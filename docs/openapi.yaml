@@ -1,0 +1,236 @@
+openapi: 3.1.0
+info:
+  title: Program Cue API
+  version: 0.2.0
+  description: Published programme data and authenticated event-operation boundaries.
+servers:
+  - url: /
+    description: Current Program Cue deployment
+paths:
+  /api/v1/health:
+    get:
+      operationId: health
+      summary: Service health
+      responses:
+        '200':
+          description: Service health and environment
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, service, environment, correlationId]
+                properties:
+                  ok: { type: boolean }
+                  service: { type: string }
+                  environment: { type: string }
+                  correlationId: { type: string }
+  /api/v1/public/events/{slug}/programme:
+    get:
+      operationId: getPublicProgramme
+      summary: Retrieve a published event programme
+      parameters:
+        - $ref: '#/components/parameters/EventSlug'
+      responses:
+        '200':
+          description: Published event and sessions
+          headers:
+            Access-Control-Allow-Origin:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProgramme'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/public/events/{slug}/calendar.ics:
+    get:
+      operationId: getPublicProgrammeCalendar
+      summary: Download the published programme as iCalendar
+      parameters:
+        - $ref: '#/components/parameters/EventSlug'
+      responses:
+        '200':
+          description: iCalendar programme feed
+          content:
+            text/calendar:
+              schema: { type: string }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/events/{eventId}/tasks:
+    get:
+      operationId: listTasks
+      summary: List readiness tasks for an authorised event
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+      responses:
+        '200':
+          description: Event task collection
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/ConfigurationError' }
+    post:
+      operationId: createTask
+      summary: Create a readiness task for an authorised event
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title, impact]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 200 }
+                impact: { type: string, enum: [critical, high, medium, low] }
+      responses:
+        '201': { description: Task created }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '415': { description: Content-Type is not application/json }
+        '422': { description: Validation error }
+        '503': { $ref: '#/components/responses/ConfigurationError' }
+  /api/v1/events/{eventId}/schedule/publish:
+    post:
+      operationId: publishSchedule
+      summary: Publish a conflict-free draft schedule version
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scheduleVersionId]
+              properties:
+                scheduleVersionId: { type: string, minLength: 1 }
+      responses:
+        '200': { description: Schedule published }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Draft schedule not found }
+        '409': { description: Blocking conflicts remain }
+        '503': { $ref: '#/components/responses/ConfigurationError' }
+  /api/v1/events/{eventId}/operations:
+    post:
+      operationId: queueOperation
+      summary: Queue an idempotent background operation
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required: [type, idempotencyKey]
+              properties:
+                type:
+                  type: string
+                  pattern: '^[a-z][a-z0-9_.-]{2,63}$'
+                idempotencyKey:
+                  type: string
+                  minLength: 8
+                  maxLength: 128
+                payload: { type: object }
+      responses:
+        '202': { description: Operation queued }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { description: Validation error }
+        '503': { $ref: '#/components/responses/ConfigurationError' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Explicit internal API boundary in the reviewed foundation. Replace with Better Auth session/API-key authorisation in the production extraction.
+  parameters:
+    EventSlug:
+      in: path
+      name: slug
+      required: true
+      schema: { type: string, minLength: 1 }
+    EventId:
+      in: path
+      name: eventId
+      required: true
+      schema: { type: string, minLength: 1 }
+  schemas:
+    PublicProgramme:
+      type: object
+      required: [event, sessions]
+      properties:
+        event:
+          type: object
+          required: [id, slug, name, timezone]
+          properties:
+            id: { type: string }
+            slug: { type: string }
+            name: { type: string }
+            timezone: { type: string }
+            venue: { type: [string, 'null'] }
+            city: { type: [string, 'null'] }
+        sessions:
+          type: array
+          items:
+            type: object
+            required: [id, title, startsAt, endsAt, room, format, speakers]
+            properties:
+              id: { type: string }
+              title: { type: string }
+              startsAt: { type: string, format: date-time }
+              endsAt: { type: string, format: date-time }
+              room: { type: string }
+              building: { type: [string, 'null'] }
+              level: { type: [string, 'null'] }
+              format: { type: string }
+              track: { type: [string, 'null'] }
+              speakers:
+                type: array
+                items: { type: string }
+    Error:
+      type: object
+      required: [error, correlationId]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+        correlationId: { type: string }
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorised:
+      description: Bearer authentication is required
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Credential is not authorised
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ConfigurationError:
+      description: Required production binding or secret is unavailable; the request fails closed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

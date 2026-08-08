@@ -1,0 +1,56 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "program-cue",
+  "main": "workers/app.js",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*",
+      "/embed/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "program-cue-db",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "program-cue-files"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "OPERATIONS_QUEUE",
+        "queue": "program-cue-operations"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "program-cue-operations",
+        "max_batch_size": 20,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "program-cue-operations-dlq"
+      }
+    ]
+  },
+  "vars": {
+    "APP_ENV": "production",
+    "DEMO_MODE": "false",
+    "PUBLIC_EVENT_SLUG": "future-of-events-2025",
+    "CORS_ALLOWED_ORIGINS": "https://app.example.invalid",
+    "EMBED_FRAME_ANCESTORS": "https://www.programcue.example"
+  }
+}

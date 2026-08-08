@@ -1,0 +1,26 @@
+{
+  "name": "program-cue",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Conference programme operations platform with an interactive evaluator build and fail-closed Cloudflare production boundaries.",
+  "scripts": {
+    "dev": "node server.mjs",
+    "dev:demo": "node server.mjs",
+    "check": "node --check public/app.js && node --check public/seed.js && node --check server.mjs && node --check workers/app.js && node --test tests/*.test.mjs && node scripts/validate-demo.mjs && node scripts/render-routes.mjs && python3 scripts/validate-migration.py && python3 scripts/static-audit.py && python3 tests/smoke_test.py && python3 scripts/browser_check.py",
+    "check:core": "node --check public/app.js && node --check public/seed.js && node --check server.mjs && node --check workers/app.js && node --test tests/*.test.mjs && node scripts/validate-demo.mjs && node scripts/render-routes.mjs && python3 scripts/validate-migration.py && python3 scripts/static-audit.py && python3 tests/smoke_test.py",
+    "check:browser": "python3 scripts/browser_check.py",
+    "screenshots": "python3 scripts/generate_screenshots.py",
+    "test": "node --test tests/*.test.mjs",
+    "validate:demo": "node scripts/validate-demo.mjs",
+    "deploy": "npx wrangler deploy",
+    "db:migrate:local": "npx wrangler d1 migrations apply program-cue-db --local",
+    "db:migrate:remote": "npx wrangler d1 migrations apply program-cue-db --remote"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "programCue": {
+    "productionStackManifest": "docs/production-package.example.json"
+  }
+}

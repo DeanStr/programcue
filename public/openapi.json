@@ -1,0 +1,306 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Program Cue API",
+    "version": "0.2.0",
+    "description": "Published programme data and authenticated event-operation boundaries."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current Program Cue deployment"
+    }
+  ],
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "summary": "Service health",
+        "responses": {
+          "200": {
+            "description": "Healthy"
+          }
+        }
+      }
+    },
+    "/api/v1/public/events/{slug}/programme": {
+      "get": {
+        "summary": "Published event programme",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Published event and sessions"
+          },
+          "404": {
+            "description": "Published event not found"
+          }
+        }
+      }
+    },
+    "/api/v1/public/events/{slug}/calendar.ics": {
+      "get": {
+        "summary": "Published programme iCalendar feed",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "iCalendar programme feed"
+          },
+          "404": {
+            "description": "Published event not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/tasks": {
+      "get": {
+        "summary": "List readiness tasks",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task list"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "503": {
+            "description": "Required binding unavailable"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create readiness task",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "impact"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "impact": {
+                    "type": "string",
+                    "enum": [
+                      "critical",
+                      "high",
+                      "medium",
+                      "low"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Task created"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "415": {
+            "description": "Unsupported media type"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "503": {
+            "description": "Required binding unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/schedule/publish": {
+      "post": {
+        "summary": "Publish a conflict-free draft schedule version",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "scheduleVersionId"
+                ],
+                "properties": {
+                  "scheduleVersionId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Published"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Draft schedule not found"
+          },
+          "409": {
+            "description": "Blocking conflicts remain"
+          },
+          "503": {
+            "description": "Required binding unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/operations": {
+      "post": {
+        "summary": "Queue an idempotent background operation",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "type",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 128
+                  },
+                  "payload": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Operation queued"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "503": {
+            "description": "Required binding unavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Explicit internal API boundary in the reviewed foundation."
+      }
+    }
+  }
+}
