@@ -1,0 +1,146 @@
+const DEMO_ORGANISATION_ID = "org-future-events";
+const DEMO_EVENT_ID = "evt-foe-2025";
+const DEMO_ADMIN_ID = "person-demo-admin";
+
+export const DEMO_IDENTITY = {
+  personId: DEMO_ADMIN_ID,
+  name: "Olivia Bennett",
+  email: "olivia@example.com",
+} as const;
+
+export const DEMO_IDENTITIES = {
+  administrator: DEMO_IDENTITY,
+  evaluator: {
+    personId: "person-demo-evaluator",
+    name: "Jordan Lee",
+    email: "jordan.evaluator@example.com",
+  },
+  submitter: {
+    personId: "person-demo-submitter",
+    name: "Alex Morgan",
+    email: "alex.submitter@example.com",
+  },
+  speaker: {
+    personId: "person-demo-speaker",
+    name: "Priya Shah",
+    email: "priya.speaker@example.com",
+  },
+} as const;
+
+export type DemoRole = keyof typeof DEMO_IDENTITIES;
+
+export async function ensureDemoData(env: CloudflareEnvironment) {
+  if (String(env.DEMO_MODE) !== "true") return;
+  if (!env.DB) throw new Error("Required Cloudflare binding DB is unavailable");
+  await env.DB.batch([
+    env.DB.prepare(`
+      INSERT OR IGNORE INTO organisations (id, name, slug, created_at, updated_at)
+      VALUES (?, 'Future Events Association', 'future-events-association', unixepoch(), unixepoch())
+    `).bind(DEMO_ORGANISATION_ID),
+    env.DB.prepare(`
+      INSERT OR IGNORE INTO people (
+        id, email, display_name, email_verified, profile_status, created_at, updated_at
+      ) VALUES (?, ?, ?, 1, 'published', unixepoch(), unixepoch())
+    `).bind(DEMO_ADMIN_ID, DEMO_IDENTITY.email, DEMO_IDENTITY.name),
+    ...Object.entries(DEMO_IDENTITIES)
+      .filter(([role]) => role !== "administrator")
+      .map(([, identity]) => env.DB.prepare(`
+        INSERT OR IGNORE INTO people (
+          id, email, display_name, email_verified, profile_status, created_at, updated_at
+        ) VALUES (?, ?, ?, 1, 'published', unixepoch(), unixepoch())
+      `).bind(identity.personId, identity.email, identity.name)),
+    env.DB.prepare(`
+      INSERT OR IGNORE INTO events (
+        id, organisation_id, name, slug, timezone, starts_at, ends_at,
+        venue_name, city, description, brand_accent, repository_provider,
+        retention_months, submission_access_mode, allow_anonymous_drafts,
+        duplicate_person_warnings, revision, last_updated_by_person_id,
+        created_at, updated_at
+      ) VALUES (
+        ?, ?, 'Future of Events 2025', 'future-of-events-2025', 'America/Toronto',
+        unixepoch('2025-05-20T00:00:00Z'), unixepoch('2025-05-22T23:59:59Z'),
+        'Metro Toronto Convention Centre', 'Toronto',
+        'The conference for modern event professionals.', '#4f46e5', 'd1',
+        24, 'email_verified', 1, 1, 1, ?, unixepoch(), unixepoch()
+      )
+    `).bind(DEMO_EVENT_ID, DEMO_ORGANISATION_ID, DEMO_ADMIN_ID),
+    env.DB.prepare(`
+      INSERT OR IGNORE INTO memberships (
+        id, organisation_id, event_id, person_id, role, invited_at, accepted_at, created_at
+      ) VALUES ('membership-demo-admin', ?, ?, ?, 'administrator', unixepoch(), unixepoch(), unixepoch())
+    `).bind(DEMO_ORGANISATION_ID, DEMO_EVENT_ID, DEMO_ADMIN_ID),
+    ...(["evaluator", "submitter", "speaker"] as const).map((role) => {
+      const identity = DEMO_IDENTITIES[role];
+      return env.DB.prepare(`
+        INSERT OR IGNORE INTO memberships (
+          id, organisation_id, event_id, person_id, role, invited_at, accepted_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch(), unixepoch())
+      `).bind(`membership-demo-${role}`, DEMO_ORGANISATION_ID, DEMO_EVENT_ID, identity.personId, role);
+    }),
+    ...[
+      ["main", "Main Stage", 1200],
+      ["301a", "Room 301A", 300],
+      ["301b", "Room 301B", 200],
+      ["302", "Room 302", 150],
+      ["303", "Room 303", 150],
+    ].map(([id, name, capacity], position) => env.DB.prepare(`
+      INSERT OR IGNORE INTO rooms (id, event_id, name, capacity, position)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(id, DEMO_EVENT_ID, name, capacity, position)),
+  ]);
+}
+
+export async function ensureDemoProgramme(env: CloudflareEnvironment) {
+  if (String(env.DEMO_MODE) !== "true") return;
+  await ensureDemoData(env);
+  const published = await env.DB.prepare("SELECT id FROM schedule_versions WHERE event_id = ? AND status = 'published'")
+    .bind(DEMO_EVENT_ID).first();
+  if (published) return;
+  const sessions = [
+    ["demo-session-1", "The Future of Attendee Engagement", "future-attendee-engagement", "keynote", "demo-track-leadership", 45, 900],
+    ["demo-session-2", "AI in Event Operations", "ai-event-operations", "presentation", "demo-track-ai", 60, 260],
+    ["demo-session-3", "Designing Inclusive Hybrid Experiences", "inclusive-hybrid", "workshop", "demo-track-experience", 60, 180],
+    ["demo-session-4", "Community and Connection", "community-connection", "panel", "demo-track-operations", 45, 140],
+    ["demo-session-5", "Building Better Event Data", "better-event-data", "breakout", "demo-track-ai", 60, 130],
+  ] as const;
+  const entries = [
+    ["demo-entry-1", "demo-session-1", "main", "2025-05-20T13:00:00Z", "2025-05-20T13:45:00Z"],
+    ["demo-entry-2", "demo-session-2", "301a", "2025-05-20T14:00:00Z", "2025-05-20T15:00:00Z"],
+    ["demo-entry-3", "demo-session-3", "301b", "2025-05-20T15:15:00Z", "2025-05-20T16:15:00Z"],
+    ["demo-entry-4", "demo-session-4", "302", "2025-05-21T13:30:00Z", "2025-05-21T14:15:00Z"],
+    ["demo-entry-5", "demo-session-5", "303", "2025-05-21T17:00:00Z", "2025-05-21T18:00:00Z"],
+  ] as const;
+  await env.DB.batch([
+    ...[
+      ["demo-track-leadership", "Leadership", "leadership", "#7c3aed", 0],
+      ["demo-track-ai", "AI & Innovation", "ai-innovation", "#4f46e5", 1],
+      ["demo-track-experience", "Experience Design", "experience-design", "#0f766e", 2],
+      ["demo-track-operations", "Event Operations", "event-operations", "#b45309", 3],
+    ].map(([id, name, slug, colour, position]) => env.DB.prepare(`
+      INSERT OR IGNORE INTO tracks (id, event_id, name, slug, colour_token, position, exclusive, is_public)
+      VALUES (?, ?, ?, ?, ?, ?, 0, 1)
+    `).bind(id, DEMO_EVENT_ID, name, slug, colour, position)),
+    ...sessions.map(([id, title, slug, format, trackId, duration, attendance]) => env.DB.prepare(`
+      INSERT OR IGNORE INTO sessions (
+        id, event_id, track_id, title, slug, description, format, duration_minutes,
+        expected_attendance, status, visibility, revision, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', 'public', 1, unixepoch(), unixepoch())
+    `).bind(id, DEMO_EVENT_ID, trackId, title, slug, `A practical session about ${title.toLowerCase()}.`, format, duration, attendance)),
+    ...sessions.map(([id], position) => env.DB.prepare(`
+      INSERT OR IGNORE INTO session_speakers (session_id, event_id, person_id, position, role_label, visibility)
+      VALUES (?, ?, ?, 0, 'Speaker', 'public')
+    `).bind(id, DEMO_EVENT_ID, position % 2 === 0 ? DEMO_IDENTITIES.speaker.personId : DEMO_IDENTITIES.submitter.personId)),
+    env.DB.prepare(`
+      INSERT OR IGNORE INTO schedule_versions (
+        id, event_id, version_number, name, status, revision, created_by_person_id, created_at, published_at
+      ) VALUES ('demo-schedule-published', ?, 1, 'Published demo programme', 'published', 1, ?, unixepoch(), unixepoch())
+    `).bind(DEMO_EVENT_ID, DEMO_ADMIN_ID),
+    ...entries.map(([id, sessionId, roomId, startsAt, endsAt]) => env.DB.prepare(`
+      INSERT OR IGNORE INTO schedule_entries (
+        id, event_id, schedule_version_id, session_id, room_id, starts_at, ends_at, revision, created_at, updated_at
+      ) VALUES (?, ?, 'demo-schedule-published', ?, ?, unixepoch(?), unixepoch(?), 1, unixepoch(), unixepoch())
+    `).bind(id, DEMO_EVENT_ID, sessionId, roomId, startsAt, endsAt)),
+    env.DB.prepare("UPDATE events SET programme_published_at = COALESCE(programme_published_at, unixepoch()), updated_at = unixepoch() WHERE id = ?")
+      .bind(DEMO_EVENT_ID),
+  ]);
+}

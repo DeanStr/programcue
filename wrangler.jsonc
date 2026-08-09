@@ -1,20 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "program-cue",
-  "main": "workers/app.js",
-  "compatibility_date": "2026-08-01",
+  "main": "workers/index.ts",
+  "compatibility_date": "2026-08-08",
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "assets": {
-    "directory": "./public",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": [
-      "/api/*",
-      "/embed/*"
-    ]
-  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -27,6 +18,20 @@
     {
       "binding": "FILES",
       "bucket_name": "program-cue-files"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "EVENT_CHANNEL",
+        "class_name": "EventChannel"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["EventChannel"]
     }
   ],
   "queues": {
@@ -49,8 +54,13 @@
   "vars": {
     "APP_ENV": "production",
     "DEMO_MODE": "false",
+    "DEFAULT_EVENT_ID": "evt-foe-2025",
+    "BETTER_AUTH_URL": "https://app.example.invalid",
+    "AUTH_EMAIL_FROM": "Program Cue <auth@example.invalid>",
     "PUBLIC_EVENT_SLUG": "future-of-events-2025",
     "CORS_ALLOWED_ORIGINS": "https://app.example.invalid",
     "EMBED_FRAME_ANCESTORS": "https://www.programcue.example"
-  }
+  },
+  "observability": { "enabled": true },
+  "upload_source_maps": true
 }

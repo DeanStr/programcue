@@ -1,5 +1,8 @@
 PRAGMA foreign_keys = ON;
 
+-- Program Cue is pre-release. This file is the complete clean baseline, not an
+-- incremental compatibility migration.
+
 CREATE TABLE organisations (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -12,10 +15,15 @@ CREATE TABLE people (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE COLLATE NOCASE,
   display_name TEXT NOT NULL,
+  email_verified INTEGER NOT NULL DEFAULT 0 CHECK (email_verified IN (0,1)),
+  image_url TEXT,
   biography TEXT,
+  pronunciation TEXT,
   organisation_name TEXT,
   job_title TEXT,
   profile_status TEXT NOT NULL DEFAULT 'draft' CHECK (profile_status IN ('draft','published','archived')),
+  profile_revision INTEGER NOT NULL DEFAULT 1 CHECK (profile_revision > 0),
+  last_operation_id TEXT,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
@@ -31,130 +39,359 @@ CREATE TABLE events (
   venue_name TEXT,
   city TEXT,
   description TEXT,
+  brand_accent TEXT NOT NULL DEFAULT '#4f46e5' CHECK (
+    length(brand_accent) = 7
+    AND substr(brand_accent, 1, 1) = '#'
+    AND substr(brand_accent, 2) NOT GLOB '*[^0-9A-Fa-f]*'
+  ),
   repository_provider TEXT NOT NULL DEFAULT 'd1' CHECK (repository_provider IN ('d1','airtable')),
+  repository_locked_at INTEGER,
+  retention_months INTEGER NOT NULL DEFAULT 24 CHECK (retention_months IN (12,24,36)),
+  submission_access_mode TEXT NOT NULL DEFAULT 'email_verified' CHECK (submission_access_mode IN ('email_verified','account_required','password_protected')),
+  allow_anonymous_drafts INTEGER NOT NULL DEFAULT 1 CHECK (allow_anonymous_drafts IN (0,1)),
+  duplicate_person_warnings INTEGER NOT NULL DEFAULT 1 CHECK (duplicate_person_warnings IN (0,1)),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  last_operation_id TEXT,
+  last_updated_by_person_id TEXT REFERENCES people(id),
   programme_published_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  UNIQUE (organisation_id, slug)
+  UNIQUE (slug),
+  UNIQUE (id, organisation_id)
 );
 
 CREATE TABLE memberships (
   id TEXT PRIMARY KEY,
   organisation_id TEXT NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
-  event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
+  event_id TEXT,
   person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK (role IN ('owner','administrator','evaluator','participant')),
+  role TEXT NOT NULL CHECK (role IN ('owner','administrator','committee_chair','evaluator','submitter','speaker')),
   invited_at INTEGER,
+  invitation_expires_at INTEGER,
   accepted_at INTEGER,
+  revoked_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  UNIQUE (event_id, person_id, role)
+  CHECK (role IN ('owner','administrator') OR event_id IS NOT NULL),
+  FOREIGN KEY (event_id, organisation_id) REFERENCES events(id, organisation_id) ON DELETE CASCADE
 );
 
 CREATE TABLE form_definitions (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  description TEXT,
   kind TEXT NOT NULL CHECK (kind IN ('submission','direct_session')),
-  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','archived')),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','closed','archived')),
   public_slug TEXT NOT NULL,
   closes_at INTEGER,
-  submission_limit INTEGER,
+  submission_limit INTEGER CHECK (submission_limit IS NULL OR submission_limit > 0),
   min_speakers INTEGER NOT NULL DEFAULT 1 CHECK (min_speakers >= 1),
   max_speakers INTEGER CHECK (max_speakers IS NULL OR max_speakers >= min_speakers),
   access_mode TEXT NOT NULL DEFAULT 'email_verified' CHECK (access_mode IN ('email_verified','account_required','password_protected')),
+  access_password_hash TEXT,
+  confirmation_template_id TEXT,
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  last_operation_id TEXT,
+  created_by_person_id TEXT REFERENCES people(id),
+  archived_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  UNIQUE(event_id, public_slug)
+  UNIQUE(public_slug),
+  UNIQUE(id, event_id),
+  CHECK ((access_mode = 'password_protected' AND access_password_hash IS NOT NULL) OR access_mode <> 'password_protected')
 );
 
 CREATE TABLE form_versions (
   id TEXT PRIMARY KEY,
-  form_id TEXT NOT NULL REFERENCES form_definitions(id) ON DELETE CASCADE,
-  version_number INTEGER NOT NULL,
+  event_id TEXT NOT NULL,
+  form_id TEXT NOT NULL,
+  version_number INTEGER NOT NULL CHECK (version_number > 0),
   schema_json TEXT NOT NULL CHECK (json_valid(schema_json)),
   routing_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(routing_json)),
-  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','archived')),
+  settings_snapshot_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(settings_snapshot_json)),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','retired')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
   published_at INTEGER,
+  retired_at INTEGER,
   created_by_person_id TEXT REFERENCES people(id),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  UNIQUE(form_id, version_number)
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(form_id, version_number),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (form_id, event_id) REFERENCES form_definitions(id, event_id) ON DELETE CASCADE,
+  CHECK ((status = 'published' AND published_at IS NOT NULL) OR status <> 'published')
 );
 
 CREATE TABLE submissions (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  form_version_id TEXT REFERENCES form_versions(id),
+  form_version_id TEXT,
   submitter_person_id TEXT REFERENCES people(id),
-  title TEXT NOT NULL,
+  submitter_email TEXT COLLATE NOCASE,
+  public_reference TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
   category TEXT,
   format TEXT,
-  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','submitted','assigned','in_review','decision_ready','accepted','rejected','withdrawn')),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','submitted','assigned','in_review','decision_ready','accepted','waitlisted','rejected','withdrawn')),
   answers_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(answers_json)),
+  submitted_snapshot_json TEXT CHECK (submitted_snapshot_json IS NULL OR json_valid(submitted_snapshot_json)),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  last_operation_id TEXT,
   submitted_at INTEGER,
+  withdrawn_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(event_id, public_reference),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (form_version_id, event_id) REFERENCES form_versions(id, event_id),
+  CHECK (
+    (status = 'draft' AND submitted_at IS NULL AND submitted_snapshot_json IS NULL)
+    OR
+    (status <> 'draft' AND submitted_at IS NOT NULL AND submitted_snapshot_json IS NOT NULL)
+  )
 );
 
+CREATE TABLE submission_revisions (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  submission_id TEXT NOT NULL,
+  form_version_id TEXT NOT NULL,
+  revision_number INTEGER NOT NULL CHECK (revision_number > 0),
+  answers_json TEXT NOT NULL CHECK (json_valid(answers_json)),
+  speaker_snapshot_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(speaker_snapshot_json)),
+  save_kind TEXT NOT NULL DEFAULT 'autosave' CHECK (save_kind IN ('autosave','manual','submitted','withdrawn')),
+  saved_by_person_id TEXT REFERENCES people(id),
+  idempotency_key TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(submission_id, revision_number),
+  UNIQUE(submission_id, idempotency_key),
+  FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (form_version_id, event_id) REFERENCES form_versions(id, event_id)
+);
+
+CREATE TABLE submission_email_verifications (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  form_id TEXT NOT NULL,
+  submission_id TEXT,
+  email TEXT NOT NULL COLLATE NOCASE,
+  token_hash TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','verified','consumed','expired','revoked')),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  expires_at INTEGER NOT NULL,
+  verified_at INTEGER,
+  consumed_at INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  FOREIGN KEY (form_id, event_id) REFERENCES form_definitions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE
+);
 CREATE TABLE submission_speakers (
-  submission_id TEXT NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
-  person_id TEXT NOT NULL REFERENCES people(id),
-  position INTEGER NOT NULL,
-  invitation_status TEXT NOT NULL DEFAULT 'pending' CHECK (invitation_status IN ('pending','claimed','declined')),
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  submission_id TEXT NOT NULL,
+  person_id TEXT REFERENCES people(id),
+  email TEXT NOT NULL COLLATE NOCASE,
+  display_name TEXT NOT NULL,
+  role_label TEXT,
+  position INTEGER NOT NULL CHECK (position >= 0),
+  invitation_status TEXT NOT NULL DEFAULT 'pending' CHECK (invitation_status IN ('pending','sent','claimed','declined','expired','revoked')),
   is_primary INTEGER NOT NULL DEFAULT 0 CHECK (is_primary IN (0,1)),
-  PRIMARY KEY (submission_id, person_id)
+  claim_token_hash TEXT UNIQUE,
+  invitation_expires_at INTEGER,
+  invited_at INTEGER,
+  claimed_at INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(submission_id, position),
+  UNIQUE(submission_id, email),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE
 );
 
 CREATE TABLE evaluation_plans (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  round_number INTEGER NOT NULL DEFAULT 1,
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','closed','archived')),
-  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  blinded_reviewing INTEGER NOT NULL DEFAULT 0 CHECK (blinded_reviewing IN (0,1)),
+  decision_role TEXT NOT NULL DEFAULT 'administrator' CHECK (decision_role IN ('administrator','committee_chair')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  created_by_person_id TEXT REFERENCES people(id),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(id, event_id)
+);
+
+CREATE TABLE evaluation_teams (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  chair_person_id TEXT REFERENCES people(id),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived')),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(event_id, name),
+  UNIQUE(id, event_id)
+);
+
+CREATE TABLE evaluation_team_members (
+  team_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'evaluator' CHECK (role IN ('chair','evaluator')),
+  joined_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  removed_at INTEGER,
+  PRIMARY KEY (team_id, person_id),
+  FOREIGN KEY (team_id, event_id) REFERENCES evaluation_teams(id, event_id) ON DELETE CASCADE
+);
+
+CREATE TABLE evaluation_rounds (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  plan_id TEXT NOT NULL,
+  round_number INTEGER NOT NULL CHECK (round_number > 0),
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','closed','archived')),
+  opens_at INTEGER,
+  closes_at INTEGER,
+  advancement_rule_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(advancement_rule_json)),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(plan_id, round_number),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (plan_id, event_id) REFERENCES evaluation_plans(id, event_id) ON DELETE CASCADE,
+  CHECK (closes_at IS NULL OR opens_at IS NULL OR closes_at > opens_at)
 );
 
 CREATE TABLE evaluation_criteria (
   id TEXT PRIMARY KEY,
-  plan_id TEXT NOT NULL REFERENCES evaluation_plans(id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL,
+  round_id TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
-  weight_percent INTEGER NOT NULL CHECK (weight_percent > 0 AND weight_percent <= 100),
-  position INTEGER NOT NULL
+  input_type TEXT NOT NULL DEFAULT 'scale_5' CHECK (input_type IN ('scale_5','scale_10','yes_no','free_text')),
+  weight_percent INTEGER NOT NULL DEFAULT 0 CHECK (weight_percent BETWEEN 0 AND 100),
+  required INTEGER NOT NULL DEFAULT 1 CHECK (required IN (0,1)),
+  position INTEGER NOT NULL CHECK (position >= 0),
+  FOREIGN KEY (round_id, event_id) REFERENCES evaluation_rounds(id, event_id) ON DELETE CASCADE,
+  UNIQUE(round_id, position),
+  CHECK ((input_type IN ('free_text','yes_no')) OR weight_percent > 0)
+);
+
+CREATE TABLE evaluator_conflicts (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  round_id TEXT NOT NULL,
+  submission_id TEXT NOT NULL,
+  evaluator_person_id TEXT NOT NULL REFERENCES people(id),
+  relationship TEXT,
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'declared' CHECK (status IN ('declared','recused','waived','dismissed')),
+  declared_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  resolved_by_person_id TEXT REFERENCES people(id),
+  resolved_at INTEGER,
+  UNIQUE(round_id, submission_id, evaluator_person_id),
+  FOREIGN KEY (round_id, event_id) REFERENCES evaluation_rounds(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE
 );
 
 CREATE TABLE evaluator_assignments (
   id TEXT PRIMARY KEY,
-  plan_id TEXT NOT NULL REFERENCES evaluation_plans(id) ON DELETE CASCADE,
-  submission_id TEXT NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL,
+  round_id TEXT NOT NULL,
+  submission_id TEXT NOT NULL,
   evaluator_person_id TEXT NOT NULL REFERENCES people(id),
-  status TEXT NOT NULL DEFAULT 'assigned' CHECK (status IN ('assigned','in_progress','submitted','conflict_returned','reopened')),
+  team_id TEXT,
+  status TEXT NOT NULL DEFAULT 'assigned' CHECK (status IN ('assigned','in_progress','submitted','recused','reopened','cancelled')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  last_operation_id TEXT,
+  due_at INTEGER,
   conflict_declared_at INTEGER,
   assigned_at INTEGER NOT NULL DEFAULT (unixepoch()),
   submitted_at INTEGER,
-  UNIQUE(plan_id, submission_id, evaluator_person_id)
+  UNIQUE(round_id, submission_id, evaluator_person_id),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (round_id, event_id) REFERENCES evaluation_rounds(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (team_id, event_id) REFERENCES evaluation_teams(id, event_id)
 );
 
 CREATE TABLE reviews (
   id TEXT PRIMARY KEY,
-  assignment_id TEXT NOT NULL UNIQUE REFERENCES evaluator_assignments(id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL,
+  assignment_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','submitted','locked','reopened')),
   scores_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(scores_json)),
   weighted_score REAL,
-  recommendation TEXT CHECK (recommendation IN ('accept','minor_changes','conditional_accept','reject')),
+  recommendation TEXT CHECK (recommendation IN ('accept','minor_changes','conditional_accept','waitlist','reject')),
   confidence INTEGER CHECK (confidence BETWEEN 1 AND 5),
   submitter_feedback TEXT,
   private_notes TEXT,
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  last_operation_id TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  submitted_at INTEGER
+  submitted_at INTEGER,
+  locked_at INTEGER,
+  UNIQUE(assignment_id),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (assignment_id, event_id) REFERENCES evaluator_assignments(id, event_id) ON DELETE CASCADE
+);
+
+CREATE TABLE review_revisions (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  review_id TEXT NOT NULL,
+  revision_number INTEGER NOT NULL CHECK (revision_number > 0),
+  scores_json TEXT NOT NULL CHECK (json_valid(scores_json)),
+  content_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(content_json)),
+  save_kind TEXT NOT NULL DEFAULT 'autosave' CHECK (save_kind IN ('autosave','manual','submitted','reopened')),
+  saved_by_person_id TEXT NOT NULL REFERENCES people(id),
+  idempotency_key TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(review_id, revision_number),
+  UNIQUE(review_id, idempotency_key),
+  FOREIGN KEY (review_id, event_id) REFERENCES reviews(id, event_id) ON DELETE CASCADE
+);
+
+CREATE TABLE review_moderations (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  round_id TEXT NOT NULL,
+  submission_id TEXT NOT NULL,
+  moderator_person_id TEXT NOT NULL REFERENCES people(id),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','confirmed','superseded')),
+  recommendation TEXT CHECK (recommendation IN ('accept','waitlist','reject','advance')),
+  moderated_score REAL,
+  notes TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  confirmed_at INTEGER,
+  FOREIGN KEY (round_id, event_id) REFERENCES evaluation_rounds(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE
 );
 
 CREATE TABLE submission_decisions (
   id TEXT PRIMARY KEY,
-  submission_id TEXT NOT NULL UNIQUE REFERENCES submissions(id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL,
+  submission_id TEXT NOT NULL,
+  round_id TEXT,
+  revision_number INTEGER NOT NULL DEFAULT 1 CHECK (revision_number > 0),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','superseded','revoked')),
   decision TEXT NOT NULL CHECK (decision IN ('accepted','rejected','waitlisted')),
   decided_by_person_id TEXT NOT NULL REFERENCES people(id),
   rationale TEXT,
+  effect_preview_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(effect_preview_json)),
+  idempotency_key TEXT,
   decided_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  published_at INTEGER
+  published_at INTEGER,
+  UNIQUE(submission_id, revision_number),
+  UNIQUE(event_id, idempotency_key),
+  FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (round_id, event_id) REFERENCES evaluation_rounds(id, event_id),
+  CHECK ((status = 'published' AND published_at IS NOT NULL) OR status <> 'published')
 );
 
 CREATE TABLE tracks (
@@ -163,7 +400,11 @@ CREATE TABLE tracks (
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
   colour_token TEXT,
-  UNIQUE(event_id, slug)
+  position INTEGER NOT NULL DEFAULT 0,
+  exclusive INTEGER NOT NULL DEFAULT 0 CHECK (exclusive IN (0,1)),
+  is_public INTEGER NOT NULL DEFAULT 1 CHECK (is_public IN (0,1)),
+  UNIQUE(event_id, slug),
+  UNIQUE(id, event_id)
 );
 
 CREATE TABLE rooms (
@@ -172,151 +413,548 @@ CREATE TABLE rooms (
   name TEXT NOT NULL,
   building TEXT,
   level TEXT,
-  capacity INTEGER CHECK (capacity IS NULL OR capacity > 0),
-  position INTEGER NOT NULL DEFAULT 0
+  capacity INTEGER NOT NULL CHECK (capacity > 0),
+  resources_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(resources_json)),
+  position INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','retired')),
+  UNIQUE(id, event_id)
 );
+
+CREATE TABLE schedule_policies (
+  event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+  room_overlap_action TEXT NOT NULL DEFAULT 'block' CHECK (room_overlap_action IN ('allow','warn','block')),
+  speaker_overlap_action TEXT NOT NULL DEFAULT 'block' CHECK (speaker_overlap_action IN ('allow','warn','block')),
+  required_resource_overlap_action TEXT NOT NULL DEFAULT 'block' CHECK (required_resource_overlap_action IN ('allow','warn','block')),
+  exclusive_track_overlap_action TEXT NOT NULL DEFAULT 'warn' CHECK (exclusive_track_overlap_action IN ('allow','warn','block')),
+  event_boundary_action TEXT NOT NULL DEFAULT 'block' CHECK (event_boundary_action IN ('allow','warn','block')),
+  capacity_action TEXT NOT NULL DEFAULT 'warn' CHECK (capacity_action IN ('allow','warn','block')),
+  minimum_turnaround_minutes INTEGER NOT NULL DEFAULT 0 CHECK (minimum_turnaround_minutes >= 0),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TRIGGER events_create_schedule_policy
+AFTER INSERT ON events
+BEGIN
+  INSERT INTO schedule_policies (event_id) VALUES (NEW.id);
+END;
 
 CREATE TABLE sessions (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  source_submission_id TEXT REFERENCES submissions(id),
-  track_id TEXT REFERENCES tracks(id),
+  source_submission_id TEXT,
+  track_id TEXT,
   title TEXT NOT NULL,
   slug TEXT NOT NULL,
   description TEXT,
-  format TEXT NOT NULL CHECK (format IN ('keynote','presentation','panel','workshop','breakout','other')),
+  format TEXT NOT NULL CHECK (format IN ('keynote','presentation','panel','workshop','breakout','break','other')),
   duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
-  expected_attendance INTEGER,
-  status TEXT NOT NULL DEFAULT 'unscheduled' CHECK (status IN ('unscheduled','scheduled','published','cancelled')),
+  expected_attendance INTEGER CHECK (expected_attendance IS NULL OR expected_attendance >= 0),
+  required_resources_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(required_resources_json)),
+  status TEXT NOT NULL DEFAULT 'unscheduled' CHECK (status IN ('unscheduled','scheduled','published','cancelled','archived')),
+  visibility TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public','private','hidden')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  UNIQUE(event_id, slug)
+  UNIQUE(event_id, slug),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (source_submission_id, event_id) REFERENCES submissions(id, event_id),
+  FOREIGN KEY (track_id, event_id) REFERENCES tracks(id, event_id)
 );
 
 CREATE TABLE session_speakers (
-  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
   person_id TEXT NOT NULL REFERENCES people(id),
-  position INTEGER NOT NULL,
+  position INTEGER NOT NULL CHECK (position >= 0),
   role_label TEXT,
-  PRIMARY KEY (session_id, person_id)
+  visibility TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public','private','hidden')),
+  PRIMARY KEY (session_id, person_id),
+  UNIQUE(session_id, position),
+  FOREIGN KEY (session_id, event_id) REFERENCES sessions(id, event_id) ON DELETE CASCADE
 );
 
 CREATE TABLE schedule_versions (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  version_number INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','archived')),
+  version_number INTEGER NOT NULL CHECK (version_number > 0),
+  name TEXT,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','publishing','published','archived','failed')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  publication_operation_id TEXT,
   created_by_person_id TEXT REFERENCES people(id),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   published_at INTEGER,
-  UNIQUE(event_id, version_number)
+  UNIQUE(event_id, version_number),
+  UNIQUE(id, event_id),
+  CHECK ((status = 'published' AND published_at IS NOT NULL) OR status <> 'published')
 );
 
 CREATE TABLE schedule_entries (
   id TEXT PRIMARY KEY,
-  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  schedule_version_id TEXT NOT NULL REFERENCES schedule_versions(id) ON DELETE CASCADE,
-  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  room_id TEXT NOT NULL REFERENCES rooms(id),
+  event_id TEXT NOT NULL,
+  schedule_version_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  room_id TEXT NOT NULL,
   starts_at INTEGER NOT NULL,
   ends_at INTEGER NOT NULL CHECK (ends_at > starts_at),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  UNIQUE(schedule_version_id, session_id)
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(schedule_version_id, session_id),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (schedule_version_id, event_id) REFERENCES schedule_versions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (session_id, event_id) REFERENCES sessions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (room_id, event_id) REFERENCES rooms(id, event_id)
 );
 
 CREATE TABLE schedule_conflicts (
   id TEXT PRIMARY KEY,
-  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  schedule_version_id TEXT NOT NULL REFERENCES schedule_versions(id) ON DELETE CASCADE,
-  conflict_type TEXT NOT NULL CHECK (conflict_type IN ('room','speaker','track','event_boundary','capacity')),
+  event_id TEXT NOT NULL,
+  schedule_version_id TEXT NOT NULL,
+  conflict_type TEXT NOT NULL CHECK (conflict_type IN ('room','speaker','track','event_boundary','capacity','required_resource','turnaround')),
   severity TEXT NOT NULL CHECK (severity IN ('warning','blocking')),
+  fingerprint TEXT NOT NULL,
+  primary_entry_id TEXT,
+  conflicting_entry_id TEXT,
   details_json TEXT NOT NULL CHECK (json_valid(details_json)),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  resolved_by_person_id TEXT REFERENCES people(id),
   resolved_at INTEGER,
-  resolution_json TEXT CHECK (resolution_json IS NULL OR json_valid(resolution_json))
+  resolution_json TEXT CHECK (resolution_json IS NULL OR json_valid(resolution_json)),
+  UNIQUE(schedule_version_id, fingerprint),
+  FOREIGN KEY (schedule_version_id, event_id) REFERENCES schedule_versions(id, event_id) ON DELETE CASCADE
+);
+
+CREATE TABLE public_itineraries (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  person_id TEXT REFERENCES people(id) ON DELETE CASCADE,
+  visitor_key_hash TEXT,
+  share_token_hash TEXT UNIQUE,
+  expires_at INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  CHECK (person_id IS NOT NULL OR visitor_key_hash IS NOT NULL),
+  UNIQUE(event_id, person_id),
+  UNIQUE(event_id, visitor_key_hash)
+);
+
+CREATE TABLE public_itinerary_items (
+  itinerary_id TEXT NOT NULL REFERENCES public_itineraries(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  PRIMARY KEY (itinerary_id, session_id)
 );
 
 CREATE TABLE task_templates (
   id TEXT PRIMARY KEY,
   event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  description TEXT,
   target_type TEXT NOT NULL CHECK (target_type IN ('speaker','session','event')),
+  task_type TEXT NOT NULL DEFAULT 'checklist' CHECK (task_type IN ('checklist','acknowledgement','short_form','file_upload','link_visit','administrator_only')),
   impact TEXT NOT NULL CHECK (impact IN ('critical','high','medium','low')),
-  evidence_mode TEXT NOT NULL DEFAULT 'none' CHECK (evidence_mode IN ('none','checkbox','file','text','admin_approval')),
-  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  evidence_mode TEXT NOT NULL DEFAULT 'none' CHECK (evidence_mode IN ('none','checkbox','file','text','link','admin_approval')),
+  due_anchor TEXT NOT NULL DEFAULT 'none' CHECK (due_anchor IN ('none','acceptance','session_start','fixed')),
+  due_offset_minutes INTEGER,
+  fixed_due_at INTEGER,
+  configuration_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(configuration_json)),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived')),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(id, event_id)
+);
+
+CREATE TABLE task_template_dependencies (
+  template_id TEXT NOT NULL REFERENCES task_templates(id) ON DELETE CASCADE,
+  depends_on_template_id TEXT NOT NULL REFERENCES task_templates(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  PRIMARY KEY (template_id, depends_on_template_id),
+  CHECK (template_id <> depends_on_template_id)
 );
 
 CREATE TABLE task_instances (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   template_id TEXT REFERENCES task_templates(id),
-  target_type TEXT CHECK (target_type IN ('speaker','session','event')),
-  target_id TEXT,
+  target_type TEXT NOT NULL CHECK (target_type IN ('speaker','session','event')),
+  target_id TEXT NOT NULL,
   owner_person_id TEXT REFERENCES people(id),
   title TEXT NOT NULL,
+  description TEXT,
+  task_type TEXT NOT NULL DEFAULT 'checklist' CHECK (task_type IN ('checklist','acknowledgement','short_form','file_upload','link_visit','administrator_only')),
   impact TEXT NOT NULL CHECK (impact IN ('critical','high','medium','low')),
-  status TEXT NOT NULL CHECK (status IN ('not_started','in_progress','completed','waived')),
+  status TEXT NOT NULL DEFAULT 'not_started' CHECK (status IN ('not_started','in_progress','blocked','submitted','completed','waived','overdue')),
   readiness_state TEXT NOT NULL DEFAULT 'on_track' CHECK (readiness_state IN ('on_track','at_risk','overdue','blocked')),
   readiness_percent INTEGER NOT NULL DEFAULT 0 CHECK (readiness_percent BETWEEN 0 AND 100),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  last_operation_id TEXT,
   idempotency_key TEXT,
   due_at INTEGER,
   evidence_json TEXT CHECK (evidence_json IS NULL OR json_valid(evidence_json)),
   waiver_json TEXT CHECK (waiver_json IS NULL OR json_valid(waiver_json)),
+  submitted_at INTEGER,
   completed_at INTEGER,
+  completed_by_person_id TEXT REFERENCES people(id),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(id, event_id)
 );
 
-CREATE TABLE communication_templates (
-  id TEXT PRIMARY KEY,
-  event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  category TEXT NOT NULL,
-  channels_json TEXT NOT NULL CHECK (json_valid(channels_json)),
-  content_json TEXT NOT NULL CHECK (json_valid(content_json)),
+CREATE TABLE task_instance_dependencies (
+  task_id TEXT NOT NULL REFERENCES task_instances(id) ON DELETE CASCADE,
+  depends_on_task_id TEXT NOT NULL REFERENCES task_instances(id) ON DELETE CASCADE,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  PRIMARY KEY (task_id, depends_on_task_id),
+  CHECK (task_id <> depends_on_task_id)
 );
 
-CREATE TABLE communications (
+CREATE TABLE task_comments (
   id TEXT PRIMARY KEY,
-  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  template_id TEXT REFERENCES communication_templates(id),
-  status TEXT NOT NULL CHECK (status IN ('draft','scheduled','queued','sending','sent','partially_failed','failed','cancelled')),
-  audience_json TEXT NOT NULL CHECK (json_valid(audience_json)),
-  content_json TEXT NOT NULL CHECK (json_valid(content_json)),
-  scheduled_at INTEGER,
-  sent_at INTEGER,
-  created_by_person_id TEXT REFERENCES people(id),
+  event_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  author_person_id TEXT NOT NULL REFERENCES people(id),
+  body TEXT NOT NULL,
+  visibility TEXT NOT NULL DEFAULT 'participant' CHECK (visibility IN ('participant','administrator')),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-);
-
-CREATE TABLE communication_deliveries (
-  id TEXT PRIMARY KEY,
-  communication_id TEXT NOT NULL REFERENCES communications(id) ON DELETE CASCADE,
-  person_id TEXT REFERENCES people(id),
-  channel TEXT NOT NULL CHECK (channel IN ('email','sms','push','calendar')),
-  provider_message_id TEXT,
-  status TEXT NOT NULL CHECK (status IN ('queued','sent','delivered','opened','clicked','bounced','suppressed','failed','cancelled')),
-  failure_code TEXT,
-  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  edited_at INTEGER,
+  FOREIGN KEY (task_id, event_id) REFERENCES task_instances(id, event_id) ON DELETE CASCADE
 );
 
 CREATE TABLE file_assets (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   owner_person_id TEXT REFERENCES people(id),
-  target_type TEXT NOT NULL,
+  target_type TEXT NOT NULL CHECK (target_type IN ('person','submission','session','task','resource')),
   target_id TEXT NOT NULL,
+  asset_kind TEXT NOT NULL CHECK (asset_kind IN ('headshot','slides','video','supporting_document','resource_attachment','task_evidence','other')),
+  current_version_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active','rejected','deleted')),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(id, event_id)
+);
+
+CREATE TABLE file_versions (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  asset_id TEXT NOT NULL,
+  version_number INTEGER NOT NULL CHECK (version_number > 0),
   object_key TEXT NOT NULL UNIQUE,
+  multipart_upload_id TEXT,
   original_filename TEXT NOT NULL,
-  content_type TEXT NOT NULL,
+  declared_content_type TEXT NOT NULL,
+  detected_content_type TEXT,
   size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
-  version_number INTEGER NOT NULL DEFAULT 1,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('pending','active','replaced','rejected','deleted')),
-  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  checksum_sha256 TEXT,
+  object_etag TEXT,
+  upload_status TEXT NOT NULL DEFAULT 'requested' CHECK (upload_status IN ('requested','uploading','uploaded','failed','aborted')),
+  signature_status TEXT NOT NULL DEFAULT 'pending' CHECK (signature_status IN ('pending','valid','invalid','failed')),
+  scan_status TEXT NOT NULL DEFAULT 'pending' CHECK (scan_status IN ('pending','clean','infected','failed')),
+  scan_provider TEXT,
+  scan_result_json TEXT CHECK (scan_result_json IS NULL OR json_valid(scan_result_json)),
+  scan_error TEXT,
+  created_by_person_id TEXT REFERENCES people(id),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  uploaded_at INTEGER,
+  scanned_at INTEGER,
+  released_at INTEGER,
+  replaced_at INTEGER,
+  deleted_at INTEGER,
+  UNIQUE(asset_id, version_number),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (asset_id, event_id) REFERENCES file_assets(id, event_id) ON DELETE CASCADE,
+  CHECK (released_at IS NULL OR (upload_status = 'uploaded' AND signature_status = 'valid' AND scan_status = 'clean'))
+);
+
+CREATE TABLE task_evidence (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  submitted_by_person_id TEXT NOT NULL REFERENCES people(id),
+  file_asset_id TEXT,
+  evidence_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(evidence_json)),
+  status TEXT NOT NULL DEFAULT 'submitted' CHECK (status IN ('submitted','approved','rejected','superseded')),
+  reviewed_by_person_id TEXT REFERENCES people(id),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  reviewed_at INTEGER,
+  FOREIGN KEY (task_id, event_id) REFERENCES task_instances(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (file_asset_id, event_id) REFERENCES file_assets(id, event_id)
+);
+
+CREATE TABLE resource_pages (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  category TEXT,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','archived')),
+  audience_scope TEXT NOT NULL DEFAULT 'all_speakers' CHECK (audience_scope IN ('all_speakers','accepted_speakers','custom')),
+  acknowledgement_required INTEGER NOT NULL DEFAULT 0 CHECK (acknowledgement_required IN (0,1)),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  last_operation_id TEXT,
+  created_by_person_id TEXT REFERENCES people(id),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  archived_at INTEGER,
+  UNIQUE(event_id, slug),
+  UNIQUE(id, event_id)
+);
+
+CREATE TABLE resource_page_versions (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  resource_page_id TEXT NOT NULL,
+  version_number INTEGER NOT NULL CHECK (version_number > 0),
+  title TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  category TEXT,
+  audience_scope TEXT NOT NULL DEFAULT 'all_speakers' CHECK (audience_scope IN ('all_speakers','accepted_speakers','custom')),
+  acknowledgement_required INTEGER NOT NULL DEFAULT 0 CHECK (acknowledgement_required IN (0,1)),
+  document_json TEXT NOT NULL CHECK (json_valid(document_json)),
+  rendered_html TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','retired')),
+  created_by_person_id TEXT REFERENCES people(id),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  published_at INTEGER,
+  UNIQUE(resource_page_id, version_number),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (resource_page_id, event_id) REFERENCES resource_pages(id, event_id) ON DELETE CASCADE,
+  CHECK ((status = 'published' AND published_at IS NOT NULL) OR status <> 'published')
+);
+
+CREATE TABLE resource_audiences (
+  resource_page_version_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  target_type TEXT NOT NULL CHECK (target_type IN ('role','team','person','session','track')),
+  target_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  PRIMARY KEY (resource_page_version_id, target_type, target_id),
+  FOREIGN KEY (resource_page_version_id, event_id) REFERENCES resource_page_versions(id, event_id) ON DELETE CASCADE
+);
+
+CREATE TABLE resource_attachments (
+  resource_page_version_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  file_asset_id TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  label TEXT,
+  PRIMARY KEY (resource_page_version_id, file_asset_id),
+  FOREIGN KEY (resource_page_version_id, event_id) REFERENCES resource_page_versions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (file_asset_id, event_id) REFERENCES file_assets(id, event_id)
+);
+
+CREATE TABLE resource_acknowledgements (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  resource_page_id TEXT NOT NULL,
+  resource_page_version_id TEXT NOT NULL,
+  person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  acknowledged_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  user_agent TEXT,
+  UNIQUE(resource_page_version_id, person_id),
+  FOREIGN KEY (resource_page_id, event_id) REFERENCES resource_pages(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (resource_page_version_id, event_id) REFERENCES resource_page_versions(id, event_id)
+);
+
+CREATE TABLE sender_profiles (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  from_name TEXT NOT NULL,
+  from_email TEXT NOT NULL COLLATE NOCASE,
+  reply_to_email TEXT COLLATE NOCASE,
+  provider TEXT NOT NULL DEFAULT 'resend' CHECK (provider IN ('resend')),
+  provider_sender_id TEXT,
+  status TEXT NOT NULL DEFAULT 'unverified' CHECK (status IN ('unverified','verified','disabled')),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(event_id, name),
+  UNIQUE(id, event_id)
+);
+
+CREATE TABLE communication_templates (
+  id TEXT PRIMARY KEY,
+  event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN ('submission_confirmation','decision','task_reminder','schedule','calendar','ad_hoc')),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','archived')),
+  last_operation_id TEXT,
+  created_by_person_id TEXT REFERENCES people(id),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(id, event_id)
+);
+
+CREATE TABLE communication_template_versions (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  template_id TEXT NOT NULL,
+  version_number INTEGER NOT NULL CHECK (version_number > 0),
+  name TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN ('submission_confirmation','decision','task_reminder','schedule','calendar','ad_hoc')),
+  channel TEXT NOT NULL CHECK (channel IN ('email','sms','push','calendar')),
+  subject_template TEXT,
+  content_json TEXT NOT NULL CHECK (json_valid(content_json)),
+  rendered_preview_html TEXT,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','retired')),
+  created_by_person_id TEXT REFERENCES people(id),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  published_at INTEGER,
+  UNIQUE(template_id, version_number, channel),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (template_id, event_id) REFERENCES communication_templates(id, event_id) ON DELETE CASCADE,
+  CHECK (
+    channel <> 'email'
+    OR (
+      subject_template IS NOT NULL
+      AND subject_template = trim(subject_template)
+      AND length(subject_template) BETWEEN 1 AND 200
+    )
+  ),
+  CHECK ((status = 'published' AND published_at IS NOT NULL) OR status <> 'published')
+);
+
+CREATE TABLE communication_triggers (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  template_id TEXT NOT NULL REFERENCES communication_templates(id) ON DELETE CASCADE,
+  trigger_type TEXT NOT NULL CHECK (trigger_type IN ('submission_confirmed','decision_published','task_due','task_overdue','schedule_published','manual')),
+  configuration_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(configuration_json)),
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(event_id, trigger_type, template_id)
+);
+
+CREATE TABLE communications (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  template_version_id TEXT,
+  sender_profile_id TEXT,
+  operation_id TEXT,
+  idempotency_key TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'transactional' CHECK (kind IN ('transactional','optional')),
+  channel TEXT NOT NULL DEFAULT 'email' CHECK (channel IN ('email','sms','push','calendar')),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','scheduled','queued','sending','sent','partially_failed','failed','cancelled')),
+  audience_json TEXT NOT NULL CHECK (json_valid(audience_json)),
+  content_snapshot_json TEXT NOT NULL CHECK (json_valid(content_snapshot_json)),
+  recipient_count INTEGER NOT NULL DEFAULT 0 CHECK (recipient_count >= 0),
+  scheduled_at INTEGER,
+  queued_at INTEGER,
+  sent_at INTEGER,
+  cancelled_at INTEGER,
+  created_by_person_id TEXT REFERENCES people(id),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(event_id, idempotency_key),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (template_version_id, event_id) REFERENCES communication_template_versions(id, event_id),
+  FOREIGN KEY (sender_profile_id, event_id) REFERENCES sender_profiles(id, event_id)
+);
+
+CREATE TABLE communication_deliveries (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  communication_id TEXT NOT NULL,
+  person_id TEXT REFERENCES people(id),
+  recipient_address TEXT NOT NULL,
+  recipient_name TEXT,
+  source_id TEXT,
+  source_values_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(source_values_json)),
+  channel TEXT NOT NULL CHECK (channel IN ('email','sms','push','calendar')),
+  provider TEXT,
+  provider_message_id TEXT,
+  idempotency_key TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','sending','sent','delivered','opened','clicked','bounced','suppressed','failed','cancelled')),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  next_attempt_at INTEGER,
+  failure_code TEXT,
+  failure_message TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(communication_id, idempotency_key),
+  UNIQUE(provider, provider_message_id),
+  UNIQUE(id, event_id),
+  FOREIGN KEY (communication_id, event_id) REFERENCES communications(id, event_id) ON DELETE CASCADE
+);
+
+CREATE TABLE communication_delivery_events (
+  id TEXT PRIMARY KEY,
+  delivery_id TEXT NOT NULL REFERENCES communication_deliveries(id) ON DELETE CASCADE,
+  provider_event_id TEXT,
+  event_type TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(payload_json)),
+  occurred_at INTEGER NOT NULL,
+  received_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(delivery_id, provider_event_id)
+);
+
+CREATE TABLE communication_unsubscribes (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  person_id TEXT REFERENCES people(id),
+  address TEXT NOT NULL COLLATE NOCASE,
+  category TEXT NOT NULL,
+  reason TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  revoked_at INTEGER,
+  UNIQUE(event_id, address, category)
+);
+
+CREATE TABLE calendar_connections (
+  id TEXT PRIMARY KEY,
+  organisation_id TEXT NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+  event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
+  person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('google','microsoft')),
+  account_reference TEXT NOT NULL,
+  encrypted_credentials TEXT NOT NULL,
+  scopes_json TEXT NOT NULL CHECK (json_valid(scopes_json)),
+  status TEXT NOT NULL DEFAULT 'connected' CHECK (status IN ('connected','needs_attention','revoked','disconnected')),
+  expires_at INTEGER,
+  last_synced_at INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(person_id, provider, account_reference),
+  UNIQUE(id, event_id)
+);
+
+CREATE TABLE calendar_invitations (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  connection_id TEXT REFERENCES calendar_connections(id),
+  delivery_id TEXT REFERENCES communication_deliveries(id),
+  ical_uid TEXT NOT NULL,
+  sequence_number INTEGER NOT NULL DEFAULT 0 CHECK (sequence_number >= 0),
+  method TEXT NOT NULL DEFAULT 'REQUEST' CHECK (method IN ('REQUEST','CANCEL')),
+  provider_event_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','queued','sent','confirmed','cancelled','failed')),
+  last_payload_hash TEXT,
+  current_attempt_id TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(event_id, ical_uid),
+  UNIQUE(session_id, person_id)
+);
+
+CREATE TABLE calendar_sync_attempts (
+  id TEXT PRIMARY KEY,
+  invitation_id TEXT NOT NULL REFERENCES calendar_invitations(id) ON DELETE CASCADE,
+  sequence_number INTEGER NOT NULL CHECK (sequence_number >= 0),
+  method TEXT NOT NULL CHECK (method IN ('REQUEST','CANCEL')),
+  provider TEXT NOT NULL CHECK (provider IN ('email_ics','google','microsoft')),
+  status TEXT NOT NULL CHECK (status IN ('queued','running','succeeded','failed','superseded')),
+  provider_event_id TEXT,
+  error_code TEXT,
+  error_message TEXT,
+  started_at INTEGER,
+  completed_at INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(invitation_id, sequence_number, provider)
 );
 
 CREATE TABLE integration_connections (
@@ -327,34 +965,188 @@ CREATE TABLE integration_connections (
   status TEXT NOT NULL CHECK (status IN ('connected','needs_attention','failed','disconnected')),
   direction TEXT NOT NULL CHECK (direction IN ('outbound','inbound','bidirectional')),
   conflict_policy TEXT,
+  encrypted_credentials TEXT,
   configuration_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(configuration_json)),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(id, event_id)
 );
 
 CREATE TABLE integration_runs (
   id TEXT PRIMARY KEY,
   connection_id TEXT NOT NULL REFERENCES integration_connections(id) ON DELETE CASCADE,
-  status TEXT NOT NULL CHECK (status IN ('queued','running','succeeded','partially_failed','failed')),
-  direction TEXT NOT NULL,
+  operation_id TEXT,
+  idempotency_key TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued','running','succeeded','partially_failed','failed','cancelled')),
+  direction TEXT NOT NULL CHECK (direction IN ('outbound','inbound','bidirectional')),
+  dry_run INTEGER NOT NULL DEFAULT 0 CHECK (dry_run IN (0,1)),
   summary_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(summary_json)),
   started_at INTEGER,
   completed_at INTEGER,
-  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(connection_id, idempotency_key)
+);
+
+CREATE TABLE integration_run_items (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES integration_runs(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  external_id TEXT,
+  action TEXT NOT NULL CHECK (action IN ('create','update','delete','skip','noop')),
+  status TEXT NOT NULL CHECK (status IN ('pending','running','succeeded','failed','skipped')),
+  diff_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(diff_json)),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  error_code TEXT,
+  error_message TEXT,
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(run_id, entity_type, entity_id)
 );
 
 CREATE TABLE operation_jobs (
   id TEXT PRIMARY KEY,
+  organisation_id TEXT REFERENCES organisations(id) ON DELETE CASCADE,
   event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
+  requested_by_person_id TEXT REFERENCES people(id),
   type TEXT NOT NULL,
-  idempotency_key TEXT NOT NULL UNIQUE,
+  idempotency_key TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('queued','queue_failed','received','running','retrying','completed','partially_failed','failed','cancelled')),
   payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+  result_json TEXT CHECK (result_json IS NULL OR json_valid(result_json)),
+  progress_total INTEGER NOT NULL DEFAULT 0 CHECK (progress_total >= 0),
+  progress_completed INTEGER NOT NULL DEFAULT 0 CHECK (progress_completed >= 0 AND progress_completed <= progress_total),
+  progress_failed INTEGER NOT NULL DEFAULT 0 CHECK (progress_failed >= 0 AND progress_failed <= progress_total),
   attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
   last_error TEXT,
+  cancellable INTEGER NOT NULL DEFAULT 0 CHECK (cancellable IN (0,1)),
+  claim_token TEXT,
+  claim_expires_at INTEGER,
+  started_at INTEGER,
   completed_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(event_id, idempotency_key),
+  UNIQUE(correlation_id)
+);
+
+CREATE TABLE operation_items (
+  id TEXT PRIMARY KEY,
+  operation_id TEXT NOT NULL REFERENCES operation_jobs(id) ON DELETE CASCADE,
+  item_key TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed','skipped')),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  result_json TEXT CHECK (result_json IS NULL OR json_valid(result_json)),
+  error_code TEXT,
+  error_message TEXT,
+  started_at INTEGER,
+  completed_at INTEGER,
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(operation_id, item_key)
+);
+
+CREATE TABLE event_changes (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  change_type TEXT NOT NULL CHECK (change_type IN ('created','updated','deleted','published','progress')),
+  correlation_id TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE saved_views (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  owner_person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  area TEXT NOT NULL CHECK (area IN ('submissions','evaluations','speakers','sessions','tasks','operations')),
+  name TEXT NOT NULL,
+  query_json TEXT NOT NULL CHECK (json_valid(query_json)),
+  visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private','event')),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(event_id, owner_person_id, area, name)
+);
+
+CREATE TABLE idempotency_records (
+  id TEXT PRIMARY KEY,
+  organisation_id TEXT NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+  event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
+  actor_id TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'processing' CHECK (status IN ('processing','completed','failed')),
+  response_status INTEGER,
+  response_json TEXT CHECK (response_json IS NULL OR json_valid(response_json)),
+  entity_type TEXT,
+  entity_id TEXT,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  completed_at INTEGER
+);
+
+CREATE TABLE webhook_endpoints (
+  id TEXT PRIMARY KEY,
+  organisation_id TEXT NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+  event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  secret_ciphertext TEXT NOT NULL,
+  event_types_json TEXT NOT NULL CHECK (json_valid(event_types_json)),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled','failing')),
+  failure_count INTEGER NOT NULL DEFAULT 0 CHECK (failure_count >= 0),
+  created_by_person_id TEXT REFERENCES people(id),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  disabled_at INTEGER
+);
+
+CREATE TABLE webhook_deliveries (
+  id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  idempotency_key TEXT NOT NULL,
+  payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','delivering','delivered','failed','cancelled')),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  next_attempt_at INTEGER,
+  delivered_at INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(endpoint_id, idempotency_key)
+);
+
+CREATE TABLE webhook_delivery_attempts (
+  id TEXT PRIMARY KEY,
+  delivery_id TEXT NOT NULL REFERENCES webhook_deliveries(id) ON DELETE CASCADE,
+  attempt_number INTEGER NOT NULL CHECK (attempt_number > 0),
+  request_timestamp INTEGER NOT NULL,
+  response_status INTEGER,
+  response_headers_json TEXT CHECK (response_headers_json IS NULL OR json_valid(response_headers_json)),
+  response_excerpt TEXT,
+  error_message TEXT,
+  duration_ms INTEGER CHECK (duration_ms IS NULL OR duration_ms >= 0),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(delivery_id, attempt_number)
+);
+
+CREATE TABLE webhook_receipts (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  external_event_id TEXT NOT NULL,
+  signature_valid INTEGER NOT NULL CHECK (signature_valid IN (0,1)),
+  payload_hash TEXT NOT NULL,
+  payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+  status TEXT NOT NULL DEFAULT 'received' CHECK (status IN ('received','processed','rejected','failed')),
+  received_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  processed_at INTEGER,
+  error_message TEXT,
+  UNIQUE(provider, external_event_id)
 );
 
 CREATE TABLE audit_events (
@@ -366,6 +1158,7 @@ CREATE TABLE audit_events (
   action TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   entity_id TEXT,
+  correlation_id TEXT,
   metadata_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(metadata_json)),
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
@@ -373,29 +1166,38 @@ CREATE TABLE audit_events (
 CREATE TABLE auth_sessions (
   id TEXT PRIMARY KEY,
   person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
-  token_hash TEXT NOT NULL UNIQUE,
+  token TEXT NOT NULL UNIQUE,
   expires_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  last_seen_at INTEGER
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  ip_address TEXT,
+  user_agent TEXT
 );
 
 CREATE TABLE auth_accounts (
   id TEXT PRIMARY KEY,
   person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
-  provider TEXT NOT NULL,
-  provider_account_id TEXT NOT NULL,
+  provider_id TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  access_token TEXT,
+  refresh_token TEXT,
+  id_token TEXT,
+  access_token_expires_at INTEGER,
+  refresh_token_expires_at INTEGER,
+  scope TEXT,
+  password TEXT,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  UNIQUE(provider, provider_account_id)
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(provider_id, account_id)
 );
 
 CREATE TABLE verification_tokens (
   id TEXT PRIMARY KEY,
   identifier TEXT NOT NULL,
-  token_hash TEXT NOT NULL UNIQUE,
-  purpose TEXT NOT NULL CHECK (purpose IN ('magic_link','email_verification','password_reset','invitation')),
+  value TEXT NOT NULL,
   expires_at INTEGER NOT NULL,
-  consumed_at INTEGER,
-  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
 CREATE TABLE api_keys (
@@ -403,6 +1205,7 @@ CREATE TABLE api_keys (
   organisation_id TEXT NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
   event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  key_prefix TEXT NOT NULL,
   key_hash TEXT NOT NULL UNIQUE,
   scopes_json TEXT NOT NULL CHECK (json_valid(scopes_json)),
   expires_at INTEGER,
@@ -412,50 +1215,90 @@ CREATE TABLE api_keys (
   last_used_at INTEGER
 );
 
+-- Tenant, lifecycle and user-facing list indexes.
 CREATE INDEX idx_events_org ON events(organisation_id);
-CREATE INDEX idx_submissions_event_status ON submissions(event_id, status);
-CREATE INDEX idx_assignments_evaluator_status ON evaluator_assignments(evaluator_person_id, status);
-CREATE INDEX idx_sessions_event_status ON sessions(event_id, status);
-CREATE INDEX idx_schedule_entries_version_time ON schedule_entries(schedule_version_id, starts_at);
-CREATE INDEX idx_schedule_conflicts_open ON schedule_conflicts(event_id, resolved_at, severity);
-CREATE INDEX idx_tasks_event_status_due ON task_instances(event_id, status, due_at);
-CREATE INDEX idx_deliveries_communication_status ON communication_deliveries(communication_id, status);
-CREATE INDEX idx_audit_event_created ON audit_events(event_id, created_at DESC);
+CREATE UNIQUE INDEX ux_api_keys_event_active_name ON api_keys(event_id, name) WHERE revoked_at IS NULL;
+CREATE INDEX idx_memberships_person_event ON memberships(person_id, event_id, accepted_at, revoked_at);
+CREATE UNIQUE INDEX ux_memberships_org_role ON memberships(organisation_id, person_id, role) WHERE event_id IS NULL;
+CREATE UNIQUE INDEX ux_memberships_event_role ON memberships(event_id, person_id, role) WHERE event_id IS NOT NULL;
 
-
-CREATE UNIQUE INDEX ux_memberships_org_role
-  ON memberships(organisation_id, person_id, role)
-  WHERE event_id IS NULL;
-CREATE UNIQUE INDEX ux_memberships_event_role
-  ON memberships(event_id, person_id, role)
-  WHERE event_id IS NOT NULL;
-CREATE UNIQUE INDEX ux_form_versions_one_published
-  ON form_versions(form_id)
-  WHERE status = 'published';
-CREATE UNIQUE INDEX ux_schedule_versions_one_published
-  ON schedule_versions(event_id)
-  WHERE status = 'published';
-CREATE UNIQUE INDEX ux_evaluation_plan_round
-  ON evaluation_plans(event_id, round_number);
-CREATE UNIQUE INDEX ux_evaluation_criteria_position
-  ON evaluation_criteria(plan_id, position);
-CREATE INDEX idx_memberships_person_event ON memberships(person_id, event_id);
-CREATE INDEX idx_submission_speakers_person ON submission_speakers(person_id);
-CREATE INDEX idx_session_speakers_person ON session_speakers(person_id);
-CREATE INDEX idx_schedule_entries_room_time ON schedule_entries(schedule_version_id, room_id, starts_at, ends_at);
-
-CREATE UNIQUE INDEX idx_task_idempotency ON task_instances(event_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
-CREATE INDEX idx_form_public_status ON form_definitions(event_id, public_slug, status);
+CREATE INDEX idx_form_public_status ON form_definitions(public_slug, status);
+CREATE UNIQUE INDEX ux_form_versions_one_published ON form_versions(form_id) WHERE status = 'published';
+CREATE INDEX idx_form_versions_lookup ON form_versions(event_id, form_id, version_number DESC);
+CREATE INDEX idx_submissions_event_status ON submissions(event_id, status, updated_at DESC);
 CREATE INDEX idx_submissions_submitter ON submissions(event_id, submitter_person_id, updated_at DESC);
-CREATE INDEX idx_files_target ON file_assets(event_id, target_type, target_id, status);
-CREATE INDEX idx_integration_runs_connection ON integration_runs(connection_id, created_at DESC);
-CREATE INDEX idx_operation_jobs_event_status ON operation_jobs(event_id, status, created_at DESC);
-CREATE INDEX idx_auth_sessions_person_expiry ON auth_sessions(person_id, expires_at);
-CREATE INDEX idx_api_keys_event ON api_keys(event_id, revoked_at);
+CREATE INDEX idx_submissions_email ON submissions(event_id, submitter_email, updated_at DESC);
+CREATE INDEX idx_submission_revisions_submission ON submission_revisions(submission_id, revision_number DESC);
+CREATE INDEX idx_submission_verifications_form_email ON submission_email_verifications(event_id, form_id, email, status, expires_at);
+CREATE INDEX idx_submission_speakers_person ON submission_speakers(event_id, person_id);
 
+CREATE INDEX idx_evaluation_plans_event ON evaluation_plans(event_id, status);
+CREATE INDEX idx_evaluation_rounds_active ON evaluation_rounds(event_id, status, round_number);
+CREATE INDEX idx_team_members_person ON evaluation_team_members(event_id, person_id, removed_at);
+CREATE INDEX idx_evaluator_conflicts_open ON evaluator_conflicts(event_id, evaluator_person_id, status);
+CREATE INDEX idx_assignments_evaluator_status ON evaluator_assignments(event_id, evaluator_person_id, status, due_at);
+CREATE INDEX idx_assignments_submission ON evaluator_assignments(event_id, submission_id, round_id);
+CREATE INDEX idx_reviews_status ON reviews(event_id, status, updated_at DESC);
+CREATE UNIQUE INDEX ux_review_moderations_current ON review_moderations(round_id, submission_id) WHERE status IN ('draft','confirmed');
+CREATE UNIQUE INDEX ux_decisions_one_published ON submission_decisions(submission_id) WHERE status = 'published';
+
+CREATE INDEX idx_sessions_event_status ON sessions(event_id, status, updated_at DESC);
+CREATE UNIQUE INDEX ux_sessions_source_submission ON sessions(source_submission_id) WHERE source_submission_id IS NOT NULL;
+CREATE INDEX idx_session_speakers_person ON session_speakers(event_id, person_id);
+CREATE UNIQUE INDEX ux_schedule_versions_one_published ON schedule_versions(event_id) WHERE status = 'published';
+CREATE INDEX idx_schedule_entries_version_time ON schedule_entries(schedule_version_id, starts_at);
+CREATE INDEX idx_schedule_entries_room_time ON schedule_entries(schedule_version_id, room_id, starts_at, ends_at);
+CREATE INDEX idx_schedule_conflicts_open ON schedule_conflicts(event_id, schedule_version_id, resolved_at, severity);
+CREATE INDEX idx_itinerary_person ON public_itineraries(event_id, person_id);
+
+CREATE INDEX idx_tasks_event_status_due ON task_instances(event_id, status, due_at);
+CREATE INDEX idx_tasks_target ON task_instances(event_id, target_type, target_id, status);
+CREATE UNIQUE INDEX ux_task_instances_template_target
+  ON task_instances(event_id, template_id, target_type, target_id)
+  WHERE template_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_task_idempotency ON task_instances(event_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE INDEX idx_task_comments_task ON task_comments(task_id, created_at);
+CREATE INDEX idx_task_evidence_task ON task_evidence(task_id, status, created_at DESC);
+
+CREATE INDEX idx_files_target ON file_assets(event_id, target_type, target_id, status);
+CREATE UNIQUE INDEX ux_file_assets_logical_active
+  ON file_assets(event_id, owner_person_id, target_type, target_id, asset_kind)
+  WHERE status <> 'deleted' AND target_type NOT IN ('task','resource');
+CREATE INDEX idx_file_versions_release ON file_versions(asset_id, scan_status, released_at, version_number DESC);
+CREATE UNIQUE INDEX ux_file_assets_current_version ON file_assets(current_version_id) WHERE current_version_id IS NOT NULL;
+CREATE INDEX idx_resource_pages_audience ON resource_pages(event_id, status, audience_scope);
+CREATE UNIQUE INDEX ux_resource_versions_one_published ON resource_page_versions(resource_page_id) WHERE status = 'published';
+CREATE INDEX idx_resource_ack_person ON resource_acknowledgements(event_id, person_id, acknowledged_at DESC);
+
+CREATE INDEX idx_templates_event_status ON communication_templates(event_id, status, category);
+CREATE UNIQUE INDEX ux_template_channel_one_published ON communication_template_versions(template_id, channel) WHERE status = 'published';
+CREATE INDEX idx_communications_status_schedule ON communications(event_id, status, scheduled_at);
+CREATE INDEX idx_deliveries_communication_status ON communication_deliveries(communication_id, status, next_attempt_at);
+CREATE INDEX idx_deliveries_provider_message ON communication_deliveries(provider, provider_message_id);
+CREATE INDEX idx_calendar_invitation_status ON calendar_invitations(event_id, status, updated_at);
+CREATE INDEX idx_calendar_attempt_status ON calendar_sync_attempts(status, created_at);
+
+CREATE INDEX idx_integration_runs_connection ON integration_runs(connection_id, created_at DESC);
+CREATE INDEX idx_integration_items_status ON integration_run_items(run_id, status);
+CREATE INDEX idx_operation_jobs_event_status ON operation_jobs(event_id, status, created_at DESC);
+CREATE INDEX idx_operation_items_status ON operation_items(operation_id, status, updated_at);
+CREATE INDEX idx_event_changes_cursor ON event_changes(event_id, sequence);
+CREATE INDEX idx_saved_views_owner ON saved_views(event_id, owner_person_id, area);
+CREATE UNIQUE INDEX ux_idempotency_event ON idempotency_records(event_id, actor_id, scope, idempotency_key) WHERE event_id IS NOT NULL;
+CREATE UNIQUE INDEX ux_idempotency_org ON idempotency_records(organisation_id, actor_id, scope, idempotency_key) WHERE event_id IS NULL;
+CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
+CREATE INDEX idx_webhook_deliveries_status ON webhook_deliveries(status, next_attempt_at);
+CREATE INDEX idx_webhook_attempts_delivery ON webhook_delivery_attempts(delivery_id, attempt_number DESC);
+CREATE INDEX idx_audit_event_created ON audit_events(event_id, created_at DESC);
+CREATE INDEX idx_auth_sessions_person_expiry ON auth_sessions(person_id, expires_at);
+CREATE INDEX idx_verification_identifier_expiry ON verification_tokens(identifier, expires_at);
+CREATE INDEX idx_api_keys_event ON api_keys(event_id, revoked_at, expires_at);
+
+-- Audit history is append-only at the database boundary.
 CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events BEGIN
   SELECT RAISE(ABORT, 'audit events are append-only');
 END;
+
 CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events BEGIN
   SELECT RAISE(ABORT, 'audit events are append-only');
 END;

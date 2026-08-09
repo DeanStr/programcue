@@ -1,14 +1,35 @@
 # Security baseline
 
-- Every event-scoped read/write must validate organisation membership and event role server-side.
-- Public endpoints expose published programme data only.
-- Administrative API routes require an authenticated session/token; hiding UI controls is not authorisation.
-- Private files use opaque keys and short-lived signed access. Original filenames are metadata, not object paths.
-- Uploads enforce MIME type, extension, size and ownership before becoming active.
-- Public forms use rate limits and bot protection; final submission requires verified email by default.
-- Provider credentials are secrets and never event form data.
-- Consequential actions append audit events: decisions, schedule publication, form publication, bulk communication, integration sync, role changes and agent approvals.
-- Bulk messages require recipient preview, suppression/invalid counts, validation and explicit confirmation.
-- Schedule publication fails while unresolved blocking conflicts exist.
-- Queued operations are idempotent and have bounded retry budgets. Non-idempotent operations do not automatically retry without a provider idempotency contract.
-- Data retention and erasure workflows operate by event and person association while preserving legally required audit evidence.
+This is an implementation baseline, not a production certification.
+
+## Implemented controls
+
+- Private page loaders/actions resolve identity and event membership server-side. Production uses Better Auth; demo identities exist only in an explicitly validated non-production runtime mode. The Worker rejects missing, misspelled or contradictory `APP_ENV`/`DEMO_MODE` combinations before routing or consuming Queue work.
+- Better Auth stores users, sessions, accounts and verification records in D1. Magic links are hashed, expire after five minutes and cannot create an uninvited account. New administrator invitations carry an expiry, are accepted and audited on first valid access, and are denied after expiry or revocation. Missing auth secrets or Resend configuration fails explicitly.
+- Public application sessions use an HttpOnly, SameSite cookie backed by a hashed D1 token. Verification codes expire after ten minutes, allow at most five failed attempts and are atomically consumed once. Demo mode never claims a code was emailed. Public form views omit password verifiers, private routing and raw persistence aliases.
+- Event API keys are high-entropy bearer credentials stored only as SHA-256 digests. They are event/organisation scoped, constrained to the declared scope vocabulary, optionally expiring, revealed once and revocable; use is timestamped. Mutation routes reject unsupported HTTP methods, and a repeated failed revocation does not create false audit evidence.
+- Private production queries and mutations are expected to include organisation and event scope. Focused tests cover cross-tenant rejection in Event Setup, evaluation, speakers, readiness and API keys. Decision release is service-authorised: owners and administrators may release, while a committee chair also requires an explicit grant from the active evaluation plan.
+- Public programme UI, JSON and iCalendar resources read only the latest published schedule version. Event slugs are globally unique, and canonical programme/calendar-session URLs carry the selected event slug. Private API CORS allows only configured origins; published resources use public CORS.
+- The Worker applies content-type, referrer, permissions, opener and content-security headers, plus HSTS in production. Embed `frame-ancestors` must be explicitly configured in every runtime mode.
+- File bytes are stored in private R2 under opaque event/target/asset/version keys and downloaded only through authenticated, audience-scoped routes. Uploads enforce declared size, extension/MIME policy and file signatures. Uploaded versions stay quarantined and unavailable until a trusted clean result releases them. Task evidence records the submitted file version; resource attachments belong to an immutable resource version and use distinct assets so later drafts cannot mutate published bytes.
+- Published form settings and resource/template identity belong to immutable versions. Draft changes cannot alter the live form URL/limits, published resource metadata/audience/attachments or automatic communication trigger category before a claimed publication succeeds. Resource acknowledgements identify the exact published version.
+- Schedule publication recomputes authoritative conflicts using event-timezone boundaries and rejects blocking conditions even if the UI showed an older result. Its event-revision claim prevents a concurrent Event Setup change from committing after validation against stale dates or capacities.
+- Communication and calendar flows persist intent, delivery/attempt rows and audit evidence before Queue/provider work. Provider execution uses renewable, random-token D1 leases that expire after 60 seconds. Expired `running` operations can be reclaimed after a crashed consumer; delivery under an active lease is delayed for 60 seconds; and completion/failure writes require the current token. Provider idempotency keys and uniqueness constraints protect retryable sends, while cancellation competes with the send claim instead of silently resurrecting cancelled work.
+- Decision and submission notification consumers keep communication, delivery, operation-item and audit materialisation conditional on the operation remaining eligible. A stale duplicate that resumes after another consumer reaches a terminal state cannot recreate or send that work.
+- Optional email contains an HMAC-signed, expiring unsubscribe link. Viewing the destination is read-only and an explicit POST confirms the category opt-out; optional-recipient selection and the final pre-provider claim both enforce active category preferences. Transactional email ignores those optional-message preferences, while provider complaint/suppression exclusions apply to every email kind.
+- Resend delivery webhooks require a valid signed raw body, bounded replay timestamp and provider event ID. Duplicate receipts reconcile idempotently, and persisted receipts are reduced by precedence so a delayed success cannot reverse a bounce, suppression or failure. Complaint and provider-suppression events create an event-wide exclusion for future email to that address.
+- Calendar lifecycle work binds each invitation to one current attempt and sequence. Rapid republication supersedes stale attempts, and a stale provider completion cannot overwrite the newer invitation state.
+- Queue configuration has bounded retries and a dead-letter queue. An active claim is retried after its 60-second lease window rather than being treated as a failure; unsupported operation messages are marked failed and audited instead of being reported as successful.
+- Audit records are append-only at the database layer. Implemented consequential flows—including event/form/resource changes, decisions, schedule publication, tasks, files, communications, calendars and API-key lifecycle—append audit evidence.
+
+## Outstanding before production
+
+- Public forms and authentication endpoints have no application rate limiter or Turnstile integration. Verification attempt limits do not replace network-level abuse controls.
+- There is a quarantine/release data model and clean-result boundary, but no malware-scanner provider, authenticated scanner callback or automated scanning workflow. No upload becomes downloadable without an externally recorded clean result.
+- Uploads are Worker-proxied multipart requests. Direct-to-R2 multipart upload, resumability and provider-side upload expiry are not implemented; files over 90 MB fail explicitly, leaving headroom below the Worker's request-body ceiling for multipart framing.
+- Cookie-authenticated React Router mutations require an exact same-origin `Origin` header at the Worker boundary. Versioned APIs, provider webhooks and Better Auth routes remain outside that browser-action boundary and use their API-key, signature or Better Auth protections.
+- The current content security policy permits inline scripts and styles for the application build. A nonce/hash-based production policy and third-party provider allow-list are not complete.
+- Data-retention duration is stored, but scheduled retention, person/event erasure, export, legal-hold and audit-preservation workflows are not implemented.
+- Backup, point-in-time restore, disaster-recovery exercises and recovery-time/recovery-point evidence are not present.
+- Sender-profile verification and connected-calendar OAuth provisioning have no administrator UI/callback flow. Provider records must not be inserted manually in production without an authorised provisioning path.
+- There is no deployed penetration test, dependency-policy gate, secret-rotation exercise or production access review in this workspace.

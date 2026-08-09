@@ -1,4 +1,4 @@
-<!-- Generated from sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.docx by scripts/convert_docx_spec.py. -->
+<!-- Converted from the verified source DOCX; the redundant binary was removed after comparison. -->
 
 > Implementation progress is audited separately in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md). Commitment and status language below is preserved from the source specification.
 

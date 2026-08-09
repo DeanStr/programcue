@@ -1,22 +1,55 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "program-cue-demo",
-  "main": "workers/app.js",
-  "compatibility_date": "2026-08-01",
-  "assets": {
-    "directory": "./public",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": [
-      "/api/*",
-      "/embed/*"
+  "main": "workers/index.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "program-cue-db",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "program-cue-files" }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "EVENT_CHANNEL", "class_name": "EventChannel" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["EventChannel"] }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "OPERATIONS_QUEUE",
+        "queue": "program-cue-operations-demo"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "program-cue-operations-demo",
+        "max_batch_size": 20,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "program-cue-operations-demo-dlq"
+      }
     ]
   },
   "vars": {
     "APP_ENV": "demo",
     "DEMO_MODE": "true",
+    "DEFAULT_EVENT_ID": "evt-foe-2025",
+    "BETTER_AUTH_SECRET": "program-cue-explicit-demo-only-signing-secret-never-use-in-production",
+    "BETTER_AUTH_URL": "http://localhost:5173",
+    "AUTH_EMAIL_FROM": "Program Cue Demo <demo@example.invalid>",
     "PUBLIC_EVENT_SLUG": "future-of-events-2025",
-    "CORS_ALLOWED_ORIGINS": "http://127.0.0.1:4173",
+    "CORS_ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173",
     "EMBED_FRAME_ANCESTORS": "*"
-  }
+  },
+  "observability": { "enabled": true }
 }

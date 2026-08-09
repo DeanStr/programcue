@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "vitest.test-files.ts",
+    "vitest.unit.config.ts",
+    "vitest.worker.config.ts",
+    "playwright.config.ts",
+    "react-router.config.ts",
+    "e2e/**/*.ts"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler"
+  }
+}

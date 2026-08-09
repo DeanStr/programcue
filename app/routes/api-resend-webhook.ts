@@ -1,0 +1,61 @@
+import type { Route } from "./+types/api-resend-webhook";
+import { ZodError } from "zod";
+import { CommunicationService } from "~/modules/communications/communication-service.server";
+import { verifyResendWebhook, WebhookVerificationError } from "~/modules/communications/resend-webhook.server";
+import { getCloudflareContext } from "~/platform/cloudflare-context";
+import { readBoundedText, RequestBodyTooLargeError } from "~/platform/http/read-body";
+
+function methodNotAllowed() {
+  return new Response("Method not allowed", { status: 405, headers: { allow: "POST" } });
+}
+
+export async function action({ request, context }: Route.ActionArgs) {
+  if (request.method !== "POST") return methodNotAllowed();
+  const { env } = getCloudflareContext(context);
+  let raw: string;
+  try {
+    raw = await readBoundedText(request, 256_000);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return Response.json({ error: "Webhook payload exceeds 256 KB." }, { status: 413 });
+    }
+    throw error;
+  }
+  const webhookId = request.headers.get("svix-id");
+  try {
+    await verifyResendWebhook({
+      body: raw,
+      webhookId,
+      timestamp: request.headers.get("svix-timestamp"),
+      signature: request.headers.get("svix-signature"),
+      secret: env.RESEND_WEBHOOK_SECRET,
+    });
+  } catch (error) {
+    if (error instanceof WebhookVerificationError) return Response.json({ error: error.message }, { status: 401 });
+    throw error;
+  }
+  let payload: unknown;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return Response.json({ error: "Webhook body is not valid JSON." }, { status: 400 });
+  }
+  let result;
+  try {
+    result = await new CommunicationService(env).reconcileResendEvent(payload, raw, webhookId!);
+  } catch (error) {
+    if (error instanceof ZodError) return Response.json({ error: "Webhook payload does not match a supported Resend event." }, { status: 400 });
+    throw error;
+  }
+  if (!result.matched) {
+    return Response.json(
+      { error: "The delivery is not available for reconciliation yet; retry this webhook." },
+      { status: 503, headers: { "retry-after": "30" } },
+    );
+  }
+  return Response.json(result);
+}
+
+export function loader() {
+  throw methodNotAllowed();
+}

@@ -1,101 +1,106 @@
 # Program Cue
 
-Program Cue is an interactive conference programme operations evaluator and a production-oriented Cloudflare foundation. It demonstrates the workflow from call-for-speakers applications through review, speaker onboarding, communications, scheduling, readiness, integrations, publication and attendee itinerary.
+Program Cue is a pre-release conference programme operations platform. It is one React Router/TypeScript modular monolith on Cloudflare Workers, with D1 for relational state, R2 for private files, Queues for provider work and an event-scoped Durable Object for realtime invalidation.
 
-The evaluator is broad, but the full production product is not yet complete. Most browser workflows persist to `localStorage`; the Worker currently implements public programme/calendar delivery, task list/create, schedule publication and idempotent operation-ingestion boundaries. See [the verified implementation audit](docs/IMPLEMENTATION_STATUS.md) for the exact boundary.
+The repository contains server-backed slices for event setup, submissions, evaluation and decisions, speaker workspaces, resources, schedule publication, the public programme, communications, operations and scoped REST APIs. Published forms, resource pages and communication templates keep version-scoped content and metadata; retryable provider work is recorded durably and claimed idempotently. It is not feature-complete against the full product specification. Provider and speaker-identity onboarding, automatic reminders, malware-scanner integration, abuse controls, Airtable/Accelevents, AI and several competition UX requirements remain; see [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
-This repository deliberately combines two layers without introducing a second service or compatibility framework:
+## Local development
 
-1. **A zero-install interactive evaluator application** in `public/`. It runs immediately with canonical seeded data and durable browser-local demo state, so evaluators do not need provider accounts or cloud credentials.
-2. **A fail-closed Cloudflare production boundary** in `workers/`, with the relational D1 schema in `migrations/`, authenticated API routes, public programme and calendar endpoints, idempotent operation ingestion, security headers, CORS rules, and explicit resource bindings.
-
-The evaluator application is not a slideshow. Form editing, category routing, multiple drafts, direct sessions, review scoring, decisions, speaker tasks and resources, local file metadata, schedule views and conflict resolution, communications validation, programme exports, integration dry runs, assistant approvals, surface switching, and local reset are interactive. These interactions should not be confused with credentialed provider execution or server-backed multi-user workflows.
-
-## Run the interactive application
+Requirements: Node.js 22+, Python 3.9+ for migration validation and Chromium for browser tests.
 
 ```bash
-cd program-cue
+npm install
 npm run dev
 ```
 
-Open:
+The development command applies the baseline migration to the local Wrangler D1 database and starts the application at `http://127.0.0.1:5173`. Demo identities and seed data are enabled only by `wrangler.demo.jsonc`.
 
-- Administrator: `http://127.0.0.1:4173/#admin/command`
-- Reviewer: `http://127.0.0.1:4173/#admin/review`
-- Form Builder: `http://127.0.0.1:4173/#admin/submissions/form`
-- Schedule Planner: `http://127.0.0.1:4173/#admin/schedule`
-- Speaker portal: `http://127.0.0.1:4173/#speaker/dashboard`
-- Speaker resources: `http://127.0.0.1:4173/#speaker/resources`
-- Public programme: `http://127.0.0.1:4173/#public/programme`
-- Public application: `http://127.0.0.1:4173/#apply/form`
-- Design system: `http://127.0.0.1:4173/#design/system`
+Useful routes:
 
-The demo stores changes in `localStorage`. Use **Reset demo** in the administrator sidebar to restore the canonical event state.
+- Command Centre: `http://127.0.0.1:5173/admin/command`
+- Event Setup: `http://127.0.0.1:5173/admin/event`
+- Submissions and forms: `http://127.0.0.1:5173/admin/submissions`
+- Review administration: `http://127.0.0.1:5173/admin/review`
+- Schedule: `http://127.0.0.1:5173/admin/schedule`
+- Communications: `http://127.0.0.1:5173/admin/communications`
+- Speaker portal: `http://127.0.0.1:5173/speaker/dashboard`
+- Public programme: `http://127.0.0.1:5173/public/programme/future-of-events-2025`
+- Public application: `http://127.0.0.1:5173/apply/form`
+- API reference: `http://127.0.0.1:5173/api/docs`
+- Design system: `http://127.0.0.1:5173/design/system`
 
-Rendered screenshots are included in `docs/screenshots/`, and the design reference board is in `docs/designs/`.
+Event slugs are globally unique. Canonical public programme and calendar-session links include the event slug; the unscoped `/public/programme` route is only an environment-configured convenience alias.
 
-## Validate everything
+## Validation
 
 ```bash
 npm run check
 ```
 
-In an environment with Python Playwright and Chromium installed, the complete check covers:
+This runs TypeScript and React Router type generation, fast Node rule tests, isolated workerd/D1/R2 integration tests, one production build, migration and OpenAPI validation, and Playwright behavior/accessibility/visual coverage against a freshly built local production Worker in Chromium.
 
-- JavaScript syntax for the application, seed, local server, and Worker;
-- **22 domain and Worker tests**;
-- **18 rendered product routes plus the iframe embed route**;
-- **34 D1 tables and 2 append-only audit triggers**;
-- **25 static product invariants**;
-- **16 HTTP and security smoke checks**;
-- a Playwright/Chromium browser workflow across all major routes, including common-laptop overflow checks.
-
-`npm run check:core` runs all checks except the Playwright browser workflow. The suite intentionally verifies that private production routes reject missing or incorrect credentials and fail closed when required Cloudflare bindings are absent.
-
-## Cloudflare deployment
-
-The production target is a modular monolith on Cloudflare Workers. The evaluator build has no runtime package-install requirement; the intended production dependency set is recorded in `docs/production-package.example.json`.
+Use the smaller commands while developing:
 
 ```bash
-# Install official tooling when preparing the real deployment.
-npm install -D wrangler
+npm run check:core
+npm run typecheck
+npm test
+npm run test:unit
+npm run test:worker
+npm run build
+npm run test:e2e
+```
 
-wrangler d1 create program-cue-db
-wrangler r2 bucket create program-cue-files
-wrangler queues create program-cue-operations
-wrangler queues create program-cue-operations-dlq
+`test:unit` runs deterministic Node-compatible rules without starting Workerd or applying D1 migrations. `test:worker` runs the service, route and provider-boundary suites against the Cloudflare runtime. `npm test` runs both projects; neither focused command replaces the complete validation gate.
+
+## Production configuration
+
+Create the D1, private R2, Queue and Durable Object resources, replace placeholder resource IDs and example origins in `wrangler.jsonc`, then configure the secrets needed by the enabled workflows:
+
+```bash
+wrangler secret put BETTER_AUTH_SECRET
+wrangler secret put RESEND_API_KEY
+wrangler secret put RESEND_WEBHOOK_SECRET
+wrangler secret put CALENDAR_CREDENTIALS_KEY
 
 npm run db:migrate:remote
+npm run db:bootstrap:production -- \\
+  --owner-email owner@your-domain.example \\
+  --owner-name "Owner Name" \\
+  --organisation-name "Organisation Name" \\
+  --organisation-slug organisation-name \\
+  --event-name "Event Name" \\
+  --timezone America/Toronto \\
+  --start-date 2027-05-20 \\
+  --end-date 2027-05-22 \\
+  --yes
 npm run deploy
 ```
 
-Set secrets instead of committing them:
+The production bootstrap is intentionally one-time and requires an empty,
+migrated application database. It atomically creates the first Better Auth
+person, organisation-wide owner membership and configured default event; it
+does not enable public sign-up or install a permanent bootstrap endpoint. After
+deployment, that owner requests their first magic link at `/sign-in`.
 
-```bash
-wrangler secret put INTERNAL_API_TOKEN
-wrangler secret put BETTER_AUTH_SECRET
-wrangler secret put RESEND_API_KEY
-wrangler secret put GOOGLE_CALENDAR_CLIENT_SECRET
-wrangler secret put MICROSOFT_CALENDAR_CLIENT_SECRET
-wrangler secret put AIRTABLE_TOKEN
-wrangler secret put ACCELEVENTS_TOKEN
-```
+`BETTER_AUTH_SECRET` must contain at least 32 characters. `CALENDAR_CREDENTIALS_KEY` is required only for encrypted Google or Microsoft calendar credentials and must be a base64-encoded 32-byte AES-GCM key. Missing auth, queue, realtime or provider configuration fails explicitly; production never falls back to demo identity or simulated delivery.
 
-External delivery and sync actions never silently report success. The evaluator interface generates explicit dry-run previews; the production Worker fails closed until the corresponding provider credential and binding are configured.
+The checked-in production configuration still contains placeholder resource identifiers and example URLs. `npm run deploy` intentionally fails its configuration preflight until they are replaced. A deployed production environment has not been verified from this workspace.
 
 ## Repository map
 
 ```text
-public/                 Interactive evaluator SPA, canonical seed data and design system
-workers/app.js          Cloudflare Worker API, assets, embed handling and queue consumer
-migrations/             D1 relational schema, constraints, indexes and audit triggers
-src/domain/             Tested scoring, scheduling, readiness and communication rules
-server.mjs              Local evaluator and API-smoke server
-scripts/                Route, migration, static, screenshot and browser validation
-tests/                  Domain, Worker and HTTP/security tests
-docs/                   Decisions, screenshots, implementation status, stack and security
+app/routes/                 React Router pages and resource/API routes
+app/modules/                Vertical-slice rules and D1/R2/provider services
+app/platform/               Auth, database, API, operations and realtime infrastructure
+workers/index.ts            Single Worker entry and React Router request handler
+workers/communications-queue.ts
+                            Email, submission/decision-notification and calendar consumers
+workers/event-channel.ts    Event-scoped Durable Object invalidation channel
+migrations/                 Pre-release D1 baseline schema and constraints
+public/styles.css           Program Cue design tokens and component styles
+e2e/                        Browser behavior, accessibility and visual tests
+docs/                       Decisions, security, design system, API and verified status
 ```
 
-## Scope boundary
-
-Program Cue is purpose-built for programme management. It does not become a general CRM, marketing-automation system, payment product, multilingual platform, or general-purpose CMS. Rich content is constrained to forms, operational messages, speaker resources, and public programme content.
+The canonical product scope is [the full implementation specification](sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md). The product deliberately excludes a general CRM, broad marketing automation, payments, multilingual expansion and a general-purpose CMS.

@@ -18,15 +18,15 @@
 ## Product and architecture boundaries
 
 - This project is pre-release. Backward compatibility is unnecessary unless a documented external consumer, deployed dataset or migration history requires it. Prefer a clean direct change over compatibility shims, dual paths or deprecated aliases.
-- The dependency-free evaluator in `public/` uses seeded data and browser `localStorage`. The Worker, D1 migration and domain modules form a smaller production foundation. Do not present evaluator behavior, static screens, schema tables or dry runs as completed production features.
+- The application is one React Router/TypeScript modular monolith on Cloudflare Workers. D1-backed route behavior is production behavior; visually ported routes without connected services remain frontend foundation only. Do not present static screens, schema tables or dry runs as completed production features.
 - Never fabricate external-provider success. Clearly label simulations and dry runs. Missing credentials, bindings or required invariants must fail fast with a specific error.
 - Do not add silent provider, storage, credential, stale-data or default fallbacks merely to keep an operation appearing successful.
 - Do not overengineer. Add indirection only for a concrete current need; avoid speculative extension points, compatibility layers, microservices and generic frameworks.
 
 ## Implementation rules
 
-- Keep deterministic business rules out of rendering handlers when practical; place them in `src/domain/` with focused tests.
-- Preserve the zero-install evaluator unless an explicit architecture decision changes it. Do not add evaluator runtime dependencies casually.
+- Keep deterministic business rules out of rendering handlers when practical; place new rules in the relevant `app/modules/` domain or service layer with focused tests.
+- Use React Router framework-mode route modules, TypeScript, server loaders/actions and the existing Program Cue design tokens. Do not introduce another client runtime or browser-local source of truth.
 - Enforce production authorization and validation server-side. Hiding a UI control is not authorization.
 - Preserve organisation and event isolation in every private production query and mutation.
 - Persist durable intent before enqueueing external work and require idempotency for retryable operations.
@@ -45,14 +45,14 @@ Run the smallest relevant checks during development, then run:
 npm run check:core
 ```
 
-When Python Playwright and Chromium are available, also run `npm run check`. If the browser check cannot run, report that explicitly rather than claiming the full suite passed.
+Run `npm run check` when Chromium is available. If the browser check cannot run, report that explicitly rather than claiming the full suite passed.
 
-For user-facing changes, exercise the real browser workflow when possible and update `scripts/browser_check.py` as needed. For Worker/API changes, update tests and keep `docs/openapi.yaml` and `public/openapi.json` synchronized.
+For user-facing changes, exercise the real browser workflow and update the Playwright behavior/visual coverage as needed. For Worker/API changes, update tests and keep `docs/openapi.yaml` and `public/openapi.json` synchronized.
 
 ## Documentation
 
 - Keep `README.md` concise and current.
 - Update `docs/IMPLEMENTATION_STATUS.md` when implementation evidence changes materially.
-- Distinguish **working evaluator**, **production subset**, **schema only**, **demonstration only** and **not implemented**.
+- Distinguish **production slice**, **frontend foundation**, **schema only**, **demonstration only** and **not implemented**.
 - Avoid new status-report documents; update the existing audit.
 - Do not edit the specification to make implementation appear more complete. Record progress in the implementation audit.

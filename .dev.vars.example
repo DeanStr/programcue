@@ -1,16 +1,14 @@
 APP_ENV=development
 DEMO_MODE=true
-INTERNAL_API_TOKEN=
-BETTER_AUTH_SECRET=
-CORS_ALLOWED_ORIGINS=http://127.0.0.1:4173
+DEFAULT_EVENT_ID=evt-foe-2025
+# Explicit local-only value. Replace it in every non-demo environment.
+BETTER_AUTH_SECRET=program-cue-explicit-demo-only-signing-secret-never-use-in-production
+BETTER_AUTH_URL=http://localhost:5173
+AUTH_EMAIL_FROM=Program Cue Dev <dev@example.invalid>
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 EMBED_FRAME_ANCESTORS=*
+PUBLIC_EVENT_SLUG=future-of-events-2025
 RESEND_API_KEY=
-RESEND_FROM=
-AIRTABLE_TOKEN=
-AIRTABLE_BASE_ID=
-ACCELEVENTS_TOKEN=
-GOOGLE_CALENDAR_CLIENT_ID=
-GOOGLE_CALENDAR_CLIENT_SECRET=
-MICROSOFT_CALENDAR_CLIENT_ID=
-MICROSOFT_CALENDAR_CLIENT_SECRET=
-AI_PROVIDER_API_KEY=
+RESEND_WEBHOOK_SECRET=
+# Base64-encoded 32-byte AES-GCM key used only to decrypt connected-calendar OAuth envelopes.
+CALENDAR_CREDENTIALS_KEY=

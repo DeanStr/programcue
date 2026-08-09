@@ -1,0 +1,524 @@
+import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  calculateOverallReadiness,
+  calculateReadiness,
+  type ReadinessTask,
+} from "./readiness-rules";
+
+type CountRow = { total: number; complete?: number; failed?: number };
+type TaskRow = {
+  id: string;
+  impact: ReadinessTask["impact"];
+  readinessPercent: number;
+  status: string;
+  readinessState: string;
+  targetType: string;
+  taskType: string;
+  dueAt: number | null;
+};
+
+export type ReadinessWorkflow = {
+  key:
+    | "content"
+    | "review"
+    | "schedule"
+    | "speakers"
+    | "communications"
+    | "operations";
+  label: string;
+  score: number;
+  completed: number;
+  total: number;
+  detail: string;
+  href: string;
+};
+
+export type ReadinessBlocker = {
+  key: string;
+  label: string;
+  count: number;
+  severity: "danger" | "warning";
+  detail: string;
+  href: string;
+  action: string;
+};
+
+export type CommandCentreSnapshot = {
+  eventId: string;
+  eventTimezone: string;
+  generatedAt: number;
+  cursor: number;
+  readiness: {
+    percentage: number;
+    status: "ready" | "on_track" | "at_risk";
+    declaredBlockers: number;
+    explanation: string;
+  };
+  workflows: ReadinessWorkflow[];
+  blockers: ReadinessBlocker[];
+  deliveryHealth: Array<{
+    channel: string;
+    successful: number;
+    total: number;
+    percentage: number;
+  }>;
+  upcoming: Array<{
+    id: string;
+    title: string;
+    startsAt: number;
+    room: string;
+  }>;
+  operations: Array<{
+    id: string;
+    type: string;
+    status: string;
+    completed: number;
+    total: number;
+  }>;
+};
+
+function percent(complete: number, total: number) {
+  if (total === 0) return 100;
+  return Math.max(0, Math.min(100, Math.round((complete / total) * 100)));
+}
+
+function numeric(value: number | null | undefined) {
+  return Number(value ?? 0);
+}
+
+export class ReadinessService {
+  constructor(private readonly env: CloudflareEnvironment) {}
+
+  async getCommandCentre(viewer: Viewer): Promise<CommandCentreSnapshot> {
+    const event = await this.env.DB.prepare(
+      `
+      SELECT id, timezone FROM events WHERE id = ? AND organisation_id = ?
+    `,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .first<{ id: string; timezone: string }>();
+    if (!event) throw new Response("Event not found", { status: 404 });
+
+    const now = Math.floor(Date.now() / 1000);
+    // Capture the cursor before the snapshot. Any mutation that commits while
+    // the remaining reads run will therefore have a newer cursor and trigger a
+    // subsequent client revalidation instead of being silently skipped.
+    const baselineCursor = await this.env.DB.prepare(
+      `
+      SELECT COALESCE(MAX(sequence), 0) AS total
+        FROM event_changes
+       WHERE event_id = ?
+    `,
+    )
+      .bind(viewer.eventId)
+      .first<CountRow>();
+    const [
+      taskResult,
+      content,
+      review,
+      schedule,
+      conflict,
+      unassigned,
+      deliveries,
+      integrations,
+      draftSchedule,
+      upcoming,
+      operationSummary,
+      operations,
+      deliveryChannels,
+    ] = await Promise.all([
+      this.env.DB.prepare(
+        `
+        SELECT id, impact, readiness_percent AS readinessPercent, status,
+               readiness_state AS readinessState, target_type AS targetType,
+               task_type AS taskType, due_at AS dueAt
+          FROM task_instances
+         WHERE event_id = ?
+      `,
+      )
+        .bind(viewer.eventId)
+        .all<TaskRow>(),
+      this.env.DB.prepare(
+        `
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status IN ('accepted','waitlisted','rejected','withdrawn') THEN 1 ELSE 0 END), 0) AS complete
+          FROM submissions
+         WHERE event_id = ? AND status <> 'draft'
+      `,
+      )
+        .bind(viewer.eventId)
+        .first<CountRow>(),
+      this.env.DB.prepare(
+        `
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END), 0) AS complete
+          FROM evaluator_assignments
+         WHERE event_id = ? AND status NOT IN ('cancelled','recused')
+      `,
+      )
+        .bind(viewer.eventId)
+        .first<CountRow>(),
+      this.env.DB.prepare(
+        `
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status IN ('scheduled','published') THEN 1 ELSE 0 END), 0) AS complete
+          FROM sessions
+         WHERE event_id = ? AND status NOT IN ('cancelled','archived')
+      `,
+      )
+        .bind(viewer.eventId)
+        .first<CountRow>(),
+      this.env.DB.prepare(
+        `
+        SELECT COUNT(*) AS total
+          FROM schedule_conflicts
+         WHERE event_id = ? AND severity = 'blocking' AND resolved_at IS NULL
+      `,
+      )
+        .bind(viewer.eventId)
+        .first<CountRow>(),
+      this.env.DB.prepare(
+        `
+        SELECT COUNT(*) AS total
+          FROM submissions s
+         WHERE s.event_id = ?
+           AND s.status IN ('submitted','assigned','in_review')
+           AND NOT EXISTS (
+             SELECT 1 FROM evaluator_assignments a
+              WHERE a.event_id = s.event_id
+                AND a.submission_id = s.id
+                AND a.status NOT IN ('cancelled','recused')
+           )
+      `,
+      )
+        .bind(viewer.eventId)
+        .first<CountRow>(),
+      this.env.DB.prepare(
+        `
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status IN ('sent','delivered','opened','clicked') THEN 1 ELSE 0 END), 0) AS complete,
+               COALESCE(SUM(CASE WHEN status IN ('failed','bounced','suppressed') THEN 1 ELSE 0 END), 0) AS failed
+          FROM communication_deliveries
+         WHERE event_id = ? AND status <> 'cancelled'
+      `,
+      )
+        .bind(viewer.eventId)
+        .first<CountRow>(),
+      this.env.DB.prepare(
+        `
+        SELECT (
+          SELECT COUNT(*) FROM integration_connections
+           WHERE event_id = ? AND status IN ('needs_attention','failed')
+        ) + (
+          SELECT COUNT(*) FROM integration_runs r
+          JOIN integration_connections c ON c.id = r.connection_id
+           WHERE c.event_id = ? AND r.status IN ('partially_failed','failed')
+        ) AS total
+      `,
+      )
+        .bind(viewer.eventId, viewer.eventId)
+        .first<CountRow>(),
+      this.env.DB.prepare(
+        `
+        SELECT COUNT(*) AS total FROM schedule_versions d
+         WHERE d.event_id = ? AND d.status = 'draft'
+           AND d.version_number > COALESCE((
+             SELECT MAX(p.version_number) FROM schedule_versions p
+              WHERE p.event_id = d.event_id AND p.status = 'published'
+           ), 0)
+      `,
+      )
+        .bind(viewer.eventId)
+        .first<CountRow>(),
+      this.env.DB.prepare(
+        `
+        SELECT s.id, s.title, e.starts_at AS startsAt, r.name AS room
+          FROM schedule_versions v
+          JOIN schedule_entries e ON e.schedule_version_id = v.id AND e.event_id = v.event_id
+          JOIN sessions s ON s.id = e.session_id AND s.event_id = v.event_id
+          JOIN rooms r ON r.id = e.room_id AND r.event_id = v.event_id
+         WHERE v.event_id = ? AND v.status = 'published'
+           AND s.visibility = 'public' AND e.starts_at >= ?
+           AND v.version_number = (
+             SELECT MAX(version_number) FROM schedule_versions
+              WHERE event_id = v.event_id AND status = 'published'
+           )
+         ORDER BY e.starts_at ASC LIMIT 5
+      `,
+      )
+        .bind(viewer.eventId, now)
+        .all<{ id: string; title: string; startsAt: number; room: string }>(),
+      this.env.DB.prepare(
+        `
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS complete,
+               COALESCE(SUM(CASE WHEN status IN ('failed','queue_failed','partially_failed') THEN 1 ELSE 0 END), 0) AS failed
+          FROM operation_jobs
+         WHERE event_id = ? AND status <> 'cancelled'
+      `,
+      )
+        .bind(viewer.eventId)
+        .first<CountRow>(),
+      this.env.DB.prepare(
+        `
+        SELECT id, type, status, progress_completed AS completed, progress_total AS total
+          FROM operation_jobs
+         WHERE event_id = ?
+         ORDER BY created_at DESC LIMIT 5
+      `,
+      )
+        .bind(viewer.eventId)
+        .all<{
+          id: string;
+          type: string;
+          status: string;
+          completed: number;
+          total: number;
+        }>(),
+      this.env.DB.prepare(
+        `
+        SELECT channel, COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status IN ('sent','delivered','opened','clicked') THEN 1 ELSE 0 END), 0) AS successful
+          FROM communication_deliveries
+         WHERE event_id = ? AND status <> 'cancelled'
+         GROUP BY channel ORDER BY channel
+      `,
+      )
+        .bind(viewer.eventId)
+        .all<{ channel: string; successful: number; total: number }>(),
+    ]);
+
+    const tasks = taskResult.results;
+    const incomplete = new Set([
+      "not_started",
+      "in_progress",
+      "blocked",
+      "submitted",
+      "overdue",
+    ]);
+    const overdueTasks = tasks.filter(
+      (task) =>
+        incomplete.has(task.status) &&
+        (task.status === "overdue" ||
+          task.readinessState === "overdue" ||
+          (task.dueAt !== null && task.dueAt < now)),
+    );
+    const criticalTasks = tasks.filter(
+      (task) => incomplete.has(task.status) && task.impact === "critical",
+    );
+    const speakerTasks = tasks.filter((task) => task.targetType === "speaker");
+    const missingSpeakerAssets = speakerTasks.filter(
+      (task) => task.taskType === "file_upload" && incomplete.has(task.status),
+    );
+    const speakerReadiness = calculateReadiness(
+      speakerTasks.map((task) => ({
+        id: task.id,
+        impact: task.impact,
+        readinessPercent: task.readinessPercent,
+        blocking: task.impact === "critical" && incomplete.has(task.status),
+      })),
+    );
+
+    const operationRows = operations.results;
+    const operationComplete = numeric(operationSummary?.complete);
+    const operationFailed = numeric(operationSummary?.failed);
+    const operationTotal = numeric(operationSummary?.total);
+    const contentTotal = numeric(content?.total);
+    const contentComplete = numeric(content?.complete);
+    const reviewTotal = numeric(review?.total);
+    const reviewComplete = numeric(review?.complete);
+    const scheduleTotal = numeric(schedule?.total);
+    const scheduleComplete = numeric(schedule?.complete);
+    const deliveryTotal = numeric(deliveries?.total);
+    const deliveryComplete = numeric(deliveries?.complete);
+    const blockingConflicts = numeric(conflict?.total);
+
+    const workflows: ReadinessWorkflow[] = [
+      {
+        key: "content",
+        label: "Content & submissions",
+        score: percent(contentComplete, contentTotal),
+        completed: contentComplete,
+        total: contentTotal,
+        detail: "Submissions with a recorded outcome",
+        href: "/admin/submissions",
+      },
+      {
+        key: "review",
+        label: "Review",
+        score: percent(reviewComplete, reviewTotal),
+        completed: reviewComplete,
+        total: reviewTotal,
+        detail: "Active assignments submitted",
+        href: "/admin/review",
+      },
+      {
+        key: "schedule",
+        label: "Schedule",
+        score: Math.min(
+          percent(scheduleComplete, scheduleTotal),
+          blockingConflicts > 0 ? 75 : 100,
+        ),
+        completed: scheduleComplete,
+        total: scheduleTotal,
+        detail: "Active sessions scheduled without blocking conflicts",
+        href: "/admin/schedule",
+      },
+      {
+        key: "speakers",
+        label: "Speakers & materials",
+        score: speakerReadiness.percentage,
+        completed: speakerTasks.filter((task) => !incomplete.has(task.status))
+          .length,
+        total: speakerTasks.length,
+        detail: "Impact-weighted speaker task readiness",
+        href: "/admin/tasks?target=speaker",
+      },
+      {
+        key: "communications",
+        label: "Communications",
+        score: percent(deliveryComplete, deliveryTotal),
+        completed: deliveryComplete,
+        total: deliveryTotal,
+        detail: "Successful delivery attempts",
+        href: "/admin/communications",
+      },
+      {
+        key: "operations",
+        label: "Operations",
+        score: percent(operationComplete, operationTotal),
+        completed: operationComplete,
+        total: operationTotal,
+        detail: "Durable background operations completed",
+        href: "/admin/operations",
+      },
+    ];
+
+    const blockers = (
+      [
+        {
+          key: "overdue_tasks",
+          label: "Overdue tasks",
+          count: overdueTasks.length,
+          severity: "danger",
+          detail: "Incomplete tasks whose due date has passed.",
+          href: "/admin/tasks?state=overdue",
+          action: "Review overdue work",
+        },
+        {
+          key: "critical_tasks",
+          label: "Critical tasks incomplete",
+          count: criticalTasks.length,
+          severity: "danger",
+          detail: "Declared critical work is not complete.",
+          href: "/admin/tasks?impact=critical&state=open",
+          action: "Resolve critical work",
+        },
+        {
+          key: "speaker_assets",
+          label: "Missing speaker assets",
+          count: missingSpeakerAssets.length,
+          severity: "warning",
+          detail: "Speaker file requests still need an approved upload.",
+          href: "/admin/tasks?target=speaker&type=file_upload&state=open",
+          action: "Follow up with speakers",
+        },
+        {
+          key: "unassigned_reviews",
+          label: "Unassigned reviews",
+          count: numeric(unassigned?.total),
+          severity: "warning",
+          detail: "Submitted proposals have no active evaluator assignment.",
+          href: "/admin/review?filter=unassigned",
+          action: "Assign evaluators",
+        },
+        {
+          key: "unscheduled_sessions",
+          label: "Unscheduled sessions",
+          count: Math.max(0, scheduleTotal - scheduleComplete),
+          severity: "warning",
+          detail: "Active sessions still need a time and room.",
+          href: "/admin/schedule?filter=unscheduled",
+          action: "Open schedule planner",
+        },
+        {
+          key: "schedule_conflicts",
+          label: "Blocking schedule conflicts",
+          count: blockingConflicts,
+          severity: "danger",
+          detail: "Unresolved conflicts will prevent publication.",
+          href: "/admin/schedule?filter=conflicts",
+          action: "Resolve conflicts",
+        },
+        {
+          key: "delivery_failures",
+          label: "Delivery failures",
+          count: numeric(deliveries?.failed),
+          severity: "danger",
+          detail: "Messages bounced, were suppressed or failed.",
+          href: "/admin/communications?filter=failed",
+          action: "Inspect deliveries",
+        },
+        {
+          key: "integration_failures",
+          label: "Integration attention",
+          count: numeric(integrations?.total),
+          severity: "danger",
+          detail: "Connections or integration runs need attention.",
+          href: "/admin/integrations?filter=attention",
+          action: "Inspect integrations",
+        },
+        {
+          key: "operation_failures",
+          label: "Operation failures",
+          count: operationFailed,
+          severity: "danger",
+          detail: "Recent durable operations failed or partially failed.",
+          href: "/admin/operations?status=failed",
+          action: "Retry failed operations",
+        },
+        {
+          key: "unpublished_schedule",
+          label: "Unpublished schedule changes",
+          count: numeric(draftSchedule?.total),
+          severity: "warning",
+          detail: "A newer schedule draft has not been published.",
+          href: "/admin/schedule?filter=draft",
+          action: "Review draft changes",
+        },
+      ] satisfies ReadinessBlocker[]
+    ).filter((blocker) => blocker.count > 0);
+
+    const declaredBlockers = blockers.reduce(
+      (sum, blocker) => sum + blocker.count,
+      0,
+    );
+    const percentage = calculateOverallReadiness(workflows, declaredBlockers);
+    return {
+      eventId: viewer.eventId,
+      eventTimezone: event.timezone,
+      generatedAt: now,
+      cursor: numeric(baselineCursor?.total),
+      readiness: {
+        percentage,
+        status:
+          percentage === 100
+            ? "ready"
+            : percentage >= 75
+              ? "on_track"
+              : "at_risk",
+        declaredBlockers,
+        explanation:
+          "Equal-weighted average across six workflows. Any declared blocker prevents a 100% ready result.",
+      },
+      workflows,
+      blockers,
+      deliveryHealth: deliveryChannels.results.map((row) => ({
+        ...row,
+        percentage: percent(row.successful, row.total),
+      })),
+      upcoming: upcoming.results,
+      operations: operationRows,
+    };
+  }
+}

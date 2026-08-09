@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Program Cue API",
-    "version": "0.2.0",
-    "description": "Published programme data and authenticated event-operation boundaries."
+    "version": "0.4.0",
+    "description": "Public programme feeds, scoped integration APIs and authenticated event invalidations for Program Cue."
   },
   "servers": [
     {
@@ -14,108 +14,246 @@
   "paths": {
     "/api/v1/health": {
       "get": {
-        "summary": "Service health",
+        "operationId": "getHealth",
+        "summary": "Check service readiness",
         "responses": {
           "200": {
-            "description": "Healthy"
+            "description": "Runtime mode is valid and the D1 baseline schema is reachable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Runtime configuration, D1 or the baseline schema is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/v1/public/events/{slug}/programme": {
       "get": {
-        "summary": "Published event programme",
+        "operationId": "getPublicProgramme",
+        "summary": "Retrieve a published event programme",
         "parameters": [
           {
-            "name": "slug",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/EventSlug"
           }
         ],
         "responses": {
           "200": {
-            "description": "Published event and sessions"
+            "description": "Published event, schedule version and public sessions",
+            "headers": {
+              "Access-Control-Allow-Origin": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProgrammeResponse"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Published event not found"
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
     },
     "/api/v1/public/events/{slug}/calendar.ics": {
       "get": {
-        "summary": "Published programme iCalendar feed",
+        "operationId": "getPublicProgrammeCalendar",
+        "summary": "Download the published programme as iCalendar",
         "parameters": [
           {
-            "name": "slug",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/EventSlug"
           }
         ],
         "responses": {
           "200": {
-            "description": "iCalendar programme feed"
+            "description": "Published iCalendar programme feed",
+            "headers": {
+              "Access-Control-Allow-Origin": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/calendar": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Published event not found"
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/operations": {
+      "get": {
+        "operationId": "listOperations",
+        "summary": "List background operations for an authorised event",
+        "description": "Requires an event-authorised API key with the `operations:read` scope.",
+        "x-required-api-key-scope": "operations:read",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/Limit200"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event operation collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "operations",
+                    "correlationId"
+                  ],
+                  "properties": {
+                    "operations": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Operation"
+                      }
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }
     },
     "/api/v1/events/{eventId}/tasks": {
       "get": {
-        "summary": "List readiness tasks",
+        "operationId": "listTasks",
+        "summary": "List readiness tasks for an authorised event",
+        "description": "Requires an event-authorised API key with the `tasks:read` scope. Unknown or repeated query parameters are rejected.",
+        "x-required-api-key-scope": "tasks:read",
         "security": [
           {
-            "bearerAuth": []
+            "apiKeyAuth": []
           }
         ],
         "parameters": [
           {
-            "name": "eventId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/Limit200"
+          },
+          {
+            "$ref": "#/components/parameters/TaskCursor"
           }
         ],
         "responses": {
           "200": {
-            "description": "Task list"
+            "description": "Rich event task collection, including dependencies and readiness state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "tasks",
+                    "nextCursor",
+                    "correlationId"
+                  ],
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Task"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Opaque cursor for the next task page"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
-            "description": "Authentication required"
+            "$ref": "#/components/responses/Unauthorised"
           },
           "403": {
-            "description": "Forbidden"
+            "$ref": "#/components/responses/Forbidden"
           },
-          "503": {
-            "description": "Required binding unavailable"
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       },
       "post": {
-        "summary": "Create readiness task",
+        "operationId": "createTask",
+        "summary": "Create a readiness task for an authorised event",
+        "description": "Requires an event-authorised API key with the `tasks:write` scope and an Idempotency-Key. Targets, owners and dependencies must belong to the authorised event. Retrying the same request with the same key replays its committed result.",
+        "x-required-api-key-scope": "tasks:write",
         "security": [
           {
-            "bearerAuth": []
+            "apiKeyAuth": []
           }
         ],
         "parameters": [
           {
-            "name": "eventId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -123,69 +261,98 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "required": [
-                  "title",
-                  "impact"
-                ],
-                "properties": {
-                  "title": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "impact": {
-                    "type": "string",
-                    "enum": [
-                      "critical",
-                      "high",
-                      "medium",
-                      "low"
-                    ]
-                  }
-                }
+                "$ref": "#/components/schemas/TaskCreateRequest"
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Task created"
+            "description": "Task, API-key audit event and event change cursor committed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "task",
+                    "changeCursor",
+                    "realtimeWarning",
+                    "correlationId"
+                  ],
+                  "properties": {
+                    "task": {
+                      "$ref": "#/components/schemas/Task"
+                    },
+                    "changeCursor": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "realtimeWarning": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "description": "Authentication required"
+            "$ref": "#/components/responses/Unauthorised"
           },
           "403": {
-            "description": "Forbidden"
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The idempotency key is already processing or was used with a different request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
           },
           "415": {
-            "description": "Unsupported media type"
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
-            "description": "Validation error"
-          },
-          "503": {
-            "description": "Required binding unavailable"
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }
     },
     "/api/v1/events/{eventId}/schedule/publish": {
       "post": {
+        "operationId": "publishSchedule",
         "summary": "Publish a conflict-free draft schedule version",
+        "description": "Requires an event-authorised API key with the `schedule:publish` scope and an Idempotency-Key. The supplied revision is checked optimistically, blocking conflicts are recalculated at publication, and an exact retry replays the committed publication.",
+        "x-required-api-key-scope": "schedule:publish",
         "security": [
           {
-            "bearerAuth": []
+            "apiKeyAuth": []
           }
         ],
         "parameters": [
           {
-            "name": "eventId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -193,58 +360,80 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "required": [
-                  "scheduleVersionId"
-                ],
-                "properties": {
-                  "scheduleVersionId": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                }
+                "$ref": "#/components/schemas/SchedulePublishRequest"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Published"
+            "description": "Schedule published, event change broadcast and durable calendar fan-out queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePublishResponse"
+                }
+              }
+            }
+          },
+          "207": {
+            "description": "Schedule publication committed, but realtime invalidation or durable calendar fan-out enqueue failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePublishResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "description": "Authentication required"
+            "$ref": "#/components/responses/Unauthorised"
           },
           "403": {
-            "description": "Forbidden"
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "description": "Draft schedule not found"
+            "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "Blocking conflicts remain"
+            "description": "Schedule revision is stale, blocking publication conditions remain, or the idempotency key conflicts with another request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
-          "503": {
-            "description": "Required binding unavailable"
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }
     },
-    "/api/v1/events/{eventId}/operations": {
+    "/api/webhooks/resend": {
       "post": {
-        "summary": "Queue an idempotent background operation",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
+        "operationId": "reconcileResendDelivery",
+        "summary": "Reconcile a signed Resend delivery event",
+        "description": "The unmodified request body is authenticated with the required Svix headers before delivery state is applied idempotently. `RESEND_WEBHOOK_SECRET` is required.",
         "parameters": [
           {
-            "name": "eventId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/SvixId"
+          },
+          {
+            "$ref": "#/components/parameters/SvixTimestamp"
+          },
+          {
+            "$ref": "#/components/parameters/SvixSignature"
           }
         ],
         "requestBody": {
@@ -252,43 +441,135 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "required": [
-                  "type",
-                  "idempotencyKey"
-                ],
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "idempotencyKey": {
-                    "type": "string",
-                    "minLength": 8,
-                    "maxLength": 128
-                  },
-                  "payload": {
-                    "type": "object"
-                  }
-                }
+                "$ref": "#/components/schemas/ResendWebhook"
               }
             }
           }
         },
         "responses": {
-          "202": {
-            "description": "Operation queued"
+          "200": {
+            "description": "Delivery reconciled or a duplicate provider event acknowledged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/WebhookBadRequest"
           },
           "401": {
-            "description": "Authentication required"
+            "$ref": "#/components/responses/WebhookUnauthorised"
           },
-          "403": {
-            "description": "Forbidden"
-          },
-          "422": {
-            "description": "Validation error"
+          "413": {
+            "$ref": "#/components/responses/WebhookPayloadTooLarge"
           },
           "503": {
-            "description": "Required binding unavailable"
+            "description": "The signed provider event arrived before its local delivery was available; retry it",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/events/{eventId}/changes": {
+      "get": {
+        "operationId": "readEventChanges",
+        "summary": "Poll event changes or upgrade to an event WebSocket",
+        "description": "Requires an authenticated owner or administrator browser session. Without an `Upgrade: websocket` header this returns authoritative D1 cursor pages. With the upgrade header it returns `101 Switching Protocols`; WebSocket messages are invalidation summaries only and clients must reload authoritative server data.",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "description": "Last event change sequence observed by the client.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          },
+          {
+            "in": "header",
+            "name": "Upgrade",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "const": "websocket"
+            }
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "WebSocket upgrade accepted; the channel emits ready and event-change messages"
+          },
+          "200": {
+            "description": "Authoritative bounded event-change cursor page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventChangePage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Browser authentication is required"
+          },
+          "403": {
+            "description": "The authenticated person may not administer this event"
+          },
+          "404": {
+            "description": "Event not found"
+          },
+          "422": {
+            "description": "cursor or limit is invalid"
+          },
+          "426": {
+            "description": "WebSocket upgrade expected by the live transport"
+          },
+          "503": {
+            "description": "EVENT_CHANNEL binding is unavailable for a requested WebSocket upgrade"
           }
         }
       }
@@ -296,10 +577,983 @@
   },
   "components": {
     "securitySchemes": {
-      "bearerAuth": {
+      "apiKeyAuth": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Explicit internal API boundary in the reviewed foundation."
+        "bearerFormat": "Program Cue API key",
+        "description": "Organisation- or event-scoped Program Cue API key. Keys are hashed at rest, permission-limited, expirable and revocable."
+      },
+      "sessionAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "session",
+        "description": "Authenticated Program Cue browser session; the deployed authentication layer controls the concrete cookie name."
+      }
+    },
+    "parameters": {
+      "EventSlug": {
+        "in": "path",
+        "name": "slug",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "EventId": {
+        "in": "path",
+        "name": "eventId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "Limit200": {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 100
+        }
+      },
+      "TaskCursor": {
+        "in": "query",
+        "name": "cursor",
+        "required": false,
+        "description": "Opaque continuation cursor returned by the previous task page",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "IdempotencyKey": {
+        "in": "header",
+        "name": "Idempotency-Key",
+        "required": true,
+        "description": "Stable retry key scoped to the authorised API key, event and operation. Committed results are retained for 30 days; an elapsed key may be reused as a new command.",
+        "schema": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        }
+      },
+      "SvixId": {
+        "in": "header",
+        "name": "svix-id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "SvixTimestamp": {
+        "in": "header",
+        "name": "svix-timestamp",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "SvixSignature": {
+        "in": "header",
+        "name": "svix-signature",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "service",
+          "environment",
+          "correlationId"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "service": {
+            "type": "string",
+            "const": "program-cue"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "PublicProgrammeResponse": {
+        "$ref": "#/components/schemas/PublicProgramme"
+      },
+      "PublicProgramme": {
+        "type": "object",
+        "required": [
+          "event",
+          "version",
+          "sessions"
+        ],
+        "properties": {
+          "event": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "slug",
+              "name",
+              "timezone",
+              "startDate",
+              "endDate",
+              "venue",
+              "city",
+              "description",
+              "brandAccent"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "slug": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "startDate": {
+                "type": "string",
+                "format": "date",
+                "description": "First event calendar date in the event timezone"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date",
+                "description": "Last event calendar date in the event timezone"
+              },
+              "venue": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brandAccent": {
+                "type": "string"
+              }
+            }
+          },
+          "version": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "versionNumber",
+              "publishedAt"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "versionNumber": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "publishedAt": {
+                "type": "integer",
+                "description": "Unix epoch seconds"
+              }
+            }
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicSession"
+            }
+          }
+        }
+      },
+      "PublicSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "description",
+          "format",
+          "startsAt",
+          "endsAt",
+          "room",
+          "building",
+          "level",
+          "track",
+          "speakerIds",
+          "speakerNames"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "startsAt": {
+            "type": "integer",
+            "description": "Unix epoch seconds"
+          },
+          "endsAt": {
+            "type": "integer",
+            "description": "Unix epoch seconds"
+          },
+          "room": {
+            "type": "string"
+          },
+          "building": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "level": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "speakerIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "speakerNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Operation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "status",
+          "idempotencyKey",
+          "operationCorrelationId",
+          "progressTotal",
+          "progressCompleted",
+          "progressFailed",
+          "attemptCount",
+          "lastError",
+          "createdAt",
+          "updatedAt",
+          "completedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "operationCorrelationId": {
+            "type": "string"
+          },
+          "progressTotal": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "progressCompleted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "progressFailed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "attemptCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          },
+          "completedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "TaskCreateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "targetType",
+          "targetId",
+          "taskType",
+          "impact"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000,
+            "default": null
+          },
+          "targetType": {
+            "type": "string",
+            "enum": [
+              "speaker",
+              "session",
+              "event"
+            ]
+          },
+          "targetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "ownerPersonId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200,
+            "default": null
+          },
+          "taskType": {
+            "$ref": "#/components/schemas/TaskType"
+          },
+          "impact": {
+            "$ref": "#/components/schemas/TaskImpact"
+          },
+          "dueAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "default": null,
+            "description": "RFC 3339 timestamp"
+          },
+          "dependencyIds": {
+            "type": "array",
+            "maxItems": 100,
+            "uniqueItems": true,
+            "default": [],
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "templateId",
+          "targetType",
+          "targetId",
+          "ownerPersonId",
+          "ownerName",
+          "title",
+          "description",
+          "taskType",
+          "impact",
+          "status",
+          "readinessState",
+          "readinessPercent",
+          "revision",
+          "dueAt",
+          "evidenceJson",
+          "waiverJson",
+          "submittedAt",
+          "completedAt",
+          "createdAt",
+          "updatedAt",
+          "dependencyIds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "templateId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "targetType": {
+            "type": "string",
+            "enum": [
+              "speaker",
+              "session",
+              "event"
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "ownerPersonId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ownerName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "taskType": {
+            "$ref": "#/components/schemas/TaskType"
+          },
+          "impact": {
+            "$ref": "#/components/schemas/TaskImpact"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_started",
+              "in_progress",
+              "blocked",
+              "submitted",
+              "completed",
+              "waived",
+              "overdue"
+            ]
+          },
+          "readinessState": {
+            "type": "string",
+            "enum": [
+              "on_track",
+              "at_risk",
+              "blocked",
+              "overdue"
+            ]
+          },
+          "readinessPercent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "dueAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "evidenceJson": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "waiverJson": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "submittedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dependencyIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TaskType": {
+        "type": "string",
+        "enum": [
+          "checklist",
+          "acknowledgement",
+          "short_form",
+          "file_upload",
+          "link_visit",
+          "administrator_only"
+        ]
+      },
+      "TaskImpact": {
+        "type": "string",
+        "enum": [
+          "critical",
+          "high",
+          "medium",
+          "low"
+        ]
+      },
+      "SchedulePublishRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scheduleVersionId",
+          "scheduleRevision"
+        ],
+        "properties": {
+          "scheduleVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "scheduleRevision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "SchedulePublishResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "published",
+          "scheduleVersionId",
+          "changeCursor",
+          "realtimeWarning",
+          "calendar",
+          "correlationId"
+        ],
+        "properties": {
+          "published": {
+            "type": "boolean",
+            "const": true
+          },
+          "scheduleVersionId": {
+            "type": "string"
+          },
+          "changeCursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "realtimeWarning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "calendar": {
+            "$ref": "#/components/schemas/CalendarFanoutSummary"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "CalendarFanoutSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId",
+          "status",
+          "dispatchError"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "queue_failed"
+            ]
+          },
+          "dispatchError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ResendWebhook": {
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "email_id"
+            ],
+            "properties": {
+              "email_id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "WebhookResult": {
+        "type": "object",
+        "required": [
+          "matched",
+          "duplicate"
+        ],
+        "properties": {
+          "matched": {
+            "type": "boolean"
+          },
+          "duplicate": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WebhookError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "EventChangePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "changes",
+          "cursor",
+          "hasMore",
+          "pollAfterMs"
+        ],
+        "properties": {
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventChange"
+            }
+          },
+          "cursor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "pollAfterMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30000
+          }
+        }
+      },
+      "EventChange": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "eventId",
+          "cursor",
+          "entityType",
+          "entityId",
+          "changeType",
+          "correlationId",
+          "committedAt"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "event-change"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "cursor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "entityType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "changeType": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated",
+              "deleted",
+              "published",
+              "progress"
+            ]
+          },
+          "correlationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "committedAt": {
+            "type": "integer",
+            "description": "Unix epoch seconds"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error",
+          "correlationId"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {}
+            }
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Request body is not valid JSON",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found in the authorised tenant and event",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorised": {
+        "description": "Bearer API key authentication is required",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "API key is invalid, expired, revoked, outside the event or lacks the required scope",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Request parameters or body failed strict validation",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "Content-Type must be application/json",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "JSON request body exceeds the endpoint limit",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "WebhookBadRequest": {
+        "description": "Webhook JSON is invalid or does not match a supported Resend event",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/WebhookError"
+            }
+          }
+        }
+      },
+      "WebhookUnauthorised": {
+        "description": "Required Svix headers are missing, stale or invalid",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/WebhookError"
+            }
+          }
+        }
+      },
+      "WebhookPayloadTooLarge": {
+        "description": "Webhook request exceeds 256 KB",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/WebhookError"
+            }
+          }
+        }
       }
     }
   }
