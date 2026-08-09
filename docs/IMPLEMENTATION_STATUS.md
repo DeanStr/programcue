@@ -100,7 +100,7 @@ npm run check
 The latest integrated checks in this workspace include:
 
 - `npm run typecheck` passed, including Wrangler bindings, React Router route generation and the TypeScript project build.
-- `npm test` passed 303 focused cases across 36 test files: 57 deterministic cases in the Node project and 246 Cloudflare integration cases covering auth, events, submissions, evaluation, speakers, tasks, files, resources, schedule, public programme, communications, calendars, readiness, API keys/CORS and realtime isolation.
+- `npm test` passed 305 focused cases across 36 test files: 57 deterministic cases in the Node project and 248 Cloudflare integration cases covering auth, events, submissions, evaluation, speakers, tasks, files, resources, schedule, public programme, communications, calendars, readiness, API keys/CORS and realtime isolation.
 - `npm run build` and `npm run openapi:check` passed; the latter verifies eight documented route paths, 75 internal references and exact YAML/JSON synchronization.
 - Migration validation for 72 application tables, 66 named indexes, foreign keys, cross-tenant constraints, file-release invariants, two append-only audit triggers and automatic schedule-policy provisioning.
 - All 68 Playwright checks passed against the production-built local Worker: Event Setup, submission, explicit unknown-record failure, unsubscribe, realtime, schedule/programme and speaker portal behavior; keyboard/focus, naming/error, mobile reviewer controls, contained wide-grid navigation, zoom-equivalent, mobile-chrome and landmark accessibility coverage; and the visual suite below.

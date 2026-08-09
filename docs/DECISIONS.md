@@ -8,6 +8,7 @@ This file records durable decisions. It does not imply that every decided capabi
 | Product shape | One pre-release TypeScript modular monolith; no backward-compatibility layer without a real external consumer or deployed migration history |
 | Frontend/runtime | React Router framework mode with SSR, loaders/actions, resource routes and path navigation on one Cloudflare Worker |
 | Vertical-slice pattern | Route → server authorisation/validation → application service → D1/R2/Queue/provider |
+| Large-module boundaries | Keep stable service/repository/Queue facades at route and Worker boundaries; split implementations by current domain workflow, keep loader/action orchestration in route modules, and keep page-local state in one route-level container while extracting focused visual panels |
 | Visual direction | Retain the Program Cue design language, but prefer a clearer and more appealing UX over exact prototype or Sessionboard parity |
 | Tenant model | One organisation with multiple events; private operational records and provider work are event-scoped |
 | Roles | Owner, administrator, committee chair, evaluator, submitter and speaker; the server, not hidden UI, is the permission boundary |

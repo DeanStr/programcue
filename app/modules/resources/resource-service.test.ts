@@ -17,6 +17,7 @@ import {
   ResourceSlugConflictError,
   ResourceTaskDependencyError,
 } from "./resource-service.server";
+import { ResourceAuthoringService } from "./resource-authoring-service.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",
@@ -786,7 +787,7 @@ describe("speaker resource service", () => {
   it("keeps one live version when two callers publish the same draft concurrently", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
-    const service = new ResourceService(testEnv);
+    const service = new ResourceAuthoringService(testEnv);
     const token = crypto.randomUUID().slice(0, 8);
     const pageId = await service.save(admin, {
       title: "Concurrent publication guide",
@@ -991,7 +992,7 @@ describe("speaker resource service", () => {
   it("cannot attach a file after the target draft crosses the publication boundary", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
-    const resources = new ResourceService(testEnv);
+    const resources = new ResourceAuthoringService(testEnv);
     const files = new FileService(testEnv);
     const token = crypto.randomUUID().slice(0, 8);
     const pageId = await resources.save(admin, {

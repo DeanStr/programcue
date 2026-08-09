@@ -81,9 +81,176 @@ function percent(complete: number, total: number) {
   if (total === 0) return 100;
   return Math.max(0, Math.min(100, Math.round((complete / total) * 100)));
 }
-
 function numeric(value: number | null | undefined) {
   return Number(value ?? 0);
+}
+
+async function loadCommandCentreRecords(
+  env: CloudflareEnvironment,
+  viewer: Viewer,
+  now: number,
+) {
+  return Promise.all([
+    env.DB.prepare(
+      `
+        SELECT id, impact, readiness_percent AS readinessPercent, status,
+               readiness_state AS readinessState, target_type AS targetType,
+               task_type AS taskType, due_at AS dueAt
+          FROM task_instances
+         WHERE event_id = ?
+      `,
+    )
+      .bind(viewer.eventId)
+      .all<TaskRow>(),
+    env.DB.prepare(
+      `
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status IN ('accepted','waitlisted','rejected','withdrawn') THEN 1 ELSE 0 END), 0) AS complete
+          FROM submissions
+         WHERE event_id = ? AND status <> 'draft'
+      `,
+    )
+      .bind(viewer.eventId)
+      .first<CountRow>(),
+    env.DB.prepare(
+      `
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END), 0) AS complete
+          FROM evaluator_assignments
+         WHERE event_id = ? AND status NOT IN ('cancelled','recused')
+      `,
+    )
+      .bind(viewer.eventId)
+      .first<CountRow>(),
+    env.DB.prepare(
+      `
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status IN ('scheduled','published') THEN 1 ELSE 0 END), 0) AS complete
+          FROM sessions
+         WHERE event_id = ? AND status NOT IN ('cancelled','archived')
+      `,
+    )
+      .bind(viewer.eventId)
+      .first<CountRow>(),
+    env.DB.prepare(
+      `
+        SELECT COUNT(*) AS total
+          FROM schedule_conflicts
+         WHERE event_id = ? AND severity = 'blocking' AND resolved_at IS NULL
+      `,
+    )
+      .bind(viewer.eventId)
+      .first<CountRow>(),
+    env.DB.prepare(
+      `
+        SELECT COUNT(*) AS total
+          FROM submissions s
+         WHERE s.event_id = ?
+           AND s.status IN ('submitted','assigned','in_review')
+           AND NOT EXISTS (
+             SELECT 1 FROM evaluator_assignments a
+              WHERE a.event_id = s.event_id
+                AND a.submission_id = s.id
+                AND a.status NOT IN ('cancelled','recused')
+           )
+      `,
+    )
+      .bind(viewer.eventId)
+      .first<CountRow>(),
+    env.DB.prepare(
+      `
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status IN ('sent','delivered','opened','clicked') THEN 1 ELSE 0 END), 0) AS complete,
+               COALESCE(SUM(CASE WHEN status IN ('failed','bounced','suppressed') THEN 1 ELSE 0 END), 0) AS failed
+          FROM communication_deliveries
+         WHERE event_id = ? AND status <> 'cancelled'
+      `,
+    )
+      .bind(viewer.eventId)
+      .first<CountRow>(),
+    env.DB.prepare(
+      `
+        SELECT (
+          SELECT COUNT(*) FROM integration_connections
+           WHERE event_id = ? AND status IN ('needs_attention','failed')
+        ) + (
+          SELECT COUNT(*) FROM integration_runs r
+          JOIN integration_connections c ON c.id = r.connection_id
+           WHERE c.event_id = ? AND r.status IN ('partially_failed','failed')
+        ) AS total
+      `,
+    )
+      .bind(viewer.eventId, viewer.eventId)
+      .first<CountRow>(),
+    env.DB.prepare(
+      `
+        SELECT COUNT(*) AS total FROM schedule_versions d
+         WHERE d.event_id = ? AND d.status = 'draft'
+           AND d.version_number > COALESCE((
+             SELECT MAX(p.version_number) FROM schedule_versions p
+              WHERE p.event_id = d.event_id AND p.status = 'published'
+           ), 0)
+      `,
+    )
+      .bind(viewer.eventId)
+      .first<CountRow>(),
+    env.DB.prepare(
+      `
+        SELECT s.id, s.title, e.starts_at AS startsAt, r.name AS room
+          FROM schedule_versions v
+          JOIN schedule_entries e ON e.schedule_version_id = v.id AND e.event_id = v.event_id
+          JOIN sessions s ON s.id = e.session_id AND s.event_id = v.event_id
+          JOIN rooms r ON r.id = e.room_id AND r.event_id = v.event_id
+         WHERE v.event_id = ? AND v.status = 'published'
+           AND s.visibility = 'public' AND e.starts_at >= ?
+           AND v.version_number = (
+             SELECT MAX(version_number) FROM schedule_versions
+              WHERE event_id = v.event_id AND status = 'published'
+           )
+         ORDER BY e.starts_at ASC LIMIT 5
+      `,
+    )
+      .bind(viewer.eventId, now)
+      .all<{ id: string; title: string; startsAt: number; room: string }>(),
+    env.DB.prepare(
+      `
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS complete,
+               COALESCE(SUM(CASE WHEN status IN ('failed','queue_failed','partially_failed') THEN 1 ELSE 0 END), 0) AS failed
+          FROM operation_jobs
+         WHERE event_id = ? AND status <> 'cancelled'
+      `,
+    )
+      .bind(viewer.eventId)
+      .first<CountRow>(),
+    env.DB.prepare(
+      `
+        SELECT id, type, status, progress_completed AS completed, progress_total AS total
+          FROM operation_jobs
+         WHERE event_id = ?
+         ORDER BY created_at DESC LIMIT 5
+      `,
+    )
+      .bind(viewer.eventId)
+      .all<{
+        id: string;
+        type: string;
+        status: string;
+        completed: number;
+        total: number;
+      }>(),
+    env.DB.prepare(
+      `
+        SELECT channel, COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status IN ('sent','delivered','opened','clicked') THEN 1 ELSE 0 END), 0) AS successful
+          FROM communication_deliveries
+         WHERE event_id = ? AND status <> 'cancelled'
+         GROUP BY channel ORDER BY channel
+      `,
+    )
+      .bind(viewer.eventId)
+      .all<{ channel: string; successful: number; total: number }>(),
+  ]);
 }
 
 export class ReadinessService {
@@ -126,167 +293,7 @@ export class ReadinessService {
       operationSummary,
       operations,
       deliveryChannels,
-    ] = await Promise.all([
-      this.env.DB.prepare(
-        `
-        SELECT id, impact, readiness_percent AS readinessPercent, status,
-               readiness_state AS readinessState, target_type AS targetType,
-               task_type AS taskType, due_at AS dueAt
-          FROM task_instances
-         WHERE event_id = ?
-      `,
-      )
-        .bind(viewer.eventId)
-        .all<TaskRow>(),
-      this.env.DB.prepare(
-        `
-        SELECT COUNT(*) AS total,
-               COALESCE(SUM(CASE WHEN status IN ('accepted','waitlisted','rejected','withdrawn') THEN 1 ELSE 0 END), 0) AS complete
-          FROM submissions
-         WHERE event_id = ? AND status <> 'draft'
-      `,
-      )
-        .bind(viewer.eventId)
-        .first<CountRow>(),
-      this.env.DB.prepare(
-        `
-        SELECT COUNT(*) AS total,
-               COALESCE(SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END), 0) AS complete
-          FROM evaluator_assignments
-         WHERE event_id = ? AND status NOT IN ('cancelled','recused')
-      `,
-      )
-        .bind(viewer.eventId)
-        .first<CountRow>(),
-      this.env.DB.prepare(
-        `
-        SELECT COUNT(*) AS total,
-               COALESCE(SUM(CASE WHEN status IN ('scheduled','published') THEN 1 ELSE 0 END), 0) AS complete
-          FROM sessions
-         WHERE event_id = ? AND status NOT IN ('cancelled','archived')
-      `,
-      )
-        .bind(viewer.eventId)
-        .first<CountRow>(),
-      this.env.DB.prepare(
-        `
-        SELECT COUNT(*) AS total
-          FROM schedule_conflicts
-         WHERE event_id = ? AND severity = 'blocking' AND resolved_at IS NULL
-      `,
-      )
-        .bind(viewer.eventId)
-        .first<CountRow>(),
-      this.env.DB.prepare(
-        `
-        SELECT COUNT(*) AS total
-          FROM submissions s
-         WHERE s.event_id = ?
-           AND s.status IN ('submitted','assigned','in_review')
-           AND NOT EXISTS (
-             SELECT 1 FROM evaluator_assignments a
-              WHERE a.event_id = s.event_id
-                AND a.submission_id = s.id
-                AND a.status NOT IN ('cancelled','recused')
-           )
-      `,
-      )
-        .bind(viewer.eventId)
-        .first<CountRow>(),
-      this.env.DB.prepare(
-        `
-        SELECT COUNT(*) AS total,
-               COALESCE(SUM(CASE WHEN status IN ('sent','delivered','opened','clicked') THEN 1 ELSE 0 END), 0) AS complete,
-               COALESCE(SUM(CASE WHEN status IN ('failed','bounced','suppressed') THEN 1 ELSE 0 END), 0) AS failed
-          FROM communication_deliveries
-         WHERE event_id = ? AND status <> 'cancelled'
-      `,
-      )
-        .bind(viewer.eventId)
-        .first<CountRow>(),
-      this.env.DB.prepare(
-        `
-        SELECT (
-          SELECT COUNT(*) FROM integration_connections
-           WHERE event_id = ? AND status IN ('needs_attention','failed')
-        ) + (
-          SELECT COUNT(*) FROM integration_runs r
-          JOIN integration_connections c ON c.id = r.connection_id
-           WHERE c.event_id = ? AND r.status IN ('partially_failed','failed')
-        ) AS total
-      `,
-      )
-        .bind(viewer.eventId, viewer.eventId)
-        .first<CountRow>(),
-      this.env.DB.prepare(
-        `
-        SELECT COUNT(*) AS total FROM schedule_versions d
-         WHERE d.event_id = ? AND d.status = 'draft'
-           AND d.version_number > COALESCE((
-             SELECT MAX(p.version_number) FROM schedule_versions p
-              WHERE p.event_id = d.event_id AND p.status = 'published'
-           ), 0)
-      `,
-      )
-        .bind(viewer.eventId)
-        .first<CountRow>(),
-      this.env.DB.prepare(
-        `
-        SELECT s.id, s.title, e.starts_at AS startsAt, r.name AS room
-          FROM schedule_versions v
-          JOIN schedule_entries e ON e.schedule_version_id = v.id AND e.event_id = v.event_id
-          JOIN sessions s ON s.id = e.session_id AND s.event_id = v.event_id
-          JOIN rooms r ON r.id = e.room_id AND r.event_id = v.event_id
-         WHERE v.event_id = ? AND v.status = 'published'
-           AND s.visibility = 'public' AND e.starts_at >= ?
-           AND v.version_number = (
-             SELECT MAX(version_number) FROM schedule_versions
-              WHERE event_id = v.event_id AND status = 'published'
-           )
-         ORDER BY e.starts_at ASC LIMIT 5
-      `,
-      )
-        .bind(viewer.eventId, now)
-        .all<{ id: string; title: string; startsAt: number; room: string }>(),
-      this.env.DB.prepare(
-        `
-        SELECT COUNT(*) AS total,
-               COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS complete,
-               COALESCE(SUM(CASE WHEN status IN ('failed','queue_failed','partially_failed') THEN 1 ELSE 0 END), 0) AS failed
-          FROM operation_jobs
-         WHERE event_id = ? AND status <> 'cancelled'
-      `,
-      )
-        .bind(viewer.eventId)
-        .first<CountRow>(),
-      this.env.DB.prepare(
-        `
-        SELECT id, type, status, progress_completed AS completed, progress_total AS total
-          FROM operation_jobs
-         WHERE event_id = ?
-         ORDER BY created_at DESC LIMIT 5
-      `,
-      )
-        .bind(viewer.eventId)
-        .all<{
-          id: string;
-          type: string;
-          status: string;
-          completed: number;
-          total: number;
-        }>(),
-      this.env.DB.prepare(
-        `
-        SELECT channel, COUNT(*) AS total,
-               COALESCE(SUM(CASE WHEN status IN ('sent','delivered','opened','clicked') THEN 1 ELSE 0 END), 0) AS successful
-          FROM communication_deliveries
-         WHERE event_id = ? AND status <> 'cancelled'
-         GROUP BY channel ORDER BY channel
-      `,
-      )
-        .bind(viewer.eventId)
-        .all<{ channel: string; successful: number; total: number }>(),
-    ]);
+    ] = await loadCommandCentreRecords(this.env, viewer, now);
 
     const tasks = taskResult.results;
     const incomplete = new Set([

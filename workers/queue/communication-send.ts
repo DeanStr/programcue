@@ -1,0 +1,1019 @@
+import { z } from "zod";
+
+import { templateContentSchema } from "../../app/modules/communications/communication-schema";
+import { renderProgramCueEmail } from "../../app/modules/communications/email-templates/render-email.server";
+import {
+  formatEventDateMarkers,
+  renderMergeTemplate,
+} from "../../app/modules/communications/merge-template";
+import { ResendEmailProvider } from "../../app/modules/communications/resend.server";
+import { createCommunicationUnsubscribeUrl } from "../../app/modules/communications/unsubscribe.server";
+import {
+  assertOperationClaim,
+  errorDetails,
+  loadOperationClaim,
+  notifyRealtimeAfterCommit,
+  QUEUE_CLAIM_LEASE_SECONDS,
+  QueueClaimLeaseBusyError,
+  QueueClaimLeaseLostError,
+  renewOperationClaim,
+  returnedChangeSequence,
+} from "./claim-infrastructure";
+import type { QueueProviderDependencies } from "./handler-types";
+
+const communicationQueueMessageSchema = z.object({
+  type: z.literal("communication.send"),
+  operationId: z.string().min(1),
+  communicationId: z.string().min(1),
+  eventId: z.string().min(1),
+  organisationId: z.string().min(1),
+  idempotencyKey: z.string().min(8),
+  includeFailed: z.boolean().optional(),
+});
+
+export const COMMUNICATION_SEND_BATCH_SIZE = 10;
+
+function communicationQueuePayload(
+  message: z.infer<typeof communicationQueueMessageSchema>,
+  includeFailed: boolean,
+) {
+  return JSON.stringify({
+    type: message.type,
+    operationId: message.operationId,
+    communicationId: message.communicationId,
+    eventId: message.eventId,
+    organisationId: message.organisationId,
+    idempotencyKey: message.idempotencyKey,
+    ...(includeFailed ? { includeFailed: true } : {}),
+  });
+}
+const contentSnapshotSchema = z.object({
+  schemaVersion: z.literal(1),
+  category: z.string(),
+  subjectTemplate: z.string(),
+  content: templateContentSchema,
+  event: z.object({
+    eventName: z.string(),
+    startsAt: z.number(),
+    endsAt: z.number(),
+  }),
+});
+
+const sourceMergeValuesSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.null()]),
+);
+async function finishOwnedCommunicationFailure(
+  env: CloudflareEnvironment,
+  message: z.infer<typeof communicationQueueMessageSchema>,
+  claimToken: string,
+  error: unknown,
+) {
+  const failure = errorDetails(error);
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE communication_deliveries
+      SET status = 'failed', failure_code = ?, failure_message = ?, next_attempt_at = NULL,
+          updated_at = unixepoch()
+      WHERE communication_id = ? AND event_id = ? AND status IN ('queued','sending','failed')
+        AND EXISTS (
+          SELECT 1 FROM operation_jobs owned_operation
+           WHERE owned_operation.id = ? AND owned_operation.event_id = ?
+             AND owned_operation.status = 'running' AND owned_operation.claim_token = ?
+        )`,
+    ).bind(
+      failure.code,
+      failure.message,
+      message.communicationId,
+      message.eventId,
+      message.operationId,
+      message.eventId,
+      claimToken,
+    ),
+    env.DB.prepare(
+      `UPDATE operation_items
+      SET status = 'failed', error_code = ?, error_message = ?, completed_at = unixepoch(),
+          updated_at = unixepoch()
+      WHERE operation_id = ? AND status IN ('pending','running','failed')
+        AND EXISTS (
+          SELECT 1 FROM operation_jobs owned_operation
+           WHERE owned_operation.id = operation_items.operation_id
+             AND owned_operation.event_id = ?
+             AND owned_operation.status = 'running' AND owned_operation.claim_token = ?
+        )`,
+    ).bind(
+      failure.code,
+      failure.message,
+      message.operationId,
+      message.eventId,
+      claimToken,
+    ),
+    env.DB.prepare(
+      `UPDATE communications
+      SET status = 'failed', updated_at = unixepoch()
+      WHERE id = ? AND event_id = ? AND operation_id = ? AND status = 'sending'
+        AND EXISTS (
+          SELECT 1 FROM operation_jobs owned_operation
+           WHERE owned_operation.id = communications.operation_id
+             AND owned_operation.event_id = communications.event_id
+             AND owned_operation.status = 'running' AND owned_operation.claim_token = ?
+        )`,
+    ).bind(
+      message.communicationId,
+      message.eventId,
+      message.operationId,
+      claimToken,
+    ),
+    env.DB.prepare(
+      `UPDATE operation_jobs
+      SET status = 'failed',
+          progress_total = (
+            SELECT COUNT(*) FROM communication_deliveries
+             WHERE communication_id = ? AND event_id = ?
+          ),
+          progress_completed = (
+            SELECT COUNT(*) FROM communication_deliveries
+             WHERE communication_id = ? AND event_id = ?
+          ),
+          progress_failed = (
+            SELECT COUNT(*) FROM communication_deliveries
+             WHERE communication_id = ? AND event_id = ?
+               AND status NOT IN ('sent','delivered','opened','clicked')
+          ),
+          payload_json = ?, last_error = ?, completed_at = unixepoch(), claim_token = NULL,
+          claim_expires_at = NULL, updated_at = unixepoch()
+      WHERE id = ? AND event_id = ? AND status = 'running' AND claim_token = ?
+        AND EXISTS (
+          SELECT 1 FROM communications failed_communication
+           WHERE failed_communication.id = ?
+             AND failed_communication.event_id = operation_jobs.event_id
+             AND failed_communication.operation_id = operation_jobs.id
+             AND failed_communication.status = 'failed'
+        )`,
+    ).bind(
+      message.communicationId,
+      message.eventId,
+      message.communicationId,
+      message.eventId,
+      message.communicationId,
+      message.eventId,
+      communicationQueuePayload(message, true),
+      failure.message,
+      message.operationId,
+      message.eventId,
+      claimToken,
+      message.communicationId,
+    ),
+  ]);
+}
+type CommunicationSendMessage = z.infer<typeof communicationQueueMessageSchema>;
+type CommunicationSnapshot = z.infer<typeof contentSnapshotSchema>;
+type ClaimedCommunication = {
+  kind: "transactional" | "optional";
+  fromName: string;
+  fromEmail: string;
+  replyToEmail: string | null;
+};
+type CommunicationDelivery = {
+  id: string;
+  personId: string | null;
+  address: string;
+  name: string;
+  idempotencyKey: string;
+  sourceValuesJson: string;
+};
+
+async function deliverCommunicationBatch(input: {
+  env: CloudflareEnvironment;
+  message: CommunicationSendMessage;
+  communication: ClaimedCommunication;
+  snapshot: CommunicationSnapshot;
+  deliveries: { results: CommunicationDelivery[] };
+  claimToken: string;
+  provider: ResendEmailProvider;
+}) {
+  const {
+    env,
+    message,
+    communication,
+    snapshot,
+    deliveries,
+    claimToken,
+    provider,
+  } = input;
+  for (const delivery of deliveries.results) {
+    await renewOperationClaim(
+      env,
+      { organisationId: message.organisationId, eventId: message.eventId },
+      message.operationId,
+      claimToken,
+    );
+    const deliveryClaimResults = await env.DB.batch([
+      env.DB.prepare(
+        `
+      UPDATE communication_deliveries
+         SET status = 'suppressed', failure_code = 'recipient_unsubscribed',
+             failure_message = 'Recipient unsubscribed before provider delivery.',
+             next_attempt_at = NULL, updated_at = unixepoch()
+       WHERE id = ? AND communication_id = ? AND event_id = ? AND status IN ('queued','failed','sending')
+         AND EXISTS (
+           SELECT 1 FROM communication_unsubscribes u
+            WHERE u.event_id = communication_deliveries.event_id
+              AND lower(u.address) = lower(communication_deliveries.recipient_address)
+              AND u.revoked_at IS NULL
+              AND (u.category = '*' OR (? = 'optional' AND u.category = ?))
+         )
+         AND EXISTS (
+           SELECT 1 FROM communications claimed_communication
+           JOIN operation_jobs claimed_operation
+             ON claimed_operation.id = claimed_communication.operation_id
+            AND claimed_operation.event_id = claimed_communication.event_id
+            WHERE claimed_communication.id = communication_deliveries.communication_id
+              AND claimed_communication.event_id = communication_deliveries.event_id
+              AND claimed_communication.operation_id = ?
+              AND claimed_communication.status = 'sending'
+              AND claimed_operation.status = 'running'
+              AND claimed_operation.claim_token = ?
+         )
+    `,
+      ).bind(
+        delivery.id,
+        message.communicationId,
+        message.eventId,
+        communication.kind,
+        snapshot.category,
+        message.operationId,
+        claimToken,
+      ),
+      env.DB.prepare(
+        `
+      UPDATE operation_items
+         SET status = 'skipped', result_json = json_object('reason', 'recipient_unsubscribed'),
+             completed_at = unixepoch(), updated_at = unixepoch()
+       WHERE operation_id = ? AND entity_id = ? AND status IN ('pending','failed','running')
+         AND EXISTS (
+           SELECT 1 FROM communication_deliveries suppressed_delivery
+           JOIN operation_jobs claimed_operation ON claimed_operation.id = operation_items.operation_id
+            WHERE suppressed_delivery.id = operation_items.entity_id
+              AND suppressed_delivery.communication_id = ?
+              AND suppressed_delivery.event_id = ?
+              AND suppressed_delivery.status = 'suppressed'
+              AND suppressed_delivery.failure_code = 'recipient_unsubscribed'
+              AND claimed_operation.status = 'running'
+              AND claimed_operation.claim_token = ?
+         )
+    `,
+      ).bind(
+        message.operationId,
+        delivery.id,
+        message.communicationId,
+        message.eventId,
+        claimToken,
+      ),
+      env.DB.prepare(
+        `
+      UPDATE communication_deliveries
+         SET status = 'sending', attempt_count = attempt_count + 1,
+             failure_code = NULL, failure_message = NULL, updated_at = unixepoch()
+       WHERE id = ? AND communication_id = ? AND event_id = ? AND status IN ('queued','failed','sending')
+         AND NOT EXISTS (
+             SELECT 1 FROM communication_unsubscribes u
+              WHERE u.event_id = communication_deliveries.event_id
+                AND lower(u.address) = lower(communication_deliveries.recipient_address)
+                AND u.revoked_at IS NULL
+                AND (u.category = '*' OR (? = 'optional' AND u.category = ?))
+         )
+         AND EXISTS (
+           SELECT 1 FROM communications claimed_communication
+           JOIN operation_jobs claimed_operation
+             ON claimed_operation.id = claimed_communication.operation_id
+            AND claimed_operation.event_id = claimed_communication.event_id
+            WHERE claimed_communication.id = communication_deliveries.communication_id
+              AND claimed_communication.event_id = communication_deliveries.event_id
+              AND claimed_communication.operation_id = ?
+              AND claimed_communication.status = 'sending'
+              AND claimed_operation.status = 'running'
+              AND claimed_operation.claim_token = ?
+         )
+    `,
+      ).bind(
+        delivery.id,
+        message.communicationId,
+        message.eventId,
+        communication.kind,
+        snapshot.category,
+        message.operationId,
+        claimToken,
+      ),
+      env.DB.prepare(
+        `
+      UPDATE operation_items
+         SET status = 'running', attempt_count = attempt_count + 1,
+             started_at = COALESCE(started_at, unixepoch()), completed_at = NULL,
+             error_code = NULL, error_message = NULL, updated_at = unixepoch()
+       WHERE operation_id = ? AND entity_id = ? AND status IN ('pending','failed','running')
+         AND EXISTS (
+           SELECT 1 FROM communication_deliveries claimed_delivery
+           JOIN operation_jobs claimed_operation ON claimed_operation.id = operation_items.operation_id
+            WHERE claimed_delivery.id = operation_items.entity_id
+              AND claimed_delivery.communication_id = ?
+              AND claimed_delivery.event_id = ?
+              AND claimed_delivery.status = 'sending'
+              AND claimed_operation.status = 'running'
+              AND claimed_operation.claim_token = ?
+         )
+    `,
+      ).bind(
+        message.operationId,
+        delivery.id,
+        message.communicationId,
+        message.eventId,
+        claimToken,
+      ),
+    ]);
+    if ((deliveryClaimResults[0].meta.changes ?? 0) === 1) {
+      if ((deliveryClaimResults[1].meta.changes ?? 0) !== 1) {
+        throw new Error(
+          "The recipient suppression could not be recorded consistently.",
+        );
+      }
+      continue;
+    }
+    if ((deliveryClaimResults[2].meta.changes ?? 0) !== 1) {
+      await assertOperationClaim(
+        env,
+        message.operationId,
+        message.eventId,
+        claimToken,
+      );
+      throw new Error(
+        "The communication delivery could not be claimed while its operation remained active.",
+      );
+    }
+    if ((deliveryClaimResults[3].meta.changes ?? 0) !== 1) {
+      throw new Error(
+        "The communication operation item could not be claimed consistently with its delivery.",
+      );
+    }
+    try {
+      const values = {
+        "recipient.name": delivery.name,
+        "recipient.firstName":
+          delivery.name.trim().split(/\s+/)[0] || delivery.name,
+        "event.name": snapshot.event.eventName,
+        "event.dates": formatEventDateMarkers(
+          snapshot.event.startsAt,
+          snapshot.event.endsAt,
+        ),
+        ...sourceMergeValuesSchema.parse(JSON.parse(delivery.sourceValuesJson)),
+      };
+      const subject = renderMergeTemplate(snapshot.subjectTemplate, values);
+      const body = renderMergeTemplate(snapshot.content.body, values);
+      const rendered = await renderProgramCueEmail({
+        preview: subject,
+        heading: subject,
+        body,
+        eventName: snapshot.event.eventName,
+        physicalAddress: snapshot.content.physicalAddress,
+        buttonText: snapshot.content.buttonText,
+        buttonUrl: snapshot.content.buttonUrl,
+        unsubscribeUrl:
+          communication.kind === "optional"
+            ? await createCommunicationUnsubscribeUrl(env, delivery.id)
+            : undefined,
+      });
+      const result = await provider.send({
+        from: `${communication.fromName} <${communication.fromEmail}>`,
+        replyTo: communication.replyToEmail,
+        to: delivery.address,
+        subject,
+        html: rendered.html,
+        text: rendered.text,
+        idempotencyKey: delivery.idempotencyKey,
+      });
+      const deliveryCompletionResults = await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE communication_deliveries SET status = 'sent', provider = ?, provider_message_id = ?,
+        failure_code = NULL, failure_message = NULL, updated_at = unixepoch()
+        WHERE id = ? AND communication_id = ? AND event_id = ? AND status = 'sending'
+          AND EXISTS (
+            SELECT 1 FROM communications claimed_communication
+            JOIN operation_jobs claimed_operation
+              ON claimed_operation.id = claimed_communication.operation_id
+             AND claimed_operation.event_id = claimed_communication.event_id
+             WHERE claimed_communication.id = communication_deliveries.communication_id
+               AND claimed_communication.event_id = communication_deliveries.event_id
+               AND claimed_communication.operation_id = ?
+               AND claimed_communication.status = 'sending'
+               AND claimed_operation.status = 'running'
+               AND claimed_operation.claim_token = ?
+          )`,
+        ).bind(
+          result.provider,
+          result.messageId,
+          delivery.id,
+          message.communicationId,
+          message.eventId,
+          message.operationId,
+          claimToken,
+        ),
+        env.DB.prepare(
+          `UPDATE operation_items SET status = 'completed', result_json = ?, completed_at = unixepoch(),
+        updated_at = unixepoch() WHERE operation_id = ? AND entity_id = ? AND status = 'running'
+          AND EXISTS (
+            SELECT 1 FROM communication_deliveries completed_delivery
+            JOIN operation_jobs claimed_operation ON claimed_operation.id = operation_items.operation_id
+             WHERE completed_delivery.id = operation_items.entity_id
+               AND completed_delivery.communication_id = ?
+               AND completed_delivery.event_id = ?
+               AND completed_delivery.status = 'sent'
+               AND completed_delivery.provider_message_id = ?
+               AND claimed_operation.status = 'running'
+               AND claimed_operation.claim_token = ?
+          )`,
+        ).bind(
+          JSON.stringify({
+            provider: result.provider,
+            providerMessageId: result.messageId,
+          }),
+          message.operationId,
+          delivery.id,
+          message.communicationId,
+          message.eventId,
+          result.messageId,
+          claimToken,
+        ),
+      ]);
+      if ((deliveryCompletionResults[0].meta.changes ?? 0) !== 1) {
+        throw new Error(
+          "The delivery send claim changed before the provider result could be recorded.",
+        );
+      }
+      if ((deliveryCompletionResults[1].meta.changes ?? 0) !== 1) {
+        throw new Error(
+          "The communication operation item could not record the provider result consistently.",
+        );
+      }
+    } catch (error) {
+      const failure = errorDetails(error);
+      const failureResults = await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE communication_deliveries SET status = 'failed', failure_code = ?, failure_message = ?,
+        next_attempt_at = unixepoch() + 60, updated_at = unixepoch()
+        WHERE id = ? AND communication_id = ? AND event_id = ? AND status = 'sending'
+          AND EXISTS (
+            SELECT 1 FROM communications claimed_communication
+            JOIN operation_jobs claimed_operation
+              ON claimed_operation.id = claimed_communication.operation_id
+             AND claimed_operation.event_id = claimed_communication.event_id
+             WHERE claimed_communication.id = communication_deliveries.communication_id
+               AND claimed_communication.event_id = communication_deliveries.event_id
+               AND claimed_communication.operation_id = ?
+               AND claimed_communication.status = 'sending'
+               AND claimed_operation.status = 'running'
+               AND claimed_operation.claim_token = ?
+          )`,
+        ).bind(
+          failure.code,
+          failure.message,
+          delivery.id,
+          message.communicationId,
+          message.eventId,
+          message.operationId,
+          claimToken,
+        ),
+        env.DB.prepare(
+          `UPDATE operation_items SET status = 'failed', error_code = ?, error_message = ?,
+        completed_at = unixepoch(), updated_at = unixepoch()
+        WHERE operation_id = ? AND entity_id = ? AND status = 'running'
+          AND EXISTS (
+            SELECT 1 FROM communication_deliveries failed_delivery
+            JOIN operation_jobs claimed_operation ON claimed_operation.id = operation_items.operation_id
+             WHERE failed_delivery.id = operation_items.entity_id
+               AND failed_delivery.communication_id = ?
+               AND failed_delivery.event_id = ?
+               AND failed_delivery.status = 'failed'
+               AND claimed_operation.status = 'running'
+               AND claimed_operation.claim_token = ?
+          )`,
+        ).bind(
+          failure.code,
+          failure.message,
+          message.operationId,
+          delivery.id,
+          message.communicationId,
+          message.eventId,
+          claimToken,
+        ),
+      ]);
+      if ((failureResults[0].meta.changes ?? 0) !== 1) {
+        await assertOperationClaim(
+          env,
+          message.operationId,
+          message.eventId,
+          claimToken,
+        );
+        throw error;
+      }
+      if ((failureResults[1].meta.changes ?? 0) !== 1) {
+        throw new Error(
+          "The communication operation item could not record the delivery failure consistently.",
+        );
+      }
+    }
+  }
+}
+export async function processCommunicationSend(
+  input: unknown,
+  env: CloudflareEnvironment,
+  dependencies: QueueProviderDependencies = {},
+) {
+  const message = communicationQueueMessageSchema.parse(input);
+  const operation = await env.DB.prepare(
+    `
+    SELECT o.id, o.status
+      FROM operation_jobs o
+      JOIN events e ON e.id = o.event_id AND e.organisation_id = ?
+     WHERE o.id = ? AND o.event_id = ? AND o.type IN ('communication.send','decision.notification','submission.notification')
+  `,
+  )
+    .bind(message.organisationId, message.operationId, message.eventId)
+    .first<{ id: string; status: string }>();
+  if (!operation)
+    throw new Error(
+      "Communication operation does not exist in the authorised event.",
+    );
+  if (operation.status === "completed" || operation.status === "cancelled")
+    return;
+  const includeFailed =
+    message.includeFailed === true ||
+    ["failed", "partially_failed", "retrying", "running"].includes(
+      operation.status,
+    );
+
+  const communication = await env.DB.prepare(
+    `
+    SELECT c.id, c.status, c.kind, c.recipient_count AS recipientCount,
+           c.content_snapshot_json AS contentSnapshotJson,
+           sp.from_name AS fromName, sp.from_email AS fromEmail,
+           sp.reply_to_email AS replyToEmail
+      FROM communications c
+      LEFT JOIN sender_profiles sp ON sp.id = c.sender_profile_id AND sp.event_id = c.event_id
+        AND sp.status = 'verified' AND sp.provider = 'resend'
+     WHERE c.id = ? AND c.event_id = ? AND c.operation_id = ? AND c.idempotency_key = ?
+  `,
+  )
+    .bind(
+      message.communicationId,
+      message.eventId,
+      message.operationId,
+      message.idempotencyKey,
+    )
+    .first<{
+      id: string;
+      status: string;
+      kind: "transactional" | "optional";
+      recipientCount: number;
+      contentSnapshotJson: string;
+      fromName: string | null;
+      fromEmail: string | null;
+      replyToEmail: string | null;
+    }>();
+  if (!communication)
+    throw new Error(
+      "Communication does not exist for this operation in the authorised event.",
+    );
+  if (communication.status === "cancelled") return;
+  if (!communication.fromName || !communication.fromEmail)
+    throw new Error("A verified Resend sender is unavailable.");
+  const claimedCommunication: ClaimedCommunication = {
+    kind: communication.kind,
+    fromName: communication.fromName,
+    fromEmail: communication.fromEmail,
+    replyToEmail: communication.replyToEmail,
+  };
+  const snapshot = contentSnapshotSchema.parse(
+    JSON.parse(communication.contentSnapshotJson),
+  );
+  const deliveries = await env.DB.prepare(
+    `
+    SELECT d.id, d.person_id AS personId, d.recipient_address AS address,
+           COALESCE(d.recipient_name, d.recipient_address) AS name,
+           d.idempotency_key AS idempotencyKey,
+           d.source_values_json AS sourceValuesJson
+      FROM communication_deliveries d
+     WHERE d.communication_id = ? AND d.event_id = ?
+       AND d.status IN ('queued','failed','sending')
+       AND (? = 1 OR d.status <> 'failed')
+     ORDER BY d.created_at, d.id
+     LIMIT ?
+  `,
+  )
+    .bind(
+      message.communicationId,
+      message.eventId,
+      includeFailed ? 1 : 0,
+      COMMUNICATION_SEND_BATCH_SIZE,
+    )
+    .all<{
+      id: string;
+      personId: string | null;
+      address: string;
+      name: string;
+      idempotencyKey: string;
+      sourceValuesJson: string;
+    }>();
+
+  // The immutable operation ID plus the queued/sending transition is the send
+  // claim. This batch serialises against CommunicationService.cancel's batch.
+  const claimToken = crypto.randomUUID();
+  const claimResults = await env.DB.batch([
+    env.DB.prepare(
+      `
+      UPDATE communications
+         SET status = 'sending', updated_at = unixepoch()
+       WHERE id = ? AND event_id = ? AND operation_id = ? AND idempotency_key = ?
+         AND status IN ('queued','failed','partially_failed','sending')
+         AND EXISTS (
+           SELECT 1
+             FROM operation_jobs claim_operation
+             JOIN events claim_event ON claim_event.id = claim_operation.event_id
+            WHERE claim_operation.id = communications.operation_id
+              AND claim_operation.event_id = communications.event_id
+              AND (
+                claim_operation.status IN ('queued','received','retrying','queue_failed','failed','partially_failed')
+                OR (
+                  claim_operation.status = 'running'
+                  AND COALESCE(claim_operation.claim_expires_at, 0) <= unixepoch()
+                )
+              )
+              AND claim_event.organisation_id = ?
+         )
+    `,
+    ).bind(
+      message.communicationId,
+      message.eventId,
+      message.operationId,
+      message.idempotencyKey,
+      message.organisationId,
+    ),
+    env.DB.prepare(
+      `
+      UPDATE operation_jobs
+         SET status = 'running', started_at = COALESCE(started_at, unixepoch()),
+             attempt_count = attempt_count + 1, last_error = NULL, completed_at = NULL,
+             claim_token = ?, claim_expires_at = unixepoch() + ?,
+             updated_at = unixepoch()
+       WHERE id = ? AND event_id = ? AND organisation_id = ?
+         AND (
+           status IN ('queued','received','retrying','queue_failed','failed','partially_failed')
+           OR (status = 'running' AND COALESCE(claim_expires_at, 0) <= unixepoch())
+         )
+         AND EXISTS (
+           SELECT 1
+             FROM communications claimed_communication
+            WHERE claimed_communication.id = ?
+              AND claimed_communication.event_id = operation_jobs.event_id
+              AND claimed_communication.operation_id = operation_jobs.id
+              AND claimed_communication.idempotency_key = ?
+              AND claimed_communication.status = 'sending'
+         )
+    `,
+    ).bind(
+      claimToken,
+      QUEUE_CLAIM_LEASE_SECONDS,
+      message.operationId,
+      message.eventId,
+      message.organisationId,
+      message.communicationId,
+      message.idempotencyKey,
+    ),
+  ]);
+  const communicationClaimed = (claimResults[0].meta.changes ?? 0) === 1;
+  const operationClaimed = (claimResults[1].meta.changes ?? 0) === 1;
+  if (!communicationClaimed && !operationClaimed) {
+    const current = await loadOperationClaim(
+      env,
+      message.operationId,
+      message.eventId,
+    );
+    if (current?.status === "completed" || current?.status === "cancelled")
+      return;
+    if (
+      current?.status === "running" &&
+      current.claimToken &&
+      (current.claimExpiresAt ?? 0) > Math.floor(Date.now() / 1_000)
+    ) {
+      throw new QueueClaimLeaseBusyError();
+    }
+    throw new Error("The communication send claim could not be acquired.");
+  }
+  if (!communicationClaimed || !operationClaimed) {
+    throw new Error(
+      "The communication send claim could not be recorded consistently.",
+    );
+  }
+
+  try {
+    const provider =
+      dependencies.resend ?? new ResendEmailProvider(env.RESEND_API_KEY);
+    await deliverCommunicationBatch({
+      env,
+      message,
+      communication: claimedCommunication,
+      snapshot,
+      deliveries,
+      claimToken,
+      provider,
+    });
+
+    await renewOperationClaim(
+      env,
+      { organisationId: message.organisationId, eventId: message.eventId },
+      message.operationId,
+      claimToken,
+    );
+    const counts = await env.DB.prepare(
+      `
+    SELECT COUNT(*) AS total,
+           SUM(CASE WHEN status IN ('sent','delivered','opened','clicked') THEN 1 ELSE 0 END) AS succeeded,
+           SUM(CASE WHEN status IN ('failed','bounced','suppressed') THEN 1 ELSE 0 END) AS failed,
+           (SELECT COUNT(*)
+              FROM operation_items oi
+              JOIN communication_deliveries item_delivery ON item_delivery.id = oi.entity_id
+             WHERE oi.operation_id = ? AND item_delivery.communication_id = ?) AS itemTotal,
+           (SELECT COUNT(*)
+              FROM operation_items oi
+              JOIN communication_deliveries item_delivery ON item_delivery.id = oi.entity_id
+             WHERE oi.operation_id = ? AND item_delivery.communication_id = ?
+               AND oi.status IN ('completed','failed','skipped')) AS terminalItems
+      FROM communication_deliveries WHERE communication_id = ?
+  `,
+    )
+      .bind(
+        message.operationId,
+        message.communicationId,
+        message.operationId,
+        message.communicationId,
+        message.communicationId,
+      )
+      .first<{
+        total: number;
+        succeeded: number | null;
+        failed: number | null;
+        itemTotal: number;
+        terminalItems: number;
+      }>();
+    if (
+      !counts ||
+      !Number.isInteger(counts.total) ||
+      counts.total < 1 ||
+      counts.succeeded === null ||
+      !Number.isInteger(counts.succeeded) ||
+      counts.failed === null ||
+      !Number.isInteger(counts.failed) ||
+      counts.total !== communication.recipientCount ||
+      counts.itemTotal !== counts.total
+    ) {
+      throw new Error(
+        "The communication delivery totals do not match its durable recipient intent.",
+      );
+    }
+    const { total, succeeded, failed } = counts;
+    if (succeeded + failed !== total || counts.terminalItems !== total) {
+      if (deliveries.results.length === 0) {
+        throw new Error(
+          "The communication has non-terminal deliveries but none can be processed by this Queue pass.",
+        );
+      }
+      await assertOperationClaim(
+        env,
+        message.operationId,
+        message.eventId,
+        claimToken,
+      );
+      const continuationPayload = communicationQueuePayload(
+        message,
+        includeFailed,
+      );
+      const continuationMessage = communicationQueueMessageSchema.parse(
+        JSON.parse(continuationPayload),
+      );
+      const continuationResults = await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE communications SET status = 'queued', updated_at = unixepoch()
+            WHERE id = ? AND event_id = ? AND operation_id = ? AND status = 'sending'
+              AND EXISTS (
+                SELECT 1 FROM operation_jobs claimed_operation
+                 WHERE claimed_operation.id = communications.operation_id
+                   AND claimed_operation.event_id = communications.event_id
+                   AND claimed_operation.status = 'running'
+                   AND claimed_operation.claim_token = ?
+              )`,
+        ).bind(
+          message.communicationId,
+          message.eventId,
+          message.operationId,
+          claimToken,
+        ),
+        env.DB.prepare(
+          `UPDATE operation_jobs
+              SET status = 'queued', progress_total = ?, progress_completed = ?,
+                  progress_failed = ?, payload_json = ?, last_error = NULL,
+                  claim_token = NULL, claim_expires_at = NULL, updated_at = unixepoch()
+            WHERE id = ? AND event_id = ? AND status = 'running' AND claim_token = ?`,
+        ).bind(
+          total,
+          counts.terminalItems,
+          failed,
+          continuationPayload,
+          message.operationId,
+          message.eventId,
+          claimToken,
+        ),
+        env.DB.prepare(
+          `INSERT INTO event_changes (
+             event_id, entity_type, entity_id, change_type, correlation_id, created_at
+           )
+           SELECT event_id, 'communication', ?, 'progress', correlation_id, unixepoch()
+             FROM operation_jobs
+            WHERE id = ? AND event_id = ? AND status = 'queued' AND payload_json = ?
+           RETURNING sequence`,
+        ).bind(
+          message.communicationId,
+          message.operationId,
+          message.eventId,
+          continuationPayload,
+        ),
+      ]);
+      if (
+        (continuationResults[0].meta.changes ?? 0) !== 1 ||
+        (continuationResults[1].meta.changes ?? 0) !== 1
+      ) {
+        throw new QueueClaimLeaseLostError();
+      }
+      try {
+        if (!env.OPERATIONS_QUEUE)
+          throw new Error("Required OPERATIONS_QUEUE binding is unavailable.");
+        await env.OPERATIONS_QUEUE.send(continuationMessage);
+      } catch (error) {
+        const failure = errorDetails(error);
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE operation_jobs
+                SET status = 'queue_failed', last_error = ?, updated_at = unixepoch()
+              WHERE id = ? AND event_id = ? AND status = 'queued' AND payload_json = ?`,
+          ).bind(
+            failure.message,
+            message.operationId,
+            message.eventId,
+            continuationPayload,
+          ),
+          env.DB.prepare(
+            `UPDATE communications SET status = 'failed', updated_at = unixepoch()
+              WHERE id = ? AND event_id = ? AND operation_id = ? AND status = 'queued'
+                AND EXISTS (
+                  SELECT 1 FROM operation_jobs failed_operation
+                   WHERE failed_operation.id = communications.operation_id
+                     AND failed_operation.event_id = communications.event_id
+                     AND failed_operation.status = 'queue_failed'
+                )`,
+          ).bind(message.communicationId, message.eventId, message.operationId),
+        ]);
+      }
+      await notifyRealtimeAfterCommit(
+        env,
+        { organisationId: message.organisationId, eventId: message.eventId },
+        returnedChangeSequence(continuationResults.at(-1)),
+        message.operationId,
+      );
+      return;
+    }
+    const operationStatus =
+      failed === 0 ? "completed" : succeeded ? "partially_failed" : "failed";
+    const communicationStatus =
+      failed === 0 ? "sent" : succeeded ? "partially_failed" : "failed";
+    const completionResults = await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE communications SET status = ?, sent_at = CASE WHEN ? = 'sent' THEN unixepoch() ELSE sent_at END,
+      updated_at = unixepoch()
+      WHERE id = ? AND event_id = ? AND operation_id = ? AND status = 'sending'
+        AND EXISTS (
+          SELECT 1 FROM operation_jobs claimed_operation
+           WHERE claimed_operation.id = communications.operation_id
+             AND claimed_operation.event_id = communications.event_id
+             AND claimed_operation.status = 'running'
+             AND claimed_operation.claim_token = ?
+        )`,
+      ).bind(
+        communicationStatus,
+        communicationStatus,
+        message.communicationId,
+        message.eventId,
+        message.operationId,
+        claimToken,
+      ),
+      env.DB.prepare(
+        `UPDATE operation_jobs SET status = ?, progress_total = ?, progress_completed = ?, progress_failed = ?,
+      payload_json = ?, last_error = CASE WHEN ? > 0 THEN ? ELSE NULL END, completed_at = unixepoch(),
+      claim_token = NULL, claim_expires_at = NULL, updated_at = unixepoch()
+      WHERE id = ? AND event_id = ? AND status = 'running' AND claim_token = ?
+        AND EXISTS (
+          SELECT 1 FROM communications completed_communication
+           WHERE completed_communication.id = ?
+             AND completed_communication.event_id = operation_jobs.event_id
+             AND completed_communication.operation_id = operation_jobs.id
+             AND completed_communication.status = ?
+        )`,
+      ).bind(
+        operationStatus,
+        total,
+        succeeded + failed,
+        failed,
+        communicationQueuePayload(message, failed > 0),
+        failed,
+        failed ? `${failed} of ${total} deliveries failed.` : null,
+        message.operationId,
+        message.eventId,
+        claimToken,
+        message.communicationId,
+        communicationStatus,
+      ),
+      env.DB.prepare(
+        `INSERT INTO audit_events (
+      id, organisation_id, event_id, action, entity_type, entity_id, metadata_json, created_at
+    ) SELECT ?, ?, ?, 'communication.delivery.finished', 'communication', ?, ?, unixepoch()
+       WHERE EXISTS (
+         SELECT 1 FROM operation_jobs completed_operation
+         WHERE completed_operation.id = ? AND completed_operation.event_id = ?
+            AND completed_operation.status = ?
+            AND changes() = 1
+       )`,
+      ).bind(
+        crypto.randomUUID(),
+        message.organisationId,
+        message.eventId,
+        message.communicationId,
+        JSON.stringify({
+          operationId: message.operationId,
+          total,
+          succeeded,
+          failed,
+        }),
+        message.operationId,
+        message.eventId,
+        operationStatus,
+      ),
+      env.DB.prepare(
+        `INSERT INTO event_changes (event_id, entity_type, entity_id, change_type, correlation_id, created_at)
+      SELECT ?, 'communication', ?, 'progress', correlation_id, unixepoch()
+        FROM operation_jobs WHERE id = ? AND event_id = ? AND status = ? AND changes() = 1
+      RETURNING sequence`,
+      ).bind(
+        message.eventId,
+        message.communicationId,
+        message.operationId,
+        message.eventId,
+        operationStatus,
+      ),
+    ]);
+    const communicationCompleted =
+      (completionResults[0].meta.changes ?? 0) === 1;
+    const operationCompleted = (completionResults[1].meta.changes ?? 0) === 1;
+    if (!communicationCompleted && !operationCompleted) {
+      const current = await loadOperationClaim(
+        env,
+        message.operationId,
+        message.eventId,
+      );
+      if (current?.status === "completed" || current?.status === "cancelled")
+        return;
+      throw new QueueClaimLeaseLostError();
+    }
+    if (!communicationCompleted || !operationCompleted) {
+      throw new Error(
+        "The communication completion could not be recorded consistently.",
+      );
+    }
+    await notifyRealtimeAfterCommit(
+      env,
+      { organisationId: message.organisationId, eventId: message.eventId },
+      returnedChangeSequence(completionResults.at(-1)),
+      message.operationId,
+    );
+  } catch (error) {
+    try {
+      await finishOwnedCommunicationFailure(env, message, claimToken, error);
+    } catch (failureError) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          subsystem: "communications-queue",
+          operationId: message.operationId,
+          message: `Could not persist the owned communication failure: ${failureError instanceof Error ? failureError.message : String(failureError)}`,
+        }),
+      );
+    }
+    throw error;
+  }
+}

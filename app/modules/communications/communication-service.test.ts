@@ -13,6 +13,7 @@ import {
   CommunicationQueueUnavailableError,
   CommunicationService,
 } from "./communication-service.server";
+import { CommunicationTemplateService } from "./communication-template-service.server";
 import { RecipientQuery } from "./recipient-query.server";
 import { ResendEmailProvider } from "./resend.server";
 import {
@@ -1494,7 +1495,7 @@ describe("Communications D1 vertical slice", () => {
 
   it("keeps one live template version when two callers publish the same draft concurrently", async () => {
     const { testEnv } = await communicationEnvironment();
-    const service = new CommunicationService(testEnv);
+    const service = new CommunicationTemplateService(testEnv);
     const first = await service.saveTemplate(viewer, {
       name: "Concurrent template",
       category: "ad_hoc",
@@ -1517,7 +1518,7 @@ describe("Communications D1 vertical slice", () => {
     });
 
     type TemplateVersion = Awaited<
-      ReturnType<CommunicationService["publishTemplate"]>
+      ReturnType<CommunicationTemplateService["publishTemplate"]>
     >;
     const internalService = service as unknown as {
       getTemplateVersion: (
