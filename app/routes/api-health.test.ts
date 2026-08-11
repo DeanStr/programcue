@@ -120,6 +120,19 @@ describe("service readiness", () => {
     });
   });
 
+  it("fails production readiness when resource embed origins are not exact HTTPS origins", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await health({
+      ...completeProductionEnvironment(),
+      RESOURCE_EMBED_ORIGINS: "https://docs.google.com/document/unsafe",
+    } as unknown as CloudflareEnvironment);
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "RUNTIME_CONFIGURATION_INVALID" },
+    });
+  });
+
   it("accepts complete local production bindings without calling providers", async () => {
     const response = await health(completeProductionEnvironment());
     expect(response.status).toBe(200);
@@ -158,6 +171,7 @@ function completeProductionEnvironment() {
     FILE_SCANNER_API_URL: "https://scanner.programcue.test",
     CORS_ALLOWED_ORIGINS: "https://programcue.test",
     EMBED_FRAME_ANCESTORS: "https://programme.programcue.test",
+    RESOURCE_EMBED_ORIGINS: "https://docs.google.com",
     BETTER_AUTH_SECRET: "a".repeat(32),
     RESEND_API_KEY: "resend-key",
     RESEND_WEBHOOK_SECRET: "resend-webhook-secret",

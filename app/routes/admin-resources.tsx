@@ -35,6 +35,7 @@ import {
   ResourceContentError,
   type TiptapNode,
 } from "~/modules/resources/resource-content";
+import { ResourceEmbedUrlError } from "~/modules/resources/resource-embed-policy";
 import {
   ResourceAudienceError,
   ResourceRevisionConflictError,
@@ -124,6 +125,7 @@ function actionError(error: unknown) {
     return error.issues[0]?.message ?? "Review the resource fields.";
   if (
     error instanceof ResourceContentError ||
+    error instanceof ResourceEmbedUrlError ||
     error instanceof ResourceAudienceError ||
     error instanceof ResourceRevisionConflictError ||
     error instanceof ResourceSlugConflictError ||
@@ -433,7 +435,10 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
         .map((value) => value.trim())
         .filter(Boolean);
       return {
-        html: renderResourceDocument(appendEmbeds(document, urls)),
+        html: renderResourceDocument(
+          appendEmbeds(document, urls, loaderData.resourceEmbedOrigins),
+          loaderData.resourceEmbedOrigins,
+        ),
         error: null,
       };
     } catch (error) {
@@ -445,7 +450,7 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
             : "The resource preview could not be rendered.",
       };
     }
-  }, [document, embedUrls]);
+  }, [document, embedUrls, loaderData.resourceEmbedOrigins]);
   const restoreDraft = useCallback((payload: typeof recoveryPayload) => {
     setTitle(payload.title);
     setSlug(payload.slug);
@@ -804,7 +809,7 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
               </div>
               <aside>
                 <label className="label">
-                  Safe HTTPS embeds
+                  Approved HTTPS embeds
                   <textarea
                     className="textarea"
                     name="embedUrls"
@@ -819,7 +824,9 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
                 </label>
                 <p className="help">
                   <Globe2 aria-hidden size={13} /> Embeds render in a sandbox
-                  without scripts or parent navigation privileges.
+                  without scripts, forms, popups or parent navigation. Allowed
+                  origins:{" "}
+                  {loaderData.resourceEmbedOrigins.join(", ") || "none"}.
                 </p>
               </aside>
             </div>

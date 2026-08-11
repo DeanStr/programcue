@@ -106,8 +106,11 @@ the external resources below, then replace every value reported by
   connections. Airtable and Accelevents credentials are entered per integration
   after deployment and encrypted with `INTEGRATION_CREDENTIALS_KEY`.
 
-Replace the D1/account IDs, public/auth/scanner URLs, sender address, CORS and
-embed origins, Turnstile site key, and `SOURCE_REVISION`. The source revision
+Replace the D1/account IDs, public/auth/scanner URLs, sender address, CORS
+origins, public-programme frame ancestors, resource-embed origins, Turnstile
+site key, and `SOURCE_REVISION`. `RESOURCE_EMBED_ORIGINS` is a comma-separated
+list of exact HTTPS origins; use the explicit value `none` when a deployment
+must reject every resource embed. The source revision
 must be the deployed 7-64 character hexadecimal Git revision. Configure the
 complete release secret inventory:
 

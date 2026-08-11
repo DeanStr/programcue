@@ -62,7 +62,19 @@ export const trackInputSchema = z.object({
   name: z.string().trim().min(1, "Every track needs a name.").max(120),
   slug: configurationKeySchema,
   colourToken: z
-    .union([z.string().regex(/^#[0-9a-fA-F]{6}$/), z.literal("")])
+    .union(
+      [
+        z
+          .string()
+          .regex(
+            /^#[0-9a-fA-F]{6}$/,
+            "Choose a valid track colour in #RRGGBB format.",
+          ),
+        z.literal(""),
+        z.null(),
+      ],
+      { error: "Choose a valid track colour in #RRGGBB format." },
+    )
     .transform((value) => (value ? value.toLowerCase() : null)),
   position: z.coerce.number().int().min(0),
   exclusive: z.boolean(),

@@ -7,10 +7,7 @@ import {
   apiPreflightResponse,
   isVersionedApiPath,
 } from "../app/platform/http/api-cors";
-import {
-  applySecurityHeaders,
-  SECURITY_HEADERS,
-} from "../app/platform/http/security-headers";
+import { applySecurityHeaders } from "../app/platform/http/security-headers";
 import {
   rejectCrossOriginBrowserMutation,
   rejectUnsupportedRequestMethod,
@@ -59,6 +56,7 @@ declare global {
     FILE_SCANNER_WEBHOOK_SECRET?: string;
     FILE_SCANNER_API_URL?: string;
     FILE_SCANNER_API_TOKEN?: string;
+    RESOURCE_EMBED_ORIGINS?: string;
     R2_ACCOUNT_ID?: string;
     R2_BUCKET_NAME?: string;
     R2_ACCESS_KEY_ID?: string;
@@ -82,6 +80,7 @@ function secure(
   applySecurityHeaders(
     headers,
     typeof appEnvironment === "string" ? appEnvironment : undefined,
+    env.RESOURCE_EMBED_ORIGINS,
   );
   for (const [name, value] of apiCorsHeaders(request, env))
     headers.set(name, value);
@@ -100,7 +99,7 @@ function secure(
       });
     headers.set(
       "content-security-policy",
-      SECURITY_HEADERS["content-security-policy"].replace(
+      String(headers.get("content-security-policy")).replace(
         "frame-ancestors 'self'",
         `frame-ancestors ${ancestors}`,
       ),

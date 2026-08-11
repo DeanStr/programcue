@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Form, useActionData, useFetcher, useNavigation } from "react-router";
+import {
+  Form,
+  useActionData,
+  useFetcher,
+  useNavigate,
+  useNavigation,
+} from "react-router";
 
 import { Dialog } from "~/components/dialog";
 import {
@@ -14,10 +20,12 @@ import type { action, ActionResponse } from "~/routes/event-setup";
 
 export function EventSetupForm({
   event,
+  focusedRecord,
   canManageFileRetention,
   canManageOrganisationAdministrators,
 }: {
   event: EventSetup;
+  focusedRecord: { kind: "room" | "track"; id: string } | null;
   canManageFileRetention: boolean;
   canManageOrganisationAdministrators: boolean;
 }) {
@@ -25,6 +33,7 @@ export function EventSetupForm({
     ActionResponse | undefined;
   const inviteFetcher = useFetcher<typeof action>();
   const repositoryFetcher = useFetcher<typeof action>();
+  const navigate = useNavigate();
   const navigation = useNavigation();
   const [rooms, setRooms] = useState(event.rooms);
   const [tracks, setTracks] = useState(event.tracks);
@@ -35,6 +44,8 @@ export function EventSetupForm({
   const [migrationOpen, setMigrationOpen] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomCapacity, setNewRoomCapacity] = useState("100");
+  const focusedRecordId = focusedRecord?.id ?? null;
+  const focusedRecordKind = focusedRecord?.kind ?? null;
   const saving =
     navigation.state === "submitting" &&
     navigation.formData?.get("_intent") === "save";
@@ -47,6 +58,14 @@ export function EventSetupForm({
     setTracks(event.tracks);
     setSessionFormats(event.sessionFormats);
   }, [event.revision]);
+  useEffect(() => {
+    if (!focusedRecordId || !focusedRecordKind) return;
+    const target = document.getElementById(
+      `event-${focusedRecordKind}-${focusedRecordId}`,
+    );
+    target?.focus();
+    target?.scrollIntoView({ block: "center" });
+  }, [focusedRecordId, focusedRecordKind]);
   useEffect(() => {
     if (inviteFetcher.data && (inviteFetcher.data as ActionResponse).ok)
       setInviteOpen(false);
@@ -91,6 +110,14 @@ export function EventSetupForm({
     setNewRoomName("");
     setNewRoomCapacity("100");
     setAddRoomOpen(false);
+  }
+
+  function clearRemovedRecordFocus(kind: "room" | "track", id: string) {
+    if (focusedRecordKind !== kind || focusedRecordId !== id) return;
+    void navigate("/admin/event", {
+      replace: true,
+      preventScrollReset: true,
+    });
   }
 
   function revokeAdministrator(
@@ -182,6 +209,10 @@ export function EventSetupForm({
             setRooms={setRooms}
             actionData={actionData}
             onAdd={() => setAddRoomOpen(true)}
+            onRemove={(roomId) => clearRemovedRecordFocus("room", roomId)}
+            focusedRoomId={
+              focusedRecordKind === "room" ? focusedRecordId : null
+            }
           />
           <EventScheduleConfigurationPanels
             tracks={tracks}
@@ -189,6 +220,10 @@ export function EventSetupForm({
             sessionFormats={sessionFormats}
             setSessionFormats={setSessionFormats}
             actionData={actionData}
+            onRemove={(trackId) => clearRemovedRecordFocus("track", trackId)}
+            focusedTrackId={
+              focusedRecordKind === "track" ? focusedRecordId : null
+            }
           />
           <EventFilePolicyPanel event={event} actionData={actionData} />
           <EventAccessPanels

@@ -36,12 +36,16 @@ export function EventScheduleConfigurationPanels({
   sessionFormats,
   setSessionFormats,
   actionData,
+  onRemove,
+  focusedTrackId,
 }: {
   tracks: Tracks;
   setTracks: Dispatch<SetStateAction<Tracks>>;
   sessionFormats: SessionFormats;
   setSessionFormats: Dispatch<SetStateAction<SessionFormats>>;
   actionData?: ActionResponse;
+  onRemove: (trackId: string) => void;
+  focusedTrackId: string | null;
 }) {
   const [newTrackName, setNewTrackName] = useState("");
   const [newFormatLabel, setNewFormatLabel] = useState("");
@@ -101,7 +105,13 @@ export function EventScheduleConfigurationPanels({
         </div>
         <div className="stack">
           {tracks.map((track) => (
-            <div className="card pad" key={track.id}>
+            <div
+              className={`card pad${focusedTrackId === track.id ? " selected" : ""}`}
+              id={`event-track-${track.id}`}
+              key={track.id}
+              tabIndex={-1}
+              aria-label={`${track.name} track settings`}
+            >
               <div className="form-row">
                 <label className="label">
                   Track name
@@ -189,11 +199,12 @@ export function EventScheduleConfigurationPanels({
                 <button
                   type="button"
                   className="btn small right"
-                  onClick={() =>
+                  onClick={() => {
                     setTracks((current) =>
                       current.filter((candidate) => candidate.id !== track.id),
-                    )
-                  }
+                    );
+                    onRemove(track.id);
+                  }}
                   aria-label={`Remove ${track.name}`}
                 >
                   Remove

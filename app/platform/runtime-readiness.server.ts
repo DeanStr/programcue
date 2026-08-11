@@ -1,4 +1,5 @@
 import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
+import { parseResourceEmbedOrigins } from "~/modules/resources/resource-embed-policy";
 
 const requiredProductionBindings = [
   "DB",
@@ -25,6 +26,7 @@ const requiredProductionValues = [
   "FILE_SCANNER_API_URL",
   "CORS_ALLOWED_ORIGINS",
   "EMBED_FRAME_ANCESTORS",
+  "RESOURCE_EMBED_ORIGINS",
   "BETTER_AUTH_SECRET",
   "RESEND_API_KEY",
   "RESEND_WEBHOOK_SECRET",
@@ -90,6 +92,11 @@ export function requireProductionRuntimeReadiness(
   }
   if (values.EMAIL_PROVIDER !== "resend") {
     invalid.push("EMAIL_PROVIDER");
+  }
+  try {
+    parseResourceEmbedOrigins(values.RESOURCE_EMBED_ORIGINS);
+  } catch {
+    invalid.push("RESOURCE_EMBED_ORIGINS");
   }
   if (invalid.length) {
     throw new ProductionReadinessConfigurationError(

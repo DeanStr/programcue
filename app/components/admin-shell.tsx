@@ -128,10 +128,26 @@ function savedViewArea(pathname: string): SavedViewArea | null {
 }
 
 function recordIcon(kind: CommandRecord["kind"]) {
-  if (kind === "speaker") return UserRound;
-  if (kind === "submission") return Files;
-  if (kind === "session") return CalendarDays;
-  return ListChecks;
+  switch (kind) {
+    case "speaker":
+      return UserRound;
+    case "submission":
+      return Files;
+    case "session":
+      return CalendarDays;
+    case "task":
+      return ListChecks;
+    case "room":
+      return Grid3X3;
+    case "track":
+      return Tags;
+    case "resource":
+      return BookOpen;
+    case "operation":
+      return Activity;
+  }
+  kind satisfies never;
+  throw new Error(`Unsupported command record kind: ${String(kind)}`);
 }
 
 const ADMIN_SECTION_LABELS: Record<string, string> = Object.fromEntries(
@@ -553,7 +569,7 @@ export function AdminShell({
                 style={{ width: "100%" }}
                 value={commandQuery}
                 onValueChange={setCommandQuery}
-                placeholder="Speaker, submission, session, task or command"
+                placeholder="Record, operation or command"
               />
             </label>
             {commandPalette.organisationSearchAllowed ? (

@@ -11,10 +11,14 @@ import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { TaskService } from "~/modules/tasks/task-service.server";
 import {
-  ResourceContentError,
   parseResourceDocument,
   renderResourceDocument,
 } from "./resource-content";
+import {
+  parseResourceEmbedOrigins,
+  ResourceEmbedConfigurationError,
+  ResourceEmbedUrlError,
+} from "./resource-embed-policy";
 import {
   ResourceAudienceError,
   ResourceInvariantError,
@@ -443,7 +447,9 @@ describe("speaker resource service", () => {
       "accessibility-guide-test",
     );
     expect(participant.selected?.renderedHtml).toContain("readable text");
-    expect(participant.selected?.renderedHtml).toContain("sandbox=");
+    expect(participant.selected?.renderedHtml).toContain('sandbox=""');
+    expect(participant.selected?.renderedHtml).not.toContain("allow-forms");
+    expect(participant.selected?.renderedHtml).not.toContain("allow-popups");
     expect(participant.selected?.acknowledged).toBe(false);
 
     await service.acknowledge(
@@ -1482,7 +1488,7 @@ describe("speaker resource service", () => {
     ).rejects.toThrow("unavailable");
   });
 
-  it("escapes text and rejects executable embed schemes", () => {
+  it("escapes text and rejects executable or unapproved embed origins", async () => {
     const safe = renderResourceDocument(
       parseResourceDocument({
         type: "doc",
@@ -1493,6 +1499,7 @@ describe("speaker resource service", () => {
           },
         ],
       }),
+      [],
     );
     expect(safe).toContain("&lt;script&gt;");
     expect(() =>
@@ -1501,7 +1508,25 @@ describe("speaker resource service", () => {
           type: "doc",
           content: [{ type: "embed", attrs: { src: "javascript:alert(1)" } }],
         }),
+        ["https://example.com"],
       ),
-    ).toThrow(ResourceContentError);
+    ).toThrow(ResourceEmbedUrlError);
+
+    expect(() =>
+      parseResourceEmbedOrigins("https://example.com,"),
+    ).toThrow(ResourceEmbedConfigurationError);
+
+    await ensureDemoSpeakerData(env as unknown as CloudflareEnvironment);
+    await expect(
+      new ResourceService(env as unknown as CloudflareEnvironment).save(admin, {
+        title: "Unapproved embed origin",
+        slug: "unapproved-embed-origin",
+        category: "Preparation",
+        audienceScope: "all_speakers",
+        acknowledgementRequired: false,
+        document: { type: "doc", content: [{ type: "paragraph" }] },
+        embedUrls: ["https://untrusted.example/reference"],
+      }),
+    ).rejects.toBeInstanceOf(ResourceEmbedUrlError);
   });
 });
