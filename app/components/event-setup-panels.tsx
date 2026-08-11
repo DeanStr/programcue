@@ -188,11 +188,15 @@ export function EventRoomsPanel({
   setRooms,
   actionData,
   onAdd,
+  onRemove,
+  focusedRoomId,
 }: {
   rooms: EventSetup["rooms"];
   setRooms: Dispatch<SetStateAction<EventSetup["rooms"]>>;
   actionData?: ActionResponse;
   onAdd: () => void;
+  onRemove: (roomId: string) => void;
+  focusedRoomId: string | null;
 }) {
   const [resourceDrafts, setResourceDrafts] = useState<
     Record<string, string>
@@ -221,7 +225,13 @@ export function EventRoomsPanel({
       </div>
       {rooms.length ? (
         rooms.map((room) => (
-          <div className="card pad mb" key={room.id}>
+          <div
+            className={`card pad mb${focusedRoomId === room.id ? " selected" : ""}`}
+            id={`event-room-${room.id}`}
+            key={room.id}
+            tabIndex={-1}
+            aria-label={`${room.name} room settings`}
+          >
             <div className="form-row">
               <input
                 className="field"
@@ -261,11 +271,12 @@ export function EventRoomsPanel({
                   type="button"
                   className="icon-btn"
                   aria-label={`Remove ${room.name}`}
-                  onClick={() =>
+                  onClick={() => {
                     setRooms((current) =>
                       current.filter((item) => item.id !== room.id),
-                    )
-                  }
+                    );
+                    onRemove(room.id);
+                  }}
                 >
                   ×
                 </button>

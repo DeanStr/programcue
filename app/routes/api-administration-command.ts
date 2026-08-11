@@ -1,6 +1,8 @@
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/api-administration-command";
+import { ResourceContentError } from "~/modules/resources/resource-content";
+import { ResourceEmbedUrlError } from "~/modules/resources/resource-embed-policy";
 import { apiAdministrationFamilySchema } from "~/platform/api/api-command-contract";
 import { ApiAdministrationCommandService } from "~/platform/api/api-administration-command-service.server";
 import {
@@ -32,6 +34,12 @@ function commandError(error: unknown) {
       "The administration command is invalid",
       error.issues,
     );
+  }
+  if (
+    error instanceof ResourceContentError ||
+    error instanceof ResourceEmbedUrlError
+  ) {
+    return new ApiError(422, "VALIDATION_ERROR", error.message);
   }
   if (error instanceof Response) {
     return new ApiError(

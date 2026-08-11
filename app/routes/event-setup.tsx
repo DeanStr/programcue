@@ -83,8 +83,22 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   const viewer = await getViewer(request, context);
   const event = await new EventService(env).getSetup(viewer);
+  const search = new URL(request.url).searchParams;
+  const roomId = search.get("room");
+  const trackId = search.get("track");
+  if (roomId && trackId)
+    throw new Response("Choose one Event Setup record.", { status: 400 });
+  if (roomId && !event.rooms.some((room) => room.id === roomId))
+    throw new Response("Room not found.", { status: 404 });
+  if (trackId && !event.tracks.some((track) => track.id === trackId))
+    throw new Response("Track not found.", { status: 404 });
   return {
     event,
+    focusedRecord: roomId
+      ? ({ kind: "room", id: roomId } as const)
+      : trackId
+        ? ({ kind: "track", id: trackId } as const)
+        : null,
     canManageFileRetention: viewer.role === "owner",
     canManageOrganisationAdministrators: viewer.role === "owner",
   };
@@ -421,6 +435,7 @@ export default function EventSetupRoute({ loaderData }: Route.ComponentProps) {
     <EventSetupForm
       key={loaderData.event.revision}
       event={loaderData.event}
+      focusedRecord={loaderData.focusedRecord}
       canManageFileRetention={loaderData.canManageFileRetention}
       canManageOrganisationAdministrators={
         loaderData.canManageOrganisationAdministrators

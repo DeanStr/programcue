@@ -10,6 +10,7 @@ import {
   renderResourceDocument,
   type TiptapNode,
 } from "./resource-content";
+import { parseResourceEmbedOrigins } from "./resource-embed-policy";
 import { ResourceServiceBase } from "./resource-service-base.server";
 import {
   participantAudienceSql,
@@ -143,6 +144,9 @@ export class ResourceAuthoringService extends ResourceServiceBase {
 
   async getAdminWorkspace(viewer: Viewer, selectedId?: string | null) {
     await this.airtable.assertReadable(viewer);
+    const resourceEmbedOrigins = parseResourceEmbedOrigins(
+      this.env.RESOURCE_EMBED_ORIGINS,
+    );
     const previewEvent = await this.env.DB.prepare(
       `SELECT name, brand_accent AS brandAccent,
               file_policy_json AS filePolicyJson
@@ -260,6 +264,7 @@ export class ResourceAuthoringService extends ResourceServiceBase {
       }
     }
     return {
+      resourceEmbedOrigins,
       previewEvent: {
         ...previewEventSummary,
         filePolicy: parseEventFilePolicy(filePolicyJson),
@@ -297,11 +302,15 @@ export class ResourceAuthoringService extends ResourceServiceBase {
       (await this.hasInvalidAudience(viewer.eventId, parsed.audiencePersonIds))
     )
       throw new ResourceAudienceError();
+    const resourceEmbedOrigins = parseResourceEmbedOrigins(
+      this.env.RESOURCE_EMBED_ORIGINS,
+    );
     const document = appendEmbeds(
       parseResourceDocument(parsed.document),
       parsed.embedUrls,
+      resourceEmbedOrigins,
     );
-    const renderedHtml = renderResourceDocument(document);
+    const renderedHtml = renderResourceDocument(document, resourceEmbedOrigins);
     const audienceIdsJson = JSON.stringify(parsed.audiencePersonIds);
     if (!parsed.id) {
       const pageId = command?.pageId ?? crypto.randomUUID();

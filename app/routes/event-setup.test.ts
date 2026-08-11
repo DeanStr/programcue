@@ -2,11 +2,19 @@ import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import type { EventSetup } from "~/modules/events/event-repository.server";
+import { EventService } from "~/modules/events/event-service.server";
+import { FILE_SIZE_MIB } from "~/modules/files/file-policy";
+import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { action, loader } from "./event-setup";
 
 const workerEnv = env as unknown as CloudflareEnvironment;
+const viewer = {
+  organisationId: "org-future-events",
+  eventId: "evt-foe-2025",
+} as const;
 
 function context() {
   const value = new RouterContextProvider();
@@ -31,11 +39,154 @@ function request(
   });
 }
 
+function setupValues(event: EventSetup, tracks: unknown = event.tracks) {
+  const values: Record<string, string> = {
+    _intent: "save",
+    revision: String(event.revision),
+    name: event.name,
+    timezone: event.timezone,
+    startDate: event.startDate,
+    endDate: event.endDate,
+    venue: event.venue,
+    city: event.city,
+    publicSlug: event.publicSlug,
+    brandAccent: event.brandAccent,
+    description: event.description,
+    repositoryProvider: event.repositoryProvider,
+    retentionMonths: String(event.retentionMonths),
+    submissionAccessMode: event.submissionAccessMode,
+    headshotMaximumMegabytes: String(
+      event.filePolicy.headshotMaximumBytes / FILE_SIZE_MIB,
+    ),
+    slidesMaximumMegabytes: String(
+      event.filePolicy.slidesMaximumBytes / FILE_SIZE_MIB,
+    ),
+    supportingDocumentMaximumMegabytes: String(
+      event.filePolicy.supportingDocumentMaximumBytes / FILE_SIZE_MIB,
+    ),
+    videoMaximumMegabytes: String(
+      event.filePolicy.videoMaximumBytes / FILE_SIZE_MIB,
+    ),
+    rooms: JSON.stringify(event.rooms),
+    tracks: JSON.stringify(tracks),
+    sessionFormats: JSON.stringify(event.sessionFormats),
+  };
+  if (event.allowAnonymousDrafts) values.allowAnonymousDrafts = "on";
+  if (event.duplicatePersonWarnings) values.duplicatePersonWarnings = "on";
+  return values;
+}
+
 beforeEach(async () => {
   await ensureDemoData(workerEnv);
 });
 
 describe("Event Setup administrator scope route", () => {
+  it("persists a track without a colour and exposes it to the schedule workspace", async () => {
+    const service = new EventService(workerEnv);
+    const original = await service.getSetup({
+      ...viewer,
+      personId: "person-demo-admin",
+      name: "Olivia Bennett",
+      email: "olivia@example.com",
+      role: "administrator",
+      demo: true,
+    });
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const track = {
+      id: `track-route-${suffix}`,
+      name: `Route track ${suffix}`,
+      slug: `route-track-${suffix}`,
+      colourToken: null,
+      position: original.tracks.length,
+      exclusive: false,
+      isPublic: true,
+    };
+
+    try {
+      const saved = await action({
+        request: request("administrator", {
+          ...setupValues(original, [...original.tracks, track]),
+        }),
+        params: {},
+        context: context(),
+      } as never);
+      if (saved instanceof Response)
+        throw new Error("Track save returned a raw response.");
+      expect(saved.data.intent).toBe("save");
+      expect(saved.data.ok || saved.data.committed).toBe(true);
+
+      const reloaded = await loader({
+        request: request("administrator"),
+        params: {},
+        context: context(),
+      } as never);
+      expect(reloaded.event.tracks).toContainEqual(track);
+
+      const schedule = await new ScheduleService(workerEnv).getWorkspace(
+        viewer,
+      );
+      expect(schedule.tracks).toContainEqual({
+        id: track.id,
+        name: track.name,
+        exclusive: false,
+      });
+    } finally {
+      await workerEnv.DB.prepare(
+        "DELETE FROM tracks WHERE event_id = ? AND id = ?",
+      )
+        .bind(viewer.eventId, track.id)
+        .run();
+    }
+  });
+
+  it("returns a specific tracks field error for an invalid colour", async () => {
+    const service = new EventService(workerEnv);
+    const original = await service.getSetup({
+      ...viewer,
+      personId: "person-demo-admin",
+      name: "Olivia Bennett",
+      email: "olivia@example.com",
+      role: "administrator",
+      demo: true,
+    });
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const track = {
+      id: `track-invalid-${suffix}`,
+      name: "Invalid colour track",
+      slug: `invalid-colour-${suffix}`,
+      colourToken: "blue",
+      position: original.tracks.length,
+      exclusive: false,
+      isPublic: true,
+    };
+
+    const rejected = await action({
+      request: request("administrator", {
+        ...setupValues(original, [...original.tracks, track]),
+      }),
+      params: {},
+      context: context(),
+    } as never);
+    if (rejected instanceof Response)
+      throw new Error("Invalid track save returned a raw response.");
+    expect(rejected.init?.status).toBe(422);
+    expect(rejected.data).toMatchObject({
+      ok: false,
+      intent: "save",
+      message: "Choose a valid track colour in #RRGGBB format.",
+      errors: {
+        tracks: ["Choose a valid track colour in #RRGGBB format."],
+      },
+    });
+    expect(
+      await workerEnv.DB.prepare(
+        "SELECT 1 FROM tracks WHERE event_id = ? AND id = ?",
+      )
+        .bind(viewer.eventId, track.id)
+        .first(),
+    ).toBeNull();
+  });
+
   it("lets an owner invite, list and explicitly revoke an organisation administrator", async () => {
     const invited = await action({
       request: request("owner", {

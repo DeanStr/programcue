@@ -52,6 +52,7 @@ const commonVariableNames = [
   "TURNSTILE_SITE_KEY",
   "CORS_ALLOWED_ORIGINS",
   "EMBED_FRAME_ANCESTORS",
+  "RESOURCE_EMBED_ORIGINS",
 ];
 const productionVariableNames = new Set([
   ...commonVariableNames,
@@ -134,6 +135,66 @@ function productionUrl(profile, name, value, issues) {
       ),
     );
   }
+}
+
+function resourceEmbedOrigins(profile, value, issues) {
+  const normalizedValue = value.trim();
+  if (!normalizedValue || normalizedValue.toLowerCase() === "none") return [];
+  const requested = normalizedValue
+    .split(",")
+    .map((origin) => origin.trim());
+  if (
+    !requested.length ||
+    requested.some((origin) => !origin) ||
+    requested.length > 16
+  ) {
+    issues.push(
+      issue(
+        profile,
+        "configuration",
+        'RESOURCE_EMBED_ORIGINS must contain 1-16 exact HTTPS origins, or "none".',
+      ),
+    );
+    return [];
+  }
+  const normalized = [];
+  for (const origin of requested) {
+    let url;
+    try {
+      url = new URL(origin);
+    } catch {
+      url = null;
+    }
+    if (
+      !url ||
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    ) {
+      issues.push(
+        issue(
+          profile,
+          "configuration",
+          "RESOURCE_EMBED_ORIGINS entries must be exact HTTPS origins without credentials, paths, queries or fragments.",
+        ),
+      );
+      continue;
+    }
+    normalized.push(url.origin);
+  }
+  if (new Set(normalized).size !== normalized.length) {
+    issues.push(
+      issue(
+        profile,
+        "configuration",
+        "RESOURCE_EMBED_ORIGINS must not contain duplicate origins.",
+      ),
+    );
+  }
+  return normalized;
 }
 
 function validateVariableInventory(profile, variables, allowed, issues) {
@@ -233,6 +294,11 @@ function validateCommonProfile(profile, config, spec, issues) {
   for (const name of commonVariableNames) {
     requiredVariable(profile, variables, name, issues);
   }
+  resourceEmbedOrigins(
+    profile,
+    String(variables.RESOURCE_EMBED_ORIGINS ?? ""),
+    issues,
+  );
   if (
     !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/u.test(
       String(variables.DEFAULT_EVENT_ID ?? ""),
@@ -566,6 +632,14 @@ function validateProduction(config, issues) {
     for (const origin of frameAncestors.split(/\s+/u).filter(Boolean)) {
       productionUrl(profile, "EMBED_FRAME_ANCESTORS", origin, issues);
     }
+  }
+  const embedOrigins = resourceEmbedOrigins(
+    profile,
+    String(variables.RESOURCE_EMBED_ORIGINS ?? ""),
+    [],
+  );
+  for (const origin of embedOrigins) {
+    productionUrl(profile, "RESOURCE_EMBED_ORIGINS", origin, issues);
   }
 
   const turnstileSiteKey = requiredVariable(

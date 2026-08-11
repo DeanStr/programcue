@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { allowedResourceEmbedUrl } from "./resource-embed-policy";
+
 type TiptapMark = { type: string; attrs?: Record<string, any> };
 export type TiptapNode = {
   type: string;
@@ -117,8 +119,13 @@ export function parseResourceDocument(raw: unknown): TiptapNode {
   return validateNode(envelope, 0, { count: 0 });
 }
 
-function renderChildren(node: TiptapNode) {
-  return (node.content ?? []).map(renderNode).join("");
+function renderChildren(
+  node: TiptapNode,
+  allowedEmbedOrigins: readonly string[],
+) {
+  return (node.content ?? [])
+    .map((child) => renderNode(child, allowedEmbedOrigins))
+    .join("");
 }
 
 function renderText(node: TiptapNode) {
@@ -137,43 +144,42 @@ function renderText(node: TiptapNode) {
   return content;
 }
 
-function renderNode(node: TiptapNode): string {
+function renderNode(
+  node: TiptapNode,
+  allowedEmbedOrigins: readonly string[],
+): string {
   switch (node.type) {
     case "doc":
-      return renderChildren(node);
+      return renderChildren(node, allowedEmbedOrigins);
     case "text":
       return renderText(node);
     case "paragraph":
-      return `<p>${renderChildren(node)}</p>`;
+      return `<p>${renderChildren(node, allowedEmbedOrigins)}</p>`;
     case "heading": {
       const level = Math.min(4, Math.max(2, Number(node.attrs?.level) || 2));
-      return `<h${level}>${renderChildren(node)}</h${level}>`;
+      return `<h${level}>${renderChildren(node, allowedEmbedOrigins)}</h${level}>`;
     }
     case "bulletList":
-      return `<ul>${renderChildren(node)}</ul>`;
+      return `<ul>${renderChildren(node, allowedEmbedOrigins)}</ul>`;
     case "orderedList":
-      return `<ol>${renderChildren(node)}</ol>`;
+      return `<ol>${renderChildren(node, allowedEmbedOrigins)}</ol>`;
     case "listItem":
-      return `<li>${renderChildren(node)}</li>`;
+      return `<li>${renderChildren(node, allowedEmbedOrigins)}</li>`;
     case "blockquote":
-      return `<blockquote>${renderChildren(node)}</blockquote>`;
+      return `<blockquote>${renderChildren(node, allowedEmbedOrigins)}</blockquote>`;
     case "codeBlock":
-      return `<pre><code>${renderChildren(node)}</code></pre>`;
+      return `<pre><code>${renderChildren(node, allowedEmbedOrigins)}</code></pre>`;
     case "horizontalRule":
       return "<hr>";
     case "hardBreak":
       return "<br>";
     case "embed": {
-      const src = safeUrl(node.attrs?.src, ["https:"]);
-      if (!src)
-        throw new ResourceContentError(
-          "Embedded references must use a valid HTTPS URL.",
-        );
+      const src = allowedResourceEmbedUrl(node.attrs?.src, allowedEmbedOrigins);
       const title =
         typeof node.attrs?.title === "string"
           ? node.attrs.title.slice(0, 160)
           : "Embedded resource";
-      return `<iframe class="resource-embed" title="${escapeHtml(title)}" sandbox="allow-forms allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" loading="lazy" src="${escapeHtml(src)}"></iframe>`;
+      return `<iframe class="resource-embed" title="${escapeHtml(title)}" sandbox="" referrerpolicy="no-referrer" loading="lazy" src="${escapeHtml(src)}"></iframe>`;
     }
     default:
       throw new ResourceContentError(
@@ -182,20 +188,28 @@ function renderNode(node: TiptapNode): string {
   }
 }
 
-export function renderResourceDocument(document: TiptapNode) {
-  return renderNode(document);
+export function renderResourceDocument(
+  document: TiptapNode,
+  allowedEmbedOrigins: readonly string[],
+) {
+  return renderNode(document, allowedEmbedOrigins);
 }
 
-export function appendEmbeds(document: TiptapNode, embedUrls: string[]) {
-  const embeds = embedUrls
-    .filter(Boolean)
-    .map(
-      (src) =>
-        ({
-          type: "embed",
-          attrs: { src, title: "Embedded reference" },
-        }) satisfies TiptapNode,
-    );
+export function appendEmbeds(
+  document: TiptapNode,
+  embedUrls: string[],
+  allowedEmbedOrigins: readonly string[],
+) {
+  const embeds = embedUrls.filter(Boolean).map(
+    (src) =>
+      ({
+        type: "embed",
+        attrs: {
+          src: allowedResourceEmbedUrl(src, allowedEmbedOrigins),
+          title: "Embedded reference",
+        },
+      }) satisfies TiptapNode,
+  );
   return parseResourceDocument({
     ...document,
     content: [

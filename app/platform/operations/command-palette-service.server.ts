@@ -5,7 +5,15 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 
 export type CommandRecord = {
   id: string;
-  kind: "speaker" | "submission" | "session" | "task";
+  kind:
+    | "speaker"
+    | "submission"
+    | "session"
+    | "task"
+    | "room"
+    | "track"
+    | "resource"
+    | "operation";
   label: string;
   description: string;
   href: string;
@@ -27,18 +35,122 @@ const searchSchema = z.object({
   scope: z.enum(["event", "organisation"]).default("event"),
 });
 
-function searchPattern(query: string) {
-  return `%${query.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
+const recordAliases: Record<CommandRecord["kind"], string[]> = {
+  speaker: [
+    "speaker",
+    "speakers",
+    "presenter",
+    "presenters",
+    "person",
+    "people",
+    "faculty",
+  ],
+  submission: [
+    "submission",
+    "submissions",
+    "proposal",
+    "proposals",
+    "application",
+    "applications",
+    "abstract",
+    "abstracts",
+    "cfp",
+  ],
+  session: [
+    "session",
+    "sessions",
+    "talk",
+    "talks",
+    "programme",
+    "program",
+    "agenda",
+  ],
+  task: [
+    "task",
+    "tasks",
+    "readiness",
+    "checklist",
+    "checklists",
+    "todo",
+    "todos",
+  ],
+  room: ["room", "rooms", "venue", "venues", "space", "spaces"],
+  track: ["track", "tracks", "stream", "streams"],
+  resource: ["resource", "resources", "wiki", "guide", "guides"],
+  operation: [
+    "operation",
+    "operations",
+    "job",
+    "jobs",
+    "run",
+    "runs",
+    "communication",
+    "communications",
+    "integration",
+    "integrations",
+  ],
+};
+
+const aliasKinds = new Map(
+  Object.entries(recordAliases).flatMap(([kind, aliases]) =>
+    aliases.map((alias) => [alias, kind as CommandRecord["kind"]] as const),
+  ),
+);
+const operationFamilyByAlias = new Map<
+  string,
+  "communication" | "integration"
+>([
+  ["communication", "communication"],
+  ["communications", "communication"],
+  ["integration", "integration"],
+  ["integrations", "integration"],
+]);
+const coreRecordKinds = new Set<CommandRecord["kind"]>([
+  "speaker",
+  "submission",
+  "session",
+  "task",
+]);
+const operationalRecordKinds = new Set<CommandRecord["kind"]>([
+  "room",
+  "track",
+  "resource",
+  "operation",
+]);
+
+function parseRecordQuery(query: string) {
+  const [first = "", ...remaining] = query.trim().split(/\s+/u);
+  const normalizedAlias = first.toLocaleLowerCase();
+  const kind = aliasKinds.get(normalizedAlias) ?? null;
+  return {
+    kind,
+    operationFamily: operationFamilyByAlias.get(normalizedAlias) ?? null,
+    query: kind ? remaining.join(" ") : query.trim(),
+  };
 }
 
 function recordHref(kind: CommandRecord["kind"], id: string) {
-  if (kind === "speaker")
-    return `/admin/speakers?person=${encodeURIComponent(id)}`;
-  if (kind === "submission")
-    return `/admin/submissions/${encodeURIComponent(id)}`;
-  if (kind === "session")
-    return `/admin/schedule?session=${encodeURIComponent(id)}`;
-  return `/admin/tasks?task=${encodeURIComponent(id)}`;
+  const encodedId = encodeURIComponent(id);
+  switch (kind) {
+    case "speaker":
+      return `/admin/speakers?person=${encodedId}`;
+    case "submission":
+      return `/admin/submissions/${encodedId}`;
+    case "session":
+      return `/admin/schedule?session=${encodedId}`;
+    case "task":
+      return `/admin/tasks?task=${encodedId}`;
+    case "room":
+      return `/admin/event?room=${encodedId}`;
+    case "track":
+      return `/admin/event?track=${encodedId}`;
+    case "resource":
+      return `/admin/resources?resource=${encodedId}`;
+    case "operation":
+      return `/admin/operations?operation=${encodedId}`;
+  }
+  kind satisfies never;
+  throw new Error(`Unsupported command record kind: ${String(kind)}`);
 }
 
 function recentHref(entityType: string, entityId: string | null) {
@@ -63,6 +175,10 @@ function recentHref(entityType: string, entityId: string | null) {
     return `/admin/tasks?task=${encodeURIComponent(entityId)}`;
   if (["speaker", "person"].includes(entityType))
     return `/admin/speakers?person=${encodeURIComponent(entityId)}`;
+  if (entityType === "room") return recordHref("room", entityId);
+  if (entityType === "track") return recordHref("track", entityId);
+  if (["resource", "resource_page"].includes(entityType))
+    return recordHref("resource", entityId);
   if (
     [
       "communication",
@@ -271,13 +387,15 @@ export class CommandPaletteService {
       );
     }
     await this.assertSearchReadable(viewer, input.scope);
-    const pattern = searchPattern(input.query);
+    const recordQuery = parseRecordQuery(input.query);
+    const searchTerm = recordQuery.query;
     const eventPredicate =
       input.scope === "event" ? "AND e.id = ?" : "AND e.organisation_id = ?";
     const scopeBinding =
       input.scope === "event" ? viewer.eventId : viewer.organisationId;
 
     if (viewer.role === "committee_chair") {
+      if (recordQuery.kind && recordQuery.kind !== "submission") return [];
       const assigned = await this.env.DB.prepare(
         `
         SELECT s.id, ea.id AS assignmentId,
@@ -290,7 +408,7 @@ export class CommandPaletteService {
             ON ea.submission_id = s.id AND ea.event_id = s.event_id
          WHERE s.event_id = ? AND ea.evaluator_person_id = ?
            AND ea.status NOT IN ('recused','cancelled')
-           AND (s.title LIKE ? ESCAPE '\\' OR s.public_reference LIKE ? ESCAPE '\\')
+           AND (instr(lower(s.title), lower(?)) > 0 OR instr(lower(s.public_reference), lower(?)) > 0)
          ORDER BY s.title, ea.assigned_at, ea.id LIMIT 30
       `,
       )
@@ -298,8 +416,8 @@ export class CommandPaletteService {
           viewer.organisationId,
           viewer.eventId,
           viewer.personId,
-          pattern,
-          pattern,
+          searchTerm,
+          searchTerm,
         )
         .all<
           Omit<CommandRecord, "href" | "aliases"> & { assignmentId: string }
@@ -307,101 +425,242 @@ export class CommandPaletteService {
       return assigned.results.map(({ assignmentId, ...record }) => ({
         ...record,
         href: `/review/workbench?assignment=${encodeURIComponent(assignmentId)}`,
-        aliases: ["proposal", "application", "review"],
+        aliases: recordAliases.submission,
       }));
     }
 
-    const rows = await this.env.DB.prepare(
-      `
-      SELECT * FROM (
-        SELECT DISTINCT p.id, 'speaker' AS kind, p.display_name AS label,
-               COALESCE(p.email, '') || CASE WHEN p.organisation_name IS NULL THEN '' ELSE ' · ' || p.organisation_name END AS description,
-               e.id AS eventId, e.name AS eventName
-          FROM people p
-          JOIN events e ON e.organisation_id = ?
-         WHERE (
-           EXISTS (
-             SELECT 1 FROM memberships m
-              WHERE m.person_id = p.id AND m.event_id = e.id
-                AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL
+    type SearchRow = Omit<CommandRecord, "href" | "aliases">;
+    const searchCoreRecords = async (): Promise<SearchRow[]> => {
+      if (recordQuery.kind && !coreRecordKinds.has(recordQuery.kind)) return [];
+      const rows = await this.env.DB.prepare(
+        `
+        SELECT * FROM (
+          SELECT DISTINCT p.id, 'speaker' AS kind, p.display_name AS label,
+                 COALESCE(p.email, '') || CASE WHEN p.organisation_name IS NULL THEN '' ELSE ' · ' || p.organisation_name END AS description,
+                 e.id AS eventId, e.name AS eventName
+            FROM people p
+            JOIN events e ON e.organisation_id = ?
+           WHERE (
+             EXISTS (
+               SELECT 1 FROM memberships m
+                WHERE m.person_id = p.id AND m.event_id = e.id
+                  AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL
+             )
+             OR EXISTS (
+               SELECT 1 FROM session_speakers ss
+                WHERE ss.person_id = p.id AND ss.event_id = e.id
+             )
+             OR EXISTS (
+               SELECT 1 FROM submissions s
+                WHERE s.submitter_person_id = p.id AND s.event_id = e.id
+             )
+             OR EXISTS (
+               SELECT 1 FROM submission_speakers speaker
+                WHERE speaker.person_id = p.id AND speaker.event_id = e.id
+             )
            )
-           OR EXISTS (
-             SELECT 1 FROM session_speakers ss
-              WHERE ss.person_id = p.id AND ss.event_id = e.id
-           )
-           OR EXISTS (
-             SELECT 1 FROM submissions s
-              WHERE s.submitter_person_id = p.id AND s.event_id = e.id
-           )
-           OR EXISTS (
-             SELECT 1 FROM submission_speakers speaker
-              WHERE speaker.person_id = p.id AND speaker.event_id = e.id
-           )
-         )
-           ${eventPredicate}
-           AND (p.display_name LIKE ? ESCAPE '\\' OR p.email LIKE ? ESCAPE '\\' OR COALESCE(p.organisation_name, '') LIKE ? ESCAPE '\\')
-        UNION ALL
-        SELECT s.id, 'submission' AS kind, s.title AS label,
-               s.status || ' · ' || s.public_reference AS description,
-               e.id AS eventId, e.name AS eventName
-          FROM submissions s
-          JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
-         WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
-           AND (s.title LIKE ? ESCAPE '\\' OR s.public_reference LIKE ? ESCAPE '\\' OR COALESCE(s.category, '') LIKE ? ESCAPE '\\')
-        UNION ALL
-        SELECT s.id, 'session' AS kind, s.title AS label,
-               s.status || ' · ' || s.format AS description,
-               e.id AS eventId, e.name AS eventName
-          FROM sessions s
-          JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
-         WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
-           AND (s.title LIKE ? ESCAPE '\\' OR s.slug LIKE ? ESCAPE '\\' OR COALESCE(s.description, '') LIKE ? ESCAPE '\\')
-        UNION ALL
-        SELECT ti.id, 'task' AS kind, ti.title AS label,
-               ti.status || ' · ' || ti.impact AS description,
-               e.id AS eventId, e.name AS eventName
-          FROM task_instances ti
-          JOIN events e ON e.id = ti.event_id AND e.organisation_id = ?
-         WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
-           AND (ti.title LIKE ? ESCAPE '\\' OR COALESCE(ti.description, '') LIKE ? ESCAPE '\\')
-      ) records
-      ORDER BY label, kind
-      LIMIT 50
-    `,
-    )
-      .bind(
-        viewer.organisationId,
-        scopeBinding,
-        pattern,
-        pattern,
-        pattern,
-        viewer.organisationId,
-        scopeBinding,
-        pattern,
-        pattern,
-        pattern,
-        viewer.organisationId,
-        scopeBinding,
-        pattern,
-        pattern,
-        pattern,
-        viewer.organisationId,
-        scopeBinding,
-        pattern,
-        pattern,
+             ${eventPredicate}
+             AND (instr(lower(p.display_name), lower(?)) > 0 OR instr(lower(p.email), lower(?)) > 0 OR instr(lower(COALESCE(p.organisation_name, '')), lower(?)) > 0)
+          UNION ALL
+          SELECT s.id, 'submission' AS kind, s.title AS label,
+                 s.status || ' · ' || s.public_reference AS description,
+                 e.id AS eventId, e.name AS eventName
+            FROM submissions s
+            JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
+           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+             AND (instr(lower(s.title), lower(?)) > 0 OR instr(lower(s.public_reference), lower(?)) > 0 OR instr(lower(COALESCE(s.category, '')), lower(?)) > 0)
+          UNION ALL
+          SELECT s.id, 'session' AS kind, s.title AS label,
+                 s.status || ' · ' || s.format AS description,
+                 e.id AS eventId, e.name AS eventName
+            FROM sessions s
+            JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
+           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+             AND (instr(lower(s.title), lower(?)) > 0 OR instr(lower(s.slug), lower(?)) > 0 OR instr(lower(COALESCE(s.description, '')), lower(?)) > 0)
+          UNION ALL
+          SELECT ti.id, 'task' AS kind, ti.title AS label,
+                 ti.status || ' · ' || ti.impact AS description,
+                 e.id AS eventId, e.name AS eventName
+            FROM task_instances ti
+            JOIN events e ON e.id = ti.event_id AND e.organisation_id = ?
+           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+             AND (instr(lower(ti.title), lower(?)) > 0 OR instr(lower(COALESCE(ti.description, '')), lower(?)) > 0)
+        ) records
+        WHERE (? IS NULL OR kind = ?)
+        ORDER BY label, kind
+        LIMIT 50
+      `,
       )
-      .all<Omit<CommandRecord, "href" | "aliases">>();
-
-    const aliases: Record<CommandRecord["kind"], string[]> = {
-      speaker: ["presenter", "person", "people", "faculty"],
-      submission: ["proposal", "application", "abstract", "cfp"],
-      session: ["talk", "programme", "agenda"],
-      task: ["readiness", "checklist", "todo"],
+        .bind(
+          viewer.organisationId,
+          scopeBinding,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          viewer.organisationId,
+          scopeBinding,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          viewer.organisationId,
+          scopeBinding,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          viewer.organisationId,
+          scopeBinding,
+          searchTerm,
+          searchTerm,
+          recordQuery.kind,
+          recordQuery.kind,
+        )
+        .all<SearchRow>();
+      return rows.results;
     };
-    return rows.results.map((record) => ({
+
+    const searchOperationalRecords = async (): Promise<SearchRow[]> => {
+      if (recordQuery.kind && !operationalRecordKinds.has(recordQuery.kind))
+        return [];
+      const rows = await this.env.DB.prepare(
+        `
+        SELECT * FROM (
+          SELECT room.id, 'room' AS kind, room.name AS label,
+                 room.status || ' · capacity ' || room.capacity ||
+                   CASE WHEN room.building IS NULL THEN '' ELSE ' · ' || room.building END ||
+                   CASE WHEN room.level IS NULL THEN '' ELSE ' · ' || room.level END AS description,
+                 e.id AS eventId, e.name AS eventName
+           FROM rooms room
+            JOIN events e ON e.id = room.event_id AND e.organisation_id = ?
+           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+             AND room.status = 'active'
+             AND (instr(lower(room.name), lower(?)) > 0 OR instr(lower(COALESCE(room.building, '')), lower(?)) > 0 OR instr(lower(COALESCE(room.level, '')), lower(?)) > 0)
+          UNION ALL
+          SELECT track.id, 'track' AS kind, track.name AS label,
+                 track.slug || CASE WHEN track.is_public = 1 THEN ' · public' ELSE ' · private' END ||
+                   CASE WHEN track.exclusive = 1 THEN ' · exclusive' ELSE '' END AS description,
+                 e.id AS eventId, e.name AS eventName
+            FROM tracks track
+            JOIN events e ON e.id = track.event_id AND e.organisation_id = ?
+           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+             AND (instr(lower(track.name), lower(?)) > 0 OR instr(lower(track.slug), lower(?)) > 0)
+          UNION ALL
+          SELECT resource.id, 'resource' AS kind, resource.title AS label,
+                 resource.status || CASE WHEN resource.category IS NULL THEN '' ELSE ' · ' || resource.category END AS description,
+                 e.id AS eventId, e.name AS eventName
+            FROM resource_pages resource
+            JOIN events e ON e.id = resource.event_id AND e.organisation_id = ?
+           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+             AND (instr(lower(resource.title), lower(?)) > 0 OR instr(lower(resource.slug), lower(?)) > 0 OR instr(lower(COALESCE(resource.category, '')), lower(?)) > 0)
+          UNION ALL
+          SELECT operation.id, 'operation' AS kind,
+                 COALESCE(
+                   MIN(NULLIF(json_extract(communication.content_snapshot_json, '$.subjectTemplate'), '')),
+                   MIN(CASE WHEN connection.provider IS NULL THEN NULL ELSE connection.provider || ' integration run' END),
+                   replace(operation.type, '.', ' ')
+                 ) AS label,
+                 operation.status || ' · ' || operation.type AS description,
+                 e.id AS eventId, e.name AS eventName
+            FROM operation_jobs operation
+            JOIN events e ON e.id = operation.event_id AND e.organisation_id = ?
+            LEFT JOIN communications communication
+              ON communication.operation_id = operation.id
+             AND communication.event_id = operation.event_id
+            LEFT JOIN integration_runs integration_run
+              ON integration_run.operation_id = operation.id
+            LEFT JOIN integration_connections connection
+              ON connection.id = integration_run.connection_id
+             AND connection.organisation_id = operation.organisation_id
+             AND (connection.event_id IS NULL OR connection.event_id = operation.event_id)
+           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+             AND (
+               ? IS NULL
+               OR (
+                 ? = 'communication'
+                 AND (
+                   communication.id IS NOT NULL
+                   OR operation.type IN (
+                     'communication.send',
+                     'decision.notification',
+                     'submission.notification'
+                   )
+                 )
+               )
+               OR (
+                 ? = 'integration'
+                 AND (
+                   integration_run.id IS NOT NULL
+                   OR operation.type = 'integration.accelevents.export'
+                 )
+               )
+             )
+           GROUP BY operation.id, operation.correlation_id, operation.status,
+                    operation.type, operation.last_error, e.id, e.name
+          HAVING instr(lower(operation.id), lower(?)) > 0
+              OR instr(lower(operation.correlation_id), lower(?)) > 0
+              OR MAX(instr(lower(COALESCE(communication.id, '')), lower(?))) > 0
+              OR MAX(instr(lower(COALESCE(integration_run.id, '')), lower(?))) > 0
+              OR instr(lower(operation.type), lower(?)) > 0
+              OR instr(lower(operation.status), lower(?)) > 0
+              OR instr(lower(COALESCE(operation.last_error, '')), lower(?)) > 0
+              OR MAX(instr(lower(COALESCE(json_extract(communication.content_snapshot_json, '$.subjectTemplate'), '')), lower(?))) > 0
+              OR MAX(instr(lower(COALESCE(connection.provider, '')), lower(?))) > 0
+        ) records
+        WHERE (? IS NULL OR kind = ?)
+        ORDER BY label, kind
+        LIMIT 50
+      `,
+      )
+        .bind(
+          viewer.organisationId,
+          scopeBinding,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          viewer.organisationId,
+          scopeBinding,
+          searchTerm,
+          searchTerm,
+          viewer.organisationId,
+          scopeBinding,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          viewer.organisationId,
+          scopeBinding,
+          recordQuery.operationFamily,
+          recordQuery.operationFamily,
+          recordQuery.operationFamily,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          searchTerm,
+          recordQuery.kind,
+          recordQuery.kind,
+        )
+        .all<SearchRow>();
+      return rows.results;
+    };
+
+    const records = (
+      await Promise.all([searchCoreRecords(), searchOperationalRecords()])
+    )
+      .flat()
+      .sort(
+        (left, right) =>
+          left.label.localeCompare(right.label) ||
+          left.kind.localeCompare(right.kind),
+      )
+      .slice(0, 50);
+
+    return records.map((record) => ({
       ...record,
       href: recordHref(record.kind, record.id),
-      aliases: aliases[record.kind],
+      aliases: recordAliases[record.kind],
     }));
   }
 }

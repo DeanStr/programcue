@@ -383,10 +383,7 @@ export class D1EventRepository implements EventRepository {
         ...room,
         resources: parseResources(resourcesJson, room.id),
       })),
-      tracks: trackRows.map((track) => ({
-        ...track,
-        colourToken: track.colourToken ?? "",
-      })),
+      tracks: trackRows,
       administrators: administrators.results,
     };
   }

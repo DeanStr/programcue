@@ -66,6 +66,7 @@ test("Wrangler profiles have no structural configuration issues", () => {
       "AUTH_EMAIL_FROM still contains an example placeholder address.",
       "CORS_ALLOWED_ORIGINS still contains an example placeholder host.",
       "EMBED_FRAME_ANCESTORS still contains an example placeholder host.",
+      "RESOURCE_EMBED_ORIGINS still contains an example placeholder host.",
       "TURNSTILE_SITE_KEY must be replaced with the production site key.",
       "CLOUDFLARE_ACCOUNT_ID must be replaced with the 32-character account ID.",
       "D1_DATABASE_ID must be replaced with the provisioned D1 UUID.",
@@ -138,6 +139,56 @@ test("production event identity is configurable while remaining well formed", ()
       "DEFAULT_EVENT_ID must be a stable 3-128 character event identifier.",
       "PUBLIC_EVENT_SLUG must be a lowercase kebab-case slug.",
     ],
+  );
+});
+
+test("resource embed origins are explicit exact HTTPS origins", () => {
+  const configs = readDeploymentConfigs();
+  configs.production.vars.RESOURCE_EMBED_ORIGINS =
+    "https://docs.google.com,https://player.vimeo.com";
+  assert.deepEqual(
+    validateDeploymentConfigs(configs).filter(({ message }) =>
+      message.includes("RESOURCE_EMBED_ORIGINS"),
+    ),
+    [],
+  );
+
+  configs.production.vars.RESOURCE_EMBED_ORIGINS =
+    "https://docs.google.com/document,https://docs.google.com";
+  assert.ok(
+    validateDeploymentConfigs(configs).some(
+      ({ profile, kind, message }) =>
+        profile === "production" &&
+        kind === "configuration" &&
+        message.includes("exact HTTPS origins"),
+    ),
+  );
+
+  configs.production.vars.RESOURCE_EMBED_ORIGINS =
+    "https://docs.google.com,";
+  assert.ok(
+    validateDeploymentConfigs(configs).some(
+      ({ profile, kind, message }) =>
+        profile === "production" &&
+        kind === "configuration" &&
+        message.includes("1-16 exact HTTPS origins"),
+    ),
+  );
+
+  configs.production.vars.RESOURCE_EMBED_ORIGINS = "none";
+  assert.deepEqual(
+    validateDeploymentConfigs(configs).filter(({ message }) =>
+      message.includes("RESOURCE_EMBED_ORIGINS"),
+    ),
+    [],
+  );
+
+  configs.production.vars.RESOURCE_EMBED_ORIGINS = " none ";
+  assert.deepEqual(
+    validateDeploymentConfigs(configs).filter(({ message }) =>
+      message.includes("RESOURCE_EMBED_ORIGINS"),
+    ),
+    [],
   );
 });
 
