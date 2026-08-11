@@ -96,6 +96,15 @@ const aliasKinds = new Map(
     aliases.map((alias) => [alias, kind as CommandRecord["kind"]] as const),
   ),
 );
+const operationFamilyByAlias = new Map<
+  string,
+  "communication" | "integration"
+>([
+  ["communication", "communication"],
+  ["communications", "communication"],
+  ["integration", "integration"],
+  ["integrations", "integration"],
+]);
 const coreRecordKinds = new Set<CommandRecord["kind"]>([
   "speaker",
   "submission",
@@ -111,9 +120,11 @@ const operationalRecordKinds = new Set<CommandRecord["kind"]>([
 
 function parseRecordQuery(query: string) {
   const [first = "", ...remaining] = query.trim().split(/\s+/u);
-  const kind = aliasKinds.get(first.toLocaleLowerCase()) ?? null;
+  const normalizedAlias = first.toLocaleLowerCase();
+  const kind = aliasKinds.get(normalizedAlias) ?? null;
   return {
     kind,
+    operationFamily: operationFamilyByAlias.get(normalizedAlias) ?? null,
     query: kind ? remaining.join(" ") : query.trim(),
   };
 }
@@ -561,6 +572,27 @@ export class CommandPaletteService {
              AND connection.organisation_id = operation.organisation_id
              AND (connection.event_id IS NULL OR connection.event_id = operation.event_id)
            WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+             AND (
+               ? IS NULL
+               OR (
+                 ? = 'communication'
+                 AND (
+                   communication.id IS NOT NULL
+                   OR operation.type IN (
+                     'communication.send',
+                     'decision.notification',
+                     'submission.notification'
+                   )
+                 )
+               )
+               OR (
+                 ? = 'integration'
+                 AND (
+                   integration_run.id IS NOT NULL
+                   OR operation.type = 'integration.accelevents.export'
+                 )
+               )
+             )
            GROUP BY operation.id, operation.correlation_id, operation.status,
                     operation.type, operation.last_error, e.id, e.name
           HAVING instr(lower(operation.id), lower(?)) > 0
@@ -595,6 +627,9 @@ export class CommandPaletteService {
           searchTerm,
           viewer.organisationId,
           scopeBinding,
+          recordQuery.operationFamily,
+          recordQuery.operationFamily,
+          recordQuery.operationFamily,
           searchTerm,
           searchTerm,
           searchTerm,

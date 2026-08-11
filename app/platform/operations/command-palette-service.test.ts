@@ -195,6 +195,137 @@ describe("command palette record search", () => {
     ).resolves.toContainEqual(expect.objectContaining({ id: operationId }));
   });
 
+  it("narrows communication and integration aliases to their operation family", async () => {
+    const token = crypto.randomUUID();
+    const communicationOperationId = `command-family-communication-${token}`;
+    const communicationId = `command-family-message-${token}`;
+    const decisionNotificationId = `command-family-decision-${token}`;
+    const submissionNotificationId = `command-family-submission-${token}`;
+    const importOperationId = `command-family-import-${token}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id,organisation_id,event_id,requested_by_person_id,type,
+           idempotency_key,correlation_id,status,payload_json
+         ) VALUES (?,?,?,?,'communication.send',?,?,'failed','{}')`,
+      ).bind(
+        communicationOperationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        communicationOperationId,
+        communicationOperationId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO communications (
+           id,event_id,operation_id,idempotency_key,status,audience_json,
+           content_snapshot_json
+         ) VALUES (?,?,?,?,'failed','{}',?)`,
+      ).bind(
+        communicationId,
+        viewer.eventId,
+        communicationOperationId,
+        communicationId,
+        JSON.stringify({ subjectTemplate: `Failed family message ${token}` }),
+      ),
+      env.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id,organisation_id,event_id,requested_by_person_id,type,
+           idempotency_key,correlation_id,status,payload_json
+         ) VALUES (?,?,?,?,'decision.notification',?,?,'queue_failed','{}')`,
+      ).bind(
+        decisionNotificationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        decisionNotificationId,
+        decisionNotificationId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id,organisation_id,event_id,requested_by_person_id,type,
+           idempotency_key,correlation_id,status,payload_json
+         ) VALUES (?,?,?,?,'submission.notification',?,?,'queued','{}')`,
+      ).bind(
+        submissionNotificationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        submissionNotificationId,
+        submissionNotificationId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id,organisation_id,event_id,requested_by_person_id,type,
+           idempotency_key,correlation_id,status,payload_json
+         ) VALUES (?,?,?,?,'data.import',?,?,'failed','{}')`,
+      ).bind(
+        importOperationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        importOperationId,
+        importOperationId,
+      ),
+    ]);
+    const service = new CommandPaletteService(
+      env as unknown as CloudflareEnvironment,
+    );
+
+    const communications = await service.search(viewer, {
+      query: "communication",
+      scope: "event",
+    });
+    expect(communications).toContainEqual(
+      expect.objectContaining({ id: communicationOperationId }),
+    );
+    expect(communications).toContainEqual(
+      expect.objectContaining({ id: decisionNotificationId }),
+    );
+    expect(communications).toContainEqual(
+      expect.objectContaining({ id: submissionNotificationId }),
+    );
+    expect(communications).not.toContainEqual(
+      expect.objectContaining({ id: "command-search-operation" }),
+    );
+    expect(communications).not.toContainEqual(
+      expect.objectContaining({ id: importOperationId }),
+    );
+
+    const integrations = await service.search(viewer, {
+      query: "integration failed",
+      scope: "event",
+    });
+    expect(integrations).toContainEqual(
+      expect.objectContaining({ id: "command-search-operation" }),
+    );
+    expect(integrations).not.toContainEqual(
+      expect.objectContaining({ id: communicationOperationId }),
+    );
+    expect(integrations).not.toContainEqual(
+      expect.objectContaining({ id: decisionNotificationId }),
+    );
+    expect(integrations).not.toContainEqual(
+      expect.objectContaining({ id: submissionNotificationId }),
+    );
+    expect(integrations).not.toContainEqual(
+      expect.objectContaining({ id: importOperationId }),
+    );
+
+    const failedOperations = await service.search(viewer, {
+      query: "operation failed",
+      scope: "event",
+    });
+    expect(failedOperations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: communicationOperationId }),
+        expect.objectContaining({ id: decisionNotificationId }),
+        expect.objectContaining({ id: "command-search-operation" }),
+        expect.objectContaining({ id: importOperationId }),
+      ]),
+    );
+  });
+
   it("excludes retired rooms whose Event Setup links cannot be opened", async () => {
     const token = crypto.randomUUID();
     const roomId = `command-retired-room-${token}`;
