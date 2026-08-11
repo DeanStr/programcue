@@ -217,6 +217,44 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
     revision,
   },
   {
+    key: "submissionTrackSelections",
+    domain: "submissions",
+    entityType: "submission_track_selection",
+    query: `SELECT submission_id || ':' || track_id AS id, event_id,
+                   submission_id, track_id, track_name_snapshot, position
+              FROM submission_track_selections WHERE event_id = ?
+             ORDER BY submission_id, position`,
+    schema: z
+      .object({
+        ...eventRecord,
+        submission_id: text.min(1),
+        track_id: text.min(1),
+        track_name_snapshot: text.min(1),
+        position: integer.nonnegative(),
+      })
+      .strict(),
+    entityId: id,
+    revision: () => 1,
+  },
+  {
+    key: "submissionRoutingTeams",
+    domain: "submissions",
+    entityType: "submission_routing_team",
+    query: `SELECT submission_id || ':' || team_id AS id, event_id,
+                   submission_id, team_id
+              FROM submission_routing_teams WHERE event_id = ?
+             ORDER BY submission_id, team_id`,
+    schema: z
+      .object({
+        ...eventRecord,
+        submission_id: text.min(1),
+        team_id: text.min(1),
+      })
+      .strict(),
+    entityId: id,
+    revision: () => 1,
+  },
+  {
     key: "submissionSpeakers",
     domain: "submissions",
     entityType: "submission_speaker",

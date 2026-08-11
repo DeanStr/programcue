@@ -368,47 +368,6 @@ export class AirtableRoomRepository {
       authoritativeConfiguration?.tables.rooms.id,
       knownTables,
     );
-    const speakerTable = await this.provisionAndValidateSchema(
-      client,
-      AIRTABLE_SPEAKERS_TABLE,
-      AIRTABLE_SPEAKER_FIELDS,
-      "Program Cue Key",
-      authoritativeConfiguration?.tables.speakers.id,
-      knownTables,
-    );
-    const sessionTable = await this.provisionAndValidateSchema(
-      client,
-      AIRTABLE_SESSIONS_TABLE,
-      AIRTABLE_SESSION_FIELDS,
-      "Program Cue Key",
-      authoritativeConfiguration?.tables.sessions.id,
-      knownTables,
-    );
-    const scheduleTable = await this.provisionAndValidateSchema(
-      client,
-      AIRTABLE_SCHEDULE_TABLE,
-      AIRTABLE_SCHEDULE_FIELDS,
-      "Program Cue Key",
-      authoritativeConfiguration?.tables.schedule.id,
-      knownTables,
-    );
-    const eventDataTables = {} as Record<
-      AirtableEventDataTableKey,
-      { id: string; name: string }
-    >;
-    for (const [key, tableName] of Object.entries(
-      AIRTABLE_EVENT_DATA_TABLE_NAMES,
-    ) as Array<[AirtableEventDataTableKey, string]>) {
-      const table = await this.provisionAndValidateSchema(
-        client,
-        tableName,
-        AIRTABLE_EVENT_DATA_FIELDS,
-        "Program Cue Key",
-        authoritativeConfiguration?.tables[key].id,
-        knownTables,
-      );
-      eventDataTables[key] = { id: table.id, name: table.name };
-    }
     const validationId = crypto.randomUUID();
     const validationKey = `connection-validation-${validationId}`;
     const validationEventId = `connection-validation:${viewer.eventId}:${validationId}`;
@@ -450,6 +409,47 @@ export class AirtableRoomRepository {
         "Airtable did not return the connection-validation record when it was read back.",
       );
     await client.deleteRecords(roomTable.id, [observedValidationRecord.id]);
+    const speakerTable = await this.provisionAndValidateSchema(
+      client,
+      AIRTABLE_SPEAKERS_TABLE,
+      AIRTABLE_SPEAKER_FIELDS,
+      "Program Cue Key",
+      authoritativeConfiguration?.tables.speakers.id,
+      knownTables,
+    );
+    const sessionTable = await this.provisionAndValidateSchema(
+      client,
+      AIRTABLE_SESSIONS_TABLE,
+      AIRTABLE_SESSION_FIELDS,
+      "Program Cue Key",
+      authoritativeConfiguration?.tables.sessions.id,
+      knownTables,
+    );
+    const scheduleTable = await this.provisionAndValidateSchema(
+      client,
+      AIRTABLE_SCHEDULE_TABLE,
+      AIRTABLE_SCHEDULE_FIELDS,
+      "Program Cue Key",
+      authoritativeConfiguration?.tables.schedule.id,
+      knownTables,
+    );
+    const eventDataTables = {} as Record<
+      AirtableEventDataTableKey,
+      { id: string; name: string }
+    >;
+    for (const [key, tableName] of Object.entries(
+      AIRTABLE_EVENT_DATA_TABLE_NAMES,
+    ) as Array<[AirtableEventDataTableKey, string]>) {
+      const table = await this.provisionAndValidateSchema(
+        client,
+        tableName,
+        AIRTABLE_EVENT_DATA_FIELDS,
+        "Program Cue Key",
+        authoritativeConfiguration?.tables[key].id,
+        knownTables,
+      );
+      eventDataTables[key] = { id: table.id, name: table.name };
+    }
     const connectionId = existing?.id ?? crypto.randomUUID();
     const encryptedCredentials = await encryptIntegrationCredentials(
       credentials,

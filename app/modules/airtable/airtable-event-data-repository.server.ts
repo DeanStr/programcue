@@ -19,6 +19,7 @@ import {
 import {
   AIRTABLE_CACHE_TTL_SECONDS,
   AIRTABLE_EVENT_DATA_FIELDS,
+  AIRTABLE_SCHEMA_VERSION,
   AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES,
   type AirtableCredentials,
   type AirtableEventDataTableKey,
@@ -639,7 +640,10 @@ export class AirtableEventDataRepository {
       eventId,
       eventId,
       hash,
-      JSON.stringify({ schema: 3, domains: AIRTABLE_EVENT_TABLE_SPECS.length }),
+      JSON.stringify({
+        schema: AIRTABLE_SCHEMA_VERSION,
+        domains: AIRTABLE_EVENT_TABLE_SPECS.length,
+      }),
     );
   }
 

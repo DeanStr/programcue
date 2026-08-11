@@ -9,6 +9,7 @@ import {
   EventService,
   EventRepositoryMigrationRequiredError,
 } from "~/modules/events/event-service.server";
+import { EventTrackInUseError } from "~/modules/events/event-repository.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
@@ -44,6 +45,7 @@ import {
 } from "./airtable-room-repository.server";
 import {
   AIRTABLE_EVENT_DATA_TABLE_NAMES,
+  AIRTABLE_ROOMS_TABLE,
   AIRTABLE_SCHEMA_VERSION,
   AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES,
 } from "./airtable-schema";
@@ -465,6 +467,9 @@ describe("Airtable authoritative room repository", () => {
       /^connection-validation-[a-f0-9-]+$/u,
     );
     expect(provider.records[0]?.fields["Event ID"]).not.toBe(viewer.eventId);
+    expect(provider.tables.map((table) => table.name)).toEqual([
+      AIRTABLE_ROOMS_TABLE,
+    ]);
 
     const retry = new AirtableRoomRepository(
       env as unknown as CloudflareEnvironment,
@@ -606,6 +611,181 @@ describe("Airtable authoritative room repository", () => {
         .bind(viewer.eventId, retiredId)
         .first<{ status: string }>(),
     ).resolves.toMatchObject({ status: "retired" });
+  });
+
+  it("creates, reads and updates event tracks through Airtable authority", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const submissionId = `airtable-track-submission-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO submissions (
+         id, event_id, public_reference, title, status, answers_json
+       ) VALUES (?, ?, ?, 'Airtable track test', 'draft', '{}')`,
+    )
+      .bind(submissionId, viewer.eventId, submissionId)
+      .run();
+    const routingTeamId = `airtable-track-team-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO evaluation_teams (id, event_id, name, status)
+       VALUES (?, ?, ?, 'active')`,
+    )
+      .bind(routingTeamId, viewer.eventId, `Track team ${routingTeamId}`)
+      .run();
+    const provider = fakeAirtable();
+    const rooms = new AirtableRoomRepository(testEnv, {
+      createClient: () => provider.client,
+    });
+    await rooms.configure(viewer, connectionInput);
+    const eventData = eventDataRepository(testEnv, rooms, provider);
+    const migration = new AirtableMigrationService(testEnv, {
+      rooms,
+      eventData,
+    });
+    const preview = await migration.preview(viewer, "airtable");
+    await migration.confirm(viewer, preview.previewId);
+    const service = new EventService(testEnv, {
+      airtableRooms: rooms,
+      airtableEventData: eventData,
+    });
+
+    const before = await service.getSetup(viewer);
+    const trackId = `airtable-track-${crypto.randomUUID()}`;
+    await service.saveSetup(viewer, {
+      ...eventInput(before),
+      tracks: [
+        ...before.tracks,
+        {
+          id: trackId,
+          name: "Airtable authority track",
+          slug: "airtable-authority-track",
+          colourToken: "#123456",
+          position: before.tracks.length,
+          exclusive: false,
+          isPublic: true,
+        },
+      ],
+    });
+
+    const created = await service.getSetup(viewer);
+    expect(created.tracks).toContainEqual(
+      expect.objectContaining({
+        id: trackId,
+        name: "Airtable authority track",
+        colourToken: "#123456",
+      }),
+    );
+    let authoritative = await eventData.readAuthoritative(
+      viewer.organisationId,
+      viewer.eventId,
+      { bypassCache: true },
+    );
+    expect(
+      authoritative.entities.find(
+        (entity) => entity.entityType === "track" && entity.entityId === trackId,
+      )?.payload,
+    ).toMatchObject({
+      id: trackId,
+      name: "Airtable authority track",
+      colour_token: "#123456",
+    });
+
+    await service.saveSetup(viewer, {
+      ...eventInput(created),
+      tracks: created.tracks.map((track) =>
+        track.id === trackId
+          ? {
+              ...track,
+              name: "Updated Airtable authority track",
+              slug: "updated-airtable-authority-track",
+              colourToken: "#654321",
+              exclusive: true,
+            }
+          : track,
+      ),
+    });
+
+    const updated = await service.getSetup(viewer);
+    expect(updated.tracks).toContainEqual(
+      expect.objectContaining({
+        id: trackId,
+        name: "Updated Airtable authority track",
+        slug: "updated-airtable-authority-track",
+        colourToken: "#654321",
+        exclusive: true,
+      }),
+    );
+    authoritative = await eventData.readAuthoritative(
+      viewer.organisationId,
+      viewer.eventId,
+      { bypassCache: true },
+    );
+    expect(
+      authoritative.entities.find(
+        (entity) => entity.entityType === "track" && entity.entityId === trackId,
+      )?.payload,
+    ).toMatchObject({
+      id: trackId,
+      name: "Updated Airtable authority track",
+      slug: "updated-airtable-authority-track",
+      colour_token: "#654321",
+      exclusive: 1,
+    });
+
+    const boundary = new AirtableProviderBoundary(testEnv, {
+      repository: eventData,
+    });
+    const routingIdentity = await airtableIntentCommand(
+      "test.submission-track-routing",
+      viewer,
+      crypto.randomUUID(),
+      { submissionId, trackId, routingTeamId },
+    );
+    await boundary.executeIdempotent(viewer, routingIdentity, async () => {
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO submission_track_selections (
+             submission_id, event_id, track_id, track_name_snapshot, position
+           ) VALUES (?, ?, ?, ?, 0)`,
+        ).bind(
+          submissionId,
+          viewer.eventId,
+          trackId,
+          "Updated Airtable authority track",
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO submission_routing_teams (
+             submission_id, event_id, team_id
+           ) VALUES (?, ?, ?)`,
+        ).bind(submissionId, viewer.eventId, routingTeamId),
+      ]);
+      return { submissionId };
+    });
+    authoritative = await eventData.readAuthoritative(
+      viewer.organisationId,
+      viewer.eventId,
+      { bypassCache: true },
+    );
+    expect(authoritative.entities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tableKey: "submissionTrackSelections",
+          entityId: `${submissionId}:${trackId}`,
+        }),
+        expect.objectContaining({
+          tableKey: "submissionRoutingTeams",
+          entityId: `${submissionId}:${routingTeamId}`,
+        }),
+      ]),
+    );
+
+    await expect(
+      service.saveSetup(viewer, {
+        ...eventInput(updated),
+        tracks: updated.tracks.filter((track) => track.id !== trackId),
+      }),
+    ).rejects.toBeInstanceOf(EventTrackInUseError);
+    await expect(
+      eventData.assertSynchronized(viewer.organisationId, viewer.eventId),
+    ).resolves.toBeDefined();
   });
 
   it("aborts a concurrent Event Setup revision conflict without an early Airtable write", async () => {
@@ -959,6 +1139,44 @@ describe("Airtable authoritative room repository", () => {
   it("synchronizes the complete managed event-data projection with explicit domain schemas", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureJudgedDemoWorkflow(testEnv);
+    const teamId = `airtable-routing-team-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO evaluation_teams (id, event_id, name, status)
+       VALUES (?, ?, ?, 'active')`,
+    )
+      .bind(teamId, viewer.eventId, `Airtable routing ${teamId}`)
+      .run();
+    const submission = await testEnv.DB.prepare(
+      `SELECT id FROM submissions WHERE event_id = ? ORDER BY id LIMIT 1`,
+    )
+      .bind(viewer.eventId)
+      .first<{ id: string }>();
+    const track = await testEnv.DB.prepare(
+      `SELECT id, name FROM tracks WHERE event_id = ? ORDER BY id LIMIT 1`,
+    )
+      .bind(viewer.eventId)
+      .first<{ id: string; name: string }>();
+    expect(submission).not.toBeNull();
+    expect(track).not.toBeNull();
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `DELETE FROM submission_track_selections
+          WHERE submission_id = ? AND event_id = ?`,
+      ).bind(submission!.id, viewer.eventId),
+      testEnv.DB.prepare(
+        `DELETE FROM submission_routing_teams
+          WHERE submission_id = ? AND event_id = ?`,
+      ).bind(submission!.id, viewer.eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO submission_track_selections (
+           submission_id, event_id, track_id, track_name_snapshot, position
+         ) VALUES (?, ?, ?, ?, 0)`,
+      ).bind(submission!.id, viewer.eventId, track!.id, track!.name),
+      testEnv.DB.prepare(
+        `INSERT INTO submission_routing_teams (submission_id, event_id, team_id)
+         VALUES (?, ?, ?)`,
+      ).bind(submission!.id, viewer.eventId, teamId),
+    ]);
     const provider = fakeAirtable();
     const rooms = new AirtableRoomRepository(testEnv, {
       createClient: () => provider.client,
@@ -977,6 +1195,30 @@ describe("Airtable authoritative room repository", () => {
         "tasks",
       ]),
     );
+    expect(d1.entities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tableKey: "submissionTrackSelections",
+          entityType: "submission_track_selection",
+          entityId: `${submission!.id}:${track!.id}`,
+          payload: expect.objectContaining({
+            submission_id: submission!.id,
+            track_id: track!.id,
+            track_name_snapshot: track!.name,
+            position: 0,
+          }),
+        }),
+        expect.objectContaining({
+          tableKey: "submissionRoutingTeams",
+          entityType: "submission_routing_team",
+          entityId: `${submission!.id}:${teamId}`,
+          payload: expect.objectContaining({
+            submission_id: submission!.id,
+            team_id: teamId,
+          }),
+        }),
+      ]),
+    );
     await initializeEventDataProjection(repository, "complete-slice", rooms);
 
     const airtable = await repository.readAuthoritative(
@@ -986,6 +1228,18 @@ describe("Airtable authoritative room repository", () => {
     );
     expect(airtable.hash).toBe(d1.hash);
     expect(airtable.entities).toHaveLength(d1.entities.length);
+    expect(airtable.entities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tableKey: "submissionTrackSelections",
+          entityId: `${submission!.id}:${track!.id}`,
+        }),
+        expect.objectContaining({
+          tableKey: "submissionRoutingTeams",
+          entityId: `${submission!.id}:${teamId}`,
+        }),
+      ]),
+    );
     await expect(
       repository.assertSynchronized(viewer.organisationId, viewer.eventId),
     ).resolves.toMatchObject({ d1: { hash: d1.hash } });

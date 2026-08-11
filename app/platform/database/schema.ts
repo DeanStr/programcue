@@ -937,6 +937,62 @@ export const tracks = sqliteTable(
   ],
 );
 
+export const submissionTrackSelections = sqliteTable(
+  "submission_track_selections",
+  {
+    submissionId: text("submission_id").notNull(),
+    eventId: text("event_id").notNull(),
+    trackId: text("track_id").notNull(),
+    trackNameSnapshot: text("track_name_snapshot").notNull(),
+    position: integer("position").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.submissionId, table.trackId] }),
+    uniqueIndex("submission_track_selections_position_unique").on(
+      table.submissionId,
+      table.position,
+    ),
+    index("idx_submission_track_selections_event").on(
+      table.eventId,
+      table.trackId,
+      table.submissionId,
+    ),
+    foreignKey({
+      columns: [table.submissionId, table.eventId],
+      foreignColumns: [submissions.id, submissions.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.trackId, table.eventId],
+      foreignColumns: [tracks.id, tracks.eventId],
+    }),
+  ],
+);
+
+export const submissionRoutingTeams = sqliteTable(
+  "submission_routing_teams",
+  {
+    submissionId: text("submission_id").notNull(),
+    eventId: text("event_id").notNull(),
+    teamId: text("team_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.submissionId, table.teamId] }),
+    index("idx_submission_routing_teams_event").on(
+      table.eventId,
+      table.teamId,
+      table.submissionId,
+    ),
+    foreignKey({
+      columns: [table.submissionId, table.eventId],
+      foreignColumns: [submissions.id, submissions.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.teamId, table.eventId],
+      foreignColumns: [evaluationTeams.id, evaluationTeams.eventId],
+    }),
+  ],
+);
+
 export const rooms = sqliteTable("rooms", {
   id: text("id").primaryKey(),
   eventId: text("event_id")
