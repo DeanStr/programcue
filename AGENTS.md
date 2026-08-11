@@ -39,15 +39,15 @@
 
 ## Validation
 
-Run the smallest relevant checks during development, then run:
+Run the smallest relevant checks during development. Before completing a code or configuration change, run:
 
 ```bash
 npm run check:core
 ```
 
-Run `npm run check` when Chromium is available. If the browser check cannot run, report that explicitly rather than claiming the full suite passed.
+For user-facing changes, exercise the real browser workflow, update Playwright behavior or visual coverage as needed, and run `npm run check` when Chromium is available. Also run `npm run check` for release or merge candidates. For Worker/API changes, update tests and keep `docs/openapi.yaml` and `public/openapi.json` synchronized.
 
-For user-facing changes, exercise the real browser workflow and update the Playwright behavior/visual coverage as needed. For Worker/API changes, update tests and keep `docs/openapi.yaml` and `public/openapi.json` synchronized.
+Documentation-only changes may use focused validation. Report any required checks that were not run and why; never claim the full suite passed when the browser check did not run.
 
 ## Documentation
 
