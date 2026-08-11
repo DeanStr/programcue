@@ -6,6 +6,7 @@ import {
 } from "~/modules/schedule/schedule-time";
 
 const encoder = new TextEncoder();
+const EXPIRED_ITINERARY_CLEANUP_LIMIT = 100;
 
 const PUBLIC_HEADSHOT_CONTENT_TYPES = [
   "image/jpeg",
@@ -623,6 +624,23 @@ export class PublicProgrammeService {
     return anonymous === null;
   }
 
+  async hasActiveAnonymousItinerary(
+    programme: PublishedProgramme,
+    visitorToken: string | null,
+  ) {
+    if (!visitorToken) return false;
+    const visitorHash = await sha256(visitorToken);
+    return Boolean(
+      await this.env.DB.prepare(
+        `SELECT 1 FROM public_itineraries
+          WHERE event_id = ? AND visitor_key_hash = ? AND person_id IS NULL
+            AND (expires_at IS NULL OR expires_at > unixepoch())`,
+      )
+        .bind(programme.event.id, visitorHash)
+        .first(),
+    );
+  }
+
   async sharedItinerary(programme: PublishedProgramme, shareToken: string) {
     if (!/^[0-9a-f-]{72}$/u.test(shareToken))
       throw new PublishedProgrammeItineraryNotFoundError(
@@ -927,6 +945,15 @@ export class PublicProgrammeService {
     const itineraryId = existing?.id ?? crypto.randomUUID();
     if (intent === "add") {
       await this.env.DB.batch([
+        this.env.DB.prepare(
+          `DELETE FROM public_itineraries
+            WHERE id IN (
+              SELECT id FROM public_itineraries
+               WHERE expires_at IS NOT NULL AND expires_at <= unixepoch()
+               ORDER BY expires_at, id
+               LIMIT ?
+            )`,
+        ).bind(EXPIRED_ITINERARY_CLEANUP_LIMIT),
         this.env.DB.prepare(
           `DELETE FROM public_itineraries
             WHERE id = ? AND event_id = ? AND visitor_key_hash = ?

@@ -297,4 +297,47 @@ describe("public abuse protection", () => {
     );
     expect(rows).toEqual([{ requestCount: 1 }, null, null]);
   });
+
+  it("removes expired rate-limit rows while retaining an active block", async () => {
+    const suffix = crypto.randomUUID();
+    const expiredKeys = [
+      `expired-abuse-${suffix}-1`,
+      `expired-abuse-${suffix}-2`,
+    ];
+    const blockedKey = `blocked-abuse-${suffix}`;
+    await env.DB.batch([
+      ...expiredKeys.map((key) =>
+        env.DB.prepare(
+          `INSERT INTO abuse_rate_limits (
+             scope_key, window_started_at, request_count, blocked_until, updated_at
+           ) VALUES (?, unixepoch() - 7200, 1, unixepoch() - 3600,
+                     unixepoch() - 7200)`,
+        ).bind(key),
+      ),
+      env.DB.prepare(
+        `INSERT INTO abuse_rate_limits (
+           scope_key, window_started_at, request_count, blocked_until, updated_at
+         ) VALUES (?, unixepoch() - 7200, 1, unixepoch() + 3600,
+                   unixepoch() - 7200)`,
+      ).bind(blockedKey),
+    ]);
+    vi.stubGlobal("fetch", successfulSiteverify());
+
+    await enforcePublicAbuseProtection({
+      env: productionEnvironment(),
+      request: protectedRequest("203.0.113.115"),
+      action: "sign_in",
+      tenantId: `cleanup-${suffix}`,
+      email: `cleanup-${suffix}@example.com`,
+      turnstileToken: "valid-token",
+    });
+
+    const retained = await env.DB.prepare(
+      `SELECT scope_key AS scopeKey FROM abuse_rate_limits
+        WHERE scope_key IN (?, ?, ?) ORDER BY scope_key`,
+    )
+      .bind(...expiredKeys, blockedKey)
+      .all<{ scopeKey: string }>();
+    expect(retained.results).toEqual([{ scopeKey: blockedKey }]);
+  });
 });

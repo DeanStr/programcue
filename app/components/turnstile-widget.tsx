@@ -103,7 +103,8 @@ export function TurnstileWidget({
     | "application_request_code"
     | "application_verify_code"
     | "application_start_anonymous"
-    | "application_file_upload";
+    | "application_file_upload"
+    | "public_itinerary_create";
   onTokenChange?: (token: string) => void;
   resetKey?: number;
 }) {

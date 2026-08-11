@@ -1,12 +1,13 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { loader as publicCalendarLoader } from "~/routes/api-public-calendar";
 import { loader as publicProgrammeLoader } from "~/routes/api-public-programme";
 import {
+  action as publicProgrammePageAction,
   itineraryCookie,
   loader as publicProgrammePageLoader,
 } from "~/routes/public-programme";
@@ -18,6 +19,11 @@ import {
 } from "./public-programme-service.server";
 
 describe("published programme and itinerary", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("rejects an empty shared-itinerary token instead of loading private state", async () => {
     const context = new RouterContextProvider();
     context.set(cloudflareContext, {
@@ -360,6 +366,9 @@ describe("published programme and itinerary", () => {
       event: { ...programme!.event, endDate: "2099-05-22" },
     };
     const sessionId = activeProgramme.sessions[0].id;
+    await expect(
+      service.hasActiveAnonymousItinerary(activeProgramme, null),
+    ).resolves.toBe(false);
     const itinerary = await service.updateItinerary(
       activeProgramme,
       { personId: null, visitorToken: null },
@@ -367,6 +376,9 @@ describe("published programme and itinerary", () => {
       "add",
     );
     const { token } = itinerary;
+    await expect(
+      service.hasActiveAnonymousItinerary(activeProgramme, token),
+    ).resolves.toBe(true);
     expect(itinerary.expiresAt).toBe(
       Math.floor(Date.parse("2099-05-23T03:59:59Z") / 1_000) + 365 * 86_400,
     );
@@ -394,6 +406,129 @@ describe("published programme and itinerary", () => {
         visitorToken: token,
       }),
     ).toEqual([]);
+  });
+
+  it("bounds expired itinerary cleanup when a new anonymous itinerary is created", async () => {
+    const service = new PublicProgrammeService({
+      ...(env as unknown as CloudflareEnvironment),
+      DEMO_MODE: "false",
+    } as CloudflareEnvironment);
+    const programme = await service.getPublished("future-of-events-2025");
+    expect(programme).not.toBeNull();
+    const activeProgramme = {
+      ...programme!,
+      event: { ...programme!.event, endDate: "2099-05-22" },
+    };
+    const prefix = `expired-itinerary-${crypto.randomUUID()}-`;
+    await env.DB.prepare(
+      `WITH RECURSIVE numbers(value) AS (
+         SELECT 1 UNION ALL SELECT value + 1 FROM numbers WHERE value < 105
+       )
+       INSERT INTO public_itineraries (
+         id, event_id, visitor_key_hash, expires_at, created_at, updated_at
+       )
+       SELECT ? || value, ?, ? || value, 1, 1, 1 FROM numbers`,
+    )
+      .bind(prefix, activeProgramme.event.id, prefix)
+      .run();
+
+    await service.updateItinerary(
+      activeProgramme,
+      { personId: null, visitorToken: null },
+      activeProgramme.sessions[0]!.id,
+      "add",
+    );
+
+    await expect(
+      env.DB.prepare(
+        `SELECT COUNT(*) AS total FROM public_itineraries
+          WHERE substr(id, 1, ?) = ? AND expires_at = 1`,
+      )
+        .bind(prefix.length, prefix)
+        .first<{ total: number }>(),
+    ).resolves.toEqual({ total: 5 });
+  });
+
+  it("requires verified abuse protection before creating an anonymous itinerary", async () => {
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    const fetcher = vi.fn(async () =>
+      Response.json({
+        success: true,
+        hostname: "programcue.test",
+        action: "public_itinerary_create",
+      }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: {
+        ...(env as unknown as CloudflareEnvironment),
+        APP_ENV: "production",
+        DEMO_MODE: "false",
+        BETTER_AUTH_URL: "https://programcue.test",
+        BETTER_AUTH_SECRET:
+          "programme-abuse-test-secret-with-at-least-thirty-two-characters",
+        TURNSTILE_SITE_KEY: "programme-site-key",
+        TURNSTILE_SECRET_KEY: "programme-secret-key",
+      } as unknown as CloudflareEnvironment,
+      ctx: {} as ExecutionContext,
+    });
+    const programmeService = new PublicProgrammeService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const currentProgramme = await programmeService.getPublished(
+      "future-of-events-2025",
+    );
+    expect(currentProgramme).not.toBeNull();
+    const originalEvent = await env.DB.prepare(
+      "SELECT ends_at AS endsAt FROM events WHERE id = ?",
+    )
+      .bind(currentProgramme!.event.id)
+      .first<{ endsAt: number }>();
+    expect(originalEvent).not.toBeNull();
+    try {
+      await env.DB.prepare("UPDATE events SET ends_at = ? WHERE id = ?")
+        .bind(4_071_081_599, currentProgramme!.event.id)
+        .run();
+      const programme = await programmeService.getPublished(
+        "future-of-events-2025",
+      );
+      expect(programme).not.toBeNull();
+      const request = new Request(
+        "https://programcue.test/public/programme/future-of-events-2025",
+        {
+          method: "POST",
+          headers: {
+            "cf-connecting-ip": "203.0.113.201",
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            intent: "add",
+            sessionId: programme!.sessions[0]!.id,
+            "turnstile-token": "verified-itinerary-token",
+          }),
+        },
+      );
+
+      const response = await publicProgrammePageAction({
+        request,
+        params: { slug: "future-of-events-2025" },
+        context,
+      } as never);
+
+      if (response instanceof Response) {
+        throw new Error(
+          "Anonymous itinerary creation returned a raw response.",
+        );
+      }
+      expect(response.init?.status).toBeUndefined();
+      expect(response.data).toMatchObject({ ok: true });
+      expect(fetcher).toHaveBeenCalledOnce();
+    } finally {
+      await env.DB.prepare("UPDATE events SET ends_at = ? WHERE id = ?")
+        .bind(originalEvent!.endsAt, currentProgramme!.event.id)
+        .run();
+    }
   });
 
   it("rotates an unrecognized visitor cookie instead of accepting a fixed bearer token", async () => {

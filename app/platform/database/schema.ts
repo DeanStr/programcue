@@ -1341,6 +1341,7 @@ export const publicItineraries = sqliteTable(
     ),
     uniqueIndex("public_itineraries_share_unique").on(table.shareTokenHash),
     index("idx_itinerary_person").on(table.eventId, table.personId),
+    index("idx_itinerary_expiry").on(table.expiresAt, table.id),
   ],
 );
 
@@ -2729,6 +2730,7 @@ export const abuseRateLimits = sqliteTable(
   },
   (table) => [
     index("idx_abuse_rate_limits_blocked_until").on(table.blockedUntil),
+    index("idx_abuse_rate_limits_updated_at").on(table.updatedAt),
   ],
 );
 

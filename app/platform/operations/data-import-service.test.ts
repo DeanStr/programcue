@@ -194,6 +194,196 @@ describe("CSV imports", () => {
     ).toEqual({ count: 1 });
   });
 
+  it("resolves existing people and memberships by normalized email keys", async () => {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const personId = `person-mixed-email-${suffix}`;
+    const membershipId = `membership-mixed-email-${suffix}`;
+    const storedEmail = `Mixed-${suffix}@Example.COM`;
+    const importedEmail = storedEmail.toLowerCase();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, organisation_name, job_title,
+           profile_status, profile_revision
+         ) VALUES (?, ?, 'Mixed Case Person', 'Example Org', 'Engineer',
+                   'published', 3)`,
+      ).bind(personId, storedEmail),
+      env.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, invited_at,
+           accepted_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch())`,
+      ).bind(membershipId, viewer.organisationId, viewer.eventId, personId),
+    ]);
+    const service = new DataImportService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const preview = await service.preview(viewer, {
+      resource: "people",
+      fileName: "mixed-case-email.csv",
+      csv: [
+        "email,name,organisation,jobTitle,profileStatus,role",
+        `${importedEmail},Mixed Case Person,Example Org,Engineer,published,speaker`,
+      ].join("\n"),
+    });
+    expect(preview).toMatchObject({ validCount: 1, invalidCount: 0 });
+
+    await service.confirm(viewer, preview.operationId);
+
+    await expect(
+      env.DB.prepare(
+        `SELECT person.id, person.email, membership.id AS membershipId,
+                membership.accepted_at AS acceptedAt
+           FROM people person
+           JOIN memberships membership ON membership.person_id = person.id
+          WHERE person.email = ? COLLATE NOCASE
+            AND membership.event_id = ? AND membership.role = 'speaker'`,
+      )
+        .bind(importedEmail, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({
+      id: personId,
+      email: storedEmail,
+      membershipId,
+      acceptedAt: expect.any(Number),
+    });
+    await expect(
+      env.DB.prepare(
+        "SELECT COUNT(*) AS total FROM people WHERE email = ? COLLATE NOCASE",
+      )
+        .bind(importedEmail)
+        .first(),
+    ).resolves.toEqual({ total: 1 });
+  });
+
+  it("links an existing person without rewriting a profile shared with another event", async () => {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const personId = `person-people-import-${suffix}`;
+    const email = `shared-person-${suffix}@example.com`;
+    const otherOrganisationId = `org-people-import-${suffix}`;
+    const otherEventId = `event-people-import-${suffix}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, organisation_name, job_title,
+           profile_status, profile_revision, last_operation_id, updated_at
+         ) VALUES (?, ?, 'Canonical Person', 'Canonical Organisation',
+                   'Canonical Role', 'published', 7, 'canonical-operation', 123)`,
+      ).bind(personId, email),
+      env.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, invited_at,
+           accepted_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch())`,
+      ).bind(
+        `membership-current-people-import-${suffix}`,
+        viewer.organisationId,
+        viewer.eventId,
+        personId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO organisations (id, name, slug)
+         VALUES (?, 'Other organisation', ?)`,
+      ).bind(otherOrganisationId, `other-organisation-${suffix}`),
+      env.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           file_policy_json
+         ) VALUES (?, ?, 'Other event', ?, 'UTC', 1760000000, 1760086400, ?)`,
+      ).bind(
+        otherEventId,
+        otherOrganisationId,
+        `other-event-${suffix}`,
+        CANONICAL_EVENT_FILE_POLICY_JSON,
+      ),
+      env.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, invited_at,
+           accepted_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch())`,
+      ).bind(
+        `membership-people-import-${suffix}`,
+        otherOrganisationId,
+        otherEventId,
+        personId,
+      ),
+    ]);
+
+    const service = new DataImportService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const rejected = await service.preview(viewer, {
+      resource: "people",
+      fileName: "shared-person.csv",
+      csv: [
+        "email,name,organisation,jobTitle,profileStatus,role",
+        `${email},Event-local Name,Event-local Organisation,Event-local Role,archived,evaluator`,
+      ].join("\n"),
+    });
+    expect(rejected).toMatchObject({ validCount: 0, invalidCount: 1 });
+    await expect(
+      env.DB.prepare(
+        `SELECT status, error_message AS errorMessage
+           FROM operation_items WHERE operation_id = ?`,
+      )
+        .bind(rejected.operationId)
+        .first(),
+    ).resolves.toMatchObject({
+      status: "failed",
+      errorMessage: expect.stringContaining(
+        "profile fields must match the existing identity",
+      ),
+    });
+
+    const preview = await service.preview(viewer, {
+      resource: "people",
+      fileName: "shared-person-link.csv",
+      csv: [
+        "email,name,organisation,jobTitle,profileStatus,role",
+        `${email},Canonical Person,Canonical Organisation,Canonical Role,published,evaluator`,
+      ].join("\n"),
+    });
+    await expect(
+      env.DB.prepare(
+        `SELECT json_extract(result_json, '$.action') AS action
+           FROM operation_items WHERE operation_id = ?`,
+      )
+        .bind(preview.operationId)
+        .first(),
+    ).resolves.toEqual({ action: "link" });
+
+    await service.confirm(viewer, preview.operationId);
+
+    await expect(
+      env.DB.prepare(
+        `SELECT display_name AS name, organisation_name AS organisation,
+                job_title AS jobTitle, profile_status AS profileStatus,
+                profile_revision AS revision,
+                last_operation_id AS operationId, updated_at AS updatedAt
+           FROM people WHERE id = ?`,
+      )
+        .bind(personId)
+        .first(),
+    ).resolves.toEqual({
+      name: "Canonical Person",
+      organisation: "Canonical Organisation",
+      jobTitle: "Canonical Role",
+      profileStatus: "published",
+      revision: 7,
+      operationId: "canonical-operation",
+      updatedAt: 123,
+    });
+    await expect(
+      env.DB.prepare(
+        `SELECT accepted_at AS acceptedAt
+           FROM memberships
+          WHERE event_id = ? AND person_id = ? AND role = 'evaluator'`,
+      )
+        .bind(viewer.eventId, personId)
+        .first(),
+    ).resolves.toEqual({ acceptedAt: null });
+  });
+
   it("imports privileged membership as a finite pending invitation requiring explicit acceptance", async () => {
     await env.DB.prepare(
       `DELETE FROM memberships
@@ -210,7 +400,7 @@ describe("CSV imports", () => {
       fileName: "privileged-person.csv",
       csv: [
         "email,name,organisation,jobTitle,profileStatus,role",
-        "olivia@example.com,Olivia Bennett,Future of Everything,Director,published,administrator",
+        "olivia@example.com,Olivia Bennett,,,published,administrator",
       ].join("\n"),
     });
     expect(preview).toMatchObject({ validCount: 1, invalidCount: 0 });
@@ -317,8 +507,8 @@ describe("CSV imports", () => {
       fileName: "historical-memberships.csv",
       csv: [
         "email,name,organisation,jobTitle,profileStatus,role",
-        `${revokedEmail},Revoked Import,,,draft,speaker`,
-        `${expiredEmail},Expired Import,,,draft,speaker`,
+        `${revokedEmail},Existing Revoked Identity,,,published,speaker`,
+        `${expiredEmail},Existing Pending Identity,,,published,speaker`,
       ].join("\n"),
     });
     await expect(service.confirm(viewer, preview.operationId)).resolves.toEqual(
@@ -414,6 +604,46 @@ describe("CSV imports", () => {
         preview.operationId,
       ),
     ).rejects.toBeInstanceOf(DataImportStateError);
+  });
+
+  it("imports a speaker-target task without broadening the email identity lookup", async () => {
+    const speaker = await env.DB.prepare(
+      `SELECT person_id AS personId
+         FROM memberships
+        WHERE event_id = ? AND role = 'speaker'
+          AND accepted_at IS NOT NULL AND revoked_at IS NULL
+        LIMIT 1`,
+    )
+      .bind(viewer.eventId)
+      .first<{ personId: string }>();
+    expect(speaker).not.toBeNull();
+    const taskId = `speaker-target-import-${crypto.randomUUID().slice(0, 8)}`;
+    const service = new DataImportService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const preview = await service.preview(viewer, {
+      resource: "tasks",
+      fileName: "speaker-task.csv",
+      csv: [
+        "id,title,description,targetType,targetId,ownerEmail,status,impact,dueAt",
+        `${taskId},Speaker task,,speaker,${speaker!.personId},,not_started,medium,`,
+      ].join("\n"),
+    });
+    expect(preview).toMatchObject({ validCount: 1, invalidCount: 0 });
+
+    await service.confirm(viewer, preview.operationId);
+
+    await expect(
+      env.DB.prepare(
+        `SELECT target_type AS targetType, target_id AS targetId
+           FROM task_instances WHERE id = ? AND event_id = ?`,
+      )
+        .bind(taskId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({
+      targetType: "speaker",
+      targetId: speaker!.personId,
+    });
   });
 
   it("rejects invalid task lifecycle changes and task IDs owned by another event", async () => {
@@ -605,6 +835,70 @@ describe("CSV imports", () => {
       "task.reopen",
       "task.waive",
     ]);
+  });
+
+  it("fails before mutation when webhook fan-out would exceed the D1 query budget", async () => {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const taskIds = Array.from(
+      { length: 66 },
+      (_, index) => `task-import-budget-${suffix}-${index}`,
+    );
+    await env.DB.prepare("DELETE FROM webhook_endpoints WHERE event_id = ?")
+      .bind(viewer.eventId)
+      .run();
+    await env.DB.batch(
+      taskIds.map((taskId, index) =>
+        env.DB.prepare(
+          `INSERT INTO task_instances (
+             id, event_id, target_type, target_id, title, task_type, impact,
+             status, readiness_state, readiness_percent, revision
+           ) VALUES (?, ?, 'event', ?, ?, 'checklist', 'medium',
+                     'in_progress', 'at_risk', 40, 1)`,
+        ).bind(taskId, viewer.eventId, viewer.eventId, `Budget task ${index}`),
+      ),
+    );
+    const service = new DataImportService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const preview = await service.preview(viewer, {
+      resource: "tasks",
+      fileName: "task-budget.csv",
+      csv: [
+        "id,title,description,targetType,targetId,ownerEmail,status,statusReason,impact,dueAt",
+        ...taskIds.map(
+          (taskId, index) =>
+            `${taskId},Budget task ${index},,event,${viewer.eventId},,completed,,medium,`,
+        ),
+      ].join("\n"),
+    });
+    await env.DB.prepare(
+      `INSERT INTO webhook_endpoints (
+         id, organisation_id, event_id, name, url, secret_ciphertext,
+         event_types_json, status, failure_count, created_at, updated_at
+       ) VALUES (?, ?, ?, 'Task import budget', 'https://example.com/webhook',
+                 'test-ciphertext', '["task.updated"]', 'active', 0,
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(
+        `webhook-import-budget-${suffix}`,
+        viewer.organisationId,
+        viewer.eventId,
+      )
+      .run();
+
+    await expect(service.confirm(viewer, preview.operationId)).rejects.toThrow(
+      "exceeds the safe D1 query budget",
+    );
+    await expect(
+      env.DB.prepare("SELECT status, revision FROM task_instances WHERE id = ?")
+        .bind(taskIds[0])
+        .first(),
+    ).resolves.toEqual({ status: "in_progress", revision: 1 });
+    await expect(
+      env.DB.prepare("SELECT status FROM operation_jobs WHERE id = ?")
+        .bind(preview.operationId)
+        .first(),
+    ).resolves.toEqual({ status: "received" });
   });
 
   it("rejects a cross-event task ID claimed after preview without reporting completion", async () => {

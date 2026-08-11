@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, MapPin } from "lucide-react";
 import { data, Link, useFetcher, useLocation } from "react-router";
 
 import type { Route } from "./+types/public-programme";
+import { TurnstileWidget } from "~/components/turnstile-widget";
 import { formatProgrammeEventDay } from "~/modules/programme/programme-presentation";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import {
@@ -14,6 +15,14 @@ import {
 } from "~/modules/programme/public-programme-service.server";
 import { createAuth } from "~/platform/auth/auth.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import {
+  AbuseProtectionConfigurationError,
+  AbuseRateLimitError,
+  enforcePublicAbuseProtection,
+  publicAbuseClientConfiguration,
+  TurnstileRejectedError,
+  TurnstileUnavailableError,
+} from "~/platform/http/public-abuse-protection.server";
 import {
   publishedProgrammeCacheHeaders,
   publishedProgrammeNotModified,
@@ -129,6 +138,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     embedded || shared ? null : await optionalPersonId(request, env);
   const visitorToken = readCookie(request, ITINERARY_COOKIE);
   const identity = { personId, visitorToken };
+  const itineraryVerificationRequired =
+    !embedded &&
+    !shared &&
+    personId === null &&
+    !(await service.hasActiveAnonymousItinerary(programme, visitorToken));
   let itinerary: string[];
   try {
     itinerary = embedded
@@ -154,6 +168,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         accent: embedAccent,
       },
       signedIn: personId !== null,
+      itineraryVerificationRequired,
+      turnstileSiteKey: itineraryVerificationRequired
+        ? publicAbuseClientConfiguration(env).turnstileSiteKey
+        : null,
       itinerarySynced:
         !embedded && !shared
           ? await service.itineraryIsSynced(programme, identity)
@@ -217,6 +235,20 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       shareUrl.searchParams.set("share", shareToken);
       return data({ ok: true, shareUrl: shareUrl.toString() });
     }
+    if (
+      intent === "add" &&
+      personId === null &&
+      !(await service.hasActiveAnonymousItinerary(programme, visitorToken))
+    ) {
+      await enforcePublicAbuseProtection({
+        env,
+        request,
+        action: "public_itinerary_create",
+        tenantId: programme.event.id,
+        email: "anonymous-itinerary",
+        turnstileToken: String(values.get("turnstile-token") ?? ""),
+      });
+    }
     const itinerary = await service.updateItinerary(
       programme,
       { personId, visitorToken },
@@ -245,6 +277,31 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
     if (error instanceof PublishedProgrammeItineraryNotFoundError) {
       return data({ ok: false, error: error.message }, { status: 404 });
+    }
+    if (error instanceof AbuseRateLimitError) {
+      return data(
+        { ok: false, error: error.message },
+        {
+          status: 429,
+          headers: { "retry-after": String(error.retryAfterSeconds) },
+        },
+      );
+    }
+    if (error instanceof TurnstileRejectedError) {
+      return data({ ok: false, error: error.message }, { status: 422 });
+    }
+    if (
+      error instanceof AbuseProtectionConfigurationError ||
+      error instanceof TurnstileUnavailableError
+    ) {
+      return data(
+        {
+          ok: false,
+          error:
+            "Itinerary security is temporarily unavailable. Try again later.",
+        },
+        { status: 503 },
+      );
     }
     if (error instanceof Response) throw error;
     throw error;
@@ -275,6 +332,9 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
   const shared = loaderData.shared;
   const embedOptions = loaderData.embedOptions;
   const fetcher = useFetcher<typeof action>();
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const previousFetcherState = useRef(fetcher.state);
   const shareUrl =
     fetcher.data &&
     "shareUrl" in fetcher.data &&
@@ -406,10 +466,21 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
       .map((other) => [session.title, other.title] as const),
   );
 
+  useEffect(() => {
+    if (previousFetcherState.current !== "idle" && fetcher.state === "idle") {
+      setTurnstileResetKey((value) => value + 1);
+    }
+    previousFetcherState.current = fetcher.state;
+  }, [fetcher.state]);
+
   function toggle(sessionId: string) {
     if (shared) return;
     void fetcher.submit(
-      { intent: saved.includes(sessionId) ? "remove" : "add", sessionId },
+      {
+        intent: saved.includes(sessionId) ? "remove" : "add",
+        sessionId,
+        "turnstile-token": turnstileToken,
+      },
       { method: "post" },
     );
   }
@@ -728,6 +799,27 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                   <p>{itineraryConflicts[0].join(" overlaps ")}</p>
                 </div>
               ) : null}
+              {fetcher.data &&
+              "error" in fetcher.data &&
+              typeof fetcher.data.error === "string" ? (
+                <p className="validation-item error" role="alert">
+                  {fetcher.data.error}
+                </p>
+              ) : null}
+              {loaderData.itineraryVerificationRequired ? (
+                <div className="stack mb">
+                  <p className="help">
+                    Complete the security check once to start this browser's
+                    itinerary.
+                  </p>
+                  <TurnstileWidget
+                    siteKey={loaderData.turnstileSiteKey}
+                    action="public_itinerary_create"
+                    onTokenChange={setTurnstileToken}
+                    resetKey={turnstileResetKey}
+                  />
+                </div>
+              ) : null}
               {savedSessions.length ? (
                 <>
                   {savedSessions.map((session) => (
@@ -796,7 +888,13 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                 <button
                   type="button"
                   className={`btn${saved.includes(selected.id) ? "" : " primary"}`}
-                  disabled={fetcher.state !== "idle"}
+                  disabled={
+                    fetcher.state !== "idle" ||
+                    (!saved.includes(selected.id) &&
+                      loaderData.itineraryVerificationRequired &&
+                      loaderData.turnstileSiteKey !== null &&
+                      !turnstileToken)
+                  }
                   onClick={() => toggle(selected.id)}
                 >
                   {fetcher.state !== "idle"

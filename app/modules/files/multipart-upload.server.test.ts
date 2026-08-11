@@ -590,6 +590,130 @@ describe("direct R2 multipart upload", () => {
     ).resolves.toEqual({ versionId: initiated.versionId, aborted: true });
   });
 
+  it("revokes a completing upload when its target becomes ineligible", async () => {
+    const baseEnvironment = configuredMultipartEnvironment();
+    let failFirstCompletion = true;
+    let providerAbortCount = 0;
+    const bucket = new Proxy(baseEnvironment.FILES, {
+      get(target, property) {
+        if (property === "resumeMultipartUpload") {
+          return (key: string, uploadId: string) => {
+            const multipart = target.resumeMultipartUpload(key, uploadId);
+            return new Proxy(multipart, {
+              get(multipartTarget, multipartProperty) {
+                if (multipartProperty === "complete" && failFirstCompletion) {
+                  return async () => {
+                    failFirstCompletion = false;
+                    throw new Error("R2 completion response was unavailable");
+                  };
+                }
+                if (multipartProperty === "abort") {
+                  return async () => {
+                    providerAbortCount += 1;
+                    return multipartTarget.abort();
+                  };
+                }
+                const value = Reflect.get(multipartTarget, multipartProperty);
+                return typeof value === "function"
+                  ? value.bind(multipartTarget)
+                  : value;
+              },
+            });
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const testEnvironment = {
+      ...baseEnvironment,
+      FILES: bucket,
+    } as unknown as CloudflareEnvironment;
+    const taskId = `multipart-completing-race-${crypto.randomUUID()}`;
+    await testEnvironment.DB.prepare(
+      `INSERT INTO task_instances (
+         id, event_id, target_type, target_id, owner_person_id, title,
+         task_type, impact, status, readiness_state, readiness_percent
+       ) VALUES (?, ?, 'speaker', ?, ?, 'Multipart completion race', 'file_upload',
+                 'high', 'not_started', 'on_track', 0)`,
+    )
+      .bind(taskId, speaker.eventId, speaker.personId, speaker.personId)
+      .run();
+    const service = new MultipartUploadService(testEnvironment);
+    const bytes = new TextEncoder().encode("%PDF-1.4\n%%EOF\n");
+    const initiated = await service.initiate(speaker, {
+      target: {
+        targetType: "task",
+        targetId: taskId,
+        assetKind: "task_evidence",
+      },
+      filename: "evidence.pdf",
+      contentType: "application/pdf",
+      sizeBytes: bytes.byteLength,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const stored = await testEnvironment.DB.prepare(
+      `SELECT object_key AS objectKey, multipart_upload_id AS uploadId
+         FROM file_versions WHERE id = ? AND event_id = ?`,
+    )
+      .bind(initiated.versionId, speaker.eventId)
+      .first<{ objectKey: string; uploadId: string }>();
+    const part = await testEnvironment.FILES.resumeMultipartUpload(
+      stored!.objectKey,
+      stored!.uploadId,
+    ).uploadPart(1, bytes);
+    const completion = {
+      versionId: initiated.versionId,
+      parts: [{ partNumber: 1, etag: part.etag }],
+    };
+
+    await expect(service.complete(speaker, completion)).rejects.toBeInstanceOf(
+      FileMultipartIncompleteError,
+    );
+    await expect(
+      testEnvironment.DB.prepare(
+        "SELECT status FROM file_multipart_uploads WHERE version_id = ?",
+      )
+        .bind(initiated.versionId)
+        .first(),
+    ).resolves.toEqual({ status: "completing" });
+    await testEnvironment.DB.prepare(
+      `UPDATE task_instances SET status = 'submitted'
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(taskId, speaker.eventId)
+      .run();
+
+    await expect(service.complete(speaker, completion)).rejects.toBeInstanceOf(
+      FileAccessError,
+    );
+    expect(providerAbortCount).toBe(1);
+    await expect(
+      testEnvironment.FILES.head(stored!.objectKey),
+    ).resolves.toBeNull();
+    await expect(
+      testEnvironment.DB.prepare(
+        `SELECT upload.status, version.upload_status AS uploadStatus,
+                version.signature_status AS signatureStatus,
+                version.scan_status AS scanStatus, asset.status AS assetStatus
+           FROM file_multipart_uploads upload
+           JOIN file_versions version
+             ON version.id = upload.version_id AND version.event_id = upload.event_id
+           JOIN file_assets asset
+             ON asset.id = upload.asset_id AND asset.event_id = upload.event_id
+          WHERE upload.version_id = ?`,
+      )
+        .bind(initiated.versionId)
+        .first(),
+    ).resolves.toEqual({
+      status: "failed",
+      uploadStatus: "failed",
+      signatureStatus: "invalid",
+      scanStatus: "failed",
+      assetStatus: "rejected",
+    });
+  });
+
   it("aborts R2 and compensates both records when only one metadata update commits", async () => {
     let providerAbortCount = 0;
     let injectedPartialCommit = false;

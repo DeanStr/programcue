@@ -1488,6 +1488,7 @@ CREATE INDEX idx_schedule_entries_version_time ON schedule_entries(schedule_vers
 CREATE INDEX idx_schedule_entries_room_time ON schedule_entries(schedule_version_id, room_id, starts_at, ends_at);
 CREATE INDEX idx_schedule_conflicts_open ON schedule_conflicts(event_id, schedule_version_id, resolved_at, severity);
 CREATE INDEX idx_itinerary_person ON public_itineraries(event_id, person_id);
+CREATE INDEX idx_itinerary_expiry ON public_itineraries(expires_at, id);
 
 CREATE INDEX idx_tasks_event_status_due ON task_instances(event_id, status, due_at);
 CREATE INDEX idx_tasks_target ON task_instances(event_id, target_type, target_id, status);
@@ -1534,6 +1535,7 @@ CREATE UNIQUE INDEX ux_idempotency_event ON idempotency_records(event_id, actor_
 CREATE UNIQUE INDEX ux_idempotency_org ON idempotency_records(organisation_id, actor_id, scope, idempotency_key) WHERE event_id IS NULL;
 CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
 CREATE INDEX idx_abuse_rate_limits_blocked_until ON abuse_rate_limits(blocked_until);
+CREATE INDEX idx_abuse_rate_limits_updated_at ON abuse_rate_limits(updated_at);
 CREATE INDEX idx_webhook_deliveries_status ON webhook_deliveries(status, next_attempt_at);
 CREATE INDEX idx_webhook_attempts_delivery ON webhook_delivery_attempts(delivery_id, attempt_number DESC);
 CREATE INDEX idx_audit_event_created ON audit_events(event_id, created_at DESC);

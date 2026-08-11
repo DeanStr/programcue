@@ -36,6 +36,8 @@ import {
 
 const MULTIPART_EXPIRY_SECONDS = 24 * 60 * 60;
 const REQUEST_CLAIM_SECONDS = 60;
+const REVOKED_COMPLETION_REASON =
+  "Multipart completion was revoked because its target or file policy is no longer eligible.";
 
 export const multipartInitiateSchema = z.object({
   target: uploadTargetSchema,
@@ -131,6 +133,7 @@ type MultipartRow = {
   partSizeBytes: number;
   manifestJson: string | null;
   manifestHash: string | null;
+  lastError: string | null;
   expiresAt: number;
   createdAt: number;
   updatedAt: number;
@@ -394,6 +397,7 @@ export class MultipartUploadService {
              upload.status, upload.part_size_bytes AS partSizeBytes,
              upload.manifest_json AS manifestJson,
              upload.manifest_hash AS manifestHash,
+             upload.last_error AS lastError,
              upload.expires_at AS expiresAt, upload.created_at AS createdAt,
              upload.updated_at AS updatedAt,
              event.file_policy_json AS filePolicyJson
@@ -441,6 +445,7 @@ export class MultipartUploadService {
              upload.status, upload.part_size_bytes AS partSizeBytes,
              upload.manifest_json AS manifestJson,
              upload.manifest_hash AS manifestHash,
+             upload.last_error AS lastError,
              upload.expires_at AS expiresAt, upload.created_at AS createdAt,
              upload.updated_at AS updatedAt,
              event.file_policy_json AS filePolicyJson
@@ -1183,6 +1188,105 @@ export class MultipartUploadService {
     throw error;
   }
 
+  private async removeRevokedProviderState(
+    row: MultipartRow & { uploadId: string },
+  ) {
+    const failures: unknown[] = [];
+    try {
+      await this.requireBucket()
+        .resumeMultipartUpload(row.objectKey, row.uploadId)
+        .abort();
+    } catch (abortError) {
+      if (!isMissingR2MultipartUpload(abortError)) failures.push(abortError);
+    }
+    try {
+      await this.requireBucket().delete(row.objectKey);
+    } catch (deleteError) {
+      failures.push(deleteError);
+    }
+    if (failures.length)
+      throw new AggregateError(
+        failures,
+        "Revoked multipart provider state could not be fully removed.",
+      );
+  }
+
+  private async failRevokedCompletion(
+    actor: MultipartActor,
+    row: MultipartRow & { uploadId: string },
+    error: FileAccessError | FilePolicyError,
+  ): Promise<never> {
+    try {
+      const [revoked] = await this.env.DB.batch([
+        this.env.DB.prepare(
+          `UPDATE file_multipart_uploads
+              SET status = 'failed', last_error = ?, updated_at = unixepoch()
+            WHERE version_id = ? AND event_id = ? AND status = 'completing'`,
+        ).bind(REVOKED_COMPLETION_REASON, row.versionId, actor.eventId),
+        this.env.DB.prepare(
+          `UPDATE file_versions
+              SET upload_status = 'failed', signature_status = 'invalid',
+                  scan_status = 'failed', object_etag = NULL, scan_error = ?
+            WHERE id = ? AND event_id = ? AND deleted_at IS NULL
+              AND upload_status = 'uploading' AND scan_status = 'pending'
+              AND EXISTS (
+                SELECT 1 FROM file_multipart_uploads upload
+                 WHERE upload.version_id = file_versions.id
+                   AND upload.event_id = file_versions.event_id
+                   AND upload.status = 'failed' AND upload.last_error = ?
+              )`,
+        ).bind(
+          REVOKED_COMPLETION_REASON,
+          row.versionId,
+          actor.eventId,
+          REVOKED_COMPLETION_REASON,
+        ),
+        this.env.DB.prepare(
+          `UPDATE file_assets
+              SET status = CASE WHEN current_version_id IS NULL THEN 'rejected' ELSE status END,
+                  updated_at = unixepoch()
+            WHERE id = ? AND event_id = ?
+              AND EXISTS (
+                SELECT 1 FROM file_versions version
+                 WHERE version.id = ? AND version.event_id = ?
+                   AND version.asset_id = file_assets.id
+                   AND version.upload_status = 'failed'
+                   AND version.scan_error = ?
+              )`,
+        ).bind(
+          row.assetId,
+          actor.eventId,
+          row.versionId,
+          actor.eventId,
+          REVOKED_COMPLETION_REASON,
+        ),
+      ]);
+      if ((revoked.meta.changes ?? 0) !== 1) {
+        const current = await this.loadByVersion(actor, row.versionId);
+        if (
+          current.status !== "failed" ||
+          current.lastError !== REVOKED_COMPLETION_REASON
+        )
+          throw error;
+      }
+    } catch (stateError) {
+      if (stateError === error) throw error;
+      throw new AggregateError(
+        [error, stateError],
+        "Revoked multipart completion could not be durably recorded.",
+      );
+    }
+    try {
+      await this.removeRevokedProviderState(row);
+    } catch (providerError) {
+      throw new AggregateError(
+        [error, providerError],
+        "Revoked multipart completion was recorded, but provider cleanup was incomplete.",
+      );
+    }
+    throw error;
+  }
+
   private async ensureScan(actor: MultipartActor, row: MultipartRow) {
     if (!row.objectEtag)
       throw new FileMultipartStateError(
@@ -1206,6 +1310,19 @@ export class MultipartUploadService {
     const parts = normalizedManifest(input.parts, expectedPartCount(row));
     const manifestJson = JSON.stringify(parts);
     const manifestHash = await sha256(manifestJson);
+    if (
+      row.status === "failed" &&
+      row.lastError === REVOKED_COMPLETION_REASON
+    ) {
+      if (!row.uploadId)
+        throw new FileMultipartStateError(
+          "Revoked multipart metadata is missing its R2 upload identifier.",
+        );
+      await this.removeRevokedProviderState({ ...row, uploadId: row.uploadId });
+      throw new FileMultipartStateError(
+        "This multipart upload was revoked before completion.",
+      );
+    }
     if (row.status === "completed") {
       if (row.manifestHash !== manifestHash)
         throw new FileMultipartConflictError(
@@ -1222,7 +1339,26 @@ export class MultipartUploadService {
     }
     if (row.status === "initiated")
       await this.assertCurrentUploadAllowed(actor, row);
-    else if (row.status === "completing") this.assertCurrentDeclaration(row);
+    else if (row.status === "completing") {
+      if (!row.uploadId)
+        throw new FileMultipartStateError(
+          "Completing multipart metadata is missing its R2 upload identifier.",
+        );
+      try {
+        await this.assertCurrentUploadAllowed(actor, row);
+      } catch (error) {
+        if (
+          error instanceof FileAccessError ||
+          error instanceof FilePolicyError
+        )
+          return this.failRevokedCompletion(
+            actor,
+            { ...row, uploadId: row.uploadId },
+            error,
+          );
+        throw error;
+      }
+    }
     if (row.status === "initiated") {
       if (row.expiresAt <= Math.floor(Date.now() / 1_000))
         throw new FileMultipartStateError(

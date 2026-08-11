@@ -11,7 +11,10 @@ import {
   eventExportResources,
   type EventExportResource,
 } from "~/platform/operations/data-export-service.server";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  WebhookService,
+  type PreparedWebhookEvent,
+} from "~/platform/operations/webhook-service.server";
 
 const importResources = eventExportResources.filter(
   (resource): resource is Exclude<EventExportResource, "audit"> =>
@@ -21,7 +24,52 @@ const importResourceSchema = z.enum(importResources);
 export type EventImportResource = z.infer<typeof importResourceSchema>;
 
 const IMPORT_BYTES_LIMIT = 512_000;
+// Leave headroom below Workers' 1,000 D1-query invocation limit for framework
+// and post-commit bookkeeping that is outside this service's estimate.
+const TASK_IMPORT_D1_QUERY_BUDGET = 800;
+const TASK_IMPORT_FIXED_QUERY_ALLOWANCE = 20;
 const rfc3339DateTime = z.iso.datetime({ offset: true });
+
+function requestedPersonEmails(
+  resource: EventImportResource,
+  rows: ReadonlyArray<Record<string, unknown>>,
+) {
+  const field =
+    resource === "people"
+      ? "email"
+      : resource === "submissions"
+        ? "submitterEmail"
+        : resource === "tasks"
+          ? "ownerEmail"
+          : null;
+  if (!field) return [];
+  return [
+    ...new Set(
+      rows
+        .map((row) =>
+          typeof row[field] === "string" ? row[field].trim().toLowerCase() : "",
+        )
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function requestedSpeakerTargetIds(
+  resource: EventImportResource,
+  rows: ReadonlyArray<Record<string, unknown>>,
+) {
+  if (resource !== "tasks") return [];
+  return [
+    ...new Set(
+      rows
+        .filter((row) => row.targetType === "speaker")
+        .map((row) =>
+          typeof row.targetId === "string" ? row.targetId.trim() : "",
+        )
+        .filter(Boolean),
+    ),
+  ];
+}
 
 const blankToNull = z
   .string()
@@ -221,6 +269,9 @@ type ValidationContextRecord = {
   status?: string;
   revision?: number;
   name?: string;
+  organisation?: string | null;
+  jobTitle?: string | null;
+  profileStatus?: string;
   building?: string | null;
   level?: string | null;
   capacity?: number;
@@ -435,15 +486,19 @@ export class DataImportService {
       throw new Error("CSV import files cannot exceed 512 KB.");
     }
     const parsed = parseCsv(input.csv);
-    const context = await this.validationContext(
-      viewer,
-      resource,
-      resource === "tasks"
-        ? parsed.rows
-            .map((row) => row.id?.trim())
-            .filter((id): id is string => Boolean(id))
-        : [],
-    );
+    const context = await this.validationContext(viewer, resource, {
+      requestedTaskIds:
+        resource === "tasks"
+          ? parsed.rows
+              .map((row) => row.id?.trim())
+              .filter((id): id is string => Boolean(id))
+          : [],
+      requestedPersonEmails: requestedPersonEmails(resource, parsed.rows),
+      requestedSpeakerTargetIds: requestedSpeakerTargetIds(
+        resource,
+        parsed.rows,
+      ),
+    });
     const valid: NormalizedImportRow[] = [];
     const invalid: InvalidImportRow[] = [];
     const fileKeys = new Set<string>();
@@ -478,6 +533,17 @@ export class DataImportService {
       fileKeys.add(duplicateKey);
       delete normalized.values.importKey;
       valid.push(normalized);
+    }
+
+    if (resource === "tasks" && invalid.length === 0) {
+      const changedTaskStatusCount = valid.filter(
+        (row) => row.values.statusTransition !== "none",
+      ).length;
+      await this.assertTaskImportQueryBudget(
+        viewer,
+        valid.length,
+        changedTaskStatusCount,
+      );
     }
 
     const operationId = crypto.randomUUID();
@@ -647,28 +713,38 @@ export class DataImportService {
       summary.resource === "tasks"
         ? rows.filter((row) => row.values.statusTransition !== "none")
         : [];
+    const taskWebhookEndpointCount =
+      summary.resource === "tasks"
+        ? await this.assertTaskImportQueryBudget(
+            viewer,
+            rows.length,
+            changedTaskStatusRows.length,
+          )
+        : 0;
     const completionAuditEventId = crypto.randomUUID();
     const webhookService = new WebhookService(this.env);
-    const preparedWebhooks = [];
-    for (const row of changedTaskStatusRows) {
-      const taskId = String(row.values.id);
-      preparedWebhooks.push(
-        await webhookService.prepareEventForAudit(
-          viewer,
-          {
-            eventType: "task.updated",
-            entityType: "task",
-            entityId: taskId,
-            idempotencyKey: `task.updated:${taskId}:${operationId}`,
-            correlationId: operationId,
-            data: {
-              action: "csv_import",
-              status: row.values.status,
+    const preparedWebhooks: PreparedWebhookEvent[] = [];
+    if (taskWebhookEndpointCount > 0) {
+      for (const row of changedTaskStatusRows) {
+        const taskId = String(row.values.id);
+        preparedWebhooks.push(
+          await webhookService.prepareEventForAudit(
+            viewer,
+            {
+              eventType: "task.updated",
+              entityType: "task",
+              entityId: taskId,
+              idempotencyKey: `task.updated:${taskId}:${operationId}`,
+              correlationId: operationId,
+              data: {
+                action: "csv_import",
+                status: row.values.status,
+              },
             },
-          },
-          completionAuditEventId,
-        ),
-      );
+            completionAuditEventId,
+          ),
+        );
+      }
     }
     const mutations = rows.flatMap((row) =>
       this.mutationStatements(viewer, operationId, summary.resource, row),
@@ -768,6 +844,12 @@ export class DataImportService {
     statements.push(
       ...preparedWebhooks.flatMap((webhook) => webhook.statements),
     );
+    this.assertPreparedTaskImportQueryBudget(
+      rows.length,
+      changedTaskStatusRows.length,
+      preparedWebhooks,
+      statements.length,
+    );
     const results = await this.env.DB.batch(statements);
     if ((results[0].meta.changes ?? 0) !== 1) {
       await this.assertSupportedAuthority(viewer, summary.resource);
@@ -779,10 +861,9 @@ export class DataImportService {
     if ((completion?.meta.changes ?? 0) !== 1) {
       throw new Error("The confirmed import did not reach a completed state.");
     }
-    const webhookWarning = await this.queueTaskStatusWebhooks(
-      viewer,
-      operationId,
-      changedTaskStatusRows,
+    const webhookWarning = await this.dispatchTaskStatusWebhooks(
+      webhookService,
+      preparedWebhooks,
     );
     return {
       operationId,
@@ -866,27 +947,15 @@ export class DataImportService {
     ];
   }
 
-  private async queueTaskStatusWebhooks(
-    viewer: Viewer,
-    operationId: string,
-    rows: readonly z.infer<typeof storedPreviewSchema>[],
+  private async dispatchTaskStatusWebhooks(
+    webhookService: WebhookService,
+    preparedWebhooks: readonly PreparedWebhookEvent[],
   ) {
-    if (rows.length === 0) return null;
+    if (preparedWebhooks.length === 0) return null;
     try {
-      const webhook = new WebhookService(this.env);
       const results = await Promise.all(
-        rows.map((row) =>
-          webhook.queueEvent(viewer, {
-            eventType: "task.updated",
-            entityType: "task",
-            entityId: String(row.values.id),
-            idempotencyKey: `task.updated:${String(row.values.id)}:${operationId}`,
-            correlationId: operationId,
-            data: {
-              action: "csv_import",
-              status: row.values.status,
-            },
-          }),
+        preparedWebhooks.map((prepared) =>
+          webhookService.dispatchPreparedEvent(prepared),
         ),
       );
       return results
@@ -899,11 +968,117 @@ export class DataImportService {
         ? "Task statuses were imported, but one or more outbound webhooks need attention in the Operation Centre."
         : null;
     } catch (error) {
-      console.error("Failed to record imported task status webhooks", {
+      console.error("Failed to dispatch imported task status webhooks", {
         errorName: error instanceof Error ? error.name : "UnknownError",
       });
-      return "Task statuses were imported, but their outbound webhook events could not all be recorded.";
+      return "Task statuses were imported, but their durable outbound webhook events could not all be dispatched.";
     }
+  }
+
+  private async activeTaskWebhookEndpointCount(viewer: Viewer) {
+    const row = await this.env.DB.prepare(
+      `SELECT COUNT(*) AS count
+         FROM webhook_endpoints endpoint
+         JOIN events event
+           ON event.id = endpoint.event_id AND event.organisation_id = ?
+        WHERE endpoint.event_id = ? AND endpoint.status IN ('active','failing')
+          AND EXISTS (
+            SELECT 1 FROM json_each(endpoint.event_types_json)
+             WHERE value = 'task.updated'
+          )`,
+    )
+      .bind(viewer.organisationId, viewer.eventId)
+      .first<{ count: number }>();
+    return row?.count ?? 0;
+  }
+
+  private taskImportQueryEstimate(
+    rowCount: number,
+    changedTaskStatusCount: number,
+    endpointCount: number,
+  ) {
+    return (
+      TASK_IMPORT_FIXED_QUERY_ALLOWANCE +
+      rowCount * 3 +
+      changedTaskStatusCount * (1 + endpointCount * 8)
+    );
+  }
+
+  private taskImportBudgetError(
+    rowCount: number,
+    changedTaskStatusCount: number,
+    endpointCount: number,
+  ) {
+    const available =
+      TASK_IMPORT_D1_QUERY_BUDGET -
+      TASK_IMPORT_FIXED_QUERY_ALLOWANCE -
+      rowCount * 3;
+    const perChangedTask = 1 + endpointCount * 8;
+    const maximumChangedTasks = Math.max(
+      0,
+      Math.floor(available / perChangedTask),
+    );
+    return new DataImportStateError(
+      `This import changes ${changedTaskStatusCount} task statuses with ${endpointCount} subscribed webhook endpoint${endpointCount === 1 ? "" : "s"}, which exceeds the safe D1 query budget. Split it so each file changes at most ${maximumChangedTasks} task statuses.`,
+    );
+  }
+
+  private async assertTaskImportQueryBudget(
+    viewer: Viewer,
+    rowCount: number,
+    changedTaskStatusCount: number,
+  ) {
+    const endpointCount =
+      changedTaskStatusCount > 0
+        ? await this.activeTaskWebhookEndpointCount(viewer)
+        : 0;
+    if (
+      this.taskImportQueryEstimate(
+        rowCount,
+        changedTaskStatusCount,
+        endpointCount,
+      ) > TASK_IMPORT_D1_QUERY_BUDGET
+    ) {
+      throw this.taskImportBudgetError(
+        rowCount,
+        changedTaskStatusCount,
+        endpointCount,
+      );
+    }
+    return endpointCount;
+  }
+
+  private assertPreparedTaskImportQueryBudget(
+    rowCount: number,
+    changedTaskStatusCount: number,
+    preparedWebhooks: readonly PreparedWebhookEvent[],
+    statementCount: number,
+  ) {
+    const deliveryCount = preparedWebhooks.reduce(
+      (total, prepared) =>
+        total + prepared.existingResults.length + prepared.candidates.length,
+      0,
+    );
+    const candidateCount = preparedWebhooks.reduce(
+      (total, prepared) => total + prepared.candidates.length,
+      0,
+    );
+    const estimate =
+      TASK_IMPORT_FIXED_QUERY_ALLOWANCE +
+      changedTaskStatusCount +
+      deliveryCount +
+      statementCount +
+      candidateCount * 2;
+    if (estimate <= TASK_IMPORT_D1_QUERY_BUDGET) return;
+    const endpointCount =
+      changedTaskStatusCount === 0
+        ? 0
+        : Math.ceil(deliveryCount / changedTaskStatusCount);
+    throw this.taskImportBudgetError(
+      rowCount,
+      changedTaskStatusCount,
+      endpointCount,
+    );
   }
 
   private async assertSupportedAuthority(
@@ -934,7 +1109,11 @@ export class DataImportService {
   private async validationContext(
     viewer: Viewer,
     resource: EventImportResource,
-    requestedTaskIds: readonly string[] = [],
+    options: {
+      requestedTaskIds?: readonly string[];
+      requestedPersonEmails?: readonly string[];
+      requestedSpeakerTargetIds?: readonly string[];
+    } = {},
   ) {
     const context: Record<string, Record<string, ValidationContextRecord>> = {};
     if (
@@ -942,32 +1121,81 @@ export class DataImportService {
       resource === "submissions" ||
       resource === "tasks"
     ) {
-      const people = await this.env.DB.prepare(
-        `SELECT p.id, lower(p.email) AS key, p.profile_revision AS revision,
+      const emails = [...new Set(options.requestedPersonEmails ?? [])].slice(
+        0,
+        200,
+      );
+      const people = emails.length
+        ? await this.env.DB.prepare(
+            `SELECT p.id, lower(p.email) AS key, p.profile_revision AS revision,
+                p.display_name AS name, p.organisation_name AS organisation,
+                p.job_title AS jobTitle, p.profile_status AS profileStatus,
                 EXISTS(
                   SELECT 1 FROM memberships m
                    WHERE m.person_id = p.id AND m.event_id = ?
                      AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL
                 ) AS linked
-           FROM people p`,
-      )
-        .bind(viewer.eventId)
-        .all<{ id: string; key: string; linked: number }>();
+           FROM people p
+          WHERE p.email IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
+          )
+            .bind(viewer.eventId, JSON.stringify(emails))
+            .all<{
+              id: string;
+              key: string;
+              revision: number;
+              name: string;
+              organisation: string | null;
+              jobTitle: string | null;
+              profileStatus: string;
+              linked: number;
+            }>()
+        : { results: [] };
       context.people = Object.fromEntries(
         people.results.map((row) => [row.key, row]),
       );
-      const memberships = await this.env.DB.prepare(
-        `SELECT lower(person.email) || char(0) || membership.role AS key,
+      const memberships = emails.length
+        ? await this.env.DB.prepare(
+            `SELECT lower(person.email) || char(0) || membership.role AS key,
                 membership.id
            FROM memberships membership
            JOIN people person ON person.id = membership.person_id
-          WHERE membership.event_id = ? AND membership.revoked_at IS NULL`,
-      )
-        .bind(viewer.eventId)
-        .all<{ id: string; key: string }>();
+          WHERE membership.event_id = ? AND membership.revoked_at IS NULL
+            AND person.email IN (
+              SELECT CAST(value AS TEXT) FROM json_each(?)
+            )`,
+          )
+            .bind(viewer.eventId, JSON.stringify(emails))
+            .all<{ id: string; key: string }>()
+        : { results: [] };
       context.memberships = Object.fromEntries(
         memberships.results.map((row) => [row.key, row]),
       );
+      if (resource === "tasks") {
+        const speakerTargetIds = [
+          ...new Set(options.requestedSpeakerTargetIds ?? []),
+        ].slice(0, 200);
+        const speakerTargets = speakerTargetIds.length
+          ? await this.env.DB.prepare(
+              `SELECT person.id
+                 FROM people person
+                WHERE person.id IN (
+                  SELECT CAST(value AS TEXT) FROM json_each(?)
+                )
+                  AND EXISTS (
+                    SELECT 1 FROM memberships membership
+                     WHERE membership.event_id = ?
+                       AND membership.person_id = person.id
+                       AND membership.accepted_at IS NOT NULL
+                       AND membership.revoked_at IS NULL
+                  )`,
+            )
+              .bind(JSON.stringify(speakerTargetIds), viewer.eventId)
+              .all<{ id: string }>()
+          : { results: [] };
+        context.speakerTargets = Object.fromEntries(
+          speakerTargets.results.map((row) => [row.id, row]),
+        );
+      }
     }
     if (resource === "submissions") {
       const rows = await this.env.DB.prepare(
@@ -1075,7 +1303,10 @@ export class DataImportService {
       }
     }
     if (resource === "tasks") {
-      const taskIds = [...new Set(requestedTaskIds)].slice(0, 200);
+      const taskIds = [...new Set(options.requestedTaskIds ?? [])].slice(
+        0,
+        200,
+      );
       const rows = taskIds.length
         ? await this.env.DB.prepare(
             `SELECT task.id, task.id AS key, task.event_id AS eventId,
@@ -1146,9 +1377,22 @@ export class DataImportService {
     if (resource === "people") {
       const key = String(values.email).toLowerCase();
       const existing = context.people?.[key];
+      if (
+        existing &&
+        (existing.name !== values.name ||
+          existing.organisation !== values.organisation ||
+          existing.jobTitle !== values.jobTitle ||
+          existing.profileStatus !== values.profileStatus)
+      ) {
+        return {
+          errors: [
+            "email identifies an existing person; profile fields must match the existing identity because CSV imports can only link its event membership",
+          ],
+        };
+      }
       return {
         rowNumber,
-        action: existing ? (existing.linked ? "update" : "link") : "create",
+        action: existing ? "link" : "create",
         values: {
           ...values,
           importKey: key,
@@ -1321,12 +1565,7 @@ export class DataImportService {
     if (targetType === "session" && !context.sessionIds?.[targetId]) {
       return { errors: ["session task targetId does not match this event"] };
     }
-    if (
-      targetType === "speaker" &&
-      !Object.values(context.people ?? {}).some(
-        (person) => person.id === targetId && person.linked,
-      )
-    ) {
+    if (targetType === "speaker" && !context.speakerTargets?.[targetId]) {
       return {
         errors: [
           "speaker task targetId does not match a person linked to this event",
@@ -1366,11 +1605,18 @@ export class DataImportService {
       .first<{ sessionFormatsJson: string }>();
     if (!event)
       throw new DataImportStateError("The import event no longer exists.");
-    const context = await this.validationContext(
-      viewer,
-      resource,
-      resource === "tasks" ? rows.map((row) => String(row.values.id)) : [],
-    );
+    const context = await this.validationContext(viewer, resource, {
+      requestedTaskIds:
+        resource === "tasks" ? rows.map((row) => String(row.values.id)) : [],
+      requestedPersonEmails: requestedPersonEmails(
+        resource,
+        rows.map((row) => row.values),
+      ),
+      requestedSpeakerTargetIds: requestedSpeakerTargetIds(
+        resource,
+        rows.map((row) => row.values),
+      ),
+    });
     if (
       resource === "sessions" &&
       rows.some((row) => !context.sessionFormats?.[String(row.values.format)])
@@ -1470,10 +1716,7 @@ export class DataImportService {
           ? values.targetId === viewer.eventId
           : values.targetType === "session"
             ? Boolean(context.sessionIds?.[String(values.targetId)])
-            : Object.values(context.people ?? {}).some(
-                (person) =>
-                  person.id === values.targetId && Boolean(person.linked),
-              );
+            : Boolean(context.speakerTargets?.[String(values.targetId)]);
       return (
         (row.action === "create"
           ? current !== undefined
@@ -1821,14 +2064,7 @@ export class DataImportService {
            profile_status, last_operation_id, created_at, updated_at
          ) SELECT ?, ?, ?, 0, ?, ?, ?, ?, unixepoch(), unixepoch()
           WHERE ${operationGuard}
-         ON CONFLICT(email) DO UPDATE SET
-           display_name = CASE WHEN ? = 'link' THEN people.display_name ELSE excluded.display_name END,
-           organisation_name = CASE WHEN ? = 'link' THEN people.organisation_name ELSE excluded.organisation_name END,
-           job_title = CASE WHEN ? = 'link' THEN people.job_title ELSE excluded.job_title END,
-           profile_status = CASE WHEN ? = 'link' THEN people.profile_status ELSE excluded.profile_status END,
-           last_operation_id = excluded.last_operation_id,
-           profile_revision = CASE WHEN ? = 'link' THEN people.profile_revision ELSE people.profile_revision + 1 END,
-           updated_at = unixepoch()`,
+         ON CONFLICT(email) DO NOTHING`,
       ).bind(
         value.id,
         value.email,
@@ -1840,11 +2076,6 @@ export class DataImportService {
         operationId,
         viewer.eventId,
         viewer.organisationId,
-        row.action,
-        row.action,
-        row.action,
-        row.action,
-        row.action,
       );
       const membership = this.env.DB.prepare(
         `INSERT INTO memberships (

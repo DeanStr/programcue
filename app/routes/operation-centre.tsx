@@ -866,8 +866,8 @@ export default function OperationCentre({ loaderData }: Route.ComponentProps) {
                     if (
                       !window.confirm(
                         previewedTaskTransitions.length
-                          ? `Commit every create and update shown in this import preview, including ${previewedTaskTransitions.length} listed task lifecycle change${previewedTaskTransitions.length === 1 ? "" : "s"}?`
-                          : "Commit every create and update shown in this import preview?",
+                          ? `Commit every create, update and membership link shown in this import preview, including ${previewedTaskTransitions.length} listed task lifecycle change${previewedTaskTransitions.length === 1 ? "" : "s"}?`
+                          : "Commit every create, update and membership link shown in this import preview?",
                       )
                     )
                       event.preventDefault();

@@ -6,6 +6,8 @@ import { requiresProductionSecurity } from "~/platform/runtime-environment.serve
 const SITEVERIFY_URL =
   "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const SITEVERIFY_RESPONSE_MAX_BYTES = 16_384;
+const RATE_LIMIT_RETENTION_SECONDS = 3_600;
+const RATE_LIMIT_CLEANUP_BATCH_SIZE = 100;
 
 type AbuseEnvironment = CloudflareEnvironment & {
   TURNSTILE_SECRET_KEY?: string;
@@ -64,6 +66,9 @@ const policies = {
       windowSeconds: 3_600,
       blockSeconds: 3_600,
     },
+  ],
+  public_itinerary_create: [
+    { dimension: "ip", limit: 10, windowSeconds: 3_600, blockSeconds: 3_600 },
   ],
 } as const satisfies Record<string, ReadonlyArray<RatePolicy>>;
 
@@ -186,9 +191,27 @@ async function consumeRateLimit(
   now: number,
 ) {
   const cutoff = now - policy.windowSeconds;
-  const row = await database
-    .prepare(
-      `
+  const [, consumed] = await database.batch([
+    database
+      .prepare(
+        `DELETE FROM abuse_rate_limits
+          WHERE scope_key IN (
+            SELECT scope_key
+              FROM abuse_rate_limits
+             WHERE updated_at <= ?
+               AND COALESCE(blocked_until, 0) <= ?
+             ORDER BY updated_at, scope_key
+             LIMIT ?
+          )`,
+      )
+      .bind(
+        now - RATE_LIMIT_RETENTION_SECONDS,
+        now,
+        RATE_LIMIT_CLEANUP_BATCH_SIZE,
+      ),
+    database
+      .prepare(
+        `
       INSERT INTO abuse_rate_limits (
         scope_key, window_started_at, request_count, blocked_until, updated_at
       ) VALUES (?, ?, 1, 0, ?)
@@ -215,18 +238,20 @@ async function consumeRateLimit(
         updated_at = excluded.updated_at
       RETURNING request_count AS requestCount, blocked_until AS blockedUntil
     `,
-    )
-    .bind(
-      key,
-      now,
-      now,
-      cutoff,
-      cutoff,
-      cutoff,
-      policy.limit,
-      policy.blockSeconds,
-    )
-    .first<{ requestCount: number; blockedUntil: number }>();
+      )
+      .bind(
+        key,
+        now,
+        now,
+        cutoff,
+        cutoff,
+        cutoff,
+        policy.limit,
+        policy.blockSeconds,
+      ),
+  ]);
+  const row = consumed.results?.[0] as
+    { requestCount: number; blockedUntil: number } | undefined;
   if (!row) {
     throw new Error("The D1 abuse-rate-limit mutation returned no state.");
   }
