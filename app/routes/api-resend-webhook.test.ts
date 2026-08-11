@@ -171,7 +171,10 @@ describe("Resend webhook route methods", () => {
     const body = JSON.stringify({
       type: "email.delivered",
       created_at: new Date().toISOString(),
-      data: { email_id: `not-yet-persisted-${crypto.randomUUID()}` },
+      data: {
+        email_id: `not-yet-persisted-${crypto.randomUUID()}`,
+        tags: { program_cue_delivery: "tracked" },
+      },
     });
     const response = await action({
       request: await signedWebhook(body, secret),
@@ -187,6 +190,30 @@ describe("Resend webhook route methods", () => {
     await expect(response.json()).resolves.toEqual({
       error:
         "The delivery is not available for reconciliation yet; retry this webhook.",
+    });
+  });
+
+  it("acknowledges verified events for untracked system emails", async () => {
+    const secret = `whsec_${btoa("program-cue-webhook-test-secret")}`;
+    const body = JSON.stringify({
+      type: "email.delivered",
+      created_at: new Date().toISOString(),
+      data: { email_id: `system-email-${crypto.randomUUID()}` },
+    });
+    const response = await action({
+      request: await signedWebhook(body, secret),
+      params: {},
+      context: context({
+        ...(testEnv as unknown as CloudflareEnvironment),
+        RESEND_WEBHOOK_SECRET: secret,
+      } as CloudflareEnvironment),
+    } as never);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      matched: false,
+      duplicate: false,
+      ignored: true,
     });
   });
 });

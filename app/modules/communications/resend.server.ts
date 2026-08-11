@@ -55,6 +55,7 @@ export class ResendEmailProvider implements EmailProvider {
         html: input.html,
         text: input.text,
         ...(input.replyTo ? { reply_to: input.replyTo } : {}),
+        ...(input.tags?.length ? { tags: input.tags } : {}),
         ...(input.attachments?.length ? {
           attachments: input.attachments.map((attachment) => ({
             filename: attachment.filename,

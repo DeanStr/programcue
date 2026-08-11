@@ -986,19 +986,25 @@ describe("calendar lifecycle", () => {
     });
 
     let calendarAttachment = "";
+    let calendarTags: unknown;
     const provider = new ResendEmailProvider(
       "calendar-provider-key",
       async (_input, init) => {
         const body = JSON.parse(String(init?.body)) as {
           attachments: Array<{ content: string }>;
+          tags?: unknown;
         };
         calendarAttachment = atob(body.attachments[0].content);
+        calendarTags = body.tags;
         return Response.json({ id: "resend-calendar-001" });
       },
     );
     await processCalendarSync(queued[0], testEnv, { email: provider });
     expect(calendarAttachment).toContain("METHOD:REQUEST");
     expect(calendarAttachment).toContain("SEQUENCE:0");
+    expect(calendarTags).toEqual([
+      { name: "program_cue_delivery", value: "tracked" },
+    ]);
     expect(realtime).toHaveLength(1);
     expect(realtime[0]).toMatchObject({
       type: "event-change",

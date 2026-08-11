@@ -6,7 +6,10 @@ import {
   formatEventDateMarkers,
   renderMergeTemplate,
 } from "../../app/modules/communications/merge-template";
-import type { EmailProvider } from "../../app/modules/communications/email-provider";
+import {
+  TRACKED_DELIVERY_EMAIL_TAG,
+  type EmailProvider,
+} from "../../app/modules/communications/email-provider";
 import { createCommunicationUnsubscribeUrl } from "../../app/modules/communications/unsubscribe.server";
 import {
   assertOperationClaim,
@@ -342,6 +345,7 @@ export async function deliverCommunicationBatch(input: {
         html: rendered.html,
         text: rendered.text,
         idempotencyKey: delivery.idempotencyKey,
+        tags: [TRACKED_DELIVERY_EMAIL_TAG],
       });
       const deliveryCompletionResults = await env.DB.batch([
         env.DB.prepare(
