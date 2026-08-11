@@ -8,6 +8,7 @@ import {
 import {
   AirtableClient,
   AirtableProviderError,
+  airtableEqualsFormula,
   type AirtableRecord,
   type AirtableTable,
 } from "./airtable-client.server";
@@ -92,6 +93,7 @@ type AirtableClientPort = Pick<
   | "createField"
   | "listRecords"
   | "upsertRecords"
+  | "deleteRecords"
 >;
 
 type CachedRooms = Omit<AirtableRoomSnapshot, "cached">;
@@ -407,6 +409,47 @@ export class AirtableRoomRepository {
       );
       eventDataTables[key] = { id: table.id, name: table.name };
     }
+    const validationId = crypto.randomUUID();
+    const validationKey = `connection-validation-${validationId}`;
+    const validationEventId = `connection-validation:${viewer.eventId}:${validationId}`;
+    const validationWrite = await client.upsertRecords(roomTable.id, [
+      {
+        fields: {
+          "Program Cue ID": validationKey,
+          "Event ID": validationEventId,
+          Name: "Program Cue connection validation",
+          Capacity: 1,
+          Position: 0,
+          Status: "retired",
+          Revision: 1,
+          Building: "",
+          Level: "",
+          "Resources JSON": "[]",
+        },
+      },
+    ]);
+    const validationRecord = validationWrite.records.find(
+      (record) => record.fields["Program Cue ID"] === validationKey,
+    );
+    if (!validationRecord)
+      throw new AirtableRepositoryConfigurationError(
+        "Airtable did not return the connection-validation record after writing it.",
+      );
+    const validationRead = await client.listRecords(roomTable.id, {
+      filterByFormula: airtableEqualsFormula("Program Cue ID", validationKey),
+      fields: ["Program Cue ID", "Event ID"],
+    });
+    const observedValidationRecord = validationRead.find(
+      (record) =>
+        record.id === validationRecord.id &&
+        record.fields["Program Cue ID"] === validationKey &&
+        record.fields["Event ID"] === validationEventId,
+    );
+    if (!observedValidationRecord)
+      throw new AirtableRepositoryConfigurationError(
+        "Airtable did not return the connection-validation record when it was read back.",
+      );
+    await client.deleteRecords(roomTable.id, [observedValidationRecord.id]);
     const connectionId = existing?.id ?? crypto.randomUUID();
     const encryptedCredentials = await encryptIntegrationCredentials(
       credentials,
@@ -671,6 +714,10 @@ export class AirtableRoomRepository {
 
     const records = await this.client(connection.credentials).listRecords(
       connection.configuration.tables.rooms.id,
+      {
+        filterByFormula: airtableEqualsFormula("Event ID", eventId),
+        fields: AIRTABLE_ROOM_FIELDS.map((field) => field.name),
+      },
     );
     const rooms = records
       .map((record) => parseRoomRecord(record, eventId))

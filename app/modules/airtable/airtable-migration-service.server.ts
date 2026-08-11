@@ -9,7 +9,11 @@ import {
 } from "./airtable-room-repository.server";
 import { AirtableProgrammeRepository } from "./airtable-programme-repository.server";
 import { AirtableEventDataRepository } from "./airtable-event-data-repository.server";
-import { airtableRoomSchema, type AirtableRoom } from "./airtable-schema";
+import {
+  AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES,
+  airtableRoomSchema,
+  type AirtableRoom,
+} from "./airtable-schema";
 
 const migrationTargetSchema = z.enum(["d1", "airtable"]);
 
@@ -358,6 +362,11 @@ export class AirtableMigrationService {
       control.repositoryProvider,
       control.revision,
     );
+    const changedItems = plan.items.filter((item) => item.action !== "noop");
+    if (changedItems.length > AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES)
+      throw new AirtableMigrationStateError(
+        `This migration would change ${changedItems.length} managed records; the synchronous Airtable migration limit is ${AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES}. Keep this event on D1 rather than starting a migration that cannot finish safely in one request.`,
+      );
     const planFingerprint = await fingerprint(plan.items);
     const previewId = crypto.randomUUID();
     const now = Math.floor(this.now() / 1_000);
@@ -388,7 +397,7 @@ export class AirtableMigrationService {
         control.repositoryProvider === "d1" ? "outbound" : "inbound",
         JSON.stringify(summary),
       ),
-      ...plan.items.map((item) =>
+      ...changedItems.map((item) =>
         this.env.DB.prepare(
           `INSERT INTO integration_run_items (
              id, run_id, entity_type, entity_id, action, status, diff_json,
@@ -433,7 +442,7 @@ export class AirtableMigrationService {
       expiresAt: summary.expiresAt,
       sourceFetchedAt: summary.sourceFetchedAt,
       counts: summary.counts,
-      items: plan.items,
+      items: changedItems,
     } satisfies AirtableMigrationPreview;
   }
 
@@ -855,6 +864,11 @@ export class AirtableMigrationService {
       );
     }
     const plan = await this.currentPlan(viewer, summary.from, control.revision);
+    const changedItems = plan.items.filter((item) => item.action !== "noop");
+    if (changedItems.length > AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES)
+      throw new AirtableMigrationStateError(
+        `The migration now contains ${changedItems.length} managed changes, above the ${AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES}-record synchronous limit. Create a smaller event or keep it on D1.`,
+      );
     if ((await fingerprint(plan.items)) !== summary.fingerprint)
       throw new AirtableMigrationStateError(
         "The D1 or Airtable event data changed after preview. Review a new migration diff before confirming.",
@@ -890,7 +904,7 @@ export class AirtableMigrationService {
         summary.from === "d1" ? "outbound" : "inbound",
         JSON.stringify(liveSummary),
       ),
-      ...plan.items.map((item) =>
+      ...changedItems.map((item) =>
         this.env.DB.prepare(
           `INSERT INTO integration_run_items (
              id, run_id, entity_type, entity_id, action, status, diff_json,
@@ -913,9 +927,7 @@ export class AirtableMigrationService {
         "The confirmed Airtable migration could not be recorded completely.",
       );
 
-    const expectedCompletedItems = plan.items.filter(
-      (item) => item.action !== "noop",
-    ).length;
+    const expectedCompletedItems = changedItems.length;
     if (summary.to === "airtable") {
       await this.completeAirtableMigration(
         viewer,

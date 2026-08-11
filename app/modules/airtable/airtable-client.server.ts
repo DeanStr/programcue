@@ -40,8 +40,37 @@ const upsertRecordsResponse = z.object({
   updatedRecords: z.array(z.string().min(1).max(512)).optional(),
 });
 
+const deleteRecordsResponse = z.object({
+  records: z.array(
+    z.object({
+      id: z.string().min(1).max(512),
+      deleted: z.literal(true),
+    }),
+  ),
+});
+
 export type AirtableTable = z.infer<typeof airtableTableSchema>;
 export type AirtableRecord = z.infer<typeof recordSchema>;
+export type AirtableListRecordsOptions = {
+  filterByFormula: string;
+  fields: readonly string[];
+};
+
+export function airtableEqualsFormula(field: string, value: string) {
+  if (!/^[A-Za-z][A-Za-z0-9 ]*$/.test(field))
+    throw new TypeError("Airtable formula field names must be canonical.");
+  return `{${field}}=${JSON.stringify(value)}`;
+}
+
+export function airtableAndFormula(...expressions: string[]) {
+  if (!expressions.length)
+    throw new TypeError(
+      "At least one Airtable formula expression is required.",
+    );
+  return expressions.length === 1
+    ? expressions[0]!
+    : `AND(${expressions.join(",")})`;
+}
 
 export class AirtableProviderError extends Error {
   constructor(
@@ -238,12 +267,22 @@ export class AirtableClient {
     return airtableFieldSchema.parse(body);
   }
 
-  async listRecords(tableId: string) {
+  async listRecords(tableId: string, options: AirtableListRecordsOptions) {
+    if (!options?.filterByFormula.trim())
+      throw new TypeError(
+        "Airtable record reads require an explicit filter formula.",
+      );
+    if (!options.fields.length || options.fields.some((field) => !field.trim()))
+      throw new TypeError(
+        "Airtable record reads require at least one explicit managed field.",
+      );
     const records: AirtableRecord[] = [];
     let offset: string | undefined;
     let pages = 0;
     do {
       const query = new URLSearchParams({ pageSize: "100" });
+      query.set("filterByFormula", options.filterByFormula);
+      for (const field of options.fields) query.append("fields[]", field);
       if (offset) query.set("offset", offset);
       const body = await this.request(
         `/v0/${encodeURIComponent(this.credentials.baseId)}/${encodeURIComponent(tableId)}?${query}`,
@@ -284,5 +323,28 @@ export class AirtableClient {
       },
     );
     return upsertRecordsResponse.parse(body);
+  }
+
+  async deleteRecords(tableId: string, recordIds: readonly string[]) {
+    if (!recordIds.length || recordIds.length > MAX_BATCH_SIZE) {
+      throw new RangeError(
+        `Airtable delete batches must contain between 1 and ${MAX_BATCH_SIZE} record IDs.`,
+      );
+    }
+    const query = new URLSearchParams();
+    for (const recordId of recordIds) query.append("records[]", recordId);
+    const body = await this.request(
+      `/v0/${encodeURIComponent(this.credentials.baseId)}/${encodeURIComponent(tableId)}?${query}`,
+      { method: "DELETE" },
+    );
+    const result = deleteRecordsResponse.parse(body);
+    const deleted = new Set(result.records.map((record) => record.id));
+    if (recordIds.some((recordId) => !deleted.has(recordId)))
+      throw new AirtableProviderError(
+        "Airtable did not confirm deletion of every connection-validation record.",
+        502,
+        "INCOMPLETE_DELETE",
+      );
+    return result;
   }
 }
