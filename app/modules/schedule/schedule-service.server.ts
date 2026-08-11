@@ -3,16 +3,28 @@ import {
   scheduleCalendarFanoutMessageSchema,
   type ScheduleCalendarFanoutMessage,
 } from "~/modules/calendars/calendar-schema";
-import { scheduleCalendarFanoutSnapshotStatements } from "~/modules/calendars/calendar-service.server";
 import { AirtableProgrammeRepository } from "~/modules/airtable/airtable-programme-repository.server";
 import {
   AirtableProviderBoundary,
   airtableCommandKey,
   airtableIntentCommand,
 } from "~/modules/airtable/airtable-provider-boundary.server";
-import { parseSessionFormatsConfiguration } from "~/modules/events/event-configuration";
-import { eventResourceSchema } from "~/modules/events/event-schema";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  ScheduleConfigurationError,
+  ScheduleIdempotencyConflictError,
+  ScheduleNotFoundError,
+  SchedulePlacementBlockedError,
+  SchedulePublicationBlockedError,
+  ScheduleRevisionConflictError,
+  ScheduleUndoUnavailableError,
+} from "./schedule-errors";
+import { buildSchedulePublicationStatements } from "./schedule-publication-statements.server";
+import {
+  detectWorkspaceConflicts,
+  loadScheduleWorkspaceD1,
+  schedulePolicyAction,
+} from "./schedule-workspace.server";
 import {
   detectScheduleConflicts,
   type ScheduleConflict,
@@ -31,7 +43,7 @@ import {
   scheduleUndoSchema,
 } from "./schedule-schema";
 
-type WorkspaceEvent = {
+export type WorkspaceEvent = {
   id: string;
   name: string;
   startsAt: number;
@@ -119,119 +131,15 @@ export type ScheduleWorkspace = {
   policyRevision: number;
 };
 
-function detectWorkspaceConflicts(workspace: ScheduleWorkspace) {
-  const sessionById = new Map(
-    workspace.sessions.map((session) => [session.id, session]),
-  );
-  const scheduled: ScheduledItem[] = workspace.entries.map((entry) => {
-    const session = sessionById.get(entry.sessionId);
-    if (!session) {
-      throw new Error(
-        `Schedule entry ${entry.id} references an unavailable session.`,
-      );
-    }
-    return {
-      ...entry,
-      entryId: entry.id,
-      trackId: session.trackId,
-      trackExclusive: session.trackExclusive,
-      speakerIds: session.speakerIds,
-      expectedAttendance: session.expectedAttendance,
-      requiredResources: session.requiredResources,
-      title: session.title,
-    };
-  });
-  const conflicts: Array<{ entryId: string; conflict: ScheduleConflict }> = [];
-  const overlapPairs = new Set<string>();
-  for (const entry of scheduled) {
-    const detected = detectScheduleConflicts({
-      candidate: entry,
-      existing: scheduled,
-      rooms: workspace.rooms,
-      eventStartsAt: workspace.event.startsAt,
-      eventEndsAt: workspace.event.endsAt,
-      eventTimezone: workspace.event.timezone,
-      policies: workspace.policies,
-      excludeEntryId: entry.entryId,
-    });
-    for (const conflict of detected) {
-      if (conflict.conflictingEntryId) {
-        const pair = [entry.entryId, conflict.conflictingEntryId].sort();
-        const fingerprint = `${conflict.type}:${pair[0]}:${pair[1]}`;
-        if (overlapPairs.has(fingerprint)) continue;
-        overlapPairs.add(fingerprint);
-      }
-      conflicts.push({ entryId: entry.entryId, conflict });
-    }
-  }
-  return conflicts;
-}
-
-export class ScheduleRevisionConflictError extends Error {
-  constructor() {
-    super(
-      "The schedule changed after this page loaded. Refresh before applying another change.",
-    );
-    this.name = "ScheduleRevisionConflictError";
-  }
-}
-
-export class ScheduleUndoUnavailableError extends Error {
-  constructor(
-    message = "This schedule change can no longer be undone. Refresh to see the authoritative schedule.",
-  ) {
-    super(message);
-    this.name = "ScheduleUndoUnavailableError";
-  }
-}
-
-export class ScheduleNotFoundError extends Error {
-  constructor(message = "Draft schedule not found.") {
-    super(message);
-    this.name = "ScheduleNotFoundError";
-  }
-}
-
-export class SchedulePublicationBlockedError extends Error {
-  constructor(
-    readonly conflicts: ReadonlyArray<ScheduleConflict>,
-    message?: string,
-  ) {
-    super(
-      message ??
-        `Resolve ${conflicts.length} blocking schedule conflict${conflicts.length === 1 ? "" : "s"} before publishing.`,
-    );
-    this.name = "SchedulePublicationBlockedError";
-  }
-}
-
-export class SchedulePlacementBlockedError extends Error {
-  constructor(readonly conflicts: ReadonlyArray<ScheduleConflict>) {
-    super(
-      `Resolve ${conflicts.length} blocking schedule conflict${conflicts.length === 1 ? "" : "s"} before placing this session.`,
-    );
-    this.name = "SchedulePlacementBlockedError";
-  }
-}
-
-export class ScheduleConfigurationError extends Error {
-  constructor(
-    message = "This event is missing its required schedule policy configuration.",
-  ) {
-    super(message);
-    this.name = "ScheduleConfigurationError";
-  }
-}
-
-export class ScheduleIdempotencyConflictError extends Error {
-  constructor(
-    readonly code: "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_REQUEST_IN_PROGRESS",
-    message: string,
-  ) {
-    super(message);
-    this.name = "ScheduleIdempotencyConflictError";
-  }
-}
+export {
+  ScheduleConfigurationError,
+  ScheduleIdempotencyConflictError,
+  ScheduleNotFoundError,
+  SchedulePlacementBlockedError,
+  SchedulePublicationBlockedError,
+  ScheduleRevisionConflictError,
+  ScheduleUndoUnavailableError,
+} from "./schedule-errors";
 
 export type ScheduleEventScope = Pick<Viewer, "organisationId" | "eventId">;
 export type ScheduleAuditActor =
@@ -282,14 +190,6 @@ export type SchedulePublicationResult = {
     dispatchError: string | null;
   };
 };
-
-function policy(value: string): "ignore" | "warn" | "block" {
-  if (value === "allow") return "ignore";
-  if (value === "warn" || value === "block") return value;
-  throw new ScheduleConfigurationError(
-    `Unsupported schedule policy action: ${value}.`,
-  );
-}
 
 function entrySnapshot(value: unknown): ScheduleEntrySnapshot | null {
   if (value === null) return null;
@@ -416,363 +316,6 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
     warnings: parsedWarnings,
     undo: { token: parsedUndo.token, expiresAt: parsedUndo.expiresAt },
   };
-}
-
-function buildSchedulePublicationStatements(input: {
-  env: CloudflareEnvironment;
-  viewer: ScheduleEventScope;
-  actor: ScheduleAuditActor;
-  command?: SchedulePublicationCommand;
-  parsed: ReturnType<typeof schedulePublishSchema.parse>;
-  workspace: ScheduleWorkspace;
-  detectedConflicts: ReturnType<typeof detectWorkspaceConflicts>;
-  publishOperationId: string;
-  calendarOperationId: string;
-  calendarIdempotencyKey: string;
-  calendarMessage: ScheduleCalendarFanoutMessage;
-  auditEventId: string;
-  conflictInsert: (
-    entryId: string,
-    conflict: ScheduleConflict,
-    operationId: string,
-  ) => D1PreparedStatement;
-}) {
-  const {
-    env,
-    viewer,
-    actor,
-    command,
-    parsed,
-    workspace,
-    detectedConflicts,
-    publishOperationId,
-    calendarOperationId,
-    calendarIdempotencyKey,
-    calendarMessage,
-    auditEventId,
-    conflictInsert,
-  } = input;
-  const idempotencyRecordId = command ? crypto.randomUUID() : null;
-  const commandGuard = command
-    ? `AND EXISTS (
-           SELECT 1 FROM idempotency_records command
-            WHERE command.id = ? AND command.organisation_id = ?
-              AND command.event_id = ? AND command.actor_id = ?
-              AND command.scope = 'schedule.publish'
-              AND command.idempotency_key = ?
-              AND command.request_hash = ? AND command.status = 'processing'
-         )`
-    : "";
-  const commandGuardBindings = command
-    ? [
-        idempotencyRecordId,
-        viewer.organisationId,
-        viewer.eventId,
-        command.actorId,
-        command.idempotencyKey,
-        command.requestHash,
-      ]
-    : [];
-  const statements: D1PreparedStatement[] = [];
-  if (command) {
-    statements.push(
-      env.DB.prepare(
-        `
-          DELETE FROM idempotency_records
-           WHERE organisation_id = ? AND event_id = ? AND actor_id = ?
-             AND scope = 'schedule.publish' AND idempotency_key = ?
-             AND expires_at <= unixepoch()
-        `,
-      ).bind(
-        viewer.organisationId,
-        viewer.eventId,
-        command.actorId,
-        command.idempotencyKey,
-      ),
-      env.DB.prepare(
-        `
-          INSERT OR IGNORE INTO idempotency_records (
-            id, organisation_id, event_id, actor_id, scope, idempotency_key,
-            request_hash, status, expires_at, created_at
-          ) VALUES (?, ?, ?, ?, 'schedule.publish', ?, ?, 'processing',
-                    unixepoch() + 2592000, unixepoch())
-        `,
-      ).bind(
-        idempotencyRecordId,
-        viewer.organisationId,
-        viewer.eventId,
-        command.actorId,
-        command.idempotencyKey,
-        command.requestHash,
-      ),
-    );
-  }
-  const publishingIndex = statements.length;
-  statements.push(
-    env.DB.prepare(
-      `
-        UPDATE schedule_versions
-           SET status = 'publishing', revision = revision + 1, publication_operation_id = ?
-         WHERE id = ? AND event_id = ? AND status = 'draft' AND revision = ?
-           AND EXISTS (
-             SELECT 1 FROM events
-              WHERE id = ? AND organisation_id = ? AND revision = ?
-           )
-           AND NOT EXISTS (
-             SELECT 1
-               FROM schedule_entries entry
-               LEFT JOIN schedule_session_contents content
-                 ON content.schedule_version_id = entry.schedule_version_id
-                AND content.event_id = entry.event_id
-                AND content.session_id = entry.session_id
-              WHERE entry.schedule_version_id = ? AND entry.event_id = ?
-                AND content.session_id IS NULL
-           )
-           ${commandGuard}
-      `,
-    ).bind(
-      publishOperationId,
-      parsed.scheduleVersionId,
-      viewer.eventId,
-      parsed.scheduleRevision,
-      viewer.eventId,
-      viewer.organisationId,
-      workspace.event.revision,
-      parsed.scheduleVersionId,
-      viewer.eventId,
-      ...commandGuardBindings,
-    ),
-    env.DB.prepare(
-      `
-        UPDATE schedule_versions SET status = 'archived'
-         WHERE event_id = ? AND status = 'published' AND id <> ?
-           AND EXISTS (SELECT 1 FROM schedule_versions WHERE id = ? AND publication_operation_id = ?)
-      `,
-    ).bind(
-      viewer.eventId,
-      parsed.scheduleVersionId,
-      parsed.scheduleVersionId,
-      publishOperationId,
-    ),
-    env.DB.prepare(
-      `
-        UPDATE schedule_versions
-           SET status = 'published', published_at = unixepoch()
-         WHERE id = ? AND event_id = ? AND status = 'publishing' AND publication_operation_id = ?
-      `,
-    ).bind(parsed.scheduleVersionId, viewer.eventId, publishOperationId),
-    env.DB.prepare(
-      `
-        UPDATE sessions SET status = 'published', revision = revision + 1, updated_at = unixepoch()
-         WHERE event_id = ? AND id IN (SELECT session_id FROM schedule_entries WHERE schedule_version_id = ?)
-           AND EXISTS (SELECT 1 FROM schedule_versions WHERE id = ? AND publication_operation_id = ?)
-      `,
-    ).bind(
-      viewer.eventId,
-      parsed.scheduleVersionId,
-      parsed.scheduleVersionId,
-      publishOperationId,
-    ),
-    env.DB.prepare(
-      `
-        DELETE FROM schedule_conflicts
-         WHERE event_id = ? AND schedule_version_id = ?
-           AND EXISTS (
-             SELECT 1 FROM schedule_versions
-              WHERE id = ? AND publication_operation_id = ?
-           )
-      `,
-    ).bind(
-      viewer.eventId,
-      parsed.scheduleVersionId,
-      parsed.scheduleVersionId,
-      publishOperationId,
-    ),
-    ...detectedConflicts.map(({ entryId, conflict }) =>
-      conflictInsert(entryId, conflict, publishOperationId),
-    ),
-    env.DB.prepare(
-      `
-        UPDATE events
-           SET programme_published_at = unixepoch(), revision = revision + 1,
-               last_operation_id = ?, updated_at = unixepoch()
-         WHERE id = ? AND organisation_id = ? AND revision = ?
-           AND EXISTS (SELECT 1 FROM schedule_versions WHERE id = ? AND publication_operation_id = ?)
-      `,
-    ).bind(
-      publishOperationId,
-      viewer.eventId,
-      viewer.organisationId,
-      workspace.event.revision,
-      parsed.scheduleVersionId,
-      publishOperationId,
-    ),
-    env.DB.prepare(
-      `
-        INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, actor_id, action, entity_type, entity_id, metadata_json, created_at
-        )
-        SELECT ?, ?, ?, ?, ?, 'schedule.published', 'schedule_version', ?, ?, unixepoch()
-         WHERE EXISTS (SELECT 1 FROM schedule_versions WHERE id = ? AND publication_operation_id = ?)
-      `,
-    ).bind(
-      auditEventId,
-      viewer.organisationId,
-      viewer.eventId,
-      actor.personId ?? null,
-      actor.actorId ?? null,
-      parsed.scheduleVersionId,
-      JSON.stringify({ entryCount: workspace.entries.length }),
-      parsed.scheduleVersionId,
-      publishOperationId,
-    ),
-    env.DB.prepare(
-      `
-        INSERT INTO operation_jobs (
-          id, organisation_id, event_id, requested_by_person_id, type, idempotency_key,
-          correlation_id, status, payload_json, progress_total, progress_completed,
-          progress_failed, cancellable, created_at, updated_at
-        )
-        SELECT ?, ?, ?, ?, 'schedule.calendar_fanout', ?, ?, 'queued', ?, 0, 0, 0, 0,
-               unixepoch(), unixepoch()
-         WHERE EXISTS (
-           SELECT 1 FROM schedule_versions
-            WHERE id = ? AND event_id = ? AND status = 'published'
-              AND publication_operation_id = ?
-         )
-      `,
-    ).bind(
-      calendarOperationId,
-      viewer.organisationId,
-      viewer.eventId,
-      actor.personId ?? null,
-      calendarIdempotencyKey,
-      crypto.randomUUID(),
-      JSON.stringify(calendarMessage),
-      parsed.scheduleVersionId,
-      viewer.eventId,
-      publishOperationId,
-    ),
-    ...scheduleCalendarFanoutSnapshotStatements(
-      env,
-      {
-        organisationId: viewer.organisationId,
-        eventId: viewer.eventId,
-        personId: actor.personId ?? null,
-      },
-      parsed.scheduleVersionId,
-      calendarOperationId,
-    ),
-  );
-  const changeIndex = statements.length;
-  statements.push(
-    env.DB.prepare(
-      `
-        INSERT INTO event_changes (
-          event_id, entity_type, entity_id, change_type, correlation_id, created_at
-        )
-        SELECT ?, 'schedule_version', ?, 'published', ?, unixepoch()
-         WHERE EXISTS (
-           SELECT 1 FROM schedule_versions
-            WHERE id = ? AND event_id = ? AND status = 'published'
-              AND publication_operation_id = ?
-         )
-        RETURNING sequence
-      `,
-    ).bind(
-      viewer.eventId,
-      parsed.scheduleVersionId,
-      publishOperationId,
-      parsed.scheduleVersionId,
-      viewer.eventId,
-      publishOperationId,
-    ),
-  );
-  if (command) {
-    statements.push(
-      env.DB.prepare(
-        `
-          UPDATE idempotency_records
-             SET status = 'completed',
-                 response_status = 200,
-                 response_json = json_object(
-                   'calendarOperationId', ?,
-                   'changeSequence', (
-                     SELECT sequence FROM event_changes
-                      WHERE event_id = ? AND entity_type = 'schedule_version'
-                        AND entity_id = ? AND change_type = 'published'
-                        AND correlation_id = ?
-                      ORDER BY sequence DESC LIMIT 1
-                   )
-                 ),
-                 entity_type = 'schedule_version', entity_id = ?,
-                 completed_at = unixepoch()
-           WHERE id = ? AND organisation_id = ? AND event_id = ?
-             AND actor_id = ? AND scope = 'schedule.publish'
-             AND idempotency_key = ? AND request_hash = ?
-             AND status = 'processing'
-             AND EXISTS (
-               SELECT 1
-                 FROM schedule_versions published_version
-                 JOIN event_changes committed_change
-                   ON committed_change.event_id = published_version.event_id
-                  AND committed_change.entity_type = 'schedule_version'
-                  AND committed_change.entity_id = published_version.id
-                  AND committed_change.change_type = 'published'
-                  AND committed_change.correlation_id = ?
-                WHERE published_version.id = ?
-                  AND published_version.event_id = ?
-                  AND published_version.status = 'published'
-                  AND published_version.publication_operation_id = ?
-             )
-        `,
-      ).bind(
-        calendarOperationId,
-        viewer.eventId,
-        parsed.scheduleVersionId,
-        publishOperationId,
-        parsed.scheduleVersionId,
-        idempotencyRecordId,
-        viewer.organisationId,
-        viewer.eventId,
-        command.actorId,
-        command.idempotencyKey,
-        command.requestHash,
-        publishOperationId,
-        parsed.scheduleVersionId,
-        viewer.eventId,
-        publishOperationId,
-      ),
-    );
-    statements.push(
-      env.DB.prepare(
-        `
-          DELETE FROM idempotency_records
-           WHERE id = ? AND organisation_id = ? AND event_id = ?
-             AND actor_id = ? AND scope = 'schedule.publish'
-             AND idempotency_key = ? AND request_hash = ?
-             AND status = 'processing'
-             AND NOT EXISTS (
-               SELECT 1 FROM schedule_versions
-                WHERE id = ? AND event_id = ? AND status = 'published'
-                  AND publication_operation_id = ?
-             )
-        `,
-      ).bind(
-        idempotencyRecordId,
-        viewer.organisationId,
-        viewer.eventId,
-        command.actorId,
-        command.idempotencyKey,
-        command.requestHash,
-        parsed.scheduleVersionId,
-        viewer.eventId,
-        publishOperationId,
-      ),
-    );
-  }
-
-  return { statements, publishingIndex, changeIndex };
 }
 
 export class ScheduleService {
@@ -1044,284 +587,7 @@ export class ScheduleService {
 
   async getWorkspace(viewer: ScheduleEventScope): Promise<ScheduleWorkspace> {
     if (this.projectionDepth === 0) await this.airtable.assertReadable(viewer);
-    return this.getWorkspaceD1(viewer);
-  }
-
-  private async getWorkspaceD1(
-    viewer: ScheduleEventScope,
-  ): Promise<ScheduleWorkspace> {
-    const event = await this.env.DB.prepare(
-      `
-      SELECT e.id, e.name, e.starts_at AS startsAt, e.ends_at AS endsAt,
-             e.timezone, e.brand_accent AS brandAccent, e.revision,
-             e.repository_provider AS repositoryProvider,
-             e.session_formats_json AS sessionFormatsJson
-        FROM events e
-       WHERE e.id = ? AND e.organisation_id = ?
-    `,
-    )
-      .bind(viewer.eventId, viewer.organisationId)
-      .first<WorkspaceEvent>();
-    if (!event) throw new Error("Event not found.");
-
-    const [version, rooms, tracks, sessions, policyRow] = await Promise.all([
-      this.env.DB.prepare(
-        `
-        SELECT id, version_number AS versionNumber, status, revision, notes
-          FROM schedule_versions
-         WHERE event_id = ? AND status IN ('draft','published')
-         ORDER BY CASE status WHEN 'draft' THEN 0 ELSE 1 END, version_number DESC
-         LIMIT 1
-      `,
-      )
-        .bind(viewer.eventId)
-        .first<{
-          id: string;
-          versionNumber: number;
-          status: string;
-          revision: number;
-          notes: string;
-        }>(),
-      this.env.DB.prepare(
-        "SELECT id, name, capacity, resources_json AS resourcesJson FROM rooms WHERE event_id = ? AND status = 'active' ORDER BY position, name",
-      )
-        .bind(viewer.eventId)
-        .all<{
-          id: string;
-          name: string;
-          capacity: number;
-          resourcesJson: string;
-        }>(),
-      this.env.DB.prepare(
-        "SELECT id, name, exclusive FROM tracks WHERE event_id = ? ORDER BY position, name",
-      )
-        .bind(viewer.eventId)
-        .all<{ id: string; name: string; exclusive: number }>(),
-      this.env.DB.prepare(
-        `
-        SELECT s.id,
-               COALESCE(content.title, s.title) AS title,
-               COALESCE(content.slug, s.slug) AS slug,
-               COALESCE(content.description, s.description, '') AS description,
-               COALESCE(content.track_id, s.track_id) AS trackId,
-               t.name AS trackName,
-               COALESCE(t.exclusive, 0) AS trackExclusive,
-               COALESCE(content.format, s.format) AS format,
-               COALESCE(content.duration_minutes, s.duration_minutes) AS durationMinutes,
-               s.expected_attendance AS expectedAttendance,
-               COALESCE(content.required_resources_json, s.required_resources_json) AS requiredResourcesJson,
-               COALESCE(content.visibility, s.visibility) AS visibility,
-               content.session_id AS snapshotSessionId, s.status,
-               s.revision,
-               GROUP_CONCAT(ss.person_id, '||') AS speakerIds,
-               GROUP_CONCAT(p.display_name, '||') AS speakerNames
-          FROM sessions s
-          LEFT JOIN schedule_session_contents content
-            ON content.event_id = s.event_id AND content.session_id = s.id
-           AND content.schedule_version_id = (
-             SELECT active.id
-               FROM schedule_versions active
-              WHERE active.event_id = s.event_id
-                AND active.status IN ('draft','published')
-              ORDER BY CASE active.status WHEN 'draft' THEN 0 ELSE 1 END,
-                       active.version_number DESC
-              LIMIT 1
-           )
-          LEFT JOIN tracks t
-            ON t.id = COALESCE(content.track_id, s.track_id)
-           AND t.event_id = s.event_id
-          LEFT JOIN session_speakers ss ON ss.session_id = s.id AND ss.event_id = s.event_id
-          LEFT JOIN people p ON p.id = ss.person_id
-         WHERE s.event_id = ? AND s.status IN ('unscheduled','scheduled','published')
-         GROUP BY s.id, t.id
-         ORDER BY s.title
-      `,
-      )
-        .bind(viewer.eventId)
-        .all<
-          Omit<
-            ScheduleSession,
-            | "speakerIds"
-            | "speakerNames"
-            | "trackExclusive"
-            | "requiredResources"
-          > & {
-            trackExclusive: number;
-            requiredResourcesJson: string;
-            snapshotSessionId: string | null;
-            speakerIds: string | null;
-            speakerNames: string | null;
-          }
-        >(),
-      this.env.DB.prepare(
-        `
-        SELECT room_overlap_action AS roomAction, speaker_overlap_action AS speakerAction,
-               required_resource_overlap_action AS resourceAction,
-               exclusive_track_overlap_action AS trackAction,
-               event_boundary_action AS boundaryAction,
-               capacity_action AS capacityAction,
-               minimum_turnaround_minutes AS minimumTurnaroundMinutes,
-               revision
-          FROM schedule_policies WHERE event_id = ?
-      `,
-      )
-        .bind(viewer.eventId)
-        .first<{
-          roomAction: string;
-          speakerAction: string;
-          resourceAction: string;
-          trackAction: string;
-          boundaryAction: string;
-          capacityAction: string;
-          minimumTurnaroundMinutes: number;
-          revision: number;
-        }>(),
-    ]);
-
-    if (!policyRow) throw new ScheduleConfigurationError();
-    const currentVersion = version ?? null;
-    const [entries, conflicts] = currentVersion
-      ? await Promise.all([
-          this.env.DB.prepare(
-            `
-        SELECT id, session_id AS sessionId, room_id AS roomId, starts_at AS startsAt,
-               ends_at AS endsAt, revision
-          FROM schedule_entries
-         WHERE event_id = ? AND schedule_version_id = ?
-         ORDER BY starts_at, room_id
-      `,
-          )
-            .bind(viewer.eventId, currentVersion.id)
-            .all<ScheduleEntry>(),
-          this.env.DB.prepare(
-            `
-        SELECT id, conflict_type AS type, severity,
-               COALESCE(json_extract(details_json, '$.message'), conflict_type) AS message
-          FROM schedule_conflicts
-         WHERE event_id = ? AND schedule_version_id = ? AND resolved_at IS NULL
-         ORDER BY severity, created_at
-      `,
-          )
-            .bind(viewer.eventId, currentVersion.id)
-            .all<{
-              id: string;
-              type: string;
-              severity: string;
-              message: string;
-            }>(),
-        ])
-      : [{ results: [] }, { results: [] }];
-    const scheduledSessionIds = new Set(
-      entries.results.map((entry) => entry.sessionId),
-    );
-    if (
-      currentVersion &&
-      sessions.results.some(
-        (session) =>
-          scheduledSessionIds.has(session.id) && !session.snapshotSessionId,
-      )
-    ) {
-      throw new ScheduleConfigurationError(
-        "The active schedule version is missing one or more frozen session-content snapshots.",
-      );
-    }
-
-    let parsedFormats: ScheduleWorkspace["sessionFormats"];
-    try {
-      parsedFormats = parseSessionFormatsConfiguration(
-        event.sessionFormatsJson,
-      );
-    } catch (error) {
-      throw new ScheduleConfigurationError(
-        error instanceof Error
-          ? error.message
-          : "The event has invalid session-format configuration.",
-      );
-    }
-    const formatKeys = new Set(parsedFormats.map((format) => format.key));
-    if (sessions.results.some((session) => !formatKeys.has(session.format))) {
-      throw new ScheduleConfigurationError(
-        "A session uses a format that is not configured for this event.",
-      );
-    }
-    const configuredRooms = rooms.results.map(({ resourcesJson, ...room }) => {
-      let resources: unknown;
-      try {
-        resources = JSON.parse(resourcesJson);
-      } catch {
-        throw new ScheduleConfigurationError(
-          `Room ${room.id} has invalid resource inventory JSON.`,
-        );
-      }
-      const parsed = eventResourceSchema.array().max(50).safeParse(resources);
-      if (!parsed.success || new Set(parsed.data).size !== parsed.data.length) {
-        throw new ScheduleConfigurationError(
-          `Room ${room.id} has invalid or duplicate resource inventory entries.`,
-        );
-      }
-      return { ...room, resources: parsed.data };
-    });
-    const configuredSessions = sessions.results.map(
-      ({ snapshotSessionId: _snapshotSessionId, ...session }) => {
-        let resources: unknown;
-        try {
-          resources = JSON.parse(session.requiredResourcesJson);
-        } catch {
-          throw new ScheduleConfigurationError(
-            `Session ${session.id} has invalid required resource JSON.`,
-          );
-        }
-        const parsed = eventResourceSchema.array().max(50).safeParse(resources);
-        if (
-          !parsed.success ||
-          new Set(parsed.data).size !== parsed.data.length
-        ) {
-          throw new ScheduleConfigurationError(
-            `Session ${session.id} has invalid or duplicate required resources.`,
-          );
-        }
-        return {
-          ...session,
-          requiredResources: parsed.data,
-          trackExclusive: Boolean(session.trackExclusive),
-          speakerIds: session.speakerIds ? session.speakerIds.split("||") : [],
-          speakerNames: session.speakerNames
-            ? session.speakerNames.split("||")
-            : [],
-        };
-      },
-    );
-
-    const workspace: ScheduleWorkspace = {
-      event,
-      version: currentVersion,
-      rooms: configuredRooms,
-      tracks: tracks.results.map((track) => ({
-        ...track,
-        exclusive: Boolean(track.exclusive),
-      })),
-      sessionFormats: parsedFormats,
-      sessions: configuredSessions,
-      entries: entries.results,
-      conflicts: conflicts.results,
-      publicationConflicts: [],
-      policies: {
-        room: policy(policyRow.roomAction),
-        speaker: policy(policyRow.speakerAction),
-        resource: policy(policyRow.resourceAction),
-        track: policy(policyRow.trackAction),
-        boundary: policy(policyRow.boundaryAction),
-        capacity: policy(policyRow.capacityAction),
-        minimumTurnaroundMinutes: policyRow.minimumTurnaroundMinutes,
-      },
-      policyRevision: policyRow.revision,
-    };
-    return {
-      ...workspace,
-      publicationConflicts: detectWorkspaceConflicts(workspace).map(
-        ({ conflict }) => conflict,
-      ),
-    };
+    return loadScheduleWorkspaceD1(this.env, viewer);
   }
 
   async getConflictedSessionIds(
@@ -3070,12 +2336,12 @@ export class ScheduleService {
         ]
       : [];
     const nextPolicies: SchedulePolicies = {
-      room: policy(parsed.roomAction),
-      speaker: policy(parsed.speakerAction),
-      resource: policy(parsed.resourceAction),
-      track: policy(parsed.trackAction),
-      boundary: policy(parsed.boundaryAction),
-      capacity: policy(parsed.capacityAction),
+      room: schedulePolicyAction(parsed.roomAction),
+      speaker: schedulePolicyAction(parsed.speakerAction),
+      resource: schedulePolicyAction(parsed.resourceAction),
+      track: schedulePolicyAction(parsed.trackAction),
+      boundary: schedulePolicyAction(parsed.boundaryAction),
+      capacity: schedulePolicyAction(parsed.capacityAction),
       minimumTurnaroundMinutes: parsed.minimumTurnaroundMinutes,
     };
     const conflicts =
