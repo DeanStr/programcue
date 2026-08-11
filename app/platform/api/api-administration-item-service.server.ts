@@ -17,6 +17,7 @@ const submissionTracksSchema = z.array(
     position: z.number().int().nonnegative(),
   }),
 );
+const submissionRoutedTeamIdsSchema = z.array(z.string().min(1));
 
 function parseJson(value: unknown, label: string) {
   if (value === null) return null;
@@ -91,6 +92,15 @@ function serialise(row: ApiRecord) {
     result.tracks = tracks;
     delete result.tracksJson;
   }
+  if ("routedTeamIdsJson" in result) {
+    result.routedTeamIds = submissionRoutedTeamIdsSchema.parse(
+      parseJson(
+        result.routedTeamIdsJson,
+        `${String(result.id)} routed team IDs`,
+      ),
+    );
+    delete result.routedTeamIdsJson;
+  }
   return result;
 }
 
@@ -138,7 +148,17 @@ export class ApiAdministrationItemService {
                 submission.submitter_person_id AS submitterPersonId,
                 submission.submitter_email AS submitterEmail,
                 submission.title, submission.category, submission.format,
-                submission.routed_team_id AS routedTeamId, submission.status,
+                COALESCE((
+                  SELECT json_group_array(routed.team_id)
+                    FROM (
+                      SELECT route.team_id
+                        FROM submission_routing_teams route
+                       WHERE route.submission_id = submission.id
+                         AND route.event_id = submission.event_id
+                       ORDER BY route.team_id
+                    ) routed
+                ), '[]') AS routedTeamIdsJson,
+                submission.status,
                 COALESCE((
                   SELECT json_group_array(json(selected.track))
                     FROM (

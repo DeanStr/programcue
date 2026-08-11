@@ -123,6 +123,9 @@ describe("submission form rules", () => {
       kind: "direct_session" as const,
     };
     conditionalDirectFormat.schema.fields.find(
+      (field) => field.id === "category",
+    )!.type = "select";
+    conditionalDirectFormat.schema.fields.find(
       (field) => field.id === "format",
     )!.condition = { fieldId: "category", equals: "AI & Innovation" };
     expect(saveFormSchema.safeParse(conditionalDirectFormat).success).toBe(

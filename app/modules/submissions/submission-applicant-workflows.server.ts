@@ -428,93 +428,6 @@ export abstract class SubmissionApplicantWorkflows extends SubmissionFormWorkflo
     return this.repository.saveDraft(form, applicant, payload);
   }
 
-  protected async resolveAutomaticRouting(
-    form: Pick<PublicForm, "eventId">,
-    teamIds: string[],
-  ) {
-    const uniqueTeamIds = [...new Set(teamIds)];
-    if (!uniqueTeamIds.length) return null;
-    const teams = await this.env.DB.prepare(
-      `SELECT id FROM evaluation_teams
-        WHERE event_id = ? AND status = 'active'
-          AND id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
-    )
-      .bind(form.eventId, JSON.stringify(uniqueTeamIds))
-      .all<{ id: string }>();
-    if (teams.results.length !== uniqueTeamIds.length) {
-      throw new SubmissionStateError(
-        "An evaluation team configured for a selected track is no longer active. Your draft was not submitted.",
-      );
-    }
-    const rounds = await this.env.DB.prepare(
-      `SELECT round.id
-         FROM evaluation_rounds round
-         JOIN evaluation_plans plan
-           ON plan.id = round.plan_id AND plan.event_id = round.event_id
-        WHERE round.event_id = ? AND round.status = 'active'
-          AND plan.status = 'active'
-        ORDER BY round.id`,
-    )
-      .bind(form.eventId)
-      .all<{ id: string }>();
-    if (rounds.results.length !== 1) {
-      throw new SubmissionStateError(
-        rounds.results.length === 0
-          ? "Automatic track routing requires one active evaluation round. Activate a round before applications are submitted."
-          : "Automatic track routing is ambiguous because this event has more than one active evaluation round.",
-      );
-    }
-    const members = await this.env.DB.prepare(
-      `SELECT member.team_id AS teamId, member.person_id AS personId,
-              EXISTS (
-                SELECT 1 FROM memberships membership
-                 WHERE membership.event_id = member.event_id
-                   AND membership.person_id = member.person_id
-                   AND membership.role IN ('evaluator','committee_chair')
-                   AND membership.accepted_at IS NOT NULL
-                   AND membership.revoked_at IS NULL
-              ) AS eligible
-         FROM evaluation_team_members member
-        WHERE member.event_id = ?
-          AND member.team_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
-          AND member.removed_at IS NULL
-        ORDER BY member.team_id, member.person_id`,
-    )
-      .bind(form.eventId, JSON.stringify(uniqueTeamIds))
-      .all<{ teamId: string; personId: string; eligible: number }>();
-    for (const teamId of uniqueTeamIds) {
-      if (!members.results.some((member) => member.teamId === teamId)) {
-        throw new SubmissionStateError(
-          "An evaluation team configured for a selected track has no active members. Your draft was not submitted.",
-        );
-      }
-    }
-    if (members.results.some((member) => !member.eligible)) {
-      throw new SubmissionStateError(
-        "Every active member of the routed team must have an accepted evaluator or committee-chair membership before applications can be submitted.",
-      );
-    }
-    return {
-      roundId: rounds.results[0]!.id,
-      teamIds: uniqueTeamIds,
-      assignments: [
-        ...new Map(
-          uniqueTeamIds.flatMap((teamId) =>
-            members.results
-              .filter((member) => member.teamId === teamId)
-              .map(
-                (member) =>
-                  [
-                    member.personId,
-                    { teamId, evaluatorPersonId: member.personId },
-                  ] as const,
-              ),
-          ),
-        ).values(),
-      ],
-    };
-  }
-
   async submitDraft(
     publicSlug: string,
     applicant: Applicant,
@@ -613,9 +526,12 @@ export abstract class SubmissionApplicantWorkflows extends SubmissionFormWorkflo
     if (Object.keys(errors).length) {
       throw answerValidationError(errors);
     }
-    const selectedTrackNames = Array.isArray(submittedPayload.answers.category)
-      ? submittedPayload.answers.category
-      : [];
+    const categoryAnswer = submittedPayload.answers.category;
+    const selectedTrackNames = Array.isArray(categoryAnswer)
+      ? categoryAnswer
+      : typeof categoryAnswer === "string" && categoryAnswer
+        ? [categoryAnswer]
+        : [];
     if (form.kind === "direct_session" && selectedTrackNames.length !== 1) {
       throw new SubmissionStateError(
         "Choose exactly one track for a direct session. A scheduled session cannot silently discard additional track choices.",
@@ -640,10 +556,6 @@ export abstract class SubmissionApplicantWorkflows extends SubmissionFormWorkflo
             ),
           ]
         : [];
-    const routingAssignment = await this.resolveAutomaticRouting(
-      form,
-      routedTeamIds,
-    );
     for (const [fieldId, reference] of Object.entries(
       submittedPayload.uploads,
     )) {
@@ -703,7 +615,6 @@ export abstract class SubmissionApplicantWorkflows extends SubmissionFormWorkflo
     return this.repository.submitDraft(form, applicant, submittedPayload, {
       trackSelections,
       routedTeamIds,
-      routingAssignment,
       upload:
         Object.entries(submittedPayload.uploads).map(
           ([fieldId, reference]) => ({ fieldId, ...reference }),

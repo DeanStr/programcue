@@ -286,7 +286,6 @@ export const submissions = sqliteTable(
     title: text("title").notNull().default(""),
     category: text("category"),
     format: text("format"),
-    routedTeamId: text("routed_team_id"),
     status: text("status")
       .notNull()
       .default("draft")
@@ -327,10 +326,6 @@ export const submissions = sqliteTable(
       columns: [table.formVersionId, table.eventId],
       foreignColumns: [formVersions.id, formVersions.eventId],
     }),
-    foreignKey({
-      columns: [table.routedTeamId, table.eventId],
-      foreignColumns: [evaluationTeams.id, evaluationTeams.eventId],
-    }),
     index("idx_submissions_event_status").on(
       table.eventId,
       table.status,
@@ -351,11 +346,6 @@ export const submissions = sqliteTable(
       table.eventId,
       table.submitterEmail,
       table.updatedAt,
-    ),
-    index("idx_submissions_routed_team").on(
-      table.eventId,
-      table.routedTeamId,
-      table.status,
     ),
   ],
 );

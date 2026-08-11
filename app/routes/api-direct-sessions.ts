@@ -32,6 +32,7 @@ const directSessionApiSchema = z
   .object({
     title: z.string().trim().min(3).max(180),
     description: z.string().trim().max(3_000).default(""),
+    trackId: z.string().trim().min(1).max(100),
     format: sessionFormatInputSchema.shape.key,
     durationMinutes: z.number().int().min(5).max(480).optional(),
     speakers: z
@@ -84,7 +85,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       params.eventId,
     );
     const idempotencyKey = requireIdempotencyKey(request);
-    const input = directSessionApiSchema.parse(await readJson(request, 128_000));
+    const input = directSessionApiSchema.parse(
+      await readJson(request, 128_000),
+    );
     const actor: SubmissionApiActor = {
       kind: "api_key",
       organisationId: authenticated.organisationId,
@@ -107,9 +110,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         correlationId: `api-direct-session:${sessionId}`,
       },
     );
-    let webhookDeliveries: Awaited<
-      ReturnType<WebhookService["queueEvent"]>
-    > = [];
+    let webhookDeliveries: Awaited<ReturnType<WebhookService["queueEvent"]>> =
+      [];
     let webhookWarning: string | null = null;
     try {
       webhookDeliveries = await new WebhookService(env).queueEvent(actor, {
@@ -121,9 +123,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         data: { source: "api_direct_entry" },
       });
       if (
-        webhookDeliveries.some(
-          (delivery) => delivery.status === "queue_failed",
-        )
+        webhookDeliveries.some((delivery) => delivery.status === "queue_failed")
       ) {
         webhookWarning =
           "The session was created, but one or more outbound webhook deliveries require retry.";

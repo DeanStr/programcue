@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { decisionSchema } from "~/modules/evaluations/evaluation-schema";
+import {
+  decisionBaseSchema,
+  requireAcceptedSessionTrack,
+} from "~/modules/evaluations/evaluation-schema";
 import {
   administratorInvitationSchema,
   administratorRevocationSchema,
@@ -74,10 +77,11 @@ export const apiSessionLifecycleSchema = z
   .object({ confirmed: z.literal(true) })
   .strict();
 
-export const apiDecisionSchema = decisionSchema
+export const apiDecisionSchema = decisionBaseSchema
   .omit({ release: true })
   .extend({ confirmed: z.literal(true) })
-  .strict();
+  .strict()
+  .superRefine(requireAcceptedSessionTrack);
 
 export const apiTaskTemplateSchema = taskTemplateInputSchema.strict();
 export const apiTaskAssignmentSchema = z

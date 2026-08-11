@@ -198,6 +198,7 @@ test("session tags and archive state use preview, confirmation and real undo", a
       has: page.getByRole("button", { name: "Create unscheduled session" }),
     });
     await directSessionForm.getByLabel("Session title").fill(title);
+    await directSessionForm.getByLabel("Track").selectOption({ index: 1 });
     await directSessionForm
       .getByLabel("Description")
       .fill("A disposable session used to exercise reviewed bulk changes.");

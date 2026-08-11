@@ -179,9 +179,6 @@ export default [
     "speaker/resources/files/:assetId",
     "routes/speaker-resource-download.ts",
   ),
-  route("public/programme", "routes/public-programme.tsx", {
-    id: "public-programme",
-  }),
   route("public/programme/:slug", "routes/public-programme.tsx", {
     id: "public-programme-by-slug",
   }),

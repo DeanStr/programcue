@@ -435,7 +435,13 @@ describe("administration API reads", () => {
   it("returns every ordered submission track in collection and item records", async () => {
     const token = crypto.randomUUID();
     const submissionId = `api-multi-track-${token}`;
+    const teamId = `api-routing-team-${token}`;
     await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO evaluation_teams (
+           id, event_id, name, status, created_at, updated_at
+         ) VALUES (?, ?, 'API routing team', 'active', unixepoch(), unixepoch())`,
+      ).bind(teamId, principal.eventId),
       testEnv.DB.prepare(
         `INSERT INTO submissions (
            id, event_id, public_reference, title, category, format, status,
@@ -454,6 +460,10 @@ describe("administration API reads", () => {
            submission_id, event_id, track_id, track_name_snapshot, position
          ) VALUES (?, ?, 'demo-track-operations', 'Event Operations', 1)`,
       ).bind(submissionId, principal.eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO submission_routing_teams (submission_id, event_id, team_id)
+         VALUES (?, ?, ?)`,
+      ).bind(submissionId, principal.eventId, teamId),
     ]);
     try {
       const collection = (await new ApiAdministrationService(testEnv).list(
@@ -466,6 +476,7 @@ describe("administration API reads", () => {
           (submission) => submission.id === submissionId,
         ),
       ).toMatchObject({
+        routedTeamIds: [teamId],
         tracks: [
           { id: "demo-track-ai", name: "AI & Innovation", position: 0 },
           {
@@ -483,6 +494,7 @@ describe("administration API reads", () => {
         ),
       ).resolves.toMatchObject({
         item: {
+          routedTeamIds: [teamId],
           tracks: [
             { id: "demo-track-ai", name: "AI & Innovation", position: 0 },
             {
@@ -498,6 +510,11 @@ describe("administration API reads", () => {
         "DELETE FROM submissions WHERE id = ? AND event_id = ?",
       )
         .bind(submissionId, principal.eventId)
+        .run();
+      await testEnv.DB.prepare(
+        "DELETE FROM evaluation_teams WHERE id = ? AND event_id = ?",
+      )
+        .bind(teamId, principal.eventId)
         .run();
     }
   });

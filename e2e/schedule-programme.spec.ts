@@ -28,7 +28,7 @@ test.beforeEach(async ({ page }) => {
   ]);
   // Opening the public route establishes the deterministic demo publication that
   // both admin views read; production mode never executes this seed path.
-  await waitForInterface(page, "/public/programme");
+  await waitForInterface(page, "/public/programme/future-of-events-2025");
 });
 
 test("schedule and programme render the event calendar date and timezone", async ({

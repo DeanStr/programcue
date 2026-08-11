@@ -58,7 +58,7 @@ Useful routes:
 - API reference: `http://127.0.0.1:5173/api/docs`
 - Design system: `http://127.0.0.1:5173/design/system`
 
-Event slugs are globally unique. Canonical public programme and calendar-session links include the event slug; the unscoped `/public/programme` route is only an environment-configured convenience alias.
+Event slugs are globally unique. Public programme and calendar-session links always include the event slug.
 
 ## Validation
 
@@ -143,6 +143,7 @@ npm run db:bootstrap:production -- \\
   --organisation-name "Organisation Name" \\
   --organisation-slug organisation-name \\
   --event-name "Event Name" \\
+  --event-slug event-name \\
   --timezone America/Toronto \\
   --start-date 2027-05-20 \\
   --end-date 2027-05-22 \\
@@ -152,7 +153,7 @@ npm run deploy
 
 The production bootstrap is intentionally one-time and requires an empty,
 migrated application database. It atomically creates the first Better Auth
-person, organisation-wide owner membership and configured default event; it
+person, organisation-wide owner membership and explicitly slugged initial event; it
 does not enable public sign-up or install a permanent bootstrap endpoint. After
 deployment, that owner requests their first magic link at `/sign-in`.
 

@@ -111,36 +111,10 @@ test("deployment validation rejects missing or non-Git production revisions", ()
   );
 });
 
-test("production event identity is configurable while remaining well formed", () => {
+test("production event identity is created by bootstrap rather than inherited from demo configuration", () => {
   const configs = readDeploymentConfigs();
-  configs.production.vars.DEFAULT_EVENT_ID = "evt-client-conference-2027";
-  configs.production.vars.PUBLIC_EVENT_SLUG = "client-conference-2027";
-  assert.deepEqual(
-    validateDeploymentConfigs(configs).filter(
-      ({ kind, message }) =>
-        kind === "configuration" &&
-        (message.includes("DEFAULT_EVENT_ID") ||
-          message.includes("PUBLIC_EVENT_SLUG")),
-    ),
-    [],
-  );
-
-  configs.production.vars.DEFAULT_EVENT_ID = "bad event id";
-  configs.production.vars.PUBLIC_EVENT_SLUG = "Bad Slug";
-  assert.deepEqual(
-    validateDeploymentConfigs(configs)
-      .filter(
-        ({ kind, message }) =>
-          kind === "configuration" &&
-          (message.includes("DEFAULT_EVENT_ID") ||
-            message.includes("PUBLIC_EVENT_SLUG")),
-      )
-      .map(({ message }) => message),
-    [
-      "DEFAULT_EVENT_ID must be a stable 3-128 character event identifier.",
-      "PUBLIC_EVENT_SLUG must be a lowercase kebab-case slug.",
-    ],
-  );
+  assert.equal(configs.production.vars.DEFAULT_EVENT_ID, undefined);
+  assert.equal(configs.production.vars.PUBLIC_EVENT_SLUG, undefined);
 });
 
 test("resource embed origins are explicit exact HTTPS origins", () => {

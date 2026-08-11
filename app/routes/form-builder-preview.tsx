@@ -692,12 +692,31 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             className="select"
             name="kind"
             value={input.kind}
-            onChange={(event) =>
+            onChange={(event) => {
+              const kind = event.target.value as SaveFormInput["kind"];
               change({
                 ...input,
-                kind: event.target.value as SaveFormInput["kind"],
-              })
-            }
+                kind,
+                schema: {
+                  ...input.schema,
+                  fields: input.schema.fields.map((field) =>
+                    field.id === "category"
+                      ? {
+                          ...field,
+                          type:
+                            kind === "direct_session"
+                              ? ("select" as const)
+                              : ("multi_select" as const),
+                          help:
+                            kind === "direct_session"
+                              ? "Choose the programme track for this session."
+                              : "Choose every programme track this proposal should be reviewed for.",
+                        }
+                      : field,
+                  ),
+                },
+              });
+            }}
           >
             <option value="submission">Application for review</option>
             <option value="direct_session">Direct session intake</option>

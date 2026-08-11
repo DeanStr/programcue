@@ -270,6 +270,16 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         `Session format “${parsed.format}” is not configured for this event.`,
       );
     }
+    const track = await this.env.DB.prepare(
+      `SELECT id, name FROM tracks WHERE id = ? AND event_id = ?`,
+    )
+      .bind(parsed.trackId, actor.eventId)
+      .first<{ id: string; name: string }>();
+    if (!track) {
+      throw new SubmissionStateError(
+        "The selected track is unavailable in this event.",
+      );
+    }
     const input = {
       ...inputWithoutDuration,
       durationMinutes:
@@ -297,6 +307,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
           source: isSubmissionApiActor(actor)
             ? "api_direct_entry"
             : "administrator_direct_entry",
+          trackId: track.id,
         },
       },
       auditEventId,
@@ -308,15 +319,19 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
     statements.push(
       this.env.DB.prepare(
         `INSERT INTO sessions (
-           id, event_id, title, slug, description, format, duration_minutes,
+           id, event_id, track_id, title, slug, description, format, duration_minutes,
            status, created_at, updated_at
          )
-         SELECT ?, ?, ?, ?, ?, ?, ?, 'unscheduled', unixepoch(), unixepoch()
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'unscheduled', unixepoch(), unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM events
              WHERE id = ? AND organisation_id = ?
                AND session_formats_json = ?
           )
+            AND EXISTS (
+              SELECT 1 FROM tracks
+               WHERE id = ? AND event_id = ?
+            )
             AND EXISTS (
               SELECT 1 FROM idempotency_records command
                WHERE command.id = ? AND command.organisation_id = ?
@@ -327,6 +342,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       ).bind(
         sessionId,
         actor.eventId,
+        track.id,
         input.title,
         slug,
         input.description || null,
@@ -335,6 +351,8 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         actor.eventId,
         actor.organisationId,
         formatSnapshot.serialized,
+        track.id,
+        actor.eventId,
         command.recordId,
         command.organisationId,
         command.eventId,
@@ -415,6 +433,8 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         sessionId,
         JSON.stringify({
           title: input.title,
+          trackId: track.id,
+          trackName: track.name,
           speakerEmails: input.speakers.map((speaker) => speaker.email),
         }),
         sessionId,
@@ -484,43 +504,61 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ id: string }>();
     if (!event) throw new Response("Event not found", { status: 404 });
-    const track = await this.env.DB.prepare(
+    const uniqueTrackIds = [...new Set(input.trackIds)];
+    const tracksResult = await this.env.DB.prepare(
       `SELECT track.id, track.name
          FROM tracks track
-        WHERE track.id = ? AND track.event_id = ?`,
+        WHERE track.event_id = ?
+          AND track.id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
     )
-      .bind(input.trackId, viewer.eventId)
-      .first<{ id: string; name: string }>();
-    if (!track) {
+      .bind(viewer.eventId, JSON.stringify(uniqueTrackIds))
+      .all<{ id: string; name: string }>();
+    if (tracksResult.results.length !== uniqueTrackIds.length) {
       throw new SubmissionStateError(
-        "The selected track is unavailable in this event.",
+        "One or more selected tracks are unavailable in this event.",
       );
     }
-    const routedTeam = input.routedTeamId
+    const tracksById = new Map(
+      tracksResult.results.map((track) => [track.id, track]),
+    );
+    const tracks = uniqueTrackIds.map((trackId) => tracksById.get(trackId)!);
+    const uniqueTeamIds = [...new Set(input.routedTeamIds)];
+    const teamsResult = uniqueTeamIds.length
       ? await this.env.DB.prepare(
           `SELECT id, name FROM evaluation_teams
-          WHERE id = ? AND event_id = ? AND status = 'active'`,
+            WHERE event_id = ? AND status = 'active'
+              AND id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
         )
-          .bind(input.routedTeamId, viewer.eventId)
-          .first<{ id: string; name: string }>()
-      : null;
-    if (input.routedTeamId && !routedTeam) {
+          .bind(viewer.eventId, JSON.stringify(uniqueTeamIds))
+          .all<{ id: string; name: string }>()
+      : { results: [] as Array<{ id: string; name: string }> };
+    if (teamsResult.results.length !== uniqueTeamIds.length) {
       throw new SubmissionStateError(
-        "The selected evaluation team is unavailable in this event.",
+        "One or more selected review teams are unavailable in this event.",
       );
     }
-    const routingAssignment = input.routedTeamId
-      ? await this.resolveAutomaticRouting({ eventId: viewer.eventId }, [
-          input.routedTeamId,
-        ])
-      : null;
+    const teamsById = new Map(
+      teamsResult.results.map((team) => [team.id, team]),
+    );
+    const teams = uniqueTeamIds.map((teamId) => teamsById.get(teamId)!);
+    const formatSnapshot =
+      await this.getConfiguredSessionFormatSnapshotD1(viewer);
+    const configuredFormat = formatSnapshot.formats.find(
+      (format) => format.key === input.format,
+    );
+    if (!configuredFormat) {
+      throw new SubmissionStateError(
+        `Session format “${input.format}” is not configured for this event.`,
+      );
+    }
     const submissionId = crypto.randomUUID();
     const operationId = crypto.randomUUID();
     const auditEventId = crypto.randomUUID();
     const webhookService = new WebhookService(this.env);
     const webhookInput = {
       source: "administrator_manual_entry",
-      status: input.routedTeamId ? "assigned" : "submitted",
+      status: "submitted",
+      routedTeamIds: uniqueTeamIds,
     };
     const preparedWebhooks = await Promise.all([
       webhookService.prepareEventForAudit(
@@ -551,8 +589,8 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
     const answers = {
       title: input.title,
       description: input.description,
-      category: [track.name],
-      format: input.format,
+      category: tracks.map((track) => track.name),
+      format: configuredFormat.key,
     };
     const manualSchema = {
       introduction: "Entered manually by an administrator.",
@@ -565,9 +603,9 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
           required: true,
           condition: null,
           ...(field.id === "category"
-            ? { options: [track.name] }
+            ? { options: tracks.map((track) => track.name) }
             : field.id === "format"
-              ? { options: [input.format] }
+              ? { options: [configuredFormat.key] }
               : {}),
         })),
     } satisfies SubmissionFormSchema;
@@ -576,15 +614,16 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       versionNumber: 1,
       schema: manualSchema,
       routing: {
-        categories: input.routedTeamId
-          ? { [track.name]: input.routedTeamId }
-          : {},
-        trackIds: { [track.name]: track.id },
-        trackNames: { [track.id]: track.name },
-        teamNames:
-          input.routedTeamId && routedTeam
-            ? { [input.routedTeamId]: routedTeam.name }
-            : {},
+        categories: {},
+        trackIds: Object.fromEntries(
+          tracks.map((track) => [track.name, track.id]),
+        ),
+        trackNames: Object.fromEntries(
+          tracks.map((track) => [track.id, track.name]),
+        ),
+        teamNames: Object.fromEntries(
+          teams.map((team) => [team.id, team.name]),
+        ),
         directSessionDurationMinutes: null,
         passwordHash: null,
       },
@@ -600,62 +639,31 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       this.env.DB.prepare(
         `INSERT INTO submissions (
            id, event_id, form_version_id, submitter_person_id, submitter_email,
-           routed_team_id, public_reference, title, category, format, status,
+           public_reference, title, category, format, status,
            answers_json, submitted_snapshot_json, revision, last_operation_id,
            submitted_at, created_at, updated_at
-         ) SELECT ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?,
+         ) SELECT ?, ?, NULL, NULL, ?, ?, ?, ?, ?, 'submitted', ?, ?, 1, ?,
                   unixepoch(), unixepoch(), unixepoch()
             WHERE EXISTS (
-                SELECT 1 FROM events WHERE id = ? AND organisation_id = ?
+                SELECT 1 FROM events
+                 WHERE id = ? AND organisation_id = ?
+                   AND session_formats_json = ?
               )
-              AND EXISTS (
-                SELECT 1 FROM tracks track
-                 WHERE track.id = ? AND track.event_id = ?
+              AND NOT EXISTS (
+                SELECT 1 FROM json_each(?) expected_track
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM tracks track
+                    WHERE track.id = CAST(expected_track.value AS TEXT)
+                      AND track.event_id = ?
+                 )
               )
-              AND (
-                ? IS NULL OR EXISTS (
-                  SELECT 1 FROM evaluation_teams team
-                   WHERE team.id = ? AND team.event_id = ? AND team.status = 'active'
-                )
-              )
-              AND (
-                ? IS NULL OR (
-                  EXISTS (
-                    SELECT 1 FROM evaluation_rounds round
-                    JOIN evaluation_plans plan
-                      ON plan.id = round.plan_id AND plan.event_id = round.event_id
-                     WHERE round.id = ? AND round.event_id = ?
-                       AND round.status = 'active' AND plan.status = 'active'
-                  )
-                  AND (
-                    SELECT COUNT(*) FROM evaluation_rounds active_round
-                    JOIN evaluation_plans active_plan
-                      ON active_plan.id = active_round.plan_id
-                     AND active_plan.event_id = active_round.event_id
-                   WHERE active_round.event_id = ?
-                     AND active_round.status = 'active'
-                     AND active_plan.status = 'active'
-                  ) = 1
-                  AND (
-                    SELECT COUNT(*) FROM evaluation_team_members member
-                     WHERE member.team_id = ? AND member.event_id = ?
-                       AND member.removed_at IS NULL
-                  ) = ?
-                  AND (
-                    SELECT COUNT(DISTINCT member.person_id)
-                      FROM evaluation_team_members member
-                     WHERE member.team_id = ? AND member.event_id = ?
-                       AND member.removed_at IS NULL
-                       AND EXISTS (
-                         SELECT 1 FROM memberships membership
-                          WHERE membership.event_id = member.event_id
-                            AND membership.person_id = member.person_id
-                            AND membership.role IN ('evaluator','committee_chair')
-                            AND membership.accepted_at IS NOT NULL
-                            AND membership.revoked_at IS NULL
-                       )
-                  ) = ?
-                )
+              AND NOT EXISTS (
+                SELECT 1 FROM json_each(?) expected_team
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM evaluation_teams team
+                    WHERE team.id = CAST(expected_team.value AS TEXT)
+                      AND team.event_id = ? AND team.status = 'active'
+                 )
               )
               AND EXISTS (
                 SELECT 1 FROM idempotency_records command
@@ -668,32 +676,20 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         submissionId,
         viewer.eventId,
         input.submitterEmail,
-        input.routedTeamId,
         `PC-MANUAL-${submissionId.slice(0, 8).toUpperCase()}`,
         input.title,
-        track.name,
-        input.format,
-        routingAssignment ? "assigned" : "submitted",
+        tracks.map((track) => track.name).join(", "),
+        configuredFormat.key,
         JSON.stringify(answers),
         JSON.stringify(snapshot),
         operationId,
         viewer.eventId,
         viewer.organisationId,
-        track.id,
+        formatSnapshot.serialized,
+        JSON.stringify(uniqueTrackIds),
         viewer.eventId,
-        input.routedTeamId,
-        input.routedTeamId,
+        JSON.stringify(uniqueTeamIds),
         viewer.eventId,
-        routingAssignment?.roundId ?? null,
-        routingAssignment?.roundId ?? null,
-        viewer.eventId,
-        viewer.eventId,
-        routingAssignment?.teamIds[0] ?? null,
-        viewer.eventId,
-        routingAssignment?.assignments.length ?? 0,
-        routingAssignment?.teamIds[0] ?? null,
-        viewer.eventId,
-        routingAssignment?.assignments.length ?? 0,
         command.recordId,
         command.organisationId,
         command.eventId,
@@ -703,49 +699,52 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         command.requestHash,
       ),
     );
-    if (input.routedTeamId) {
+    for (const team of teams) {
       statements.push(
         this.env.DB.prepare(
           `INSERT INTO submission_routing_teams (submission_id, event_id, team_id)
            SELECT ?, ?, ? WHERE EXISTS (
              SELECT 1 FROM submissions
-              WHERE id = ? AND event_id = ? AND last_operation_id = ? AND status = 'assigned'
+              WHERE id = ? AND event_id = ? AND last_operation_id = ?
            )`,
         ).bind(
           submissionId,
           viewer.eventId,
-          input.routedTeamId,
+          team.id,
           submissionId,
           viewer.eventId,
           operationId,
         ),
       );
     }
-    statements.push(
-      this.env.DB.prepare(
-        `INSERT INTO submission_track_selections (
-           submission_id, event_id, track_id, track_name_snapshot, position
-         )
-         SELECT ?, ?, ?, ?, 0 WHERE EXISTS (
-           SELECT 1 FROM submissions
-            WHERE id = ? AND event_id = ? AND last_operation_id = ?
-              AND status <> 'draft'
-         ) AND EXISTS (
-           SELECT 1 FROM tracks
-            WHERE id = ? AND event_id = ?
-         )`,
-      ).bind(
-        submissionId,
-        viewer.eventId,
-        track.id,
-        track.name,
-        submissionId,
-        viewer.eventId,
-        operationId,
-        track.id,
-        viewer.eventId,
-      ),
-    );
+    tracks.forEach((track, position) => {
+      statements.push(
+        this.env.DB.prepare(
+          `INSERT INTO submission_track_selections (
+             submission_id, event_id, track_id, track_name_snapshot, position
+           )
+           SELECT ?, ?, ?, ?, ? WHERE EXISTS (
+             SELECT 1 FROM submissions
+              WHERE id = ? AND event_id = ? AND last_operation_id = ?
+                AND status <> 'draft'
+           ) AND EXISTS (
+             SELECT 1 FROM tracks
+              WHERE id = ? AND event_id = ?
+           )`,
+        ).bind(
+          submissionId,
+          viewer.eventId,
+          track.id,
+          track.name,
+          position,
+          submissionId,
+          viewer.eventId,
+          operationId,
+          track.id,
+          viewer.eventId,
+        ),
+      );
+    });
     statements.push(
       this.env.DB.prepare(
         `INSERT INTO people (
@@ -837,100 +836,6 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         ),
       );
     });
-    if (routingAssignment) {
-      for (const assignment of routingAssignment.assignments) {
-        statements.push(
-          this.env.DB.prepare(
-            `INSERT INTO evaluator_assignments (
-               id, event_id, round_id, submission_id, evaluator_person_id,
-               team_id, status, revision, last_operation_id, assigned_at
-             )
-             SELECT ?, ?, ?, ?, ?, ?, 'assigned', 1, ?, unixepoch()
-              WHERE EXISTS (
-                SELECT 1 FROM submissions submission
-                 WHERE submission.id = ? AND submission.event_id = ?
-                   AND submission.status = 'assigned'
-                   AND submission.routed_team_id = ?
-                   AND submission.last_operation_id = ?
-              )
-                AND EXISTS (
-                  SELECT 1 FROM evaluation_rounds round
-                  JOIN evaluation_plans plan
-                    ON plan.id = round.plan_id AND plan.event_id = round.event_id
-                 WHERE round.id = ? AND round.event_id = ?
-                   AND round.status = 'active' AND plan.status = 'active'
-                )
-                AND EXISTS (
-                  SELECT 1 FROM evaluation_team_members member
-                  JOIN evaluation_teams team
-                    ON team.id = member.team_id AND team.event_id = member.event_id
-                 WHERE member.team_id = ? AND member.event_id = ?
-                   AND member.person_id = ? AND member.removed_at IS NULL
-                   AND team.status = 'active'
-                   AND EXISTS (
-                     SELECT 1 FROM memberships membership
-                      WHERE membership.event_id = member.event_id
-                        AND membership.person_id = member.person_id
-                        AND membership.role IN ('evaluator','committee_chair')
-                        AND membership.accepted_at IS NOT NULL
-                        AND membership.revoked_at IS NULL
-                   )
-                )
-             ON CONFLICT(round_id, submission_id, evaluator_person_id)
-               WHERE submission_id IS NOT NULL DO NOTHING`,
-          ).bind(
-            crypto.randomUUID(),
-            viewer.eventId,
-            routingAssignment.roundId,
-            submissionId,
-            assignment.evaluatorPersonId,
-            assignment.teamId,
-            operationId,
-            submissionId,
-            viewer.eventId,
-            assignment.teamId,
-            operationId,
-            routingAssignment.roundId,
-            viewer.eventId,
-            assignment.teamId,
-            viewer.eventId,
-            assignment.evaluatorPersonId,
-          ),
-        );
-      }
-      statements.push(
-        this.env.DB.prepare(
-          `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
-             entity_type, entity_id, metadata_json, created_at
-           )
-           SELECT ?, ?, ?, ?, 'evaluation.assignments.auto_created',
-                  'submission', ?, ?, unixepoch()
-            WHERE (
-              SELECT COUNT(*) FROM evaluator_assignments assignment
-               WHERE assignment.event_id = ? AND assignment.round_id = ?
-                 AND assignment.submission_id = ?
-                 AND assignment.last_operation_id = ?
-            ) = ?`,
-        ).bind(
-          crypto.randomUUID(),
-          viewer.organisationId,
-          viewer.eventId,
-          viewer.personId,
-          submissionId,
-          JSON.stringify({
-            roundId: routingAssignment.roundId,
-            teamIds: routingAssignment.teamIds,
-            evaluatorCount: routingAssignment.assignments.length,
-          }),
-          viewer.eventId,
-          routingAssignment.roundId,
-          submissionId,
-          operationId,
-          routingAssignment.assignments.length,
-        ),
-      );
-    }
     statements.push(
       this.env.DB.prepare(
         `INSERT INTO audit_events (
@@ -948,7 +853,11 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         viewer.personId,
         submissionId,
         operationId,
-        JSON.stringify({ routedTeamId: input.routedTeamId }),
+        JSON.stringify({
+          trackIds: uniqueTrackIds,
+          routedTeamIds: uniqueTeamIds,
+          format: configuredFormat.key,
+        }),
         submissionId,
         viewer.eventId,
         operationId,
@@ -991,9 +900,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       const replay = await this.resolveAdminMutationRace(command);
       if (replay) return replay;
       throw new SubmissionStateError(
-        input.routedTeamId
-          ? "The evaluation routing configuration changed before the manual application was created. Refresh and try again."
-          : "The manual application could not be created in this event.",
+        "The event tracks, review teams, or session formats changed before the manual application was created. Refresh and try again.",
       );
     }
     await Promise.all(

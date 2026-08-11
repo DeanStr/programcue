@@ -190,6 +190,7 @@ describe("submission demo reset", () => {
         title: `Sponsor briefing ${token}`,
         description: "Disposable direct-session reset fixture.",
         format: "presentation",
+        trackId: "demo-track-ai",
         speakers: [
           {
             name: "Reset Sponsor",

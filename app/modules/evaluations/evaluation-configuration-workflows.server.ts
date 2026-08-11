@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { routingSchema } from "~/modules/submissions/submission-schema";
 import { createAuth } from "~/platform/auth/auth.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
@@ -185,8 +186,25 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationService
                       ORDER BY selection.position
                    ) selected
                ) AS category,
+               COALESCE((
+                 SELECT json_group_array(json(selected.track))
+                   FROM (
+                     SELECT json_object(
+                              'id', selection.track_id,
+                              'name', track.name,
+                              'submittedName', selection.track_name_snapshot,
+                              'position', selection.position
+                            ) AS track
+                       FROM submission_track_selections selection
+                       JOIN tracks track
+                         ON track.id = selection.track_id
+                        AND track.event_id = selection.event_id
+                      WHERE selection.submission_id = s.id
+                        AND selection.event_id = s.event_id
+                      ORDER BY selection.position
+                   ) selected
+               ), '[]') AS tracksJson,
                s.format, s.status,
-               s.routed_team_id AS routedTeamId,
                COALESCE((
                  SELECT json_group_array(routed.team_id)
                    FROM (
@@ -197,18 +215,10 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationService
                       ORDER BY route.team_id
                    ) routed
                ), '[]') AS routedTeamIdsJson,
-               (
-                 SELECT group_concat(routed.name, ', ')
-                   FROM (
-                     SELECT team.name
-                       FROM submission_routing_teams route
-                       JOIN evaluation_teams team
-                         ON team.id = route.team_id AND team.event_id = route.event_id
-                      WHERE route.submission_id = s.id
-                        AND route.event_id = s.event_id
-                      ORDER BY team.name, team.id
-                   ) routed
-               ) AS routedTeamName,
+               COALESCE(
+                 form_version.routing_json,
+                 json_extract(s.submitted_snapshot_json, '$.routing')
+               ) AS routingJson,
                s.submitter_email AS submitterEmail,
                (SELECT COUNT(*) FROM submission_speakers ss
                  WHERE ss.event_id = s.event_id AND ss.submission_id = s.id
@@ -218,6 +228,9 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationService
                AVG(r.weighted_score) AS averageScore
           FROM submissions s
           JOIN events e ON e.id = s.event_id
+          LEFT JOIN form_versions form_version
+            ON form_version.id = s.form_version_id
+           AND form_version.event_id = s.event_id
           LEFT JOIN evaluator_assignments a ON a.submission_id = s.id AND a.event_id = s.event_id
           LEFT JOIN reviews r ON r.assignment_id = a.id AND r.status IN ('submitted','locked')
          WHERE s.event_id = ? AND e.organisation_id = ? AND s.status <> 'draft'
@@ -230,11 +243,11 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationService
           reference: string;
           title: string;
           category: string | null;
+          tracksJson: string;
           format: string | null;
           status: string;
-          routedTeamId: string | null;
           routedTeamIdsJson: string;
-          routedTeamName: string | null;
+          routingJson: string | null;
           submitterEmail: string | null;
           unclaimedSpeakerCount: number;
           assignmentCount: number;
@@ -423,7 +436,7 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationService
         )
       : [];
     const submissions = submissionRows.results.map(
-      ({ routedTeamIdsJson, ...submission }) => {
+      ({ routedTeamIdsJson, routingJson, tracksJson, ...submission }) => {
         if (!submission.category) {
           throw new EvaluationStateError(
             `Submission ${submission.id} is missing persisted track selections.`,
@@ -432,22 +445,39 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationService
         const routedTeamIds = z
           .array(z.string())
           .parse(JSON.parse(routedTeamIdsJson));
-        if (routedTeamIds.length === 0) {
-          if (submission.routedTeamId) {
-            throw new EvaluationStateError(
-              `Submission ${submission.id} has incomplete persisted routing teams.`,
-            );
-          }
-        } else if (
-          !submission.routedTeamId ||
-          !routedTeamIds.includes(submission.routedTeamId) ||
-          !submission.routedTeamName
-        ) {
+        if (!routingJson) {
           throw new EvaluationStateError(
-            `Submission ${submission.id} has inconsistent persisted routing teams.`,
+            `Submission ${submission.id} is missing its immutable routing snapshot.`,
           );
         }
-        return submission;
+        const routing = routingSchema.parse(JSON.parse(routingJson));
+        const routedTeamNames = routedTeamIds.map((teamId) => {
+          const name = routing.teamNames[teamId];
+          if (!name) {
+            throw new EvaluationStateError(
+              `Submission ${submission.id} has inconsistent persisted routing teams.`,
+            );
+          }
+          return name;
+        });
+        const tracks = z
+          .array(
+            z.object({
+              id: z.string(),
+              name: z.string(),
+              submittedName: z.string(),
+              position: z.number().int().nonnegative(),
+            }),
+          )
+          .min(1)
+          .parse(JSON.parse(tracksJson));
+        return {
+          ...submission,
+          routedTeamIds,
+          routedTeamName:
+            routedTeamNames.length > 0 ? routedTeamNames.join(", ") : null,
+          tracks,
+        };
       },
     );
     return {

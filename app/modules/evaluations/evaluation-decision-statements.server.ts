@@ -266,6 +266,7 @@ export function buildDecisionStatements(input: {
   slug: string;
   format: string;
   sessionDurationMinutes: number;
+  sessionTrack: { id: string; name: string } | null;
   notificationOperationId: string | null;
   notificationFeedback: string[];
   roundId: string | null;
@@ -288,6 +289,7 @@ export function buildDecisionStatements(input: {
     slug,
     format,
     sessionDurationMinutes,
+    sessionTrack,
     notificationOperationId,
     notificationFeedback,
     roundId,
@@ -295,6 +297,16 @@ export function buildDecisionStatements(input: {
     speakerInvitationPlans,
     auditEventId,
   } = input;
+  if (parsed.decision === "accepted" && !sessionTrack) {
+    throw new Error(
+      "Accepted decision statements require the confirmed submitted track.",
+    );
+  }
+  if (parsed.decision !== "accepted" && sessionTrack) {
+    throw new Error(
+      "Only accepted decision statements may carry a programme track.",
+    );
+  }
   const speakerSetGuard = speakerMemberships.length
     ? `(
         SELECT COUNT(*) FROM submission_speakers current_speaker
@@ -330,12 +342,17 @@ export function buildDecisionStatements(input: {
              OR ((${speakerSetGuard}) AND (${acceptanceTaskPlanGuardSql}))
            )
            AND (
-             ? <> 'published' OR ? <> 'accepted'
-             OR EXISTS (
-               SELECT 1 FROM submission_track_selections selection
-                WHERE selection.submission_id = submissions.id
-                  AND selection.event_id = submissions.event_id
-             )
+             ? <> 'accepted'
+              OR EXISTS (
+                SELECT 1 FROM submission_track_selections selection
+                JOIN tracks current_track
+                  ON current_track.id = selection.track_id
+                 AND current_track.event_id = selection.event_id
+                 WHERE selection.submission_id = submissions.id
+                   AND selection.event_id = submissions.event_id
+                   AND selection.track_id = ?
+                   AND current_track.name = ?
+              )
            )
            AND (
              ? <> 'published'
@@ -360,8 +377,9 @@ export function buildDecisionStatements(input: {
       status,
       parsed.decision,
       ...speakerSetBindings,
-      status,
       parsed.decision,
+      sessionTrack?.id ?? null,
+      sessionTrack?.name ?? null,
       status,
       viewer.role,
       viewer.role,
@@ -436,6 +454,8 @@ export function buildDecisionStatements(input: {
         queuesNotification: Boolean(notificationOperationId),
         roundId,
         reviewEvidenceOverride: status === "published" && roundId === null,
+        sessionTrackId: sessionTrack?.id ?? null,
+        sessionTrackName: sessionTrack?.name ?? null,
       }),
       `decision:${submission.id}:${revision}`,
       status,
@@ -451,23 +471,26 @@ export function buildDecisionStatements(input: {
             id, event_id, source_submission_id, track_id, title, slug, description, format,
             duration_minutes, status, visibility, revision, created_at, updated_at
           )
-          SELECT ?, ?, ?, (
-                   SELECT selection.track_id
-                     FROM submission_track_selections selection
-                    WHERE selection.submission_id = ? AND selection.event_id = ?
-                    ORDER BY selection.position LIMIT 1
-                 ), ?, ?, ?, ?, ?, 'unscheduled', 'public', 1, unixepoch(), unixepoch()
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unscheduled', 'public', 1, unixepoch(), unixepoch()
            WHERE EXISTS (
              SELECT 1 FROM submission_decisions
               WHERE id = ? AND event_id = ? AND status = 'published' AND decision = 'accepted'
            )
+             AND EXISTS (
+               SELECT 1 FROM submission_track_selections selection
+               JOIN tracks current_track
+                 ON current_track.id = selection.track_id
+                AND current_track.event_id = selection.event_id
+                WHERE selection.submission_id = ? AND selection.event_id = ?
+                  AND selection.track_id = ?
+                  AND current_track.name = ?
+             )
         `,
           ).bind(
             sessionId,
             viewer.eventId,
             submission.id,
-            submission.id,
-            viewer.eventId,
+            sessionTrack!.id,
             sessionTitle,
             slug,
             sessionDescription,
@@ -475,6 +498,10 @@ export function buildDecisionStatements(input: {
             sessionDurationMinutes,
             decisionId,
             viewer.eventId,
+            submission.id,
+            viewer.eventId,
+            sessionTrack!.id,
+            sessionTrack!.name,
           ),
           env.DB.prepare(
             `
@@ -629,6 +656,8 @@ export function buildDecisionStatements(input: {
       JSON.stringify({
         decision: parsed.decision,
         sessionId,
+        sessionTrackId: sessionTrack?.id ?? null,
+        sessionTrackName: sessionTrack?.name ?? null,
         notificationOperationId,
         reviewEvidenceOverride: parsed.release && roundId === null,
       }),

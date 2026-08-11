@@ -1110,14 +1110,6 @@ export class SubmissionApplicantRepository {
     options: {
       trackSelections: Array<{ trackId: string; trackName: string }>;
       routedTeamIds: string[];
-      routingAssignment?: {
-        roundId: string;
-        teamIds: string[];
-        assignments: Array<{
-          teamId: string;
-          evaluatorPersonId: string;
-        }>;
-      } | null;
       upload?: { fieldId: string; assetId: string; versionId: string } | null;
       operationId?: string;
     },

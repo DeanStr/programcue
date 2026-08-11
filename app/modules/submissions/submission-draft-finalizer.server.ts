@@ -48,14 +48,6 @@ export class SubmissionDraftFinalizer {
     options: {
       trackSelections: Array<{ trackId: string; trackName: string }>;
       routedTeamIds: string[];
-      routingAssignment?: {
-        roundId: string;
-        teamIds: string[];
-        assignments: Array<{
-          teamId: string;
-          evaluatorPersonId: string;
-        }>;
-      } | null;
       upload?: { fieldId: string; assetId: string; versionId: string } | null;
       operationId?: string;
     },
@@ -70,21 +62,6 @@ export class SubmissionDraftFinalizer {
         "A submission must retain at least one submitted event track.",
       );
     }
-    if (
-      Boolean(options.routedTeamIds.length) !==
-        Boolean(options.routingAssignment) ||
-      (options.routingAssignment &&
-        (options.routingAssignment.teamIds.length !==
-          options.routedTeamIds.length ||
-          options.routingAssignment.teamIds.some(
-            (teamId) => !options.routedTeamIds.includes(teamId),
-          )))
-    ) {
-      throw new Error(
-        "Submission routing teams must match the automatic assignment plan.",
-      );
-    }
-    const primaryRoutedTeamId = options.routedTeamIds[0] ?? null;
     const operationsQueue = this.env.OPERATIONS_QUEUE;
     if (!operationsQueue) {
       throw new Error("Required OPERATIONS_QUEUE binding is unavailable.");
@@ -251,11 +228,7 @@ export class SubmissionDraftFinalizer {
       uploads: payload.uploads ?? {},
     });
     const finalStatus =
-      form.kind === "direct_session"
-        ? "accepted"
-        : options.routingAssignment
-          ? "assigned"
-          : "submitted";
+      form.kind === "direct_session" ? "accepted" : "submitted";
     const submissionAuditEventId = crypto.randomUUID();
     const directSessionAuditEventId = directSessionId
       ? crypto.randomUUID()
@@ -308,7 +281,7 @@ export class SubmissionDraftFinalizer {
       this.env.DB.prepare(
         `
         UPDATE submissions
-           SET status = ?, routed_team_id = ?, submitted_snapshot_json = ?, revision = revision + 1,
+           SET status = ?, submitted_snapshot_json = ?, revision = revision + 1,
                last_operation_id = ?, submitted_at = unixepoch(), updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND submitter_person_id = ? AND form_version_id = ?
            AND status = 'draft' AND revision = ?
@@ -350,13 +323,6 @@ export class SubmissionDraftFinalizer {
                   SELECT 1 FROM evaluation_teams routed_team
                    WHERE routed_team.id = CAST(expected_team.value AS TEXT)
                      AND routed_team.event_id = submissions.event_id
-                     AND routed_team.status = 'active'
-                     AND EXISTS (
-                       SELECT 1 FROM evaluation_team_members routed_member
-                        WHERE routed_member.team_id = routed_team.id
-                          AND routed_member.event_id = routed_team.event_id
-                          AND routed_member.removed_at IS NULL
-                     )
                 )
              )
            )
@@ -367,70 +333,6 @@ export class SubmissionDraftFinalizer {
                  WHERE current_track.id = json_extract(expected_track.value, '$.trackId')
                    AND current_track.event_id = submissions.event_id
               )
-           )
-           AND (
-             ? = 0 OR NOT EXISTS (
-               SELECT 1 FROM evaluator_assignments existing_assignment
-                WHERE existing_assignment.event_id = submissions.event_id
-                  AND existing_assignment.submission_id = submissions.id
-             )
-           )
-           AND (
-             ? IS NULL OR (
-               EXISTS (
-                 SELECT 1 FROM evaluation_rounds routed_round
-                 JOIN evaluation_plans routed_plan
-                   ON routed_plan.id = routed_round.plan_id
-                  AND routed_plan.event_id = routed_round.event_id
-                WHERE routed_round.id = ?
-                  AND routed_round.event_id = submissions.event_id
-                  AND routed_round.status = 'active'
-                  AND routed_plan.status = 'active'
-               )
-               AND (
-                 SELECT COUNT(*) FROM evaluation_rounds active_round
-                 JOIN evaluation_plans active_plan
-                   ON active_plan.id = active_round.plan_id
-                  AND active_plan.event_id = active_round.event_id
-                WHERE active_round.event_id = submissions.event_id
-                  AND active_round.status = 'active'
-                  AND active_plan.status = 'active'
-               ) = 1
-               AND NOT EXISTS (
-                 SELECT 1 FROM json_each(?) expected_assignment
-                  WHERE NOT EXISTS (
-                    SELECT 1 FROM evaluation_team_members routed_member
-                    JOIN evaluation_teams routed_team
-                      ON routed_team.id = routed_member.team_id
-                     AND routed_team.event_id = routed_member.event_id
-                     AND routed_team.status = 'active'
-                   WHERE routed_member.event_id = submissions.event_id
-                     AND routed_member.team_id = json_extract(expected_assignment.value, '$.teamId')
-                     AND routed_member.person_id = json_extract(expected_assignment.value, '$.evaluatorPersonId')
-                     AND routed_member.removed_at IS NULL
-                     AND EXISTS (
-                       SELECT 1 FROM memberships routed_membership
-                        WHERE routed_membership.event_id = routed_member.event_id
-                          AND routed_membership.person_id = routed_member.person_id
-                          AND routed_membership.role IN ('evaluator','committee_chair')
-                          AND routed_membership.accepted_at IS NOT NULL
-                          AND routed_membership.revoked_at IS NULL
-                     )
-                  )
-               )
-               AND NOT EXISTS (
-                 SELECT 1 FROM evaluation_team_members active_member
-                  WHERE active_member.event_id = submissions.event_id
-                    AND active_member.team_id IN (
-                      SELECT CAST(value AS TEXT) FROM json_each(?)
-                    )
-                    AND active_member.removed_at IS NULL
-                    AND NOT EXISTS (
-                      SELECT 1 FROM json_each(?) expected_assignment
-                       WHERE json_extract(expected_assignment.value, '$.evaluatorPersonId') = active_member.person_id
-                    )
-               )
-             )
            )
            AND EXISTS (
              SELECT 1 FROM form_definitions current_form
@@ -450,7 +352,6 @@ export class SubmissionDraftFinalizer {
       `,
       ).bind(
         finalStatus,
-        primaryRoutedTeamId,
         submissionSnapshot,
         operationId,
         payload.submissionId,
@@ -467,12 +368,6 @@ export class SubmissionDraftFinalizer {
         options.routedTeamIds.length,
         JSON.stringify(options.routedTeamIds),
         JSON.stringify(options.trackSelections),
-        options.routedTeamIds.length,
-        options.routingAssignment?.roundId ?? null,
-        options.routingAssignment?.roundId ?? null,
-        JSON.stringify(options.routingAssignment?.assignments ?? []),
-        JSON.stringify(options.routedTeamIds),
-        JSON.stringify(options.routingAssignment?.assignments ?? []),
         form.id,
         form.eventId,
       ),
@@ -611,11 +506,11 @@ export class SubmissionDraftFinalizer {
             WHERE EXISTS (
               SELECT 1 FROM submissions submission
                WHERE submission.id = ? AND submission.event_id = ?
-                 AND submission.last_operation_id = ? AND submission.status = 'assigned'
+                 AND submission.last_operation_id = ? AND submission.status <> 'draft'
             )
               AND EXISTS (
                 SELECT 1 FROM evaluation_teams team
-                 WHERE team.id = ? AND team.event_id = ? AND team.status = 'active'
+                 WHERE team.id = ? AND team.event_id = ?
               )`,
         ).bind(
           payload.submissionId,
@@ -626,105 +521,6 @@ export class SubmissionDraftFinalizer {
           operationId,
           teamId,
           form.eventId,
-        ),
-      );
-    }
-    if (options.routingAssignment) {
-      for (const assignment of options.routingAssignment.assignments) {
-        finalStatements.push(
-          this.env.DB.prepare(
-            `INSERT INTO evaluator_assignments (
-               id, event_id, round_id, submission_id, evaluator_person_id,
-               team_id, status, revision, last_operation_id, assigned_at
-             )
-             SELECT ?, ?, ?, ?, ?, ?, 'assigned', 1, ?, unixepoch()
-              WHERE EXISTS (
-                SELECT 1 FROM submissions submission
-                 WHERE submission.id = ? AND submission.event_id = ?
-                   AND submission.status = 'assigned'
-                   AND EXISTS (
-                     SELECT 1 FROM submission_routing_teams routed
-                      WHERE routed.submission_id = submission.id
-                        AND routed.event_id = submission.event_id
-                        AND routed.team_id = ?
-                   )
-                   AND submission.last_operation_id = ?
-              )
-                AND EXISTS (
-                  SELECT 1 FROM evaluation_rounds round
-                  JOIN evaluation_plans plan
-                    ON plan.id = round.plan_id AND plan.event_id = round.event_id
-                 WHERE round.id = ? AND round.event_id = ?
-                   AND round.status = 'active' AND plan.status = 'active'
-                )
-                AND EXISTS (
-                  SELECT 1 FROM evaluation_team_members member
-                  JOIN evaluation_teams team
-                    ON team.id = member.team_id AND team.event_id = member.event_id
-                 WHERE member.team_id = ? AND member.event_id = ?
-                   AND member.person_id = ? AND member.removed_at IS NULL
-                   AND team.status = 'active'
-                   AND EXISTS (
-                     SELECT 1 FROM memberships membership
-                      WHERE membership.event_id = member.event_id
-                        AND membership.person_id = member.person_id
-                        AND membership.role IN ('evaluator','committee_chair')
-                        AND membership.accepted_at IS NOT NULL
-                        AND membership.revoked_at IS NULL
-                   )
-                )
-             ON CONFLICT(round_id, submission_id, evaluator_person_id)
-               WHERE submission_id IS NOT NULL DO NOTHING`,
-          ).bind(
-            crypto.randomUUID(),
-            form.eventId,
-            options.routingAssignment.roundId,
-            payload.submissionId,
-            assignment.evaluatorPersonId,
-            assignment.teamId,
-            operationId,
-            payload.submissionId,
-            form.eventId,
-            assignment.teamId,
-            operationId,
-            options.routingAssignment.roundId,
-            form.eventId,
-            assignment.teamId,
-            form.eventId,
-            assignment.evaluatorPersonId,
-          ),
-        );
-      }
-      finalStatements.push(
-        this.env.DB.prepare(
-          `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
-             entity_type, entity_id, metadata_json, created_at
-           )
-           SELECT ?, ?, ?, ?, 'evaluation.assignments.auto_created',
-                  'submission', ?, ?, unixepoch()
-            WHERE (
-              SELECT COUNT(*) FROM evaluator_assignments assignment
-               WHERE assignment.event_id = ? AND assignment.round_id = ?
-                 AND assignment.submission_id = ?
-                 AND assignment.last_operation_id = ?
-            ) = ?`,
-        ).bind(
-          crypto.randomUUID(),
-          event.organisationId,
-          form.eventId,
-          applicant.personId,
-          payload.submissionId,
-          JSON.stringify({
-            roundId: options.routingAssignment.roundId,
-            teamIds: options.routingAssignment.teamIds,
-            evaluatorCount: options.routingAssignment.assignments.length,
-          }),
-          form.eventId,
-          options.routingAssignment.roundId,
-          payload.submissionId,
-          operationId,
-          options.routingAssignment.assignments.length,
         ),
       );
     }

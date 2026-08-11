@@ -117,7 +117,9 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await expect(
       routing.getByRole("checkbox", { name: "Event Operations" }),
     ).toBeChecked();
-    await routing.getByRole("checkbox", { name: "Leadership" }).uncheck();
+    await expect(
+      routing.getByRole("checkbox", { name: "Leadership" }),
+    ).toBeChecked();
     await routing
       .getByRole("combobox", { name: "Event Operations" })
       .selectOption({
@@ -168,6 +170,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
         "A practical operating model for accountable handoffs across programme, speaker and venue teams.",
       );
     await page.getByLabel("Event Operations").check();
+    await page.getByLabel("Leadership").check();
     await page.getByLabel("Format *").selectOption("Presentation");
     await page.getByLabel("Speaker 1 name").fill(SPEAKER_NAME);
     await page.getByRole("button", { name: "Save draft" }).click();
@@ -180,6 +183,13 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await waitForInterface(page, "/admin/review");
     const row = page.getByRole("row", { name: new RegExp(SUBMISSION_TITLE) });
     await expect(row).toContainText(`Routed to ${TEAM_NAME}`);
+    await expect(row).toContainText("submitted");
+    await expect(row).toContainText("0 / 0");
+    await row
+      .getByLabel(`Evaluator or team for ${SUBMISSION_TITLE}`)
+      .selectOption({ label: `${TEAM_NAME} (1)` });
+    await row.getByRole("button", { name: "Assign" }).click();
+    await expectStatus(page, "1 evaluator assignment created.");
     await expect(row).toContainText("assigned");
     await expect(row).toContainText("0 / 1");
   });
@@ -247,6 +257,12 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       name: `Decision · ${SUBMISSION_TITLE}`,
     });
     await decision.locator('select[name="decision"]').selectOption("accepted");
+    await expect(decision.getByLabel("Acceptance programme track")).toHaveValue(
+      "",
+    );
+    await decision
+      .getByLabel("Acceptance programme track")
+      .selectOption({ label: "Event Operations" });
     await decision
       .getByLabel("Rationale")
       .fill("Two completed rounds support programme acceptance.");

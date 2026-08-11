@@ -44,11 +44,9 @@ const commonVariableNames = [
   "APP_ENV",
   "DEMO_MODE",
   "SOURCE_REVISION",
-  "DEFAULT_EVENT_ID",
   "BETTER_AUTH_URL",
   "AUTH_EMAIL_FROM",
   "EMAIL_PROVIDER",
-  "PUBLIC_EVENT_SLUG",
   "TURNSTILE_SITE_KEY",
   "CORS_ALLOWED_ORIGINS",
   "EMBED_FRAME_ANCESTORS",
@@ -64,6 +62,8 @@ const productionVariableNames = new Set([
 ]);
 const localVariableNames = new Set([
   ...commonVariableNames,
+  "DEFAULT_EVENT_ID",
+  "PUBLIC_EVENT_SLUG",
   "MAILPIT_SEND_API_URL",
 ]);
 
@@ -140,9 +140,7 @@ function productionUrl(profile, name, value, issues) {
 function resourceEmbedOrigins(profile, value, issues) {
   const normalizedValue = value.trim();
   if (!normalizedValue || normalizedValue.toLowerCase() === "none") return [];
-  const requested = normalizedValue
-    .split(",")
-    .map((origin) => origin.trim());
+  const requested = normalizedValue.split(",").map((origin) => origin.trim());
   if (
     !requested.length ||
     requested.some((origin) => !origin) ||
@@ -300,6 +298,7 @@ function validateCommonProfile(profile, config, spec, issues) {
     issues,
   );
   if (
+    profile !== "production" &&
     !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/u.test(
       String(variables.DEFAULT_EVENT_ID ?? ""),
     )
@@ -313,6 +312,7 @@ function validateCommonProfile(profile, config, spec, issues) {
     );
   }
   if (
+    profile !== "production" &&
     !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(
       String(variables.PUBLIC_EVENT_SLUG ?? ""),
     )

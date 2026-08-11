@@ -80,10 +80,7 @@ test("shared form errors connect labels, help and corrective links", async ({
   await expect(pendingButton).toHaveAttribute("aria-busy", "true");
 });
 
-for (const path of [
-  "/admin/submissions/form",
-  "/design/system",
-] as const) {
+for (const path of ["/admin/submissions/form", "/design/system"] as const) {
   test(`${path} exposes a name for every form control`, async ({ page }) => {
     await waitForInterface(page, path);
     if (path === "/admin/submissions/form") {
@@ -149,7 +146,7 @@ test("representative shells remain usable at a 200 percent equivalent layout vie
   for (const path of [
     "/admin/submissions",
     "/apply/form",
-    "/public/programme",
+    "/public/programme/future-of-events-2025",
     "/speaker/dashboard",
     "/speaker/tasks",
     "/admin/communications/compose",
@@ -192,7 +189,7 @@ test("representative surfaces have one primary main landmark and unique ids", as
     "/admin/event",
     "/admin/review",
     "/apply/form",
-    "/public/programme",
+    "/public/programme/future-of-events-2025",
     "/speaker/resources",
     "/speaker/tasks",
     "/admin/communications/compose",

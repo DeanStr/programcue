@@ -3,6 +3,7 @@ import { Link } from "react-router";
 
 import type { ActionResponse } from "~/routes/event-setup";
 import type { EventSetup } from "~/modules/events/event-repository.server";
+import { AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES } from "~/modules/airtable/airtable-schema";
 import {
   CANONICAL_EVENT_FILE_POLICY,
   maximumMegabytes,
@@ -198,9 +199,9 @@ export function EventRoomsPanel({
   onRemove: (roomId: string) => void;
   focusedRoomId: string | null;
 }) {
-  const [resourceDrafts, setResourceDrafts] = useState<
-    Record<string, string>
-  >({});
+  const [resourceDrafts, setResourceDrafts] = useState<Record<string, string>>(
+    {},
+  );
 
   function addResource(roomId: string) {
     const resource = (resourceDrafts[roomId] ?? "").trim().toLowerCase();
@@ -466,8 +467,8 @@ export function EventAccessPanels({
           <div className="card pad">
             <strong>Administrators</strong>
             <p className="subtle">
-              Event administrators manage this event. Organisation administrators
-              manage every event in this organisation.
+              Event administrators manage this event. Organisation
+              administrators manage every event in this organisation.
             </p>
             {event.administrators.map((administrator) => (
               <div className="row-main mt" key={administrator.id}>
@@ -475,7 +476,11 @@ export function EventAccessPanels({
                 <span>
                   <strong>{administrator.name}</strong>
                   <small>
-                    {administrator.email} · {administrator.scope === "organisation" ? "Organisation" : "Event"} · {administrator.status}
+                    {administrator.email} ·{" "}
+                    {administrator.scope === "organisation"
+                      ? "Organisation"
+                      : "Event"}{" "}
+                    · {administrator.status}
                   </small>
                 </span>
                 {canManageAdministrators ? (
@@ -496,7 +501,9 @@ export function EventAccessPanels({
               </div>
             ))}
             {!event.administrators.length ? (
-              <p className="help mt">No additional administrators are assigned.</p>
+              <p className="help mt">
+                No additional administrators are assigned.
+              </p>
             ) : null}
           </div>
           <div className="card pad">
@@ -595,14 +602,18 @@ export function EventAccessPanels({
           </div>
         </div>
         {event.repositoryConnection?.status === "connected" ? (
-          <button
-            type="button"
-            className="btn mt"
-            onClick={onMigrateRepository}
-          >
-            Preview migration to{" "}
-            {event.repositoryProvider === "d1" ? "Airtable" : "D1"}
-          </button>
+          <div className="mt">
+            <button type="button" className="btn" onClick={onMigrateRepository}>
+              Preview migration to{" "}
+              {event.repositoryProvider === "d1" ? "Airtable" : "D1"}
+            </button>
+            <p className="help mt">
+              Authority migration is synchronous and fails before changing data
+              when more than {AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES}{" "}
+              managed records would change. Keep larger events on the
+              recommended D1 provider.
+            </p>
+          </div>
         ) : null}
         {event.repositoryLockedAt ? (
           <p className="help mt">

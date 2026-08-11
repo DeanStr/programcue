@@ -13,22 +13,11 @@ import {
 
 function requireRoutedTeamSummary(
   submissionId: string,
-  primaryTeamId: string | null,
   routedTeamIds: string[],
   routing: FormRouting,
 ) {
   if (routedTeamIds.length === 0) {
-    if (primaryTeamId) {
-      throw new Error(
-        `Submission ${submissionId} has incomplete persisted routing teams.`,
-      );
-    }
     return "Unassigned";
-  }
-  if (!primaryTeamId || !routedTeamIds.includes(primaryTeamId)) {
-    throw new Error(
-      `Submission ${submissionId} has inconsistent persisted routing teams.`,
-    );
   }
   return routedTeamIds
     .map((teamId) => {
@@ -152,7 +141,6 @@ export class SubmissionAdminRepository {
              COALESCE(p.email, s.submitter_email, '') AS submitterEmail,
              (SELECT COUNT(*) FROM submission_speakers ss WHERE ss.submission_id = s.id) AS speakerCount,
              fv.version_number AS versionNumber, s.submitted_at AS submittedAt, s.updated_at AS updatedAt,
-             s.routed_team_id AS routedTeamId,
              COALESCE((
                SELECT json_group_array(routed.team_id)
                  FROM (
@@ -164,8 +152,7 @@ export class SubmissionAdminRepository {
              ), '[]') AS routedTeamIdsJson,
              COALESCE(
                fv.routing_json,
-               json_extract(s.submitted_snapshot_json, '$.routing'),
-               '{}'
+               json_extract(s.submitted_snapshot_json, '$.routing')
              ) AS routingJson
         FROM submissions s
         JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
@@ -202,7 +189,7 @@ export class SubmissionAdminRepository {
       .all<
         Omit<AdminSubmission, "category" | "routedTo" | "routedTeamIds"> & {
           category: string | null;
-          routingJson: string;
+          routingJson: string | null;
           routedTeamIdsJson: string;
         }
       >();
@@ -210,6 +197,11 @@ export class SubmissionAdminRepository {
       if (row.status !== "draft" && !row.category) {
         throw new Error(
           `Submission ${row.id} is missing persisted track selections.`,
+        );
+      }
+      if (!routingJson) {
+        throw new Error(
+          `Submission ${row.id} is missing its immutable routing snapshot.`,
         );
       }
       const routing = routingSchema.parse(JSON.parse(routingJson));
@@ -221,12 +213,7 @@ export class SubmissionAdminRepository {
         category: row.category ?? "",
         speakerCount: Number(row.speakerCount),
         routedTeamIds,
-        routedTo: requireRoutedTeamSummary(
-          row.id,
-          row.routedTeamId,
-          routedTeamIds,
-          routing,
-        ),
+        routedTo: requireRoutedTeamSummary(row.id, routedTeamIds, routing),
       };
     });
   }
@@ -244,7 +231,6 @@ export class SubmissionAdminRepository {
              COALESCE(p.display_name, s.submitter_email) AS submitterName,
              COALESCE(p.email, s.submitter_email) AS submitterEmail,
              fv.version_number AS versionNumber, fv.schema_json AS schemaJson,
-             s.routed_team_id AS routedTeamId,
              COALESCE((
                SELECT json_group_array(routed.team_id)
                  FROM (
@@ -256,8 +242,7 @@ export class SubmissionAdminRepository {
              ), '[]') AS routedTeamIdsJson,
              COALESCE(
                fv.routing_json,
-               json_extract(s.submitted_snapshot_json, '$.routing'),
-               '{}'
+               json_extract(s.submitted_snapshot_json, '$.routing')
              ) AS routingJson,
              s.submitted_snapshot_json AS snapshotJson,
              (
@@ -289,13 +274,17 @@ export class SubmissionAdminRepository {
         submitterEmail: string | null;
         versionNumber: number | null;
         schemaJson: string | null;
-        routingJson: string;
-        routedTeamId: string | null;
+        routingJson: string | null;
         routedTeamIdsJson: string;
         snapshotJson: string | null;
         latestSpeakerSnapshotJson: string | null;
       }>();
     if (!row) return null;
+    if (!row.routingJson) {
+      throw new Error(
+        `Submission ${row.id} is missing its immutable routing snapshot.`,
+      );
+    }
     const speakers = await this.env.DB.prepare(
       `
       SELECT ss.id, ss.person_id AS personId, ss.display_name AS name,
@@ -370,12 +359,7 @@ export class SubmissionAdminRepository {
       answers,
       schema,
       routedTeamIds,
-      routedTo: requireRoutedTeamSummary(
-        row.id,
-        row.routedTeamId,
-        routedTeamIds,
-        routing,
-      ),
+      routedTo: requireRoutedTeamSummary(row.id, routedTeamIds, routing),
       uploads: snapshot ? snapshot.uploads : {},
       speakers: speakers.results.map(({ currentBiography, ...speaker }) => {
         const submittedBiography =

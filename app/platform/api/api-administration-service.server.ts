@@ -234,6 +234,7 @@ const submissionTracksSchema = z.array(
     position: z.number().int().nonnegative(),
   }),
 );
+const submissionRoutedTeamIdsSchema = z.array(z.string().min(1));
 
 function jsonValue(value: unknown, label: string) {
   if (typeof value !== "string") return value;
@@ -385,7 +386,16 @@ export class ApiAdministrationService {
                     submission.submitter_person_id AS submitterPersonId,
                     submission.submitter_email AS submitterEmail,
                     submission.title, submission.category, submission.format,
-                    submission.routed_team_id AS routedTeamId,
+                    COALESCE((
+                      SELECT json_group_array(routed.team_id)
+                        FROM (
+                          SELECT route.team_id
+                            FROM submission_routing_teams route
+                           WHERE route.submission_id = submission.id
+                             AND route.event_id = submission.event_id
+                           ORDER BY route.team_id
+                        ) routed
+                    ), '[]') AS routedTeamIdsJson,
                     COALESCE((
                       SELECT json_group_array(json(selected.track))
                         FROM (
@@ -838,6 +848,13 @@ export class ApiAdministrationService {
       }
       result.tracks = tracks;
       delete result.tracksJson;
+      result.routedTeamIds = submissionRoutedTeamIdsSchema.parse(
+        jsonValue(
+          result.routedTeamIdsJson,
+          `Submission ${String(result.id)} routed team IDs`,
+        ),
+      );
+      delete result.routedTeamIdsJson;
     }
     if (resource === "sessions") {
       result.requiredResources = jsonValue(
