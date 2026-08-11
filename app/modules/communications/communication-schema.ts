@@ -72,6 +72,31 @@ export const scheduleCommunicationSchema = confirmCommunicationSchema.extend({
   scheduledAt: z.coerce.number().int().positive(),
 });
 
+export const communicationDraftFieldsSchema = previewCommunicationSchema.extend(
+  {
+    scheduledAt: z.number().int().positive().nullable(),
+  },
+);
+
+export const updateCommunicationDraftSchema =
+  communicationDraftFieldsSchema.extend({
+    draftId: z.uuid(),
+    revision: z.coerce.number().int().positive(),
+  });
+
+export const confirmCommunicationDraftSchema = z.object({
+  draftId: z.uuid(),
+  revision: z.coerce.number().int().positive(),
+  recipientFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  deliverableFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  suppressedCount: z.coerce.number().int().nonnegative(),
+});
+
+export const discardCommunicationDraftSchema = z.object({
+  draftId: z.uuid(),
+  revision: z.coerce.number().int().positive(),
+});
+
 export const testCommunicationSchema = z.object({
   templateVersionId: z.uuid(),
   recipient: z.email(),
@@ -129,6 +154,18 @@ export type ConfirmCommunicationInput = z.infer<
 >;
 export type ScheduleCommunicationInput = z.infer<
   typeof scheduleCommunicationSchema
+>;
+export type CommunicationDraftFields = z.infer<
+  typeof communicationDraftFieldsSchema
+>;
+export type UpdateCommunicationDraftInput = z.input<
+  typeof updateCommunicationDraftSchema
+>;
+export type ConfirmCommunicationDraftInput = z.input<
+  typeof confirmCommunicationDraftSchema
+>;
+export type DiscardCommunicationDraftInput = z.input<
+  typeof discardCommunicationDraftSchema
 >;
 export type TestCommunicationInput = z.infer<typeof testCommunicationSchema>;
 export type SaveCommunicationTriggerInput = z.input<

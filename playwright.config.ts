@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { e2eOrigin } from "./e2e/support/e2e-origin";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -8,7 +10,7 @@ export default defineConfig({
   retries: 0,
   reporter: "line",
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: e2eOrigin,
     colorScheme: "light",
     locale: "en-US",
     timezoneId: "UTC",
@@ -22,13 +24,23 @@ export default defineConfig({
   },
   webServer: {
     command: "npm run serve:e2e",
-    url: "http://127.0.0.1:5173/admin/event",
+    url: `${e2eOrigin}/admin/event`,
     reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [
-    { name: "desktop-chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 1000 } } },
-    { name: "mobile-chromium", use: { ...devices["Pixel 7"] }, testMatch: /visual\.spec\.ts/ },
+    {
+      name: "desktop-chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 1000 },
+      },
+    },
+    {
+      name: "mobile-chromium",
+      use: { ...devices["Pixel 7"] },
+      testMatch: /visual\.spec\.ts/,
+    },
     {
       name: "firefox-smoke",
       use: { ...devices["Desktop Firefox"] },

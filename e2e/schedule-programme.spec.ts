@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { e2eOrigin } from "./support/e2e-origin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 async function waitForInterface(page: Page, path: string) {
@@ -133,7 +134,7 @@ test("schedule and programme render the event calendar date and timezone", async
     page.getByText(/May 20, 2025.*9:00 AM.*(?:EDT|GMT-4)/).first(),
   ).toBeVisible();
   await expect(page.getByLabel("Embed code")).toHaveValue(
-    /<iframe src="http:\/\/127\.0\.0\.1:5173\/embed\/future-of-events-2025"/,
+    new RegExp(`<iframe src="${e2eOrigin}/embed/future-of-events-2025"`),
   );
   await expect(page.getByLabel("Auto-resizing widget code")).toHaveValue(
     /programcue-widget\.js.*data-programcue-event="future-of-events-2025"/s,
@@ -174,22 +175,20 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
   // a CSP-neutral loopback host document so the local HTTP test can exercise
   // the widget contract without inheriting Program Cue's response headers or
   // using an opaque origin that Chromium blocks from loopback resources.
-  await page.route(
-    "http://127.0.0.1:5173/__programcue-widget-host",
-    async (route) =>
-      route.fulfill({
-        contentType: "text/html",
-        body: `
+  await page.route(`${e2eOrigin}/__programcue-widget-host`, async (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `
           <main><div id="programme-widget"></div></main>
-          <script src="http://127.0.0.1:5173/programcue-widget.js"
+          <script src="${e2eOrigin}/programcue-widget.js"
             data-programcue-event="future-of-events-2025"
             data-target="#programme-widget"
             data-day="2025-05-21"
             data-accent="#0d9488"></script>
         `,
-      }),
+    }),
   );
-  await page.goto("http://127.0.0.1:5173/__programcue-widget-host");
+  await page.goto(`${e2eOrigin}/__programcue-widget-host`);
   const frame = page.locator("#programme-widget iframe");
   await expect(frame).toHaveAttribute(
     "src",
@@ -392,7 +391,7 @@ test("keeps personal itinerary state private and disables it in embeds", async (
 
   const mutation = await page.request.post("/embed/future-of-events-2025", {
     form: { intent: "add", sessionId: "not-used" },
-    headers: { origin: "http://127.0.0.1:5173" },
+    headers: { origin: e2eOrigin },
   });
   expect(mutation.status()).toBe(405);
   expect(mutation.headers().allow).toBe("GET");

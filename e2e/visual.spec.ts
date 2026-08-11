@@ -44,6 +44,10 @@ const SURFACES: readonly Surface[] = [
   { name: "schedule-planner", path: "/admin/schedule" },
   { name: "session-bulk", path: "/admin/sessions/bulk" },
   { name: "communications", path: "/admin/communications" },
+  {
+    name: "communications-compose",
+    path: "/admin/communications/compose",
+  },
   { name: "tasks-readiness", path: "/admin/tasks" },
   { name: "task-bulk", path: "/admin/tasks/bulk" },
   { name: "programme-admin", path: "/admin/programme" },
@@ -60,6 +64,10 @@ const SURFACES: readonly Surface[] = [
     path: "/speaker/dashboard",
     role: "speaker",
   },
+  { name: "speaker-sessions", path: "/speaker/sessions", role: "speaker" },
+  { name: "speaker-tasks", path: "/speaker/tasks", role: "speaker" },
+  { name: "speaker-files", path: "/speaker/files", role: "speaker" },
+  { name: "speaker-profile", path: "/speaker/profile", role: "speaker" },
   {
     name: "speaker-resources",
     path: "/speaker/resources",
@@ -471,20 +479,29 @@ test.describe.serial("responsive visual inventory", () => {
     page,
   }) => {
     await selectCurrentEvent(page);
-    await openHydrated(page, "/admin/communications");
+    await openHydrated(page, "/admin/communications/compose");
     const composer = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "1. Configure audience" }),
+      has: page.getByRole("heading", { name: "1. Create the durable draft" }),
     });
     await composer
       .getByLabel("Schedule for later (optional, America/Toronto)")
       .fill("2027-07-10T09:30");
     await composer
-      .getByRole("button", { name: "Preview recipients and content" })
+      .getByRole("button", { name: "Create durable draft" })
+      .click();
+    await page
+      .getByRole("button", { name: "Generate current preview" })
       .click();
 
-    const preview = page.locator(".comms-confirm-panel");
+    const preview = page.locator("section").filter({
+      has: page.getByRole("heading", {
+        name: "2. Verify the authoritative preview",
+      }),
+    });
     await expect(
-      preview.getByRole("heading", { name: "2. Verify preview" }),
+      preview.getByRole("heading", {
+        name: "2. Verify the authoritative preview",
+      }),
     ).toBeVisible();
     await expect(
       preview.locator(".validation-item.info").filter({

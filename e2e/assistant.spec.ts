@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { e2eOrigin } from "./support/e2e-origin";
+
 const FIXTURE_CONFIRMATION = "seed-assistant-approval-browser-fixture";
 
 test.beforeEach(async ({ context }) => {
@@ -27,7 +29,9 @@ test("assistant fails explicitly when the OpenAI credential is unavailable", asy
   await expect(
     page.getByText("AI provider is not configured", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Ask assistant" })).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Ask assistant" }),
+  ).toBeDisabled();
   await expect(page.getByText(/simulate a response/i)).toBeVisible();
 });
 
@@ -37,7 +41,7 @@ test("assistant task preview requires confirmation and executes through the real
 }) => {
   const fixture = await request.post("/demo/fixtures/assistant-proposal", {
     form: { intent: "seed", confirm: FIXTURE_CONFIRMATION },
-    headers: { origin: "http://127.0.0.1:5173" },
+    headers: { origin: e2eOrigin },
   });
   const fixtureBody = await fixture.text();
   expect(fixture.ok(), fixtureBody).toBeTruthy();
@@ -56,7 +60,9 @@ test("assistant task preview requires confirmation and executes through the real
   const proposal = page
     .locator("section.card")
     .filter({ hasText: fixtureData.taskTitle });
-  await expect(proposal.getByText("Approval required", { exact: true })).toBeVisible();
+  await expect(
+    proposal.getByText("Approval required", { exact: true }),
+  ).toBeVisible();
   const approve = proposal.getByRole("button", {
     name: "Approve and create task",
   });
@@ -79,7 +85,9 @@ test("assistant task preview requires confirmation and executes through the real
   ).toBeVisible();
   await page.getByRole("link", { name: "Open created task" }).click();
   await expect(page).toHaveURL(/\/admin\/tasks\?task=/);
-  await expect(page.getByText(fixtureData.taskTitle, { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(fixtureData.taskTitle, { exact: true }),
+  ).toBeVisible();
 });
 
 test("assistant reminder preview can be edited and queues exactly once only after approval", async ({
@@ -88,7 +96,7 @@ test("assistant reminder preview can be edited and queues exactly once only afte
 }) => {
   const fixture = await request.post("/demo/fixtures/assistant-proposal", {
     form: { intent: "seed_reminder", confirm: FIXTURE_CONFIRMATION },
-    headers: { origin: "http://127.0.0.1:5173" },
+    headers: { origin: e2eOrigin },
   });
   const fixtureBody = await fixture.text();
   expect(fixture.ok(), fixtureBody).toBeTruthy();
@@ -114,7 +122,9 @@ test("assistant reminder preview can be edited and queues exactly once only afte
     proposal.getByText("Approval required", { exact: true }),
   ).toBeVisible();
   await proposal.getByText(/Review all \d+ selected recipients/).click();
-  await expect(proposal.getByText(fixtureData.deliverableAddress)).toBeVisible();
+  await expect(
+    proposal.getByText(fixtureData.deliverableAddress),
+  ).toBeVisible();
   await expect(proposal.getByText(fixtureData.suppressedAddress)).toBeVisible();
   await expect(
     proposal.getByText("Suppressed", { exact: true }).first(),
@@ -131,7 +141,10 @@ test("assistant reminder preview can be edited and queues exactly once only afte
   await expect(
     page.getByText(/saved as a new immutable template version/i),
   ).toBeVisible();
-  proposal = page.locator("section.card").filter({ hasText: revisedSubject }).first();
+  proposal = page
+    .locator("section.card")
+    .filter({ hasText: revisedSubject })
+    .first();
   await expect(proposal.getByLabel("Subject")).toHaveValue(revisedSubject);
 
   const approve = proposal.getByRole("button", {
@@ -189,5 +202,7 @@ test("contextual AI actions stay inside the readiness and review workflows", asy
   await expect(
     page.getByRole("button", { name: "Generate advisory review aid" }),
   ).toBeVisible();
-  await expect(page.getByText(/cannot score, submit or change your review/i)).toBeVisible();
+  await expect(
+    page.getByText(/cannot score, submit or change your review/i),
+  ).toBeVisible();
 });

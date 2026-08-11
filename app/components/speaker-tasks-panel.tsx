@@ -11,8 +11,8 @@ import { maximumMegabytes } from "~/modules/files/file-policy";
 import {
   speakerDueLabel,
   type SpeakerPortal,
+  type SpeakerTask,
 } from "~/components/speaker-dashboard-panel-shared";
-import type { SpeakerDashboardData } from "~/routes/speaker-dashboard";
 
 async function attachTaskEvidence(
   taskId: string,
@@ -60,7 +60,7 @@ export function SpeakerTasksPanel({
   intentId,
 }: {
   portal: SpeakerPortal;
-  tasks: SpeakerDashboardData["tasks"];
+  tasks: SpeakerTask[];
   finished: number;
   busy: boolean;
   intentId: string;

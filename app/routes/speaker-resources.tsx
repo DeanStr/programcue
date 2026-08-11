@@ -8,63 +8,29 @@ import {
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 
 import type { Route } from "./+types/speaker-resources";
-import { SpeakerShell } from "~/components/speaker-shell";
+import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
 import {
   ResourceRevisionConflictError,
   ResourceService,
 } from "~/modules/resources/resource-service.server";
-import {
-  ensureDemoSpeakerData,
-  requireSpeakerViewer,
-} from "~/modules/speakers/demo.server";
-import { SpeakerService } from "~/modules/speakers/speaker-service.server";
-import { resolveCurrentEventId } from "~/platform/auth/current-event.server";
-import { getCloudflareContext } from "~/platform/cloudflare-context";
+import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
 export const meta = () => [{ title: "Speaker Resources · Program Cue" }];
 
-async function participant(
-  request: Request,
-  context: Route.LoaderArgs["context"],
-) {
-  const { env } = getCloudflareContext(context);
-  await ensureDemoSpeakerData(env);
-  const eventId = await resolveCurrentEventId(request, env, ["speaker"]);
-  const viewer = await requireSpeakerViewer(request, env, eventId);
-  return { env, viewer };
-}
-
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const { env, viewer } = await participant(request, context);
+  const { env, viewer } = await requireSpeakerWorkspace(request, context);
   const slug = new URL(request.url).searchParams.get("resource");
-  const [workspace, portal] = await Promise.all([
-    new ResourceService(env).getParticipantWorkspace(viewer, slug),
-    new SpeakerService(env).getPortal(viewer),
-  ]);
-  const date = new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
   return {
-    workspace,
-    viewer,
-    timezone: portal.event.timezone,
-    event: {
-      name: portal.event.name,
-      brandAccent: portal.event.brandAccent,
-      dateLabel: `${date.format(new Date(portal.event.startsAt * 1_000))}–${date.format(new Date(portal.event.endsAt * 1_000))}`,
-      locationLabel: [portal.event.venue, portal.event.city]
-        .filter(Boolean)
-        .join(", "),
-    },
+    workspace: await new ResourceService(env).getParticipantWorkspace(
+      viewer,
+      slug,
+    ),
   };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  const { env, viewer } = await participant(request, context);
+  const { env, viewer } = await requireSpeakerWorkspace(request, context);
   const form = await request.formData();
   if (form.get("confirmed") !== "on") {
     return data(
@@ -113,12 +79,14 @@ function fileSize(bytes: number) {
 }
 
 export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
-  const { workspace, viewer, event, timezone } = loaderData;
+  const { workspace } = loaderData;
+  const { portal } = useSpeakerWorkspace();
+  const timezone = portal.event.timezone;
   const selected = workspace.selected;
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   return (
-    <SpeakerShell event={event} viewer={viewer}>
+    <>
       <div className="page-head">
         <div>
           <span className="pc-page-eyebrow">Knowledge library</span>
@@ -270,6 +238,6 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
           </section>
         )}
       </div>
-    </SpeakerShell>
+    </>
   );
 }

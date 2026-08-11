@@ -48,3 +48,23 @@ export function assertCommunicationScheduleStillMatchesPreview(
     );
   }
 }
+
+export function communicationScheduledLocalValue(
+  epochSeconds: number | null,
+  eventTimezone: string,
+) {
+  if (epochSeconds === null) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: eventTimezone,
+  }).formatToParts(new Date(epochSeconds * 1_000));
+  const value = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+  return `${value.year}-${value.month}-${value.day}T${value.hour}:${value.minute}`;
+}

@@ -26,28 +26,32 @@ test("speaker profile, sessions and D1 task state render through the production 
     page.getByRole("heading", { name: /Welcome back, Priya/ }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Designing inclusive event technology" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Upload presentation slides" }).first(),
-  ).toBeVisible();
-  await expect(
     page.getByRole("progressbar", { name: /complete/ }),
   ).toHaveAttribute("aria-valuenow");
   await expect(page.getByRole("link", { name: "Dashboard" })).toHaveAttribute(
     "aria-current",
     "page",
   );
+  await page.getByRole("link", { name: "My sessions", exact: true }).click();
+  await expect(page).toHaveURL(/\/speaker\/sessions$/u);
+  await expect(
+    page.getByRole("heading", { name: "Designing inclusive event technology" }),
+  ).toBeVisible();
   await page.getByRole("link", { name: "Tasks" }).click();
+  await expect(page).toHaveURL(/\/speaker\/tasks$/u);
+  await expect(
+    page.getByRole("heading", { name: "Upload presentation slides" }).first(),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "Tasks" })).toHaveAttribute(
     "aria-current",
-    "location",
+    "page",
   );
   await expect(
     page.getByRole("link", { name: "Dashboard" }),
   ).not.toHaveAttribute("aria-current");
+  await page.getByRole("link", { name: "Files" }).click();
   await expect(page.getByRole("link", { name: /^Download / })).toHaveCount(0);
-  await page.locator("#profile").scrollIntoViewIfNeeded();
+  await page.getByRole("link", { name: "Profile" }).click();
   await page.getByRole("button", { name: "Save profile" }).click();
   await expect(page.getByRole("status")).toContainText("Profile saved to D1");
   await page.reload();

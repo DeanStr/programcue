@@ -217,6 +217,117 @@ export class CommunicationDeliveryService {
     return this.record(viewer, parsed, parsed.scheduledAt, false);
   }
 
+  async confirmDraft(
+    viewer: Viewer,
+    input: ConfirmCommunicationInput & {
+      draftId: string;
+      draftRevision: number;
+      scheduledAt: number | null;
+    },
+  ) {
+    const parsed = confirmCommunicationSchema.parse(input);
+    if (input.scheduledAt !== null) {
+      if (!this.env.OPERATIONS_QUEUE) {
+        throw new CommunicationStateError(
+          "Required OPERATIONS_QUEUE binding is unavailable; scheduled delivery cannot be enabled.",
+        );
+      }
+      const now = Math.floor(Date.now() / 1_000);
+      if (input.scheduledAt <= now + 60) {
+        throw new CommunicationStateError(
+          "Scheduled delivery must be at least one minute in the future.",
+        );
+      }
+    }
+    return this.record(viewer, parsed, input.scheduledAt, false, {
+      id: input.draftId,
+      revision: input.draftRevision,
+    });
+  }
+
+  async replayDraftConfirmation(
+    viewer: Viewer,
+    input: {
+      draftId: string;
+      draftRevision: number;
+      recipientFingerprint: string;
+      deliverableFingerprint: string;
+      suppressedCount: number;
+    },
+  ) {
+    const row = await this.env.DB.prepare(
+      `SELECT communication.id,
+              communication.template_version_id AS templateVersionId,
+              communication.idempotency_key AS idempotencyKey,
+              communication.kind, communication.scheduled_at AS scheduledAt,
+              communication.operation_id AS operationId, communication.status,
+              operation.status AS operationStatus,
+              json_extract(communication.audience_json, '$.type') AS audienceType,
+              json_extract(communication.audience_json, '$.requestHash') AS requestHash,
+              json_extract(communication.audience_json, '$.confirmedDraftRevision') AS confirmedDraftRevision
+         FROM communications communication
+         JOIN events event
+           ON event.id = communication.event_id AND event.organisation_id = ?
+         LEFT JOIN operation_jobs operation
+           ON operation.id = communication.operation_id
+          AND operation.event_id = communication.event_id
+        WHERE communication.id = ? AND communication.event_id = ?`,
+    )
+      .bind(viewer.organisationId, input.draftId, viewer.eventId)
+      .first<
+        ExistingCommunication & {
+          templateVersionId: string | null;
+          idempotencyKey: string;
+          kind: string;
+          scheduledAt: number | null;
+          audienceType: string | null;
+          confirmedDraftRevision: number | null;
+        }
+      >();
+    if (!row) {
+      throw new CommunicationNotFoundError(
+        "The communication draft was not found in this event.",
+      );
+    }
+    if (
+      row.status === "draft" ||
+      row.confirmedDraftRevision !== input.draftRevision
+    ) {
+      throw new CommunicationStateError(
+        "This communication draft is no longer awaiting that confirmation.",
+      );
+    }
+    const parsed = confirmCommunicationSchema.parse({
+      templateVersionId: row.templateVersionId,
+      audienceType: row.audienceType,
+      manualRecipients: "",
+      kind: row.kind,
+      idempotencyKey: row.idempotencyKey,
+      recipientFingerprint: input.recipientFingerprint,
+      deliverableFingerprint: input.deliverableFingerprint,
+      suppressedCount: input.suppressedCount,
+    });
+    const requestHash = await communicationRequestHash({
+      ...parsed,
+      scheduledAt: row.scheduledAt,
+      mode: "send",
+    });
+    if (row.requestHash !== requestHash) {
+      throw new CommunicationStateError(
+        "This idempotency key is already associated with a different communication request.",
+      );
+    }
+    if (row.operationStatus === "queue_failed") {
+      return communicationReplay(row, requestHash);
+    }
+    if (["failed", "partially_failed", "cancelled"].includes(row.status)) {
+      throw new CommunicationStateError(
+        `This communication is ${row.status.replaceAll("_", " ")} and cannot be confirmed again. Inspect its durable history before taking another action.`,
+      );
+    }
+    return communicationReplay(row, requestHash);
+  }
+
   async testSend(viewer: Viewer, input: TestCommunicationInput) {
     const parsed = testCommunicationSchema.parse(input);
     const previewInput: PreviewCommunicationInput = {
@@ -243,6 +354,7 @@ export class CommunicationDeliveryService {
     parsed: ConfirmCommunicationInput,
     scheduledAt: number | null,
     representativeTest: boolean,
+    draft?: { id: string; revision: number },
   ) {
     const requestHash = await communicationRequestHash({
       ...parsed,
@@ -251,7 +363,7 @@ export class CommunicationDeliveryService {
     });
     const existing = await this.env.DB.prepare(
       `
-      SELECT c.id, c.operation_id AS operationId, c.status,
+      SELECT c.id, c.operation_id AS operationId, c.status, c.revision,
              json_extract(c.audience_json, '$.requestHash') AS requestHash,
              operation.status AS operationStatus
         FROM communications c
@@ -262,8 +374,27 @@ export class CommunicationDeliveryService {
     `,
     )
       .bind(viewer.organisationId, viewer.eventId, parsed.idempotencyKey)
-      .first<ExistingCommunication>();
-    if (existing) return communicationReplay(existing, requestHash);
+      .first<ExistingCommunication & { revision: number }>();
+    if (!draft && existing) return communicationReplay(existing, requestHash);
+    if (
+      draft &&
+      existing &&
+      existing.id === draft.id &&
+      existing.status !== "draft"
+    ) {
+      return communicationReplay(existing, requestHash);
+    }
+    if (
+      draft &&
+      (!existing ||
+        existing.id !== draft.id ||
+        existing.status !== "draft" ||
+        existing.revision !== draft.revision)
+    ) {
+      throw new CommunicationStateError(
+        "This communication draft changed after it was previewed. Preview it again before confirming.",
+      );
+    }
 
     const preview = await this.previewParsed(
       viewer,
@@ -314,7 +445,7 @@ export class CommunicationDeliveryService {
       "communication.completed",
     );
 
-    const communicationId = crypto.randomUUID();
+    const communicationId = draft?.id ?? crypto.randomUUID();
     const operationId = crypto.randomUUID();
     const correlationId = crypto.randomUUID();
     const requiredSourceVariables = sourceVariables(preview.template);
@@ -354,6 +485,8 @@ export class CommunicationDeliveryService {
       invalid: preview.recipients.invalid.length,
       suppressed: preview.recipients.suppressed.length,
       requestHash,
+      recordingClaimId: operationId,
+      confirmedDraftRevision: draft?.revision ?? null,
       test: representativeTest,
     };
     const queueMessage = {
@@ -365,9 +498,62 @@ export class CommunicationDeliveryService {
       idempotencyKey: parsed.idempotencyKey,
     };
     const deliveriesJson = JSON.stringify(deliveries);
-    const results = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `
+    const communicationRecord = draft
+      ? this.env.DB.prepare(
+          `
+          UPDATE communications
+             SET sender_profile_id = ?, operation_id = ?, kind = ?,
+                 status = ?, audience_json = ?, content_snapshot_json = ?,
+                 recipient_count = ?, scheduled_at = ?,
+                 queued_at = CASE WHEN ? IS NULL THEN unixepoch() ELSE NULL END,
+                 revision = revision + 1, updated_at = unixepoch()
+           WHERE id = ? AND event_id = ? AND status = 'draft' AND revision = ?
+             AND template_version_id = ?
+             AND EXISTS (
+               SELECT 1 FROM events event
+                WHERE event.id = communications.event_id
+                  AND event.organisation_id = ?
+             )
+             AND EXISTS (
+               SELECT 1 FROM communication_template_versions exact_template
+                WHERE exact_template.id = communications.template_version_id
+                  AND exact_template.event_id = communications.event_id
+                  AND exact_template.status = 'published'
+             )
+             AND EXISTS (
+               SELECT 1 FROM sender_profiles exact_sender
+                WHERE exact_sender.id = ?
+                  AND exact_sender.event_id = communications.event_id
+                  AND exact_sender.status = 'verified'
+                  AND exact_sender.provider = ?
+                  AND exact_sender.from_name = ?
+                  AND exact_sender.from_email = ?
+                  AND exact_sender.reply_to_email IS ?
+             )
+        `,
+        ).bind(
+          sender.id,
+          scheduledAt === null ? operationId : null,
+          parsed.kind,
+          scheduledAt === null ? "queued" : "scheduled",
+          JSON.stringify(audienceSnapshot),
+          JSON.stringify(contentSnapshot),
+          deliveries.length,
+          scheduledAt,
+          scheduledAt,
+          communicationId,
+          viewer.eventId,
+          draft.revision,
+          preview.template.id,
+          viewer.organisationId,
+          sender.id,
+          emailProvider.provider,
+          sender.fromName,
+          sender.fromEmail,
+          sender.replyToEmail,
+        )
+      : this.env.DB.prepare(
+          `
         INSERT OR IGNORE INTO communications (
           id, event_id, template_version_id, sender_profile_id, operation_id, idempotency_key,
           kind, channel, status, audience_json, content_snapshot_json, recipient_count,
@@ -382,28 +568,36 @@ export class CommunicationDeliveryService {
              AND exact_sender.from_name = ? AND exact_sender.from_email = ?
              AND exact_sender.reply_to_email IS ?
            WHERE e.id = ? AND e.organisation_id = ?
+             AND EXISTS (
+               SELECT 1 FROM communication_template_versions exact_template
+                WHERE exact_template.id = ? AND exact_template.event_id = e.id
+                  AND exact_template.status = 'published'
+             )
       `,
-      ).bind(
-        communicationId,
-        preview.template.id,
-        scheduledAt === null ? operationId : null,
-        parsed.idempotencyKey,
-        parsed.kind,
-        scheduledAt === null ? "queued" : "scheduled",
-        JSON.stringify(audienceSnapshot),
-        JSON.stringify(contentSnapshot),
-        deliveries.length,
-        scheduledAt,
-        scheduledAt,
-        viewer.personId,
-        sender.id,
-        emailProvider.provider,
-        sender.fromName,
-        sender.fromEmail,
-        sender.replyToEmail,
-        viewer.eventId,
-        viewer.organisationId,
-      ),
+        ).bind(
+          communicationId,
+          preview.template.id,
+          scheduledAt === null ? operationId : null,
+          parsed.idempotencyKey,
+          parsed.kind,
+          scheduledAt === null ? "queued" : "scheduled",
+          JSON.stringify(audienceSnapshot),
+          JSON.stringify(contentSnapshot),
+          deliveries.length,
+          scheduledAt,
+          scheduledAt,
+          viewer.personId,
+          sender.id,
+          emailProvider.provider,
+          sender.fromName,
+          sender.fromEmail,
+          sender.replyToEmail,
+          viewer.eventId,
+          viewer.organisationId,
+          preview.template.id,
+        );
+    const results = await this.env.DB.batch([
+      communicationRecord,
       this.env.DB.prepare(
         `
         INSERT INTO communication_deliveries (
@@ -415,7 +609,11 @@ export class CommunicationDeliveryService {
                json_extract(value, '$.sourceId'), json_extract(value, '$.sourceValues'),
                'email', ?, json_extract(value, '$.idempotencyKey'), 'queued', unixepoch(), unixepoch()
           FROM json_each(?)
-         WHERE EXISTS (SELECT 1 FROM communications WHERE id = ? AND event_id = ?)
+         WHERE EXISTS (
+           SELECT 1 FROM communications
+            WHERE id = ? AND event_id = ? AND status IN ('queued','scheduled')
+              AND json_extract(audience_json, '$.recordingClaimId') = ?
+         )
       `,
       ).bind(
         viewer.eventId,
@@ -424,6 +622,7 @@ export class CommunicationDeliveryService {
         deliveriesJson,
         communicationId,
         viewer.eventId,
+        operationId,
       ),
       this.env.DB.prepare(
         `
@@ -433,7 +632,11 @@ export class CommunicationDeliveryService {
           progress_failed, cancellable, created_at, updated_at
         ) SELECT ?, ?, ?, ?, 'communication.send', ?, ?, 'queued', ?, ?, 0, 0, 1, unixepoch(), unixepoch()
            WHERE ? IS NULL
-             AND EXISTS (SELECT 1 FROM communications WHERE id = ? AND event_id = ? AND status = 'queued')
+             AND EXISTS (
+               SELECT 1 FROM communications
+                WHERE id = ? AND event_id = ? AND status = 'queued'
+                  AND json_extract(audience_json, '$.recordingClaimId') = ?
+             )
       `,
       ).bind(
         operationId,
@@ -447,6 +650,7 @@ export class CommunicationDeliveryService {
         scheduledAt,
         communicationId,
         viewer.eventId,
+        operationId,
       ),
       this.env.DB.prepare(
         `
@@ -463,7 +667,11 @@ export class CommunicationDeliveryService {
         INSERT INTO audit_events (
           id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
         ) SELECT ?, ?, ?, ?, ?, 'communication', ?, ?, unixepoch()
-           WHERE EXISTS (SELECT 1 FROM communications WHERE id = ?)
+           WHERE EXISTS (
+             SELECT 1 FROM communications
+              WHERE id = ? AND event_id = ? AND status IN ('queued','scheduled')
+                AND json_extract(audience_json, '$.recordingClaimId') = ?
+           )
       `,
       ).bind(
         crypto.randomUUID(),
@@ -481,16 +689,54 @@ export class CommunicationDeliveryService {
           scheduledAt,
         }),
         communicationId,
+        viewer.eventId,
+        operationId,
       ),
       this.env.DB.prepare(
         `
         INSERT INTO event_changes (event_id, entity_type, entity_id, change_type, correlation_id, created_at)
         SELECT ?, 'communication', ?, 'created', ?, unixepoch()
-         WHERE EXISTS (SELECT 1 FROM communications WHERE id = ?)
+         WHERE EXISTS (
+           SELECT 1 FROM communications
+            WHERE id = ? AND event_id = ? AND status IN ('queued','scheduled')
+              AND json_extract(audience_json, '$.recordingClaimId') = ?
+         )
       `,
-      ).bind(viewer.eventId, communicationId, correlationId, communicationId),
+      ).bind(
+        viewer.eventId,
+        communicationId,
+        correlationId,
+        communicationId,
+        viewer.eventId,
+        operationId,
+      ),
     ]);
     if ((results[0].meta.changes ?? 0) !== 1) {
+      if (draft) {
+        const race = await this.env.DB.prepare(
+          `SELECT communication.id,
+                  communication.operation_id AS operationId,
+                  communication.status,
+                  json_extract(communication.audience_json, '$.requestHash') AS requestHash,
+                  operation.status AS operationStatus
+             FROM communications communication
+             JOIN events event
+               ON event.id = communication.event_id
+              AND event.organisation_id = ?
+             LEFT JOIN operation_jobs operation
+               ON operation.id = communication.operation_id
+              AND operation.event_id = communication.event_id
+            WHERE communication.id = ? AND communication.event_id = ?`,
+        )
+          .bind(viewer.organisationId, draft.id, viewer.eventId)
+          .first<ExistingCommunication>();
+        if (race && race.status !== "draft") {
+          return communicationReplay(race, requestHash);
+        }
+        throw new CommunicationStateError(
+          "This communication draft changed after it was previewed. Preview it again before confirming.",
+        );
+      }
       const race = await this.env.DB.prepare(
         `
         SELECT communication.id, communication.operation_id AS operationId,

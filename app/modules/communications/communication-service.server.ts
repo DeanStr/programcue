@@ -5,6 +5,7 @@ import { CommunicationTemplateService } from "./communication-template-service.s
 import { ResendReconciliationService } from "./resend-reconciliation-service.server";
 import { SenderProfileService } from "./sender-profile-service.server";
 import { CommunicationAutomationService } from "./communication-automation-service.server";
+import { CommunicationDraftService } from "./communication-draft-service.server";
 
 export {
   CommunicationNotFoundError,
@@ -23,6 +24,7 @@ export class CommunicationService {
   private readonly reconciliation: ResendReconciliationService;
   private readonly senders: SenderProfileService;
   private readonly automation: CommunicationAutomationService;
+  private readonly drafts: CommunicationDraftService;
 
   constructor(env: CloudflareEnvironment) {
     this.templates = new CommunicationTemplateService(env);
@@ -30,6 +32,7 @@ export class CommunicationService {
     this.reconciliation = new ResendReconciliationService(env);
     this.senders = new SenderProfileService(env);
     this.automation = new CommunicationAutomationService(env);
+    this.drafts = new CommunicationDraftService(env);
   }
 
   listCentre(...args: Parameters<CommunicationTemplateService["listCentre"]>) {
@@ -58,6 +61,30 @@ export class CommunicationService {
 
   schedule(...args: Parameters<CommunicationDeliveryService["schedule"]>) {
     return this.delivery.schedule(...args);
+  }
+
+  createDraft(...args: Parameters<CommunicationDraftService["create"]>) {
+    return this.drafts.create(...args);
+  }
+
+  getDraft(...args: Parameters<CommunicationDraftService["get"]>) {
+    return this.drafts.get(...args);
+  }
+
+  updateDraft(...args: Parameters<CommunicationDraftService["update"]>) {
+    return this.drafts.update(...args);
+  }
+
+  previewDraft(...args: Parameters<CommunicationDraftService["preview"]>) {
+    return this.drafts.preview(...args);
+  }
+
+  confirmDraft(...args: Parameters<CommunicationDraftService["confirm"]>) {
+    return this.drafts.confirm(...args);
+  }
+
+  discardDraft(...args: Parameters<CommunicationDraftService["discard"]>) {
+    return this.drafts.discard(...args);
   }
 
   testSend(...args: Parameters<CommunicationDeliveryService["testSend"]>) {

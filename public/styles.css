@@ -4614,6 +4614,14 @@ body.portal-open {
 .comms-recipient-sample-address {
   overflow-wrap: anywhere;
 }
+.data-table.comms-recipient-sample {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+.comms-recipient-sample-name {
+  width: 42%;
+}
 .comms-body {
   min-height: 190px;
 }
@@ -4678,6 +4686,33 @@ body.portal-open {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.comms-compose-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+}
+.comms-compose-steps li {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+.comms-compose-steps li.is-current {
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.comms-compose-steps li.is-complete {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
 @media (max-width: 1100px) {
   .comms-provider-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4699,6 +4734,9 @@ body.portal-open {
   }
 }
 @media (max-width: 760px) {
+  .comms-compose-steps {
+    grid-template-columns: 1fr;
+  }
   .comms-provider-strip {
     grid-template-columns: 1fr;
   }

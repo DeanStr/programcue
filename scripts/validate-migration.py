@@ -81,7 +81,7 @@ for table, expected in {
     "session_archives": {"event_id", "previous_status", "archive_operation_id"},
     "schedule_versions": {"status", "revision", "notes"},
     "schedule_session_contents": {"schedule_version_id", "event_id", "session_id", "title", "slug", "description", "track_id", "format", "duration_minutes", "required_resources_json", "visibility", "last_operation_id"},
-    "communications": {"idempotency_key", "content_snapshot_json", "recipient_count", "operation_id"},
+    "communications": {"idempotency_key", "content_snapshot_json", "recipient_count", "operation_id", "revision"},
     "calendar_invitations": {"ical_uid", "sequence_number", "method", "provider_event_id", "status"},
     "operation_jobs": {"correlation_id", "progress_total", "progress_completed", "progress_failed", "result_json", "claim_token", "claim_expires_at"},
     "abuse_rate_limits": {"scope_key", "window_started_at", "request_count", "blocked_until"},

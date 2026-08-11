@@ -1,9 +1,6 @@
-import { AlertTriangle, CheckCircle2, Mic2 } from "lucide-react";
+import { Mic2 } from "lucide-react";
+import { Link } from "react-router";
 
-import {
-  TaskCompletionUndoControl,
-  type TaskCompletionUndoNotice,
-} from "~/components/task-completion-undo-control";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import {
@@ -16,12 +13,10 @@ export function SpeakerDashboardOverview({
   portal,
   next,
   progress,
-  actionNotice,
 }: {
   portal: SpeakerPortal;
   next: SpeakerTask | undefined;
   progress: number;
-  actionNotice?: { ok: boolean; message: string } & TaskCompletionUndoNotice;
 }) {
   const waitingOnTeam = next
     ? ["submitted", "blocked"].includes(next.status)
@@ -42,25 +37,6 @@ export function SpeakerDashboardOverview({
           <span>onboarding complete</span>
         </div>
       </div>
-
-      {actionNotice ? (
-        <div
-          className={`pc-status-notice ${actionNotice.ok ? "is-success" : "is-danger"}`}
-          role={actionNotice.ok ? "status" : "alert"}
-        >
-          {actionNotice.ok ? (
-            <CheckCircle2 aria-hidden size={19} />
-          ) : (
-            <AlertTriangle aria-hidden size={19} />
-          )}
-          <div className="pc-status-notice-copy">
-            <strong>{actionNotice.ok ? "Saved" : "Action needed"}</strong>
-            <div>{actionNotice.message}</div>
-            <TaskCompletionUndoControl notice={actionNotice} />
-          </div>
-        </div>
-      ) : null}
-
       <section className="card next-action mt">
         <div>
           <span
@@ -83,9 +59,9 @@ export function SpeakerDashboardOverview({
               : "There are no outstanding requirements right now."}
           </p>
           {next ? (
-            <a className="btn primary" href={`#task-${next.id}`}>
+            <Link className="btn primary" to={`/speaker/tasks#task-${next.id}`}>
               Open task
-            </a>
+            </Link>
           ) : null}
         </div>
         <div

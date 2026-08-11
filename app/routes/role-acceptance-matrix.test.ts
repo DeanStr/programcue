@@ -22,6 +22,10 @@ import {
 import { action as assistantAction } from "./assistant";
 import { action as contextualAiAction } from "./ai-context-action";
 import {
+  action as communicationComposerAction,
+  loader as communicationComposerLoader,
+} from "./communication-composer";
+import {
   action as evaluationAction,
   loader as evaluationLoader,
 } from "./evaluation-admin";
@@ -32,10 +36,9 @@ import {
   action as reviewAction,
   loader as reviewLoader,
 } from "./review-workbench";
-import {
-  action as speakerAction,
-  loader as speakerLoader,
-} from "./speaker-dashboard";
+import { loader as speakerLoader } from "./speaker-dashboard";
+import { loader as speakerLayoutLoader } from "./speaker-layout";
+import { action as speakerAction } from "./speaker-tasks";
 import { loader as speakerFileLoader } from "./speaker-file-download";
 
 const workerEnv = env as unknown as CloudflareEnvironment;
@@ -300,6 +303,31 @@ type Boundary = {
 
 const boundaries: readonly Boundary[] = [
   {
+    name: "communication composer loader",
+    allowed: adminActors,
+    allowedStatus: 200,
+    invoke: (actor) =>
+      communicationComposerLoader({
+        request: requestFor(actor, "/admin/communications/compose"),
+        params: {},
+        context: context(),
+      } as never),
+  },
+  {
+    name: "communication composer action",
+    allowed: adminActors,
+    allowedStatus: 400,
+    invoke: (actor) =>
+      communicationComposerAction({
+        request: requestFor(actor, "/admin/communications/compose", {
+          method: "POST",
+          body: new URLSearchParams({ intent: "unsupported" }),
+        }),
+        params: {},
+        context: context(),
+      } as never),
+  },
+  {
     name: "Event Setup loader",
     allowed: adminActors,
     allowedStatus: 200,
@@ -375,7 +403,18 @@ const boundaries: readonly Boundary[] = [
       } as never),
   },
   {
-    name: "speaker workspace loader",
+    name: "speaker workspace layout loader",
+    allowed: new Set<ActorName>(["speaker"]),
+    allowedStatus: 200,
+    invoke: (actor) =>
+      speakerLayoutLoader({
+        request: requestFor(actor, "/speaker/dashboard"),
+        params: {},
+        context: context(),
+      } as never),
+  },
+  {
+    name: "speaker dashboard data loader",
     allowed: new Set<ActorName>(["speaker"]),
     allowedStatus: 200,
     invoke: (actor) =>
@@ -391,7 +430,7 @@ const boundaries: readonly Boundary[] = [
     allowedStatus: 400,
     invoke: (actor) =>
       speakerAction({
-        request: requestFor(actor, "/speaker/dashboard", {
+        request: requestFor(actor, "/speaker/tasks", {
           method: "POST",
           body: new URLSearchParams({ intent: "unsupported" }),
         }),

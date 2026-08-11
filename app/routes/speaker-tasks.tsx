@@ -1,0 +1,162 @@
+import { data, useActionData, useNavigation } from "react-router";
+import { ZodError } from "zod";
+
+import type { Route } from "./+types/speaker-tasks";
+import { SpeakerActionNotice } from "~/components/speaker-action-notice";
+import { SpeakerTasksPanel } from "~/components/speaker-tasks-panel";
+import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
+import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
+import {
+  TaskService,
+  TaskStateError,
+} from "~/modules/tasks/task-service.server";
+import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+
+export const meta = () => [{ title: "Speaker Tasks · Program Cue" }];
+
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const { env, viewer } = await requireSpeakerWorkspace(request, context);
+  return {
+    tasks: await new TaskService(env).listParticipantTasks(viewer),
+    intentId: crypto.randomUUID(),
+  };
+}
+
+export async function action({ request, context }: Route.ActionArgs) {
+  const { env, viewer } = await requireSpeakerWorkspace(request, context);
+  const form = await request.formData();
+  const intent = String(form.get("intent") ?? "");
+  try {
+    if (intent === "complete-task") {
+      const taskId = String(form.get("taskId") ?? "");
+      const result = await new TaskService(env).completeParticipant(viewer, {
+        taskId,
+        revision: form.get("revision"),
+        confirmed: form.get("confirmed") ?? "false",
+        text: form.get("text") || undefined,
+        url: form.get("url") || undefined,
+      });
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "task_instance",
+        entityId: taskId,
+        changeType: "progress",
+      });
+      const undo = result.undoToken
+        ? {
+            undoToken: result.undoToken,
+            undoTaskId: taskId,
+            undoExpiresAt: result.undoExpiresAt,
+          }
+        : {};
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning) {
+        return data(
+          { ok: false, committed: true, message: warning, ...undo },
+          { status: 207 },
+        );
+      }
+      return data({
+        ok: true,
+        message: result.undoToken
+          ? "Task completed. You can undo this for five minutes."
+          : "Task updated.",
+        ...undo,
+      });
+    }
+    if (intent === "undo-task-completion") {
+      const result = await new TaskService(env).undoCompletion(
+        viewer,
+        form.get("undoToken"),
+      );
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "task_instance",
+        entityId: result.taskId,
+        changeType: "progress",
+      });
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning) {
+        return data(
+          { ok: false, committed: true, message: warning },
+          { status: 207 },
+        );
+      }
+      return data({ ok: true, message: "Task completion undone." });
+    }
+    if (intent === "comment") {
+      const taskId = String(form.get("taskId") ?? "");
+      const result = await new TaskService(env).addComment(
+        viewer,
+        taskId,
+        String(form.get("body") ?? ""),
+        "participant",
+        String(form.get("intentId") ?? ""),
+      );
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "task_instance",
+        entityId: taskId,
+        changeType: "updated",
+      });
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning) {
+        return data(
+          { ok: false, committed: true, message: warning },
+          { status: 207 },
+        );
+      }
+      return data({ ok: true, message: "Comment added." });
+    }
+    return data(
+      { ok: false, message: "Unsupported speaker task action." },
+      { status: 400 },
+    );
+  } catch (error) {
+    const message =
+      error instanceof ZodError
+        ? (error.issues[0]?.message ?? "Review the highlighted information.")
+        : error instanceof TaskStateError
+          ? error.message
+          : null;
+    if (message) {
+      return data(
+        { ok: false, message },
+        { status: error instanceof TaskStateError ? 409 : 422 },
+      );
+    }
+    if (error instanceof Response) throw error;
+    throw error;
+  }
+}
+
+export default function SpeakerTasks({ loaderData }: Route.ComponentProps) {
+  const { portal } = useSpeakerWorkspace();
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const finished = loaderData.tasks.filter((task) =>
+    ["completed", "waived"].includes(task.status),
+  ).length;
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <span className="pc-page-eyebrow">Onboarding</span>
+          <h1>Tasks</h1>
+          <p>Complete event requirements and keep the team informed.</p>
+        </div>
+      </div>
+      <SpeakerActionNotice notice={actionData} />
+      <SpeakerTasksPanel
+        portal={portal}
+        tasks={loaderData.tasks}
+        finished={finished}
+        busy={navigation.state !== "idle"}
+        intentId={loaderData.intentId}
+      />
+    </>
+  );
+}

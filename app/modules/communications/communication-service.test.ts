@@ -107,6 +107,186 @@ async function confirmPreviewed(
 }
 
 describe("Communications D1 vertical slice", () => {
+  it("persists, revises, previews and confirms one authoritative draft row", async () => {
+    const { testEnv, sent } = await communicationEnvironment();
+    const service = new CommunicationService(testEnv);
+    const saved = await service.saveTemplate(viewer, {
+      name: "Durable draft workflow",
+      category: "ad_hoc",
+      subject: "A current update for {{recipient.firstName}}",
+      content: {
+        body: "Hello {{recipient.firstName}}, this is the current event update.",
+        physicalAddress: "100 Programme Way, Toronto",
+      },
+    });
+    await service.publishTemplate(viewer, saved.versionId);
+
+    const draft = await service.createDraft(viewer, {
+      templateVersionId: saved.versionId,
+      audienceType: "manual",
+      manualRecipients: "Alex Morgan <alex.draft@example.com>",
+      kind: "transactional",
+      scheduledAt: null,
+    });
+    expect(draft.revision).toBe(1);
+    await expect(service.getDraft(viewer, draft.id)).resolves.toMatchObject({
+      id: draft.id,
+      manualRecipients: "Alex Morgan <alex.draft@example.com>",
+    });
+
+    const firstPreview = await service.previewDraft(viewer, draft.id);
+    const revised = await service.updateDraft(viewer, {
+      draftId: draft.id,
+      revision: draft.revision,
+      templateVersionId: saved.versionId,
+      audienceType: "manual",
+      manualRecipients: "Priya Current <priya.current@example.com>",
+      kind: "transactional",
+      scheduledAt: null,
+    });
+    expect(revised.revision).toBe(2);
+    await expect(
+      service.confirmDraft(viewer, {
+        draftId: draft.id,
+        revision: firstPreview.draft.revision,
+        ...firstPreview.preview.confirmation,
+      }),
+    ).rejects.toThrow("changed after it was previewed");
+
+    const currentPreview = await service.previewDraft(viewer, draft.id);
+    const confirmation = {
+      draftId: draft.id,
+      revision: currentPreview.draft.revision,
+      ...currentPreview.preview.confirmation,
+    };
+    const concurrentAttempts = await Promise.allSettled([
+      service.confirmDraft(viewer, confirmation),
+      service.confirmDraft(viewer, confirmation),
+    ]);
+    const fulfilled = concurrentAttempts.filter(
+      (
+        attempt,
+      ): attempt is PromiseFulfilledResult<
+        Awaited<ReturnType<CommunicationService["confirmDraft"]>>
+      > => attempt.status === "fulfilled",
+    );
+    expect(fulfilled).toHaveLength(2);
+    expect(fulfilled.map((attempt) => attempt.value.duplicate).sort()).toEqual([
+      false,
+      true,
+    ]);
+    const confirmed = fulfilled.find(
+      (attempt) => !attempt.value.duplicate,
+    )!.value;
+    expect(confirmed).toMatchObject({
+      communicationId: draft.id,
+      status: "queued",
+      duplicate: false,
+    });
+    expect(sent).toHaveLength(1);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT status, revision, recipient_count AS recipientCount
+           FROM communications WHERE id = ?`,
+      )
+        .bind(draft.id)
+        .first(),
+    ).resolves.toEqual({ status: "queued", revision: 3, recipientCount: 1 });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM communication_deliveries WHERE communication_id = ?) AS deliveryCount,
+           (SELECT COUNT(*) FROM operation_jobs WHERE id = ?) AS operationCount,
+           (SELECT COUNT(*) FROM audit_events
+             WHERE entity_type = 'communication' AND entity_id = ?
+               AND action = 'communication.queued') AS auditCount,
+           (SELECT COUNT(*) FROM event_changes
+             WHERE entity_type = 'communication' AND entity_id = ?
+               AND change_type = 'created') AS changeCount`,
+      )
+        .bind(draft.id, confirmed.operationId, draft.id, draft.id)
+        .first(),
+    ).resolves.toEqual({
+      deliveryCount: 1,
+      operationCount: 1,
+      auditCount: 1,
+      changeCount: 1,
+    });
+    await expect(service.getDraft(viewer, draft.id)).rejects.toThrow(
+      "not found",
+    );
+    await expect(
+      service.confirmDraft(viewer, confirmation),
+    ).resolves.toMatchObject({
+      communicationId: confirmed.communicationId,
+      operationId: confirmed.operationId,
+      status: "queued",
+      duplicate: true,
+    });
+    await expect(
+      service.confirmDraft(viewer, {
+        ...confirmation,
+        deliverableFingerprint: `${confirmation.deliverableFingerprint.startsWith("0") ? "1" : "0"}${confirmation.deliverableFingerprint.slice(1)}`,
+      }),
+    ).rejects.toThrow("idempotency key is already associated");
+    expect(sent).toHaveLength(1);
+
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "UPDATE communications SET status = 'failed' WHERE id = ?",
+      ).bind(draft.id),
+      testEnv.DB.prepare(
+        "UPDATE operation_jobs SET status = 'failed' WHERE id = ?",
+      ).bind(confirmed.operationId),
+    ]);
+    await expect(service.confirmDraft(viewer, confirmation)).rejects.toThrow(
+      "failed and cannot be confirmed again",
+    );
+    expect(sent).toHaveLength(1);
+  });
+
+  it("rejects an exact confirmation replay after a scheduled draft is cancelled", async () => {
+    const { testEnv, sent } = await communicationEnvironment();
+    const service = new CommunicationService(testEnv);
+    const saved = await service.saveTemplate(viewer, {
+      name: "Cancelled scheduled draft",
+      category: "ad_hoc",
+      subject: "Scheduled update for {{recipient.firstName}}",
+      content: {
+        body: "Hello {{recipient.firstName}}, this update was scheduled.",
+        physicalAddress: "100 Programme Way, Toronto",
+      },
+    });
+    await service.publishTemplate(viewer, saved.versionId);
+    const draft = await service.createDraft(viewer, {
+      templateVersionId: saved.versionId,
+      audienceType: "manual",
+      manualRecipients: "Alex Scheduled <alex.scheduled@example.com>",
+      kind: "transactional",
+      scheduledAt: Math.floor(Date.now() / 1_000) + 3_600,
+    });
+    const preview = await service.previewDraft(viewer, draft.id);
+    const confirmation = {
+      draftId: draft.id,
+      revision: preview.draft.revision,
+      ...preview.preview.confirmation,
+    };
+    await expect(
+      service.confirmDraft(viewer, confirmation),
+    ).resolves.toMatchObject({
+      communicationId: draft.id,
+      operationId: null,
+      status: "scheduled",
+      duplicate: false,
+    });
+    await service.cancel(viewer, draft.id);
+
+    await expect(service.confirmDraft(viewer, confirmation)).rejects.toThrow(
+      "cancelled and cannot be confirmed again",
+    );
+    expect(sent).toHaveLength(0);
+  });
+
   it("fails closed before resolving a non-manual audience from an unreadable Airtable projection", async () => {
     const unavailable = new Error("Airtable projection is unavailable.");
     const assertReadable = vi.fn(async () => {

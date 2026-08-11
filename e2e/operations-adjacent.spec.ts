@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { e2eOrigin } from "./support/e2e-origin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 import { resetDemoSubmissions } from "./support/reset-demo-submissions";
 
@@ -71,7 +72,7 @@ test("CSV import exposes a durable preview before confirming", async ({
     },
   ]);
   const exported = await page.request.post("/admin/exports/rooms.csv", {
-    headers: { origin: "http://127.0.0.1:5173" },
+    headers: { origin: e2eOrigin },
     form: { idempotencyKey: crypto.randomUUID() },
   });
   expect(exported.ok()).toBeTruthy();
@@ -149,10 +150,9 @@ test("task import previews disclose every lifecycle transition before confirmati
 
   await expect(page.getByText("1 task lifecycle change")).toBeVisible();
   await expect(
-    page.getByText(
-      "(task-demo-handbook): not started → waived (waive)",
-      { exact: false },
-    ),
+    page.getByText("(task-demo-handbook): not started → waived (waive)", {
+      exact: false,
+    }),
   ).toBeVisible();
   await expect(
     page.getByRole("cell", {

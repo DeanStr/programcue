@@ -127,6 +127,10 @@ export default [
     route("admin/views", "routes/admin-saved-views.ts"),
     route("admin/event", "routes/event-setup.tsx"),
     route("admin/operations", "routes/operation-centre.tsx"),
+    route(
+      "admin/communications/compose/:draftId?",
+      "routes/communication-composer.tsx",
+    ),
     route("admin/communications", "routes/communications-centre.tsx"),
     route("admin/review", "routes/evaluation-admin.tsx"),
     route("admin/speakers", "routes/admin-speakers.tsx"),
@@ -157,8 +161,14 @@ export default [
   ]),
   route("review/workbench", "routes/review-workbench.tsx"),
   route("review/files/:assetId", "routes/review-file-download.ts"),
-  route("speaker/dashboard", "routes/speaker-dashboard.tsx"),
-  route("speaker/resources", "routes/speaker-resources.tsx"),
+  layout("routes/speaker-layout.tsx", [
+    route("speaker/dashboard", "routes/speaker-dashboard.tsx"),
+    route("speaker/sessions", "routes/speaker-sessions.tsx"),
+    route("speaker/tasks", "routes/speaker-tasks.tsx"),
+    route("speaker/files", "routes/speaker-files.tsx"),
+    route("speaker/profile", "routes/speaker-profile.tsx"),
+    route("speaker/resources", "routes/speaker-resources.tsx"),
+  ]),
   route("speaker/files/:assetId", "routes/speaker-file-download.ts"),
   route(
     "speaker/resources/files/:assetId",
