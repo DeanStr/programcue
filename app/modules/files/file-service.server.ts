@@ -169,6 +169,67 @@ export type StoredUpload = {
   scanStatus: "pending";
 };
 
+type ScanResultInput = z.infer<typeof scanResultSchema>;
+
+type FileErasureInput = {
+  assetId: string;
+  confirmed: boolean;
+  reason?: string;
+  enforceEventRetentionBoundary?: boolean;
+};
+
+type FileErasurePreview = {
+  id: string;
+  versionCount: number;
+  resourceAttachmentCount: number;
+  taskEvidenceCount: number;
+};
+
+type ErasureVersion = {
+  objectKey: string;
+  uploadId: string | null;
+  multipartStatus: string | null;
+};
+
+type ScanRow = {
+  id: string;
+  assetId: string;
+  assetStatus: string;
+  uploadStatus: string;
+  signatureStatus: string;
+  scanStatus: string;
+  scanProvider: string | null;
+  scanResultJson: string | null;
+  objectKey: string;
+  objectEtag: string | null;
+  sizeBytes: number;
+  deletedAt: number | null;
+};
+
+function classifyScanReplay(
+  candidate: ScanRow,
+  input: ScanResultInput,
+  scanResultJson: string,
+) {
+  if (candidate.scanStatus === "pending") {
+    throw new FileScanStateError(
+      "The file changed or was deleted before the scan result was committed.",
+    );
+  }
+  if (
+    candidate.scanStatus === input.status &&
+    candidate.scanProvider === input.provider &&
+    candidate.scanResultJson === scanResultJson
+  ) {
+    return {
+      applied: false,
+      duplicate: true,
+      status: input.status,
+    } as const;
+  }
+  throw new FileScanConflictError();
+}
+
 export class FileService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
@@ -525,35 +586,9 @@ export class FileService {
     return this.discardUnattachedUpload(viewer, upload, "task", taskId);
   }
 
-  async recordScanResult(rawInput: z.input<typeof scanResultSchema>) {
-    const input = scanResultSchema.parse(rawInput);
-    const scanResultJson = JSON.stringify({
-      callbackId: input.callbackId,
-      result: input.result,
-    });
-    if (!scanResultJson) {
-      throw new FileScanStateError(
-        "The scanner result could not be represented as JSON.",
-      );
-    }
-
-    type ScanRow = {
-      id: string;
-      assetId: string;
-      assetStatus: string;
-      uploadStatus: string;
-      signatureStatus: string;
-      scanStatus: string;
-      scanProvider: string | null;
-      scanResultJson: string | null;
-      objectKey: string;
-      objectEtag: string | null;
-      sizeBytes: number;
-      deletedAt: number | null;
-    };
-    const load = () =>
-      this.env.DB.prepare(
-        `
+  private loadScanRow(eventId: string, versionId: string) {
+    return this.env.DB.prepare(
+      `
       SELECT fv.id, fv.asset_id AS assetId, fv.upload_status AS uploadStatus,
              fv.signature_status AS signatureStatus,
              fv.scan_status AS scanStatus, fv.scan_provider AS scanProvider,
@@ -564,116 +599,16 @@ export class FileService {
         FROM file_versions fv JOIN file_assets fa ON fa.id = fv.asset_id AND fa.event_id = fv.event_id
        WHERE fv.id = ? AND fv.event_id = ?
     `,
-      )
-        .bind(input.versionId, input.eventId)
-        .first<ScanRow>();
-    const classifyReplay = (candidate: ScanRow) => {
-      if (candidate.scanStatus === "pending") {
-        throw new FileScanStateError(
-          "The file changed or was deleted before the scan result was committed.",
-        );
-      }
-      if (
-        candidate.scanStatus === input.status &&
-        candidate.scanProvider === input.provider &&
-        candidate.scanResultJson === scanResultJson
-      ) {
-        return {
-          applied: false,
-          duplicate: true,
-          status: input.status,
-        } as const;
-      }
-      throw new FileScanConflictError();
-    };
-
-    const row = await load();
-    if (!row) throw new FileVersionNotFoundError();
-    if (
-      input.jobId !== `file-scan-dispatch:${row.id}` ||
-      input.assetId !== row.assetId ||
-      input.objectEtag !== row.objectEtag ||
-      input.sizeBytes !== row.sizeBytes
-    ) {
-      throw new FileScanStateError(
-        "The scanner callback does not match the dispatched file object.",
-      );
-    }
-    const dispatch = await this.env.DB.prepare(
-      `SELECT status, claim_token AS claimToken,
-              json_extract(result_json, '$.accepted') AS accepted,
-              json_extract(result_json, '$.dispatchStarted') AS dispatchStarted
-         FROM operation_jobs
-        WHERE id = ? AND event_id = ? AND type = 'file.scan.dispatch'
-          AND json_extract(payload_json, '$.operationId') = ?
-          AND json_extract(payload_json, '$.eventId') = ?
-          AND json_extract(payload_json, '$.versionId') = ?
-          AND json_extract(payload_json, '$.assetId') = ?
-          AND json_extract(payload_json, '$.objectEtag') = ?
-          AND json_extract(payload_json, '$.sizeBytes') = ?`,
     )
-      .bind(
-        input.jobId,
-        input.eventId,
-        input.jobId,
-        input.eventId,
-        input.versionId,
-        input.assetId,
-        input.objectEtag,
-        input.sizeBytes,
-      )
-      .first<{
-        status: string;
-        claimToken: string | null;
-        accepted: number | null;
-        dispatchStarted: number | null;
-      }>();
-    if (!dispatch) {
-      throw new FileScanStateError(
-        "The scanner callback does not match a durable dispatch.",
-      );
-    }
-    if (row.scanStatus !== "pending") {
-      if (dispatch.status !== "completed") {
-        throw new FileScanStateError(
-          "The completed scan is not linked to a completed dispatch.",
-        );
-      }
-      return classifyReplay(row);
-    }
-    if (
-      dispatch.status !== "running" ||
-      !(
-        (dispatch.claimToken === null && dispatch.accepted === 1) ||
-        dispatch.dispatchStarted === 1
-      )
-    ) {
-      throw new FileScanStateError(
-        "The scanner verdict arrived before the durable dispatch was accepted.",
-      );
-    }
-    if (
-      row.uploadStatus !== "uploaded" ||
-      row.signatureStatus !== "valid" ||
-      row.deletedAt !== null ||
-      row.assetStatus === "deleted"
-    ) {
-      throw new FileScanStateError(
-        "Only a completely uploaded, signature-valid version can be scanned.",
-      );
-    }
-    const object = await this.requireBucket().head(row.objectKey);
-    if (
-      !object ||
-      !row.objectEtag ||
-      object.httpEtag !== row.objectEtag ||
-      object.size !== row.sizeBytes
-    ) {
-      throw new FileScanStateError(
-        "The quarantined R2 object is missing or no longer matches the dispatched version.",
-      );
-    }
+      .bind(versionId, eventId)
+      .first<ScanRow>();
+  }
 
+  private async commitScanVerdict(
+    input: ScanResultInput,
+    row: ScanRow,
+    scanResultJson: string,
+  ) {
     const scanOperationId = `file-scan:${row.id}`;
     const results = await this.env.DB.batch([
       this.env.DB.prepare(
@@ -964,9 +899,110 @@ export class FileService {
         "The scan result changed the file without completing its durable dispatch.",
       );
     }
-    const current = await load();
+    const current = await this.loadScanRow(input.eventId, input.versionId);
     if (!current) throw new FileVersionNotFoundError();
-    return classifyReplay(current);
+    return classifyScanReplay(current, input, scanResultJson);
+  }
+  async recordScanResult(rawInput: z.input<typeof scanResultSchema>) {
+    const input = scanResultSchema.parse(rawInput);
+    const scanResultJson = JSON.stringify({
+      callbackId: input.callbackId,
+      result: input.result,
+    });
+    if (!scanResultJson) {
+      throw new FileScanStateError(
+        "The scanner result could not be represented as JSON.",
+      );
+    }
+
+    const row = await this.loadScanRow(input.eventId, input.versionId);
+    if (!row) throw new FileVersionNotFoundError();
+    if (
+      input.jobId !== `file-scan-dispatch:${row.id}` ||
+      input.assetId !== row.assetId ||
+      input.objectEtag !== row.objectEtag ||
+      input.sizeBytes !== row.sizeBytes
+    ) {
+      throw new FileScanStateError(
+        "The scanner callback does not match the dispatched file object.",
+      );
+    }
+    const dispatch = await this.env.DB.prepare(
+      `SELECT status, claim_token AS claimToken,
+              json_extract(result_json, '$.accepted') AS accepted,
+              json_extract(result_json, '$.dispatchStarted') AS dispatchStarted
+         FROM operation_jobs
+        WHERE id = ? AND event_id = ? AND type = 'file.scan.dispatch'
+          AND json_extract(payload_json, '$.operationId') = ?
+          AND json_extract(payload_json, '$.eventId') = ?
+          AND json_extract(payload_json, '$.versionId') = ?
+          AND json_extract(payload_json, '$.assetId') = ?
+          AND json_extract(payload_json, '$.objectEtag') = ?
+          AND json_extract(payload_json, '$.sizeBytes') = ?`,
+    )
+      .bind(
+        input.jobId,
+        input.eventId,
+        input.jobId,
+        input.eventId,
+        input.versionId,
+        input.assetId,
+        input.objectEtag,
+        input.sizeBytes,
+      )
+      .first<{
+        status: string;
+        claimToken: string | null;
+        accepted: number | null;
+        dispatchStarted: number | null;
+      }>();
+    if (!dispatch) {
+      throw new FileScanStateError(
+        "The scanner callback does not match a durable dispatch.",
+      );
+    }
+    if (row.scanStatus !== "pending") {
+      if (dispatch.status !== "completed") {
+        throw new FileScanStateError(
+          "The completed scan is not linked to a completed dispatch.",
+        );
+      }
+      return classifyScanReplay(row, input, scanResultJson);
+    }
+    if (
+      dispatch.status !== "running" ||
+      !(
+        (dispatch.claimToken === null && dispatch.accepted === 1) ||
+        dispatch.dispatchStarted === 1
+      )
+    ) {
+      throw new FileScanStateError(
+        "The scanner verdict arrived before the durable dispatch was accepted.",
+      );
+    }
+    if (
+      row.uploadStatus !== "uploaded" ||
+      row.signatureStatus !== "valid" ||
+      row.deletedAt !== null ||
+      row.assetStatus === "deleted"
+    ) {
+      throw new FileScanStateError(
+        "Only a completely uploaded, signature-valid version can be scanned.",
+      );
+    }
+    const object = await this.requireBucket().head(row.objectKey);
+    if (
+      !object ||
+      !row.objectEtag ||
+      object.httpEtag !== row.objectEtag ||
+      object.size !== row.sizeBytes
+    ) {
+      throw new FileScanStateError(
+        "The quarantined R2 object is missing or no longer matches the dispatched version.",
+      );
+    }
+
+    return this.commitScanVerdict(input, row, scanResultJson);
   }
 
   private async fileErasurePreview(viewer: Viewer, assetId: string) {
@@ -1045,26 +1081,12 @@ export class FileService {
     return this.fileErasurePreview(viewer, assetId);
   }
 
-  async eraseAsset(
+  private async revokeAssetForErasure(
     viewer: Viewer,
-    input: {
-      assetId: string;
-      confirmed: boolean;
-      reason?: string;
-      enforceEventRetentionBoundary?: boolean;
-    },
+    input: FileErasureInput,
+    preview: FileErasurePreview,
+    operationId: string,
   ) {
-    if (!input.confirmed) throw new FileErasureConfirmationError();
-    const preview = await this.fileErasurePreview(viewer, input.assetId);
-    const operationId = `file-erasure:${preview.id}`;
-    if (preview.erasureComplete) {
-      return {
-        operationId,
-        duplicate: true,
-        erasedVersions: preview.versionCount,
-        affected: preview,
-      };
-    }
     const metadata = JSON.stringify({
       reason: input.reason?.trim().slice(0, 240) || "explicit_file_deletion",
       versionCount: preview.versionCount,
@@ -1190,24 +1212,14 @@ export class FileService {
         "File retention changed concurrently before the erasure intent committed.",
       );
     }
+  }
 
-    const versions = await this.env.DB.prepare(
-      `SELECT version.object_key AS objectKey,
-              upload.upload_id AS uploadId,
-              upload.status AS multipartStatus
-         FROM file_versions version
-         LEFT JOIN file_multipart_uploads upload
-           ON upload.version_id = version.id
-          AND upload.event_id = version.event_id
-        WHERE version.asset_id = ? AND version.event_id = ?
-        ORDER BY version.version_number`,
-    )
-      .bind(preview.id, viewer.eventId)
-      .all<{
-        objectKey: string;
-        uploadId: string | null;
-        multipartStatus: string | null;
-      }>();
+  private async eraseAssetProviderState(
+    viewer: Viewer,
+    assetId: string,
+    operationId: string,
+    versions: { results: ErasureVersion[] },
+  ) {
     try {
       const providerAbortFailures: unknown[] = [];
       for (const version of versions.results) {
@@ -1244,13 +1256,13 @@ export class FileService {
               SET deleted_at = COALESCE(deleted_at, unixepoch()),
                   released_at = NULL
             WHERE asset_id = ? AND event_id = ?`,
-        ).bind(preview.id, viewer.eventId),
+        ).bind(assetId, viewer.eventId),
         this.env.DB.prepare(
           `UPDATE file_assets
               SET status = 'deleted', current_version_id = NULL,
                   updated_at = unixepoch()
             WHERE id = ? AND event_id = ?`,
-        ).bind(preview.id, viewer.eventId),
+        ).bind(assetId, viewer.eventId),
         this.env.DB.prepare(
           `INSERT OR IGNORE INTO audit_events (
              id, organisation_id, event_id, actor_person_id, action,
@@ -1258,11 +1270,11 @@ export class FileService {
            ) VALUES (?, ?, ?, ?, 'file.erasure.completed',
                      'file_asset', ?, ?, ?, unixepoch())`,
         ).bind(
-          `file-erasure-complete:${preview.id}`,
+          `file-erasure-complete:${assetId}`,
           viewer.organisationId,
           viewer.eventId,
           viewer.personId,
-          preview.id,
+          assetId,
           operationId,
           JSON.stringify({ erasedVersions: versions.results.length }),
         ),
@@ -1270,6 +1282,40 @@ export class FileService {
     } catch (error) {
       throw new FileErasureIncompleteError(operationId, { cause: error });
     }
+  }
+
+  async eraseAsset(viewer: Viewer, input: FileErasureInput) {
+    if (!input.confirmed) throw new FileErasureConfirmationError();
+    const preview = await this.fileErasurePreview(viewer, input.assetId);
+    const operationId = `file-erasure:${preview.id}`;
+    if (preview.erasureComplete) {
+      return {
+        operationId,
+        duplicate: true,
+        erasedVersions: preview.versionCount,
+        affected: preview,
+      };
+    }
+    await this.revokeAssetForErasure(viewer, input, preview, operationId);
+    const versions = await this.env.DB.prepare(
+      `SELECT version.object_key AS objectKey,
+              upload.upload_id AS uploadId,
+              upload.status AS multipartStatus
+         FROM file_versions version
+         LEFT JOIN file_multipart_uploads upload
+           ON upload.version_id = version.id
+          AND upload.event_id = version.event_id
+        WHERE version.asset_id = ? AND version.event_id = ?
+        ORDER BY version.version_number`,
+    )
+      .bind(preview.id, viewer.eventId)
+      .all<ErasureVersion>();
+    await this.eraseAssetProviderState(
+      viewer,
+      preview.id,
+      operationId,
+      versions,
+    );
     return {
       operationId,
       duplicate: false,

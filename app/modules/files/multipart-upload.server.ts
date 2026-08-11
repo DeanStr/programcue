@@ -1401,6 +1401,39 @@ export class MultipartUploadService {
         "Multipart completion is already using a different part manifest.",
       );
 
+    const completingRow = { ...row, uploadId: row.uploadId };
+    const object = await this.completeProviderObject(
+      actor,
+      completingRow,
+      parts,
+    );
+    const detected = await this.validateCompletedObject(
+      actor,
+      completingRow,
+      object,
+    );
+    row = await this.commitCompletedObject(
+      actor,
+      completingRow,
+      manifestHash,
+      object,
+      detected,
+    );
+    const scan = await this.ensureScan(actor, row);
+    return {
+      assetId: row.assetId,
+      versionId: row.versionId,
+      scanStatus: "pending" as const,
+      scanOperationId: scan.operationId,
+      duplicate: false,
+    };
+  }
+
+  private async completeProviderObject(
+    actor: MultipartActor,
+    row: MultipartRow & { uploadId: string },
+    parts: ReturnType<typeof normalizedManifest>,
+  ): Promise<R2Object> {
     let object = await this.requireBucket().head(row.objectKey);
     if (!object) {
       try {
@@ -1432,6 +1465,14 @@ export class MultipartUploadService {
         }
       }
     }
+    return object;
+  }
+
+  private async validateCompletedObject(
+    actor: MultipartActor,
+    row: MultipartRow & { uploadId: string },
+    object: R2Object,
+  ) {
     if (
       object.size !== row.sizeBytes ||
       object.customMetadata?.eventId !== row.eventId ||
@@ -1460,6 +1501,16 @@ export class MultipartUploadService {
     } catch (error) {
       return this.failInvalidObject(actor, row, detected, error);
     }
+    return detected;
+  }
+
+  private async commitCompletedObject(
+    actor: MultipartActor,
+    row: MultipartRow,
+    manifestHash: string,
+    object: R2Object,
+    detected: string | null,
+  ) {
     const [versionCommitted, uploadCommitted] = await this.env.DB.batch([
       this.env.DB.prepare(
         `UPDATE file_versions
@@ -1646,14 +1697,7 @@ export class MultipartUploadService {
         "The R2 object completed, but its quarantined metadata did not commit. Retry completion.",
         true,
       );
-    const scan = await this.ensureScan(actor, row);
-    return {
-      assetId: row.assetId,
-      versionId: row.versionId,
-      scanStatus: "pending" as const,
-      scanOperationId: scan.operationId,
-      duplicate: false,
-    };
+    return row;
   }
 
   async abort(actor: MultipartActor, rawInput: unknown) {

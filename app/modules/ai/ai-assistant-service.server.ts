@@ -100,6 +100,41 @@ const proposalExecutionResultSchema = z.discriminatedUnion("kind", [
 type ParsedProposalExecutionResult = z.infer<
   typeof proposalExecutionResultSchema
 >;
+type AssistantProposalMetadata = z.infer<
+  typeof assistantProposalMetadataSchema
+>;
+type ReminderProposalMetadata = Extract<
+  AssistantProposalMetadata,
+  { toolName: "propose_reminder_send" }
+>;
+type TaskProposalMetadata = Extract<
+  AssistantProposalMetadata,
+  { toolName: "propose_task" }
+>;
+type DomainProposalMetadata = Exclude<
+  AssistantProposalMetadata,
+  ReminderProposalMetadata | TaskProposalMetadata
+>;
+type DomainProposalToolName = DomainProposalMetadata["toolName"];
+type DomainProposalMetadataFor<TName extends DomainProposalToolName> = Extract<
+  DomainProposalMetadata,
+  { toolName: TName }
+>;
+type ExecutedDomainProposal = {
+  entityType: string;
+  entityId: string;
+  title: string;
+  href: string;
+  operationId: string | null;
+  details: Record<string, unknown>;
+};
+type ClaimedProposalInput<TMetadata extends AssistantProposalMetadata> = {
+  proposalId: string;
+  metadata: TMetadata;
+  correlationId: string;
+  claimToken: string;
+  operationId: string;
+};
 type ProposalExecutionResult =
   | (Extract<ParsedProposalExecutionResult, { kind: "communication" }> & {
       taskId?: never;
@@ -1512,562 +1547,12 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
     const claimToken = execution.claimToken;
     const operationId = `assistant:${proposalId}`;
     try {
-      if (metadata.data.toolName === "propose_reminder_send") {
-        const reminder = metadata.data.preview.reminder;
-        const communications = new CommunicationService(this.env);
-        const recordedCommunication = await this.env.DB.prepare(
-          `SELECT communication.id
-             FROM communications communication
-             JOIN events event
-               ON event.id = communication.event_id
-              AND event.organisation_id = ?
-            WHERE communication.event_id = ?
-              AND communication.idempotency_key = ?`,
-        )
-          .bind(viewer.organisationId, viewer.eventId, operationId)
-          .first();
-        if (!recordedCommunication) {
-          const current = await communications.preview(viewer, {
-            templateVersionId: reminder.template.id,
-            audienceType: reminder.audienceType,
-            manualRecipients: "",
-            kind: reminder.kind,
-          });
-          if (
-            current.template.id !== reminder.template.id ||
-            current.template.templateId !== reminder.template.templateId ||
-            current.template.name !== reminder.template.name ||
-            current.template.category !== reminder.template.category ||
-            current.template.versionNumber !==
-              reminder.template.versionNumber ||
-            current.template.subject !== reminder.template.subject ||
-            JSON.stringify(current.template.content) !==
-              JSON.stringify(reminder.template.content)
-          ) {
-            throw new AiProposalStateError(
-              "The reminder template changed after preview. Prepare and inspect a fresh assistant preview.",
-            );
-          }
-          if (
-            !current.provider.configured ||
-            !current.provider.sender ||
-            !current.provider.queueConfigured
-          ) {
-            throw new AiProposalStateError(
-              "The verified sender, email provider or OPERATIONS_QUEUE became unavailable after preview.",
-            );
-          }
-          if (current.provider.sender !== reminder.provider.sender) {
-            throw new AiProposalStateError(
-              "The verified sender changed after preview. Prepare and inspect a fresh assistant preview.",
-            );
-          }
-          if (
-            current.confirmation.recipientFingerprint !==
-            reminder.confirmation.recipientFingerprint
-          ) {
-            throw new AiProposalStateError(
-              "The reminder audience changed after preview. Prepare and inspect a fresh assistant preview.",
-            );
-          }
-          if (
-            current.confirmation.deliverableFingerprint !==
-              reminder.confirmation.deliverableFingerprint &&
-            current.confirmation.suppressedCount <=
-              reminder.confirmation.suppressedCount
-          ) {
-            throw new AiProposalStateError(
-              "The deliverable reminder audience changed after preview. Prepare and inspect a fresh assistant preview.",
-            );
-          }
-          if (!current.recipients.deliverable.length) {
-            throw new AiProposalStateError(
-              "The reminder audience no longer contains a deliverable recipient.",
-            );
-          }
-          await communications.publishTemplate(viewer, reminder.template.id);
-        }
-        const result = await communications.confirm(viewer, {
-          templateVersionId: reminder.template.id,
-          audienceType: reminder.audienceType,
-          manualRecipients: "",
-          kind: reminder.kind,
-          idempotencyKey: operationId,
-          ...reminder.confirmation,
-        });
-        if (!result.operationId) {
-          throw new Error(
-            "The approved reminder did not create a communication operation.",
-          );
-        }
-        const response: ProposalExecutionResult = {
-          kind: "communication",
-          proposalId,
-          communicationId: result.communicationId,
-          operationId: result.operationId,
-          title: metadata.data.preview.title,
-          href: `/admin/operations?operation=${encodeURIComponent(result.operationId)}`,
-          replayed: false,
-        };
-        return await this.completeProposalExecution(viewer, {
-          proposalId,
-          toolName: metadata.data.toolName,
-          model: metadata.data.model,
-          correlationId,
-          claimToken,
-          entityType: "communication",
-          entityId: result.communicationId,
-          result: response,
-          details: {
-            status: result.status,
-            downstreamDuplicate: result.duplicate,
-          },
-        });
-      }
-      if (metadata.data.toolName !== "propose_task") {
-        let executed: {
-          entityType: string;
-          entityId: string;
-          title: string;
-          href: string;
-          operationId: string | null;
-          details: Record<string, unknown>;
-        };
-        switch (metadata.data.toolName) {
-          case "propose_form_draft": {
-            const formId = await new SubmissionService(this.env).saveForm(
-              viewer,
-              metadata.data.snapshot,
-              {
-                operationId,
-                formId: proposalId,
-                versionId: `assistant-form-version:${proposalId}`,
-                auditId: `assistant-form-audit:${proposalId}`,
-              },
-            );
-            executed = {
-              entityType: "form_definition",
-              entityId: formId,
-              title: metadata.data.preview.title,
-              href: "/admin/submissions/form",
-              operationId: null,
-              details: { formId, published: false },
-            };
-            break;
-          }
-          case "propose_rubric_update": {
-            await new EvaluationService(this.env).updateDraftRound(
-              viewer,
-              metadata.data.snapshot,
-              {
-                operationId,
-                auditId: `assistant-rubric-audit:${proposalId}`,
-              },
-            );
-            executed = {
-              entityType: "evaluation_round",
-              entityId: metadata.data.snapshot.roundId,
-              title: metadata.data.preview.title,
-              href: `/admin/review?round=${encodeURIComponent(metadata.data.snapshot.roundId)}`,
-              operationId: null,
-              details: {
-                roundId: metadata.data.snapshot.roundId,
-                previousRevision: metadata.data.snapshot.revision,
-                criterionCount: metadata.data.snapshot.criteria.length,
-              },
-            };
-            break;
-          }
-          case "propose_reviewer_assignment": {
-            const evaluation = new EvaluationService(this.env);
-            const input = metadata.data.snapshot.input;
-            const requestHash = await sha256(JSON.stringify(input));
-            const recordedAssignment = await this.env.DB.prepare(
-              `SELECT status, request_hash AS requestHash
-                 FROM idempotency_records
-                WHERE organisation_id = ? AND event_id = ? AND actor_id = ?
-                  AND scope = 'evaluation.assign' AND idempotency_key = ?
-                  AND expires_at > unixepoch()`,
-            )
-              .bind(
-                viewer.organisationId,
-                viewer.eventId,
-                `assistant:${viewer.personId}`,
-                operationId,
-              )
-              .first<{ status: string; requestHash: string }>();
-            if (
-              !recordedAssignment ||
-              recordedAssignment.status !== "completed"
-            ) {
-              const workspace = await evaluation.getAdminWorkspace(viewer);
-              const currentEvaluatorIds = input.teamId
-                ? (workspace.teams
-                    .find(
-                      (team) =>
-                        team.id === input.teamId && team.status === "active",
-                    )
-                    ?.members.filter((member) => member.authorised)
-                    .map((member) => member.personId) ?? [])
-                : workspace.evaluators
-                    .filter((evaluator) =>
-                      input.evaluatorPersonIds.includes(evaluator.id),
-                    )
-                    .map((evaluator) => evaluator.id);
-              const expectedEvaluatorIds = [
-                ...metadata.data.snapshot.resolvedEvaluatorPersonIds,
-              ].sort();
-              if (
-                JSON.stringify([...new Set(currentEvaluatorIds)].sort()) !==
-                JSON.stringify(expectedEvaluatorIds)
-              ) {
-                throw new AiProposalStateError(
-                  "The authorised reviewer set changed after preview. Prepare and inspect a fresh assignment preview.",
-                );
-              }
-            } else if (recordedAssignment.requestHash !== requestHash) {
-              throw new AiProposalStateError(
-                "The durable reviewer-assignment operation does not match this proposal.",
-              );
-            }
-            const result = await evaluation.assign(viewer, input, {
-              actorId: `assistant:${viewer.personId}`,
-              idempotencyKey: operationId,
-              requestHash,
-            });
-            executed = {
-              entityType: "evaluation_round",
-              entityId: input.roundId,
-              title: metadata.data.preview.title,
-              href: `/admin/review?round=${encodeURIComponent(input.roundId)}`,
-              operationId: result.undoOperationId,
-              details: {
-                roundId: input.roundId,
-                createdAssignmentCount: result.createdAssignmentCount,
-                requestedAssignmentCount: result.requestedAssignmentCount,
-                undoOperationId: result.undoOperationId,
-                undoExpiresAt: result.undoExpiresAt,
-              },
-            };
-            break;
-          }
-          case "propose_email_template_draft": {
-            const result = await new CommunicationService(
-              this.env,
-            ).saveTemplate(viewer, metadata.data.snapshot, {
-              operationId,
-              templateId: proposalId,
-              versionId: `assistant-template-version:${proposalId}`,
-              auditId: `assistant-template-audit:${proposalId}`,
-            });
-            executed = {
-              entityType: "communication_template",
-              entityId: result.templateId,
-              title: metadata.data.preview.title,
-              href: `/admin/communications?template=${encodeURIComponent(result.templateId)}`,
-              operationId: null,
-              details: { ...result, published: false, sent: false },
-            };
-            break;
-          }
-          case "propose_schedule_placement": {
-            const result = await new ScheduleService(this.env).place(
-              viewer,
-              metadata.data.snapshot.input,
-              {
-                actorId: `assistant:${viewer.personId}`,
-                idempotencyKey: operationId,
-                requestHash: await sha256(
-                  JSON.stringify(metadata.data.snapshot.input),
-                ),
-              },
-            );
-            executed = {
-              entityType: "schedule_entry",
-              entityId: result.entryId,
-              title: metadata.data.preview.title,
-              href: `/admin/schedule?session=${encodeURIComponent(metadata.data.snapshot.input.sessionId)}`,
-              operationId: null,
-              details: {
-                entryId: result.entryId,
-                warningCount: result.warnings.length,
-                undoToken: result.undo.token,
-                undoExpiresAt: result.undo.expiresAt,
-              },
-            };
-            break;
-          }
-          case "propose_form_publication": {
-            const submissions = new SubmissionService(this.env);
-            const recordedPublication = await this.env.DB.prepare(
-              `SELECT form.id
-                 FROM form_definitions form
-                 JOIN events event
-                   ON event.id = form.event_id AND event.organisation_id = ?
-                WHERE form.id = ? AND form.event_id = ?
-                  AND form.status = 'published' AND form.last_operation_id = ?`,
-            )
-              .bind(
-                viewer.organisationId,
-                metadata.data.snapshot.formId,
-                viewer.eventId,
-                operationId,
-              )
-              .first();
-            if (!recordedPublication) {
-              const current = await submissions.getAdminWorkspace(
-                viewer,
-                metadata.data.snapshot.formId,
-              );
-              if (!current) {
-                throw new AiProposalStateError(
-                  "The form no longer exists in this event.",
-                );
-              }
-              const currentSchemaHash = await sha256(
-                JSON.stringify({
-                  schema: current.draftVersion.schema,
-                  routing: current.draftVersion.routing,
-                  settings: current.draftVersion.settings,
-                }),
-              );
-              if (
-                current.revision !== metadata.data.snapshot.formRevision ||
-                current.draftVersion.revision !==
-                  metadata.data.snapshot.draftRevision ||
-                current.draftVersion.id !==
-                  metadata.data.snapshot.draftVersionId ||
-                currentSchemaHash !== metadata.data.snapshot.schemaHash
-              ) {
-                throw new AiProposalStateError(
-                  "The form draft changed after preview. Prepare and inspect a fresh publication preview.",
-                );
-              }
-            }
-            await submissions.publishForm(
-              viewer,
-              metadata.data.snapshot.formId,
-              metadata.data.snapshot.formRevision,
-              metadata.data.snapshot.draftRevision,
-              {
-                operationId,
-                nextVersionId: `assistant-next-form-version:${proposalId}`,
-                auditId: `assistant-form-publication-audit:${proposalId}`,
-              },
-            );
-            executed = {
-              entityType: "form_definition",
-              entityId: metadata.data.snapshot.formId,
-              title: metadata.data.preview.title,
-              href: "/admin/submissions/form",
-              operationId: null,
-              details: {
-                formId: metadata.data.snapshot.formId,
-                publicPath: `/apply/${metadata.data.snapshot.publicSlug}`,
-                published: true,
-              },
-            };
-            break;
-          }
-          case "propose_schedule_publication": {
-            const schedules = new ScheduleService(this.env);
-            const scheduleActorId = `assistant:${viewer.personId}`;
-            const requestHash = await sha256(
-              JSON.stringify(metadata.data.arguments),
-            );
-            const recordedPublication = await this.env.DB.prepare(
-              `SELECT status, request_hash AS requestHash
-                 FROM idempotency_records
-                WHERE organisation_id = ? AND event_id = ? AND actor_id = ?
-                  AND scope = 'schedule.publish' AND idempotency_key = ?
-                  AND expires_at > unixepoch()`,
-            )
-              .bind(
-                viewer.organisationId,
-                viewer.eventId,
-                scheduleActorId,
-                operationId,
-              )
-              .first<{ status: string; requestHash: string }>();
-            if (
-              !recordedPublication ||
-              recordedPublication.status !== "completed"
-            ) {
-              const current = await schedules.getWorkspace(viewer);
-              const currentEntriesHash = await sha256(
-                JSON.stringify(
-                  current.entries.map((entry) => ({
-                    id: entry.id,
-                    sessionId: entry.sessionId,
-                    roomId: entry.roomId,
-                    startsAt: entry.startsAt,
-                    endsAt: entry.endsAt,
-                    revision: entry.revision,
-                  })),
-                ),
-              );
-              if (
-                !current.version ||
-                current.version.id !==
-                  metadata.data.snapshot.scheduleVersionId ||
-                current.version.status !== "draft" ||
-                current.version.revision !==
-                  metadata.data.snapshot.scheduleRevision ||
-                currentEntriesHash !== metadata.data.snapshot.entriesHash
-              ) {
-                throw new AiProposalStateError(
-                  "The draft schedule changed after preview. Prepare and inspect a fresh publication preview.",
-                );
-              }
-            } else if (recordedPublication.requestHash !== requestHash) {
-              throw new AiProposalStateError(
-                "The durable schedule publication does not match this proposal.",
-              );
-            }
-            const result = await schedules.publish(
-              {
-                organisationId: viewer.organisationId,
-                eventId: viewer.eventId,
-              },
-              metadata.data.arguments,
-              { actorId: scheduleActorId },
-              {
-                actorId: scheduleActorId,
-                idempotencyKey: operationId,
-                requestHash,
-              },
-            );
-            executed = {
-              entityType: "schedule_version",
-              entityId: result.scheduleVersionId,
-              title: metadata.data.preview.title,
-              href: "/admin/schedule",
-              operationId: result.calendar.operationId,
-              details: {
-                scheduleVersionId: result.scheduleVersionId,
-                changeSequence: result.changeSequence,
-                calendar: result.calendar,
-              },
-            };
-            break;
-          }
-          case "propose_accelevents_run": {
-            const integrations = new IntegrationService(this.env);
-            const previewFingerprint =
-              metadata.data.snapshot.previewFingerprint;
-            const recordedRun = await this.env.DB.prepare(
-              `SELECT run.id
-                 FROM integration_runs run
-                 JOIN integration_connections connection
-                   ON connection.id = run.connection_id
-                WHERE run.connection_id = ? AND run.idempotency_key = ?
-                  AND connection.event_id = ?
-                  AND connection.organisation_id = ?`,
-            )
-              .bind(
-                metadata.data.snapshot.connectionId,
-                operationId,
-                viewer.eventId,
-                viewer.organisationId,
-              )
-              .first();
-            if (!recordedRun) {
-              const current = await integrations.preview(
-                viewer,
-                metadata.data.snapshot.connectionId,
-              );
-              const currentPlanHash = await sha256(
-                JSON.stringify(current.items),
-              );
-              if (
-                currentPlanHash !== metadata.data.snapshot.planHash ||
-                current.previewFingerprint !== previewFingerprint
-              ) {
-                throw new AiProposalStateError(
-                  "The Accelevents export plan changed after preview. Prepare and inspect a fresh run preview.",
-                );
-              }
-            }
-            const result = await integrations.startRun(viewer, {
-              ...metadata.data.arguments,
-              idempotencyKey: operationId,
-              previewFingerprint,
-            });
-            if (!result.operationId) {
-              throw new Error(
-                "The approved Accelevents run did not resolve a durable operation.",
-              );
-            }
-            executed = {
-              entityType: "integration_run",
-              entityId: result.runId,
-              title: metadata.data.preview.title,
-              href: `/admin/operations?operation=${encodeURIComponent(result.operationId)}`,
-              operationId: result.operationId,
-              details: {
-                runId: result.runId,
-                operationId: result.operationId,
-                queued: result.queued,
-                replayed: result.replayed,
-                dryRun: metadata.data.arguments.dryRun,
-              },
-            };
-            break;
-          }
-        }
-        const response: ProposalExecutionResult = {
-          kind: "domain",
-          proposalId,
-          toolName: metadata.data.toolName,
-          entityId: executed.entityId,
-          operationId: executed.operationId,
-          title: executed.title,
-          href: executed.href,
-          replayed: false,
-        };
-        return await this.completeProposalExecution(viewer, {
-          proposalId,
-          toolName: metadata.data.toolName,
-          model: metadata.data.model,
-          correlationId,
-          claimToken,
-          entityType: executed.entityType,
-          entityId: executed.entityId,
-          result: response,
-          details: executed.details,
-        });
-      }
-      const result = await new ApiTaskService(this.env).create(
-        {
-          keyId: `assistant:${viewer.personId}`,
-          organisationId: viewer.organisationId,
-          eventId: viewer.eventId,
-          scopes: new Set(["tasks:write"]),
-        },
-        metadata.data.arguments,
-        correlationId,
-        `assistant:${proposalId}`,
-      );
-      const response: ProposalExecutionResult = {
-        kind: "task",
+      return await this.executeClaimedProposal(viewer, {
         proposalId,
-        taskId: result.task.id,
-        title: result.task.title,
-        href: `/admin/tasks?task=${encodeURIComponent(result.task.id)}`,
-        replayed: false,
-      };
-      return await this.completeProposalExecution(viewer, {
-        proposalId,
-        toolName: metadata.data.toolName,
-        model: metadata.data.model,
+        metadata: metadata.data,
         correlationId,
         claimToken,
-        entityType: "task_instance",
-        entityId: result.task.id,
-        result: response,
-        details: {
-          changeSequence: result.changeSequence,
-        },
+        operationId,
       });
     } catch (error) {
       try {
@@ -2094,6 +1579,689 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
       }
       throw error;
     }
+  }
+
+  private async executeClaimedProposal(
+    viewer: Viewer,
+    input: ClaimedProposalInput<AssistantProposalMetadata>,
+  ): Promise<AiProposalApprovalResult> {
+    switch (input.metadata.toolName) {
+      case "propose_reminder_send":
+        return this.executeClaimedReminderProposal(viewer, {
+          ...input,
+          metadata: input.metadata,
+        });
+      case "propose_task":
+        return this.executeClaimedTaskProposal(viewer, {
+          ...input,
+          metadata: input.metadata,
+        });
+      default:
+        return this.executeClaimedDomainProposal(viewer, {
+          ...input,
+          metadata: input.metadata,
+        });
+    }
+  }
+
+  private async executeClaimedReminderProposal(
+    viewer: Viewer,
+    input: ClaimedProposalInput<ReminderProposalMetadata>,
+  ): Promise<AiProposalApprovalResult> {
+    const { proposalId, metadata, correlationId, claimToken, operationId } =
+      input;
+    const reminder = metadata.preview.reminder;
+    const communications = new CommunicationService(this.env);
+    const recordedCommunication = await this.env.DB.prepare(
+      `SELECT communication.id
+         FROM communications communication
+         JOIN events event
+           ON event.id = communication.event_id
+          AND event.organisation_id = ?
+        WHERE communication.event_id = ?
+          AND communication.idempotency_key = ?`,
+    )
+      .bind(viewer.organisationId, viewer.eventId, operationId)
+      .first();
+    if (!recordedCommunication) {
+      const current = await communications.preview(viewer, {
+        templateVersionId: reminder.template.id,
+        audienceType: reminder.audienceType,
+        manualRecipients: "",
+        kind: reminder.kind,
+      });
+      if (
+        current.template.id !== reminder.template.id ||
+        current.template.templateId !== reminder.template.templateId ||
+        current.template.name !== reminder.template.name ||
+        current.template.category !== reminder.template.category ||
+        current.template.versionNumber !== reminder.template.versionNumber ||
+        current.template.subject !== reminder.template.subject ||
+        JSON.stringify(current.template.content) !==
+          JSON.stringify(reminder.template.content)
+      ) {
+        throw new AiProposalStateError(
+          "The reminder template changed after preview. Prepare and inspect a fresh assistant preview.",
+        );
+      }
+      if (
+        !current.provider.configured ||
+        !current.provider.sender ||
+        !current.provider.queueConfigured
+      ) {
+        throw new AiProposalStateError(
+          "The verified sender, email provider or OPERATIONS_QUEUE became unavailable after preview.",
+        );
+      }
+      if (current.provider.sender !== reminder.provider.sender) {
+        throw new AiProposalStateError(
+          "The verified sender changed after preview. Prepare and inspect a fresh assistant preview.",
+        );
+      }
+      if (
+        current.confirmation.recipientFingerprint !==
+        reminder.confirmation.recipientFingerprint
+      ) {
+        throw new AiProposalStateError(
+          "The reminder audience changed after preview. Prepare and inspect a fresh assistant preview.",
+        );
+      }
+      if (
+        current.confirmation.deliverableFingerprint !==
+          reminder.confirmation.deliverableFingerprint &&
+        current.confirmation.suppressedCount <=
+          reminder.confirmation.suppressedCount
+      ) {
+        throw new AiProposalStateError(
+          "The deliverable reminder audience changed after preview. Prepare and inspect a fresh assistant preview.",
+        );
+      }
+      if (!current.recipients.deliverable.length) {
+        throw new AiProposalStateError(
+          "The reminder audience no longer contains a deliverable recipient.",
+        );
+      }
+      await communications.publishTemplate(viewer, reminder.template.id);
+    }
+    const result = await communications.confirm(viewer, {
+      templateVersionId: reminder.template.id,
+      audienceType: reminder.audienceType,
+      manualRecipients: "",
+      kind: reminder.kind,
+      idempotencyKey: operationId,
+      ...reminder.confirmation,
+    });
+    if (!result.operationId) {
+      throw new Error(
+        "The approved reminder did not create a communication operation.",
+      );
+    }
+    const response: ProposalExecutionResult = {
+      kind: "communication",
+      proposalId,
+      communicationId: result.communicationId,
+      operationId: result.operationId,
+      title: metadata.preview.title,
+      href: `/admin/operations?operation=${encodeURIComponent(result.operationId)}`,
+      replayed: false,
+    };
+    return await this.completeProposalExecution(viewer, {
+      proposalId,
+      toolName: metadata.toolName,
+      model: metadata.model,
+      correlationId,
+      claimToken,
+      entityType: "communication",
+      entityId: result.communicationId,
+      result: response,
+      details: {
+        status: result.status,
+        downstreamDuplicate: result.duplicate,
+      },
+    });
+  }
+
+  private async executeClaimedDomainProposal(
+    viewer: Viewer,
+    input: ClaimedProposalInput<DomainProposalMetadata>,
+  ): Promise<AiProposalApprovalResult> {
+    const { proposalId, metadata, correlationId, claimToken, operationId } =
+      input;
+    let executed: {
+      entityType: string;
+      entityId: string;
+      title: string;
+      href: string;
+      operationId: string | null;
+      details: Record<string, unknown>;
+    };
+    switch (metadata.toolName) {
+      case "propose_form_draft": {
+        executed = await this.prepareApprovedFormDraft(viewer, {
+          ...input,
+          metadata,
+        });
+        break;
+      }
+      case "propose_rubric_update": {
+        executed = await this.prepareApprovedRubricUpdate(viewer, {
+          ...input,
+          metadata,
+        });
+        break;
+      }
+      case "propose_reviewer_assignment": {
+        executed = await this.prepareApprovedReviewerAssignment(viewer, {
+          ...input,
+          metadata,
+        });
+        break;
+      }
+      case "propose_email_template_draft": {
+        executed = await this.prepareApprovedEmailTemplateDraft(viewer, {
+          ...input,
+          metadata,
+        });
+        break;
+      }
+      case "propose_schedule_placement": {
+        executed = await this.prepareApprovedSchedulePlacement(viewer, {
+          ...input,
+          metadata,
+        });
+        break;
+      }
+      case "propose_form_publication": {
+        executed = await this.prepareApprovedFormPublication(viewer, {
+          ...input,
+          metadata,
+        });
+        break;
+      }
+      case "propose_schedule_publication": {
+        executed = await this.prepareApprovedSchedulePublication(viewer, {
+          ...input,
+          metadata,
+        });
+        break;
+      }
+      case "propose_accelevents_run": {
+        executed = await this.prepareApprovedAcceleventsRun(viewer, {
+          ...input,
+          metadata,
+        });
+        break;
+      }
+    }
+    const response: ProposalExecutionResult = {
+      kind: "domain",
+      proposalId,
+      toolName: metadata.toolName,
+      entityId: executed.entityId,
+      operationId: executed.operationId,
+      title: executed.title,
+      href: executed.href,
+      replayed: false,
+    };
+    return await this.completeProposalExecution(viewer, {
+      proposalId,
+      toolName: metadata.toolName,
+      model: metadata.model,
+      correlationId,
+      claimToken,
+      entityType: executed.entityType,
+      entityId: executed.entityId,
+      result: response,
+      details: executed.details,
+    });
+  }
+
+  private async prepareApprovedFormDraft(
+    viewer: Viewer,
+    input: ClaimedProposalInput<
+      DomainProposalMetadataFor<"propose_form_draft">
+    >,
+  ): Promise<ExecutedDomainProposal> {
+    const { proposalId, metadata, operationId } = input;
+    const formId = await new SubmissionService(this.env).saveForm(
+      viewer,
+      metadata.snapshot,
+      {
+        operationId,
+        formId: proposalId,
+        versionId: `assistant-form-version:${proposalId}`,
+        auditId: `assistant-form-audit:${proposalId}`,
+      },
+    );
+    return {
+      entityType: "form_definition",
+      entityId: formId,
+      title: metadata.preview.title,
+      href: "/admin/submissions/form",
+      operationId: null,
+      details: { formId, published: false },
+    };
+  }
+
+  private async prepareApprovedRubricUpdate(
+    viewer: Viewer,
+    input: ClaimedProposalInput<
+      DomainProposalMetadataFor<"propose_rubric_update">
+    >,
+  ): Promise<ExecutedDomainProposal> {
+    const { proposalId, metadata, operationId } = input;
+    await new EvaluationService(this.env).updateDraftRound(
+      viewer,
+      metadata.snapshot,
+      {
+        operationId,
+        auditId: `assistant-rubric-audit:${proposalId}`,
+      },
+    );
+    return {
+      entityType: "evaluation_round",
+      entityId: metadata.snapshot.roundId,
+      title: metadata.preview.title,
+      href: `/admin/review?round=${encodeURIComponent(metadata.snapshot.roundId)}`,
+      operationId: null,
+      details: {
+        roundId: metadata.snapshot.roundId,
+        previousRevision: metadata.snapshot.revision,
+        criterionCount: metadata.snapshot.criteria.length,
+      },
+    };
+  }
+
+  private async prepareApprovedReviewerAssignment(
+    viewer: Viewer,
+    input: ClaimedProposalInput<
+      DomainProposalMetadataFor<"propose_reviewer_assignment">
+    >,
+  ): Promise<ExecutedDomainProposal> {
+    const { proposalId, metadata, operationId } = input;
+    const evaluation = new EvaluationService(this.env);
+    const assignmentInput = metadata.snapshot.input;
+    const requestHash = await sha256(JSON.stringify(assignmentInput));
+    const recordedAssignment = await this.env.DB.prepare(
+      `SELECT status, request_hash AS requestHash
+         FROM idempotency_records
+        WHERE organisation_id = ? AND event_id = ? AND actor_id = ?
+          AND scope = 'evaluation.assign' AND idempotency_key = ?
+          AND expires_at > unixepoch()`,
+    )
+      .bind(
+        viewer.organisationId,
+        viewer.eventId,
+        `assistant:${viewer.personId}`,
+        operationId,
+      )
+      .first<{ status: string; requestHash: string }>();
+    if (!recordedAssignment || recordedAssignment.status !== "completed") {
+      const workspace = await evaluation.getAdminWorkspace(viewer);
+      const currentEvaluatorIds = assignmentInput.teamId
+        ? (workspace.teams
+            .find(
+              (team) =>
+                team.id === assignmentInput.teamId && team.status === "active",
+            )
+            ?.members.filter((member) => member.authorised)
+            .map((member) => member.personId) ?? [])
+        : workspace.evaluators
+            .filter((evaluator) =>
+              assignmentInput.evaluatorPersonIds.includes(evaluator.id),
+            )
+            .map((evaluator) => evaluator.id);
+      const expectedEvaluatorIds = [
+        ...metadata.snapshot.resolvedEvaluatorPersonIds,
+      ].sort();
+      if (
+        JSON.stringify([...new Set(currentEvaluatorIds)].sort()) !==
+        JSON.stringify(expectedEvaluatorIds)
+      ) {
+        throw new AiProposalStateError(
+          "The authorised reviewer set changed after preview. Prepare and inspect a fresh assignment preview.",
+        );
+      }
+    } else if (recordedAssignment.requestHash !== requestHash) {
+      throw new AiProposalStateError(
+        "The durable reviewer-assignment operation does not match this proposal.",
+      );
+    }
+    const result = await evaluation.assign(viewer, assignmentInput, {
+      actorId: `assistant:${viewer.personId}`,
+      idempotencyKey: operationId,
+      requestHash,
+    });
+    return {
+      entityType: "evaluation_round",
+      entityId: assignmentInput.roundId,
+      title: metadata.preview.title,
+      href: `/admin/review?round=${encodeURIComponent(assignmentInput.roundId)}`,
+      operationId: result.undoOperationId,
+      details: {
+        roundId: assignmentInput.roundId,
+        createdAssignmentCount: result.createdAssignmentCount,
+        requestedAssignmentCount: result.requestedAssignmentCount,
+        undoOperationId: result.undoOperationId,
+        undoExpiresAt: result.undoExpiresAt,
+      },
+    };
+  }
+
+  private async prepareApprovedEmailTemplateDraft(
+    viewer: Viewer,
+    input: ClaimedProposalInput<
+      DomainProposalMetadataFor<"propose_email_template_draft">
+    >,
+  ): Promise<ExecutedDomainProposal> {
+    const { proposalId, metadata, operationId } = input;
+    const result = await new CommunicationService(this.env).saveTemplate(
+      viewer,
+      metadata.snapshot,
+      {
+        operationId,
+        templateId: proposalId,
+        versionId: `assistant-template-version:${proposalId}`,
+        auditId: `assistant-template-audit:${proposalId}`,
+      },
+    );
+    return {
+      entityType: "communication_template",
+      entityId: result.templateId,
+      title: metadata.preview.title,
+      href: `/admin/communications?template=${encodeURIComponent(result.templateId)}`,
+      operationId: null,
+      details: { ...result, published: false, sent: false },
+    };
+  }
+
+  private async prepareApprovedSchedulePlacement(
+    viewer: Viewer,
+    input: ClaimedProposalInput<
+      DomainProposalMetadataFor<"propose_schedule_placement">
+    >,
+  ): Promise<ExecutedDomainProposal> {
+    const { proposalId, metadata, operationId } = input;
+    const result = await new ScheduleService(this.env).place(
+      viewer,
+      metadata.snapshot.input,
+      {
+        actorId: `assistant:${viewer.personId}`,
+        idempotencyKey: operationId,
+        requestHash: await sha256(JSON.stringify(metadata.snapshot.input)),
+      },
+    );
+    return {
+      entityType: "schedule_entry",
+      entityId: result.entryId,
+      title: metadata.preview.title,
+      href: `/admin/schedule?session=${encodeURIComponent(metadata.snapshot.input.sessionId)}`,
+      operationId: null,
+      details: {
+        entryId: result.entryId,
+        warningCount: result.warnings.length,
+        undoToken: result.undo.token,
+        undoExpiresAt: result.undo.expiresAt,
+      },
+    };
+  }
+
+  private async prepareApprovedFormPublication(
+    viewer: Viewer,
+    input: ClaimedProposalInput<
+      DomainProposalMetadataFor<"propose_form_publication">
+    >,
+  ): Promise<ExecutedDomainProposal> {
+    const { proposalId, metadata, operationId } = input;
+    const submissions = new SubmissionService(this.env);
+    const recordedPublication = await this.env.DB.prepare(
+      `SELECT form.id
+         FROM form_definitions form
+         JOIN events event
+           ON event.id = form.event_id AND event.organisation_id = ?
+        WHERE form.id = ? AND form.event_id = ?
+          AND form.status = 'published' AND form.last_operation_id = ?`,
+    )
+      .bind(
+        viewer.organisationId,
+        metadata.snapshot.formId,
+        viewer.eventId,
+        operationId,
+      )
+      .first();
+    if (!recordedPublication) {
+      const current = await submissions.getAdminWorkspace(
+        viewer,
+        metadata.snapshot.formId,
+      );
+      if (!current) {
+        throw new AiProposalStateError(
+          "The form no longer exists in this event.",
+        );
+      }
+      const currentSchemaHash = await sha256(
+        JSON.stringify({
+          schema: current.draftVersion.schema,
+          routing: current.draftVersion.routing,
+          settings: current.draftVersion.settings,
+        }),
+      );
+      if (
+        current.revision !== metadata.snapshot.formRevision ||
+        current.draftVersion.revision !== metadata.snapshot.draftRevision ||
+        current.draftVersion.id !== metadata.snapshot.draftVersionId ||
+        currentSchemaHash !== metadata.snapshot.schemaHash
+      ) {
+        throw new AiProposalStateError(
+          "The form draft changed after preview. Prepare and inspect a fresh publication preview.",
+        );
+      }
+    }
+    await submissions.publishForm(
+      viewer,
+      metadata.snapshot.formId,
+      metadata.snapshot.formRevision,
+      metadata.snapshot.draftRevision,
+      {
+        operationId,
+        nextVersionId: `assistant-next-form-version:${proposalId}`,
+        auditId: `assistant-form-publication-audit:${proposalId}`,
+      },
+    );
+    return {
+      entityType: "form_definition",
+      entityId: metadata.snapshot.formId,
+      title: metadata.preview.title,
+      href: "/admin/submissions/form",
+      operationId: null,
+      details: {
+        formId: metadata.snapshot.formId,
+        publicPath: `/apply/${metadata.snapshot.publicSlug}`,
+        published: true,
+      },
+    };
+  }
+
+  private async prepareApprovedSchedulePublication(
+    viewer: Viewer,
+    input: ClaimedProposalInput<
+      DomainProposalMetadataFor<"propose_schedule_publication">
+    >,
+  ): Promise<ExecutedDomainProposal> {
+    const { proposalId, metadata, operationId } = input;
+    const schedules = new ScheduleService(this.env);
+    const scheduleActorId = `assistant:${viewer.personId}`;
+    const requestHash = await sha256(JSON.stringify(metadata.arguments));
+    const recordedPublication = await this.env.DB.prepare(
+      `SELECT status, request_hash AS requestHash
+         FROM idempotency_records
+        WHERE organisation_id = ? AND event_id = ? AND actor_id = ?
+          AND scope = 'schedule.publish' AND idempotency_key = ?
+          AND expires_at > unixepoch()`,
+    )
+      .bind(viewer.organisationId, viewer.eventId, scheduleActorId, operationId)
+      .first<{ status: string; requestHash: string }>();
+    if (!recordedPublication || recordedPublication.status !== "completed") {
+      const current = await schedules.getWorkspace(viewer);
+      const currentEntriesHash = await sha256(
+        JSON.stringify(
+          current.entries.map((entry) => ({
+            id: entry.id,
+            sessionId: entry.sessionId,
+            roomId: entry.roomId,
+            startsAt: entry.startsAt,
+            endsAt: entry.endsAt,
+            revision: entry.revision,
+          })),
+        ),
+      );
+      if (
+        !current.version ||
+        current.version.id !== metadata.snapshot.scheduleVersionId ||
+        current.version.status !== "draft" ||
+        current.version.revision !== metadata.snapshot.scheduleRevision ||
+        currentEntriesHash !== metadata.snapshot.entriesHash
+      ) {
+        throw new AiProposalStateError(
+          "The draft schedule changed after preview. Prepare and inspect a fresh publication preview.",
+        );
+      }
+    } else if (recordedPublication.requestHash !== requestHash) {
+      throw new AiProposalStateError(
+        "The durable schedule publication does not match this proposal.",
+      );
+    }
+    const result = await schedules.publish(
+      {
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+      },
+      metadata.arguments,
+      { actorId: scheduleActorId },
+      {
+        actorId: scheduleActorId,
+        idempotencyKey: operationId,
+        requestHash,
+      },
+    );
+    return {
+      entityType: "schedule_version",
+      entityId: result.scheduleVersionId,
+      title: metadata.preview.title,
+      href: "/admin/schedule",
+      operationId: result.calendar.operationId,
+      details: {
+        scheduleVersionId: result.scheduleVersionId,
+        changeSequence: result.changeSequence,
+        calendar: result.calendar,
+      },
+    };
+  }
+
+  private async prepareApprovedAcceleventsRun(
+    viewer: Viewer,
+    input: ClaimedProposalInput<
+      DomainProposalMetadataFor<"propose_accelevents_run">
+    >,
+  ): Promise<ExecutedDomainProposal> {
+    const { proposalId, metadata, operationId } = input;
+    const integrations = new IntegrationService(this.env);
+    const previewFingerprint = metadata.snapshot.previewFingerprint;
+    const recordedRun = await this.env.DB.prepare(
+      `SELECT run.id
+         FROM integration_runs run
+         JOIN integration_connections connection
+           ON connection.id = run.connection_id
+        WHERE run.connection_id = ? AND run.idempotency_key = ?
+          AND connection.event_id = ?
+          AND connection.organisation_id = ?`,
+    )
+      .bind(
+        metadata.snapshot.connectionId,
+        operationId,
+        viewer.eventId,
+        viewer.organisationId,
+      )
+      .first();
+    if (!recordedRun) {
+      const current = await integrations.preview(
+        viewer,
+        metadata.snapshot.connectionId,
+      );
+      const currentPlanHash = await sha256(JSON.stringify(current.items));
+      if (
+        currentPlanHash !== metadata.snapshot.planHash ||
+        current.previewFingerprint !== previewFingerprint
+      ) {
+        throw new AiProposalStateError(
+          "The Accelevents export plan changed after preview. Prepare and inspect a fresh run preview.",
+        );
+      }
+    }
+    const result = await integrations.startRun(viewer, {
+      ...metadata.arguments,
+      idempotencyKey: operationId,
+      previewFingerprint,
+    });
+    if (!result.operationId) {
+      throw new Error(
+        "The approved Accelevents run did not resolve a durable operation.",
+      );
+    }
+    return {
+      entityType: "integration_run",
+      entityId: result.runId,
+      title: metadata.preview.title,
+      href: `/admin/operations?operation=${encodeURIComponent(result.operationId)}`,
+      operationId: result.operationId,
+      details: {
+        runId: result.runId,
+        operationId: result.operationId,
+        queued: result.queued,
+        replayed: result.replayed,
+        dryRun: metadata.arguments.dryRun,
+      },
+    };
+  }
+
+  private async executeClaimedTaskProposal(
+    viewer: Viewer,
+    input: ClaimedProposalInput<TaskProposalMetadata>,
+  ): Promise<AiProposalApprovalResult> {
+    const { proposalId, metadata, correlationId, claimToken, operationId } =
+      input;
+    const result = await new ApiTaskService(this.env).create(
+      {
+        keyId: `assistant:${viewer.personId}`,
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        scopes: new Set(["tasks:write"]),
+      },
+      metadata.arguments,
+      correlationId,
+      `assistant:${proposalId}`,
+    );
+    const response: ProposalExecutionResult = {
+      kind: "task",
+      proposalId,
+      taskId: result.task.id,
+      title: result.task.title,
+      href: `/admin/tasks?task=${encodeURIComponent(result.task.id)}`,
+      replayed: false,
+    };
+    return await this.completeProposalExecution(viewer, {
+      proposalId,
+      toolName: metadata.toolName,
+      model: metadata.model,
+      correlationId,
+      claimToken,
+      entityType: "task_instance",
+      entityId: result.task.id,
+      result: response,
+      details: {
+        changeSequence: result.changeSequence,
+      },
+    });
   }
 
   async reviseReminderProposal(

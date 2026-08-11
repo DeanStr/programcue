@@ -1507,1748 +1507,1884 @@ export class AiToolExecutor {
       );
     }
     await this.airtable.assertReadable(this.viewer);
-    if (name === "get_event_readiness") {
-      const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
-      const snapshot = await new ReadinessService(this.env).getCommandCentre(
-        this.viewer,
-      );
-      const evidence: AiEvidence[] = [
-        {
-          id: "event-readiness",
-          label: "Event readiness",
-          detail: `${snapshot.readiness.percentage}% · ${snapshot.readiness.status.replaceAll("_", " ")}`,
-          href: "/admin/command",
-          source: "Program Cue D1",
-        },
-        ...snapshot.blockers.map((blocker) => ({
-          id: `readiness-blocker:${blocker.key}`,
-          label: blocker.label,
-          detail: `${blocker.count} affected · ${blocker.detail}`,
-          href: blocker.href,
-          source: "Program Cue D1" as const,
-        })),
-      ];
-      return {
-        output: {
-          source: "authoritative_command_centre_snapshot",
-          generatedAt: new Date(snapshot.generatedAt * 1_000).toISOString(),
-          readiness: snapshot.readiness,
-          workflows: snapshot.workflows,
-          blockers: snapshot.blockers,
-        },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          readiness: snapshot.readiness.percentage,
-          blockerCount: snapshot.blockers.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
+    switch (name) {
+      case "get_event_readiness":
+        return this.executeGetEventReadiness(encodedArguments);
+      case "find_incomplete_speakers":
+        return this.executeFindIncompleteSpeakers(encodedArguments);
+      case "get_review_progress":
+        return this.executeGetReviewProgress(encodedArguments);
+      case "inspect_schedule_conflicts":
+        return this.executeInspectScheduleConflicts(encodedArguments);
+      case "inspect_integration_failures":
+        return this.executeInspectIntegrationFailures(encodedArguments);
+      case "search_submissions":
+        return this.executeSearchSubmissions(encodedArguments);
+      case "list_reminder_templates":
+        return this.executeListReminderTemplates(encodedArguments);
+      case "get_evaluation_setup":
+        return this.executeGetEvaluationSetup(encodedArguments);
+      case "get_schedule_workspace":
+        return this.executeGetScheduleWorkspace(encodedArguments);
+      case "list_form_drafts":
+        return this.executeListFormDrafts(encodedArguments);
+      case "get_accelevents_export_status":
+        return this.executeGetAcceleventsExportStatus(encodedArguments);
+      case "draft_reminder":
+        return this.executeDraftReminder(encodedArguments);
+      case "propose_reminder_send":
+        return this.executeProposeReminderSend(encodedArguments);
+      case "propose_form_draft":
+        return this.executeProposeFormDraft(encodedArguments);
+      case "propose_rubric_update":
+        return this.executeProposeRubricUpdate(encodedArguments);
+      case "propose_reviewer_assignment":
+        return this.executeProposeReviewerAssignment(encodedArguments);
+      case "propose_email_template_draft":
+        return this.executeProposeEmailTemplateDraft(encodedArguments);
+      case "propose_schedule_placement":
+        return this.executeProposeSchedulePlacement(encodedArguments);
+      case "propose_form_publication":
+        return this.executeProposeFormPublication(encodedArguments);
+      case "propose_schedule_publication":
+        return this.executeProposeSchedulePublication(encodedArguments);
+      case "propose_accelevents_run":
+        return this.executeProposeAcceleventsRun(encodedArguments);
+      case "propose_task":
+        return this.executeProposeTask(encodedArguments);
     }
-    if (name === "find_incomplete_speakers") {
-      const args = parseArguments(name, encodedArguments, boundedLimitSchema);
-      const rows = await this.env.DB.prepare(
-        `WITH event_speakers(person_id) AS (
-           SELECT person_id FROM session_speakers WHERE event_id = ?
-           UNION
-           SELECT person_id FROM memberships
-            WHERE event_id = ? AND role = 'speaker'
-              AND accepted_at IS NOT NULL AND revoked_at IS NULL
-         )
-         SELECT p.id, p.display_name AS name,
-                COUNT(ti.id) AS taskCount,
-                COALESCE(SUM(CASE WHEN ti.status NOT IN ('completed','waived') THEN 1 ELSE 0 END), 0) AS incompleteCount,
-                COALESCE(SUM(CASE WHEN ti.status = 'overdue' OR
-                  (ti.status NOT IN ('completed','waived') AND ti.due_at IS NOT NULL AND ti.due_at < unixepoch())
-                  THEN 1 ELSE 0 END), 0) AS overdueCount
-           FROM event_speakers es
-           JOIN people p ON p.id = es.person_id
-           JOIN events e ON e.id = ? AND e.organisation_id = ?
-           LEFT JOIN task_instances ti ON ti.event_id = e.id
-             AND ti.target_type = 'speaker' AND ti.target_id = p.id
-          GROUP BY p.id, p.display_name
-         HAVING incompleteCount > 0
-          ORDER BY overdueCount DESC, incompleteCount DESC, p.display_name
-          LIMIT ?`,
+    throw new AiToolPermissionError(`Tool ${name} is not allow-listed.`);
+  }
+
+  private async executeGetEventReadiness(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "get_event_readiness";
+
+    const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
+    const snapshot = await new ReadinessService(this.env).getCommandCentre(
+      this.viewer,
+    );
+    const evidence: AiEvidence[] = [
+      {
+        id: "event-readiness",
+        label: "Event readiness",
+        detail: `${snapshot.readiness.percentage}% · ${snapshot.readiness.status.replaceAll("_", " ")}`,
+        href: "/admin/command",
+        source: "Program Cue D1",
+      },
+      ...snapshot.blockers.map((blocker) => ({
+        id: `readiness-blocker:${blocker.key}`,
+        label: blocker.label,
+        detail: `${blocker.count} affected · ${blocker.detail}`,
+        href: blocker.href,
+        source: "Program Cue D1" as const,
+      })),
+    ];
+    return {
+      output: {
+        source: "authoritative_command_centre_snapshot",
+        generatedAt: new Date(snapshot.generatedAt * 1_000).toISOString(),
+        readiness: snapshot.readiness,
+        workflows: snapshot.workflows,
+        blockers: snapshot.blockers,
+      },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        readiness: snapshot.readiness.percentage,
+        blockerCount: snapshot.blockers.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeFindIncompleteSpeakers(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "find_incomplete_speakers";
+
+    const args = parseArguments(name, encodedArguments, boundedLimitSchema);
+    const rows = await this.env.DB.prepare(
+      `WITH event_speakers(person_id) AS (
+         SELECT person_id FROM session_speakers WHERE event_id = ?
+         UNION
+         SELECT person_id FROM memberships
+          WHERE event_id = ? AND role = 'speaker'
+            AND accepted_at IS NOT NULL AND revoked_at IS NULL
+       )
+       SELECT p.id, p.display_name AS name,
+              COUNT(ti.id) AS taskCount,
+              COALESCE(SUM(CASE WHEN ti.status NOT IN ('completed','waived') THEN 1 ELSE 0 END), 0) AS incompleteCount,
+              COALESCE(SUM(CASE WHEN ti.status = 'overdue' OR
+                (ti.status NOT IN ('completed','waived') AND ti.due_at IS NOT NULL AND ti.due_at < unixepoch())
+                THEN 1 ELSE 0 END), 0) AS overdueCount
+         FROM event_speakers es
+         JOIN people p ON p.id = es.person_id
+         JOIN events e ON e.id = ? AND e.organisation_id = ?
+         LEFT JOIN task_instances ti ON ti.event_id = e.id
+           AND ti.target_type = 'speaker' AND ti.target_id = p.id
+        GROUP BY p.id, p.display_name
+       HAVING incompleteCount > 0
+        ORDER BY overdueCount DESC, incompleteCount DESC, p.display_name
+        LIMIT ?`,
+    )
+      .bind(
+        this.viewer.eventId,
+        this.viewer.eventId,
+        this.viewer.eventId,
+        this.viewer.organisationId,
+        args.limit,
       )
-        .bind(
-          this.viewer.eventId,
-          this.viewer.eventId,
-          this.viewer.eventId,
-          this.viewer.organisationId,
-          args.limit,
+      .all<{
+        id: string;
+        name: string;
+        taskCount: number;
+        incompleteCount: number;
+        overdueCount: number;
+      }>();
+    const evidence = rows.results.map((speaker) => ({
+      id: `speaker:${speaker.id}`,
+      label: speaker.name,
+      detail: `${speaker.incompleteCount} incomplete task${speaker.incompleteCount === 1 ? "" : "s"}`,
+      href: `/admin/speakers?person=${encodeURIComponent(speaker.id)}`,
+      source: "Program Cue D1" as const,
+    }));
+    return {
+      output: { source: "event_speaker_tasks", speakers: rows.results },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        resultCount: rows.results.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeGetReviewProgress(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "get_review_progress";
+
+    const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
+    const rows = await this.env.DB.prepare(
+      `SELECT r.id, r.name, r.round_number AS roundNumber, r.status,
+              COUNT(a.id) AS totalAssignments,
+              COALESCE(SUM(CASE WHEN a.status = 'submitted' THEN 1 ELSE 0 END), 0) AS submittedAssignments,
+              COALESCE(SUM(CASE WHEN a.status IN ('assigned','in_progress','reopened') THEN 1 ELSE 0 END), 0) AS openAssignments,
+              COALESCE(SUM(CASE WHEN a.status = 'recused' THEN 1 ELSE 0 END), 0) AS recusals
+         FROM evaluation_rounds r
+         JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+         LEFT JOIN evaluator_assignments a ON a.round_id = r.id AND a.event_id = r.event_id
+        WHERE r.event_id = ?
+        GROUP BY r.id, r.name, r.round_number, r.status
+        ORDER BY r.round_number`,
+    )
+      .bind(this.viewer.organisationId, this.viewer.eventId)
+      .all<{
+        id: string;
+        name: string;
+        roundNumber: number;
+        status: string;
+        totalAssignments: number;
+        submittedAssignments: number;
+        openAssignments: number;
+        recusals: number;
+      }>();
+    const evidence = rows.results.map((round) => ({
+      id: `evaluation-round:${round.id}`,
+      label: round.name,
+      detail: `${round.submittedAssignments}/${round.totalAssignments} assignments submitted`,
+      href: `/admin/review?round=${encodeURIComponent(round.id)}`,
+      source: "Program Cue D1" as const,
+    }));
+    return {
+      output: { source: "evaluation_assignments", rounds: rows.results },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        resultCount: rows.results.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeInspectScheduleConflicts(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "inspect_schedule_conflicts";
+
+    const args = parseArguments(name, encodedArguments, boundedLimitSchema);
+    const rows = await this.env.DB.prepare(
+      `SELECT c.id, c.conflict_type AS conflictType, c.severity,
+              c.details_json AS detailsJson,
+              primary_session.title AS primarySession,
+              conflicting_session.title AS conflictingSession
+         FROM schedule_conflicts c
+         JOIN schedule_versions v ON v.id = c.schedule_version_id AND v.event_id = c.event_id
+         JOIN events event ON event.id = c.event_id AND event.organisation_id = ?
+         LEFT JOIN schedule_entries primary_entry ON primary_entry.id = c.primary_entry_id
+         LEFT JOIN sessions primary_session ON primary_session.id = primary_entry.session_id
+         LEFT JOIN schedule_entries conflicting_entry ON conflicting_entry.id = c.conflicting_entry_id
+         LEFT JOIN sessions conflicting_session ON conflicting_session.id = conflicting_entry.session_id
+        WHERE c.event_id = ? AND c.resolved_at IS NULL
+        ORDER BY CASE c.severity WHEN 'blocking' THEN 0 ELSE 1 END, c.created_at DESC
+        LIMIT ?`,
+    )
+      .bind(this.viewer.organisationId, this.viewer.eventId, args.limit)
+      .all<{
+        id: string;
+        conflictType: string;
+        severity: string;
+        detailsJson: string;
+        primarySession: string | null;
+        conflictingSession: string | null;
+      }>();
+    const conflicts = rows.results.map(({ detailsJson, ...row }) => ({
+      ...row,
+      details: parseJson(detailsJson, `Schedule conflict ${row.id}`),
+    }));
+    const evidence = conflicts.map((conflict) => ({
+      id: `schedule-conflict:${conflict.id}`,
+      label: `${conflict.severity} ${conflict.conflictType.replaceAll("_", " ")} conflict`,
+      detail:
+        [conflict.primarySession, conflict.conflictingSession]
+          .filter(Boolean)
+          .join(" / ") || "Recorded schedule conflict",
+      href: `/admin/schedule?conflict=${encodeURIComponent(conflict.id)}`,
+      source: "Program Cue D1" as const,
+    }));
+    return {
+      output: {
+        source: "deterministic_schedule_conflict_engine",
+        conflicts,
+      },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        resultCount: conflicts.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeInspectIntegrationFailures(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "inspect_integration_failures";
+
+    const args = parseArguments(name, encodedArguments, boundedLimitSchema);
+    const rows = await this.env.DB.prepare(
+      `SELECT c.id AS connectionId, c.provider,
+              c.status AS connectionStatus, r.id AS runId, r.status AS runStatus,
+              item.entity_type AS entityType, item.entity_id AS entityId,
+              item.error_code AS errorCode, item.error_message AS errorMessage
+         FROM integration_connections c
+         JOIN events event ON event.id = c.event_id AND event.organisation_id = ?
+         LEFT JOIN integration_runs r ON r.connection_id = c.id
+           AND r.id = (SELECT latest.id FROM integration_runs latest
+                        WHERE latest.connection_id = c.id
+                        ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1)
+         LEFT JOIN integration_run_items item ON item.run_id = r.id AND item.status = 'failed'
+        WHERE c.event_id = ? AND (
+          c.status IN ('needs_attention','failed')
+          OR r.status IN ('partially_failed','failed')
         )
-        .all<{
-          id: string;
-          name: string;
-          taskCount: number;
-          incompleteCount: number;
-          overdueCount: number;
-        }>();
-      const evidence = rows.results.map((speaker) => ({
-        id: `speaker:${speaker.id}`,
-        label: speaker.name,
-        detail: `${speaker.incompleteCount} incomplete task${speaker.incompleteCount === 1 ? "" : "s"}`,
-        href: `/admin/speakers?person=${encodeURIComponent(speaker.id)}`,
-        source: "Program Cue D1" as const,
-      }));
-      return {
-        output: { source: "event_speaker_tasks", speakers: rows.results },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          resultCount: rows.results.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "get_review_progress") {
-      const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
-      const rows = await this.env.DB.prepare(
-        `SELECT r.id, r.name, r.round_number AS roundNumber, r.status,
-                COUNT(a.id) AS totalAssignments,
-                COALESCE(SUM(CASE WHEN a.status = 'submitted' THEN 1 ELSE 0 END), 0) AS submittedAssignments,
-                COALESCE(SUM(CASE WHEN a.status IN ('assigned','in_progress','reopened') THEN 1 ELSE 0 END), 0) AS openAssignments,
-                COALESCE(SUM(CASE WHEN a.status = 'recused' THEN 1 ELSE 0 END), 0) AS recusals
-           FROM evaluation_rounds r
-           JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
-           LEFT JOIN evaluator_assignments a ON a.round_id = r.id AND a.event_id = r.event_id
-          WHERE r.event_id = ?
-          GROUP BY r.id, r.name, r.round_number, r.status
-          ORDER BY r.round_number`,
-      )
-        .bind(this.viewer.organisationId, this.viewer.eventId)
-        .all<{
-          id: string;
-          name: string;
-          roundNumber: number;
-          status: string;
-          totalAssignments: number;
-          submittedAssignments: number;
-          openAssignments: number;
-          recusals: number;
-        }>();
-      const evidence = rows.results.map((round) => ({
-        id: `evaluation-round:${round.id}`,
-        label: round.name,
-        detail: `${round.submittedAssignments}/${round.totalAssignments} assignments submitted`,
-        href: `/admin/review?round=${encodeURIComponent(round.id)}`,
-        source: "Program Cue D1" as const,
-      }));
-      return {
-        output: { source: "evaluation_assignments", rounds: rows.results },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          resultCount: rows.results.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "inspect_schedule_conflicts") {
-      const args = parseArguments(name, encodedArguments, boundedLimitSchema);
-      const rows = await this.env.DB.prepare(
-        `SELECT c.id, c.conflict_type AS conflictType, c.severity,
-                c.details_json AS detailsJson,
-                primary_session.title AS primarySession,
-                conflicting_session.title AS conflictingSession
-           FROM schedule_conflicts c
-           JOIN schedule_versions v ON v.id = c.schedule_version_id AND v.event_id = c.event_id
-           JOIN events event ON event.id = c.event_id AND event.organisation_id = ?
-           LEFT JOIN schedule_entries primary_entry ON primary_entry.id = c.primary_entry_id
-           LEFT JOIN sessions primary_session ON primary_session.id = primary_entry.session_id
-           LEFT JOIN schedule_entries conflicting_entry ON conflicting_entry.id = c.conflicting_entry_id
-           LEFT JOIN sessions conflicting_session ON conflicting_session.id = conflicting_entry.session_id
-          WHERE c.event_id = ? AND c.resolved_at IS NULL
-          ORDER BY CASE c.severity WHEN 'blocking' THEN 0 ELSE 1 END, c.created_at DESC
-          LIMIT ?`,
-      )
-        .bind(this.viewer.organisationId, this.viewer.eventId, args.limit)
-        .all<{
-          id: string;
-          conflictType: string;
-          severity: string;
-          detailsJson: string;
-          primarySession: string | null;
-          conflictingSession: string | null;
-        }>();
-      const conflicts = rows.results.map(({ detailsJson, ...row }) => ({
-        ...row,
-        details: parseJson(detailsJson, `Schedule conflict ${row.id}`),
-      }));
-      const evidence = conflicts.map((conflict) => ({
-        id: `schedule-conflict:${conflict.id}`,
-        label: `${conflict.severity} ${conflict.conflictType.replaceAll("_", " ")} conflict`,
+        ORDER BY c.updated_at DESC, item.updated_at DESC
+        LIMIT ?`,
+    )
+      .bind(this.viewer.organisationId, this.viewer.eventId, args.limit)
+      .all<{
+        connectionId: string;
+        provider: string;
+        connectionStatus: string;
+        runId: string | null;
+        runStatus: string | null;
+        entityType: string | null;
+        entityId: string | null;
+        errorCode: string | null;
+        errorMessage: string | null;
+      }>();
+    const evidence = distinctEvidence(
+      rows.results.map((failure) => ({
+        id: `integration:${failure.connectionId}`,
+        label: `${failure.provider} integration`,
         detail:
-          [conflict.primarySession, conflict.conflictingSession]
-            .filter(Boolean)
-            .join(" / ") || "Recorded schedule conflict",
-        href: `/admin/schedule?conflict=${encodeURIComponent(conflict.id)}`,
+          failure.errorMessage?.slice(0, 300) ??
+          failure.runStatus ??
+          failure.connectionStatus,
+        href: `/admin/integrations?connection=${encodeURIComponent(failure.connectionId)}`,
         source: "Program Cue D1" as const,
-      }));
-      return {
-        output: {
-          source: "deterministic_schedule_conflict_engine",
-          conflicts,
-        },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          resultCount: conflicts.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "inspect_integration_failures") {
-      const args = parseArguments(name, encodedArguments, boundedLimitSchema);
-      const rows = await this.env.DB.prepare(
-        `SELECT c.id AS connectionId, c.provider,
-                c.status AS connectionStatus, r.id AS runId, r.status AS runStatus,
-                item.entity_type AS entityType, item.entity_id AS entityId,
-                item.error_code AS errorCode, item.error_message AS errorMessage
-           FROM integration_connections c
-           JOIN events event ON event.id = c.event_id AND event.organisation_id = ?
-           LEFT JOIN integration_runs r ON r.connection_id = c.id
-             AND r.id = (SELECT latest.id FROM integration_runs latest
-                          WHERE latest.connection_id = c.id
-                          ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1)
-           LEFT JOIN integration_run_items item ON item.run_id = r.id AND item.status = 'failed'
-          WHERE c.event_id = ? AND (
-            c.status IN ('needs_attention','failed')
-            OR r.status IN ('partially_failed','failed')
-          )
-          ORDER BY c.updated_at DESC, item.updated_at DESC
-          LIMIT ?`,
-      )
-        .bind(this.viewer.organisationId, this.viewer.eventId, args.limit)
-        .all<{
-          connectionId: string;
-          provider: string;
-          connectionStatus: string;
-          runId: string | null;
-          runStatus: string | null;
-          entityType: string | null;
-          entityId: string | null;
-          errorCode: string | null;
-          errorMessage: string | null;
-        }>();
-      const evidence = distinctEvidence(
-        rows.results.map((failure) => ({
-          id: `integration:${failure.connectionId}`,
-          label: `${failure.provider} integration`,
-          detail:
-            failure.errorMessage?.slice(0, 300) ??
-            failure.runStatus ??
-            failure.connectionStatus,
-          href: `/admin/integrations?connection=${encodeURIComponent(failure.connectionId)}`,
-          source: "Program Cue D1" as const,
-        })),
-      );
-      return {
-        output: { source: "integration_run_history", failures: rows.results },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          resultCount: rows.results.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "search_submissions") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        submissionSearchSchema,
-      );
-      const pattern = likePattern(args.query);
-      const rows = await this.env.DB.prepare(
-        `SELECT s.id, s.public_reference AS reference, s.title, s.category,
-                s.format, s.status
-           FROM submissions s
-           JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
-          WHERE s.event_id = ? AND (
-            s.title LIKE ? ESCAPE '\\'
-            OR s.public_reference LIKE ? ESCAPE '\\'
-            OR COALESCE(s.category, '') LIKE ? ESCAPE '\\'
-          )
-          ORDER BY s.updated_at DESC, s.id
-          LIMIT ?`,
-      )
-        .bind(
-          this.viewer.organisationId,
-          this.viewer.eventId,
-          pattern,
-          pattern,
-          pattern,
-          args.limit,
+      })),
+    );
+    return {
+      output: { source: "integration_run_history", failures: rows.results },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        resultCount: rows.results.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeSearchSubmissions(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "search_submissions";
+
+    const args = parseArguments(name, encodedArguments, submissionSearchSchema);
+    const pattern = likePattern(args.query);
+    const rows = await this.env.DB.prepare(
+      `SELECT s.id, s.public_reference AS reference, s.title, s.category,
+              s.format, s.status
+         FROM submissions s
+         JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
+        WHERE s.event_id = ? AND (
+          s.title LIKE ? ESCAPE '\\'
+          OR s.public_reference LIKE ? ESCAPE '\\'
+          OR COALESCE(s.category, '') LIKE ? ESCAPE '\\'
         )
-        .all<{
-          id: string;
-          reference: string;
-          title: string;
-          category: string | null;
-          format: string | null;
-          status: string;
-        }>();
-      const evidence = rows.results.map((submission) => ({
-        id: `submission:${submission.id}`,
-        label: submission.title,
-        detail: `${submission.reference} · ${submission.status}`,
-        href: `/admin/submissions/${encodeURIComponent(submission.id)}`,
-        source: "Program Cue D1" as const,
-      }));
-      return {
-        output: { source: "event_submissions", submissions: rows.results },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          resultCount: rows.results.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "list_reminder_templates") {
-      const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
-      const rows = await this.env.DB.prepare(
-        `SELECT version.id, version.template_id AS templateId, version.name,
-                version.version_number AS versionNumber,
-                version.subject_template AS subject
-           FROM communication_template_versions version
-           JOIN communication_templates template
-             ON template.id = version.template_id
-            AND template.event_id = version.event_id
-           JOIN events event
-             ON event.id = version.event_id AND event.organisation_id = ?
-          WHERE version.event_id = ? AND version.category = 'task_reminder'
-            AND version.channel = 'email' AND version.status = 'published'
-            AND template.status = 'active'
-          ORDER BY template.updated_at DESC, version.version_number DESC
-          LIMIT 20`,
+        ORDER BY s.updated_at DESC, s.id
+        LIMIT ?`,
+    )
+      .bind(
+        this.viewer.organisationId,
+        this.viewer.eventId,
+        pattern,
+        pattern,
+        pattern,
+        args.limit,
       )
-        .bind(this.viewer.organisationId, this.viewer.eventId)
-        .all<{
-          id: string;
-          templateId: string;
-          name: string;
-          versionNumber: number;
-          subject: string;
-        }>();
-      const evidence = rows.results.map((template) => ({
-        id: `communication-template-version:${template.id}`,
-        label: template.name,
-        detail: `Published task reminder v${template.versionNumber} · ${template.subject}`,
-        href: `/admin/communications?template=${encodeURIComponent(template.templateId)}`,
-        source: "Program Cue D1" as const,
-      }));
-      return {
-        output: {
-          source: "published_communication_templates",
-          templates: rows.results,
-          nextStep: rows.results.length
-            ? "Use one returned version ID as baseTemplateVersionId when preparing a reminder-send preview."
-            : "Create and publish a task-reminder template in Communications before preparing a send.",
-        },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          resultCount: rows.results.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "get_evaluation_setup") {
-      const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
-      const workspace = await new EvaluationService(this.env).getAdminWorkspace(
-        this.viewer,
-      );
-      const plan = workspace.plan
-        ? {
-            id: workspace.plan.id,
-            name: workspace.plan.name,
-            status: workspace.plan.status,
-            revision: workspace.plan.revision,
-            decisionRole: workspace.plan.decisionRole,
-            rounds: workspace.plan.rounds.map((round) => ({
-              id: round.id,
-              name: round.name,
-              roundNumber: round.roundNumber,
-              status: round.status,
-              revision: round.revision,
-              criteria: round.criteria.map((criterion) => ({
-                id: criterion.id,
-                name: criterion.name,
-                description: criterion.description,
-                inputType: criterion.inputType,
-                weightPercent: criterion.weightPercent,
-                required: criterion.required,
-                position: criterion.position,
-              })),
+      .all<{
+        id: string;
+        reference: string;
+        title: string;
+        category: string | null;
+        format: string | null;
+        status: string;
+      }>();
+    const evidence = rows.results.map((submission) => ({
+      id: `submission:${submission.id}`,
+      label: submission.title,
+      detail: `${submission.reference} · ${submission.status}`,
+      href: `/admin/submissions/${encodeURIComponent(submission.id)}`,
+      source: "Program Cue D1" as const,
+    }));
+    return {
+      output: { source: "event_submissions", submissions: rows.results },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        resultCount: rows.results.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeListReminderTemplates(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "list_reminder_templates";
+
+    const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
+    const rows = await this.env.DB.prepare(
+      `SELECT version.id, version.template_id AS templateId, version.name,
+              version.version_number AS versionNumber,
+              version.subject_template AS subject
+         FROM communication_template_versions version
+         JOIN communication_templates template
+           ON template.id = version.template_id
+          AND template.event_id = version.event_id
+         JOIN events event
+           ON event.id = version.event_id AND event.organisation_id = ?
+        WHERE version.event_id = ? AND version.category = 'task_reminder'
+          AND version.channel = 'email' AND version.status = 'published'
+          AND template.status = 'active'
+        ORDER BY template.updated_at DESC, version.version_number DESC
+        LIMIT 20`,
+    )
+      .bind(this.viewer.organisationId, this.viewer.eventId)
+      .all<{
+        id: string;
+        templateId: string;
+        name: string;
+        versionNumber: number;
+        subject: string;
+      }>();
+    const evidence = rows.results.map((template) => ({
+      id: `communication-template-version:${template.id}`,
+      label: template.name,
+      detail: `Published task reminder v${template.versionNumber} · ${template.subject}`,
+      href: `/admin/communications?template=${encodeURIComponent(template.templateId)}`,
+      source: "Program Cue D1" as const,
+    }));
+    return {
+      output: {
+        source: "published_communication_templates",
+        templates: rows.results,
+        nextStep: rows.results.length
+          ? "Use one returned version ID as baseTemplateVersionId when preparing a reminder-send preview."
+          : "Create and publish a task-reminder template in Communications before preparing a send.",
+      },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        resultCount: rows.results.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeGetEvaluationSetup(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "get_evaluation_setup";
+
+    const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
+    const workspace = await new EvaluationService(this.env).getAdminWorkspace(
+      this.viewer,
+    );
+    const plan = workspace.plan
+      ? {
+          id: workspace.plan.id,
+          name: workspace.plan.name,
+          status: workspace.plan.status,
+          revision: workspace.plan.revision,
+          decisionRole: workspace.plan.decisionRole,
+          rounds: workspace.plan.rounds.map((round) => ({
+            id: round.id,
+            name: round.name,
+            roundNumber: round.roundNumber,
+            status: round.status,
+            revision: round.revision,
+            criteria: round.criteria.map((criterion) => ({
+              id: criterion.id,
+              name: criterion.name,
+              description: criterion.description,
+              inputType: criterion.inputType,
+              weightPercent: criterion.weightPercent,
+              required: criterion.required,
+              position: criterion.position,
             })),
-          }
-        : null;
-      const targets = {
-        submissions: workspace.submissions.slice(0, 100).map((submission) => ({
-          id: submission.id,
-          reference: submission.reference,
-          title: submission.title,
-          status: submission.status,
-        })),
-        sessions: workspace.sessions.slice(0, 100).map((session) => ({
-          id: session.id,
-          reference: session.reference,
-          title: session.title,
-          status: session.status,
-        })),
-      };
-      const evidence: AiEvidence[] = plan
-        ? plan.rounds.map((round) => ({
-            id: `evaluation-round:${round.id}`,
-            label: round.name,
-            detail: `${round.status} · revision ${round.revision} · ${round.criteria.length} criteria`,
-            href: `/admin/review?round=${encodeURIComponent(round.id)}`,
-            source: "Program Cue D1" as const,
-          }))
-        : [];
-      return {
-        output: {
-          source: "allow_listed_evaluation_setup",
-          plan,
-          evaluators: workspace.evaluators.map((evaluator) => ({
-            id: evaluator.id,
-            name: evaluator.name,
-            role: evaluator.role,
           })),
-          teams: workspace.teams.map((team) => ({
-            id: team.id,
-            name: team.name,
-            status: team.status,
-            members: team.members
-              .filter((member) => member.authorised)
-              .map((member) => ({
-                personId: member.personId,
-                name: member.name,
-                role: member.role,
-              })),
-          })),
-          targets,
-          truncated: {
-            submissions:
-              workspace.submissions.length > targets.submissions.length,
-            sessions: workspace.sessions.length > targets.sessions.length,
-          },
-        },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          roundCount: plan?.rounds.length ?? 0,
-          evaluatorCount: workspace.evaluators.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "get_schedule_workspace") {
-      const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
-      const workspace = await new ScheduleService(this.env).getWorkspace(
-        this.viewer,
-      );
-      const sessions = workspace.sessions.slice(0, 200).map((session) => ({
+        }
+      : null;
+    const targets = {
+      submissions: workspace.submissions.slice(0, 100).map((submission) => ({
+        id: submission.id,
+        reference: submission.reference,
+        title: submission.title,
+        status: submission.status,
+      })),
+      sessions: workspace.sessions.slice(0, 100).map((session) => ({
         id: session.id,
+        reference: session.reference,
         title: session.title,
         status: session.status,
-        durationMinutes: session.durationMinutes,
+      })),
+    };
+    const evidence: AiEvidence[] = plan
+      ? plan.rounds.map((round) => ({
+          id: `evaluation-round:${round.id}`,
+          label: round.name,
+          detail: `${round.status} · revision ${round.revision} · ${round.criteria.length} criteria`,
+          href: `/admin/review?round=${encodeURIComponent(round.id)}`,
+          source: "Program Cue D1" as const,
+        }))
+      : [];
+    return {
+      output: {
+        source: "allow_listed_evaluation_setup",
+        plan,
+        evaluators: workspace.evaluators.map((evaluator) => ({
+          id: evaluator.id,
+          name: evaluator.name,
+          role: evaluator.role,
+        })),
+        teams: workspace.teams.map((team) => ({
+          id: team.id,
+          name: team.name,
+          status: team.status,
+          members: team.members
+            .filter((member) => member.authorised)
+            .map((member) => ({
+              personId: member.personId,
+              name: member.name,
+              role: member.role,
+            })),
+        })),
+        targets,
+        truncated: {
+          submissions:
+            workspace.submissions.length > targets.submissions.length,
+          sessions: workspace.sessions.length > targets.sessions.length,
+        },
+      },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        roundCount: plan?.rounds.length ?? 0,
+        evaluatorCount: workspace.evaluators.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeGetScheduleWorkspace(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "get_schedule_workspace";
+
+    const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
+    const workspace = await new ScheduleService(this.env).getWorkspace(
+      this.viewer,
+    );
+    const sessions = workspace.sessions.slice(0, 200).map((session) => ({
+      id: session.id,
+      title: session.title,
+      status: session.status,
+      durationMinutes: session.durationMinutes,
+      trackId: session.trackId,
+      speakerIds: session.speakerIds,
+      requiredResources: session.requiredResources,
+    }));
+    const entries = workspace.entries.slice(0, 300).map((entry) => ({
+      id: entry.id,
+      sessionId: entry.sessionId,
+      roomId: entry.roomId,
+      startsAt: entry.startsAt,
+      endsAt: entry.endsAt,
+      revision: entry.revision,
+    }));
+    const evidence: AiEvidence[] = workspace.version
+      ? [
+          {
+            id: `schedule-version:${workspace.version.id}`,
+            label: `${workspace.version.status} schedule v${workspace.version.versionNumber}`,
+            detail: `Revision ${workspace.version.revision} · ${workspace.entries.length} entries`,
+            href: "/admin/schedule",
+            source: "Program Cue D1",
+          },
+        ]
+      : [];
+    return {
+      output: {
+        source: "authoritative_schedule_workspace",
+        event: {
+          id: workspace.event.id,
+          startsAt: workspace.event.startsAt,
+          endsAt: workspace.event.endsAt,
+          timezone: workspace.event.timezone,
+        },
+        version: workspace.version,
+        rooms: workspace.rooms.map((room) => ({
+          id: room.id,
+          name: room.name,
+          capacity: room.capacity,
+          resources: room.resources,
+        })),
+        sessions,
+        entries,
+        conflictCount: workspace.conflicts.length,
+        truncated: {
+          sessions: workspace.sessions.length > sessions.length,
+          entries: workspace.entries.length > entries.length,
+        },
+      },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        sessionCount: workspace.sessions.length,
+        entryCount: workspace.entries.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeListFormDrafts(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "list_form_drafts";
+
+    const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
+    const rows = await this.env.DB.prepare(
+      `SELECT form.id, form.name, form.status,
+              form.public_slug AS publicSlug, form.revision AS formRevision,
+              draft.id AS draftVersionId,
+              draft.version_number AS draftVersionNumber,
+              draft.revision AS draftRevision,
+              json_array_length(json_extract(draft.schema_json, '$.fields')) AS fieldCount
+         FROM form_definitions form
+         JOIN events event
+           ON event.id = form.event_id AND event.organisation_id = ?
+         JOIN form_versions draft
+           ON draft.form_id = form.id AND draft.event_id = form.event_id
+          AND draft.status = 'draft'
+        WHERE form.event_id = ? AND form.status <> 'archived'
+        ORDER BY form.updated_at DESC, form.id
+        LIMIT 50`,
+    )
+      .bind(this.viewer.organisationId, this.viewer.eventId)
+      .all<{
+        id: string;
+        name: string;
+        status: string;
+        publicSlug: string;
+        formRevision: number;
+        draftVersionId: string;
+        draftVersionNumber: number;
+        draftRevision: number;
+        fieldCount: number;
+      }>();
+    const evidence = rows.results.map((form) => ({
+      id: `form:${form.id}`,
+      label: form.name,
+      detail: `Draft v${form.draftVersionNumber} · form revision ${form.formRevision} · draft revision ${form.draftRevision}`,
+      href: "/admin/submissions/form",
+      source: "Program Cue D1" as const,
+    }));
+    return {
+      output: { source: "event_form_drafts", forms: rows.results },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        resultCount: rows.results.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeGetAcceleventsExportStatus(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "get_accelevents_export_status";
+
+    const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
+    const workspace = await new IntegrationService(this.env).getWorkspace(
+      this.viewer,
+    );
+    const evidence = workspace.connections.map((connection) => ({
+      id: `integration:${connection.id}`,
+      label: "Accelevents connection",
+      detail: `${connection.status} · ${connection.direction}`,
+      href: `/admin/integrations?connection=${encodeURIComponent(connection.id)}`,
+      source: "Program Cue D1" as const,
+    }));
+    return {
+      output: {
+        source: "accelevents_integration_workspace",
+        connections: workspace.connections.map((connection) => ({
+          id: connection.id,
+          provider: connection.provider,
+          status: connection.status,
+          direction: connection.direction,
+          hasCredentials: connection.hasCredentials,
+          configuration: connection.configuration,
+        })),
+        recentRuns: workspace.runs.slice(0, 10).map((run) => ({
+          id: run.id,
+          connectionId: run.connectionId,
+          operationId: run.operationId,
+          status: run.status,
+          dryRun: run.dryRun,
+          summary: run.summary,
+        })),
+      },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        connectionCount: workspace.connections.length,
+        runCount: workspace.runs.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeDraftReminder(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "draft_reminder";
+
+    const args = parseArguments(
+      name,
+      encodedArguments,
+      reminderDraftArgumentsSchema,
+    );
+    const cohort = await loadReminderCohort(this.env, this.viewer, args.cohort);
+    const evidence: AiEvidence[] = [
+      {
+        id: `reminder-cohort:${args.cohort}`,
+        label: args.cohort.replaceAll("_", " "),
+        detail: `${cohort.count} recipient${cohort.count === 1 ? "" : "s"} with ${cohort.reason}`,
+        href: cohort.href,
+        source: "Program Cue D1",
+      },
+    ];
+    return {
+      output: {
+        source: "deterministic_recipient_cohort",
+        draftOnly: true,
+        sent: false,
+        cohort,
+        draft: { subject: args.subject, body: args.body },
+        nextStep:
+          "Open Communications, review exact recipients and content, then use its normal confirmation flow if sending is intended.",
+      },
+      evidence,
+      proposals: [],
+      auditSummary: {
+        arguments: args,
+        recipientCount: cohort.count,
+        sent: false,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeProposeReminderSend(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "propose_reminder_send";
+
+    const args = parseArguments(
+      name,
+      encodedArguments,
+      reminderSendProposalArgumentsSchema,
+    );
+    const result = await prepareReminderSendProposal(this.env, this.viewer, {
+      runId: this.runId,
+      model: this.model,
+      arguments: args,
+    });
+    return {
+      output: {
+        source: "validated_communication_preview",
+        proposalId: result.preview.id,
+        executed: false,
+        approvalRequired: true,
+        templateVersionId: result.preview.reminder.template.id,
+        audience: {
+          type: result.preview.reminder.audienceType,
+          selected: result.preview.reminder.recipients.selected,
+          deliverable: result.preview.reminder.recipients.deliverable.length,
+          suppressed: result.preview.reminder.recipients.suppressed.length,
+          invalid: result.preview.reminder.recipients.invalid.length,
+        },
+        subject: result.preview.reminder.template.subject,
+        nextStep:
+          "The signed-in administrator must inspect the saved exact preview and explicitly approve it in Program Cue. No communication has been sent or queued.",
+      },
+      evidence: result.evidence,
+      proposals: [result.preview],
+      auditSummary: {
+        arguments: args,
+        proposalId: result.preview.id,
+        executed: false,
+        recipientCount: result.preview.reminder.recipients.deliverable.length,
+        suppressedCount: result.preview.reminder.recipients.suppressed.length,
+        evidenceIds: result.evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeProposeFormDraft(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "propose_form_draft";
+
+    const args = parseArguments(
+      name,
+      encodedArguments,
+      formDraftProposalArgumentsSchema,
+    );
+    const submissions = new SubmissionService(this.env);
+    const [defaults, existingForms] = await Promise.all([
+      submissions.getDefaultFormInput(this.viewer),
+      submissions.listAdminForms(this.viewer),
+    ]);
+    if (existingForms.some((form) => form.publicSlug === args.publicSlug)) {
+      throw new AiToolValidationError(
+        "A form with this public slug already exists in the current event.",
+      );
+    }
+    const snapshot: SaveFormInput = saveFormSchema.parse({
+      ...defaults,
+      ...args,
+    });
+    const proposalId = crypto.randomUUID();
+    const preview: AiProposalPreview = {
+      id: proposalId,
+      toolName: "propose_form_draft",
+      title: snapshot.name,
+      summary: `Create one editable ${snapshot.kind.replaceAll("_", " ")} form draft with ${snapshot.schema.fields.length} default fields.`,
+      consequence:
+        "Approval saves one D1-backed form draft through the normal submission service. It does not publish the form or accept applications.",
+      changes: [
+        { field: "Form", before: null, after: snapshot.name },
+        { field: "Public slug", before: null, after: snapshot.publicSlug },
+        {
+          field: "Close date",
+          before: null,
+          after: snapshot.closeDate ?? "No close date",
+        },
+        {
+          field: "Speaker limits",
+          before: null,
+          after: `${snapshot.minSpeakers}–${snapshot.maxSpeakers ?? "unlimited"}`,
+        },
+        {
+          field: "Access",
+          before: null,
+          after: snapshot.accessMode.replaceAll("_", " "),
+        },
+      ],
+      affectedRecords: snapshot.schema.fields.map((field) => ({
+        id: `form-field:${field.id}`,
+        label: field.label,
+        detail: `${field.type.replaceAll("_", " ")}${field.required ? " · required" : " · optional"}`,
+        href: "/admin/submissions/form",
+      })),
+      approvalRequired: true,
+    };
+    const persisted = await persistDomainProposal(this.env, this.viewer, {
+      version: 1,
+      toolName: "propose_form_draft",
+      runId: this.runId,
+      model: this.model,
+      arguments: args,
+      snapshot,
+      preview,
+    });
+    const evidence: AiEvidence[] = [
+      {
+        id: `event:${this.viewer.eventId}`,
+        label: "Current event form configuration",
+        detail: `Default ${snapshot.accessMode.replaceAll("_", " ")} access · ${snapshot.schema.fields.length} fields`,
+        href: "/admin/submissions/form",
+        source: "Program Cue D1",
+      },
+    ];
+    return {
+      output: {
+        source: "validated_form_draft_preview",
+        proposalId,
+        executed: false,
+        published: false,
+        fieldCount: snapshot.schema.fields.length,
+        approvalRequired: true,
+      },
+      evidence,
+      proposals: [persisted],
+      auditSummary: {
+        arguments: args,
+        proposalId,
+        executed: false,
+        fieldCount: snapshot.schema.fields.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeProposeRubricUpdate(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "propose_rubric_update";
+
+    const args = parseArguments(name, encodedArguments, draftRoundUpdateSchema);
+    const workspace = await new EvaluationService(this.env).getAdminWorkspace(
+      this.viewer,
+    );
+    const round = workspace.plan?.rounds.find(
+      (candidate) => candidate.id === args.roundId,
+    );
+    if (!round || round.status !== "draft") {
+      throw new AiToolValidationError(
+        "The proposed rubric target is not a draft evaluation round in this event.",
+      );
+    }
+    if (round.revision !== args.revision) {
+      throw new AiToolValidationError(
+        "The evaluation round revision changed. Inspect the current setup and prepare a fresh rubric preview.",
+      );
+    }
+    if (
+      workspace.assignments.some(
+        (assignment) => assignment.roundId === round.id,
+      )
+    ) {
+      throw new AiToolValidationError(
+        "A rubric cannot be replaced after the round has assignments.",
+      );
+    }
+    const proposalId = crypto.randomUUID();
+    const scoredWeight = args.criteria
+      .filter((criterion) => criterion.inputType.startsWith("scale_"))
+      .reduce((total, criterion) => total + criterion.weightPercent, 0);
+    const preview: AiProposalPreview = {
+      id: proposalId,
+      toolName: "propose_rubric_update",
+      title: `${args.name} rubric`,
+      summary: `Replace the editable rubric for draft round ${round.name} with ${args.criteria.length} validated criteria.`,
+      consequence:
+        "Approval updates only this unassigned draft round through EvaluationService CAS validation. It does not activate the round, assign reviewers, score submissions or submit reviews.",
+      changes: [
+        { field: "Round name", before: round.name, after: args.name },
+        {
+          field: "Criteria",
+          before: `${round.criteria.length}`,
+          after: `${args.criteria.length}`,
+        },
+        {
+          field: "Scored weight",
+          before: `${round.criteria.filter((criterion) => criterion.inputType.startsWith("scale_")).reduce((total, criterion) => total + criterion.weightPercent, 0)}%`,
+          after: `${scoredWeight}%`,
+        },
+        {
+          field: "Due date",
+          before: "Current draft setting",
+          after: args.dueAt ?? "No due date",
+        },
+      ],
+      affectedRecords: args.criteria.map((criterion) => ({
+        id: `criterion:${criterion.id}`,
+        label: criterion.name,
+        detail: `${criterion.inputType.replaceAll("_", " ")} · ${criterion.weightPercent}% · ${criterion.required ? "required" : "optional"}`,
+        href: `/admin/review?round=${encodeURIComponent(round.id)}`,
+      })),
+      approvalRequired: true,
+    };
+    const persisted = await persistDomainProposal(this.env, this.viewer, {
+      version: 1,
+      toolName: "propose_rubric_update",
+      runId: this.runId,
+      model: this.model,
+      arguments: args,
+      snapshot: args,
+      preview,
+    });
+    const evidence: AiEvidence[] = [
+      {
+        id: `evaluation-round:${round.id}`,
+        label: round.name,
+        detail: `Draft revision ${round.revision} · ${round.criteria.length} current criteria`,
+        href: `/admin/review?round=${encodeURIComponent(round.id)}`,
+        source: "Program Cue D1",
+      },
+    ];
+    return {
+      output: {
+        source: "validated_rubric_preview",
+        proposalId,
+        executed: false,
+        criterionCount: args.criteria.length,
+        scoredWeight,
+        approvalRequired: true,
+      },
+      evidence,
+      proposals: [persisted],
+      auditSummary: {
+        arguments: args,
+        proposalId,
+        executed: false,
+        criterionCount: args.criteria.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeProposeReviewerAssignment(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "propose_reviewer_assignment";
+
+    const args = parseArguments(name, encodedArguments, assignmentBatchSchema);
+    const workspace = await new EvaluationService(this.env).getAdminWorkspace(
+      this.viewer,
+    );
+    const round = workspace.plan?.rounds.find(
+      (candidate) => candidate.id === args.roundId,
+    );
+    if (!round || round.status !== "active") {
+      throw new AiToolValidationError(
+        "Reviewer assignments require an active round in the current event.",
+      );
+    }
+    const targets =
+      args.targetType === "submission"
+        ? workspace.submissions.filter((target) =>
+            args.targetIds.includes(target.id),
+          )
+        : workspace.sessions.filter((target) =>
+            args.targetIds.includes(target.id),
+          );
+    if (targets.length !== args.targetIds.length) {
+      throw new AiToolValidationError(
+        "One or more proposed evaluation targets are not available in this event.",
+      );
+    }
+    let evaluators: Array<{ id: string; name: string }>;
+    if (args.teamId) {
+      const team = workspace.teams.find(
+        (candidate) =>
+          candidate.id === args.teamId && candidate.status === "active",
+      );
+      if (!team) {
+        throw new AiToolValidationError(
+          "The proposed evaluation team is not active in this event.",
+        );
+      }
+      evaluators = team.members
+        .filter((member) => member.authorised)
+        .map((member) => ({ id: member.personId, name: member.name }));
+    } else {
+      evaluators = workspace.evaluators
+        .filter((evaluator) => args.evaluatorPersonIds.includes(evaluator.id))
+        .map((evaluator) => ({ id: evaluator.id, name: evaluator.name }));
+    }
+    const requestedEvaluatorIds = args.teamId
+      ? evaluators.map((evaluator) => evaluator.id)
+      : args.evaluatorPersonIds;
+    if (
+      evaluators.length === 0 ||
+      new Set(evaluators.map((evaluator) => evaluator.id)).size !==
+        new Set(requestedEvaluatorIds).size
+    ) {
+      throw new AiToolValidationError(
+        "One or more proposed evaluators are not authorised for this event.",
+      );
+    }
+    const requestedCount = targets.length * evaluators.length;
+    const existingPairs = new Set(
+      workspace.assignments
+        .filter((assignment) => assignment.roundId === round.id)
+        .map(
+          (assignment) =>
+            `${assignment.targetType}:${assignment.submissionId ?? assignment.sessionId}:${assignment.evaluatorPersonId}`,
+        ),
+    );
+    const newCount = targets.reduce(
+      (total, target) =>
+        total +
+        evaluators.filter(
+          (evaluator) =>
+            !existingPairs.has(
+              `${args.targetType}:${target.id}:${evaluator.id}`,
+            ),
+        ).length,
+      0,
+    );
+    const proposalId = crypto.randomUUID();
+    const preview: AiProposalPreview = {
+      id: proposalId,
+      toolName: "propose_reviewer_assignment",
+      title: `Assign ${evaluators.length} reviewer${evaluators.length === 1 ? "" : "s"} in ${round.name}`,
+      summary: `Request ${requestedCount} reviewer-target pair${requestedCount === 1 ? "" : "s"}; ${newCount} are currently new and ${requestedCount - newCount} already exist.`,
+      consequence:
+        "Approval calls the canonical evaluation assignment service as the signed-in administrator. The service revalidates the active round, targets, memberships and team composition and offers its normal five-minute undo for newly created assignments.",
+      changes: [
+        {
+          field: "Targets",
+          before: null,
+          after: `${targets.length} ${args.targetType}${targets.length === 1 ? "" : "s"}`,
+        },
+        {
+          field: "Evaluators",
+          before: null,
+          after: `${evaluators.length}`,
+        },
+        {
+          field: "New assignment pairs",
+          before: null,
+          after: `${newCount}`,
+        },
+      ],
+      affectedRecords: [
+        ...targets.map((target) => ({
+          id: `${args.targetType}:${target.id}`,
+          label: target.title,
+          detail: `${args.targetType} target`,
+          href: "/admin/review",
+        })),
+        ...evaluators.map((evaluator) => ({
+          id: `evaluator:${evaluator.id}`,
+          label: evaluator.name,
+          detail: "Authorised evaluator",
+          href: "/admin/review",
+        })),
+      ],
+      approvalRequired: true,
+    };
+    const snapshot = {
+      input: args,
+      resolvedEvaluatorPersonIds: evaluators
+        .map((evaluator) => evaluator.id)
+        .sort(),
+    };
+    const persisted = await persistDomainProposal(this.env, this.viewer, {
+      version: 1,
+      toolName: "propose_reviewer_assignment",
+      runId: this.runId,
+      model: this.model,
+      arguments: args,
+      snapshot,
+      preview,
+    });
+    const evidence: AiEvidence[] = [
+      {
+        id: `evaluation-round:${round.id}`,
+        label: round.name,
+        detail: `Active round · ${targets.length} targets · ${evaluators.length} evaluators`,
+        href: `/admin/review?round=${encodeURIComponent(round.id)}`,
+        source: "Program Cue D1",
+      },
+    ];
+    return {
+      output: {
+        source: "validated_assignment_preview",
+        proposalId,
+        executed: false,
+        requestedAssignmentCount: requestedCount,
+        currentlyNewAssignmentCount: newCount,
+        approvalRequired: true,
+      },
+      evidence,
+      proposals: [persisted],
+      auditSummary: {
+        arguments: args,
+        proposalId,
+        executed: false,
+        requestedAssignmentCount: requestedCount,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeProposeEmailTemplateDraft(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "propose_email_template_draft";
+
+    const args = parseArguments(
+      name,
+      encodedArguments,
+      emailTemplateDraftProposalArgumentsSchema,
+    );
+    renderMergeTemplate(args.subject, representativeMergeValues);
+    renderMergeTemplate(args.body, representativeMergeValues);
+    const snapshot: SaveTemplateInput = saveTemplateSchema.parse({
+      name: args.name,
+      category: args.category,
+      subject: args.subject,
+      content: {
+        body: args.body,
+        physicalAddress: args.physicalAddress,
+        ...(args.buttonText && args.buttonUrl
+          ? { buttonText: args.buttonText, buttonUrl: args.buttonUrl }
+          : {}),
+      },
+    });
+    const proposalId = crypto.randomUUID();
+    const preview: AiProposalPreview = {
+      id: proposalId,
+      toolName: "propose_email_template_draft",
+      title: snapshot.name,
+      summary: `Create one editable ${snapshot.category.replaceAll("_", " ")} email template draft with the exact subject, body, footer and action shown below.`,
+      consequence:
+        "Approval saves a draft template through CommunicationService. It does not publish, queue, schedule, test-send or send any email.",
+      changes: [
+        { field: "Template", before: null, after: snapshot.name },
+        { field: "Category", before: null, after: snapshot.category },
+        { field: "Subject", before: null, after: snapshot.subject },
+        {
+          field: "Body",
+          before: null,
+          after: snapshot.content.body,
+        },
+        {
+          field: "Footer",
+          before: null,
+          after: snapshot.content.physicalAddress,
+        },
+        {
+          field: "Action",
+          before: null,
+          after: snapshot.content.buttonText
+            ? `${snapshot.content.buttonText} · ${snapshot.content.buttonUrl}`
+            : "No action button",
+        },
+      ],
+      approvalRequired: true,
+    };
+    const persisted = await persistDomainProposal(this.env, this.viewer, {
+      version: 1,
+      toolName: "propose_email_template_draft",
+      runId: this.runId,
+      model: this.model,
+      arguments: args,
+      snapshot,
+      preview,
+    });
+    const evidence: AiEvidence[] = [
+      {
+        id: `event:${this.viewer.eventId}:communications`,
+        label: "Current event Communications workspace",
+        detail: "Template draft target",
+        href: "/admin/communications",
+        source: "Program Cue D1",
+      },
+    ];
+    return {
+      output: {
+        source: "validated_email_template_draft_preview",
+        proposalId,
+        executed: false,
+        published: false,
+        sent: false,
+        approvalRequired: true,
+      },
+      evidence,
+      proposals: [persisted],
+      auditSummary: {
+        arguments: args,
+        proposalId,
+        executed: false,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeProposeSchedulePlacement(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "propose_schedule_placement";
+
+    const args = parseArguments(
+      name,
+      encodedArguments,
+      schedulePlacementSchema,
+    );
+    const workspace = await new ScheduleService(this.env).getWorkspace(
+      this.viewer,
+    );
+    if (
+      !workspace.version ||
+      workspace.version.id !== args.scheduleVersionId ||
+      workspace.version.status !== "draft" ||
+      workspace.version.revision !== args.scheduleRevision
+    ) {
+      throw new AiToolValidationError(
+        "The proposed placement does not target the current draft schedule revision.",
+      );
+    }
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === args.sessionId,
+    );
+    const room = workspace.rooms.find(
+      (candidate) => candidate.id === args.roomId,
+    );
+    if (!session || !room) {
+      throw new AiToolValidationError(
+        "The proposed session or room is not available in this event.",
+      );
+    }
+    const currentEntry = workspace.entries.find(
+      (entry) => entry.sessionId === session.id,
+    );
+    const sessionById = new Map(
+      workspace.sessions.map((candidate) => [candidate.id, candidate]),
+    );
+    const existing: ScheduledItem[] = workspace.entries.map((entry) => {
+      const scheduledSession = sessionById.get(entry.sessionId);
+      if (!scheduledSession) {
+        throw new Error(
+          `Schedule entry ${entry.id} references an unavailable session.`,
+        );
+      }
+      return {
+        entryId: entry.id,
+        sessionId: entry.sessionId,
+        roomId: entry.roomId,
+        startsAt: entry.startsAt,
+        endsAt: entry.endsAt,
+        trackId: scheduledSession.trackId,
+        trackExclusive: scheduledSession.trackExclusive,
+        speakerIds: scheduledSession.speakerIds,
+        requiredResources: scheduledSession.requiredResources,
+        expectedAttendance: scheduledSession.expectedAttendance,
+        title: scheduledSession.title,
+      };
+    });
+    const conflicts = detectScheduleConflicts({
+      candidate: {
+        sessionId: session.id,
+        roomId: room.id,
+        startsAt: args.startsAt,
+        endsAt: args.endsAt,
         trackId: session.trackId,
+        trackExclusive: session.trackExclusive,
         speakerIds: session.speakerIds,
         requiredResources: session.requiredResources,
-      }));
-      const entries = workspace.entries.slice(0, 300).map((entry) => ({
+        expectedAttendance: session.expectedAttendance,
+      },
+      existing,
+      rooms: workspace.rooms,
+      eventStartsAt: workspace.event.startsAt,
+      eventEndsAt: workspace.event.endsAt,
+      eventTimezone: workspace.event.timezone,
+      policies: workspace.policies,
+      excludeEntryId: currentEntry?.id,
+    });
+    const blocking = conflicts.filter(
+      (conflict) => conflict.severity === "blocking",
+    );
+    if (blocking.length) {
+      throw new AiToolValidationError(
+        `The proposed schedule placement is blocked: ${blocking.map((conflict) => conflict.message).join(" ")}`,
+      );
+    }
+    const warnings = conflicts.filter(
+      (conflict): conflict is typeof conflict & { severity: "warning" } =>
+        conflict.severity === "warning",
+    );
+    const proposalId = crypto.randomUUID();
+    const preview: AiProposalPreview = {
+      id: proposalId,
+      toolName: "propose_schedule_placement",
+      title: `Place ${session.title}`,
+      summary: `${currentEntry ? "Move" : "Place"} one session in ${room.name} from ${new Date(args.startsAt * 1_000).toISOString()} to ${new Date(args.endsAt * 1_000).toISOString()}.`,
+      consequence:
+        "Approval calls ScheduleService.place against the exact draft revision. The service re-runs every deterministic conflict rule, CASes the schedule/session records and returns its normal 30-second undo. This does not publish the schedule.",
+      changes: [
+        {
+          field: "Room",
+          before: currentEntry
+            ? (workspace.rooms.find(
+                (candidate) => candidate.id === currentEntry.roomId,
+              )?.name ?? currentEntry.roomId)
+            : null,
+          after: room.name,
+        },
+        {
+          field: "Starts",
+          before: currentEntry
+            ? new Date(currentEntry.startsAt * 1_000).toISOString()
+            : null,
+          after: new Date(args.startsAt * 1_000).toISOString(),
+        },
+        {
+          field: "Ends",
+          before: currentEntry
+            ? new Date(currentEntry.endsAt * 1_000).toISOString()
+            : null,
+          after: new Date(args.endsAt * 1_000).toISOString(),
+        },
+        {
+          field: "Warnings",
+          before: null,
+          after: warnings.length
+            ? warnings.map((warning) => warning.message).join(" · ")
+            : "No deterministic warnings",
+        },
+      ],
+      affectedRecords: [
+        {
+          id: `session:${session.id}`,
+          label: session.title,
+          detail: `${session.durationMinutes} minutes · ${session.status}`,
+          href: `/admin/schedule?session=${encodeURIComponent(session.id)}`,
+        },
+        {
+          id: `room:${room.id}`,
+          label: room.name,
+          detail: `Capacity ${room.capacity}`,
+          href: "/admin/schedule",
+        },
+      ],
+      approvalRequired: true,
+    };
+    const snapshot = { input: args, warningConflicts: warnings };
+    const persisted = await persistDomainProposal(this.env, this.viewer, {
+      version: 1,
+      toolName: "propose_schedule_placement",
+      runId: this.runId,
+      model: this.model,
+      arguments: args,
+      snapshot,
+      preview,
+    });
+    const evidence: AiEvidence[] = [
+      {
+        id: `schedule-version:${workspace.version.id}`,
+        label: `Draft schedule v${workspace.version.versionNumber}`,
+        detail: `Revision ${workspace.version.revision} · ${warnings.length} placement warnings`,
+        href: `/admin/schedule?session=${encodeURIComponent(session.id)}`,
+        source: "Program Cue D1",
+      },
+    ];
+    return {
+      output: {
+        source: "deterministic_schedule_placement_preview",
+        proposalId,
+        executed: false,
+        warningCount: warnings.length,
+        blockingCount: 0,
+        approvalRequired: true,
+      },
+      evidence,
+      proposals: [persisted],
+      auditSummary: {
+        arguments: args,
+        proposalId,
+        executed: false,
+        warningCount: warnings.length,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeProposeFormPublication(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "propose_form_publication";
+
+    const args = parseArguments(
+      name,
+      encodedArguments,
+      formPublicationProposalArgumentsSchema,
+    );
+    const workspace = await new SubmissionService(this.env).getAdminWorkspace(
+      this.viewer,
+      args.formId,
+    );
+    if (!workspace) {
+      throw new AiToolValidationError(
+        "The proposed form publication target was not found in this event.",
+      );
+    }
+    if (
+      workspace.revision !== args.formRevision ||
+      workspace.draftVersion.revision !== args.draftRevision
+    ) {
+      throw new AiToolValidationError(
+        "The form or its draft changed. Inspect current revisions and prepare a fresh publication preview.",
+      );
+    }
+    const schemaHash = await hashJson({
+      schema: workspace.draftVersion.schema,
+      routing: workspace.draftVersion.routing,
+      settings: workspace.draftVersion.settings,
+    });
+    const snapshot = {
+      formId: workspace.id,
+      name: workspace.name,
+      publicSlug: workspace.publicSlug,
+      status: workspace.status,
+      formRevision: workspace.revision,
+      draftRevision: workspace.draftVersion.revision,
+      draftVersionId: workspace.draftVersion.id,
+      fieldCount: workspace.draftVersion.schema.fields.length,
+      schemaHash,
+    };
+    const proposalId = crypto.randomUUID();
+    const preview: AiProposalPreview = {
+      id: proposalId,
+      toolName: "propose_form_publication",
+      title: `Publish ${workspace.name}`,
+      summary: `Publish draft version ${workspace.draftVersion.versionNumber} with ${snapshot.fieldCount} fields at /apply/${workspace.publicSlug}.`,
+      consequence:
+        "Approval makes this form draft publicly available through the normal form publication CAS boundary. Applicants may immediately see it; publication is consequential and is not treated as undoable.",
+      changes: [
+        {
+          field: "Form status",
+          before: workspace.status,
+          after: "published",
+        },
+        {
+          field: "Published version",
+          before: workspace.publishedVersion
+            ? `${workspace.publishedVersion.versionNumber}`
+            : null,
+          after: `${workspace.draftVersion.versionNumber}`,
+        },
+        {
+          field: "Public path",
+          before: workspace.publishedVersion
+            ? `/apply/${workspace.publicSlug}`
+            : null,
+          after: `/apply/${workspace.publicSlug}`,
+        },
+      ],
+      affectedRecords: workspace.draftVersion.schema.fields.map((field) => ({
+        id: `form-field:${field.id}`,
+        label: field.label,
+        detail: `${field.type.replaceAll("_", " ")}${field.required ? " · required" : ""}`,
+        href: "/admin/submissions/form",
+      })),
+      approvalRequired: true,
+    };
+    const persisted = await persistDomainProposal(this.env, this.viewer, {
+      version: 1,
+      toolName: "propose_form_publication",
+      runId: this.runId,
+      model: this.model,
+      arguments: args,
+      snapshot,
+      preview,
+    });
+    const evidence: AiEvidence[] = [
+      {
+        id: `form:${workspace.id}`,
+        label: workspace.name,
+        detail: `Draft version ${workspace.draftVersion.versionNumber} · revision ${workspace.draftVersion.revision}`,
+        href: "/admin/submissions/form",
+        source: "Program Cue D1",
+      },
+    ];
+    return {
+      output: {
+        source: "validated_form_publication_preview",
+        proposalId,
+        executed: false,
+        formRevision: workspace.revision,
+        draftRevision: workspace.draftVersion.revision,
+        fieldCount: snapshot.fieldCount,
+        approvalRequired: true,
+      },
+      evidence,
+      proposals: [persisted],
+      auditSummary: {
+        arguments: args,
+        proposalId,
+        executed: false,
+        schemaHash,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeProposeSchedulePublication(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "propose_schedule_publication";
+
+    const args = parseArguments(name, encodedArguments, schedulePublishSchema);
+    const workspace = await new ScheduleService(this.env).getWorkspace(
+      this.viewer,
+    );
+    if (
+      !workspace.version ||
+      workspace.version.id !== args.scheduleVersionId ||
+      workspace.version.status !== "draft" ||
+      workspace.version.revision !== args.scheduleRevision
+    ) {
+      throw new AiToolValidationError(
+        "The proposed publication does not target the current draft schedule revision.",
+      );
+    }
+    const blockingConflicts = workspace.conflicts.filter(
+      (conflict) => conflict.severity === "blocking",
+    );
+    if (blockingConflicts.length) {
+      throw new AiToolValidationError(
+        `The draft schedule has ${blockingConflicts.length} blocking conflict${blockingConflicts.length === 1 ? "" : "s"}. Resolve them before preparing a publication preview.`,
+      );
+    }
+    const entriesHash = await hashJson(
+      workspace.entries.map((entry) => ({
         id: entry.id,
         sessionId: entry.sessionId,
         roomId: entry.roomId,
         startsAt: entry.startsAt,
         endsAt: entry.endsAt,
         revision: entry.revision,
-      }));
-      const evidence: AiEvidence[] = workspace.version
-        ? [
-            {
-              id: `schedule-version:${workspace.version.id}`,
-              label: `${workspace.version.status} schedule v${workspace.version.versionNumber}`,
-              detail: `Revision ${workspace.version.revision} · ${workspace.entries.length} entries`,
-              href: "/admin/schedule",
-              source: "Program Cue D1",
-            },
-          ]
-        : [];
-      return {
-        output: {
-          source: "authoritative_schedule_workspace",
-          event: {
-            id: workspace.event.id,
-            startsAt: workspace.event.startsAt,
-            endsAt: workspace.event.endsAt,
-            timezone: workspace.event.timezone,
-          },
-          version: workspace.version,
-          rooms: workspace.rooms.map((room) => ({
-            id: room.id,
-            name: room.name,
-            capacity: room.capacity,
-            resources: room.resources,
-          })),
-          sessions,
-          entries,
-          conflictCount: workspace.conflicts.length,
-          truncated: {
-            sessions: workspace.sessions.length > sessions.length,
-            entries: workspace.entries.length > entries.length,
-          },
-        },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          sessionCount: workspace.sessions.length,
-          entryCount: workspace.entries.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "list_form_drafts") {
-      const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
-      const rows = await this.env.DB.prepare(
-        `SELECT form.id, form.name, form.status,
-                form.public_slug AS publicSlug, form.revision AS formRevision,
-                draft.id AS draftVersionId,
-                draft.version_number AS draftVersionNumber,
-                draft.revision AS draftRevision,
-                json_array_length(json_extract(draft.schema_json, '$.fields')) AS fieldCount
-           FROM form_definitions form
-           JOIN events event
-             ON event.id = form.event_id AND event.organisation_id = ?
-           JOIN form_versions draft
-             ON draft.form_id = form.id AND draft.event_id = form.event_id
-            AND draft.status = 'draft'
-          WHERE form.event_id = ? AND form.status <> 'archived'
-          ORDER BY form.updated_at DESC, form.id
-          LIMIT 50`,
-      )
-        .bind(this.viewer.organisationId, this.viewer.eventId)
-        .all<{
-          id: string;
-          name: string;
-          status: string;
-          publicSlug: string;
-          formRevision: number;
-          draftVersionId: string;
-          draftVersionNumber: number;
-          draftRevision: number;
-          fieldCount: number;
-        }>();
-      const evidence = rows.results.map((form) => ({
-        id: `form:${form.id}`,
-        label: form.name,
-        detail: `Draft v${form.draftVersionNumber} · form revision ${form.formRevision} · draft revision ${form.draftRevision}`,
-        href: "/admin/submissions/form",
-        source: "Program Cue D1" as const,
-      }));
-      return {
-        output: { source: "event_form_drafts", forms: rows.results },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          resultCount: rows.results.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "get_accelevents_export_status") {
-      const args = parseArguments(name, encodedArguments, emptyArgumentsSchema);
-      const workspace = await new IntegrationService(this.env).getWorkspace(
-        this.viewer,
-      );
-      const evidence = workspace.connections.map((connection) => ({
-        id: `integration:${connection.id}`,
-        label: "Accelevents connection",
-        detail: `${connection.status} · ${connection.direction}`,
-        href: `/admin/integrations?connection=${encodeURIComponent(connection.id)}`,
-        source: "Program Cue D1" as const,
-      }));
-      return {
-        output: {
-          source: "accelevents_integration_workspace",
-          connections: workspace.connections.map((connection) => ({
-            id: connection.id,
-            provider: connection.provider,
-            status: connection.status,
-            direction: connection.direction,
-            hasCredentials: connection.hasCredentials,
-            configuration: connection.configuration,
-          })),
-          recentRuns: workspace.runs.slice(0, 10).map((run) => ({
-            id: run.id,
-            connectionId: run.connectionId,
-            operationId: run.operationId,
-            status: run.status,
-            dryRun: run.dryRun,
-            summary: run.summary,
-          })),
-        },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          connectionCount: workspace.connections.length,
-          runCount: workspace.runs.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "draft_reminder") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        reminderDraftArgumentsSchema,
-      );
-      const cohort = await loadReminderCohort(
-        this.env,
-        this.viewer,
-        args.cohort,
-      );
-      const evidence: AiEvidence[] = [
+      })),
+    );
+    const snapshot = {
+      scheduleVersionId: workspace.version.id,
+      versionNumber: workspace.version.versionNumber,
+      scheduleRevision: workspace.version.revision,
+      entryCount: workspace.entries.length,
+      unresolvedBlockingConflicts: 0,
+      entriesHash,
+    };
+    const proposalId = crypto.randomUUID();
+    const sessionById = new Map(
+      workspace.sessions.map((session) => [session.id, session]),
+    );
+    const roomById = new Map(workspace.rooms.map((room) => [room.id, room]));
+    const preview: AiProposalPreview = {
+      id: proposalId,
+      toolName: "propose_schedule_publication",
+      title: `Publish schedule v${workspace.version.versionNumber}`,
+      summary: `Publish ${workspace.entries.length} scheduled session${workspace.entries.length === 1 ? "" : "s"} with no recorded blocking conflicts.`,
+      consequence:
+        "Approval re-runs all publication-boundary conflict rules and CAS revision validation, publishes the schedule, exposes public programme data and queues calendar fan-out. Published changes are not presented as undoable.",
+      changes: [
         {
-          id: `reminder-cohort:${args.cohort}`,
-          label: args.cohort.replaceAll("_", " "),
-          detail: `${cohort.count} recipient${cohort.count === 1 ? "" : "s"} with ${cohort.reason}`,
-          href: cohort.href,
-          source: "Program Cue D1",
+          field: "Schedule status",
+          before: "draft",
+          after: "published",
         },
-      ];
-      return {
-        output: {
-          source: "deterministic_recipient_cohort",
-          draftOnly: true,
-          sent: false,
-          cohort,
-          draft: { subject: args.subject, body: args.body },
-          nextStep:
-            "Open Communications, review exact recipients and content, then use its normal confirmation flow if sending is intended.",
-        },
-        evidence,
-        proposals: [],
-        auditSummary: {
-          arguments: args,
-          recipientCount: cohort.count,
-          sent: false,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "propose_reminder_send") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        reminderSendProposalArgumentsSchema,
-      );
-      const result = await prepareReminderSendProposal(this.env, this.viewer, {
-        runId: this.runId,
-        model: this.model,
-        arguments: args,
-      });
-      return {
-        output: {
-          source: "validated_communication_preview",
-          proposalId: result.preview.id,
-          executed: false,
-          approvalRequired: true,
-          templateVersionId: result.preview.reminder.template.id,
-          audience: {
-            type: result.preview.reminder.audienceType,
-            selected: result.preview.reminder.recipients.selected,
-            deliverable: result.preview.reminder.recipients.deliverable.length,
-            suppressed: result.preview.reminder.recipients.suppressed.length,
-            invalid: result.preview.reminder.recipients.invalid.length,
-          },
-          subject: result.preview.reminder.template.subject,
-          nextStep:
-            "The signed-in administrator must inspect the saved exact preview and explicitly approve it in Program Cue. No communication has been sent or queued.",
-        },
-        evidence: result.evidence,
-        proposals: [result.preview],
-        auditSummary: {
-          arguments: args,
-          proposalId: result.preview.id,
-          executed: false,
-          recipientCount: result.preview.reminder.recipients.deliverable.length,
-          suppressedCount: result.preview.reminder.recipients.suppressed.length,
-          evidenceIds: result.evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "propose_form_draft") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        formDraftProposalArgumentsSchema,
-      );
-      const submissions = new SubmissionService(this.env);
-      const [defaults, existingForms] = await Promise.all([
-        submissions.getDefaultFormInput(this.viewer),
-        submissions.listAdminForms(this.viewer),
-      ]);
-      if (existingForms.some((form) => form.publicSlug === args.publicSlug)) {
-        throw new AiToolValidationError(
-          "A form with this public slug already exists in the current event.",
-        );
-      }
-      const snapshot: SaveFormInput = saveFormSchema.parse({
-        ...defaults,
-        ...args,
-      });
-      const proposalId = crypto.randomUUID();
-      const preview: AiProposalPreview = {
-        id: proposalId,
-        toolName: "propose_form_draft",
-        title: snapshot.name,
-        summary: `Create one editable ${snapshot.kind.replaceAll("_", " ")} form draft with ${snapshot.schema.fields.length} default fields.`,
-        consequence:
-          "Approval saves one D1-backed form draft through the normal submission service. It does not publish the form or accept applications.",
-        changes: [
-          { field: "Form", before: null, after: snapshot.name },
-          { field: "Public slug", before: null, after: snapshot.publicSlug },
-          {
-            field: "Close date",
-            before: null,
-            after: snapshot.closeDate ?? "No close date",
-          },
-          {
-            field: "Speaker limits",
-            before: null,
-            after: `${snapshot.minSpeakers}–${snapshot.maxSpeakers ?? "unlimited"}`,
-          },
-          {
-            field: "Access",
-            before: null,
-            after: snapshot.accessMode.replaceAll("_", " "),
-          },
-        ],
-        affectedRecords: snapshot.schema.fields.map((field) => ({
-          id: `form-field:${field.id}`,
-          label: field.label,
-          detail: `${field.type.replaceAll("_", " ")}${field.required ? " · required" : " · optional"}`,
-          href: "/admin/submissions/form",
-        })),
-        approvalRequired: true,
-      };
-      const persisted = await persistDomainProposal(this.env, this.viewer, {
-        version: 1,
-        toolName: "propose_form_draft",
-        runId: this.runId,
-        model: this.model,
-        arguments: args,
-        snapshot,
-        preview,
-      });
-      const evidence: AiEvidence[] = [
         {
-          id: `event:${this.viewer.eventId}`,
-          label: "Current event form configuration",
-          detail: `Default ${snapshot.accessMode.replaceAll("_", " ")} access · ${snapshot.schema.fields.length} fields`,
-          href: "/admin/submissions/form",
-          source: "Program Cue D1",
+          field: "Published sessions",
+          before: null,
+          after: `${workspace.entries.length}`,
         },
-      ];
-      return {
-        output: {
-          source: "validated_form_draft_preview",
-          proposalId,
-          executed: false,
-          published: false,
-          fieldCount: snapshot.schema.fields.length,
-          approvalRequired: true,
-        },
-        evidence,
-        proposals: [persisted],
-        auditSummary: {
-          arguments: args,
-          proposalId,
-          executed: false,
-          fieldCount: snapshot.schema.fields.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "propose_rubric_update") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        draftRoundUpdateSchema,
-      );
-      const workspace = await new EvaluationService(this.env).getAdminWorkspace(
-        this.viewer,
-      );
-      const round = workspace.plan?.rounds.find(
-        (candidate) => candidate.id === args.roundId,
-      );
-      if (!round || round.status !== "draft") {
-        throw new AiToolValidationError(
-          "The proposed rubric target is not a draft evaluation round in this event.",
-        );
-      }
-      if (round.revision !== args.revision) {
-        throw new AiToolValidationError(
-          "The evaluation round revision changed. Inspect the current setup and prepare a fresh rubric preview.",
-        );
-      }
-      if (
-        workspace.assignments.some(
-          (assignment) => assignment.roundId === round.id,
-        )
-      ) {
-        throw new AiToolValidationError(
-          "A rubric cannot be replaced after the round has assignments.",
-        );
-      }
-      const proposalId = crypto.randomUUID();
-      const scoredWeight = args.criteria
-        .filter((criterion) => criterion.inputType.startsWith("scale_"))
-        .reduce((total, criterion) => total + criterion.weightPercent, 0);
-      const preview: AiProposalPreview = {
-        id: proposalId,
-        toolName: "propose_rubric_update",
-        title: `${args.name} rubric`,
-        summary: `Replace the editable rubric for draft round ${round.name} with ${args.criteria.length} validated criteria.`,
-        consequence:
-          "Approval updates only this unassigned draft round through EvaluationService CAS validation. It does not activate the round, assign reviewers, score submissions or submit reviews.",
-        changes: [
-          { field: "Round name", before: round.name, after: args.name },
-          {
-            field: "Criteria",
-            before: `${round.criteria.length}`,
-            after: `${args.criteria.length}`,
-          },
-          {
-            field: "Scored weight",
-            before: `${round.criteria.filter((criterion) => criterion.inputType.startsWith("scale_")).reduce((total, criterion) => total + criterion.weightPercent, 0)}%`,
-            after: `${scoredWeight}%`,
-          },
-          {
-            field: "Due date",
-            before: "Current draft setting",
-            after: args.dueAt ?? "No due date",
-          },
-        ],
-        affectedRecords: args.criteria.map((criterion) => ({
-          id: `criterion:${criterion.id}`,
-          label: criterion.name,
-          detail: `${criterion.inputType.replaceAll("_", " ")} · ${criterion.weightPercent}% · ${criterion.required ? "required" : "optional"}`,
-          href: `/admin/review?round=${encodeURIComponent(round.id)}`,
-        })),
-        approvalRequired: true,
-      };
-      const persisted = await persistDomainProposal(this.env, this.viewer, {
-        version: 1,
-        toolName: "propose_rubric_update",
-        runId: this.runId,
-        model: this.model,
-        arguments: args,
-        snapshot: args,
-        preview,
-      });
-      const evidence: AiEvidence[] = [
         {
-          id: `evaluation-round:${round.id}`,
-          label: round.name,
-          detail: `Draft revision ${round.revision} · ${round.criteria.length} current criteria`,
-          href: `/admin/review?round=${encodeURIComponent(round.id)}`,
-          source: "Program Cue D1",
+          field: "Blocking conflicts",
+          before: "0",
+          after: "Revalidated at approval",
         },
-      ];
-      return {
-        output: {
-          source: "validated_rubric_preview",
-          proposalId,
-          executed: false,
-          criterionCount: args.criteria.length,
-          scoredWeight,
-          approvalRequired: true,
-        },
-        evidence,
-        proposals: [persisted],
-        auditSummary: {
-          arguments: args,
-          proposalId,
-          executed: false,
-          criterionCount: args.criteria.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "propose_reviewer_assignment") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        assignmentBatchSchema,
-      );
-      const workspace = await new EvaluationService(this.env).getAdminWorkspace(
-        this.viewer,
-      );
-      const round = workspace.plan?.rounds.find(
-        (candidate) => candidate.id === args.roundId,
-      );
-      if (!round || round.status !== "active") {
-        throw new AiToolValidationError(
-          "Reviewer assignments require an active round in the current event.",
-        );
-      }
-      const targets =
-        args.targetType === "submission"
-          ? workspace.submissions.filter((target) =>
-              args.targetIds.includes(target.id),
-            )
-          : workspace.sessions.filter((target) =>
-              args.targetIds.includes(target.id),
-            );
-      if (targets.length !== args.targetIds.length) {
-        throw new AiToolValidationError(
-          "One or more proposed evaluation targets are not available in this event.",
-        );
-      }
-      let evaluators: Array<{ id: string; name: string }>;
-      if (args.teamId) {
-        const team = workspace.teams.find(
-          (candidate) =>
-            candidate.id === args.teamId && candidate.status === "active",
-        );
-        if (!team) {
-          throw new AiToolValidationError(
-            "The proposed evaluation team is not active in this event.",
-          );
-        }
-        evaluators = team.members
-          .filter((member) => member.authorised)
-          .map((member) => ({ id: member.personId, name: member.name }));
-      } else {
-        evaluators = workspace.evaluators
-          .filter((evaluator) => args.evaluatorPersonIds.includes(evaluator.id))
-          .map((evaluator) => ({ id: evaluator.id, name: evaluator.name }));
-      }
-      const requestedEvaluatorIds = args.teamId
-        ? evaluators.map((evaluator) => evaluator.id)
-        : args.evaluatorPersonIds;
-      if (
-        evaluators.length === 0 ||
-        new Set(evaluators.map((evaluator) => evaluator.id)).size !==
-          new Set(requestedEvaluatorIds).size
-      ) {
-        throw new AiToolValidationError(
-          "One or more proposed evaluators are not authorised for this event.",
-        );
-      }
-      const requestedCount = targets.length * evaluators.length;
-      const existingPairs = new Set(
-        workspace.assignments
-          .filter((assignment) => assignment.roundId === round.id)
-          .map(
-            (assignment) =>
-              `${assignment.targetType}:${assignment.submissionId ?? assignment.sessionId}:${assignment.evaluatorPersonId}`,
-          ),
-      );
-      const newCount = targets.reduce(
-        (total, target) =>
-          total +
-          evaluators.filter(
-            (evaluator) =>
-              !existingPairs.has(
-                `${args.targetType}:${target.id}:${evaluator.id}`,
-              ),
-          ).length,
-        0,
-      );
-      const proposalId = crypto.randomUUID();
-      const preview: AiProposalPreview = {
-        id: proposalId,
-        toolName: "propose_reviewer_assignment",
-        title: `Assign ${evaluators.length} reviewer${evaluators.length === 1 ? "" : "s"} in ${round.name}`,
-        summary: `Request ${requestedCount} reviewer-target pair${requestedCount === 1 ? "" : "s"}; ${newCount} are currently new and ${requestedCount - newCount} already exist.`,
-        consequence:
-          "Approval calls the canonical evaluation assignment service as the signed-in administrator. The service revalidates the active round, targets, memberships and team composition and offers its normal five-minute undo for newly created assignments.",
-        changes: [
-          {
-            field: "Targets",
-            before: null,
-            after: `${targets.length} ${args.targetType}${targets.length === 1 ? "" : "s"}`,
-          },
-          {
-            field: "Evaluators",
-            before: null,
-            after: `${evaluators.length}`,
-          },
-          {
-            field: "New assignment pairs",
-            before: null,
-            after: `${newCount}`,
-          },
-        ],
-        affectedRecords: [
-          ...targets.map((target) => ({
-            id: `${args.targetType}:${target.id}`,
-            label: target.title,
-            detail: `${args.targetType} target`,
-            href: "/admin/review",
-          })),
-          ...evaluators.map((evaluator) => ({
-            id: `evaluator:${evaluator.id}`,
-            label: evaluator.name,
-            detail: "Authorised evaluator",
-            href: "/admin/review",
-          })),
-        ],
-        approvalRequired: true,
-      };
-      const snapshot = {
-        input: args,
-        resolvedEvaluatorPersonIds: evaluators
-          .map((evaluator) => evaluator.id)
-          .sort(),
-      };
-      const persisted = await persistDomainProposal(this.env, this.viewer, {
-        version: 1,
-        toolName: "propose_reviewer_assignment",
-        runId: this.runId,
-        model: this.model,
-        arguments: args,
-        snapshot,
-        preview,
-      });
-      const evidence: AiEvidence[] = [
         {
-          id: `evaluation-round:${round.id}`,
-          label: round.name,
-          detail: `Active round · ${targets.length} targets · ${evaluators.length} evaluators`,
-          href: `/admin/review?round=${encodeURIComponent(round.id)}`,
-          source: "Program Cue D1",
+          field: "Calendar fan-out",
+          before: null,
+          after: "Queued background operation",
         },
-      ];
-      return {
-        output: {
-          source: "validated_assignment_preview",
-          proposalId,
-          executed: false,
-          requestedAssignmentCount: requestedCount,
-          currentlyNewAssignmentCount: newCount,
-          approvalRequired: true,
-        },
-        evidence,
-        proposals: [persisted],
-        auditSummary: {
-          arguments: args,
-          proposalId,
-          executed: false,
-          requestedAssignmentCount: requestedCount,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "propose_email_template_draft") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        emailTemplateDraftProposalArgumentsSchema,
-      );
-      renderMergeTemplate(args.subject, representativeMergeValues);
-      renderMergeTemplate(args.body, representativeMergeValues);
-      const snapshot: SaveTemplateInput = saveTemplateSchema.parse({
-        name: args.name,
-        category: args.category,
-        subject: args.subject,
-        content: {
-          body: args.body,
-          physicalAddress: args.physicalAddress,
-          ...(args.buttonText && args.buttonUrl
-            ? { buttonText: args.buttonText, buttonUrl: args.buttonUrl }
-            : {}),
-        },
-      });
-      const proposalId = crypto.randomUUID();
-      const preview: AiProposalPreview = {
-        id: proposalId,
-        toolName: "propose_email_template_draft",
-        title: snapshot.name,
-        summary: `Create one editable ${snapshot.category.replaceAll("_", " ")} email template draft with the exact subject, body, footer and action shown below.`,
-        consequence:
-          "Approval saves a draft template through CommunicationService. It does not publish, queue, schedule, test-send or send any email.",
-        changes: [
-          { field: "Template", before: null, after: snapshot.name },
-          { field: "Category", before: null, after: snapshot.category },
-          { field: "Subject", before: null, after: snapshot.subject },
-          {
-            field: "Body",
-            before: null,
-            after: snapshot.content.body,
-          },
-          {
-            field: "Footer",
-            before: null,
-            after: snapshot.content.physicalAddress,
-          },
-          {
-            field: "Action",
-            before: null,
-            after: snapshot.content.buttonText
-              ? `${snapshot.content.buttonText} · ${snapshot.content.buttonUrl}`
-              : "No action button",
-          },
-        ],
-        approvalRequired: true,
-      };
-      const persisted = await persistDomainProposal(this.env, this.viewer, {
-        version: 1,
-        toolName: "propose_email_template_draft",
-        runId: this.runId,
-        model: this.model,
-        arguments: args,
-        snapshot,
-        preview,
-      });
-      const evidence: AiEvidence[] = [
-        {
-          id: `event:${this.viewer.eventId}:communications`,
-          label: "Current event Communications workspace",
-          detail: "Template draft target",
-          href: "/admin/communications",
-          source: "Program Cue D1",
-        },
-      ];
-      return {
-        output: {
-          source: "validated_email_template_draft_preview",
-          proposalId,
-          executed: false,
-          published: false,
-          sent: false,
-          approvalRequired: true,
-        },
-        evidence,
-        proposals: [persisted],
-        auditSummary: {
-          arguments: args,
-          proposalId,
-          executed: false,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "propose_schedule_placement") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        schedulePlacementSchema,
-      );
-      const workspace = await new ScheduleService(this.env).getWorkspace(
-        this.viewer,
-      );
-      if (
-        !workspace.version ||
-        workspace.version.id !== args.scheduleVersionId ||
-        workspace.version.status !== "draft" ||
-        workspace.version.revision !== args.scheduleRevision
-      ) {
-        throw new AiToolValidationError(
-          "The proposed placement does not target the current draft schedule revision.",
-        );
-      }
-      const session = workspace.sessions.find(
-        (candidate) => candidate.id === args.sessionId,
-      );
-      const room = workspace.rooms.find(
-        (candidate) => candidate.id === args.roomId,
-      );
-      if (!session || !room) {
-        throw new AiToolValidationError(
-          "The proposed session or room is not available in this event.",
-        );
-      }
-      const currentEntry = workspace.entries.find(
-        (entry) => entry.sessionId === session.id,
-      );
-      const sessionById = new Map(
-        workspace.sessions.map((candidate) => [candidate.id, candidate]),
-      );
-      const existing: ScheduledItem[] = workspace.entries.map((entry) => {
-        const scheduledSession = sessionById.get(entry.sessionId);
-        if (!scheduledSession) {
-          throw new Error(
-            `Schedule entry ${entry.id} references an unavailable session.`,
-          );
-        }
-        return {
-          entryId: entry.id,
-          sessionId: entry.sessionId,
-          roomId: entry.roomId,
-          startsAt: entry.startsAt,
-          endsAt: entry.endsAt,
-          trackId: scheduledSession.trackId,
-          trackExclusive: scheduledSession.trackExclusive,
-          speakerIds: scheduledSession.speakerIds,
-          requiredResources: scheduledSession.requiredResources,
-          expectedAttendance: scheduledSession.expectedAttendance,
-          title: scheduledSession.title,
-        };
-      });
-      const conflicts = detectScheduleConflicts({
-        candidate: {
-          sessionId: session.id,
-          roomId: room.id,
-          startsAt: args.startsAt,
-          endsAt: args.endsAt,
-          trackId: session.trackId,
-          trackExclusive: session.trackExclusive,
-          speakerIds: session.speakerIds,
-          requiredResources: session.requiredResources,
-          expectedAttendance: session.expectedAttendance,
-        },
-        existing,
-        rooms: workspace.rooms,
-        eventStartsAt: workspace.event.startsAt,
-        eventEndsAt: workspace.event.endsAt,
-        eventTimezone: workspace.event.timezone,
-        policies: workspace.policies,
-        excludeEntryId: currentEntry?.id,
-      });
-      const blocking = conflicts.filter(
-        (conflict) => conflict.severity === "blocking",
-      );
-      if (blocking.length) {
-        throw new AiToolValidationError(
-          `The proposed schedule placement is blocked: ${blocking.map((conflict) => conflict.message).join(" ")}`,
-        );
-      }
-      const warnings = conflicts.filter(
-        (conflict): conflict is typeof conflict & { severity: "warning" } =>
-          conflict.severity === "warning",
-      );
-      const proposalId = crypto.randomUUID();
-      const preview: AiProposalPreview = {
-        id: proposalId,
-        toolName: "propose_schedule_placement",
-        title: `Place ${session.title}`,
-        summary: `${currentEntry ? "Move" : "Place"} one session in ${room.name} from ${new Date(args.startsAt * 1_000).toISOString()} to ${new Date(args.endsAt * 1_000).toISOString()}.`,
-        consequence:
-          "Approval calls ScheduleService.place against the exact draft revision. The service re-runs every deterministic conflict rule, CASes the schedule/session records and returns its normal 30-second undo. This does not publish the schedule.",
-        changes: [
-          {
-            field: "Room",
-            before: currentEntry
-              ? (workspace.rooms.find(
-                  (candidate) => candidate.id === currentEntry.roomId,
-                )?.name ?? currentEntry.roomId)
-              : null,
-            after: room.name,
-          },
-          {
-            field: "Starts",
-            before: currentEntry
-              ? new Date(currentEntry.startsAt * 1_000).toISOString()
-              : null,
-            after: new Date(args.startsAt * 1_000).toISOString(),
-          },
-          {
-            field: "Ends",
-            before: currentEntry
-              ? new Date(currentEntry.endsAt * 1_000).toISOString()
-              : null,
-            after: new Date(args.endsAt * 1_000).toISOString(),
-          },
-          {
-            field: "Warnings",
-            before: null,
-            after: warnings.length
-              ? warnings.map((warning) => warning.message).join(" · ")
-              : "No deterministic warnings",
-          },
-        ],
-        affectedRecords: [
-          {
-            id: `session:${session.id}`,
-            label: session.title,
-            detail: `${session.durationMinutes} minutes · ${session.status}`,
-            href: `/admin/schedule?session=${encodeURIComponent(session.id)}`,
-          },
-          {
-            id: `room:${room.id}`,
-            label: room.name,
-            detail: `Capacity ${room.capacity}`,
-            href: "/admin/schedule",
-          },
-        ],
-        approvalRequired: true,
-      };
-      const snapshot = { input: args, warningConflicts: warnings };
-      const persisted = await persistDomainProposal(this.env, this.viewer, {
-        version: 1,
-        toolName: "propose_schedule_placement",
-        runId: this.runId,
-        model: this.model,
-        arguments: args,
-        snapshot,
-        preview,
-      });
-      const evidence: AiEvidence[] = [
-        {
-          id: `schedule-version:${workspace.version.id}`,
-          label: `Draft schedule v${workspace.version.versionNumber}`,
-          detail: `Revision ${workspace.version.revision} · ${warnings.length} placement warnings`,
-          href: `/admin/schedule?session=${encodeURIComponent(session.id)}`,
-          source: "Program Cue D1",
-        },
-      ];
-      return {
-        output: {
-          source: "deterministic_schedule_placement_preview",
-          proposalId,
-          executed: false,
-          warningCount: warnings.length,
-          blockingCount: 0,
-          approvalRequired: true,
-        },
-        evidence,
-        proposals: [persisted],
-        auditSummary: {
-          arguments: args,
-          proposalId,
-          executed: false,
-          warningCount: warnings.length,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "propose_form_publication") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        formPublicationProposalArgumentsSchema,
-      );
-      const workspace = await new SubmissionService(this.env).getAdminWorkspace(
-        this.viewer,
-        args.formId,
-      );
-      if (!workspace) {
-        throw new AiToolValidationError(
-          "The proposed form publication target was not found in this event.",
-        );
-      }
-      if (
-        workspace.revision !== args.formRevision ||
-        workspace.draftVersion.revision !== args.draftRevision
-      ) {
-        throw new AiToolValidationError(
-          "The form or its draft changed. Inspect current revisions and prepare a fresh publication preview.",
-        );
-      }
-      const schemaHash = await hashJson({
-        schema: workspace.draftVersion.schema,
-        routing: workspace.draftVersion.routing,
-        settings: workspace.draftVersion.settings,
-      });
-      const snapshot = {
-        formId: workspace.id,
-        name: workspace.name,
-        publicSlug: workspace.publicSlug,
-        status: workspace.status,
-        formRevision: workspace.revision,
-        draftRevision: workspace.draftVersion.revision,
-        draftVersionId: workspace.draftVersion.id,
-        fieldCount: workspace.draftVersion.schema.fields.length,
-        schemaHash,
-      };
-      const proposalId = crypto.randomUUID();
-      const preview: AiProposalPreview = {
-        id: proposalId,
-        toolName: "propose_form_publication",
-        title: `Publish ${workspace.name}`,
-        summary: `Publish draft version ${workspace.draftVersion.versionNumber} with ${snapshot.fieldCount} fields at /apply/${workspace.publicSlug}.`,
-        consequence:
-          "Approval makes this form draft publicly available through the normal form publication CAS boundary. Applicants may immediately see it; publication is consequential and is not treated as undoable.",
-        changes: [
-          {
-            field: "Form status",
-            before: workspace.status,
-            after: "published",
-          },
-          {
-            field: "Published version",
-            before: workspace.publishedVersion
-              ? `${workspace.publishedVersion.versionNumber}`
-              : null,
-            after: `${workspace.draftVersion.versionNumber}`,
-          },
-          {
-            field: "Public path",
-            before: workspace.publishedVersion
-              ? `/apply/${workspace.publicSlug}`
-              : null,
-            after: `/apply/${workspace.publicSlug}`,
-          },
-        ],
-        affectedRecords: workspace.draftVersion.schema.fields.map((field) => ({
-          id: `form-field:${field.id}`,
-          label: field.label,
-          detail: `${field.type.replaceAll("_", " ")}${field.required ? " · required" : ""}`,
-          href: "/admin/submissions/form",
-        })),
-        approvalRequired: true,
-      };
-      const persisted = await persistDomainProposal(this.env, this.viewer, {
-        version: 1,
-        toolName: "propose_form_publication",
-        runId: this.runId,
-        model: this.model,
-        arguments: args,
-        snapshot,
-        preview,
-      });
-      const evidence: AiEvidence[] = [
-        {
-          id: `form:${workspace.id}`,
-          label: workspace.name,
-          detail: `Draft version ${workspace.draftVersion.versionNumber} · revision ${workspace.draftVersion.revision}`,
-          href: "/admin/submissions/form",
-          source: "Program Cue D1",
-        },
-      ];
-      return {
-        output: {
-          source: "validated_form_publication_preview",
-          proposalId,
-          executed: false,
-          formRevision: workspace.revision,
-          draftRevision: workspace.draftVersion.revision,
-          fieldCount: snapshot.fieldCount,
-          approvalRequired: true,
-        },
-        evidence,
-        proposals: [persisted],
-        auditSummary: {
-          arguments: args,
-          proposalId,
-          executed: false,
-          schemaHash,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "propose_schedule_publication") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        schedulePublishSchema,
-      );
-      const workspace = await new ScheduleService(this.env).getWorkspace(
-        this.viewer,
-      );
-      if (
-        !workspace.version ||
-        workspace.version.id !== args.scheduleVersionId ||
-        workspace.version.status !== "draft" ||
-        workspace.version.revision !== args.scheduleRevision
-      ) {
-        throw new AiToolValidationError(
-          "The proposed publication does not target the current draft schedule revision.",
-        );
-      }
-      const blockingConflicts = workspace.conflicts.filter(
-        (conflict) => conflict.severity === "blocking",
-      );
-      if (blockingConflicts.length) {
-        throw new AiToolValidationError(
-          `The draft schedule has ${blockingConflicts.length} blocking conflict${blockingConflicts.length === 1 ? "" : "s"}. Resolve them before preparing a publication preview.`,
-        );
-      }
-      const entriesHash = await hashJson(
-        workspace.entries.map((entry) => ({
-          id: entry.id,
-          sessionId: entry.sessionId,
-          roomId: entry.roomId,
-          startsAt: entry.startsAt,
-          endsAt: entry.endsAt,
-          revision: entry.revision,
-        })),
-      );
-      const snapshot = {
-        scheduleVersionId: workspace.version.id,
-        versionNumber: workspace.version.versionNumber,
-        scheduleRevision: workspace.version.revision,
+      ],
+      affectedRecords: workspace.entries.map((entry) => ({
+        id: `schedule-entry:${entry.id}`,
+        label: sessionById.get(entry.sessionId)?.title ?? entry.sessionId,
+        detail: `${new Date(entry.startsAt * 1_000).toISOString()} · ${roomById.get(entry.roomId)?.name ?? entry.roomId}`,
+        href: `/admin/schedule?session=${encodeURIComponent(entry.sessionId)}`,
+      })),
+      approvalRequired: true,
+    };
+    const persisted = await persistDomainProposal(this.env, this.viewer, {
+      version: 1,
+      toolName: "propose_schedule_publication",
+      runId: this.runId,
+      model: this.model,
+      arguments: args,
+      snapshot,
+      preview,
+    });
+    const evidence: AiEvidence[] = [
+      {
+        id: `schedule-version:${workspace.version.id}`,
+        label: `Draft schedule v${workspace.version.versionNumber}`,
+        detail: `Revision ${workspace.version.revision} · ${workspace.entries.length} entries · no blocking conflicts`,
+        href: "/admin/schedule",
+        source: "Program Cue D1",
+      },
+    ];
+    return {
+      output: {
+        source: "validated_schedule_publication_preview",
+        proposalId,
+        executed: false,
         entryCount: workspace.entries.length,
-        unresolvedBlockingConflicts: 0,
-        entriesHash,
-      };
-      const proposalId = crypto.randomUUID();
-      const sessionById = new Map(
-        workspace.sessions.map((session) => [session.id, session]),
-      );
-      const roomById = new Map(workspace.rooms.map((room) => [room.id, room]));
-      const preview: AiProposalPreview = {
-        id: proposalId,
-        toolName: "propose_schedule_publication",
-        title: `Publish schedule v${workspace.version.versionNumber}`,
-        summary: `Publish ${workspace.entries.length} scheduled session${workspace.entries.length === 1 ? "" : "s"} with no recorded blocking conflicts.`,
-        consequence:
-          "Approval re-runs all publication-boundary conflict rules and CAS revision validation, publishes the schedule, exposes public programme data and queues calendar fan-out. Published changes are not presented as undoable.",
-        changes: [
-          {
-            field: "Schedule status",
-            before: "draft",
-            after: "published",
-          },
-          {
-            field: "Published sessions",
-            before: null,
-            after: `${workspace.entries.length}`,
-          },
-          {
-            field: "Blocking conflicts",
-            before: "0",
-            after: "Revalidated at approval",
-          },
-          {
-            field: "Calendar fan-out",
-            before: null,
-            after: "Queued background operation",
-          },
-        ],
-        affectedRecords: workspace.entries.map((entry) => ({
-          id: `schedule-entry:${entry.id}`,
-          label: sessionById.get(entry.sessionId)?.title ?? entry.sessionId,
-          detail: `${new Date(entry.startsAt * 1_000).toISOString()} · ${roomById.get(entry.roomId)?.name ?? entry.roomId}`,
-          href: `/admin/schedule?session=${encodeURIComponent(entry.sessionId)}`,
-        })),
+        blockingConflictCount: 0,
         approvalRequired: true,
-      };
-      const persisted = await persistDomainProposal(this.env, this.viewer, {
-        version: 1,
-        toolName: "propose_schedule_publication",
-        runId: this.runId,
-        model: this.model,
+      },
+      evidence,
+      proposals: [persisted],
+      auditSummary: {
         arguments: args,
-        snapshot,
-        preview,
-      });
-      const evidence: AiEvidence[] = [
+        proposalId,
+        executed: false,
+        entriesHash,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeProposeAcceleventsRun(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "propose_accelevents_run";
+
+    const args = parseArguments(
+      name,
+      encodedArguments,
+      acceleventsRunProposalArgumentsSchema,
+    );
+    const plan = await new IntegrationService(this.env).preview(
+      this.viewer,
+      args.connectionId,
+    );
+    const planHash = await hashJson(plan.items);
+    const snapshot = {
+      connectionId: plan.connection.id,
+      connectionStatus: plan.connection.status,
+      dryRun: args.dryRun,
+      summary: plan.summary,
+      planHash,
+      previewFingerprint: plan.previewFingerprint,
+    };
+    const proposalId = crypto.randomUUID();
+    const preview: AiProposalPreview = {
+      id: proposalId,
+      toolName: "propose_accelevents_run",
+      title: `${args.dryRun ? "Dry-run" : "Run"} Accelevents export`,
+      summary: `${plan.summary.create} create, ${plan.summary.update} update and ${plan.summary.noop} unchanged item${plan.summary.total === 1 ? "" : "s"} in the exact current export plan.`,
+      consequence: args.dryRun
+        ? "Approval records a completed dry-run operation and exact item diffs. It does not call Accelevents or change external records."
+        : "Approval re-runs and compares the exact export plan, durably records an idempotent integration operation and queues provider work. External effects cannot be undone; failures remain visible per record.",
+      changes: [
+        { field: "Creates", before: null, after: `${plan.summary.create}` },
+        { field: "Updates", before: null, after: `${plan.summary.update}` },
+        { field: "Unchanged", before: null, after: `${plan.summary.noop}` },
         {
-          id: `schedule-version:${workspace.version.id}`,
-          label: `Draft schedule v${workspace.version.versionNumber}`,
-          detail: `Revision ${workspace.version.revision} · ${workspace.entries.length} entries · no blocking conflicts`,
-          href: "/admin/schedule",
-          source: "Program Cue D1",
+          field: "Provider calls",
+          before: null,
+          after: args.dryRun ? "None — dry run" : "Queued after approval",
         },
-      ];
-      return {
-        output: {
-          source: "validated_schedule_publication_preview",
-          proposalId,
-          executed: false,
-          entryCount: workspace.entries.length,
-          blockingConflictCount: 0,
-          approvalRequired: true,
-        },
-        evidence,
-        proposals: [persisted],
-        auditSummary: {
-          arguments: args,
-          proposalId,
-          executed: false,
-          entriesHash,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "propose_accelevents_run") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        acceleventsRunProposalArgumentsSchema,
-      );
-      const plan = await new IntegrationService(this.env).preview(
-        this.viewer,
-        args.connectionId,
-      );
-      const planHash = await hashJson(plan.items);
-      const snapshot = {
-        connectionId: plan.connection.id,
-        connectionStatus: plan.connection.status,
+      ],
+      affectedRecords: plan.items.map((item) => ({
+        id: `${item.entityType}:${item.entityId}`,
+        label: item.label,
+        detail: `${item.action}${item.externalId ? ` · external ${item.externalId}` : ""}`,
+        href:
+          item.entityType === "session"
+            ? `/admin/schedule?session=${encodeURIComponent(item.entityId)}`
+            : `/admin/speakers?person=${encodeURIComponent(item.entityId)}`,
+      })),
+      approvalRequired: true,
+    };
+    const persisted = await persistDomainProposal(this.env, this.viewer, {
+      version: 1,
+      toolName: "propose_accelevents_run",
+      runId: this.runId,
+      model: this.model,
+      arguments: args,
+      snapshot,
+      preview,
+    });
+    const evidence: AiEvidence[] = [
+      {
+        id: `integration:${plan.connection.id}`,
+        label: "Accelevents export connection",
+        detail: `${plan.connection.status} · ${plan.summary.total} planned records`,
+        href: `/admin/integrations?connection=${encodeURIComponent(plan.connection.id)}`,
+        source: "Program Cue D1",
+      },
+    ];
+    return {
+      output: {
+        source: "validated_accelevents_export_preview",
+        proposalId,
+        executed: false,
         dryRun: args.dryRun,
         summary: plan.summary,
+        approvalRequired: true,
+      },
+      evidence,
+      proposals: [persisted],
+      auditSummary: {
+        arguments: args,
+        proposalId,
+        executed: false,
         planHash,
-        previewFingerprint: plan.previewFingerprint,
-      };
-      const proposalId = crypto.randomUUID();
-      const preview: AiProposalPreview = {
-        id: proposalId,
-        toolName: "propose_accelevents_run",
-        title: `${args.dryRun ? "Dry-run" : "Run"} Accelevents export`,
-        summary: `${plan.summary.create} create, ${plan.summary.update} update and ${plan.summary.noop} unchanged item${plan.summary.total === 1 ? "" : "s"} in the exact current export plan.`,
-        consequence: args.dryRun
-          ? "Approval records a completed dry-run operation and exact item diffs. It does not call Accelevents or change external records."
-          : "Approval re-runs and compares the exact export plan, durably records an idempotent integration operation and queues provider work. External effects cannot be undone; failures remain visible per record.",
-        changes: [
-          { field: "Creates", before: null, after: `${plan.summary.create}` },
-          { field: "Updates", before: null, after: `${plan.summary.update}` },
-          { field: "Unchanged", before: null, after: `${plan.summary.noop}` },
-          {
-            field: "Provider calls",
-            before: null,
-            after: args.dryRun ? "None — dry run" : "Queued after approval",
-          },
-        ],
-        affectedRecords: plan.items.map((item) => ({
-          id: `${item.entityType}:${item.entityId}`,
-          label: item.label,
-          detail: `${item.action}${item.externalId ? ` · external ${item.externalId}` : ""}`,
-          href:
-            item.entityType === "session"
-              ? `/admin/schedule?session=${encodeURIComponent(item.entityId)}`
-              : `/admin/speakers?person=${encodeURIComponent(item.entityId)}`,
-        })),
-        approvalRequired: true,
-      };
-      const persisted = await persistDomainProposal(this.env, this.viewer, {
-        version: 1,
-        toolName: "propose_accelevents_run",
-        runId: this.runId,
-        model: this.model,
-        arguments: args,
-        snapshot,
-        preview,
-      });
-      const evidence: AiEvidence[] = [
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
+  }
+
+  private async executeProposeTask(
+    encodedArguments: string,
+  ): Promise<AiToolExecution> {
+    const name = "propose_task";
+
+    const args = parseArguments(
+      name,
+      encodedArguments,
+      taskProposalArgumentsSchema,
+    );
+    const targetLabel = await validateTaskReferences(
+      this.env,
+      this.viewer,
+      args,
+    );
+    const proposalId = crypto.randomUUID();
+    const preview: AiProposalPreview = {
+      id: proposalId,
+      toolName: "propose_task",
+      title: args.title,
+      summary: `Create one ${args.impact} ${args.taskType.replaceAll("_", " ")} task for ${targetLabel}.`,
+      consequence:
+        "Approval creates one durable task in this event. It does not send a message, publish data or create additional tasks.",
+      changes: [
+        { field: "Task", before: null, after: args.title },
         {
-          id: `integration:${plan.connection.id}`,
-          label: "Accelevents export connection",
-          detail: `${plan.connection.status} · ${plan.summary.total} planned records`,
-          href: `/admin/integrations?connection=${encodeURIComponent(plan.connection.id)}`,
-          source: "Program Cue D1",
+          field: "Target",
+          before: null,
+          after: `${args.targetType}: ${targetLabel}`,
         },
-      ];
-      return {
-        output: {
-          source: "validated_accelevents_export_preview",
-          proposalId,
-          executed: false,
-          dryRun: args.dryRun,
-          summary: plan.summary,
-          approvalRequired: true,
+        { field: "Impact", before: null, after: args.impact },
+        {
+          field: "Due date",
+          before: null,
+          after: args.dueAt ?? "No due date",
         },
-        evidence,
-        proposals: [persisted],
-        auditSummary: {
-          arguments: args,
-          proposalId,
-          executed: false,
-          planHash,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    if (name === "propose_task") {
-      const args = parseArguments(
-        name,
-        encodedArguments,
-        taskProposalArgumentsSchema,
-      );
-      const targetLabel = await validateTaskReferences(
-        this.env,
-        this.viewer,
-        args,
-      );
-      const proposalId = crypto.randomUUID();
-      const preview: AiProposalPreview = {
-        id: proposalId,
-        toolName: "propose_task",
-        title: args.title,
-        summary: `Create one ${args.impact} ${args.taskType.replaceAll("_", " ")} task for ${targetLabel}.`,
-        consequence:
-          "Approval creates one durable task in this event. It does not send a message, publish data or create additional tasks.",
-        changes: [
-          { field: "Task", before: null, after: args.title },
-          {
-            field: "Target",
-            before: null,
-            after: `${args.targetType}: ${targetLabel}`,
-          },
-          { field: "Impact", before: null, after: args.impact },
-          {
-            field: "Due date",
-            before: null,
-            after: args.dueAt ?? "No due date",
-          },
-        ],
-        approvalRequired: true,
-      };
-      const metadata = assistantProposalMetadataSchema.parse({
-        version: 1,
-        toolName: "propose_task",
-        runId: this.runId,
-        model: this.model,
-        arguments: args,
-        preview,
-      });
-      await this.env.DB.prepare(
-        `INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
-          entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) VALUES (?, ?, ?, ?, 'assistant.proposal.previewed',
-                  'assistant_proposal', ?, ?, ?, unixepoch())`,
+      ],
+      approvalRequired: true,
+    };
+    const metadata = assistantProposalMetadataSchema.parse({
+      version: 1,
+      toolName: "propose_task",
+      runId: this.runId,
+      model: this.model,
+      arguments: args,
+      preview,
+    });
+    await this.env.DB.prepare(
+      `INSERT INTO audit_events (
+        id, organisation_id, event_id, actor_person_id, action,
+        entity_type, entity_id, correlation_id, metadata_json, created_at
+      ) VALUES (?, ?, ?, ?, 'assistant.proposal.previewed',
+                'assistant_proposal', ?, ?, ?, unixepoch())`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        this.viewer.organisationId,
+        this.viewer.eventId,
+        this.viewer.personId,
+        proposalId,
+        this.runId,
+        JSON.stringify(metadata),
       )
-        .bind(
-          crypto.randomUUID(),
-          this.viewer.organisationId,
-          this.viewer.eventId,
-          this.viewer.personId,
-          proposalId,
-          this.runId,
-          JSON.stringify(metadata),
-        )
-        .run();
-      const evidence: AiEvidence[] = [
-        {
-          id: `${args.targetType}:${args.targetId}`,
-          label: targetLabel,
-          detail: `Proposed task target · ${args.targetType}`,
-          href:
-            args.targetType === "event"
-              ? "/admin/command"
-              : args.targetType === "session"
-                ? `/admin/schedule?session=${encodeURIComponent(args.targetId)}`
-                : `/admin/speakers?person=${encodeURIComponent(args.targetId)}`,
-          source: "Program Cue D1",
-        },
-      ];
-      return {
-        output: {
-          source: "validated_task_preview",
-          preview,
-          executed: false,
-          approvalRequired: true,
-        },
-        evidence,
-        proposals: [preview],
-        auditSummary: {
-          arguments: args,
-          proposalId,
-          executed: false,
-          evidenceIds: evidence.map((item) => item.id),
-        },
-      };
-    }
-    throw new AiToolPermissionError(`Tool ${name} is not allow-listed.`);
+      .run();
+    const evidence: AiEvidence[] = [
+      {
+        id: `${args.targetType}:${args.targetId}`,
+        label: targetLabel,
+        detail: `Proposed task target · ${args.targetType}`,
+        href:
+          args.targetType === "event"
+            ? "/admin/command"
+            : args.targetType === "session"
+              ? `/admin/schedule?session=${encodeURIComponent(args.targetId)}`
+              : `/admin/speakers?person=${encodeURIComponent(args.targetId)}`,
+        source: "Program Cue D1",
+      },
+    ];
+    return {
+      output: {
+        source: "validated_task_preview",
+        preview,
+        executed: false,
+        approvalRequired: true,
+      },
+      evidence,
+      proposals: [preview],
+      auditSummary: {
+        arguments: args,
+        proposalId,
+        executed: false,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    };
   }
 }
