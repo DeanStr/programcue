@@ -2,9 +2,11 @@ import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
-  readBoundedResponseText,
-  ResponseBodyTooLargeError,
-} from "~/platform/http/read-response";
+  FileMultipartConflictError,
+  FileMultipartIncompleteError,
+  FileMultipartStateError,
+} from "./multipart-upload-errors";
+import { MultipartR2Provider } from "./multipart-r2-provider.server";
 import {
   assetKindSchema,
   detectInspectionContentType,
@@ -28,11 +30,7 @@ import {
   enqueueFileScan,
   type FileScanQueueMessage,
 } from "./file-scan-dispatch.server";
-import {
-  presignR2S3Request,
-  requireR2S3Configuration,
-  R2S3ConfigurationError,
-} from "./r2-s3-signing.server";
+import { requireR2S3Configuration } from "./r2-s3-signing.server";
 
 const MULTIPART_EXPIRY_SECONDS = 24 * 60 * 60;
 const REQUEST_CLAIM_SECONDS = 60;
@@ -80,30 +78,11 @@ export const multipartAbortSchema = z.object({
   versionId: z.string().min(1).max(160),
 });
 
-export class FileMultipartStateError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "FileMultipartStateError";
-  }
-}
-
-export class FileMultipartConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "FileMultipartConflictError";
-  }
-}
-
-export class FileMultipartIncompleteError extends Error {
-  constructor(
-    message: string,
-    readonly committed: boolean,
-    options?: ErrorOptions,
-  ) {
-    super(message, options);
-    this.name = "FileMultipartIncompleteError";
-  }
-}
+export {
+  FileMultipartConflictError,
+  FileMultipartIncompleteError,
+  FileMultipartStateError,
+} from "./multipart-upload-errors";
 
 type MultipartRow = {
   versionId: string;
@@ -207,104 +186,18 @@ function normalizedManifest(
   return normalized;
 }
 
-function decodeXmlText(value: string) {
-  return value.replace(
-    /&(?:quot|apos|lt|gt|amp|#\d+|#x[\da-f]+);/gi,
-    (entity) => {
-      const named: Record<string, string> = {
-        "&quot;": '"',
-        "&apos;": "'",
-        "&lt;": "<",
-        "&gt;": ">",
-        "&amp;": "&",
-      };
-      const normalized = entity.toLowerCase();
-      if (named[normalized] !== undefined) return named[normalized];
-      const hexadecimal = normalized.startsWith("&#x");
-      const raw = normalized.slice(hexadecimal ? 3 : 2, -1);
-      const codePoint = Number.parseInt(raw, hexadecimal ? 16 : 10);
-      return Number.isSafeInteger(codePoint) &&
-        codePoint >= 0 &&
-        codePoint <= 0x10ffff
-        ? String.fromCodePoint(codePoint)
-        : entity;
-    },
-  );
-}
-
-function xmlElement(source: string, name: string) {
-  const match = source.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`));
-  return match ? decodeXmlText(match[1]!.trim()) : null;
-}
-
-function parseR2ListParts(
-  xml: string,
-  row: Pick<MultipartRow, "sizeBytes" | "partSizeBytes">,
-) {
-  if (xml.length > 2_000_000)
-    throw new FileMultipartStateError(
-      "R2 returned an unexpectedly large multipart part list.",
-    );
-  const truncated = xmlElement(xml, "IsTruncated");
-  if (truncated !== "false")
-    throw new FileMultipartStateError(
-      "R2 returned an incomplete multipart part list.",
-    );
-  const parts: Array<{ PartNumber: number; Size: number; ETag: string }> = [];
-  const partPattern = /<Part>([\s\S]*?)<\/Part>/g;
-  for (const match of xml.matchAll(partPattern)) {
-    const source = match[1]!;
-    const partNumber = Number(xmlElement(source, "PartNumber"));
-    const size = Number(xmlElement(source, "Size"));
-    const etag = xmlElement(source, "ETag");
-    if (
-      !Number.isInteger(partNumber) ||
-      partNumber < 1 ||
-      partNumber > expectedPartCount(row) ||
-      !Number.isInteger(size) ||
-      size < 1 ||
-      !etag ||
-      !/^[\x21-\x7e]{1,200}$/.test(etag)
-    )
-      throw new FileMultipartStateError(
-        "R2 returned invalid multipart part metadata.",
-      );
-    const expectedSize = Math.min(
-      row.partSizeBytes,
-      row.sizeBytes - (partNumber - 1) * row.partSizeBytes,
-    );
-    if (size !== expectedSize)
-      throw new FileMultipartStateError(
-        `R2 part ${partNumber} does not match the declared upload chunk size.`,
-      );
-    parts.push({ PartNumber: partNumber, Size: size, ETag: etag });
-  }
-  parts.sort((left, right) => left.PartNumber - right.PartNumber);
-  parts.forEach((part, index) => {
-    if (index > 0 && parts[index - 1]!.PartNumber === part.PartNumber)
-      throw new FileMultipartStateError(
-        "R2 returned duplicate multipart part metadata.",
-      );
-  });
-  return parts;
-}
-
 export class MultipartUploadService {
-  private readonly fetcher: typeof fetch;
+  private readonly provider: MultipartR2Provider;
 
   constructor(
     private readonly env: CloudflareEnvironment,
     dependencies?: { fetch?: typeof fetch },
   ) {
-    this.fetcher = dependencies?.fetch ?? fetch;
+    this.provider = new MultipartR2Provider(env, dependencies);
   }
 
   private requireBucket() {
-    if (!this.env.FILES)
-      throw new R2S3ConfigurationError(
-        "Required private R2 binding FILES is unavailable.",
-      );
-    return this.env.FILES;
+    return this.provider.requireBucket();
   }
 
   private async assertTarget(actor: MultipartActor, target: UploadTarget) {
@@ -756,18 +649,7 @@ export class MultipartUploadService {
   private async createProviderUpload(actor: MultipartActor, row: MultipartRow) {
     let multipart: R2MultipartUpload;
     try {
-      multipart = await this.requireBucket().createMultipartUpload(
-        row.objectKey,
-        {
-          httpMetadata: { contentType: row.contentType },
-          customMetadata: {
-            eventId: row.eventId,
-            assetId: row.assetId,
-            versionId: row.versionId,
-            quarantine: "pending-scan",
-          },
-        },
-      );
+      multipart = await this.provider.createUpload(row);
     } catch (error) {
       await this.env.DB.batch([
         this.env.DB.prepare(
@@ -1021,52 +903,10 @@ export class MultipartUploadService {
       throw new FileMultipartStateError(
         "This multipart upload has expired. Abort it and begin a new upload.",
       );
-    const url = await presignR2S3Request({
-      env: this.env,
-      method: "GET",
-      objectKey: row.objectKey,
-      query: {
-        uploadId: row.uploadId,
-        "max-parts": String(Math.min(expectedPartCount(row), 1_000)),
-      },
-      expiresSeconds: 60,
+    const parts = await this.provider.listParts({
+      ...row,
+      uploadId: row.uploadId,
     });
-    let providerResponse: Response;
-    try {
-      providerResponse = await this.fetcher(url, {
-        method: "GET",
-        headers: { accept: "application/xml" },
-        signal: AbortSignal.timeout(10_000),
-      });
-    } catch (error) {
-      throw new FileMultipartIncompleteError(
-        "R2 could not list the uploaded parts. Retry resume.",
-        false,
-        { cause: error },
-      );
-    }
-    if (providerResponse.status === 404)
-      throw new FileMultipartStateError(
-        "R2 no longer has this multipart upload. Abort it and begin a new upload.",
-      );
-    if (!providerResponse.ok)
-      throw new FileMultipartIncompleteError(
-        `R2 could not list the uploaded parts (${providerResponse.status}). Retry resume.`,
-        false,
-      );
-    let xml: string;
-    try {
-      xml = await readBoundedResponseText(providerResponse, 2_000_000);
-    } catch (error) {
-      if (error instanceof ResponseBodyTooLargeError) {
-        throw new FileMultipartStateError(
-          "R2 returned an unexpectedly large multipart part list.",
-          { cause: error },
-        );
-      }
-      throw error;
-    }
-    const parts = parseR2ListParts(xml, row);
     return {
       versionId: row.versionId,
       state: "initiated" as const,
@@ -1096,16 +936,10 @@ export class MultipartUploadService {
     return {
       versionId: row.versionId,
       partNumber: input.partNumber,
-      url: await presignR2S3Request({
-        env: this.env,
-        method: "PUT",
-        objectKey: row.objectKey,
-        query: {
-          partNumber: String(input.partNumber),
-          uploadId: row.uploadId,
-        },
-        expiresSeconds: 900,
-      }),
+      url: await this.provider.createPartUrl(
+        { ...row, uploadId: row.uploadId },
+        input.partNumber,
+      ),
       expiresInSeconds: 900,
     };
   }
@@ -1193,14 +1027,12 @@ export class MultipartUploadService {
   ) {
     const failures: unknown[] = [];
     try {
-      await this.requireBucket()
-        .resumeMultipartUpload(row.objectKey, row.uploadId)
-        .abort();
+      await this.provider.abort(row);
     } catch (abortError) {
-      if (!isMissingR2MultipartUpload(abortError)) failures.push(abortError);
+      failures.push(abortError);
     }
     try {
-      await this.requireBucket().delete(row.objectKey);
+      await this.provider.delete(row.objectKey);
     } catch (deleteError) {
       failures.push(deleteError);
     }
@@ -1434,38 +1266,29 @@ export class MultipartUploadService {
     row: MultipartRow & { uploadId: string },
     parts: ReturnType<typeof normalizedManifest>,
   ): Promise<R2Object> {
-    let object = await this.requireBucket().head(row.objectKey);
-    if (!object) {
-      try {
-        object = await this.requireBucket()
-          .resumeMultipartUpload(row.objectKey, row.uploadId)
-          .complete(parts);
-      } catch (error) {
-        object = await this.requireBucket().head(row.objectKey);
-        if (!object) {
-          await this.env.DB.prepare(
-            `UPDATE file_multipart_uploads
-                SET last_error = ?, updated_at = unixepoch()
-              WHERE version_id = ? AND event_id = ? AND status = 'completing'`,
-          )
-            .bind(
-              (error instanceof Error ? error.message : String(error)).slice(
-                0,
-                2_000,
-              ),
-              row.versionId,
-              actor.eventId,
-            )
-            .run();
-          throw new FileMultipartIncompleteError(
-            "R2 multipart completion did not finish. Retry with the same part manifest.",
-            true,
-            { cause: error },
-          );
-        }
-      }
+    try {
+      return await this.provider.complete(row, parts);
+    } catch (error) {
+      await this.env.DB.prepare(
+        `UPDATE file_multipart_uploads
+            SET last_error = ?, updated_at = unixepoch()
+          WHERE version_id = ? AND event_id = ? AND status = 'completing'`,
+      )
+        .bind(
+          (error instanceof Error ? error.message : String(error)).slice(
+            0,
+            2_000,
+          ),
+          row.versionId,
+          actor.eventId,
+        )
+        .run();
+      throw new FileMultipartIncompleteError(
+        "R2 multipart completion did not finish. Retry with the same part manifest.",
+        true,
+        { cause: error },
+      );
     }
-    return object;
   }
 
   private async validateCompletedObject(
@@ -1736,39 +1559,34 @@ export class MultipartUploadService {
     }
     if (row.uploadId) {
       try {
-        await this.requireBucket()
-          .resumeMultipartUpload(row.objectKey, row.uploadId)
-          .abort();
+        await this.provider.abort({ ...row, uploadId: row.uploadId });
       } catch (error) {
-        if (isMissingR2MultipartUpload(error)) {
-          await this.env.DB.prepare(
-            `UPDATE file_multipart_uploads
-                SET last_error = NULL, updated_at = unixepoch()
-              WHERE version_id = ? AND event_id = ? AND status = 'aborted'`,
+        await this.env.DB.prepare(
+          `UPDATE file_multipart_uploads SET last_error = ?, updated_at = unixepoch()
+          WHERE version_id = ? AND event_id = ? AND status = 'aborted'`,
+        )
+          .bind(
+            (error instanceof Error ? error.message : String(error)).slice(
+              0,
+              2_000,
+            ),
+            row.versionId,
+            actor.eventId,
           )
-            .bind(row.versionId, actor.eventId)
-            .run();
-        } else {
-          await this.env.DB.prepare(
-            `UPDATE file_multipart_uploads SET last_error = ?, updated_at = unixepoch()
-            WHERE version_id = ? AND event_id = ? AND status = 'aborted'`,
-          )
-            .bind(
-              (error instanceof Error ? error.message : String(error)).slice(
-                0,
-                2_000,
-              ),
-              row.versionId,
-              actor.eventId,
-            )
-            .run();
-          throw new FileMultipartIncompleteError(
-            "File access was revoked, but the incomplete R2 multipart upload could not be aborted. Retry abort.",
-            true,
-            { cause: error },
-          );
-        }
+          .run();
+        throw new FileMultipartIncompleteError(
+          "File access was revoked, but the incomplete R2 multipart upload could not be aborted. Retry abort.",
+          true,
+          { cause: error },
+        );
       }
+      await this.env.DB.prepare(
+        `UPDATE file_multipart_uploads
+            SET last_error = NULL, updated_at = unixepoch()
+          WHERE version_id = ? AND event_id = ? AND status = 'aborted'`,
+      )
+        .bind(row.versionId, actor.eventId)
+        .run();
     }
     await this.env.DB.prepare(
       `INSERT OR IGNORE INTO audit_events (
