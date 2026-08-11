@@ -384,7 +384,14 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                             .join("")}
                         </span>
                         <span className="pc-record-identity">
-                          <strong>{speaker.name}</strong>
+                          <strong>
+                            <Link
+                              className="pc-record-link"
+                              to={`/admin/speakers/${encodeURIComponent(speaker.id)}`}
+                            >
+                              {speaker.name}
+                            </Link>
+                          </strong>
                           <small className="pc-record-email">
                             {speaker.email}
                           </small>

@@ -2102,6 +2102,8 @@ a {
 }
 .public-nav {
   display: flex;
+  align-self: stretch;
+  align-items: stretch;
   gap: 22px;
   margin-left: auto;
 }
@@ -2142,14 +2144,15 @@ a {
   border-top: 1px solid var(--line);
 }
 .public-nav a {
+  display: flex;
+  align-items: center;
+  border-bottom: 2px solid transparent;
   font-weight: 650;
   color: #475569;
 }
 .public-nav a.active {
   color: #4338ca;
   border-bottom: 2px solid #4f46e5;
-  padding-bottom: 20px;
-  padding-top: 20px;
 }
 .hero {
   margin: 20px auto;
@@ -2206,6 +2209,9 @@ a {
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
+.public-filter-summary {
+  margin: -4px 0 12px;
+}
 .programme-list {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -2221,6 +2227,88 @@ a {
 }
 .programme-row:last-child {
   border-bottom: 0;
+}
+/* The row button and its description read as one record, so the entry owns the
+   background and separator rather than the button alone. */
+.programme-entry {
+  border-bottom: 1px solid var(--line);
+  background: white;
+}
+.programme-entry.active {
+  background: #f7f7ff;
+}
+.programme-entry:last-child {
+  border-bottom: 0;
+}
+.programme-entry > .programme-row {
+  border-bottom: 0;
+  background: transparent;
+}
+.programme-row-speakers {
+  display: grid;
+  gap: 2px;
+}
+.programme-row-speaker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 4px;
+}
+.programme-row-affiliation {
+  font-size: 11px;
+}
+.programme-entry-description {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 13px 13px;
+}
+.programme-entry-description p {
+  flex: 1 1 260px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-on-surface);
+}
+.public-profile-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* Session and profile cross-links are plain anchors, so give them an explicit
+   affordance rather than relying on position alone. */
+.session-detail-panel .stack a:not(.btn),
+#programme-speaker-profile .stack a:not(.btn) {
+  color: var(--blue);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.session-detail-panel .stack a:not(.btn):hover,
+.session-detail-panel .stack a:not(.btn):focus-visible,
+#programme-speaker-profile .stack a:not(.btn):hover,
+#programme-speaker-profile .stack a:not(.btn):focus-visible {
+  text-decoration-thickness: 2px;
+}
+.public-detail-list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+}
+.public-detail-list dt {
+  font-weight: 650;
+  color: var(--muted-on-surface);
+  font-size: 12px;
+}
+.public-detail-list dd {
+  margin: 0;
+  font-size: 12px;
+}
+.pc-plain-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 .programme-row.active {
   background: #f7f7ff;
@@ -2245,11 +2333,37 @@ a {
   padding: 10px;
   border-bottom: 1px solid var(--line);
 }
+.itinerary-title,
+.itinerary-meta,
+.itinerary-speakers,
+.itinerary-speakers > span {
+  display: block;
+}
+.itinerary-title {
+  margin-top: 4px;
+  font-weight: 650;
+}
+.itinerary-meta,
+.itinerary-speakers {
+  margin-top: 3px;
+  color: var(--muted-on-surface);
+  font-size: 11px;
+}
+.itinerary-speakers {
+  display: grid;
+  gap: 2px;
+}
 .itinerary-item:last-child {
   border-bottom: 0;
 }
 .session-detail-panel {
   padding: 16px;
+}
+.session-detail-panel > h3 {
+  margin: 16px 0 6px;
+}
+.session-detail-panel > .btn {
+  margin-top: 4px;
 }
 .venue-photo {
   height: 120px;
@@ -2711,11 +2825,12 @@ a {
     display: block;
   }
   .public-filters {
-    position: sticky;
-    top: 66px;
+    position: static;
     background: white;
     padding: 8px 0;
-    z-index: 20;
+  }
+  .programme-entry:not(.active) .programme-entry-description {
+    display: none;
   }
   .programme-row {
     grid-template-columns: 82px 1fr 44px;
@@ -5201,6 +5316,16 @@ body.portal-open {
 .pc-responsive-table .pc-record-email {
   overflow-wrap: anywhere;
 }
+.pc-record-link {
+  color: var(--blue);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.pc-record-link:hover,
+.pc-record-link:focus-visible {
+  text-decoration-thickness: 2px;
+}
 .pc-responsive-table .pc-record-action-cell {
   white-space: nowrap;
 }
@@ -5234,6 +5359,9 @@ body.portal-open {
   min-width: 0;
 }
 @media (max-width: 760px) {
+  .admin-speaker-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .pc-data-grid-toolbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

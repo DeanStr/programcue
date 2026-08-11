@@ -135,6 +135,11 @@ export default [
     route("admin/review", "routes/evaluation-admin.tsx"),
     route("admin/speakers", "routes/admin-speakers.tsx"),
     route(
+      "admin/speakers/:personId/files/:assetId",
+      "routes/admin-speaker-file-download.ts",
+    ),
+    route("admin/speakers/:personId", "routes/admin-speaker-detail.tsx"),
+    route(
       "admin/tasks/files/:assetId/:versionId",
       "routes/admin-task-file-download.ts",
     ),

@@ -8,13 +8,16 @@ import { loader as publicCalendarLoader } from "~/routes/api-public-calendar";
 import { loader as publicProgrammeLoader } from "~/routes/api-public-programme";
 import {
   action as publicProgrammePageAction,
+  descriptionSnippet,
   itineraryCookie,
   loader as publicProgrammePageLoader,
 } from "~/routes/public-programme";
 import {
+  assertPublishedSpeakerGraphIntegrity,
   PublicProgrammeService,
   PublishedProgrammeItineraryNotFoundError,
   PublishedProgrammeSnapshotInvariantError,
+  PublishedProgrammeSpeakerInvariantError,
   readCookie,
 } from "./public-programme-service.server";
 
@@ -167,6 +170,26 @@ describe("published programme and itinerary", () => {
     expect(
       programme?.sessions.every((session) => session.speakerNames.length > 0),
     ).toBe(true);
+    expect(() =>
+      assertPublishedSpeakerGraphIntegrity(
+        programme!.version.id,
+        [
+          {
+            ...programme!.sessions[0],
+            speakerIds: [
+              ...programme!.sessions[0].speakerIds,
+              "missing-person",
+            ],
+            speakerNames: [
+              ...programme!.sessions[0].speakerNames,
+              "Missing Person",
+            ],
+          },
+          ...programme!.sessions.slice(1),
+        ],
+        programme!.speakers,
+      ),
+    ).toThrow(PublishedProgrammeSpeakerInvariantError);
 
     const publicSessionId = programme!.sessions[0].id;
     await env.DB.batch([
@@ -180,7 +203,7 @@ describe("published programme and itinerary", () => {
         INSERT INTO people (
           id, email, display_name, email_verified, profile_status, created_at, updated_at
         ) VALUES ('programme-speaker-early', 'programme-speaker-early@example.com',
-          'Earlier Co-speaker', 1, 'published', unixepoch(), unixepoch())
+          'Earlier || Co-speaker', 1, 'published', unixepoch(), unixepoch())
       `),
       env.DB.prepare(
         `
@@ -203,7 +226,7 @@ describe("published programme and itinerary", () => {
       "programme-speaker-late",
     ]);
     expect(orderedSession.speakerNames.slice(-2)).toEqual([
-      "Earlier Co-speaker",
+      "Earlier || Co-speaker",
       "Later Co-speaker",
     ]);
 
@@ -1040,6 +1063,24 @@ describe("published programme and itinerary", () => {
         "program_cue_itinerary",
       ),
     ).toBeNull();
+  });
+
+  it("truncates long public descriptions on a word boundary and leaves short ones intact", () => {
+    const short = "A practical session about accessible programme design.";
+    expect(descriptionSnippet(short)).toBe(short);
+    expect(descriptionSnippet(" Collapsed   whitespace\nsnippet ")).toBe(
+      "Collapsed whitespace snippet",
+    );
+
+    const long = `${"word ".repeat(80)}end`;
+    const snippet = descriptionSnippet(long);
+    expect(snippet.endsWith("…")).toBe(true);
+    expect(snippet.length).toBeLessThanOrEqual(181);
+    expect(snippet.slice(0, -1)).not.toMatch(/\s$/u);
+    expect(long.startsWith(snippet.slice(0, -1))).toBe(true);
+
+    const unbroken = "x".repeat(400);
+    expect(descriptionSnippet(unbroken)).toBe(`${"x".repeat(180)}…`);
   });
 
   it("returns no programme for an unpublished event", async () => {

@@ -70,6 +70,75 @@ test("an administrator demo identity cannot use a speaker-owned portal", async (
   await expect(page.getByText(/do not have permission/i)).toBeVisible();
 });
 
+test("organiser speaker detail edits the profile and keeps a durable save confirmation", async ({
+  page,
+}) => {
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/admin/speakers");
+  await page.getByRole("link", { name: "Priya Shah" }).click();
+  await expect(page).toHaveURL(/\/admin\/speakers\/person-demo-speaker$/u);
+  await expect(
+    page.getByRole("heading", { name: "Priya Shah", level: 1 }),
+  ).toBeVisible();
+
+  await expect(
+    page.getByRole("heading", { name: "Linked sessions" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: /Designing inclusive event technology/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Uploaded files and versions" }),
+  ).toBeVisible();
+
+  const notice = page.locator(".pc-status-notice");
+  await page.getByLabel("Job title").fill("Head of Experience Design");
+  await page.getByLabel("Profile status").selectOption("published");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(notice).toContainText("Saved to D1 as revision");
+
+  // The durable confirmation is server state, so it survives a reload while the
+  // transient action notice does not.
+  await page.reload();
+  await expect(page.getByLabel("Job title")).toHaveValue(
+    "Head of Experience Design",
+  );
+  await expect(page.getByText(/Last saved .* · revision \d+/)).toBeVisible();
+  await expect(notice).toHaveCount(0);
+
+  // A second organiser holding the previous revision is refused rather than
+  // silently overwriting the saved profile.
+  const stalePage = await page.context().newPage();
+  await stalePage.goto("/admin/speakers/person-demo-speaker");
+  await page.getByLabel("Name pronunciation").fill("PREE-yah SHAH");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(notice).toContainText("Saved to D1");
+  await stalePage.getByLabel("Job title").fill("Stale Organiser Title");
+  await stalePage.getByRole("button", { name: "Save profile" }).click();
+  await expect(stalePage.getByRole("alert")).toContainText(
+    "changed after the page loaded",
+  );
+  await stalePage.close();
+  await page.reload();
+  await expect(page.getByLabel("Job title")).toHaveValue(
+    "Head of Experience Design",
+  );
+
+  // Restore the seeded demo identity for later specs.
+  await page.getByLabel("Job title").fill("Director of Experience Design");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(notice).toContainText("Saved to D1 as revision");
+});
+
 test("administrator speaker filters use the event-scoped server list", async ({
   page,
 }) => {

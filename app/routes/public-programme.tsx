@@ -12,6 +12,7 @@ import {
   PublishedProgrammeSessionNotFoundError,
   PublicProgrammeService,
   readCookie,
+  type PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
 import { createAuth } from "~/platform/auth/auth.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -325,6 +326,45 @@ function formatTime(epoch: number, timezone: string) {
   }).format(new Date(epoch * 1_000));
 }
 
+const DESCRIPTION_SNIPPET_LENGTH = 180;
+
+export function descriptionSnippet(description: string) {
+  const collapsed = normaliseDescription(description);
+  if (collapsed.length <= DESCRIPTION_SNIPPET_LENGTH) return collapsed;
+  const cut = collapsed.slice(0, DESCRIPTION_SNIPPET_LENGTH);
+  const boundary = cut.lastIndexOf(" ");
+  return `${(boundary > DESCRIPTION_SNIPPET_LENGTH / 2 ? cut.slice(0, boundary) : cut).trimEnd()}…`;
+}
+
+function normaliseDescription(description: string) {
+  return description.replace(/\s+/gu, " ").trim();
+}
+
+function initials(name: string) {
+  return (
+    name
+      .split(/\s+/u)
+      .map((part) => part[0])
+      .filter(Boolean)
+      .join("")
+      .slice(0, 2) || "PC"
+  );
+}
+
+function distinctSorted(values: Array<string | null>) {
+  return [
+    ...new Set(values.filter((value): value is string => Boolean(value))),
+  ].sort((left, right) => left.localeCompare(right));
+}
+
+function speakerAffiliation(
+  speaker: Pick<PublishedSpeaker, "jobTitle" | "organisationName">,
+) {
+  return [speaker.jobTitle, speaker.organisationName]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
   const { programme } = loaderData;
   const location = useLocation();
@@ -365,10 +405,35 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
       ? formatDay(initialEmbedDay.startsAt, programme.event.timezone)
       : "All days",
   );
-  const [selectedId, setSelectedId] = useState(programme.sessions[0]?.id ?? "");
-  const [selectedSpeakerId, setSelectedSpeakerId] = useState(
-    programme.sessions[0]?.speakerIds[0] ?? programme.speakers[0]?.id ?? "",
+  const [track, setTrack] = useState("");
+  const [format, setFormat] = useState("");
+  const [room, setRoom] = useState("");
+  const [expandedDescriptions, setExpandedDescriptions] = useState<string[]>(
+    [],
   );
+  const tracks = useMemo(
+    () => distinctSorted(programme.sessions.map((session) => session.track)),
+    [programme.sessions],
+  );
+  const formats = useMemo(
+    () => distinctSorted(programme.sessions.map((session) => session.format)),
+    [programme.sessions],
+  );
+  const rooms = useMemo(
+    () => distinctSorted(programme.sessions.map((session) => session.room)),
+    [programme.sessions],
+  );
+  const speakerById = useMemo(
+    () =>
+      new Map(
+        programme.speakers.map((speaker) => [speaker.id, speaker] as const),
+      ),
+    [programme.speakers],
+  );
+  const [selectedId, setSelectedId] = useState(programme.sessions[0]?.id ?? "");
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
+  const speakerProfileRef = useRef<HTMLElement | null>(null);
+  const speakerProfileReturnFocusRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!embedded) return;
     const publishHeight = () => {
@@ -405,40 +470,63 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
       if (linked) setSelectedSpeakerId(linked.id);
     }
   }, [location.hash, programme.sessions, programme.speakers]);
-  const visible = useMemo(
+  const normalisedQuery = query.trim().toLocaleLowerCase();
+  const sessionsMatchingFacets = useMemo(
     () =>
       programme.sessions.filter((session) => {
         const matchesDay =
           day === "All days" ||
           formatDay(session.startsAt, programme.event.timezone) === day;
-        const matchesTrack =
+        const matchesEmbedTrack =
           !embedOptions.track || session.track === embedOptions.track;
-        const haystack = [
+        const matchesTrack = !track || session.track === track;
+        const matchesFormat = !format || session.format === format;
+        const matchesRoom = !room || session.room === room;
+        return (
+          matchesDay &&
+          matchesEmbedTrack &&
+          matchesTrack &&
+          matchesFormat &&
+          matchesRoom
+        );
+      }),
+    [day, embedOptions.track, format, programme, room, track],
+  );
+  const visible = useMemo(
+    () =>
+      sessionsMatchingFacets.filter((session) =>
+        [
           session.title,
+          session.description,
           session.speakerNames.join(" "),
           session.track,
           session.format,
           session.room,
         ]
           .join(" ")
-          .toLowerCase();
-        return (
-          matchesDay &&
-          matchesTrack &&
-          haystack.includes(query.trim().toLowerCase())
-        );
-      }),
-    [day, embedOptions.track, programme, query],
+          .toLocaleLowerCase()
+          .includes(normalisedQuery),
+      ),
+    [normalisedQuery, sessionsMatchingFacets],
   );
+  const sessionFiltersActive =
+    day !== "All days" || Boolean(track) || Boolean(format) || Boolean(room);
+  const filtersActive = sessionFiltersActive || query.trim() !== "";
   const selected =
     visible.find((session) => session.id === selectedId) ?? visible[0] ?? null;
   const visibleSessionIds = new Set(visible.map((session) => session.id));
+  const facetSpeakerIds = new Set(
+    sessionsMatchingFacets.flatMap((session) => session.speakerIds),
+  );
   const visibleSpeakerIds = new Set(
     visible.flatMap((session) => session.speakerIds),
   );
-  const visibleSpeakers = programme.speakers.filter(
-    (speaker) =>
-      (!embedded || visibleSpeakerIds.has(speaker.id)) &&
+  const visibleSpeakers = programme.speakers.filter((speaker) => {
+    const matchesFacets =
+      (!embedded && !sessionFiltersActive) || facetSpeakerIds.has(speaker.id);
+    const matchesQuery =
+      !normalisedQuery ||
+      visibleSpeakerIds.has(speaker.id) ||
       [
         speaker.displayName,
         speaker.jobTitle,
@@ -447,12 +535,18 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
       ]
         .join(" ")
         .toLocaleLowerCase()
-        .includes(query.trim().toLocaleLowerCase()),
-  );
+        .includes(normalisedQuery);
+    return matchesFacets && matchesQuery;
+  });
   const selectedSpeaker =
-    visibleSpeakers.find((speaker) => speaker.id === selectedSpeakerId) ??
-    visibleSpeakers[0] ??
-    null;
+    visibleSpeakers.find((speaker) => speaker.id === selectedSpeakerId) ?? null;
+  const selectedSpeakerSessions = selectedSpeaker
+    ? programme.sessions.filter(
+        (session) =>
+          selectedSpeaker.sessionIds.includes(session.id) &&
+          visibleSessionIds.has(session.id),
+      )
+    : [];
   const savedSessions = programme.sessions.filter((session) =>
     saved.includes(session.id),
   );
@@ -472,6 +566,60 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
     }
     previousFetcherState.current = fetcher.state;
   }, [fetcher.state]);
+
+  // Opening a speaker profile moves reading position to the panel; closing it
+  // returns focus to the exact control that opened it.
+  useEffect(() => {
+    if (selectedSpeakerId) speakerProfileRef.current?.focus();
+  }, [selectedSpeakerId]);
+
+  // Do not silently reopen a profile if later filter changes remove its
+  // speaker from the result set and those filters are subsequently cleared.
+  useEffect(() => {
+    if (selectedSpeakerId && !selectedSpeaker) {
+      setSelectedSpeakerId("");
+      speakerProfileReturnFocusRef.current = null;
+    }
+  }, [selectedSpeaker, selectedSpeakerId]);
+
+  function openSpeakerProfile(speakerId: string, trigger: HTMLElement) {
+    speakerProfileReturnFocusRef.current = trigger;
+    setSelectedSpeakerId(speakerId);
+  }
+
+  function closeSpeakerProfile() {
+    const returnFocus = speakerProfileReturnFocusRef.current;
+    const fallbackFocus = selectedSpeakerId
+      ? document.getElementById(`speaker-profile-link-${selectedSpeakerId}`)
+      : null;
+    setSelectedSpeakerId("");
+    speakerProfileReturnFocusRef.current = null;
+    requestAnimationFrame(() => {
+      if (returnFocus?.isConnected) returnFocus.focus();
+      else if (fallbackFocus?.isConnected) fallbackFocus.focus();
+    });
+  }
+
+  function toggleDescription(sessionId: string) {
+    setExpandedDescriptions((current) =>
+      current.includes(sessionId)
+        ? current.filter((value) => value !== sessionId)
+        : [...current, sessionId],
+    );
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setDay("All days");
+    setTrack("");
+    setFormat("");
+    setRoom("");
+  }
+
+  function selectSavedSession(sessionId: string) {
+    if (!visibleSessionIds.has(sessionId)) clearFilters();
+    setSelectedId(sessionId);
+  }
 
   function toggle(sessionId: string) {
     if (shared) return;
@@ -601,77 +749,189 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                 <option key={value}>{value}</option>
               ))}
             </select>
+            {!embedOptions.track && tracks.length > 1 ? (
+              <select
+                className="select"
+                value={track}
+                onChange={(event) => setTrack(event.target.value)}
+                aria-label="Filter by track"
+              >
+                <option value="">All tracks</option>
+                {tracks.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            {formats.length > 1 ? (
+              <select
+                className="select"
+                value={format}
+                onChange={(event) => setFormat(event.target.value)}
+                aria-label="Filter by format"
+              >
+                <option value="">All formats</option>
+                {formats.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            {rooms.length > 1 ? (
+              <select
+                className="select"
+                value={room}
+                onChange={(event) => setRoom(event.target.value)}
+                aria-label="Filter by room"
+              >
+                <option value="">All rooms</option>
+                {rooms.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <button
               type="button"
               className="btn"
-              onClick={() => {
-                setQuery("");
-                setDay("All days");
-              }}
+              onClick={clearFilters}
+              disabled={!filtersActive}
             >
               Clear filters
             </button>
           </div>
+          <p className="public-filter-summary help" role="status">
+            Showing {visible.length} of {programme.sessions.length} published
+            session{programme.sessions.length === 1 ? "" : "s"}
+            {filtersActive ? " for the current filters" : ""}.
+          </p>
           <div className="programme-list">
             {visible.length ? (
-              visible.map((session) => (
-                <button
-                  type="button"
-                  id={`session-${session.slug}`}
-                  className={`programme-row${session.id === selectedId ? " active" : ""}`}
-                  key={session.id}
-                  aria-pressed={session.id === selectedId}
-                  onClick={() => {
-                    setSelectedId(session.id);
-                    if (session.speakerIds[0])
-                      setSelectedSpeakerId(session.speakerIds[0]);
-                  }}
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    borderTop: 0,
-                    borderLeft: 0,
-                    borderRight: 0,
-                  }}
-                >
-                  <div>
-                    <strong>
-                      {formatTime(session.startsAt, programme.event.timezone)}
-                    </strong>
-                    <small className="subtle" style={{ display: "block" }}>
-                      {formatDay(session.startsAt, programme.event.timezone)}
-                    </small>
-                  </div>
-                  <div>
-                    <span className="pill">{session.format}</span>
-                    <h3>{session.title}</h3>
-                    <div className="speaker">
-                      {session.speakerNames.join(", ") ||
-                        "Speaker to be announced"}
-                    </div>
-                  </div>
-                  <div className="room-col">
-                    <strong>{session.room}</strong>
-                    <small className="subtle" style={{ display: "block" }}>
-                      {[session.building, session.level]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </small>
-                  </div>
-                  <div className="track-col">{session.track}</div>
-                  <div>
-                    {!embedded && saved.includes(session.id) ? (
-                      <span className="status success">Saved ✓</span>
-                    ) : !embedded && !shared ? (
-                      <span className="pill">＋</span>
+              visible.map((session) => {
+                const sessionSpeakers = session.speakerIds.map(
+                  (speakerId, index) => {
+                    const speaker = speakerById.get(speakerId)!;
+                    return {
+                      id: speakerId,
+                      name: session.speakerNames[index]!,
+                      affiliation: speakerAffiliation(speaker),
+                    };
+                  },
+                );
+                const description = normaliseDescription(session.description);
+                const snippet = descriptionSnippet(description);
+                const expanded = expandedDescriptions.includes(session.id);
+                return (
+                  <div
+                    className={`programme-entry${session.id === selected?.id ? " active" : ""}`}
+                    key={session.id}
+                  >
+                    <button
+                      type="button"
+                      id={`session-${session.slug}`}
+                      className={`programme-row${session.id === selected?.id ? " active" : ""}`}
+                      aria-pressed={session.id === selected?.id}
+                      onClick={() => setSelectedId(session.id)}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        borderTop: 0,
+                        borderLeft: 0,
+                        borderRight: 0,
+                      }}
+                    >
+                      <div>
+                        <strong>
+                          {formatTime(
+                            session.startsAt,
+                            programme.event.timezone,
+                          )}
+                        </strong>
+                        <small className="subtle" style={{ display: "block" }}>
+                          {formatDay(
+                            session.startsAt,
+                            programme.event.timezone,
+                          )}
+                        </small>
+                      </div>
+                      <div>
+                        <span className="pill">{session.format}</span>
+                        <h3>{session.title}</h3>
+                        <div className="programme-row-speakers">
+                          {sessionSpeakers.length ? (
+                            sessionSpeakers.map((speaker) => (
+                              <div
+                                className="programme-row-speaker"
+                                key={speaker.id}
+                              >
+                                <span className="speaker">{speaker.name}</span>
+                                {speaker.affiliation ? (
+                                  <small className="subtle programme-row-affiliation">
+                                    {" "}
+                                    <span aria-hidden="true">— </span>
+                                    {speaker.affiliation}
+                                  </small>
+                                ) : null}
+                              </div>
+                            ))
+                          ) : (
+                            <span className="speaker">
+                              Speaker to be announced
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="room-col">
+                        <strong>{session.room}</strong>
+                        <small className="subtle" style={{ display: "block" }}>
+                          {[session.building, session.level]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </small>
+                      </div>
+                      <div className="track-col">{session.track}</div>
+                      <div>
+                        {!embedded && saved.includes(session.id) ? (
+                          <span className="status success">Saved ✓</span>
+                        ) : !embedded && !shared ? (
+                          <span className="pill">＋</span>
+                        ) : null}
+                      </div>
+                    </button>
+                    {snippet ? (
+                      <div className="programme-entry-description">
+                        <p id={`session-description-${session.id}`}>
+                          {expanded ? description : snippet}
+                        </p>
+                        {snippet === description ? null : (
+                          <button
+                            type="button"
+                            className="btn small"
+                            aria-expanded={expanded}
+                            aria-controls={`session-description-${session.id}`}
+                            aria-label={`${expanded ? "Show less" : "Show more"} of the ${session.title} description`}
+                            onClick={() => toggleDescription(session.id)}
+                          >
+                            {expanded ? "Show less" : "Show more"}
+                          </button>
+                        )}
+                      </div>
                     ) : null}
                   </div>
-                </button>
-              ))
+                );
+              })
             ) : (
               <section className="card pad">
                 <h2>No matching sessions</h2>
                 <p className="subtle">Clear a filter or broaden the search.</p>
+                {filtersActive ? (
+                  <button type="button" className="btn" onClick={clearFilters}>
+                    Clear filters
+                  </button>
+                ) : null}
               </section>
             )}
           </div>
@@ -722,11 +982,23 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                         </p>
                       </div>
                     </div>
-                    <p>{speaker.biography || "Biography coming soon."}</p>
+                    <p>
+                      {speaker.biography
+                        ? descriptionSnippet(speaker.biography)
+                        : "Biography coming soon."}
+                    </p>
+                    <p className="help">
+                      {speaker.sessionIds.length} session
+                      {speaker.sessionIds.length === 1 ? "" : "s"}
+                    </p>
                     <a
                       className="btn small"
-                      href={`#speaker-${speaker.id}`}
-                      onClick={() => setSelectedSpeakerId(speaker.id)}
+                      id={`speaker-profile-link-${speaker.id}`}
+                      href="#programme-speaker-profile"
+                      aria-label={`View profile and sessions for ${speaker.displayName}`}
+                      onClick={(event) =>
+                        openSpeakerProfile(speaker.id, event.currentTarget)
+                      }
                     >
                       View profile and sessions
                     </a>
@@ -739,18 +1011,44 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
               </div>
             )}
             {selectedSpeaker ? (
-              <article className="card pad mt" aria-live="polite">
+              <article
+                className="card pad mt"
+                id="programme-speaker-profile"
+                aria-live="polite"
+                aria-labelledby="programme-speaker-profile-name"
+                tabIndex={-1}
+                ref={speakerProfileRef}
+              >
                 <div className="card-title">
                   <div>
                     <span className="pill">Speaker profile</span>
-                    <h2>{selectedSpeaker.displayName}</h2>
+                    <h2 id="programme-speaker-profile-name">
+                      {selectedSpeaker.displayName}
+                    </h2>
+                    <p className="help">
+                      {[
+                        selectedSpeaker.jobTitle,
+                        selectedSpeaker.organisationName,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "Role and organisation to be confirmed"}
+                    </p>
                   </div>
-                  <a
-                    className="btn small"
-                    href={`#speaker-${selectedSpeaker.id}`}
-                  >
-                    Share profile link
-                  </a>
+                  <div className="public-profile-actions">
+                    <a
+                      className="btn small"
+                      href={`#speaker-${selectedSpeaker.id}`}
+                    >
+                      Share profile link
+                    </a>
+                    <button
+                      type="button"
+                      className="btn small"
+                      onClick={closeSpeakerProfile}
+                    >
+                      Close profile
+                    </button>
+                  </div>
                 </div>
                 {selectedSpeaker.pronunciation ? (
                   <p className="help">
@@ -758,15 +1056,15 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                   </p>
                 ) : null}
                 <p>{selectedSpeaker.biography || "Biography coming soon."}</p>
-                <h3>Sessions</h3>
+                <h3>
+                  Sessions{" "}
+                  <span className="status info">
+                    {selectedSpeakerSessions.length}
+                  </span>
+                </h3>
                 <div className="stack">
-                  {programme.sessions
-                    .filter(
-                      (session) =>
-                        selectedSpeaker.sessionIds.includes(session.id) &&
-                        (!embedded || visibleSessionIds.has(session.id)),
-                    )
-                    .map((session) => (
+                  {selectedSpeakerSessions.length ? (
+                    selectedSpeakerSessions.map((session) => (
                       <a
                         href={`#session-${session.slug}`}
                         key={session.id}
@@ -775,9 +1073,14 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                         {formatDay(session.startsAt, programme.event.timezone)}{" "}
                         ·{" "}
                         {formatTime(session.startsAt, programme.event.timezone)}{" "}
-                        · {session.title}
+                        · {session.title} · {session.room}
                       </a>
-                    ))}
+                    ))
+                  ) : (
+                    <p className="subtle">
+                      No sessions match the current filters.
+                    </p>
+                  )}
                 </div>
               </article>
             ) : null}
@@ -822,24 +1125,58 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
               ) : null}
               {savedSessions.length ? (
                 <>
-                  {savedSessions.map((session) => (
-                    <button
-                      type="button"
-                      className="itinerary-item"
-                      style={{ width: "100%", textAlign: "left" }}
-                      key={session.id}
-                      aria-pressed={session.id === selectedId}
-                      onClick={() => setSelectedId(session.id)}
-                    >
-                      <strong>
-                        {formatDay(session.startsAt, programme.event.timezone)}{" "}
-                        ·{" "}
-                        {formatTime(session.startsAt, programme.event.timezone)}
-                      </strong>
-                      <p>{session.title}</p>
-                      <small>{session.room}</small>
-                    </button>
-                  ))}
+                  {savedSessions.map((session) => {
+                    const sessionSpeakers = session.speakerIds.map(
+                      (speakerId, index) => {
+                        const speaker = speakerById.get(speakerId)!;
+                        return {
+                          id: speakerId,
+                          name: session.speakerNames[index]!,
+                          affiliation: speakerAffiliation(speaker),
+                        };
+                      },
+                    );
+                    return (
+                      <button
+                        type="button"
+                        className="itinerary-item"
+                        style={{ width: "100%", textAlign: "left" }}
+                        key={session.id}
+                        aria-pressed={session.id === selected?.id}
+                        onClick={() => selectSavedSession(session.id)}
+                      >
+                        <strong>
+                          {formatDay(
+                            session.startsAt,
+                            programme.event.timezone,
+                          )}{" "}
+                          ·{" "}
+                          {formatTime(
+                            session.startsAt,
+                            programme.event.timezone,
+                          )}
+                        </strong>
+                        <span className="itinerary-title">{session.title}</span>
+                        <span className="itinerary-meta">
+                          {[session.room, session.format, session.track]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                        {sessionSpeakers.length ? (
+                          <span className="itinerary-speakers">
+                            {sessionSpeakers.map((speaker) => (
+                              <span key={speaker.id}>
+                                {speaker.name}
+                                {speaker.affiliation
+                                  ? ` — ${speaker.affiliation}`
+                                  : ""}
+                              </span>
+                            ))}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                   {!shared ? (
                     <fetcher.Form method="post" className="mt">
                       <input type="hidden" name="intent" value="share" />
@@ -869,20 +1206,48 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                 <span className="pill">{selected.format}</span>
               </div>
               <h2>{selected.title}</h2>
-              <div className="row-main mb">
-                <span className="avatar">
-                  {selected.speakerNames[0]
-                    ?.split(" ")
-                    .map((part) => part[0])
-                    .join("") || "PC"}
-                </span>
-                <div>
-                  <strong>
-                    {selected.speakerNames.join(", ") ||
-                      "Speaker to be announced"}
-                  </strong>
-                  <small>{selected.track}</small>
-                </div>
+              <div className="stack mb">
+                {selected.speakerIds.length ? (
+                  selected.speakerIds.map((speakerId, index) => {
+                    const speaker = speakerById.get(speakerId)!;
+                    const name = selected.speakerNames[index]!;
+                    const affiliation = speakerAffiliation(speaker);
+                    return (
+                      <div className="row-main" key={speakerId}>
+                        {speaker.imageUrl ? (
+                          <img
+                            className="avatar"
+                            src={speaker.imageUrl}
+                            alt=""
+                            width={40}
+                            height={40}
+                          />
+                        ) : (
+                          <span className="avatar" aria-hidden="true">
+                            {initials(name)}
+                          </span>
+                        )}
+                        <div>
+                          <strong>{name}</strong>
+                          <small>
+                            {affiliation ||
+                              "Role and organisation not provided"}
+                          </small>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="row-main">
+                    <span className="avatar" aria-hidden="true">
+                      PC
+                    </span>
+                    <div>
+                      <strong>Speaker to be announced</strong>
+                      <small>{selected.track}</small>
+                    </div>
+                  </div>
+                )}
               </div>
               {!embedded && !shared ? (
                 <button
@@ -905,7 +1270,7 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                 </button>
               ) : null}
               <h3>About this session</h3>
-              <p>{selected.description}</p>
+              <p>{selected.description || "A description is coming soon."}</p>
               <Link
                 className="btn small"
                 to={`/public/programme/${programme.event.slug}#session-${selected.slug}`}
@@ -918,7 +1283,9 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                     <a
                       key={speakerId}
                       href={`#speaker-${speakerId}`}
-                      onClick={() => setSelectedSpeakerId(speakerId)}
+                      onClick={(event) =>
+                        openSpeakerProfile(speakerId, event.currentTarget)
+                      }
                     >
                       View {selected.speakerNames[index]}’s profile
                     </a>
@@ -927,13 +1294,24 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
               ) : null}
               <div className="divider" />
               <h3>Details</h3>
-              <p>
-                {formatDay(selected.startsAt, programme.event.timezone)} ·{" "}
-                {formatTime(selected.startsAt, programme.event.timezone)}–
-                {formatTime(selected.endsAt, programme.event.timezone)}
-                <br />
-                {selected.room}
-              </p>
+              <dl className="public-detail-list">
+                <dt>When</dt>
+                <dd>
+                  {formatDay(selected.startsAt, programme.event.timezone)} ·{" "}
+                  {formatTime(selected.startsAt, programme.event.timezone)}–
+                  {formatTime(selected.endsAt, programme.event.timezone)}
+                </dd>
+                <dt>Where</dt>
+                <dd>
+                  {[selected.room, selected.building, selected.level]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </dd>
+                <dt>Track</dt>
+                <dd>{selected.track ?? "Not assigned to a public track"}</dd>
+                <dt>Format</dt>
+                <dd>{selected.format}</dd>
+              </dl>
             </section>
           ) : null}
         </aside>

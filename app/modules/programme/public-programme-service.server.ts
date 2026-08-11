@@ -100,6 +100,122 @@ export class PublishedProgrammeSnapshotInvariantError extends Error {
   }
 }
 
+export class PublishedProgrammeSpeakerInvariantError extends Error {
+  constructor(versionId: string, detail: string) {
+    super(
+      `Published schedule version ${versionId} has an invalid speaker graph: ${detail}`,
+    );
+    this.name = "PublishedProgrammeSpeakerInvariantError";
+  }
+}
+
+export function assertPublishedSpeakerGraphIntegrity(
+  versionId: string,
+  sessions: PublishedSession[],
+  speakers: PublishedSpeaker[],
+) {
+  const sessionById = new Map(sessions.map((session) => [session.id, session]));
+  const speakerById = new Map<string, PublishedSpeaker>();
+  for (const speaker of speakers) {
+    if (speakerById.has(speaker.id)) {
+      throw new PublishedProgrammeSpeakerInvariantError(
+        versionId,
+        `speaker ${speaker.id} is duplicated`,
+      );
+    }
+    if (!speaker.displayName.trim()) {
+      throw new PublishedProgrammeSpeakerInvariantError(
+        versionId,
+        `speaker ${speaker.id} has no display name`,
+      );
+    }
+    speakerById.set(speaker.id, speaker);
+  }
+
+  for (const session of sessions) {
+    if (session.speakerIds.length !== session.speakerNames.length) {
+      throw new PublishedProgrammeSpeakerInvariantError(
+        versionId,
+        `session ${session.id} has ${session.speakerIds.length} speaker IDs but ${session.speakerNames.length} speaker names`,
+      );
+    }
+    const seenSpeakerIds = new Set<string>();
+    session.speakerIds.forEach((speakerId, index) => {
+      if (seenSpeakerIds.has(speakerId)) {
+        throw new PublishedProgrammeSpeakerInvariantError(
+          versionId,
+          `session ${session.id} links speaker ${speakerId} more than once`,
+        );
+      }
+      seenSpeakerIds.add(speakerId);
+      const speaker = speakerById.get(speakerId);
+      if (!speaker) {
+        throw new PublishedProgrammeSpeakerInvariantError(
+          versionId,
+          `session ${session.id} links missing published speaker ${speakerId}`,
+        );
+      }
+      if (session.speakerNames[index] !== speaker.displayName) {
+        throw new PublishedProgrammeSpeakerInvariantError(
+          versionId,
+          `session ${session.id} has a stale or mismatched name for speaker ${speakerId}`,
+        );
+      }
+      if (!speaker.sessionIds.includes(session.id)) {
+        throw new PublishedProgrammeSpeakerInvariantError(
+          versionId,
+          `speaker ${speakerId} does not link back to session ${session.id}`,
+        );
+      }
+    });
+  }
+
+  for (const speaker of speakers) {
+    for (const sessionId of speaker.sessionIds) {
+      const session = sessionById.get(sessionId);
+      if (!session || !session.speakerIds.includes(speaker.id)) {
+        throw new PublishedProgrammeSpeakerInvariantError(
+          versionId,
+          `speaker ${speaker.id} links invalid session ${sessionId}`,
+        );
+      }
+    }
+  }
+}
+
+function parsePublishedSpeakerArray(
+  versionId: string,
+  sessionId: string,
+  field: "speaker IDs" | "speaker names",
+  value: string | null,
+) {
+  if (value === null) {
+    throw new PublishedProgrammeSpeakerInvariantError(
+      versionId,
+      `session ${sessionId} did not return ${field}`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new PublishedProgrammeSpeakerInvariantError(
+      versionId,
+      `session ${sessionId} returned malformed ${field}`,
+    );
+  }
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((entry) => typeof entry !== "string")
+  ) {
+    throw new PublishedProgrammeSpeakerInvariantError(
+      versionId,
+      `session ${sessionId} returned invalid ${field}`,
+    );
+  }
+  return parsed;
+}
+
 async function sha256(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
   return Array.from(new Uint8Array(digest), (byte) =>
@@ -167,6 +283,11 @@ async function publicContentRevision(
 async function withPublicContentRevision(
   programme: Omit<PublishedProgramme, "contentRevision">,
 ): Promise<PublishedProgramme> {
+  assertPublishedSpeakerGraphIntegrity(
+    programme.version.id,
+    programme.sessions,
+    programme.speakers,
+  );
   return {
     ...programme,
     contentRevision: await publicContentRevision(programme),
@@ -408,7 +529,21 @@ export class PublicProgrammeService {
         freshness: snapshot.freshness,
       });
     }
-    const snapshotIntegrity = await this.env.DB.prepare(
+    type SnapshotIntegrityRow = { missingContent: number };
+    type PublishedSessionRow = Omit<
+      PublishedSession,
+      "speakerIds" | "speakerNames"
+    > & {
+      speakerIds: string | null;
+      speakerNames: string | null;
+    };
+    type PublishedSpeakerRow = Omit<
+      PublishedSpeaker,
+      "imageUrl" | "sessionIds"
+    > & {
+      sessionIds: string;
+    };
+    const snapshotIntegrityStatement = this.env.DB.prepare(
       `SELECT COUNT(*) AS missingContent
          FROM schedule_entries entry
          LEFT JOIN schedule_session_contents content
@@ -417,28 +552,15 @@ export class PublicProgrammeService {
           AND content.session_id = entry.session_id
         WHERE entry.event_id = ? AND entry.schedule_version_id = ?
           AND content.session_id IS NULL`,
-    )
-      .bind(event.id, version.id)
-      .first<{ missingContent: number }>();
-    if (!snapshotIntegrity) {
-      throw new Error(
-        "Published schedule snapshot integrity query returned no result.",
-      );
-    }
-    if (snapshotIntegrity.missingContent > 0) {
-      throw new PublishedProgrammeSnapshotInvariantError(
-        version.id,
-        snapshotIntegrity.missingContent,
-      );
-    }
-    const rows = await this.env.DB.prepare(
+    ).bind(event.id, version.id);
+    const sessionsStatement = this.env.DB.prepare(
       `
       SELECT s.id, content.slug, content.title,
              COALESCE(content.description, '') AS description, content.format,
              se.starts_at AS startsAt, se.ends_at AS endsAt, r.name AS room, r.building, r.level,
              t.name AS track,
              (
-               SELECT GROUP_CONCAT(ordered.personId, '||')
+               SELECT json_group_array(ordered.personId)
                  FROM (
                    SELECT ss.person_id AS personId
                      FROM session_speakers ss
@@ -449,7 +571,7 @@ export class PublicProgrammeService {
                  ) ordered
              ) AS speakerIds,
              (
-               SELECT GROUP_CONCAT(ordered.displayName, '||')
+               SELECT json_group_array(ordered.displayName)
                  FROM (
                    SELECT p.display_name AS displayName
                      FROM session_speakers ss
@@ -476,15 +598,8 @@ export class PublicProgrammeService {
          AND s.status = 'published' AND content.visibility = 'public'
        ORDER BY se.starts_at, r.position, content.title
     `,
-    )
-      .bind(event.id, version.id)
-      .all<
-        Omit<PublishedSession, "speakerIds" | "speakerNames"> & {
-          speakerIds: string | null;
-          speakerNames: string | null;
-        }
-      >();
-    const speakers = await this.env.DB.prepare(
+    ).bind(event.id, version.id);
+    const speakersStatement = this.env.DB.prepare(
       `
       SELECT p.id, p.display_name AS displayName, p.biography, p.pronunciation,
              p.organisation_name AS organisationName, p.job_title AS jobTitle,
@@ -506,14 +621,30 @@ export class PublicProgrammeService {
        GROUP BY p.id
        ORDER BY p.display_name COLLATE NOCASE, p.id
     `,
-    )
-      .bind(event.id, version.id)
-      .all<
-        Omit<PublishedSpeaker, "imageUrl" | "sessionIds"> & {
-          sessionIds: string;
-        }
-      >();
-    const publishedSpeakers = speakers.results.map((speaker) => ({
+    ).bind(event.id, version.id);
+    // Session rows repeat mutable speaker identity fields. Read the integrity
+    // count and both graph projections in one D1 transaction so a concurrent
+    // profile edit cannot produce a mixed-before-and-after public response.
+    const [snapshotResult, sessionsResult, speakersResult] =
+      await this.env.DB.batch<
+        SnapshotIntegrityRow | PublishedSessionRow | PublishedSpeakerRow
+      >([snapshotIntegrityStatement, sessionsStatement, speakersStatement]);
+    const snapshotIntegrity = snapshotResult.results[0] as
+      SnapshotIntegrityRow | undefined;
+    if (!snapshotIntegrity) {
+      throw new Error(
+        "Published schedule snapshot integrity query returned no result.",
+      );
+    }
+    if (snapshotIntegrity.missingContent > 0) {
+      throw new PublishedProgrammeSnapshotInvariantError(
+        version.id,
+        snapshotIntegrity.missingContent,
+      );
+    }
+    const rows = sessionsResult.results as PublishedSessionRow[];
+    const speakers = speakersResult.results as PublishedSpeakerRow[];
+    const publishedSpeakers = speakers.map((speaker) => ({
       ...speaker,
       imageUrl: null,
       sessionIds: speaker.sessionIds.split("||"),
@@ -521,10 +652,20 @@ export class PublicProgrammeService {
     return withPublicContentRevision({
       event,
       version,
-      sessions: rows.results.map((row) => ({
+      sessions: rows.map((row) => ({
         ...row,
-        speakerIds: row.speakerIds?.split("||") ?? [],
-        speakerNames: row.speakerNames?.split("||") ?? [],
+        speakerIds: parsePublishedSpeakerArray(
+          version.id,
+          row.id,
+          "speaker IDs",
+          row.speakerIds,
+        ),
+        speakerNames: parsePublishedSpeakerArray(
+          version.id,
+          row.id,
+          "speaker names",
+          row.speakerNames,
+        ),
       })),
       speakers: await this.withPublishedHeadshotUrls(
         event,
