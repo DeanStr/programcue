@@ -1,6 +1,10 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { RouterContextProvider } from "react-router";
+import {
+  matchRoutes,
+  RouterContextProvider,
+  type RouteObject,
+} from "react-router";
 
 import routeConfig from "~/routes";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
@@ -65,12 +69,17 @@ beforeEach(async () => {
 });
 
 describe("administration API item reachability", () => {
-  it("registers the concrete item routes ahead of collection fallbacks", () => {
-    const configured = JSON.stringify(routeConfig);
-    expect(configured).toContain("api/v1/events/:eventId/:resource/:itemId");
-    expect(configured).toContain("routes/api-administration-item.ts");
-    expect(configured).toContain("api/v1/events/:eventId/tasks/:taskId");
-    expect(configured).toContain("routes/api-task-item.ts");
+  it("matches concrete task items ahead of administration item fallbacks", () => {
+    const matches = matchRoutes(
+      routeConfig as unknown as RouteObject[],
+      `/api/v1/events/${eventId}/tasks/task-1`,
+    );
+
+    expect(matches).not.toBeNull();
+    expect(matches!.at(-1)?.route).toMatchObject({
+      path: "api/v1/events/:eventId/tasks/:taskId",
+      file: "routes/api-task-item.ts",
+    });
   });
 
   it("reads tenant-scoped people, form, session and schedule-version items", async () => {

@@ -124,4 +124,7 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
     "/admin/communications/compose/00000000-0000-4000-8000-000000000000",
   );
   expect(missingDraft?.status()).toBe(404);
+  await expect(
+    page.getByRole("heading", { name: "Page not found" }),
+  ).toBeVisible();
 });

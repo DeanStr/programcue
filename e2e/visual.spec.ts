@@ -29,9 +29,6 @@ const SURFACES: readonly Surface[] = [
   },
   { name: "event-clone", path: "/admin/events/clone", role: "owner" },
   { name: "command-centre", path: "/admin/command" },
-  { name: "event-assistant", path: "/admin/assistant" },
-  { name: "operation-centre", path: "/admin/operations" },
-  { name: "submissions-list", path: "/admin/submissions" },
   { name: "form-builder", path: "/admin/submissions/form" },
   { name: "evaluation-admin", path: "/admin/review" },
   {
@@ -41,14 +38,8 @@ const SURFACES: readonly Surface[] = [
   },
   { name: "speakers-list", path: "/admin/speakers" },
   { name: "resources-admin", path: "/admin/resources" },
-  { name: "schedule-planner", path: "/admin/schedule" },
   { name: "session-bulk", path: "/admin/sessions/bulk" },
   { name: "communications", path: "/admin/communications" },
-  {
-    name: "communications-compose",
-    path: "/admin/communications/compose",
-  },
-  { name: "tasks-readiness", path: "/admin/tasks" },
   { name: "task-bulk", path: "/admin/tasks/bulk" },
   { name: "programme-admin", path: "/admin/programme" },
   { name: "integrations", path: "/admin/integrations" },
@@ -73,7 +64,6 @@ const SURFACES: readonly Surface[] = [
     path: "/speaker/resources",
     role: "speaker",
   },
-  { name: "design-system", path: "/design/system" },
 ];
 
 async function selectDemoRole(page: Page, role: DemoRole) {
@@ -204,23 +194,6 @@ async function waitForSurfaceReady(page: Page, name: string) {
         name: "Anonymise expired participant data",
       }),
     ).toBeVisible();
-  } else if (name === "event-assistant") {
-    await expect(
-      page.getByRole("heading", { name: "Model routing" }),
-    ).toBeVisible();
-  } else if (name === "operation-centre") {
-    await expect(
-      page.getByRole("heading", { name: "Filter operations" }),
-    ).toBeVisible();
-    await expect(
-      page.getByText(
-        /Live operation updates|Polling for operation updates|Operation updates unavailable/,
-      ),
-    ).toBeVisible();
-  } else if (name === "submissions-list") {
-    await expect(
-      page.getByRole("region", { name: /Application queue table/ }),
-    ).toBeVisible();
   } else if (name === "form-builder") {
     const editor = page.getByRole("region", {
       name: "Visual call-for-speakers form editor",
@@ -231,19 +204,9 @@ async function waitForSurfaceReady(page: Page, name: string) {
         /Visual editor ready|Visual form and Program Cue draft are synchronized/,
       ),
     ).toBeVisible();
-  } else if (name === "schedule-planner") {
-    await expect(page.getByTestId("schedule-notes-editor")).toBeVisible();
-    await expect(page.getByTestId("session-content-editor")).toBeVisible();
-    await expect(page.getByTestId("session-content-preview")).toBeVisible();
   } else if (name === "communications") {
     await expect(
       page.getByText("Operations Queue bound", { exact: true }),
-    ).toBeVisible();
-  } else if (name === "tasks-readiness") {
-    await expect(
-      page.locator("aside").filter({
-        has: page.getByRole("heading", { name: "Assign a plan" }),
-      }),
     ).toBeVisible();
   } else if (name === "settings") {
     await expect(

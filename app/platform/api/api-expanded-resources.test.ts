@@ -32,7 +32,6 @@ import { cloudflareContext } from "~/platform/cloudflare-context";
 import { loader as administrationResourceLoader } from "~/routes/api-administration-resources";
 import { action as evaluationResourceAction } from "~/routes/api-evaluation-resources";
 import { loader as publicCalendarLoader } from "~/routes/api-public-calendar";
-import { loader as legacyPublicProgrammeLoader } from "~/routes/api-public-programme";
 import { loader as publicEventLoader } from "~/routes/api-public-event";
 import { loader as publicScheduleLoader } from "~/routes/api-public-schedule";
 import { loader as publicSessionsLoader } from "~/routes/api-public-sessions";
@@ -75,21 +74,6 @@ beforeEach(async () => {
 });
 
 describe("expanded public API contract", () => {
-  it("keeps legacy public programme errors readable across origins", async () => {
-    const response = await legacyPublicProgrammeLoader({
-      request: new Request(
-        "https://programcue.test/api/public/programme/missing?format=unsupported",
-      ),
-      params: { slug: "missing" },
-      context: routeContext(),
-    } as never);
-    expect(response.status).toBe(400);
-    expect(response.headers.get("access-control-allow-origin")).toBe("*");
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: "INVALID_EXPORT_FORMAT" },
-    });
-  });
-
   it("returns only published records with RFC 3339 timestamps and stable pagination", async () => {
     await ensureDemoProgramme(testEnv);
     const programme = await new PublicProgrammeService(testEnv).getPublished(

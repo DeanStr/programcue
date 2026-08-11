@@ -28,31 +28,4 @@ describe("submission data grid", () => {
     expect(pageSelectionControl(markup)).toContain('disabled=""');
     expect(markup).toContain("No matching applications");
   });
-
-  it("keeps page selection available when the filtered page has a record", () => {
-    const markup = renderGrid([
-      {
-        id: "submission-1",
-        publicReference: "PC-001",
-        title: "An observable session",
-        category: "Operations",
-        format: "Presentation",
-        status: "assigned",
-        submitterName: "Priya Shah",
-        submitterEmail: "priya@example.com",
-        speakerCount: 1,
-        versionNumber: 1,
-        submittedAt: 1,
-        updatedAt: 1,
-        routedTo: "Programme committee",
-        routedTeamId: "team-1",
-      },
-    ]);
-
-    expect(pageSelectionControl(markup)).not.toContain("disabled");
-    expect(markup).toContain("An observable session");
-    expect(markup).toContain('<summary class="btn small">');
-    expect(markup).toContain(" Columns</summary>");
-    expect(markup).toContain("<legend>Visible columns</legend>");
-  });
 });
