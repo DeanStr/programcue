@@ -4,6 +4,10 @@ import { data, Link, useFetcher, useLocation } from "react-router";
 
 import type { Route } from "./+types/public-programme";
 import { TurnstileWidget } from "~/components/turnstile-widget";
+import {
+  ProgrammeEmbedConfigurationError,
+  parseProgrammeEmbedSearchParameters,
+} from "~/modules/programme/programme-embed-configuration";
 import { formatProgrammeEventDay } from "~/modules/programme/programme-presentation";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import {
@@ -77,18 +81,25 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     throw new Response("Published event programme not found", { status: 404 });
   const embedded = new URL(request.url).pathname.startsWith("/embed/");
   const url = new URL(request.url);
-  const embedDay = embedded
-    ? url.searchParams.get("day")?.trim() || null
-    : null;
-  const embedTrack = embedded
-    ? url.searchParams.get("track")?.trim() || null
-    : null;
-  const embedQuery = embedded
-    ? url.searchParams.get("query")?.trim() || ""
-    : "";
-  const embedAccent = embedded
-    ? url.searchParams.get("accent")?.trim() || null
-    : null;
+  let embedOptions;
+  try {
+    embedOptions = parseProgrammeEmbedSearchParameters(
+      embedded ? url.searchParams : new URLSearchParams(),
+    );
+  } catch (error) {
+    if (error instanceof ProgrammeEmbedConfigurationError) {
+      throw new Response(error.message, { status: 400 });
+    }
+    throw error;
+  }
+  const {
+    day: embedDay,
+    track: embedTrack,
+    format: embedFormat,
+    room: embedRoom,
+    query: embedQuery,
+    accent: embedAccent,
+  } = embedOptions;
   if (
     embedDay &&
     (!/^\d{4}-\d{2}-\d{2}$/u.test(embedDay) ||
@@ -104,10 +115,28 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   }
   if (
     embedTrack &&
-    (embedTrack.length > 100 ||
+    (embedTrack.length > 120 ||
       !programme.sessions.some((session) => session.track === embedTrack))
   ) {
     throw new Response("Embed track must identify a published track", {
+      status: 400,
+    });
+  }
+  if (
+    embedFormat &&
+    (embedFormat.length > 120 ||
+      !programme.sessions.some((session) => session.format === embedFormat))
+  ) {
+    throw new Response("Embed format must identify a published format", {
+      status: 400,
+    });
+  }
+  if (
+    embedRoom &&
+    (embedRoom.length > 120 ||
+      !programme.sessions.some((session) => session.room === embedRoom))
+  ) {
+    throw new Response("Embed room must identify a published room", {
       status: 400,
     });
   }
@@ -162,12 +191,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       programme,
       itinerary,
       embedded,
-      embedOptions: {
-        day: embedDay,
-        track: embedTrack,
-        query: embedQuery,
-        accent: embedAccent,
-      },
+      embedOptions,
       signedIn: personId !== null,
       itineraryVerificationRequired,
       turnstileSiteKey: itineraryVerificationRequired
@@ -405,9 +429,9 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
       ? formatDay(initialEmbedDay.startsAt, programme.event.timezone)
       : "All days",
   );
-  const [track, setTrack] = useState("");
-  const [format, setFormat] = useState("");
-  const [room, setRoom] = useState("");
+  const [track, setTrack] = useState(embedOptions.track ?? "");
+  const [format, setFormat] = useState(embedOptions.format ?? "");
+  const [room, setRoom] = useState(embedOptions.room ?? "");
   const [expandedDescriptions, setExpandedDescriptions] = useState<string[]>(
     [],
   );
@@ -434,6 +458,10 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
   const speakerProfileRef = useRef<HTMLElement | null>(null);
   const speakerProfileReturnFocusRef = useRef<HTMLElement | null>(null);
+  const visibleEmbedControls = new Set(embedOptions.controls);
+  const showControl = (control: (typeof embedOptions.controls)[number]) =>
+    !embedded || visibleEmbedControls.has(control);
+  const showSpeakers = !embedded || embedOptions.showSpeakers;
   useEffect(() => {
     if (!embedded) return;
     const publishHeight = () => {
@@ -462,14 +490,14 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
         (session) => session.slug === slug,
       );
       if (linked) setSelectedId(linked.id);
-    } else if (location.hash.startsWith("#speaker-")) {
+    } else if (showSpeakers && location.hash.startsWith("#speaker-")) {
       const personId = location.hash.slice("#speaker-".length);
       const linked = programme.speakers.find(
         (speaker) => speaker.id === personId,
       );
       if (linked) setSelectedSpeakerId(linked.id);
     }
-  }, [location.hash, programme.sessions, programme.speakers]);
+  }, [location.hash, programme.sessions, programme.speakers, showSpeakers]);
   const normalisedQuery = query.trim().toLocaleLowerCase();
   const sessionsMatchingFacets = useMemo(
     () =>
@@ -477,20 +505,12 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
         const matchesDay =
           day === "All days" ||
           formatDay(session.startsAt, programme.event.timezone) === day;
-        const matchesEmbedTrack =
-          !embedOptions.track || session.track === embedOptions.track;
         const matchesTrack = !track || session.track === track;
         const matchesFormat = !format || session.format === format;
         const matchesRoom = !room || session.room === room;
-        return (
-          matchesDay &&
-          matchesEmbedTrack &&
-          matchesTrack &&
-          matchesFormat &&
-          matchesRoom
-        );
+        return matchesDay && matchesTrack && matchesFormat && matchesRoom;
       }),
-    [day, embedOptions.track, format, programme, room, track],
+    [day, format, programme, room, track],
   );
   const visible = useMemo(
     () =>
@@ -512,6 +532,12 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
   const sessionFiltersActive =
     day !== "All days" || Boolean(track) || Boolean(format) || Boolean(room);
   const filtersActive = sessionFiltersActive || query.trim() !== "";
+  const clearableFiltersActive =
+    (showControl("search") && query.trim() !== "") ||
+    (showControl("day") && day !== "All days") ||
+    (showControl("track") && Boolean(track)) ||
+    (showControl("format") && Boolean(format)) ||
+    (showControl("room") && Boolean(room));
   const selected =
     visible.find((session) => session.id === selectedId) ?? visible[0] ?? null;
   const visibleSessionIds = new Set(visible.map((session) => session.id));
@@ -609,11 +635,11 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
   }
 
   function clearFilters() {
-    setQuery("");
-    setDay("All days");
-    setTrack("");
-    setFormat("");
-    setRoom("");
+    if (showControl("search")) setQuery("");
+    if (showControl("day")) setDay("All days");
+    if (showControl("track")) setTrack("");
+    if (showControl("format")) setFormat("");
+    if (showControl("room")) setRoom("");
   }
 
   function selectSavedSession(sessionId: string) {
@@ -635,7 +661,7 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
 
   return (
     <div
-      className={`public-shell event-branded${embedded ? " embedded" : ""}`}
+      className={`public-shell event-branded${embedded ? " embedded" : ""}${embedded && embedOptions.density === "compact" ? " embed-compact" : ""}`}
       style={
         {
           "--event-accent": embedOptions.accent ?? programme.event.brandAccent,
@@ -656,7 +682,7 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
             <a className="active" href="#programme" aria-current="page">
               Programme
             </a>
-            <a href="#speakers">Speakers</a>
+            {showSpeakers ? <a href="#speakers">Speakers</a> : null}
           </nav>
           <details className="public-mobile-nav">
             <summary className="btn small">Browse</summary>
@@ -664,7 +690,7 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
               <a href="#programme" aria-current="page">
                 Programme
               </a>
-              <a href="#speakers">Speakers</a>
+              {showSpeakers ? <a href="#speakers">Speakers</a> : null}
             </nav>
           </details>
           <a className="btn" href="#itinerary">
@@ -726,83 +752,86 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
               <span>The link is read-only. Creating another rotates it.</span>
             </div>
           ) : null}
-          <div className="public-filters">
-            {embedOptions.track ? (
-              <span className="status info">Track · {embedOptions.track}</span>
-            ) : null}
-            <input
-              className="field"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search sessions, speakers, or topics"
-              aria-label="Search sessions, speakers, or topics"
-              style={{ flex: 1 }}
-            />
-            <select
-              className="select"
-              value={day}
-              onChange={(event) => setDay(event.target.value)}
-              aria-label="Filter by day"
-            >
-              <option>All days</option>
-              {days.map((value) => (
-                <option key={value}>{value}</option>
-              ))}
-            </select>
-            {!embedOptions.track && tracks.length > 1 ? (
-              <select
-                className="select"
-                value={track}
-                onChange={(event) => setTrack(event.target.value)}
-                aria-label="Filter by track"
+          {embedOptions.controls.length || !embedded ? (
+            <div className="public-filters">
+              {showControl("search") ? (
+                <input
+                  className="field"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search sessions, speakers, or topics"
+                  aria-label="Search sessions, speakers, or topics"
+                  style={{ flex: 1 }}
+                />
+              ) : null}
+              {showControl("day") ? (
+                <select
+                  className="select"
+                  value={day}
+                  onChange={(event) => setDay(event.target.value)}
+                  aria-label="Filter by day"
+                >
+                  <option>All days</option>
+                  {days.map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
+                </select>
+              ) : null}
+              {showControl("track") && tracks.length > 1 ? (
+                <select
+                  className="select"
+                  value={track}
+                  onChange={(event) => setTrack(event.target.value)}
+                  aria-label="Filter by track"
+                >
+                  <option value="">All tracks</option>
+                  {tracks.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {showControl("format") && formats.length > 1 ? (
+                <select
+                  className="select"
+                  value={format}
+                  onChange={(event) => setFormat(event.target.value)}
+                  aria-label="Filter by format"
+                >
+                  <option value="">All formats</option>
+                  {formats.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {showControl("room") && rooms.length > 1 ? (
+                <select
+                  className="select"
+                  value={room}
+                  onChange={(event) => setRoom(event.target.value)}
+                  aria-label="Filter by room"
+                >
+                  <option value="">All rooms</option>
+                  {rooms.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              <button
+                type="button"
+                className="btn"
+                onClick={clearFilters}
+                disabled={!clearableFiltersActive}
               >
-                <option value="">All tracks</option>
-                {tracks.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            {formats.length > 1 ? (
-              <select
-                className="select"
-                value={format}
-                onChange={(event) => setFormat(event.target.value)}
-                aria-label="Filter by format"
-              >
-                <option value="">All formats</option>
-                {formats.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            {rooms.length > 1 ? (
-              <select
-                className="select"
-                value={room}
-                onChange={(event) => setRoom(event.target.value)}
-                aria-label="Filter by room"
-              >
-                <option value="">All rooms</option>
-                {rooms.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <button
-              type="button"
-              className="btn"
-              onClick={clearFilters}
-              disabled={!filtersActive}
-            >
-              Clear filters
-            </button>
-          </div>
+                Clear filters
+              </button>
+            </div>
+          ) : null}
           <p className="public-filter-summary help" role="status">
             Showing {visible.length} of {programme.sessions.length} published
             session{programme.sessions.length === 1 ? "" : "s"}
@@ -927,7 +956,7 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
               <section className="card pad">
                 <h2>No matching sessions</h2>
                 <p className="subtle">Clear a filter or broaden the search.</p>
-                {filtersActive ? (
+                {clearableFiltersActive ? (
                   <button type="button" className="btn" onClick={clearFilters}>
                     Clear filters
                   </button>
@@ -939,6 +968,7 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
             id="speakers"
             className="mt"
             aria-labelledby="speakers-title"
+            hidden={!showSpeakers}
           >
             <div className="card-title">
               <div>
@@ -1277,7 +1307,7 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
               >
                 Shareable session link
               </Link>
-              {selected.speakerIds.length ? (
+              {showSpeakers && selected.speakerIds.length ? (
                 <div className="stack mt">
                   {selected.speakerIds.map((speakerId, index) => (
                     <a

@@ -13,6 +13,7 @@ export const nodeOnlyTestFiles = [
   "app/modules/communications/communication-time.test.ts",
   "app/modules/evaluations/evaluation-rules.test.ts",
   "app/modules/events/event-configuration.test.ts",
+  "app/modules/programme/programme-embed-configuration.test.ts",
   "app/modules/programme/programme-presentation.test.ts",
   "app/modules/submissions/application-notice.test.ts",
   "app/modules/submissions/form-js-adapter.test.ts",

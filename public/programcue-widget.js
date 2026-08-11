@@ -31,19 +31,32 @@
 
   var widgetOrigin = new URL(script.src, document.baseURI).origin;
   var frameUrl = new URL("/embed/" + encodeURIComponent(slug), widgetOrigin);
-  ["day", "track", "query", "accent"].forEach(function copyFilter(name) {
+  [
+    "day",
+    "track",
+    "format",
+    "room",
+    "query",
+    "accent",
+    "controls",
+    "density",
+    "speakers",
+  ].forEach(function copyFilter(name) {
     var value = script.dataset[name];
-    if (value) frameUrl.searchParams.set(name, value);
+    if (script.hasAttribute("data-" + name)) {
+      frameUrl.searchParams.set(name, value);
+    }
   });
 
   var frame = document.createElement("iframe");
   frame.src = frameUrl.toString();
   frame.title = script.dataset.title || "Event programme";
   frame.loading = "lazy";
+  frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
   frame.referrerPolicy = "strict-origin-when-cross-origin";
   frame.style.width = "100%";
   var initialHeight = 720;
-  if (script.dataset.height) {
+  if (script.hasAttribute("data-height")) {
     initialHeight = Number(script.dataset.height);
     if (
       !/^\d+$/.test(script.dataset.height) ||

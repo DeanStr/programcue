@@ -6,6 +6,8 @@ export type AdminProgrammeRow = {
   title: string;
   status: string;
   visibility: string;
+  track: string | null;
+  format: string;
   room: string | null;
   startsAt: number | null;
 };
@@ -33,6 +35,8 @@ export class ProgrammeAdminService {
                 CASE WHEN se.id IS NULL THEN s.title ELSE content.title END AS title,
                 s.status,
                 CASE WHEN se.id IS NULL THEN s.visibility ELSE content.visibility END AS visibility,
+                CASE WHEN se.id IS NULL THEN source_track.name ELSE published_track.name END AS track,
+                CASE WHEN se.id IS NULL THEN s.format ELSE content.format END AS format,
                 r.name AS room, se.starts_at AS startsAt,
                 content.session_id AS publishedContentSessionId
            FROM sessions s
@@ -52,6 +56,12 @@ export class ProgrammeAdminService {
             AND content.event_id = se.event_id
             AND content.session_id = se.session_id
            LEFT JOIN rooms r ON r.id = se.room_id AND r.event_id = s.event_id
+           LEFT JOIN tracks source_track
+             ON source_track.id = s.track_id AND source_track.event_id = s.event_id
+           LEFT JOIN tracks published_track
+             ON published_track.id = content.track_id
+            AND published_track.event_id = content.event_id
+            AND published_track.is_public = 1
           WHERE s.event_id = ? AND s.status NOT IN ('archived','cancelled')
           ORDER BY se.starts_at IS NULL, se.starts_at, s.title`,
       )
@@ -71,11 +81,16 @@ export class ProgrammeAdminService {
           publishedAt: number | null;
         }>(),
       this.env.DB.prepare(
-        `SELECT timezone, slug FROM events
+        `SELECT name, timezone, slug, brand_accent AS brandAccent FROM events
           WHERE id = ? AND organisation_id = ?`,
       )
         .bind(viewer.eventId, viewer.organisationId)
-        .first<{ timezone: string; slug: string }>(),
+        .first<{
+          name: string;
+          timezone: string;
+          slug: string;
+          brandAccent: string;
+        }>(),
       this.env.DB.prepare(
         `SELECT COUNT(DISTINCT person.id) AS total
            FROM people person
@@ -128,6 +143,8 @@ export class ProgrammeAdminService {
       ),
       version,
       timezone: event.timezone,
+      eventName: event.name,
+      brandAccent: event.brandAccent,
       publicSlug: event.slug,
       speakerCount: Number(speakerCount?.total ?? 0),
     };

@@ -2,6 +2,7 @@ import { CalendarDays, ExternalLink } from "lucide-react";
 import { Link } from "react-router";
 
 import type { Route } from "./+types/admin-section";
+import { ProgrammeEmbedBuilder } from "~/components/programme-embed-builder";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
@@ -33,10 +34,6 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
 export default function AdminSection({ loaderData }: Route.ComponentProps) {
   const summary = summarizeProgramme(loaderData.sessions);
-  const embedUrl = `${loaderData.publicOrigin}/embed/${loaderData.publicSlug}`;
-  const embedCode = `<iframe src="${embedUrl}" title="${loaderData.publicSlug} programme" loading="lazy" style="width:100%;min-height:720px;border:0"></iframe>`;
-  const widgetTarget = `programcue-${loaderData.publicSlug}`;
-  const widgetCode = `<div id="${widgetTarget}"></div>\n<script src="${loaderData.publicOrigin}/programcue-widget.js" data-programcue-event="${loaderData.publicSlug}" data-target="#${widgetTarget}" async></script>`;
   return (
     <>
       <div className="page-head">
@@ -177,67 +174,26 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
           />
         )}
       </section>
-      <section className="card pad mt">
-        <div className="card-title">
-          <div>
-            <h2>Embed programme</h2>
-            <p className="help">
-              Paste this responsive iframe into the event website.
-            </p>
-          </div>
-          <Link
-            className="btn small"
-            to={embedUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Preview embed <ExternalLink aria-hidden size={13} />
-            <span className="sr-only">(opens in a new tab)</span>
-          </Link>
-        </div>
-        <label className="label">
-          Embed code
-          <textarea
-            className="textarea"
-            value={embedCode}
-            readOnly
-            rows={4}
-            onFocus={(event) => event.currentTarget.select()}
-          />
-        </label>
-        <label className="label mt">
-          Auto-resizing widget code
-          <textarea
-            className="textarea"
-            value={widgetCode}
-            readOnly
-            rows={5}
-            onFocus={(event) => event.currentTarget.select()}
-          />
-          <span className="help">
-            Optional attributes: data-day, data-track, data-query, data-accent
-            and data-height.
-          </span>
-        </label>
-        <div className="row-main mt">
-          <a
-            className="btn small"
-            href={`/api/v1/public/events/${loaderData.publicSlug}/programme?format=json`}
-          >
-            Download static JSON
-          </a>
-          <a
-            className="btn small"
-            href={`/api/v1/public/events/${loaderData.publicSlug}/programme?format=html`}
-          >
-            Download static HTML
-          </a>
-        </div>
-        <p className="help">
-          Allowed parent origins remain controlled by the deployment’s frame
-          ancestor configuration.
-        </p>
-      </section>
+      {loaderData.version ? (
+        <ProgrammeEmbedBuilder
+          key={`${loaderData.publicSlug}:${loaderData.version.versionNumber}:${loaderData.version.publishedAt ?? "pending"}:${loaderData.brandAccent}:${loaderData.timezone}`}
+          publicOrigin={loaderData.publicOrigin}
+          publicSlug={loaderData.publicSlug}
+          eventName={loaderData.eventName}
+          eventAccent={loaderData.brandAccent}
+          timezone={loaderData.timezone}
+          sessions={loaderData.sessions}
+        />
+      ) : (
+        <section className="card pad mt">
+          <span className="pc-page-eyebrow">Published programme</span>
+          <h2>Embed unavailable</h2>
+          <p className="help">
+            Publish a schedule before configuring or installing its public
+            programme embed.
+          </p>
+        </section>
+      )}
     </>
   );
 }
