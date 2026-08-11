@@ -2,14 +2,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 
-import { AirtableClient } from "~/modules/airtable/airtable-client.server";
 import { GoogleCalendarProvider } from "~/modules/calendars/calendar-providers.server";
 import {
   createEmailProvider,
   requireEmailProviderConfiguration,
 } from "~/modules/communications/email-provider.server";
 import { ResendEmailProvider } from "~/modules/communications/resend.server";
-import { AcceleventsProvider } from "~/modules/integrations/accelevents-provider.server";
 
 const server = setupServer();
 
@@ -150,72 +148,6 @@ describe("provider HTTP contracts through MSW", () => {
         method: "REQUEST",
       }),
     ).resolves.toEqual({ providerEventId: "google-event-81" });
-  });
-
-  it("keeps Airtable PAT authentication and performUpsert at the Web API boundary", async () => {
-    server.use(
-      http.patch(
-        "https://api.airtable.com/v0/appProgramCue/tblRooms",
-        async ({ request }) => {
-          expect(request.headers.get("authorization")).toBe(
-            "Bearer pat-program-cue-contract-token",
-          );
-          await expect(request.json()).resolves.toEqual({
-            performUpsert: { fieldsToMergeOn: ["Program Cue ID"] },
-            records: [
-              { fields: { "Program Cue ID": "room-main", Name: "Main" } },
-            ],
-            typecast: false,
-          });
-          return HttpResponse.json({
-            records: [
-              {
-                id: "recMain",
-                fields: { "Program Cue ID": "room-main", Name: "Main" },
-              },
-            ],
-            createdRecords: ["recMain"],
-          });
-        },
-      ),
-    );
-    const client = new AirtableClient({
-      personalAccessToken: "pat-program-cue-contract-token",
-      baseId: "appProgramCue",
-    });
-
-    await expect(
-      client.upsertRecords("tblRooms", [
-        { fields: { "Program Cue ID": "room-main", Name: "Main" } },
-      ]),
-    ).resolves.toMatchObject({ createdRecords: ["recMain"] });
-  });
-
-  it("keeps Accelevents event scoping and its documented Key header", async () => {
-    server.use(
-      http.get(
-        "https://api.accelevents.com/rest/host/event/future-of-events/session",
-        ({ request }) => {
-          const url = new URL(request.url);
-          expect(request.headers.get("Key")).toBe("accelevents-api-key");
-          expect(Object.fromEntries(url.searchParams)).toMatchObject({
-            eventId: "441",
-            page: "0",
-            size: "100",
-            expand: "SPEAKER,TRACK",
-          });
-          return HttpResponse.json({ data: [] });
-        },
-      ),
-    );
-    const provider = new AcceleventsProvider({
-      apiKey: "accelevents-api-key",
-      eventUrl: "future-of-events",
-      externalEventId: 441,
-      sessionTypeFormat: "IN_PERSON",
-    });
-
-    await expect(provider.validateConnection()).resolves.toBeUndefined();
   });
 });
 

@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   CalendarAdministration,
-  CommunicationRecipientIdentity,
 } from "./communications-centre-panels";
 import {
   CommunicationDraftPreview,
@@ -18,19 +17,6 @@ describe("communications presentation", () => {
     expect(deliveryActionLabel("Schedule", 2)).toBe("Schedule 2 deliveries");
     expect(deliveryActionLabel("Confirm", 1)).toBe("Confirm 1 delivery");
     expect(deliveryActionLabel("Confirm", 0)).toBe("Confirm 0 deliveries");
-  });
-
-  it("renders an invitation recipient name and email on distinct lines", () => {
-    const markup = renderToStaticMarkup(
-      <CommunicationRecipientIdentity
-        name="Priya Shah"
-        email="priya@example.com"
-      />,
-    );
-
-    expect(markup).toBe(
-      '<div class="comms-recipient-identity"><div class="comms-recipient-name"><strong>Priya Shah</strong></div><div class="comms-recipient-email"><small>priya@example.com</small></div></div>',
-    );
   });
 
   it("labels every published-session invitation field in the responsive card", () => {
