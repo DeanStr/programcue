@@ -598,12 +598,22 @@ export class IntegrationService {
   ) {
     this.assertAdministrator(viewer);
     const current = await this.env.DB.prepare(
-      `SELECT revision FROM integration_connections
-        WHERE id = ? AND event_id = ? AND organisation_id = ?
-          AND status <> 'disconnected'`,
+      `SELECT connection.revision, connection.provider,
+              event.repository_provider AS repositoryProvider
+         FROM integration_connections connection
+         JOIN events event
+           ON event.id = connection.event_id
+          AND event.organisation_id = connection.organisation_id
+        WHERE connection.id = ? AND connection.event_id = ?
+          AND connection.organisation_id = ?
+          AND connection.status <> 'disconnected'`,
     )
       .bind(connectionId, viewer.eventId, viewer.organisationId)
-      .first<{ revision: number }>();
+      .first<{
+        revision: number;
+        provider: string;
+        repositoryProvider: string;
+      }>();
     if (!current) {
       if (suppliedOperationId) {
         const recovered = await this.env.DB.prepare(
@@ -624,6 +634,13 @@ export class IntegrationService {
         "The active integration connection was not found.",
       );
     }
+    if (
+      current.provider === "airtable_repository" &&
+      current.repositoryProvider === "airtable"
+    )
+      throw new IntegrationStateError(
+        "Migrate event-data authority back to D1 before disconnecting Airtable.",
+      );
     const operationId = suppliedOperationId ?? crypto.randomUUID();
     const results = await this.env.DB.batch([
       this.env.DB.prepare(
@@ -631,7 +648,16 @@ export class IntegrationService {
             SET status = 'disconnected', encrypted_credentials = NULL,
                 revision = revision + 1, last_operation_id = ?, updated_at = unixepoch()
           WHERE id = ? AND event_id = ? AND organisation_id = ? AND revision = ?
-            AND status <> 'disconnected'`,
+            AND status <> 'disconnected'
+            AND NOT (
+              provider = 'airtable_repository'
+              AND EXISTS (
+                SELECT 1 FROM events event
+                 WHERE event.id = integration_connections.event_id
+                   AND event.organisation_id = integration_connections.organisation_id
+                   AND event.repository_provider = 'airtable'
+              )
+            )`,
       ).bind(
         operationId,
         connectionId,

@@ -114,7 +114,9 @@ export class EventRoomOwnershipError extends Error {
 
 export class EventTrackInUseError extends Error {
   constructor() {
-    super("Reassign sessions before removing a track.");
+    super(
+      "A track used by a published form, submission or session cannot be removed. Keep it configured and create a replacement track if needed.",
+    );
     this.name = "EventTrackInUseError";
   }
 }
@@ -478,11 +480,28 @@ export class D1EventRepository implements EventRepository {
     const removedTrackReference = await this.env.DB.prepare(
       `SELECT 1
          FROM tracks removed
-         JOIN sessions session
-           ON session.event_id = removed.event_id AND session.track_id = removed.id
-        WHERE removed.event_id = ?
-          AND removed.id NOT IN (SELECT value FROM json_each(?))
-        LIMIT 1`,
+         WHERE removed.event_id = ?
+           AND removed.id NOT IN (SELECT value FROM json_each(?))
+          AND (
+            EXISTS (
+              SELECT 1 FROM sessions session
+               WHERE session.event_id = removed.event_id
+                 AND session.track_id = removed.id
+            )
+            OR EXISTS (
+              SELECT 1 FROM submission_track_selections selection
+               WHERE selection.event_id = removed.event_id
+                 AND selection.track_id = removed.id
+            )
+            OR EXISTS (
+              SELECT 1 FROM form_versions version,
+                            json_each(version.routing_json, '$.trackNames') routed_track
+               WHERE version.event_id = removed.event_id
+                 AND version.status = 'published'
+                 AND routed_track.key = removed.id
+            )
+          )
+         LIMIT 1`,
     )
       .bind(eventId, trackIdsJson)
       .first();

@@ -94,6 +94,24 @@ describe("complete evaluator demo reset", () => {
     );
   });
 
+  it("deletes multi-track routing rows before their referenced parents", () => {
+    const position = (table: (typeof DEMO_RESET_EVENT_TABLES)[number]) =>
+      DEMO_RESET_EVENT_TABLES.indexOf(table);
+
+    expect(position("submission_track_selections")).toBeLessThan(
+      position("tracks"),
+    );
+    expect(position("submission_track_selections")).toBeLessThan(
+      position("submissions"),
+    );
+    expect(position("submission_routing_teams")).toBeLessThan(
+      position("evaluation_teams"),
+    );
+    expect(position("submission_routing_teams")).toBeLessThan(
+      position("submissions"),
+    );
+  });
+
   it("clears only the demo R2 prefix, preserves audit history and restores the judged D1 baseline", async () => {
     const testEnvironment = demoEnvironment();
     await ensureJudgedDemoWorkflow(testEnvironment);

@@ -39,7 +39,12 @@ describe("Airtable Web API client", () => {
       },
     });
 
-    await expect(client.listRecords("tblRooms")).resolves.toHaveLength(2);
+    await expect(
+      client.listRecords("tblRooms", {
+        filterByFormula: '{Event ID}="evt-1"',
+        fields: ["Program Cue ID", "Event ID"],
+      }),
+    ).resolves.toHaveLength(2);
     expect(requests).toHaveLength(2);
     expect(requests[0]?.headers.get("authorization")).toBe(
       `Bearer ${credentials.personalAccessToken}`,
@@ -48,10 +53,39 @@ describe("Airtable Web API client", () => {
     expect(new URL(requests[1]!.url).searchParams.get("offset")).toBe(
       "next/page",
     );
+    expect(new URL(requests[0]!.url).searchParams.get("filterByFormula")).toBe(
+      '{Event ID}="evt-1"',
+    );
+    expect(new URL(requests[0]!.url).searchParams.getAll("fields[]")).toEqual([
+      "Program Cue ID",
+      "Event ID",
+    ]);
     expect(requestSignals).toHaveLength(2);
     expect(requestSignals.every((signal) => signal && !signal.aborted)).toBe(
       true,
     );
+  });
+
+  it("refuses unscoped or all-field record reads before contacting Airtable", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const client = new AirtableClient(credentials, { fetch });
+
+    await expect(
+      client.listRecords("tblRooms", {
+        filterByFormula: "",
+        fields: ["Program Cue ID"],
+      }),
+    ).rejects.toThrow(/explicit filter formula/iu);
+    await expect(
+      client.listRecords("tblRooms", {
+        filterByFormula: '{Event ID}="evt-1"',
+        fields: [],
+      }),
+    ).rejects.toThrow(/at least one explicit managed field/iu);
+    await expect(
+      client.listRecords("tblRooms", undefined as never),
+    ).rejects.toThrow(/explicit filter formula/iu);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("waits at least 30 seconds and backs off exponentially for 429s", async () => {
@@ -151,6 +185,32 @@ describe("Airtable Web API client", () => {
         })),
       ),
     ).rejects.toThrow(/between 1 and 10/i);
+  });
+
+  it("deletes bounded record batches and requires complete confirmation", async () => {
+    let request: Request | null = null;
+    const client = new AirtableClient(credentials, {
+      fetch: vi.fn(async (input, init) => {
+        request = new Request(input, init);
+        return Response.json({
+          records: [{ id: "rec-1", deleted: true }],
+        });
+      }) as typeof fetch,
+    });
+
+    await expect(client.deleteRecords("tblRooms", ["rec-1"])).resolves.toEqual({
+      records: [{ id: "rec-1", deleted: true }],
+    });
+    expect(request!.method).toBe("DELETE");
+    expect(new URL(request!.url).searchParams.getAll("records[]")).toEqual([
+      "rec-1",
+    ]);
+    await expect(client.deleteRecords("tblRooms", [])).rejects.toThrow(
+      /between 1 and 10/iu,
+    );
+    await expect(
+      client.deleteRecords("tblRooms", ["rec-1", "rec-2"]),
+    ).rejects.toThrow(/did not confirm deletion of every/iu);
   });
 
   it("surfaces provider errors without stale or simulated data", async () => {

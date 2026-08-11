@@ -123,6 +123,8 @@ export const DEMO_RESET_EVENT_TABLES = [
   "sessions",
   "tags",
   "rooms",
+  "submission_routing_teams",
+  "submission_track_selections",
   "tracks",
   "schedule_policies",
   "submission_decisions",

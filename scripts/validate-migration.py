@@ -19,6 +19,7 @@ tables = {
 required = {
     "organisations", "people", "organisation_ai_settings", "events", "memberships",
     "form_definitions", "form_versions", "submissions", "submission_revisions",
+    "submission_track_selections", "submission_routing_teams",
     "submission_email_verifications", "submission_speakers",
     "evaluation_plans", "evaluation_teams", "evaluation_team_members", "evaluation_rounds",
     "evaluation_criteria", "evaluator_conflicts", "evaluator_assignments", "reviews",
@@ -65,6 +66,8 @@ for table, expected in {
     "memberships": {"organisation_id", "event_id", "person_id", "role", "revoked_at"},
     "form_versions": {"event_id", "schema_json", "routing_json", "settings_snapshot_json", "revision"},
     "submissions": {"submitted_snapshot_json", "revision", "last_operation_id", "routed_team_id"},
+    "submission_track_selections": {"submission_id", "event_id", "track_id", "track_name_snapshot", "position"},
+    "submission_routing_teams": {"submission_id", "event_id", "team_id"},
     "submission_revisions": {"answers_json", "speaker_snapshot_json", "save_kind", "idempotency_key"},
     "submission_email_verifications": {"form_id", "token_hash", "status", "attempt_count", "verified_at", "consumed_at"},
     "submission_speakers": {"person_id", "email", "invitation_status", "claim_token_hash", "claimed_at"},

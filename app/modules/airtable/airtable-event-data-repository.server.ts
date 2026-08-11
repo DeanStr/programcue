@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { AirtableClient, type AirtableRecord } from "./airtable-client.server";
+import {
+  AirtableClient,
+  airtableEqualsFormula,
+  type AirtableRecord,
+} from "./airtable-client.server";
 import {
   AIRTABLE_EVENT_TABLE_SPECS,
   type AirtableEventDataDomain,
@@ -14,6 +18,9 @@ import {
 } from "./airtable-room-repository.server";
 import {
   AIRTABLE_CACHE_TTL_SECONDS,
+  AIRTABLE_EVENT_DATA_FIELDS,
+  AIRTABLE_SCHEMA_VERSION,
+  AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES,
   type AirtableCredentials,
   type AirtableEventDataTableKey,
 } from "./airtable-schema";
@@ -426,6 +433,10 @@ export class AirtableEventDataRepository {
     for (const spec of AIRTABLE_EVENT_TABLE_SPECS) {
       const records = await client.listRecords(
         connection.configuration.tables[spec.key].id,
+        {
+          filterByFormula: airtableEqualsFormula("Event ID", eventId),
+          fields: AIRTABLE_EVENT_DATA_FIELDS.map((field) => field.name),
+        },
       );
       const ids = new Set<string>();
       const keys = new Set<string>();
@@ -629,7 +640,10 @@ export class AirtableEventDataRepository {
       eventId,
       eventId,
       hash,
-      JSON.stringify({ schema: 3, domains: AIRTABLE_EVENT_TABLE_SPECS.length }),
+      JSON.stringify({
+        schema: AIRTABLE_SCHEMA_VERSION,
+        domains: AIRTABLE_EVENT_TABLE_SPECS.length,
+      }),
     );
   }
 
@@ -729,6 +743,11 @@ export class AirtableEventDataRepository {
       }),
     ]);
     const plan = this.plan(desired, current);
+    const changedPlan = plan.filter((item) => item.action !== "noop");
+    if (changedPlan.length > AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES)
+      throw new AirtableEventDataUnsynchronizedError(
+        `The initial Airtable synchronization would change ${changedPlan.length} managed records, above the ${AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES}-record synchronous limit. Keep this event on D1.`,
+      );
     const runId = crypto.randomUUID();
     const summary = {
       kind: "airtable_event_initial_sync",
@@ -749,7 +768,7 @@ export class AirtableEventDataRepository {
         options.idempotencyKey,
         JSON.stringify(summary),
       ),
-      ...plan.map((item) =>
+      ...changedPlan.map((item) =>
         this.env.DB.prepare(
           `INSERT INTO integration_run_items (
              id, run_id, entity_type, entity_id, action, status, diff_json,
@@ -783,7 +802,7 @@ export class AirtableEventDataRepository {
         this.env.DB.prepare(
           `UPDATE integration_run_items
               SET status = CASE WHEN action = 'noop' THEN 'skipped' ELSE 'succeeded' END,
-                  attempt_count = CASE WHEN action = 'noop' THEN 0 ELSE 1 END,
+                  attempt_count = 1,
                   updated_at = unixepoch()
             WHERE run_id = ?`,
         ).bind(runId),
@@ -809,7 +828,7 @@ export class AirtableEventDataRepository {
       ]);
       if (
         (completed[0]?.meta.changes ?? 0) !== 1 ||
-        (completed[1]?.meta.changes ?? 0) !== plan.length ||
+        (completed[1]?.meta.changes ?? 0) !== changedPlan.length ||
         (completed[2]?.meta.changes ?? 0) !== 1 ||
         (completed[3]?.meta.changes ?? 0) !== 1
       )
@@ -1184,20 +1203,15 @@ export class AirtableEventDataRepository {
       throw new AirtableEventDataUnsynchronizedError(
         "The Airtable connection for this projection run is no longer available.",
       );
-    const [d1, airtable] = await Promise.all([
-      this.readD1Projection(completion.eventId),
-      this.readAuthoritative(completion.organisationId, completion.eventId, {
-        bypassCache: true,
-        allowNeedsAttention: true,
-      }),
-    ]);
-    if (
-      d1.hash !== completion.afterHash ||
-      airtable.hash !== completion.afterHash
-    )
+    const d1 = await this.readD1Projection(completion.eventId);
+    if (d1.hash !== completion.afterHash)
       throw new AirtableEventDataUnsynchronizedError(
-        "The D1 projection or Airtable changed before the command could finalize.",
+        "The D1 projection changed before the Airtable command could finalize.",
       );
+    // prepareCommandCompletion has already read the provider back and matched
+    // its complete snapshot hash. A later external edit is detected at the next
+    // read boundary; repeating all managed table reads here only narrows that
+    // race and materially increases Airtable request amplification.
     const summary: ProjectionRunSummary = {
       kind: "airtable_event_projection",
       phase: "finalized",

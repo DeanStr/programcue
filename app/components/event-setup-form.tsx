@@ -443,6 +443,9 @@ export function EventSetupForm({
                   repositoryData.preview.expiresAt * 1_000,
                 ).toLocaleTimeString()}
                 . Confirmation rechecks Airtable and the D1 event revision.
+                {repositoryData.preview.counts.noop > 0
+                  ? ` ${repositoryData.preview.counts.noop} unchanged managed records are omitted from the table.`
+                  : ""}
               </p>
               <div
                 className="table-wrap mt"

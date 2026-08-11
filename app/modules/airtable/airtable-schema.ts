@@ -4,8 +4,9 @@ export const AIRTABLE_ROOMS_TABLE = "Program Cue Rooms";
 export const AIRTABLE_SPEAKERS_TABLE = "Program Cue Published Speakers";
 export const AIRTABLE_SESSIONS_TABLE = "Program Cue Published Sessions";
 export const AIRTABLE_SCHEDULE_TABLE = "Program Cue Published Schedule";
-export const AIRTABLE_SCHEMA_VERSION = 3;
+export const AIRTABLE_SCHEMA_VERSION = 4;
 export const AIRTABLE_CACHE_TTL_SECONDS = 15;
+export const AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES = 250;
 
 export const AIRTABLE_EVENT_DATA_TABLE_NAMES = {
   eventConfiguration: "Program Cue Event Configuration",
@@ -13,6 +14,8 @@ export const AIRTABLE_EVENT_DATA_TABLE_NAMES = {
   forms: "Program Cue Forms",
   formVersions: "Program Cue Form Versions",
   submissions: "Program Cue Submissions",
+  submissionTrackSelections: "Program Cue Submission Tracks",
+  submissionRoutingTeams: "Program Cue Submission Routing Teams",
   submissionRevisions: "Program Cue Submission Revisions",
   submissionSpeakers: "Program Cue Submission Speakers",
   evaluationPlans: "Program Cue Evaluation Plans",

@@ -5,13 +5,21 @@ import type {
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { AirtableClient, type AirtableRecord } from "./airtable-client.server";
+import {
+  AirtableClient,
+  airtableAndFormula,
+  airtableEqualsFormula,
+  type AirtableRecord,
+} from "./airtable-client.server";
 import {
   AirtableRepositoryReconciliationError,
   AirtableRoomRepository,
 } from "./airtable-room-repository.server";
 import {
   AIRTABLE_CACHE_TTL_SECONDS,
+  AIRTABLE_SCHEDULE_FIELDS,
+  AIRTABLE_SESSION_FIELDS,
+  AIRTABLE_SPEAKER_FIELDS,
   type AirtableCredentials,
 } from "./airtable-schema";
 
@@ -141,6 +149,14 @@ type CachedSnapshot = Omit<AirtablePublishedSnapshot, "freshness"> & {
   cacheExpiresAt: number;
 };
 const programmeCache = new Map<string, CachedSnapshot>();
+const PUBLISHED_SNAPSHOT_MAPPING_TYPE = "airtable_published_snapshot";
+
+function publishedFilter(eventId: string, versionId: string) {
+  return airtableAndFormula(
+    airtableEqualsFormula("Event ID", eventId),
+    airtableEqualsFormula("Version ID", versionId),
+  );
+}
 
 function nullableString(value: unknown) {
   return typeof value === "string" && value.length ? value : null;
@@ -333,6 +349,49 @@ async function entityHash(
   ).join("");
 }
 
+async function publishedRecordsHash(
+  eventId: string,
+  versionId: string,
+  groups: ReadonlyArray<{
+    tableId: string;
+    fields: readonly string[];
+    records: AirtableRecord[];
+  }>,
+) {
+  const entities: Array<{
+    tableId: string;
+    key: string;
+    fields: Record<string, unknown>;
+  }> = [];
+  for (const group of groups) {
+    for (const record of group.records) {
+      if (
+        record.fields["Event ID"] !== eventId ||
+        record.fields["Version ID"] !== versionId
+      )
+        continue;
+      if (record.fields.Status === "retired") continue;
+      if (record.fields.Status !== "active")
+        throw new AirtableProgrammeSchemaError(
+          `Airtable managed record ${record.id} must have active or retired status.`,
+        );
+      const key = record.fields["Program Cue Key"];
+      if (typeof key !== "string" || !key)
+        throw new AirtableProgrammeSchemaError(
+          `Airtable managed record ${record.id} has no Program Cue Key.`,
+        );
+      entities.push({
+        tableId: group.tableId,
+        key,
+        fields: Object.fromEntries(
+          group.fields.map((field) => [field, record.fields[field] ?? ""]),
+        ),
+      });
+    }
+  }
+  return entityHash(entities);
+}
+
 export class AirtableProgrammeRepository {
   private readonly rooms;
   private readonly now;
@@ -365,6 +424,43 @@ export class AirtableProgrammeRepository {
       ...speaker,
       sessionIds: [...speaker.sessionIds],
     }));
+  }
+
+  private publishedMappingStatement(
+    connectionId: string,
+    versionId: string,
+    sourceHash: string,
+    versionRevision: number,
+  ) {
+    return this.env.DB.prepare(
+      `INSERT INTO integration_entity_mappings (
+         id, connection_id, entity_type, entity_id, external_id, source_hash,
+         metadata_json, last_synced_at, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch(), unixepoch())
+       ON CONFLICT(connection_id, entity_type, entity_id) DO UPDATE SET
+         external_id = excluded.external_id,
+         source_hash = excluded.source_hash,
+         metadata_json = excluded.metadata_json,
+         last_synced_at = unixepoch(), updated_at = unixepoch()`,
+    ).bind(
+      crypto.randomUUID(),
+      connectionId,
+      PUBLISHED_SNAPSHOT_MAPPING_TYPE,
+      versionId,
+      versionId,
+      sourceHash,
+      JSON.stringify({ versionRevision }),
+    );
+  }
+
+  private async publishedMapping(connectionId: string, versionId: string) {
+    return this.env.DB.prepare(
+      `SELECT source_hash AS sourceHash
+         FROM integration_entity_mappings
+        WHERE connection_id = ? AND entity_type = ? AND entity_id = ?`,
+    )
+      .bind(connectionId, PUBLISHED_SNAPSHOT_MAPPING_TYPE, versionId)
+      .first<{ sourceHash: string }>();
   }
 
   private async source(
@@ -588,14 +684,29 @@ export class AirtableProgrammeRepository {
       source,
       connection.configuration.tables,
     );
-    const client = this.client(connection.credentials);
     const existingByTable = new Map<string, AirtableRecord[]>();
-    for (const tableId of [
-      connection.configuration.tables.speakers.id,
-      connection.configuration.tables.sessions.id,
-      connection.configuration.tables.schedule.id,
-    ]) {
-      existingByTable.set(tableId, await client.listRecords(tableId));
+    const client = this.client(connection.credentials);
+    for (const [tableId, fields] of [
+      [
+        connection.configuration.tables.speakers.id,
+        AIRTABLE_SPEAKER_FIELDS.map((field) => field.name),
+      ],
+      [
+        connection.configuration.tables.sessions.id,
+        AIRTABLE_SESSION_FIELDS.map((field) => field.name),
+      ],
+      [
+        connection.configuration.tables.schedule.id,
+        AIRTABLE_SCHEDULE_FIELDS.map((field) => field.name),
+      ],
+    ] as const) {
+      existingByTable.set(
+        tableId,
+        await client.listRecords(tableId, {
+          filterByFormula: publishedFilter(eventId, source.version.id),
+          fields,
+        }),
+      );
     }
     for (const [tableId, records] of existingByTable) {
       const keys = new Set<string>();
@@ -716,6 +827,7 @@ export class AirtableProgrammeRepository {
         "Airtable repository connection not found.",
       );
     const items = await this.plan(scope.eventId, source, connection);
+    const changedItems = items.filter((item) => item.action !== "noop");
     const sourceHash = await entityHash(
       this.entities(scope.eventId, source, connection.configuration.tables),
     );
@@ -726,8 +838,24 @@ export class AirtableProgrammeRepository {
     )
       .bind(connection.id, idempotencyKey)
       .first<{ id: string; status: string }>();
-    if (existing?.status === "succeeded")
+    if (existing?.status === "succeeded") {
+      const mapping = await this.publishedMapping(connection.id, versionId);
+      if (
+        changedItems.length > 0 ||
+        !mapping ||
+        mapping.sourceHash !== sourceHash
+      ) {
+        const reason =
+          "The previously staged Airtable published-programme projection no longer matches its immutable Program Cue snapshot. Publish a new schedule version before continuing.";
+        await this.rooms.markNeedsAttention(
+          scope.organisationId,
+          scope.eventId,
+          reason,
+        );
+        throw new AirtableRepositoryReconciliationError(reason);
+      }
       return { runId: existing.id, idempotent: true };
+    }
     if (existing && !["failed", "partially_failed"].includes(existing.status))
       throw new AirtableRepositoryReconciliationError(
         `Airtable publication staging is already ${existing.status.replaceAll("_", " ")} for this schedule revision.`,
@@ -764,7 +892,7 @@ export class AirtableProgrammeRepository {
           noop: items.filter((item) => item.action === "noop").length,
         }),
       ),
-      ...items.map((item) =>
+      ...changedItems.map((item) =>
         this.env.DB.prepare(
           `INSERT INTO integration_run_items (
              id, run_id, entity_type, entity_id, action, status,
@@ -816,6 +944,12 @@ export class AirtableProgrammeRepository {
           "Airtable programme staging did not reconcile to the requested version snapshot.",
         );
       const completionResults = await this.env.DB.batch([
+        this.publishedMappingStatement(
+          connection.id,
+          versionId,
+          sourceHash,
+          source.version.revision,
+        ),
         this.env.DB.prepare(
           `UPDATE integration_runs
               SET status = 'succeeded', completed_at = unixepoch()
@@ -824,7 +958,7 @@ export class AirtableProgrammeRepository {
         this.env.DB.prepare(
           `UPDATE integration_run_items
               SET status = CASE WHEN action = 'noop' THEN 'skipped' ELSE 'succeeded' END,
-                  attempt_count = CASE WHEN action = 'noop' THEN 0 ELSE 1 END,
+                  attempt_count = 1,
                   updated_at = unixepoch()
             WHERE run_id = ?`,
         ).bind(runId),
@@ -846,8 +980,9 @@ export class AirtableProgrammeRepository {
       ]);
       if (
         (completionResults[0]?.meta.changes ?? 0) !== 1 ||
-        (completionResults[1]?.meta.changes ?? 0) !== items.length ||
-        (completionResults[2]?.meta.changes ?? 0) !== 1
+        (completionResults[1]?.meta.changes ?? 0) !== 1 ||
+        (completionResults[2]?.meta.changes ?? 0) !== changedItems.length ||
+        (completionResults[3]?.meta.changes ?? 0) !== 1
       )
         throw new AirtableRepositoryReconciliationError(
           "Airtable publication reconciled, but its D1 run and audit result could not be recorded completely.",
@@ -900,13 +1035,51 @@ export class AirtableProgrammeRepository {
     const client = this.client(connection.credentials);
     const speakerRecords = await client.listRecords(
       connection.configuration.tables.speakers.id,
+      {
+        filterByFormula: publishedFilter(eventId, versionId),
+        fields: AIRTABLE_SPEAKER_FIELDS.map((field) => field.name),
+      },
     );
     const sessionRecords = await client.listRecords(
       connection.configuration.tables.sessions.id,
+      {
+        filterByFormula: publishedFilter(eventId, versionId),
+        fields: AIRTABLE_SESSION_FIELDS.map((field) => field.name),
+      },
     );
     const entryRecords = await client.listRecords(
       connection.configuration.tables.schedule.id,
+      {
+        filterByFormula: publishedFilter(eventId, versionId),
+        fields: AIRTABLE_SCHEDULE_FIELDS.map((field) => field.name),
+      },
     );
+    const [mapping, actualHash] = await Promise.all([
+      this.publishedMapping(connection.id, versionId),
+      publishedRecordsHash(eventId, versionId, [
+        {
+          tableId: connection.configuration.tables.speakers.id,
+          fields: AIRTABLE_SPEAKER_FIELDS.map((field) => field.name),
+          records: speakerRecords,
+        },
+        {
+          tableId: connection.configuration.tables.sessions.id,
+          fields: AIRTABLE_SESSION_FIELDS.map((field) => field.name),
+          records: sessionRecords,
+        },
+        {
+          tableId: connection.configuration.tables.schedule.id,
+          fields: AIRTABLE_SCHEDULE_FIELDS.map((field) => field.name),
+          records: entryRecords,
+        },
+      ]),
+    ]);
+    if (!mapping || mapping.sourceHash !== actualHash) {
+      const reason =
+        "The Airtable published-programme projection changed outside the Program Cue publication boundary. Publish a new schedule version before serving it.";
+      await this.rooms.markNeedsAttention(organisationId, eventId, reason);
+      throw new AirtableRepositoryReconciliationError(reason);
+    }
     const roomSnapshot = await this.rooms.readRooms(organisationId, eventId, {
       bypassCache: options.bypassCache,
     });

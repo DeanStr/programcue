@@ -1173,4 +1173,47 @@ describe("Accelevents integration service", () => {
         .first(),
     ).resolves.toEqual({ status: "disconnected", credentials: null });
   });
+
+  it("refuses to disconnect the authoritative Airtable repository", async () => {
+    const connectionId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE events SET repository_provider = 'airtable'
+          WHERE id = ? AND organisation_id = ?`,
+      ).bind(viewer.eventId, viewer.organisationId),
+      env.DB.prepare(
+        `INSERT INTO integration_connections (
+           id, organisation_id, event_id, provider, status, direction,
+           conflict_policy, encrypted_credentials, configuration_json,
+           revision, created_at, updated_at
+         ) VALUES (?, ?, ?, 'airtable_repository', 'connected', 'bidirectional',
+                   'single_authority_no_dual_write', 'encrypted-test-value', '{}',
+                   1, unixepoch(), unixepoch())`,
+      ).bind(connectionId, viewer.organisationId, viewer.eventId),
+    ]);
+    const service = new IntegrationService(
+      env as unknown as CloudflareEnvironment,
+    );
+
+    await expect(service.disconnect(viewer, connectionId)).rejects.toThrow(
+      /migrate event-data authority back to D1/iu,
+    );
+    await expect(
+      env.DB.prepare(
+        `SELECT status, encrypted_credentials AS credentials
+           FROM integration_connections WHERE id = ?`,
+      )
+        .bind(connectionId)
+        .first(),
+    ).resolves.toEqual({
+      status: "connected",
+      credentials: "encrypted-test-value",
+    });
+    await env.DB.prepare(
+      `UPDATE events SET repository_provider = 'd1'
+        WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .run();
+  });
 });
