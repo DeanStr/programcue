@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useFetcher } from "react-router";
 
 import {
@@ -81,6 +89,51 @@ function useOnlineState() {
   }, []);
   return online;
 }
+function useScheduleAutosave(input: {
+  enabled: boolean;
+  dirty: boolean;
+  online: boolean;
+  blocked: boolean;
+  fetcherState: string;
+  recoveryState: string;
+  changeToken: string;
+  submit: () => void;
+}) {
+  const {
+    enabled,
+    dirty,
+    online,
+    blocked,
+    fetcherState,
+    recoveryState,
+    changeToken,
+    submit,
+  } = input;
+  useEffect(() => {
+    if (
+      !enabled ||
+      !dirty ||
+      !online ||
+      blocked ||
+      fetcherState !== "idle" ||
+      recoveryState === "conflict" ||
+      recoveryState === "restore_available" ||
+      recoveryState === "retry_required"
+    )
+      return;
+    const timer = window.setTimeout(submit, 900);
+    return () => window.clearTimeout(timer);
+  }, [
+    blocked,
+    changeToken,
+    dirty,
+    enabled,
+    fetcherState,
+    online,
+    recoveryState,
+    submit,
+  ]);
+}
 
 function downloadRecovery(filename: string, value: unknown) {
   const blob = new Blob([JSON.stringify(value, null, 2)], {
@@ -127,18 +180,19 @@ function statusFor(input: {
   if (input.saved) return { label: "Saved", tone: "success" as const };
   return null;
 }
-
-function SessionContentEditor({
-  workspace,
-  session,
-  recoveryScope,
-  calendarPreview,
-}: {
+type SessionContentEditorProps = {
   workspace: ScheduleWorkspace;
   session: ScheduleSession;
   recoveryScope: RecoveryScope;
   calendarPreview: ScheduleCalendarPreview | null;
-}) {
+};
+
+function useSessionContentEditorState({
+  workspace,
+  session,
+  recoveryScope,
+  calendarPreview,
+}: SessionContentEditorProps) {
   const version = workspace.version;
   const editable = version?.status === "draft";
   const initialDraft = useMemo<SessionContentDraft>(
@@ -186,7 +240,6 @@ function SessionContentEditor({
     scheduleRevision: number;
   } | null>(null);
   const handledDataRef = useRef<EditorActionData | null>(null);
-
   draftRef.current = draft;
   const restore = useCallback((payload: SessionContentDraft) => {
     setDraft({ ...payload, requiredResources: [...payload.requiredResources] });
@@ -207,7 +260,6 @@ function SessionContentEditor({
     onRestore: restore,
     enabled: editable,
   });
-
   const submit = useCallback(
     (revisionOverride?: { session: number; schedule: number }) => {
       if (!editable || !version || !online || fetcher.state !== "idle") return;
@@ -263,34 +315,16 @@ function SessionContentEditor({
       version,
     ],
   );
-
-  useEffect(() => {
-    if (
-      !editable ||
-      !dirty ||
-      !online ||
-      serverError ||
-      conflict ||
-      fetcher.state !== "idle" ||
-      recovery.state === "conflict" ||
-      recovery.state === "restore_available" ||
-      recovery.state === "retry_required"
-    )
-      return;
-    const timer = window.setTimeout(() => submit(), 900);
-    return () => window.clearTimeout(timer);
-  }, [
-    conflict,
-    currentFingerprint,
+  useScheduleAutosave({
+    enabled: editable,
     dirty,
-    editable,
-    fetcher.state,
     online,
-    recovery.state,
-    serverError,
+    blocked: Boolean(serverError || conflict),
+    fetcherState: fetcher.state,
+    recoveryState: recovery.state,
+    changeToken: currentFingerprint,
     submit,
-  ]);
-
+  });
   useEffect(() => {
     const result = fetcher.data;
     if (
@@ -335,7 +369,6 @@ function SessionContentEditor({
     }
     setServerError(result.error ?? "Session content could not be saved.");
   }, [fetcher.data, fetcher.state, recovery.markServerSaved, session.id]);
-
   useEffect(() => {
     if (session.revision === serverRevision) return;
     if (fetcher.state !== "idle") return;
@@ -369,7 +402,6 @@ function SessionContentEditor({
     session,
     version,
   ]);
-
   useEffect(() => {
     if (!version || version.revision === scheduleRevision) return;
     if (fetcher.state !== "idle") return;
@@ -387,7 +419,6 @@ function SessionContentEditor({
     }
     setScheduleRevision(version.revision);
   }, [dirty, fetcher.data, fetcher.state, scheduleRevision, session, version]);
-
   const inventory = useMemo(
     () =>
       [...new Set(workspace.rooms.flatMap((room) => room.resources))].sort(),
@@ -406,7 +437,6 @@ function SessionContentEditor({
     saved,
     restored: recovery.state === "restored",
   });
-
   const acceptServer = () => {
     if (!conflict) return;
     const next = {
@@ -440,389 +470,457 @@ function SessionContentEditor({
     operationRef.current = null;
     window.setTimeout(() => submit(revisions), 0);
   };
+  return {
+    workspace,
+    session,
+    calendarPreview,
+    editable,
+    draft,
+    setDraft,
+    serverError,
+    setServerError,
+    warning,
+    conflict,
+    setSaved,
+    surface,
+    setSurface,
+    viewport,
+    setViewport,
+    recovery,
+    submit,
+    inventory,
+    entry,
+    room,
+    status,
+    acceptServer,
+    overwrite,
+  };
+}
 
+const SessionContentEditorContext = createContext<ReturnType<
+  typeof useSessionContentEditorState
+> | null>(null);
+
+function useSessionContentEditorModel() {
+  const model = useContext(SessionContentEditorContext);
+  if (!model) throw new Error("Session content editor model is unavailable.");
+  return model;
+}
+
+function SessionContentFieldsPanel() {
+  const {
+    workspace,
+    session,
+    editable,
+    draft,
+    setDraft,
+    serverError,
+    setServerError,
+    warning,
+    conflict,
+    setSaved,
+    recovery,
+    submit,
+    inventory,
+    status,
+    acceptServer,
+    overwrite,
+  } = useSessionContentEditorModel();
   return (
-    <>
-      <section
-        className="card pad mt"
-        aria-labelledby="session-content-title"
-        data-testid="session-content-editor"
-      >
-        <div className="card-title">
-          <div>
-            <span className="pc-page-eyebrow">Revisioned content</span>
-            <h2 id="session-content-title">Session editor</h2>
-          </div>
-          <span className="row-actions right">
-            {status ? <PersistenceStatus {...status} /> : null}
-            <DraftRecoveryStatus state={recovery.state} />
+    <section
+      className="card pad mt"
+      aria-labelledby="session-content-title"
+      data-testid="session-content-editor"
+    >
+      <div className="card-title">
+        <div>
+          <span className="pc-page-eyebrow">Revisioned content</span>
+          <h2 id="session-content-title">Session editor</h2>
+        </div>
+        <span className="row-actions right">
+          {status ? <PersistenceStatus {...status} /> : null}
+          <DraftRecoveryStatus state={recovery.state} />
+        </span>
+      </div>
+      {!editable ? (
+        <div className="validation-item warn mb">
+          <span>
+            This published version is read-only. Create the next draft before
+            changing session content.
           </span>
         </div>
-        {!editable ? (
-          <div className="validation-item warn mb">
-            <span>
-              This published version is read-only. Create the next draft before
-              changing session content.
-            </span>
-          </div>
-        ) : null}
-        <DraftRecoveryFeedback recovery={recovery} />
-        {serverError ? (
-          <div className="validation-item error mb" role="alert">
-            <strong>Retry required</strong>
-            <span>{serverError}</span>
+      ) : null}
+      <DraftRecoveryFeedback recovery={recovery} />
+      {serverError ? (
+        <div className="validation-item error mb" role="alert">
+          <strong>Retry required</strong>
+          <span>{serverError}</span>
+          <button
+            className="btn small right"
+            type="button"
+            onClick={() => submit()}
+          >
+            Retry the same save
+          </button>
+        </div>
+      ) : null}
+      {warning ? (
+        <div className="validation-item warn mb" role="status">
+          <span>{warning}</span>
+        </div>
+      ) : null}
+      {conflict ? (
+        <div className="validation-item error card pad mb" role="alert">
+          <strong>Session-content conflict</strong>
+          <span>
+            The server changed after this editor loaded. Nothing was
+            overwritten. Compare the current server title “
+            {conflict.session.title}” with your local title “{draft.title}”,
+            then choose which version to keep.
+          </span>
+          <span className="row-actions right">
             <button
-              className="btn small right"
+              className="btn small"
               type="button"
-              onClick={() => submit()}
-            >
-              Retry the same save
-            </button>
-          </div>
-        ) : null}
-        {warning ? (
-          <div className="validation-item warn mb" role="status">
-            <span>{warning}</span>
-          </div>
-        ) : null}
-        {conflict ? (
-          <div className="validation-item error card pad mb" role="alert">
-            <strong>Session-content conflict</strong>
-            <span>
-              The server changed after this editor loaded. Nothing was
-              overwritten. Compare the current server title “
-              {conflict.session.title}” with your local title “{draft.title}”,
-              then choose which version to keep.
-            </span>
-            <span className="row-actions right">
-              <button
-                className="btn small"
-                type="button"
-                onClick={() =>
-                  downloadRecovery(
-                    `${session.slug}-session-recovery.json`,
-                    draft,
-                  )
-                }
-              >
-                Export local edits
-              </button>
-              <button
-                className="btn small"
-                type="button"
-                onClick={acceptServer}
-              >
-                Load server version
-              </button>
-              <button
-                className="btn small primary"
-                type="button"
-                onClick={overwrite}
-              >
-                Save my version
-              </button>
-            </span>
-          </div>
-        ) : null}
-        <div className="grid grid-2">
-          <label className="label">
-            Title
-            <input
-              className="field"
-              value={draft.title}
-              maxLength={240}
-              disabled={!editable}
-              onChange={(event) => {
-                setDraft((current) => ({
-                  ...current,
-                  title: event.target.value,
-                }));
-                setServerError(null);
-                setSaved(false);
-              }}
-              onBlur={() =>
-                setDraft((current) => ({
-                  ...current,
-                  title: current.title.trim(),
-                }))
+              onClick={() =>
+                downloadRecovery(`${session.slug}-session-recovery.json`, draft)
               }
-            />
-          </label>
-          <label className="label">
-            Format
-            <select
-              className="select"
-              value={draft.format}
-              disabled={!editable}
-              onChange={(event) => {
-                const selected = workspace.sessionFormats.find(
-                  (format) => format.key === event.target.value,
-                );
-                setDraft((current) => ({
-                  ...current,
-                  format: event.target.value,
-                  durationMinutes:
-                    current.format === event.target.value || !selected
-                      ? current.durationMinutes
-                      : selected.defaultDurationMinutes,
-                }));
-                setServerError(null);
-                setSaved(false);
-              }}
             >
-              {workspace.sessionFormats.map((format) => (
-                <option key={format.key} value={format.key}>
-                  {format.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="label span-2">
-            Public description
-            <textarea
-              className="textarea"
-              rows={5}
-              maxLength={12_000}
-              value={draft.description}
-              disabled={!editable}
-              onChange={(event) => {
-                setDraft((current) => ({
-                  ...current,
-                  description: event.target.value,
-                }));
-                setServerError(null);
-                setSaved(false);
-              }}
-            />
-          </label>
-          <label className="label">
-            Duration (minutes)
-            <input
-              className="field"
-              type="number"
-              min={5}
-              max={480}
-              value={draft.durationMinutes}
-              disabled={!editable}
-              onChange={(event) => {
-                setDraft((current) => ({
-                  ...current,
-                  durationMinutes: Number(event.target.value),
-                }));
-                setServerError(null);
-                setSaved(false);
-              }}
-            />
-          </label>
-          <label className="label">
-            Track
-            <select
-              className="select"
-              value={draft.trackId ?? ""}
-              disabled={!editable}
-              onChange={(event) => {
-                setDraft((current) => ({
-                  ...current,
-                  trackId: event.target.value || null,
-                }));
-                setServerError(null);
-                setSaved(false);
-              }}
-            >
-              <option value="">No track</option>
-              {workspace.tracks.map((track) => (
-                <option key={track.id} value={track.id}>
-                  {track.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="label">
-            Visibility
-            <select
-              className="select"
-              value={draft.visibility}
-              disabled={!editable}
-              onChange={(event) => {
-                setDraft((current) => ({
-                  ...current,
-                  visibility: event.target
-                    .value as SessionContentDraft["visibility"],
-                }));
-                setServerError(null);
-                setSaved(false);
-              }}
-            >
-              <option value="public">Public</option>
-              <option value="private">Private</option>
-              <option value="hidden">Hidden</option>
-            </select>
-          </label>
-          <fieldset className="stack">
-            <legend className="label">Required resources</legend>
-            {inventory.length ? (
-              inventory.map((resource) => (
-                <label className="toggle" key={resource}>
-                  <input
-                    type="checkbox"
-                    checked={draft.requiredResources.includes(resource)}
-                    disabled={!editable}
-                    onChange={(event) => {
-                      setDraft((current) => ({
-                        ...current,
-                        requiredResources: event.target.checked
-                          ? [...current.requiredResources, resource]
-                          : current.requiredResources.filter(
-                              (candidate) => candidate !== resource,
-                            ),
-                      }));
-                      setServerError(null);
-                      setSaved(false);
-                    }}
-                  />{" "}
-                  {resource}
-                </label>
-              ))
-            ) : (
-              <span className="help">No room resources are configured.</span>
-            )}
-          </fieldset>
-        </div>
-      </section>
-
-      <section
-        className="card pad mt"
-        aria-labelledby="content-preview-title"
-        data-testid="session-content-preview"
-      >
-        <div className="card-title">
-          <div>
-            <span className="pc-page-eyebrow">Isolated live preview</span>
-            <h2 id="content-preview-title">Session card and detail</h2>
-          </div>
-          <div className="page-actions">
-            {(["desktop", "mobile"] as const).map((option) => (
-              <button
-                className={`btn small${viewport === option ? " primary" : ""}`}
-                type="button"
-                aria-pressed={viewport === option}
-                key={option}
-                onClick={() => setViewport(option)}
-              >
-                {option[0].toUpperCase() + option.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="tabs mb" role="group" aria-label="Preview surface">
-          {(["card", "detail", "calendar"] as const).map((option) => (
+              Export local edits
+            </button>
+            <button className="btn small" type="button" onClick={acceptServer}>
+              Load server version
+            </button>
             <button
-              className={`tab${surface === option ? " active" : ""}`}
+              className="btn small primary"
               type="button"
-              aria-pressed={surface === option}
-              key={option}
-              onClick={() => setSurface(option)}
+              onClick={overwrite}
             >
-              {option === "card"
-                ? "Session card"
-                : option === "detail"
-                  ? "Session detail"
-                  : "Calendar"}
+              Save my version
+            </button>
+          </span>
+        </div>
+      ) : null}
+      <div className="grid grid-2">
+        <label className="label">
+          Title
+          <input
+            className="field"
+            value={draft.title}
+            maxLength={240}
+            disabled={!editable}
+            onChange={(event) => {
+              setDraft((current) => ({
+                ...current,
+                title: event.target.value,
+              }));
+              setServerError(null);
+              setSaved(false);
+            }}
+            onBlur={() =>
+              setDraft((current) => ({
+                ...current,
+                title: current.title.trim(),
+              }))
+            }
+          />
+        </label>
+        <label className="label">
+          Format
+          <select
+            className="select"
+            value={draft.format}
+            disabled={!editable}
+            onChange={(event) => {
+              const selected = workspace.sessionFormats.find(
+                (format) => format.key === event.target.value,
+              );
+              setDraft((current) => ({
+                ...current,
+                format: event.target.value,
+                durationMinutes:
+                  current.format === event.target.value || !selected
+                    ? current.durationMinutes
+                    : selected.defaultDurationMinutes,
+              }));
+              setServerError(null);
+              setSaved(false);
+            }}
+          >
+            {workspace.sessionFormats.map((format) => (
+              <option key={format.key} value={format.key}>
+                {format.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="label span-2">
+          Public description
+          <textarea
+            className="textarea"
+            rows={5}
+            maxLength={12_000}
+            value={draft.description}
+            disabled={!editable}
+            onChange={(event) => {
+              setDraft((current) => ({
+                ...current,
+                description: event.target.value,
+              }));
+              setServerError(null);
+              setSaved(false);
+            }}
+          />
+        </label>
+        <label className="label">
+          Duration (minutes)
+          <input
+            className="field"
+            type="number"
+            min={5}
+            max={480}
+            value={draft.durationMinutes}
+            disabled={!editable}
+            onChange={(event) => {
+              setDraft((current) => ({
+                ...current,
+                durationMinutes: Number(event.target.value),
+              }));
+              setServerError(null);
+              setSaved(false);
+            }}
+          />
+        </label>
+        <label className="label">
+          Track
+          <select
+            className="select"
+            value={draft.trackId ?? ""}
+            disabled={!editable}
+            onChange={(event) => {
+              setDraft((current) => ({
+                ...current,
+                trackId: event.target.value || null,
+              }));
+              setServerError(null);
+              setSaved(false);
+            }}
+          >
+            <option value="">No track</option>
+            {workspace.tracks.map((track) => (
+              <option key={track.id} value={track.id}>
+                {track.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="label">
+          Visibility
+          <select
+            className="select"
+            value={draft.visibility}
+            disabled={!editable}
+            onChange={(event) => {
+              setDraft((current) => ({
+                ...current,
+                visibility: event.target
+                  .value as SessionContentDraft["visibility"],
+              }));
+              setServerError(null);
+              setSaved(false);
+            }}
+          >
+            <option value="public">Public</option>
+            <option value="private">Private</option>
+            <option value="hidden">Hidden</option>
+          </select>
+        </label>
+        <fieldset className="stack">
+          <legend className="label">Required resources</legend>
+          {inventory.length ? (
+            inventory.map((resource) => (
+              <label className="toggle" key={resource}>
+                <input
+                  type="checkbox"
+                  checked={draft.requiredResources.includes(resource)}
+                  disabled={!editable}
+                  onChange={(event) => {
+                    setDraft((current) => ({
+                      ...current,
+                      requiredResources: event.target.checked
+                        ? [...current.requiredResources, resource]
+                        : current.requiredResources.filter(
+                            (candidate) => candidate !== resource,
+                          ),
+                    }));
+                    setServerError(null);
+                    setSaved(false);
+                  }}
+                />{" "}
+                {resource}
+              </label>
+            ))
+          ) : (
+            <span className="help">No room resources are configured.</span>
+          )}
+        </fieldset>
+      </div>
+    </section>
+  );
+}
+
+function SessionContentPreviewPanel() {
+  const {
+    workspace,
+    session,
+    calendarPreview,
+    draft,
+    surface,
+    setSurface,
+    viewport,
+    setViewport,
+    entry,
+    room,
+  } = useSessionContentEditorModel();
+  return (
+    <section
+      className="card pad mt"
+      aria-labelledby="content-preview-title"
+      data-testid="session-content-preview"
+    >
+      <div className="card-title">
+        <div>
+          <span className="pc-page-eyebrow">Isolated live preview</span>
+          <h2 id="content-preview-title">Session card and detail</h2>
+        </div>
+        <div className="page-actions">
+          {(["desktop", "mobile"] as const).map((option) => (
+            <button
+              className={`btn small${viewport === option ? " primary" : ""}`}
+              type="button"
+              aria-pressed={viewport === option}
+              key={option}
+              onClick={() => setViewport(option)}
+            >
+              {option[0].toUpperCase() + option.slice(1)}
             </button>
           ))}
         </div>
-        <div
-          className="card pad"
-          style={{
-            marginInline: "auto",
-            maxWidth: viewport === "mobile" ? 390 : 900,
-            borderColor: workspace.event.brandAccent,
-          }}
-          data-preview-viewport={viewport}
-        >
-          {surface === "card" ? (
-            <article>
-              <span className="pill">{draft.format}</span>
-              <h3>{draft.title || "Untitled session"}</h3>
-              <p className="help">
-                {session.speakerNames.join(", ") || "Speaker to be announced"}
-              </p>
-              <strong>
-                {entry
-                  ? `${formatDate(entry.startsAt, workspace.event.timezone)} · ${formatTime(entry.startsAt, workspace.event.timezone)}`
-                  : `${draft.durationMinutes} minutes · not scheduled`}
-              </strong>
-            </article>
-          ) : surface === "detail" ? (
-            <article>
-              <span className="pill">Session detail</span>
-              <h2>{draft.title || "Untitled session"}</h2>
-              <p>{draft.description || "No public description yet."}</p>
-              <dl>
-                <div>
-                  <dt>Speakers</dt>
-                  <dd>
-                    {session.speakerNames.join(", ") || "To be announced"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Track</dt>
-                  <dd>
-                    {workspace.tracks.find(
-                      (track) => track.id === draft.trackId,
-                    )?.name ?? "No track"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Visibility</dt>
-                  <dd>{draft.visibility}</dd>
-                </div>
-              </dl>
-            </article>
-          ) : (
-            <article>
-              <span className="pill">Generated invitation data</span>
-              <h2>{draft.title || "Untitled session"}</h2>
-              <p>{draft.description || "No description."}</p>
-              <p>
-                {entry
-                  ? `${formatDate(entry.startsAt, workspace.event.timezone)} · ${formatTime(entry.startsAt, workspace.event.timezone)}–${formatTime(entry.endsAt, workspace.event.timezone)}`
-                  : "Schedule the session to generate invitation data."}
-              </p>
-              <p>
-                {room?.name ?? "Room to be assigned"} ·{" "}
-                {workspace.event.timezone}
-              </p>
-              {calendarPreview ? (
-                <details>
-                  <summary>
-                    Exact ICS generated from the last saved server revision
-                  </summary>
-                  <pre className="code-block">{calendarPreview.ics}</pre>
-                  <button
-                    className="btn small"
-                    type="button"
-                    onClick={() => {
-                      const blob = new Blob([calendarPreview.ics], {
-                        type: "text/calendar;charset=utf-8",
-                      });
-                      const href = URL.createObjectURL(blob);
-                      const link = document.createElement("a");
-                      link.href = href;
-                      link.download = `${session.slug}-preview.ics`;
-                      link.click();
-                      URL.revokeObjectURL(href);
-                    }}
-                  >
-                    Download generated ICS
-                  </button>
-                </details>
-              ) : null}
-            </article>
-          )}
-        </div>
-      </section>
-    </>
+      </div>
+      <div className="tabs mb" role="group" aria-label="Preview surface">
+        {(["card", "detail", "calendar"] as const).map((option) => (
+          <button
+            className={`tab${surface === option ? " active" : ""}`}
+            type="button"
+            aria-pressed={surface === option}
+            key={option}
+            onClick={() => setSurface(option)}
+          >
+            {option === "card"
+              ? "Session card"
+              : option === "detail"
+                ? "Session detail"
+                : "Calendar"}
+          </button>
+        ))}
+      </div>
+      <div
+        className="card pad"
+        style={{
+          marginInline: "auto",
+          maxWidth: viewport === "mobile" ? 390 : 900,
+          borderColor: workspace.event.brandAccent,
+        }}
+        data-preview-viewport={viewport}
+      >
+        {surface === "card" ? (
+          <article>
+            <span className="pill">{draft.format}</span>
+            <h3>{draft.title || "Untitled session"}</h3>
+            <p className="help">
+              {session.speakerNames.join(", ") || "Speaker to be announced"}
+            </p>
+            <strong>
+              {entry
+                ? `${formatDate(entry.startsAt, workspace.event.timezone)} · ${formatTime(entry.startsAt, workspace.event.timezone)}`
+                : `${draft.durationMinutes} minutes · not scheduled`}
+            </strong>
+          </article>
+        ) : surface === "detail" ? (
+          <article>
+            <span className="pill">Session detail</span>
+            <h2>{draft.title || "Untitled session"}</h2>
+            <p>{draft.description || "No public description yet."}</p>
+            <dl>
+              <div>
+                <dt>Speakers</dt>
+                <dd>{session.speakerNames.join(", ") || "To be announced"}</dd>
+              </div>
+              <div>
+                <dt>Track</dt>
+                <dd>
+                  {workspace.tracks.find((track) => track.id === draft.trackId)
+                    ?.name ?? "No track"}
+                </dd>
+              </div>
+              <div>
+                <dt>Visibility</dt>
+                <dd>{draft.visibility}</dd>
+              </div>
+            </dl>
+          </article>
+        ) : (
+          <article>
+            <span className="pill">Generated invitation data</span>
+            <h2>{draft.title || "Untitled session"}</h2>
+            <p>{draft.description || "No description."}</p>
+            <p>
+              {entry
+                ? `${formatDate(entry.startsAt, workspace.event.timezone)} · ${formatTime(entry.startsAt, workspace.event.timezone)}–${formatTime(entry.endsAt, workspace.event.timezone)}`
+                : "Schedule the session to generate invitation data."}
+            </p>
+            <p>
+              {room?.name ?? "Room to be assigned"} · {workspace.event.timezone}
+            </p>
+            {calendarPreview ? (
+              <details>
+                <summary>
+                  Exact ICS generated from the last saved server revision
+                </summary>
+                <pre className="code-block">{calendarPreview.ics}</pre>
+                <button
+                  className="btn small"
+                  type="button"
+                  onClick={() => {
+                    const blob = new Blob([calendarPreview.ics], {
+                      type: "text/calendar;charset=utf-8",
+                    });
+                    const href = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = href;
+                    link.download = `${session.slug}-preview.ics`;
+                    link.click();
+                    URL.revokeObjectURL(href);
+                  }}
+                >
+                  Download generated ICS
+                </button>
+              </details>
+            ) : null}
+          </article>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SessionContentEditor(props: SessionContentEditorProps) {
+  const model = useSessionContentEditorState(props);
+  return (
+    <SessionContentEditorContext.Provider value={model}>
+      <SessionContentFieldsPanel />
+      <SessionContentPreviewPanel />
+    </SessionContentEditorContext.Provider>
   );
 }
 
@@ -895,32 +993,16 @@ function ScheduleNotesEditor({
     [editable, fetcher, online, scheduleRevision, version],
   );
 
-  useEffect(() => {
-    if (
-      !editable ||
-      !dirty ||
-      !online ||
-      serverError ||
-      conflict ||
-      fetcher.state !== "idle" ||
-      recovery.state === "conflict" ||
-      recovery.state === "restore_available" ||
-      recovery.state === "retry_required"
-    )
-      return;
-    const timer = window.setTimeout(() => submit(), 900);
-    return () => window.clearTimeout(timer);
-  }, [
-    conflict,
+  useScheduleAutosave({
+    enabled: editable,
     dirty,
-    editable,
-    fetcher.state,
-    notes,
     online,
-    recovery.state,
-    serverError,
+    blocked: Boolean(serverError || conflict),
+    fetcherState: fetcher.state,
+    recoveryState: recovery.state,
+    changeToken: notes,
     submit,
-  ]);
+  });
 
   useEffect(() => {
     const result = fetcher.data;

@@ -17,6 +17,7 @@ import { nodeOnlyTestFiles } from "../vitest.test-files.ts";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ignoredTestDiscoveryDirectories = new Set([
+  ".claude",
   ".git",
   ".artifacts",
   ".react-router",
@@ -164,8 +165,7 @@ test("resource embed origins are explicit exact HTTPS origins", () => {
     ),
   );
 
-  configs.production.vars.RESOURCE_EMBED_ORIGINS =
-    "https://docs.google.com,";
+  configs.production.vars.RESOURCE_EMBED_ORIGINS = "https://docs.google.com,";
   assert.ok(
     validateDeploymentConfigs(configs).some(
       ({ profile, kind, message }) =>

@@ -17,3 +17,4 @@ worker-configuration.d.ts
 .DS_Store
 *.log
 *.tsbuildinfo
+.claude/worktrees/

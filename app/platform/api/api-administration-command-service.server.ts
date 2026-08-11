@@ -10,6 +10,10 @@ import {
   TaskService,
   taskTemplateIdForIntent,
 } from "~/modules/tasks/task-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { SessionBulkService } from "~/platform/operations/session-bulk-service.server";
+import { decryptWebhookSecret } from "~/platform/operations/webhook-crypto.server";
+import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
   apiAdministrationCommandSchema,
   apiAdministrationFamilySchema,
@@ -33,12 +37,8 @@ import {
   apiWebhookStatusSchema,
   apiWebhookTestSchema,
 } from "./api-command-contract";
-import { ApiError, apiRequestHash } from "./api.server";
 import { ApiPersonIdempotencyService } from "./api-person-idempotency.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { SessionBulkService } from "~/platform/operations/session-bulk-service.server";
-import { decryptWebhookSecret } from "~/platform/operations/webhook-crypto.server";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
+import { ApiError, apiRequestHash } from "./api.server";
 
 type Family = z.infer<typeof apiAdministrationFamilySchema>;
 type Command = z.infer<typeof apiAdministrationCommandSchema>;
@@ -220,18 +220,14 @@ export class ApiAdministrationCommandService {
       }>();
   }
 
-  async execute(
+  private async executeForms(
     viewer: Viewer,
-    rawFamily: string | undefined,
-    rawItemId: string | undefined,
-    rawCommand: string | undefined,
+    family: Family,
+    itemId: string,
+    command: Command,
     rawInput: unknown,
     idempotencyKey: string,
-  ) {
-    const family = apiAdministrationFamilySchema.parse(rawFamily);
-    const command = apiAdministrationCommandSchema.parse(rawCommand);
-    const itemId = identifierSchema.parse(rawItemId);
-
+  ): Promise<unknown> {
     if (family === "forms" && command === "save") {
       const input = apiFormSaveSchema.parse(rawInput);
       if (itemId === "new") {
@@ -311,6 +307,21 @@ export class ApiAdministrationCommandService {
       return { ...response.result, replayed: response.replayed };
     }
 
+    throw new ApiError(
+      404,
+      "ADMINISTRATION_COMMAND_NOT_FOUND",
+      `The ${family}/${command} administration command is not supported`,
+    );
+  }
+
+  private async executePeople(
+    viewer: Viewer,
+    family: Family,
+    itemId: string,
+    command: Command,
+    rawInput: unknown,
+    idempotencyKey: string,
+  ): Promise<unknown> {
     if (family === "people" && command === "invite") {
       assertNew(itemId);
       const input = apiPersonInvitationSchema.parse(rawInput);
@@ -370,6 +381,21 @@ export class ApiAdministrationCommandService {
       return { ...response.result, replayed: response.replayed };
     }
 
+    throw new ApiError(
+      404,
+      "ADMINISTRATION_COMMAND_NOT_FOUND",
+      `The ${family}/${command} administration command is not supported`,
+    );
+  }
+
+  private async executeMemberships(
+    viewer: Viewer,
+    family: Family,
+    itemId: string,
+    command: Command,
+    rawInput: unknown,
+    idempotencyKey: string,
+  ): Promise<unknown> {
     if (family === "memberships" && command === "revoke") {
       const input = apiMembershipRevocationSchema.parse(rawInput);
       assertMatch(input.membershipId, itemId, "Membership identifier");
@@ -408,6 +434,21 @@ export class ApiAdministrationCommandService {
       };
     }
 
+    throw new ApiError(
+      404,
+      "ADMINISTRATION_COMMAND_NOT_FOUND",
+      `The ${family}/${command} administration command is not supported`,
+    );
+  }
+
+  private async executeSessions(
+    viewer: Viewer,
+    family: Family,
+    itemId: string,
+    command: Command,
+    rawInput: unknown,
+    idempotencyKey: string,
+  ): Promise<unknown> {
     if (family === "sessions" && command === "edit") {
       const input = apiSessionEditSchema.parse(rawInput);
       assertMatch(input.sessionId, itemId, "Session identifier");
@@ -472,6 +513,21 @@ export class ApiAdministrationCommandService {
       return { ...response.result, replayed: response.replayed };
     }
 
+    throw new ApiError(
+      404,
+      "ADMINISTRATION_COMMAND_NOT_FOUND",
+      `The ${family}/${command} administration command is not supported`,
+    );
+  }
+
+  private async executeDecisions(
+    viewer: Viewer,
+    family: Family,
+    itemId: string,
+    command: Command,
+    rawInput: unknown,
+    idempotencyKey: string,
+  ): Promise<unknown> {
     if (
       family === "decisions" &&
       (command === "draft" || command === "release")
@@ -506,6 +562,21 @@ export class ApiAdministrationCommandService {
       return { ...response.result, replayed: response.replayed };
     }
 
+    throw new ApiError(
+      404,
+      "ADMINISTRATION_COMMAND_NOT_FOUND",
+      `The ${family}/${command} administration command is not supported`,
+    );
+  }
+
+  private async executeTaskTemplates(
+    viewer: Viewer,
+    family: Family,
+    itemId: string,
+    command: Command,
+    rawInput: unknown,
+    idempotencyKey: string,
+  ): Promise<unknown> {
     if (family === "task-templates" && command === "save") {
       assertNew(itemId);
       const input = apiTaskTemplateSchema.parse(rawInput);
@@ -535,6 +606,21 @@ export class ApiAdministrationCommandService {
       return { ...response.result, replayed: response.replayed };
     }
 
+    throw new ApiError(
+      404,
+      "ADMINISTRATION_COMMAND_NOT_FOUND",
+      `The ${family}/${command} administration command is not supported`,
+    );
+  }
+
+  private async executeTaskAssignments(
+    viewer: Viewer,
+    family: Family,
+    itemId: string,
+    command: Command,
+    rawInput: unknown,
+    idempotencyKey: string,
+  ): Promise<unknown> {
     if (family === "task-assignments" && command === "assign") {
       assertNew(itemId);
       const input = apiTaskAssignmentSchema.parse(rawInput);
@@ -578,6 +664,21 @@ export class ApiAdministrationCommandService {
       return { ...response.result, replayed: response.replayed };
     }
 
+    throw new ApiError(
+      404,
+      "ADMINISTRATION_COMMAND_NOT_FOUND",
+      `The ${family}/${command} administration command is not supported`,
+    );
+  }
+
+  private async executeResources(
+    viewer: Viewer,
+    family: Family,
+    itemId: string,
+    command: Command,
+    rawInput: unknown,
+    idempotencyKey: string,
+  ): Promise<unknown> {
     if (family === "resources" && command === "save") {
       const input = apiResourceSaveSchema.parse(rawInput);
       if (itemId === "new") {
@@ -653,6 +754,21 @@ export class ApiAdministrationCommandService {
       return { ...response.result, replayed: response.replayed };
     }
 
+    throw new ApiError(
+      404,
+      "ADMINISTRATION_COMMAND_NOT_FOUND",
+      `The ${family}/${command} administration command is not supported`,
+    );
+  }
+
+  private async executeIntegrationConnections(
+    viewer: Viewer,
+    family: Family,
+    itemId: string,
+    command: Command,
+    rawInput: unknown,
+    idempotencyKey: string,
+  ): Promise<unknown> {
     if (family === "integration-connections" && command === "connect") {
       assertNew(itemId);
       const input = apiIntegrationConnectionSchema.parse(rawInput);
@@ -716,6 +832,21 @@ export class ApiAdministrationCommandService {
       };
     }
 
+    throw new ApiError(
+      404,
+      "ADMINISTRATION_COMMAND_NOT_FOUND",
+      `The ${family}/${command} administration command is not supported`,
+    );
+  }
+
+  private async executeIntegrationMappings(
+    viewer: Viewer,
+    family: Family,
+    itemId: string,
+    command: Command,
+    rawInput: unknown,
+    idempotencyKey: string,
+  ): Promise<unknown> {
     if (family === "integration-mappings" && command === "save") {
       const input = apiIntegrationMappingSchema.parse(rawInput);
       const response = await this.idempotency.run({
@@ -789,6 +920,21 @@ export class ApiAdministrationCommandService {
       };
     }
 
+    throw new ApiError(
+      404,
+      "ADMINISTRATION_COMMAND_NOT_FOUND",
+      `The ${family}/${command} administration command is not supported`,
+    );
+  }
+
+  private async executeWebhookEndpoints(
+    viewer: Viewer,
+    family: Family,
+    itemId: string,
+    command: Command,
+    rawInput: unknown,
+    idempotencyKey: string,
+  ): Promise<unknown> {
     if (family === "webhook-endpoints" && command === "save") {
       assertNew(itemId);
       const input = apiWebhookEndpointSchema.parse(rawInput);
@@ -978,6 +1124,41 @@ export class ApiAdministrationCommandService {
       404,
       "ADMINISTRATION_COMMAND_NOT_FOUND",
       `The ${family}/${command} administration command is not supported`,
+    );
+  }
+
+  async execute(
+    viewer: Viewer,
+    rawFamily: string | undefined,
+    rawItemId: string | undefined,
+    rawCommand: string | undefined,
+    rawInput: unknown,
+    idempotencyKey: string,
+  ) {
+    const family = apiAdministrationFamilySchema.parse(rawFamily);
+    const command = apiAdministrationCommandSchema.parse(rawCommand);
+    const itemId = identifierSchema.parse(rawItemId);
+    const handlers = {
+      forms: this.executeForms,
+      people: this.executePeople,
+      memberships: this.executeMemberships,
+      sessions: this.executeSessions,
+      decisions: this.executeDecisions,
+      "task-templates": this.executeTaskTemplates,
+      "task-assignments": this.executeTaskAssignments,
+      resources: this.executeResources,
+      "integration-connections": this.executeIntegrationConnections,
+      "integration-mappings": this.executeIntegrationMappings,
+      "webhook-endpoints": this.executeWebhookEndpoints,
+    } satisfies Record<Family, typeof this.executeForms>;
+    return handlers[family].call(
+      this,
+      viewer,
+      family,
+      itemId,
+      command,
+      rawInput,
+      idempotencyKey,
     );
   }
 }

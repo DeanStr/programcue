@@ -8,7 +8,14 @@ import {
   Globe2,
   Plus,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   data,
   Form,
@@ -19,16 +26,16 @@ import {
 } from "react-router";
 import { ZodError } from "zod";
 
-import type { Route } from "./+types/admin-resources";
+import { Dialog } from "~/components/dialog";
 import {
   DirectMultipartUpload,
   DirectUploadCompletionConflictError,
 } from "~/components/direct-multipart-upload";
-import { Dialog } from "~/components/dialog";
 import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
+import { maximumMegabytes } from "~/modules/files/file-policy";
 import {
   appendEmbeds,
   renderResourceDocument,
@@ -51,7 +58,7 @@ import {
   useDraftRecovery,
 } from "~/platform/drafts/draft-recovery";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
-import { maximumMegabytes } from "~/modules/files/file-policy";
+import type { Route } from "./+types/admin-resources";
 
 export const meta = () => [{ title: "Speaker Resources · Program Cue" }];
 
@@ -376,8 +383,7 @@ function statusClass(status: string) {
       ? "danger"
       : "warning";
 }
-
-export default function AdminResources({ loaderData }: Route.ComponentProps) {
+function useResourceAdminState(loaderData: Route.ComponentProps["loaderData"]) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const pendingIntent = navigation.formData?.get("intent");
@@ -510,580 +516,817 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
       recordId: "new",
     });
   }, [loaderData.createdFromLocalDraft, loaderData.recoveryScope]);
-  return (
+  return {
+    loaderData,
+    actionData,
+    navigation,
+    pendingIntent,
+    selected,
+    document,
+    setDocument,
+    creating,
+    setCreating,
+    audienceScope,
+    setAudienceScope,
+    title,
+    setTitle,
+    slug,
+    setSlug,
+    category,
+    setCategory,
+    embedUrls,
+    setEmbedUrls,
+    audiencePersonIds,
+    setAudiencePersonIds,
+    acknowledgementRequired,
+    setAcknowledgementRequired,
+    dirty,
+    setDirty,
+    publishConfirmationOpen,
+    setPublishConfirmationOpen,
+    previewViewport,
+    setPreviewViewport,
+    recoveryPayload,
+    resourcePreview,
+    restoreDraft,
+    editing,
+    editorKey,
+    recovery,
+  };
+}
+
+const ResourceAdminModelContext = createContext<ReturnType<
+  typeof useResourceAdminState
+> | null>(null);
+
+function useResourceAdminModel() {
+  const model = useContext(ResourceAdminModelContext);
+  if (!model) throw new Error("Resource administration model is unavailable.");
+  return model;
+}
+
+function ResourceSaveIntent() {
+  const {
+    loaderData,
+    actionData,
+    navigation,
+    pendingIntent,
+    selected,
+    document,
+    setDocument,
+    creating,
+    setCreating,
+    audienceScope,
+    setAudienceScope,
+    title,
+    setTitle,
+    slug,
+    setSlug,
+    category,
+    setCategory,
+    embedUrls,
+    setEmbedUrls,
+    audiencePersonIds,
+    setAudiencePersonIds,
+    acknowledgementRequired,
+    setAcknowledgementRequired,
+    dirty,
+    setDirty,
+    publishConfirmationOpen,
+    setPublishConfirmationOpen,
+    previewViewport,
+    setPreviewViewport,
+    recoveryPayload,
+    resourcePreview,
+    restoreDraft,
+    editing,
+    editorKey,
+    recovery,
+  } = useResourceAdminModel();
+  return <input type="hidden" name="intent" value="save" />;
+}
+
+function ResourceEditingIdentity() {
+  const { editing } = useResourceAdminModel();
+  return editing ? (
     <>
-      <div className="page-head pc-page-header">
-        <div>
-          <span className="pc-page-eyebrow">Speaker knowledge</span>
-          <h1>Resource pages</h1>
-          <p>
-            Author versioned guidance with a constrained Tiptap editor, safe
-            HTTPS embeds and audience-scoped publication.
-          </p>
-        </div>
-        <div className="page-actions">
-          <Link
-            className="btn"
-            to="/speaker/resources"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <ExternalLink aria-hidden size={15} /> Speaker view
-            <span className="sr-only"> (opens in a new tab)</span>
-          </Link>
-          <button
-            className="btn primary"
-            type="button"
-            onClick={() => {
-              setCreating(true);
-              setDocument(emptyDocument);
-              setAudienceScope("all_speakers");
-              setTitle("");
-              setSlug("");
-              setCategory("");
-              setEmbedUrls("");
-              setAudiencePersonIds([]);
-              setAcknowledgementRequired(false);
-              setDirty(false);
-            }}
-          >
-            <Plus aria-hidden size={15} /> New resource
-          </button>
-        </div>
+      <input type="hidden" name="id" value={editing.id} />
+      <input type="hidden" name="revision" value={editing.revision} />
+    </>
+  ) : null;
+}
+
+function ResourceDocumentValue() {
+  const { document } = useResourceAdminModel();
+  return (
+    <input type="hidden" name="documentJson" value={JSON.stringify(document)} />
+  );
+}
+
+function ResourceEditorHeader() {
+  const { editing } = useResourceAdminModel();
+  return (
+    <div className="resource-editor-head">
+      <div>
+        <span className="pc-section-kicker">
+          {editing
+            ? `Version ${editing.versionNumber ?? 1} · ${editing.versionStatus}`
+            : "New draft"}
+        </span>
+        <h2>{editing?.title ?? "Untitled resource"}</h2>
       </div>
-      {actionData ? (
-        <div
-          className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
-          role={actionData.ok ? "status" : "alert"}
+      {editing ? (
+        <span className={`status ${statusClass(editing.status)}`}>
+          {editing.status}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function ResourceSettingsPanel() {
+  const {
+    audienceScope,
+    setAudienceScope,
+    title,
+    setTitle,
+    slug,
+    setSlug,
+    category,
+    setCategory,
+    setDirty,
+  } = useResourceAdminModel();
+  return (
+    <div className="resource-settings-grid">
+      <label className="label">
+        Title
+        <input
+          className="field"
+          name="title"
+          value={title}
+          onChange={(event) => {
+            setTitle(event.target.value);
+            setDirty(true);
+          }}
+          required
+          maxLength={180}
+        />
+      </label>
+      <label className="label">
+        URL slug
+        <input
+          className="field"
+          name="slug"
+          value={slug}
+          onChange={(event) => {
+            setSlug(event.target.value);
+            setDirty(true);
+          }}
+          required
+          pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+        />
+      </label>
+      <label className="label">
+        Category
+        <input
+          className="field"
+          name="category"
+          value={category}
+          onChange={(event) => {
+            setCategory(event.target.value);
+            setDirty(true);
+          }}
+        />
+      </label>
+      <label className="label">
+        Audience
+        <select
+          className="select"
+          name="audienceScope"
+          value={audienceScope}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (
+              value === "all_speakers" ||
+              value === "accepted_speakers" ||
+              value === "custom"
+            ) {
+              setAudienceScope(value);
+              setDirty(true);
+            }
+          }}
         >
-          {actionData.ok ? (
-            <CheckCircle2 aria-hidden size={18} />
-          ) : (
-            <AlertTriangle aria-hidden size={18} />
-          )}
-          <div className="pc-status-notice-copy">
-            <strong>{actionData.ok ? "Saved" : "Action needed"}</strong>
-            <div>{actionData.message}</div>
-          </div>
-        </div>
-      ) : null}
-      {loaderData.liveUpdateDelayed ? (
-        <div className="pc-status-notice is-warning mb" role="status">
-          <AlertTriangle aria-hidden size={18} />
-          <div className="pc-status-notice-copy">
-            <strong>Draft saved · live update delayed</strong>
-            <div>
-              The new resource draft is authoritative in D1. Refresh other open
-              views before continuing.
-            </div>
-          </div>
-        </div>
-      ) : null}
-      <DraftRecoveryFeedback recovery={recovery} />
-      {actionData && "conflict" in actionData && actionData.conflict ? (
-        <div className="validation-item error card pad mb" role="alert">
-          <strong>Draft conflict</strong>
-          <span>
-            The editor and browser recovery copy remain intact. Export them or
-            explicitly load the latest server version.
-          </span>
-          <span className="row-actions right">
-            <button
-              className="btn small"
-              type="button"
-              onClick={() => {
-                const blob = new Blob(
-                  [JSON.stringify(recoveryPayload, null, 2)],
-                  {
-                    type: "application/json",
-                  },
-                );
-                const href = URL.createObjectURL(blob);
-                const link = window.document.createElement("a");
-                link.href = href;
-                link.download = `${slug || "resource"}-recovery.json`;
-                link.click();
-                URL.revokeObjectURL(href);
-              }}
-            >
-              Export local edits
-            </button>
-            <button
-              className="btn small"
-              type="button"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Discard the current editor contents and load the latest server version?",
-                  )
-                ) {
-                  void recovery.clear().then(() => window.location.reload());
-                }
-              }}
-            >
-              Load server version
-            </button>
-          </span>
-        </div>
-      ) : null}
-      <div className="resource-admin-layout">
-        <aside className="card pad resource-admin-index">
-          <div className="card-title">
-            <h2>Library</h2>
-            <span className="pill right">{loaderData.pages.length}</span>
-          </div>
-          <div className="stack">
-            {loaderData.pages.map((page) => (
-              <Link
-                className={`resource-link${!creating && selected?.id === page.id ? " active" : ""}`}
-                to={`/admin/resources?resource=${page.id}`}
-                key={page.id}
-              >
-                <strong>{page.title}</strong>
-                <small>
-                  {page.category ?? "General"} · version{" "}
-                  {page.versionNumber ?? "—"}
-                </small>
-                <span className={`status ${statusClass(page.status)}`}>
-                  {page.status}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </aside>
-        <section className="card resource-admin-editor">
-          <Form key={editorKey} method="post" className="resource-edit-form">
-            <input type="hidden" name="intent" value="save" />
-            {editing ? (
-              <>
-                <input type="hidden" name="id" value={editing.id} />
-                <input type="hidden" name="revision" value={editing.revision} />
-              </>
-            ) : null}
-            <input
-              type="hidden"
-              name="documentJson"
-              value={JSON.stringify(document)}
-            />
-            <div className="resource-editor-head">
-              <div>
-                <span className="pc-section-kicker">
-                  {editing
-                    ? `Version ${editing.versionNumber ?? 1} · ${editing.versionStatus}`
-                    : "New draft"}
-                </span>
-                <h2>{editing?.title ?? "Untitled resource"}</h2>
-              </div>
-              {editing ? (
-                <span className={`status ${statusClass(editing.status)}`}>
-                  {editing.status}
-                </span>
-              ) : null}
-            </div>
-            <div className="resource-settings-grid">
-              <label className="label">
-                Title
-                <input
-                  className="field"
-                  name="title"
-                  value={title}
-                  onChange={(event) => {
-                    setTitle(event.target.value);
-                    setDirty(true);
-                  }}
-                  required
-                  maxLength={180}
-                />
-              </label>
-              <label className="label">
-                URL slug
-                <input
-                  className="field"
-                  name="slug"
-                  value={slug}
-                  onChange={(event) => {
-                    setSlug(event.target.value);
-                    setDirty(true);
-                  }}
-                  required
-                  pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                />
-              </label>
-              <label className="label">
-                Category
-                <input
-                  className="field"
-                  name="category"
-                  value={category}
-                  onChange={(event) => {
-                    setCategory(event.target.value);
-                    setDirty(true);
-                  }}
-                />
-              </label>
-              <label className="label">
-                Audience
-                <select
-                  className="select"
-                  name="audienceScope"
-                  value={audienceScope}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    if (
-                      value === "all_speakers" ||
-                      value === "accepted_speakers" ||
-                      value === "custom"
-                    ) {
-                      setAudienceScope(value);
-                      setDirty(true);
-                    }
-                  }}
-                >
-                  <option value="all_speakers">All speakers</option>
-                  <option value="accepted_speakers">
-                    Speakers with accepted sessions
-                  </option>
-                  <option value="custom">Selected speakers</option>
-                </select>
-              </label>
-            </div>
-            {audienceScope === "custom" ? (
-              <fieldset className="card pad mt">
-                <legend>Selected speakers</legend>
-                {loaderData.audienceCandidates.length ? (
-                  <div className="stack">
-                    {loaderData.audienceCandidates.map((person) => (
-                      <label className="toggle" key={person.id}>
-                        <input
-                          type="checkbox"
-                          name="audiencePersonIds"
-                          value={person.id}
-                          checked={audiencePersonIds.includes(person.id)}
-                          onChange={(event) => {
-                            setAudiencePersonIds((current) =>
-                              event.target.checked
-                                ? [...new Set([...current, person.id])]
-                                : current.filter((id) => id !== person.id),
-                            );
-                            setDirty(true);
-                          }}
-                        />{" "}
-                        <span>
-                          <strong>{person.displayName}</strong>
-                          <small>{person.email}</small>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="help">
-                    Add speakers to sessions before creating a selected-speaker
-                    audience.
-                  </p>
-                )}
-              </fieldset>
-            ) : null}
-            <label className="speaker-confirm">
+          <option value="all_speakers">All speakers</option>
+          <option value="accepted_speakers">
+            Speakers with accepted sessions
+          </option>
+          <option value="custom">Selected speakers</option>
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function ResourceCustomAudiencePanel() {
+  const {
+    loaderData,
+    audienceScope,
+    audiencePersonIds,
+    setAudiencePersonIds,
+    setDirty,
+  } = useResourceAdminModel();
+  return audienceScope === "custom" ? (
+    <fieldset className="card pad mt">
+      <legend>Selected speakers</legend>
+      {loaderData.audienceCandidates.length ? (
+        <div className="stack">
+          {loaderData.audienceCandidates.map((person) => (
+            <label className="toggle" key={person.id}>
               <input
                 type="checkbox"
-                name="acknowledgementRequired"
-                checked={acknowledgementRequired}
+                name="audiencePersonIds"
+                value={person.id}
+                checked={audiencePersonIds.includes(person.id)}
                 onChange={(event) => {
-                  setAcknowledgementRequired(event.target.checked);
+                  setAudiencePersonIds((current) =>
+                    event.target.checked
+                      ? [...new Set([...current, person.id])]
+                      : current.filter((id) => id !== person.id),
+                  );
                   setDirty(true);
                 }}
               />{" "}
-              Create and track an acknowledgement task for this resource
-            </label>
-            <div className="resource-authoring-grid">
-              <div>
-                <label className="label">Page content</label>
-                <RichResourceEditor
-                  key={editorKey}
-                  document={document}
-                  onChange={(next) => {
-                    setDocument(next);
-                    setDirty(true);
-                  }}
-                />
-              </div>
-              <aside>
-                <label className="label">
-                  Approved HTTPS embeds
-                  <textarea
-                    className="textarea"
-                    name="embedUrls"
-                    value={embedUrls}
-                    onChange={(event) => {
-                      setEmbedUrls(event.target.value);
-                      setDirty(true);
-                    }}
-                    placeholder="One HTTPS URL per line"
-                    rows={6}
-                  />
-                </label>
-                <p className="help">
-                  <Globe2 aria-hidden size={13} /> Embeds render in a sandbox
-                  without scripts, forms, popups or parent navigation. Allowed
-                  origins:{" "}
-                  {loaderData.resourceEmbedOrigins.join(", ") || "none"}.
-                </p>
-              </aside>
-            </div>
-            <section
-              className="resource-live-preview mt"
-              aria-label="Live speaker resource preview"
-            >
-              <div className="card-title">
-                <div>
-                  <span className="pc-section-kicker">Live speaker view</span>
-                  <h3>Resource preview</h3>
-                </div>
-                <span
-                  className="preview-viewport-controls right"
-                  role="group"
-                  aria-label="Resource preview size"
-                >
-                  <button
-                    className="btn small"
-                    type="button"
-                    aria-pressed={previewViewport === "mobile"}
-                    onClick={() => setPreviewViewport("mobile")}
-                  >
-                    Mobile
-                  </button>
-                  <button
-                    className="btn small"
-                    type="button"
-                    aria-pressed={previewViewport === "desktop"}
-                    onClick={() => setPreviewViewport("desktop")}
-                  >
-                    Desktop
-                  </button>
-                </span>
-              </div>
-              {resourcePreview.error ? (
-                <div className="validation-item error" role="alert">
-                  <strong>Preview unavailable</strong>
-                  <span>{resourcePreview.error}</span>
-                </div>
-              ) : (
-                <article
-                  className={`resource-preview-device event-branded is-${previewViewport}`}
-                  style={
-                    {
-                      "--event-accent": loaderData.previewEvent.brandAccent,
-                    } as React.CSSProperties
-                  }
-                >
-                  <header>
-                    <span className="brand-mark small">P</span>
-                    <span>
-                      <strong>{loaderData.previewEvent.name}</strong>
-                      <small>Speaker resources</small>
-                    </span>
-                  </header>
-                  <div className="speaker-resource-content">
-                    <span className="pill">{category.trim() || "General"}</span>
-                    <h2>{title.trim() || "Untitled resource"}</h2>
-                    <div
-                      className="resource-rendered"
-                      dangerouslySetInnerHTML={{ __html: resourcePreview.html }}
-                    />
-                  </div>
-                </article>
-              )}
-              <p className="help">
-                Preview content stays local. Saving creates the authoritative D1
-                draft version; publishing controls what speakers can see.
-              </p>
-            </section>
-            <div className="sticky-actions">
-              <span className="subtle">
-                Saving creates a new immutable draft version.
+              <span>
+                <strong>{person.displayName}</strong>
+                <small>{person.email}</small>
               </span>
-              <DraftRecoveryStatus state={recovery.state} />
-              <span className="spacer" />
-              <button
-                className="btn primary"
-                disabled={navigation.state !== "idle"}
-              >
-                {navigation.state === "submitting" && pendingIntent === "save"
-                  ? "Saving…"
-                  : "Save draft version"}
-              </button>
-            </div>
-          </Form>
-          {editing ? (
-            <div className="resource-secondary-actions">
-              <button
-                className="btn primary"
-                type="button"
-                onClick={() => setPublishConfirmationOpen(true)}
-                disabled={
-                  editing.versionStatus !== "draft" ||
-                  dirty ||
-                  navigation.state !== "idle"
-                }
-              >
-                <BookOpenCheck aria-hidden size={15} /> Publish current draft
-              </button>
-              {editing.versionId ? (
-                <DirectMultipartUpload
-                  key={`${editing.versionId}:${editing.revision}`}
-                  target={{ targetType: "resource", targetId: editing.id }}
-                  kinds={[
-                    {
-                      value: "resource_attachment",
-                      label: "Resource attachment",
-                      accept:
-                        ".pdf,.doc,.docx,.xls,.xlsx,.zip,application/pdf,application/zip",
-                      maximumBytes:
-                        loaderData.previewEvent.filePolicy
-                          .supportingDocumentMaximumBytes,
-                    },
-                  ]}
-                  heading="Private resource attachment"
-                  description={`The browser uploads PDF, Office document or ZIP attachments directly to private R2 (maximum ${maximumMegabytes(loaderData.previewEvent.filePolicy.supportingDocumentMaximumBytes)} MB). Save page edits first; the completed file is linked only to this exact draft revision and remains quarantined until scanning passes.`}
-                  disabled={
-                    editing.versionStatus !== "draft" ||
-                    dirty ||
-                    navigation.state !== "idle"
-                  }
-                  onCompleted={async ({ assetId, versionId }) => {
-                    const response = await fetch("/files/resource-attachment", {
-                      method: "POST",
-                      headers: { "content-type": "application/json" },
-                      body: JSON.stringify({
-                        pageId: editing.id,
-                        pageVersionId: editing.versionId,
-                        revision: editing.revision,
-                        assetId,
-                        fileVersionId: versionId,
-                      }),
-                    });
-                    return readResourceAttachmentCompletion(response);
-                  }}
-                />
-              ) : (
-                <div className="validation-item error" role="alert">
-                  This resource has no current draft version. Save a draft
-                  before uploading an attachment.
-                </div>
-              )}
-              {editing.attachments.length ? (
-                <div className="stack resource-admin-attachments">
-                  {editing.attachments.map((attachment) => (
-                    <div className="file-version-row" key={attachment.id}>
-                      <span>
-                        <strong>{attachment.filename}</strong>
-                        <small>
-                          {attachment.uploadStatus} · scan{" "}
-                          {attachment.scanStatus}
-                        </small>
-                      </span>
-                      <span
-                        className={`status ${attachment.scanStatus === "clean" ? "success" : "warning"}`}
-                      >
-                        {attachment.scanStatus === "pending"
-                          ? "Quarantined"
-                          : attachment.scanStatus}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {publishConfirmationOpen && editing ? (
-            <Dialog
-              title="Publish this resource version?"
-              onClose={() => setPublishConfirmationOpen(false)}
-              footer={
-                <>
-                  <button
-                    className="btn"
-                    type="button"
-                    onClick={() => setPublishConfirmationOpen(false)}
-                  >
-                    Keep as draft
-                  </button>
-                  <Form
-                    method="post"
-                    onSubmit={() => setPublishConfirmationOpen(false)}
-                  >
-                    <input type="hidden" name="intent" value="publish" />
-                    <input type="hidden" name="id" value={editing.id} />
-                    <input
-                      type="hidden"
-                      name="revision"
-                      value={editing.revision}
-                    />
-                    <button
-                      className="btn primary"
-                      type="submit"
-                      disabled={
-                        (editing.publicationImpact?.blockingDependentTasks ??
-                          0) > 0
-                      }
-                    >
-                      Publish version {editing.versionNumber}
-                    </button>
-                  </Form>
-                </>
-              }
-            >
-              <p>
-                <strong>{editing.title}</strong> will immediately replace the
-                current public resource for its audience.
-              </p>
-              <ul>
-                <li>Audience: {editing.audienceScope.replaceAll("_", " ")}.</li>
-                {editing.acknowledgementRequired ? (
-                  <li>
-                    Create or reset acknowledgement tasks for{" "}
-                    {editing.publicationImpact?.tasksCreatedOrReset ?? 0}{" "}
-                    eligible speaker
-                    {(editing.publicationImpact?.eligibleSpeakerCount ?? 0) ===
-                    1
-                      ? ""
-                      : "s"}
-                    .
-                  </li>
-                ) : (
-                  <li>No acknowledgement will be required for this version.</li>
-                )}
-                {(editing.publicationImpact?.tasksWaived ?? 0) > 0 ? (
-                  <li>
-                    Waive {editing.publicationImpact!.tasksWaived} existing
-                    acknowledgement task
-                    {editing.publicationImpact!.tasksWaived === 1 ? "" : "s"}.
-                  </li>
-                ) : null}
-                {(editing.publicationImpact?.templateDependenciesRemoved ?? 0) >
-                0 ? (
-                  <li>
-                    Remove acknowledgement as a prerequisite from{" "}
-                    {editing.publicationImpact!.templateDependenciesRemoved}{" "}
-                    active task template
-                    {editing.publicationImpact!.templateDependenciesRemoved ===
-                    1
-                      ? ""
-                      : "s"}
-                    .
-                  </li>
-                ) : null}
-              </ul>
-              {(editing.publicationImpact?.blockingDependentTasks ?? 0) > 0 ? (
-                <div className="validation-item error" role="alert">
-                  Reopen the submitted or completed dependent task before
-                  publishing this acknowledgement reset.
-                </div>
-              ) : null}
-            </Dialog>
-          ) : null}
-        </section>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <p className="help">
+          Add speakers to sessions before creating a selected-speaker audience.
+        </p>
+      )}
+    </fieldset>
+  ) : null;
+}
+
+function ResourceAcknowledgementSetting() {
+  const { acknowledgementRequired, setAcknowledgementRequired, setDirty } =
+    useResourceAdminModel();
+  return (
+    <label className="speaker-confirm">
+      <input
+        type="checkbox"
+        name="acknowledgementRequired"
+        checked={acknowledgementRequired}
+        onChange={(event) => {
+          setAcknowledgementRequired(event.target.checked);
+          setDirty(true);
+        }}
+      />{" "}
+      Create and track an acknowledgement task for this resource
+    </label>
+  );
+}
+
+function ResourceAuthoringPanel() {
+  const {
+    loaderData,
+    document,
+    setDocument,
+    embedUrls,
+    setEmbedUrls,
+    setDirty,
+    editorKey,
+  } = useResourceAdminModel();
+  return (
+    <div className="resource-authoring-grid">
+      <div>
+        <label className="label">Page content</label>
+        <RichResourceEditor
+          key={editorKey}
+          document={document}
+          onChange={(next) => {
+            setDocument(next);
+            setDirty(true);
+          }}
+        />
       </div>
+      <aside>
+        <label className="label">
+          Approved HTTPS embeds
+          <textarea
+            className="textarea"
+            name="embedUrls"
+            value={embedUrls}
+            onChange={(event) => {
+              setEmbedUrls(event.target.value);
+              setDirty(true);
+            }}
+            placeholder="One HTTPS URL per line"
+            rows={6}
+          />
+        </label>
+        <p className="help">
+          <Globe2 aria-hidden size={13} /> Embeds render in a sandbox without
+          scripts, forms, popups or parent navigation. Allowed origins:{" "}
+          {loaderData.resourceEmbedOrigins.join(", ") || "none"}.
+        </p>
+      </aside>
+    </div>
+  );
+}
+
+function ResourcePreviewPanel() {
+  const {
+    loaderData,
+    title,
+    category,
+    previewViewport,
+    setPreviewViewport,
+    resourcePreview,
+  } = useResourceAdminModel();
+  return (
+    <section
+      className="resource-live-preview mt"
+      aria-label="Live speaker resource preview"
+    >
+      <div className="card-title">
+        <div>
+          <span className="pc-section-kicker">Live speaker view</span>
+          <h3>Resource preview</h3>
+        </div>
+        <span
+          className="preview-viewport-controls right"
+          role="group"
+          aria-label="Resource preview size"
+        >
+          <button
+            className="btn small"
+            type="button"
+            aria-pressed={previewViewport === "mobile"}
+            onClick={() => setPreviewViewport("mobile")}
+          >
+            Mobile
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            aria-pressed={previewViewport === "desktop"}
+            onClick={() => setPreviewViewport("desktop")}
+          >
+            Desktop
+          </button>
+        </span>
+      </div>
+      {resourcePreview.error ? (
+        <div className="validation-item error" role="alert">
+          <strong>Preview unavailable</strong>
+          <span>{resourcePreview.error}</span>
+        </div>
+      ) : (
+        <article
+          className={`resource-preview-device event-branded is-${previewViewport}`}
+          style={
+            {
+              "--event-accent": loaderData.previewEvent.brandAccent,
+            } as React.CSSProperties
+          }
+        >
+          <header>
+            <span className="brand-mark small">P</span>
+            <span>
+              <strong>{loaderData.previewEvent.name}</strong>
+              <small>Speaker resources</small>
+            </span>
+          </header>
+          <div className="speaker-resource-content">
+            <span className="pill">{category.trim() || "General"}</span>
+            <h2>{title.trim() || "Untitled resource"}</h2>
+            <div
+              className="resource-rendered"
+              dangerouslySetInnerHTML={{ __html: resourcePreview.html }}
+            />
+          </div>
+        </article>
+      )}
+      <p className="help">
+        Preview content stays local. Saving creates the authoritative D1 draft
+        version; publishing controls what speakers can see.
+      </p>
+    </section>
+  );
+}
+
+function ResourceEditorActions() {
+  const { navigation, pendingIntent, recovery } = useResourceAdminModel();
+  return (
+    <div className="sticky-actions">
+      <span className="subtle">
+        Saving creates a new immutable draft version.
+      </span>
+      <DraftRecoveryStatus state={recovery.state} />
+      <span className="spacer" />
+      <button className="btn primary" disabled={navigation.state !== "idle"}>
+        {navigation.state === "submitting" && pendingIntent === "save"
+          ? "Saving…"
+          : "Save draft version"}
+      </button>
+    </div>
+  );
+}
+
+function ResourceEditorPanel() {
+  const {
+    loaderData,
+    navigation,
+    dirty,
+    publishConfirmationOpen,
+    setPublishConfirmationOpen,
+    editing,
+    editorKey,
+  } = useResourceAdminModel();
+  return (
+    <section className="card resource-admin-editor">
+      <Form key={editorKey} method="post" className="resource-edit-form">
+        <ResourceSaveIntent />
+        <ResourceEditingIdentity />
+        <ResourceDocumentValue />
+        <ResourceEditorHeader />
+        <ResourceSettingsPanel />
+        <ResourceCustomAudiencePanel />
+        <ResourceAcknowledgementSetting />
+        <ResourceAuthoringPanel />
+        <ResourcePreviewPanel />
+        <ResourceEditorActions />
+      </Form>
+      {editing ? (
+        <div className="resource-secondary-actions">
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => setPublishConfirmationOpen(true)}
+            disabled={
+              editing.versionStatus !== "draft" ||
+              dirty ||
+              navigation.state !== "idle"
+            }
+          >
+            <BookOpenCheck aria-hidden size={15} /> Publish current draft
+          </button>
+          {editing.versionId ? (
+            <DirectMultipartUpload
+              key={`${editing.versionId}:${editing.revision}`}
+              target={{ targetType: "resource", targetId: editing.id }}
+              kinds={[
+                {
+                  value: "resource_attachment",
+                  label: "Resource attachment",
+                  accept:
+                    ".pdf,.doc,.docx,.xls,.xlsx,.zip,application/pdf,application/zip",
+                  maximumBytes:
+                    loaderData.previewEvent.filePolicy
+                      .supportingDocumentMaximumBytes,
+                },
+              ]}
+              heading="Private resource attachment"
+              description={`The browser uploads PDF, Office document or ZIP attachments directly to private R2 (maximum ${maximumMegabytes(loaderData.previewEvent.filePolicy.supportingDocumentMaximumBytes)} MB). Save page edits first; the completed file is linked only to this exact draft revision and remains quarantined until scanning passes.`}
+              disabled={
+                editing.versionStatus !== "draft" ||
+                dirty ||
+                navigation.state !== "idle"
+              }
+              onCompleted={async ({ assetId, versionId }) => {
+                const response = await fetch("/files/resource-attachment", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    pageId: editing.id,
+                    pageVersionId: editing.versionId,
+                    revision: editing.revision,
+                    assetId,
+                    fileVersionId: versionId,
+                  }),
+                });
+                return readResourceAttachmentCompletion(response);
+              }}
+            />
+          ) : (
+            <div className="validation-item error" role="alert">
+              This resource has no current draft version. Save a draft before
+              uploading an attachment.
+            </div>
+          )}
+          {editing.attachments.length ? (
+            <div className="stack resource-admin-attachments">
+              {editing.attachments.map((attachment) => (
+                <div className="file-version-row" key={attachment.id}>
+                  <span>
+                    <strong>{attachment.filename}</strong>
+                    <small>
+                      {attachment.uploadStatus} · scan {attachment.scanStatus}
+                    </small>
+                  </span>
+                  <span
+                    className={`status ${attachment.scanStatus === "clean" ? "success" : "warning"}`}
+                  >
+                    {attachment.scanStatus === "pending"
+                      ? "Quarantined"
+                      : attachment.scanStatus}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {publishConfirmationOpen && editing ? (
+        <Dialog
+          title="Publish this resource version?"
+          onClose={() => setPublishConfirmationOpen(false)}
+          footer={
+            <>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => setPublishConfirmationOpen(false)}
+              >
+                Keep as draft
+              </button>
+              <Form
+                method="post"
+                onSubmit={() => setPublishConfirmationOpen(false)}
+              >
+                <input type="hidden" name="intent" value="publish" />
+                <input type="hidden" name="id" value={editing.id} />
+                <input type="hidden" name="revision" value={editing.revision} />
+                <button
+                  className="btn primary"
+                  type="submit"
+                  disabled={
+                    (editing.publicationImpact?.blockingDependentTasks ?? 0) > 0
+                  }
+                >
+                  Publish version {editing.versionNumber}
+                </button>
+              </Form>
+            </>
+          }
+        >
+          <p>
+            <strong>{editing.title}</strong> will immediately replace the
+            current public resource for its audience.
+          </p>
+          <ul>
+            <li>Audience: {editing.audienceScope.replaceAll("_", " ")}.</li>
+            {editing.acknowledgementRequired ? (
+              <li>
+                Create or reset acknowledgement tasks for{" "}
+                {editing.publicationImpact?.tasksCreatedOrReset ?? 0} eligible
+                speaker
+                {(editing.publicationImpact?.eligibleSpeakerCount ?? 0) === 1
+                  ? ""
+                  : "s"}
+                .
+              </li>
+            ) : (
+              <li>No acknowledgement will be required for this version.</li>
+            )}
+            {(editing.publicationImpact?.tasksWaived ?? 0) > 0 ? (
+              <li>
+                Waive {editing.publicationImpact!.tasksWaived} existing
+                acknowledgement task
+                {editing.publicationImpact!.tasksWaived === 1 ? "" : "s"}.
+              </li>
+            ) : null}
+            {(editing.publicationImpact?.templateDependenciesRemoved ?? 0) >
+            0 ? (
+              <li>
+                Remove acknowledgement as a prerequisite from{" "}
+                {editing.publicationImpact!.templateDependenciesRemoved} active
+                task template
+                {editing.publicationImpact!.templateDependenciesRemoved === 1
+                  ? ""
+                  : "s"}
+                .
+              </li>
+            ) : null}
+          </ul>
+          {(editing.publicationImpact?.blockingDependentTasks ?? 0) > 0 ? (
+            <div className="validation-item error" role="alert">
+              Reopen the submitted or completed dependent task before publishing
+              this acknowledgement reset.
+            </div>
+          ) : null}
+        </Dialog>
+      ) : null}
+    </section>
+  );
+}
+
+function ResourceLibraryPanel() {
+  const { loaderData, selected, creating } = useResourceAdminModel();
+  return (
+    <aside className="card pad resource-admin-index">
+      <div className="card-title">
+        <h2>Library</h2>
+        <span className="pill right">{loaderData.pages.length}</span>
+      </div>
+      <div className="stack">
+        {loaderData.pages.map((page) => (
+          <Link
+            className={`resource-link${!creating && selected?.id === page.id ? " active" : ""}`}
+            to={`/admin/resources?resource=${page.id}`}
+            key={page.id}
+          >
+            <strong>{page.title}</strong>
+            <small>
+              {page.category ?? "General"} · version {page.versionNumber ?? "—"}
+            </small>
+            <span className={`status ${statusClass(page.status)}`}>
+              {page.status}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+function ResourceAdministrationLayout() {
+  return (
+    <div className="resource-admin-layout">
+      <ResourceLibraryPanel />
+      <ResourceEditorPanel />
+    </div>
+  );
+}
+
+function ResourceAdminHeader() {
+  const {
+    setDocument,
+    setCreating,
+    setAudienceScope,
+    setTitle,
+    setSlug,
+    setCategory,
+    setEmbedUrls,
+    setAudiencePersonIds,
+    setAcknowledgementRequired,
+    setDirty,
+  } = useResourceAdminModel();
+  return (
+    <div className="page-head pc-page-header">
+      <div>
+        <span className="pc-page-eyebrow">Speaker knowledge</span>
+        <h1>Resource pages</h1>
+        <p>
+          Author versioned guidance with a constrained Tiptap editor, safe HTTPS
+          embeds and audience-scoped publication.
+        </p>
+      </div>
+      <div className="page-actions">
+        <Link
+          className="btn"
+          to="/speaker/resources"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <ExternalLink aria-hidden size={15} /> Speaker view
+          <span className="sr-only"> (opens in a new tab)</span>
+        </Link>
+        <button
+          className="btn primary"
+          type="button"
+          onClick={() => {
+            setCreating(true);
+            setDocument(emptyDocument);
+            setAudienceScope("all_speakers");
+            setTitle("");
+            setSlug("");
+            setCategory("");
+            setEmbedUrls("");
+            setAudiencePersonIds([]);
+            setAcknowledgementRequired(false);
+            setDirty(false);
+          }}
+        >
+          <Plus aria-hidden size={15} /> New resource
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ResourceActionNotice() {
+  const { actionData } = useResourceAdminModel();
+  return actionData ? (
+    <div
+      className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
+      role={actionData.ok ? "status" : "alert"}
+    >
+      {actionData.ok ? (
+        <CheckCircle2 aria-hidden size={18} />
+      ) : (
+        <AlertTriangle aria-hidden size={18} />
+      )}
+      <div className="pc-status-notice-copy">
+        <strong>{actionData.ok ? "Saved" : "Action needed"}</strong>
+        <div>{actionData.message}</div>
+      </div>
+    </div>
+  ) : null;
+}
+
+function ResourceLiveUpdateNotice() {
+  const { loaderData } = useResourceAdminModel();
+  return loaderData.liveUpdateDelayed ? (
+    <div className="pc-status-notice is-warning mb" role="status">
+      <AlertTriangle aria-hidden size={18} />
+      <div className="pc-status-notice-copy">
+        <strong>Draft saved · live update delayed</strong>
+        <div>
+          The new resource draft is authoritative in D1. Refresh other open
+          views before continuing.
+        </div>
+      </div>
+    </div>
+  ) : null;
+}
+
+function ResourceDraftRecoveryNotice() {
+  const { recovery } = useResourceAdminModel();
+  return <DraftRecoveryFeedback recovery={recovery} />;
+}
+
+function ResourceDraftConflictNotice() {
+  const { actionData, slug, recoveryPayload, recovery } =
+    useResourceAdminModel();
+  return actionData && "conflict" in actionData && actionData.conflict ? (
+    <div className="validation-item error card pad mb" role="alert">
+      <strong>Draft conflict</strong>
+      <span>
+        The editor and browser recovery copy remain intact. Export them or
+        explicitly load the latest server version.
+      </span>
+      <span className="row-actions right">
+        <button
+          className="btn small"
+          type="button"
+          onClick={() => {
+            const blob = new Blob([JSON.stringify(recoveryPayload, null, 2)], {
+              type: "application/json",
+            });
+            const href = URL.createObjectURL(blob);
+            const link = window.document.createElement("a");
+            link.href = href;
+            link.download = `${slug || "resource"}-recovery.json`;
+            link.click();
+            URL.revokeObjectURL(href);
+          }}
+        >
+          Export local edits
+        </button>
+        <button
+          className="btn small"
+          type="button"
+          onClick={() => {
+            if (
+              window.confirm(
+                "Discard the current editor contents and load the latest server version?",
+              )
+            ) {
+              void recovery.clear().then(() => window.location.reload());
+            }
+          }}
+        >
+          Load server version
+        </button>
+      </span>
+    </div>
+  ) : null;
+}
+
+function ResourceAdministrationPage() {
+  return (
+    <>
+      <ResourceAdminHeader />
+      <ResourceActionNotice />
+      <ResourceLiveUpdateNotice />
+      <ResourceDraftRecoveryNotice />
+      <ResourceDraftConflictNotice />
+      <ResourceAdministrationLayout />
     </>
+  );
+}
+
+export default function AdminResources({ loaderData }: Route.ComponentProps) {
+  const model = useResourceAdminState(loaderData);
+  return (
+    <ResourceAdminModelContext.Provider value={model}>
+      <ResourceAdministrationPage />
+    </ResourceAdminModelContext.Provider>
   );
 }

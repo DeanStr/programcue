@@ -1,0 +1,1164 @@
+import { z } from "zod";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  hashApplicantToken,
+  type PublicForm,
+} from "./applicant-session.server";
+import {
+  buildCoSpeakerInvitationPlan,
+  persistQueueFailure,
+} from "./co-speaker-invitation.server";
+import { SubmissionFormWorkflows } from "./submission-form-workflows.server";
+import {
+  SubmissionRevisionConflictError,
+  SubmissionStateError,
+  type Applicant,
+} from "./submission-repository.server";
+import {
+  draftPayloadSchema,
+  validateAnswerShapes,
+  validateFinalAnswers,
+  visibleAnswers,
+  visibleFields,
+} from "./submission-schema";
+import {
+  PublicFormUnavailableError,
+  SubmissionCommittedStateError,
+  answerValidationError,
+  applicantFormView,
+  intentBoundDraftId,
+  withdrawSubmissionSchema,
+  type ApplicantVideoUploadRow,
+} from "./submission-service-foundation.server";
+
+export abstract class SubmissionApplicantWorkflows extends SubmissionFormWorkflows {
+  async authorizeApplicantMultipartUpload(
+    request: Request,
+    publicSlug: string,
+    submissionIdInput: string,
+    fieldIdInput: string,
+  ) {
+    const submissionId = z.string().min(1).max(100).parse(submissionIdInput);
+    const fieldId = z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{1,39}$/)
+      .parse(fieldIdInput);
+    const form = await this.getPublicForm(publicSlug);
+    const applicant = await this.applicants.get(request, form);
+    if (!applicant) {
+      throw new Response(
+        "Open the application draft before uploading a video.",
+        {
+          status: 401,
+        },
+      );
+    }
+    this.assertApplicationManagementAccess(applicant);
+    const draftForm = await this.repository.getApplicantDraftForm(
+      form,
+      applicant,
+      submissionId,
+    );
+    const field = draftForm.version.schema.fields.find(
+      (candidate) => candidate.id === fieldId,
+    );
+    if (field?.type !== "video") {
+      throw new Response(
+        "This application field does not accept video uploads.",
+        {
+          status: 422,
+        },
+      );
+    }
+    const draft = await this.env.DB.prepare(
+      `SELECT event.organisation_id AS organisationId
+         FROM submissions submission
+         JOIN events event ON event.id = submission.event_id
+         JOIN form_versions version
+           ON version.id = submission.form_version_id
+          AND version.event_id = submission.event_id
+        WHERE submission.id = ? AND submission.event_id = ?
+          AND version.form_id = ? AND version.id = ?
+          AND submission.status = 'draft'
+          AND (
+            (? IS NOT NULL AND submission.submitter_person_id = ?)
+            OR
+            (? IS NOT NULL AND submission.id = ?
+              AND submission.submitter_person_id IS NULL
+              AND submission.submitter_email IS NULL)
+          )`,
+    )
+      .bind(
+        submissionId,
+        form.eventId,
+        form.id,
+        draftForm.version.id,
+        applicant.personId,
+        applicant.personId,
+        applicant.anonymousDraftId,
+        applicant.anonymousDraftId,
+      )
+      .first<{ organisationId: string }>();
+    if (!draft) {
+      throw new Response("Application draft not found.", { status: 404 });
+    }
+    return {
+      organisationId: draft.organisationId,
+      eventId: form.eventId,
+      personId: applicant.personId,
+      submissionId,
+      fieldId,
+    };
+  }
+
+  protected applicationAvailability(
+    form: Awaited<ReturnType<SubmissionFormWorkflows["getPublicForm"]>>,
+  ) {
+    if (
+      form.closesAt !== null &&
+      form.closesAt < Math.floor(Date.now() / 1_000)
+    ) {
+      return {
+        accepting: false as const,
+        reason: "Applications for this event are closed.",
+      };
+    }
+    if (
+      form.submissionLimit !== null &&
+      form.submittedCount >= form.submissionLimit
+    ) {
+      return {
+        accepting: false as const,
+        reason: "This call for speakers has reached its submission limit.",
+      };
+    }
+    return { accepting: true as const, reason: null };
+  }
+
+  protected async getApplicantVideoUpload(
+    form: PublicForm,
+    applicant: Applicant,
+    submissionId: string,
+  ) {
+    const field = form.version.schema.fields.find(
+      (candidate) => candidate.type === "video",
+    );
+    if (!field) return null;
+    const row = await this.env.DB.prepare(
+      `SELECT asset.id AS assetId, asset.status AS assetStatus,
+              asset.current_version_id AS currentVersionId,
+              version.id AS versionId, version.original_filename AS filename,
+              version.size_bytes AS sizeBytes,
+              version.upload_status AS uploadStatus,
+              version.signature_status AS signatureStatus,
+              version.scan_status AS scanStatus,
+              version.released_at AS releasedAt
+         FROM file_assets asset
+         JOIN file_versions version
+           ON version.asset_id = asset.id AND version.event_id = asset.event_id
+        WHERE asset.event_id = ? AND asset.target_type = 'submission'
+          AND asset.target_id = ? AND asset.asset_kind = 'video'
+          AND asset.owner_person_id IS ? AND asset.status <> 'deleted'
+        ORDER BY version.version_number DESC
+        LIMIT 1`,
+    )
+      .bind(form.eventId, submissionId, applicant.personId)
+      .first<ApplicantVideoUploadRow>();
+    if (!row) return null;
+    const status =
+      row.assetStatus === "active" &&
+      row.currentVersionId === row.versionId &&
+      row.uploadStatus === "uploaded" &&
+      row.signatureStatus === "valid" &&
+      row.scanStatus === "clean" &&
+      row.releasedAt !== null
+        ? ("ready" as const)
+        : row.uploadStatus === "uploaded" &&
+            row.signatureStatus === "valid" &&
+            row.scanStatus === "pending"
+          ? ("scanning" as const)
+          : ["failed", "aborted"].includes(row.uploadStatus) ||
+              ["invalid", "failed"].includes(row.signatureStatus) ||
+              ["infected", "failed"].includes(row.scanStatus) ||
+              row.assetStatus === "rejected"
+            ? ("rejected" as const)
+            : ("uploading" as const);
+    return {
+      fieldId: field.id,
+      assetId: row.assetId,
+      versionId: row.versionId,
+      filename: row.filename,
+      sizeBytes: row.sizeBytes,
+      status,
+    };
+  }
+
+  async getApplicantPortal(
+    publicSlug: string,
+    request: Request,
+    selectedId?: string | null,
+  ) {
+    const form = await this.getPublicForm(publicSlug);
+    const applicant = await this.applicants.get(request, form);
+    const availability = this.applicationAvailability(form);
+    if (!applicant) {
+      const browserForm = applicantFormView(form);
+      return {
+        form: browserForm,
+        applicant: null,
+        drafts: [],
+        invitations: [],
+        speakerProfile: null,
+        selected: null,
+        selectedForm: browserForm,
+        selectedUpload: null,
+        availability,
+      };
+    }
+    const [drafts, invitations, claimedProfile] = await Promise.all([
+      applicant.claimOnly
+        ? Promise.resolve([])
+        : this.repository.getApplicantDrafts(form.id, applicant),
+      this.repository.getCoSpeakerInvitations(form.id, applicant),
+      applicant.verified
+        ? this.env.DB.prepare(
+            `SELECT 1 AS available
+               FROM submission_speakers speaker
+               JOIN submissions submission
+                 ON submission.id = speaker.submission_id
+                AND submission.event_id = speaker.event_id
+               JOIN form_versions version
+                 ON version.id = submission.form_version_id
+                AND version.event_id = submission.event_id
+              WHERE speaker.person_id = ? AND speaker.invitation_status = 'claimed'
+                AND version.form_id = ? AND speaker.event_id = ?
+              LIMIT 1`,
+          )
+            .bind(applicant.personId, form.id, form.eventId)
+            .first<{ available: number }>()
+        : Promise.resolve(null),
+    ]);
+    const requestedDraft = selectedId !== null && selectedId !== undefined;
+    const selected = requestedDraft
+      ? (drafts.find((draft) => draft.id === selectedId) ?? null)
+      : (drafts.find((draft) => draft.status === "draft") ??
+        drafts.at(0) ??
+        null);
+    if (requestedDraft && !selected) {
+      throw new Response("Application draft not found", { status: 404 });
+    }
+    const selectedForm = selected
+      ? await this.repository.getApplicantDraftForm(
+          form,
+          applicant,
+          selected.id,
+        )
+      : form;
+    const selectedUpload =
+      selected?.status === "draft" && selectedForm
+        ? await this.getApplicantVideoUpload(
+            selectedForm,
+            applicant,
+            selected.id,
+          )
+        : null;
+    return {
+      form: applicantFormView(form),
+      applicant,
+      drafts,
+      invitations,
+      speakerProfile:
+        applicant.verified && claimedProfile
+          ? {
+              name: applicant.name,
+              biography: applicant.biography,
+              revision: applicant.profileRevision,
+            }
+          : null,
+      selected,
+      selectedForm: applicantFormView(selectedForm),
+      selectedUpload,
+      availability,
+    };
+  }
+
+  async createDraft(
+    publicSlug: string,
+    applicant: Applicant,
+    intentId: string = crypto.randomUUID(),
+  ) {
+    this.assertApplicationManagementAccess(applicant);
+    const form = await this.getPublicForm(publicSlug);
+    const scope = await this.publicScope(form.eventId);
+    return this.projectIntentCommand(
+      { ...scope, personId: applicant.personId },
+      "submission.draft.create",
+      intentId,
+      { publicSlug, applicant },
+      async () => {
+        const draftId = await intentBoundDraftId(
+          form.id,
+          "authenticated",
+          applicant.personId,
+          intentId,
+        );
+        const replay = await this.repository.findDraftCreationReplay(
+          form,
+          applicant,
+          draftId,
+        );
+        if (replay) return replay.id;
+        const availability = this.applicationAvailability(form);
+        if (!availability.accepting) {
+          throw new PublicFormUnavailableError(availability.reason);
+        }
+        return this.repository.createDraft(form, applicant, draftId);
+      },
+    );
+  }
+
+  async startAnonymousDraft(
+    publicSlug: string,
+    password: string,
+    intentId: string = crypto.randomUUID(),
+  ) {
+    const form = await this.getPublicForm(publicSlug);
+    const scope = await this.publicScope(form.eventId);
+    return this.projectIntentCommand(
+      { ...scope, personId: null },
+      "submission.anonymous_draft.start",
+      intentId,
+      { publicSlug, password },
+      async () =>
+        this.startAnonymousDraftD1(
+          form,
+          password,
+          await intentBoundDraftId(form.id, "anonymous", null, intentId),
+        ),
+      { replay: "reject" },
+    );
+  }
+
+  protected async startAnonymousDraftD1(
+    form: PublicForm,
+    password: string,
+    draftId: string,
+  ) {
+    const applicant: Applicant = {
+      personId: null,
+      email: "",
+      name: "",
+      verified: false,
+      anonymousDraftId: draftId,
+      biography: "",
+      profileRevision: 0,
+    };
+    const replay = await this.repository.findDraftCreationReplay(
+      form,
+      applicant,
+      draftId,
+    );
+    if (!replay) {
+      const availability = this.applicationAvailability(form);
+      if (!availability.accepting) {
+        throw new PublicFormUnavailableError(availability.reason);
+      }
+    }
+    const session = await this.applicants.startAnonymous(
+      form,
+      draftId,
+      password,
+      { requireExistingDraft: Boolean(replay) },
+    );
+    if (replay) return { draftId, cookie: session.cookie };
+    try {
+      await this.repository.createDraft(form, session.applicant, draftId);
+    } catch (error) {
+      await this.env.DB.prepare("DELETE FROM verification_tokens WHERE id = ?")
+        .bind(session.tokenId)
+        .run();
+      throw error;
+    }
+    return { draftId, cookie: session.cookie };
+  }
+
+  async saveDraft(
+    publicSlug: string,
+    applicant: Applicant,
+    rawPayload: unknown,
+  ) {
+    this.assertApplicationManagementAccess(applicant);
+    const currentForm = await this.getPublicForm(publicSlug);
+    const scope = await this.publicScope(currentForm.eventId);
+    return this.projectCommand(
+      { ...scope, personId: applicant.personId },
+      "submission.draft.save",
+      { publicSlug, applicant, rawPayload },
+      () => this.saveDraftD1(currentForm, applicant, rawPayload),
+    );
+  }
+
+  protected async saveDraftD1(
+    currentForm: PublicForm,
+    applicant: Applicant,
+    rawPayload: unknown,
+  ) {
+    const payload = draftPayloadSchema.parse(rawPayload);
+    if (
+      applicant.verified &&
+      payload.speakers[0]?.email.toLowerCase() !== applicant.email.toLowerCase()
+    ) {
+      throw answerValidationError({
+        speakers: [
+          "The primary speaker email must match the verified applicant email.",
+        ],
+      });
+    }
+    const form = await this.repository.getApplicantDraftForm(
+      currentForm,
+      applicant,
+      payload.submissionId,
+    );
+    const errors = validateAnswerShapes(
+      form.version.schema,
+      payload.answers,
+      payload.uploads,
+    );
+    if (Object.keys(errors).length) throw answerValidationError(errors);
+    return this.repository.saveDraft(form, applicant, payload);
+  }
+
+  protected async resolveAutomaticRouting(
+    form: Pick<PublicForm, "eventId">,
+    teamIds: string[],
+  ) {
+    const uniqueTeamIds = [...new Set(teamIds)];
+    if (!uniqueTeamIds.length) return null;
+    const teams = await this.env.DB.prepare(
+      `SELECT id FROM evaluation_teams
+        WHERE event_id = ? AND status = 'active'
+          AND id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
+    )
+      .bind(form.eventId, JSON.stringify(uniqueTeamIds))
+      .all<{ id: string }>();
+    if (teams.results.length !== uniqueTeamIds.length) {
+      throw new SubmissionStateError(
+        "An evaluation team configured for a selected track is no longer active. Your draft was not submitted.",
+      );
+    }
+    const rounds = await this.env.DB.prepare(
+      `SELECT round.id
+         FROM evaluation_rounds round
+         JOIN evaluation_plans plan
+           ON plan.id = round.plan_id AND plan.event_id = round.event_id
+        WHERE round.event_id = ? AND round.status = 'active'
+          AND plan.status = 'active'
+        ORDER BY round.id`,
+    )
+      .bind(form.eventId)
+      .all<{ id: string }>();
+    if (rounds.results.length !== 1) {
+      throw new SubmissionStateError(
+        rounds.results.length === 0
+          ? "Automatic track routing requires one active evaluation round. Activate a round before applications are submitted."
+          : "Automatic track routing is ambiguous because this event has more than one active evaluation round.",
+      );
+    }
+    const members = await this.env.DB.prepare(
+      `SELECT member.team_id AS teamId, member.person_id AS personId,
+              EXISTS (
+                SELECT 1 FROM memberships membership
+                 WHERE membership.event_id = member.event_id
+                   AND membership.person_id = member.person_id
+                   AND membership.role IN ('evaluator','committee_chair')
+                   AND membership.accepted_at IS NOT NULL
+                   AND membership.revoked_at IS NULL
+              ) AS eligible
+         FROM evaluation_team_members member
+        WHERE member.event_id = ?
+          AND member.team_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+          AND member.removed_at IS NULL
+        ORDER BY member.team_id, member.person_id`,
+    )
+      .bind(form.eventId, JSON.stringify(uniqueTeamIds))
+      .all<{ teamId: string; personId: string; eligible: number }>();
+    for (const teamId of uniqueTeamIds) {
+      if (!members.results.some((member) => member.teamId === teamId)) {
+        throw new SubmissionStateError(
+          "An evaluation team configured for a selected track has no active members. Your draft was not submitted.",
+        );
+      }
+    }
+    if (members.results.some((member) => !member.eligible)) {
+      throw new SubmissionStateError(
+        "Every active member of the routed team must have an accepted evaluator or committee-chair membership before applications can be submitted.",
+      );
+    }
+    return {
+      roundId: rounds.results[0]!.id,
+      teamIds: uniqueTeamIds,
+      assignments: [
+        ...new Map(
+          uniqueTeamIds.flatMap((teamId) =>
+            members.results
+              .filter((member) => member.teamId === teamId)
+              .map(
+                (member) =>
+                  [
+                    member.personId,
+                    { teamId, evaluatorPersonId: member.personId },
+                  ] as const,
+              ),
+          ),
+        ).values(),
+      ],
+    };
+  }
+
+  async submitDraft(
+    publicSlug: string,
+    applicant: Applicant,
+    rawPayload: unknown,
+  ) {
+    this.assertApplicationManagementAccess(applicant);
+    if (!applicant.verified) {
+      throw new SubmissionStateError(
+        "Verify your email before submitting this application.",
+      );
+    }
+    const currentForm = await this.getPublicForm(publicSlug);
+    const scope = await this.publicScope(currentForm.eventId);
+    return this.projectCommand(
+      { ...scope, personId: applicant.personId },
+      "submission.draft.submit",
+      { publicSlug, applicant, rawPayload },
+      () => this.submitDraftD1(currentForm, applicant, rawPayload),
+    );
+  }
+
+  async submitDraftForParticipantApi(
+    publicSlug: string,
+    applicant: Extract<Applicant, { verified: true }>,
+    rawPayload: unknown,
+    operationId: string,
+  ) {
+    this.assertApplicationManagementAccess(applicant);
+    const currentForm = await this.getPublicForm(publicSlug);
+    const scope = await this.publicScope(currentForm.eventId);
+    return this.projectCommand(
+      { ...scope, personId: applicant.personId },
+      "submission.participant_api.submit",
+      { publicSlug, applicant, rawPayload, operationId },
+      () => this.submitDraftD1(currentForm, applicant, rawPayload, operationId),
+    );
+  }
+
+  protected async submitDraftD1(
+    currentForm: PublicForm,
+    applicant: Extract<Applicant, { verified: true }>,
+    rawPayload: unknown,
+    operationId?: string,
+  ) {
+    const availability = this.applicationAvailability(currentForm);
+    if (!availability.accepting)
+      throw new PublicFormUnavailableError(availability.reason);
+    const payload = draftPayloadSchema.parse(rawPayload);
+    if (
+      payload.speakers[0]?.email.toLowerCase() !== applicant.email.toLowerCase()
+    ) {
+      throw answerValidationError({
+        speakers: [
+          "The primary speaker email must match the verified applicant email.",
+        ],
+      });
+    }
+    const form = await this.repository.getApplicantDraftForm(
+      currentForm,
+      applicant,
+      payload.submissionId,
+    );
+    const shapeErrors = validateAnswerShapes(
+      form.version.schema,
+      payload.answers,
+      payload.uploads,
+    );
+    if (Object.keys(shapeErrors).length)
+      throw answerValidationError(shapeErrors);
+    const answers = visibleAnswers(form.version.schema, payload.answers);
+    const visibleVideoFields = new Set(
+      visibleFields(form.version.schema, answers)
+        .filter((field) => field.type === "video")
+        .map((field) => field.id),
+    );
+    const uploads = Object.fromEntries(
+      Object.entries(payload.uploads).filter(
+        ([fieldId]) =>
+          visibleVideoFields.has(fieldId) &&
+          !String(answers[fieldId] ?? "").trim(),
+      ),
+    );
+    const submittedPayload = {
+      ...payload,
+      answers,
+      uploads,
+    };
+    const errors = validateFinalAnswers(
+      form.version.schema,
+      submittedPayload.answers,
+      submittedPayload.speakers,
+      form.minSpeakers,
+      form.maxSpeakers,
+      submittedPayload.uploads,
+    );
+    if (Object.keys(errors).length) {
+      throw answerValidationError(errors);
+    }
+    const selectedTrackNames = Array.isArray(submittedPayload.answers.category)
+      ? submittedPayload.answers.category
+      : [];
+    if (form.kind === "direct_session" && selectedTrackNames.length !== 1) {
+      throw new SubmissionStateError(
+        "Choose exactly one track for a direct session. A scheduled session cannot silently discard additional track choices.",
+      );
+    }
+    const trackSelections = selectedTrackNames.map((trackName) => {
+      const trackId = form.version.routing.trackIds[trackName];
+      if (!trackId || form.version.routing.trackNames[trackId] !== trackName) {
+        throw new SubmissionStateError(
+          `Track “${trackName}” is no longer valid for this form version.`,
+        );
+      }
+      return { trackId, trackName };
+    });
+    const routedTeamIds =
+      form.kind === "submission"
+        ? [
+            ...new Set(
+              selectedTrackNames
+                .map((trackName) => form.version.routing.categories[trackName])
+                .filter((teamId): teamId is string => Boolean(teamId)),
+            ),
+          ]
+        : [];
+    const routingAssignment = await this.resolveAutomaticRouting(
+      form,
+      routedTeamIds,
+    );
+    for (const [fieldId, reference] of Object.entries(
+      submittedPayload.uploads,
+    )) {
+      const upload = await this.env.DB.prepare(
+        `SELECT asset.status AS assetStatus,
+                asset.current_version_id AS currentVersionId,
+                version.upload_status AS uploadStatus,
+                version.signature_status AS signatureStatus,
+                version.scan_status AS scanStatus,
+                version.released_at AS releasedAt
+           FROM file_assets asset
+           JOIN file_versions version
+             ON version.id = ? AND version.asset_id = asset.id
+            AND version.event_id = asset.event_id
+          WHERE asset.id = ? AND asset.event_id = ?
+            AND asset.target_type = 'submission' AND asset.target_id = ?
+            AND asset.asset_kind = 'video' AND asset.owner_person_id = ?
+            AND asset.status <> 'deleted'`,
+      )
+        .bind(
+          reference.versionId,
+          reference.assetId,
+          form.eventId,
+          submittedPayload.submissionId,
+          applicant.personId,
+        )
+        .first<{
+          assetStatus: string;
+          currentVersionId: string | null;
+          uploadStatus: string;
+          signatureStatus: string;
+          scanStatus: string;
+          releasedAt: number | null;
+        }>();
+      if (!upload) {
+        throw new SubmissionStateError(
+          `The native video selected for ${fieldId} no longer belongs to this draft. Upload it again or use an HTTPS link.`,
+        );
+      }
+      if (
+        upload.assetStatus !== "active" ||
+        upload.currentVersionId !== reference.versionId ||
+        upload.uploadStatus !== "uploaded" ||
+        upload.signatureStatus !== "valid" ||
+        upload.scanStatus !== "clean" ||
+        upload.releasedAt === null
+      ) {
+        const message =
+          upload.uploadStatus === "uploaded" &&
+          upload.signatureStatus === "valid" &&
+          upload.scanStatus === "pending"
+            ? "The uploaded video is still being scanned. Refresh after the scan finishes before submitting."
+            : "The uploaded video did not pass upload and security validation. Upload a replacement or use an HTTPS link.";
+        throw new SubmissionStateError(message);
+      }
+    }
+    return this.repository.submitDraft(form, applicant, submittedPayload, {
+      trackSelections,
+      routedTeamIds,
+      routingAssignment,
+      upload:
+        Object.entries(submittedPayload.uploads).map(
+          ([fieldId, reference]) => ({ fieldId, ...reference }),
+        )[0] ?? null,
+      operationId,
+    });
+  }
+
+  async withdrawSubmission(
+    publicSlug: string,
+    applicant: Applicant,
+    rawInput: unknown,
+  ) {
+    this.assertApplicationManagementAccess(applicant);
+    if (!applicant.verified) {
+      throw new SubmissionStateError(
+        "Verify your email before withdrawing this application.",
+      );
+    }
+    const input = withdrawSubmissionSchema.parse(rawInput);
+    const currentForm = await this.getPublicForm(publicSlug);
+    const form = await this.repository.getApplicantDraftForm(
+      currentForm,
+      applicant,
+      input.submissionId,
+    );
+    const scope = await this.publicScope(form.eventId);
+    return this.projectCommand(
+      { ...scope, personId: applicant.personId },
+      "submission.withdraw",
+      { publicSlug, input },
+      () =>
+        this.repository.withdrawSubmission(
+          form,
+          applicant,
+          input.submissionId,
+          input.revision,
+        ),
+    );
+  }
+
+  async withdrawSubmissionForParticipantApi(
+    publicSlug: string,
+    applicant: Extract<Applicant, { verified: true }>,
+    rawInput: unknown,
+    operationId: string,
+  ) {
+    this.assertApplicationManagementAccess(applicant);
+    const input = withdrawSubmissionSchema.parse(rawInput);
+    const currentForm = await this.getPublicForm(publicSlug);
+    const form = await this.repository.getApplicantDraftForm(
+      currentForm,
+      applicant,
+      input.submissionId,
+    );
+    const scope = await this.publicScope(form.eventId);
+    return this.projectCommand(
+      { ...scope, personId: applicant.personId },
+      "submission.participant_api.withdraw",
+      { publicSlug, input, operationId },
+      () =>
+        this.repository.withdrawSubmission(
+          form,
+          applicant,
+          input.submissionId,
+          input.revision,
+          { operationId },
+        ),
+    );
+  }
+
+  async updateClaimedSpeakerProfile(
+    publicSlug: string,
+    applicant: Applicant,
+    rawInput: unknown,
+  ) {
+    if (!applicant.verified) {
+      throw new SubmissionStateError(
+        "Verify your email before updating a speaker profile.",
+      );
+    }
+    const form = await this.getPublicForm(publicSlug);
+    const scope = await this.publicScope(form.eventId);
+    return this.projectCommand(
+      { ...scope, personId: applicant.personId },
+      "submission.speaker_profile.update",
+      { publicSlug, rawInput },
+      () => this.updateClaimedSpeakerProfileD1(form, applicant, rawInput),
+    );
+  }
+
+  protected async updateClaimedSpeakerProfileD1(
+    form: PublicForm,
+    applicant: Extract<Applicant, { verified: true }>,
+    rawInput: unknown,
+  ) {
+    const input = z
+      .object({
+        revision: z.coerce.number().int().positive(),
+        name: z.string().trim().min(1).max(120),
+        biography: z.string().trim().max(5_000),
+      })
+      .parse(rawInput);
+    const operationId = crypto.randomUUID();
+    const [updated] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `UPDATE people
+            SET display_name = ?, biography = ?, profile_revision = profile_revision + 1,
+                last_operation_id = ?, updated_at = unixepoch()
+          WHERE id = ? AND profile_revision = ? AND email_verified = 1
+            AND EXISTS (
+              SELECT 1 FROM submission_speakers speaker
+              JOIN submissions submission
+                ON submission.id = speaker.submission_id
+               AND submission.event_id = speaker.event_id
+              JOIN form_versions version
+                ON version.id = submission.form_version_id
+               AND version.event_id = submission.event_id
+             WHERE speaker.person_id = people.id
+               AND speaker.invitation_status = 'claimed'
+               AND version.form_id = ? AND speaker.event_id = ?
+            )`,
+      ).bind(
+        input.name,
+        input.biography || null,
+        operationId,
+        applicant.personId,
+        input.revision,
+        form.id,
+        form.eventId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE submission_speakers
+            SET display_name = ?, updated_at = unixepoch()
+          WHERE person_id = ? AND event_id = ? AND invitation_status = 'claimed'
+            AND EXISTS (SELECT 1 FROM people WHERE id = ? AND last_operation_id = ?)`,
+      ).bind(
+        input.name,
+        applicant.personId,
+        form.eventId,
+        applicant.personId,
+        operationId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action, entity_type,
+           entity_id, metadata_json, created_at
+         ) SELECT ?, event.organisation_id, ?, ?, 'speaker.profile.updated',
+                  'person', ?, ?, unixepoch()
+             FROM events event
+            WHERE event.id = ?
+              AND EXISTS (SELECT 1 FROM people WHERE id = ? AND last_operation_id = ?)`,
+      ).bind(
+        crypto.randomUUID(),
+        form.eventId,
+        applicant.personId,
+        applicant.personId,
+        JSON.stringify({ source: "application_claim" }),
+        form.eventId,
+        applicant.personId,
+        operationId,
+      ),
+    ]);
+    if ((updated.meta.changes ?? 0) !== 1) {
+      throw new SubmissionRevisionConflictError();
+    }
+  }
+
+  async claimCoSpeaker(
+    publicSlug: string,
+    applicant: Applicant,
+    invitationId: string,
+  ) {
+    const form = await this.getPublicForm(publicSlug);
+    const scope = await this.publicScope(form.eventId);
+    await this.projectCommand(
+      { ...scope, personId: applicant.personId },
+      "submission.co_speaker.claim",
+      { publicSlug, invitationId, applicant },
+      () => this.repository.claimCoSpeaker(form.id, applicant, invitationId),
+    );
+  }
+
+  async getCoSpeakerClaim(
+    publicSlug: string,
+    speakerId: string,
+    rawToken: string,
+  ) {
+    const form = await this.getPublicForm(publicSlug);
+    return this.getCoSpeakerClaimD1(form, speakerId, rawToken);
+  }
+
+  protected async getCoSpeakerClaimD1(
+    form: PublicForm,
+    speakerId: string,
+    rawToken: string,
+  ) {
+    if (!speakerId || !rawToken) return null;
+    const tokenHash = await hashApplicantToken(
+      `co-speaker-claim:${form.id}:${speakerId}:${rawToken}`,
+    );
+    const claim = await this.env.DB.prepare(
+      `SELECT speaker.id, speaker.email, speaker.display_name AS displayName,
+              speaker.invitation_expires_at AS expiresAt,
+              submission.id AS submissionId, submission.title AS submissionTitle
+         FROM submission_speakers speaker
+         JOIN submissions submission
+           ON submission.id = speaker.submission_id
+          AND submission.event_id = speaker.event_id
+         JOIN form_versions version
+           ON version.id = submission.form_version_id
+          AND version.event_id = submission.event_id
+        WHERE speaker.id = ? AND speaker.event_id = ?
+          AND speaker.claim_token_hash = ?
+          AND speaker.invitation_status IN ('pending','sent','expired')
+          AND version.form_id = ?`,
+    )
+      .bind(speakerId, form.eventId, tokenHash, form.id)
+      .first<{
+        id: string;
+        email: string;
+        displayName: string;
+        expiresAt: number | null;
+        submissionId: string;
+        submissionTitle: string;
+      }>();
+    if (!claim) return null;
+    return {
+      ...claim,
+      expired:
+        claim.expiresAt === null ||
+        claim.expiresAt <= Math.floor(Date.now() / 1_000),
+    };
+  }
+
+  async claimCoSpeakerToken(
+    publicSlug: string,
+    speakerId: string,
+    rawToken: string,
+  ) {
+    const form = await this.getPublicForm(publicSlug);
+    const scope = await this.publicScope(form.eventId);
+    return this.projectCommand(
+      { ...scope, personId: null },
+      "submission.co_speaker_token.claim",
+      { publicSlug, speakerId, rawToken },
+      () => this.claimCoSpeakerTokenD1(form, speakerId, rawToken),
+      { replay: "reject" },
+    );
+  }
+
+  protected async claimCoSpeakerTokenD1(
+    form: PublicForm,
+    speakerId: string,
+    rawToken: string,
+  ) {
+    const expectedClaimTokenHash = await hashApplicantToken(
+      `co-speaker-claim:${form.id}:${speakerId}:${rawToken}`,
+    );
+    const claim = await this.getCoSpeakerClaimD1(form, speakerId, rawToken);
+    if (!claim) {
+      throw new SubmissionStateError(
+        "This co-speaker claim link is invalid or has been replaced.",
+      );
+    }
+    if (claim.expired) {
+      await this.env.DB.prepare(
+        `UPDATE submission_speakers
+            SET invitation_status = 'expired', updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND invitation_status IN ('pending','sent')
+            AND invitation_expires_at <= unixepoch()`,
+      )
+        .bind(speakerId, form.eventId)
+        .run();
+      throw new SubmissionCommittedStateError(
+        "This co-speaker claim link has expired. Ask an administrator to resend it.",
+      );
+    }
+    const proposedBiography = await this.env.DB.prepare(
+      `SELECT revision.speaker_snapshot_json AS speakerSnapshotJson
+         FROM submission_revisions revision
+        WHERE revision.submission_id = ? AND revision.event_id = ?
+        ORDER BY revision.revision_number DESC LIMIT 1`,
+    )
+      .bind(claim.submissionId, form.eventId)
+      .first<{ speakerSnapshotJson: string }>();
+    if (!proposedBiography) {
+      throw new SubmissionStateError(
+        "The latest submission speaker revision is unavailable for this co-speaker claim.",
+      );
+    }
+    const speakers = draftPayloadSchema.shape.speakers.parse(
+      JSON.parse(proposedBiography.speakerSnapshotJson),
+    );
+    const matchingSpeaker = speakers.find(
+      (speaker) => speaker.email.toLowerCase() === claim.email.toLowerCase(),
+    );
+    if (!matchingSpeaker) {
+      throw new SubmissionStateError(
+        "The latest submission speaker revision does not contain this co-speaker claim.",
+      );
+    }
+    const biography = matchingSpeaker.biography;
+    const personId = crypto.randomUUID();
+    await this.env.DB.batch([
+      this.env.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, biography, profile_status,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, 0, ?, 'draft', unixepoch(), unixepoch())
+         ON CONFLICT(email) DO NOTHING`,
+      ).bind(personId, claim.email, claim.displayName, biography ?? null),
+    ]);
+    const person = await this.env.DB.prepare(
+      `SELECT id AS personId, email, display_name AS name,
+              COALESCE(biography, '') AS biography,
+              profile_revision AS profileRevision
+         FROM people WHERE email = ? COLLATE NOCASE`,
+    )
+      .bind(claim.email)
+      .first<{
+        personId: string;
+        email: string;
+        name: string;
+        biography: string;
+        profileRevision: number;
+      }>();
+    if (!person) {
+      throw new SubmissionStateError(
+        "The co-speaker identity could not be established.",
+      );
+    }
+    const preparedSession = await this.applicants.prepareVerifiedSession(
+      form,
+      person.personId,
+    );
+    if (!preparedSession.applicant.verified) {
+      throw new Error("A prepared co-speaker claim session must be verified.");
+    }
+    await this.repository.claimCoSpeaker(
+      form.id,
+      preparedSession.applicant,
+      speakerId,
+      expectedClaimTokenHash,
+      preparedSession.persistence,
+      biography ?? null,
+    );
+    const claimedApplicant = {
+      ...preparedSession.applicant,
+      biography:
+        preparedSession.applicant.biography.trim() || biography?.trim() || "",
+    };
+    return {
+      applicant:
+        form.accessMode === "account_required"
+          ? { ...claimedApplicant, claimOnly: true }
+          : claimedApplicant,
+      cookie: preparedSession.cookie,
+    };
+  }
+
+  async resendCoSpeakerInvitation(viewer: Viewer, invitationId: string) {
+    return this.projectCommand(
+      viewer,
+      "submission.co_speaker.resend",
+      { invitationId },
+      () => this.resendCoSpeakerInvitationD1(viewer, invitationId),
+    );
+  }
+
+  protected async resendCoSpeakerInvitationD1(
+    viewer: Viewer,
+    invitationId: string,
+  ) {
+    const operationsQueue = this.env.OPERATIONS_QUEUE;
+    if (!operationsQueue) {
+      throw new Error("Required OPERATIONS_QUEUE binding is unavailable.");
+    }
+    const row = await this.env.DB.prepare(
+      `SELECT speaker.id, speaker.email, speaker.display_name AS displayName,
+              speaker.claim_token_hash AS claimTokenHash,
+              submission.id AS submissionId, submission.title AS submissionTitle,
+              form.id AS formId, form.public_slug AS publicSlug,
+              event.name AS eventName, event.starts_at AS startsAt,
+              event.ends_at AS endsAt, event.brand_accent AS brandAccent,
+              event.venue_name AS venueName,
+              event.city
+         FROM submission_speakers speaker
+         JOIN submissions submission
+           ON submission.id = speaker.submission_id
+          AND submission.event_id = speaker.event_id
+         JOIN form_versions version
+           ON version.id = submission.form_version_id
+          AND version.event_id = submission.event_id
+         JOIN form_definitions form
+           ON form.id = version.form_id AND form.event_id = version.event_id
+         JOIN events event
+           ON event.id = speaker.event_id AND event.organisation_id = ?
+        WHERE speaker.id = ? AND speaker.event_id = ? AND speaker.is_primary = 0
+          AND speaker.invitation_status IN ('pending','sent','expired')`,
+    )
+      .bind(viewer.organisationId, invitationId, viewer.eventId)
+      .first<{
+        id: string;
+        email: string;
+        displayName: string;
+        claimTokenHash: string | null;
+        submissionId: string;
+        submissionTitle: string;
+        formId: string;
+        publicSlug: string;
+        eventName: string;
+        brandAccent: string;
+        startsAt: number;
+        endsAt: number;
+        venueName: string | null;
+        city: string | null;
+      }>();
+    if (!row) {
+      throw new SubmissionStateError(
+        "This co-speaker invitation is unavailable in the current event.",
+      );
+    }
+    const plan = await buildCoSpeakerInvitationPlan(
+      this.env,
+      {
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        eventName: row.eventName,
+        brandAccent: row.brandAccent,
+        startsAt: row.startsAt,
+        endsAt: row.endsAt,
+        physicalAddress: [row.venueName, row.city]
+          .filter((value): value is string => Boolean(value?.trim()))
+          .join(", "),
+        formId: row.formId,
+        publicSlug: row.publicSlug,
+        submissionId: row.submissionId,
+        submissionTitle: row.submissionTitle,
+        requestedByPersonId: viewer.personId,
+      },
+      row,
+    );
+    const [updated] = await this.env.DB.batch(plan.statements);
+    if ((updated.meta.changes ?? 0) !== 1) {
+      throw new SubmissionStateError(
+        "This invitation changed before it could be resent. Refresh and try again.",
+      );
+    }
+    try {
+      await operationsQueue.send(plan.message);
+      return { status: "queued" as const, operationId: plan.operationId };
+    } catch (error) {
+      await persistQueueFailure(this.env, plan, error);
+      return { status: "queue_failed" as const, operationId: plan.operationId };
+    }
+  }
+}
