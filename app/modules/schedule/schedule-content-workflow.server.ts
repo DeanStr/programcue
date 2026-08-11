@@ -1,0 +1,1203 @@
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { WebhookService } from "~/platform/operations/webhook-service.server";
+import { scheduleConflictInsert } from "./schedule-conflict-statement.server";
+import {
+  ScheduleConfigurationError,
+  ScheduleIdempotencyConflictError,
+  ScheduleNotFoundError,
+  SchedulePlacementBlockedError,
+  ScheduleRevisionConflictError,
+} from "./schedule-errors";
+import {
+  detectWorkspaceConflicts,
+  schedulePolicyAction,
+} from "./schedule-workspace.server";
+import { type ScheduleConflict, type SchedulePolicies } from "./schedule-rules";
+import {
+  scheduleNotesSchema,
+  schedulePolicySchema,
+  scheduleSessionContentSchema,
+  scheduleSessionResourcesSchema,
+} from "./schedule-schema";
+import type {
+  ScheduleEventScope,
+  ScheduleSession,
+  ScheduleWorkspace,
+} from "./schedule-service.server";
+
+export class ScheduleContentWorkflow {
+  constructor(
+    private readonly env: CloudflareEnvironment,
+    private readonly dependencies: {
+      getWorkspace: (viewer: ScheduleEventScope) => Promise<ScheduleWorkspace>;
+    },
+  ) {}
+
+  private getWorkspace(viewer: ScheduleEventScope) {
+    return this.dependencies.getWorkspace(viewer);
+  }
+
+  private async replayEditorCommand<T>(
+    viewer: Viewer,
+    scope: "schedule.session_content.save" | "schedule.notes.save",
+    idempotencyKey: string,
+    requestHash: string,
+    parse: (value: unknown) => T,
+  ): Promise<T | null> {
+    const record = await this.env.DB.prepare(
+      `SELECT request_hash AS requestHash, status, response_json AS responseJson
+         FROM idempotency_records
+        WHERE organisation_id = ? AND event_id = ? AND actor_id = ?
+          AND scope = ? AND idempotency_key = ? AND expires_at > unixepoch()`,
+    )
+      .bind(
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        scope,
+        idempotencyKey,
+      )
+      .first<{
+        requestHash: string;
+        status: "processing" | "completed" | "failed";
+        responseJson: string | null;
+      }>();
+    if (!record) return null;
+    if (record.requestHash !== requestHash) {
+      throw new ScheduleIdempotencyConflictError(
+        "IDEMPOTENCY_KEY_REUSED",
+        "This editor save identifier was already used for different content.",
+      );
+    }
+    if (record.status !== "completed") {
+      throw new ScheduleIdempotencyConflictError(
+        "IDEMPOTENCY_REQUEST_IN_PROGRESS",
+        record.status === "failed"
+          ? "This editor save did not complete. Make another edit or explicitly retry with a new save identifier."
+          : "This editor save is still being processed. Retry the same save shortly.",
+      );
+    }
+    if (!record.responseJson) {
+      throw new Error(
+        "The completed editor save is missing its durable response.",
+      );
+    }
+    let response: unknown;
+    try {
+      response = JSON.parse(record.responseJson);
+    } catch {
+      throw new Error(
+        "The completed editor save has an invalid durable response.",
+      );
+    }
+    return parse(response);
+  }
+
+  async updateSessionResourcesD1(viewer: Viewer, input: unknown) {
+    const parsed = scheduleSessionResourcesSchema.parse(input);
+    const workspace = await this.getWorkspace(viewer);
+    if (
+      !workspace.version ||
+      workspace.version.id !== parsed.scheduleVersionId ||
+      workspace.version.status !== "draft"
+    ) {
+      throw new ScheduleNotFoundError(
+        "Create an active draft before changing session scheduling requirements.",
+      );
+    }
+    if (workspace.version.revision !== parsed.scheduleRevision) {
+      throw new ScheduleRevisionConflictError();
+    }
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === parsed.sessionId,
+    );
+    if (!session) throw new ScheduleNotFoundError("Session not found.");
+    if (session.revision !== parsed.sessionRevision) {
+      throw new ScheduleRevisionConflictError();
+    }
+    const configuredResources = new Set(
+      workspace.rooms.flatMap((room) => room.resources),
+    );
+    const unconfigured = parsed.requiredResources.find(
+      (resource) => !configuredResources.has(resource),
+    );
+    if (unconfigured) {
+      throw new ScheduleConfigurationError(
+        `Required resource “${unconfigured}” is not configured in any active room.`,
+      );
+    }
+
+    const prospective: ScheduleWorkspace = {
+      ...workspace,
+      sessions: workspace.sessions.map((candidate) =>
+        candidate.id === session.id
+          ? { ...candidate, requiredResources: parsed.requiredResources }
+          : candidate,
+      ),
+    };
+    const conflicts = detectWorkspaceConflicts(prospective);
+    const scheduledEntry = workspace.entries.find(
+      (entry) => entry.sessionId === session.id,
+    );
+    const blockers = scheduledEntry
+      ? conflicts
+          .filter(
+            ({ entryId, conflict }) =>
+              conflict.severity === "blocking" &&
+              (entryId === scheduledEntry.id ||
+                conflict.conflictingEntryId === scheduledEntry.id),
+          )
+          .map(({ conflict }) => conflict)
+      : [];
+    if (blockers.length) throw new SchedulePlacementBlockedError(blockers);
+
+    const operationId = crypto.randomUUID();
+    const nextSessionRevision = session.revision + 1;
+    const auditEventId = crypto.randomUUID();
+    const webhookService = new WebhookService(this.env);
+    const preparedWebhook = await webhookService.prepareEventForAudit(
+      viewer,
+      {
+        eventType: "session.updated",
+        entityType: "session",
+        entityId: session.id,
+        idempotencyKey: `session.updated:${session.id}:${nextSessionRevision}`,
+        correlationId: `${session.id}:${nextSessionRevision}`,
+        data: {
+          revision: nextSessionRevision,
+          changedFields: ["requiredResources"],
+        },
+      },
+      auditEventId,
+    );
+    const statements: D1PreparedStatement[] = [
+      this.env.DB.prepare(
+        `UPDATE events
+            SET revision = revision + 1, last_operation_id = ?,
+                last_updated_by_person_id = ?, updated_at = unixepoch()
+          WHERE id = ? AND organisation_id = ? AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM schedule_versions version
+               WHERE version.id = ? AND version.event_id = events.id
+                 AND version.status = 'draft' AND version.revision = ?
+            )
+            AND EXISTS (
+              SELECT 1 FROM sessions configured
+               WHERE configured.id = ? AND configured.event_id = events.id
+                 AND configured.revision = ?
+            )`,
+      ).bind(
+        operationId,
+        viewer.personId,
+        viewer.eventId,
+        viewer.organisationId,
+        workspace.event.revision,
+        parsed.scheduleVersionId,
+        parsed.scheduleRevision,
+        session.id,
+        parsed.sessionRevision,
+      ),
+      this.env.DB.prepare(
+        `UPDATE schedule_versions
+            SET revision = revision + 1, publication_operation_id = ?
+          WHERE id = ? AND event_id = ? AND status = 'draft' AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM events
+               WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
+            )`,
+      ).bind(
+        operationId,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        parsed.scheduleRevision,
+        viewer.eventId,
+        viewer.organisationId,
+        operationId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE sessions
+            SET required_resources_json = ?, revision = revision + 1,
+                updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM schedule_versions
+               WHERE id = ? AND event_id = ? AND publication_operation_id = ?
+            )`,
+      ).bind(
+        JSON.stringify(parsed.requiredResources),
+        session.id,
+        viewer.eventId,
+        parsed.sessionRevision,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        operationId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET required_resources_json = ?, last_operation_id = ?,
+                updated_at = unixepoch()
+          WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?
+            AND EXISTS (
+              SELECT 1 FROM schedule_versions
+               WHERE id = schedule_session_contents.schedule_version_id
+                 AND event_id = schedule_session_contents.event_id
+                 AND status = 'draft' AND publication_operation_id = ?
+            )`,
+      ).bind(
+        JSON.stringify(parsed.requiredResources),
+        operationId,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        session.id,
+        operationId,
+      ),
+      this.env.DB.prepare(
+        `DELETE FROM schedule_conflicts
+          WHERE event_id = ? AND schedule_version_id = ?
+            AND EXISTS (
+              SELECT 1 FROM schedule_versions
+               WHERE id = ? AND event_id = ? AND publication_operation_id = ?
+            )`,
+      ).bind(
+        viewer.eventId,
+        parsed.scheduleVersionId,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        operationId,
+      ),
+      ...conflicts.map(({ entryId, conflict }) =>
+        this.conflictInsert(
+          viewer.eventId,
+          parsed.scheduleVersionId,
+          entryId,
+          conflict,
+          operationId,
+        ),
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, ?, ?, ?, 'session.resources.updated', 'session', ?, ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM schedule_versions
+             WHERE id = ? AND event_id = ? AND publication_operation_id = ?
+          )`,
+      ).bind(
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        session.id,
+        JSON.stringify({
+          requiredResources: parsed.requiredResources,
+          revision: nextSessionRevision,
+        }),
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        operationId,
+      ),
+    ];
+    const auditIndex = statements.length - 1;
+    statements.push(...preparedWebhook.statements);
+    const results = await this.env.DB.batch(statements);
+    const [eventUpdated, versionUpdated, sessionUpdated, snapshotUpdated] =
+      results;
+    const audit = results[auditIndex]!;
+    if (
+      (eventUpdated.meta.changes ?? 0) !== 1 ||
+      (versionUpdated.meta.changes ?? 0) !== 1 ||
+      (sessionUpdated.meta.changes ?? 0) !== 1 ||
+      (snapshotUpdated.meta.changes ?? 0) !== 1 ||
+      (audit.meta.changes ?? 0) !== 1
+    ) {
+      throw new ScheduleRevisionConflictError();
+    }
+    await webhookService.dispatchPreparedEvent(preparedWebhook);
+    return {
+      sessionId: session.id,
+      revision: nextSessionRevision,
+      warnings: conflicts
+        .filter(
+          ({ entryId, conflict }) =>
+            conflict.severity === "warning" &&
+            scheduledEntry !== undefined &&
+            (entryId === scheduledEntry.id ||
+              conflict.conflictingEntryId === scheduledEntry.id),
+        )
+        .map(({ conflict }) => conflict),
+    };
+  }
+
+  async updateSessionContentD1(
+    viewer: Viewer,
+    parsed: ReturnType<typeof scheduleSessionContentSchema.parse>,
+    requestHash: string,
+  ) {
+    type Result = {
+      sessionId: string;
+      revision: number;
+      scheduleRevision: number;
+      warnings: ScheduleConflict[];
+    };
+    const parseResult = (value: unknown): Result => {
+      if (!value || typeof value !== "object")
+        throw new Error("The saved session-content response is invalid.");
+      const result = value as Partial<Result>;
+      if (
+        typeof result.sessionId !== "string" ||
+        !Number.isSafeInteger(result.revision) ||
+        !Number.isSafeInteger(result.scheduleRevision) ||
+        !Array.isArray(result.warnings)
+      ) {
+        throw new Error("The saved session-content response is invalid.");
+      }
+      return result as Result;
+    };
+    const replay = await this.replayEditorCommand(
+      viewer,
+      "schedule.session_content.save",
+      parsed.idempotencyKey,
+      requestHash,
+      parseResult,
+    );
+    if (replay) return replay;
+
+    const workspace = await this.getWorkspace(viewer);
+    if (
+      !workspace.version ||
+      workspace.version.id !== parsed.scheduleVersionId ||
+      workspace.version.status !== "draft"
+    ) {
+      throw new ScheduleNotFoundError(
+        "Create an active draft before editing session content.",
+      );
+    }
+    if (workspace.version.revision !== parsed.scheduleRevision)
+      throw new ScheduleRevisionConflictError();
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === parsed.sessionId,
+    );
+    if (!session) throw new ScheduleNotFoundError("Session not found.");
+    if (session.revision !== parsed.sessionRevision)
+      throw new ScheduleRevisionConflictError();
+    if (
+      !workspace.sessionFormats.some((format) => format.key === parsed.format)
+    ) {
+      throw new ScheduleConfigurationError(
+        `Session format “${parsed.format}” is not configured for this event.`,
+      );
+    }
+    if (
+      parsed.trackId &&
+      !workspace.tracks.some((track) => track.id === parsed.trackId)
+    ) {
+      throw new ScheduleConfigurationError(
+        "The selected track is not available in this event.",
+      );
+    }
+    const configuredResources = new Set(
+      workspace.rooms.flatMap((room) => room.resources),
+    );
+    const unconfigured = parsed.requiredResources.find(
+      (resource) => !configuredResources.has(resource),
+    );
+    if (unconfigured) {
+      throw new ScheduleConfigurationError(
+        `Required resource “${unconfigured}” is not configured in any active room.`,
+      );
+    }
+
+    const scheduledEntry = workspace.entries.find(
+      (entry) => entry.sessionId === session.id,
+    );
+    const prospectiveSession: ScheduleSession = {
+      ...session,
+      title: parsed.title,
+      description: parsed.description,
+      trackId: parsed.trackId,
+      trackName:
+        workspace.tracks.find((track) => track.id === parsed.trackId)?.name ??
+        null,
+      trackExclusive:
+        workspace.tracks.find((track) => track.id === parsed.trackId)
+          ?.exclusive ?? false,
+      format: parsed.format,
+      durationMinutes: parsed.durationMinutes,
+      requiredResources: parsed.requiredResources,
+      visibility: parsed.visibility,
+    };
+    const prospective: ScheduleWorkspace = {
+      ...workspace,
+      sessions: workspace.sessions.map((candidate) =>
+        candidate.id === session.id ? prospectiveSession : candidate,
+      ),
+      entries: workspace.entries.map((entry) =>
+        entry.sessionId === session.id
+          ? {
+              ...entry,
+              endsAt: entry.startsAt + parsed.durationMinutes * 60,
+            }
+          : entry,
+      ),
+    };
+    const conflicts = detectWorkspaceConflicts(prospective);
+    const relatedConflicts = scheduledEntry
+      ? conflicts
+          .filter(
+            ({ entryId, conflict }) =>
+              entryId === scheduledEntry.id ||
+              conflict.conflictingEntryId === scheduledEntry.id,
+          )
+          .map(({ conflict }) => conflict)
+      : [];
+    const blockers = relatedConflicts.filter(
+      (conflict) => conflict.severity === "blocking",
+    );
+    if (blockers.length) throw new SchedulePlacementBlockedError(blockers);
+    const warnings = relatedConflicts.filter(
+      (conflict) => conflict.severity === "warning",
+    );
+
+    const commandId = crypto.randomUUID();
+    const nextRevision = session.revision + 1;
+    const nextScheduleRevision = workspace.version.revision + 1;
+    const result: Result = {
+      sessionId: session.id,
+      revision: nextRevision,
+      scheduleRevision: nextScheduleRevision,
+      warnings,
+    };
+    const auditEventId = crypto.randomUUID();
+    const webhookService = new WebhookService(this.env);
+    const preparedWebhook = await webhookService.prepareEventForAudit(
+      viewer,
+      {
+        eventType: "session.updated",
+        entityType: "session",
+        entityId: session.id,
+        idempotencyKey: `session.updated:${session.id}:${nextRevision}`,
+        correlationId: `${session.id}:${nextRevision}`,
+        data: {
+          revision: nextRevision,
+          changedFields: [
+            "title",
+            "description",
+            "format",
+            "durationMinutes",
+            "trackId",
+            "visibility",
+            "requiredResources",
+          ],
+        },
+      },
+      auditEventId,
+    );
+    const statements: D1PreparedStatement[] = [
+      this.env.DB.prepare(
+        `DELETE FROM idempotency_records
+          WHERE organisation_id = ? AND event_id = ? AND actor_id = ?
+            AND scope = 'schedule.session_content.save'
+            AND idempotency_key = ? AND expires_at <= unixepoch()`,
+      ).bind(
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.idempotencyKey,
+      ),
+      this.env.DB.prepare(
+        `INSERT OR IGNORE INTO idempotency_records (
+           id, organisation_id, event_id, actor_id, scope, idempotency_key,
+           request_hash, status, expires_at, created_at
+         ) VALUES (?, ?, ?, ?, 'schedule.session_content.save', ?, ?,
+                   'processing', unixepoch() + 604800, unixepoch())`,
+      ).bind(
+        commandId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.idempotencyKey,
+        requestHash,
+      ),
+      this.env.DB.prepare(
+        `UPDATE events
+            SET revision = revision + 1, last_operation_id = ?,
+                last_updated_by_person_id = ?, updated_at = unixepoch()
+          WHERE id = ? AND organisation_id = ? AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM idempotency_records command
+               WHERE command.id = ? AND command.organisation_id = ?
+                 AND command.event_id = ? AND command.actor_id = ?
+                 AND command.scope = 'schedule.session_content.save'
+                 AND command.idempotency_key = ?
+                 AND command.request_hash = ? AND command.status = 'processing'
+            )
+            AND EXISTS (
+              SELECT 1 FROM schedule_versions version
+               WHERE version.id = ? AND version.event_id = events.id
+                 AND version.status = 'draft' AND version.revision = ?
+            )
+            AND EXISTS (
+              SELECT 1 FROM sessions current_session
+               WHERE current_session.id = ?
+                 AND current_session.event_id = events.id
+                 AND current_session.revision = ?
+            )`,
+      ).bind(
+        commandId,
+        viewer.personId,
+        viewer.eventId,
+        viewer.organisationId,
+        workspace.event.revision,
+        commandId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.idempotencyKey,
+        requestHash,
+        parsed.scheduleVersionId,
+        parsed.scheduleRevision,
+        session.id,
+        parsed.sessionRevision,
+      ),
+      this.env.DB.prepare(
+        `UPDATE schedule_versions
+            SET revision = revision + 1, publication_operation_id = ?
+          WHERE id = ? AND event_id = ? AND status = 'draft' AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM events
+               WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
+            )`,
+      ).bind(
+        commandId,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        parsed.scheduleRevision,
+        viewer.eventId,
+        viewer.organisationId,
+        commandId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE sessions
+            SET title = ?, description = ?, track_id = ?, format = ?,
+                duration_minutes = ?, required_resources_json = ?,
+                visibility = ?, revision = revision + 1,
+                updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM schedule_versions
+               WHERE id = ? AND event_id = ? AND status = 'draft'
+                 AND publication_operation_id = ?
+            )`,
+      ).bind(
+        parsed.title,
+        parsed.description || null,
+        parsed.trackId,
+        parsed.format,
+        parsed.durationMinutes,
+        JSON.stringify(parsed.requiredResources),
+        parsed.visibility,
+        session.id,
+        viewer.eventId,
+        parsed.sessionRevision,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        commandId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET title = ?, description = ?, track_id = ?, format = ?,
+                duration_minutes = ?, required_resources_json = ?,
+                visibility = ?, last_operation_id = ?, updated_at = unixepoch()
+          WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?
+            AND EXISTS (
+              SELECT 1 FROM schedule_versions
+               WHERE id = schedule_session_contents.schedule_version_id
+                 AND event_id = schedule_session_contents.event_id
+                 AND status = 'draft' AND publication_operation_id = ?
+            )`,
+      ).bind(
+        parsed.title,
+        parsed.description || null,
+        parsed.trackId,
+        parsed.format,
+        parsed.durationMinutes,
+        JSON.stringify(parsed.requiredResources),
+        parsed.visibility,
+        commandId,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        session.id,
+        commandId,
+      ),
+      ...(scheduledEntry
+        ? [
+            this.env.DB.prepare(
+              `UPDATE schedule_entries
+                  SET ends_at = starts_at + ?, revision = revision + 1,
+                      updated_at = unixepoch()
+                WHERE id = ? AND event_id = ? AND schedule_version_id = ?
+                  AND revision = ?
+                  AND EXISTS (
+                    SELECT 1 FROM schedule_versions
+                     WHERE id = schedule_entries.schedule_version_id
+                       AND event_id = schedule_entries.event_id
+                       AND status = 'draft' AND publication_operation_id = ?
+                  )`,
+            ).bind(
+              parsed.durationMinutes * 60,
+              scheduledEntry.id,
+              viewer.eventId,
+              parsed.scheduleVersionId,
+              scheduledEntry.revision,
+              commandId,
+            ),
+          ]
+        : []),
+      this.env.DB.prepare(
+        `DELETE FROM schedule_conflicts
+          WHERE event_id = ? AND schedule_version_id = ?
+            AND EXISTS (
+              SELECT 1 FROM schedule_versions
+               WHERE id = ? AND event_id = ? AND publication_operation_id = ?
+            )`,
+      ).bind(
+        viewer.eventId,
+        parsed.scheduleVersionId,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        commandId,
+      ),
+      ...conflicts.map(({ entryId, conflict }) =>
+        this.conflictInsert(
+          viewer.eventId,
+          parsed.scheduleVersionId,
+          entryId,
+          conflict,
+          commandId,
+        ),
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, ?, ?, ?, 'session.content.updated', 'session', ?, ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM schedule_session_contents
+             WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?
+               AND last_operation_id = ?
+          )`,
+      ).bind(
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        session.id,
+        JSON.stringify({
+          revision: nextRevision,
+          scheduleRevision: nextScheduleRevision,
+          visibility: parsed.visibility,
+        }),
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        session.id,
+        commandId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE idempotency_records
+            SET status = 'completed', response_status = 200,
+                response_json = ?, entity_type = 'session', entity_id = ?,
+                completed_at = unixepoch()
+          WHERE id = ? AND organisation_id = ? AND event_id = ?
+            AND actor_id = ? AND scope = 'schedule.session_content.save'
+            AND idempotency_key = ? AND request_hash = ?
+            AND status = 'processing'
+            AND EXISTS (
+              SELECT 1 FROM schedule_session_contents
+               WHERE schedule_version_id = ? AND event_id = ?
+                 AND session_id = ? AND last_operation_id = ?
+            )`,
+      ).bind(
+        JSON.stringify(result),
+        session.id,
+        commandId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.idempotencyKey,
+        requestHash,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        session.id,
+        commandId,
+      ),
+      this.env.DB.prepare(
+        `DELETE FROM idempotency_records
+          WHERE id = ? AND organisation_id = ? AND event_id = ?
+            AND actor_id = ? AND scope = 'schedule.session_content.save'
+            AND idempotency_key = ? AND request_hash = ?
+            AND status = 'processing'
+            AND NOT EXISTS (
+              SELECT 1 FROM schedule_session_contents
+               WHERE schedule_version_id = ? AND event_id = ?
+                 AND session_id = ? AND last_operation_id = ?
+            )`,
+      ).bind(
+        commandId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.idempotencyKey,
+        requestHash,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        session.id,
+        commandId,
+      ),
+    ];
+    const auditIndex = statements.length - 3;
+    statements.push(...preparedWebhook.statements);
+    const results = await this.env.DB.batch(statements);
+    const eventUpdated = results[2]!;
+    const versionUpdated = results[3]!;
+    const sessionUpdated = results[4]!;
+    const snapshotUpdated = results[5]!;
+    const entryUpdated = scheduledEntry ? results[6]! : null;
+    if (
+      (eventUpdated.meta.changes ?? 0) !== 1 ||
+      (versionUpdated.meta.changes ?? 0) !== 1 ||
+      (sessionUpdated.meta.changes ?? 0) !== 1 ||
+      (snapshotUpdated.meta.changes ?? 0) !== 1 ||
+      (entryUpdated && (entryUpdated.meta.changes ?? 0) !== 1) ||
+      (results[auditIndex]?.meta.changes ?? 0) !== 1
+    ) {
+      const racedReplay = await this.replayEditorCommand(
+        viewer,
+        "schedule.session_content.save",
+        parsed.idempotencyKey,
+        requestHash,
+        parseResult,
+      );
+      if (racedReplay) return racedReplay;
+      throw new ScheduleRevisionConflictError();
+    }
+    const completed = await this.replayEditorCommand(
+      viewer,
+      "schedule.session_content.save",
+      parsed.idempotencyKey,
+      requestHash,
+      parseResult,
+    );
+    if (!completed)
+      throw new Error("The session-content save did not record its result.");
+    await webhookService.dispatchPreparedEvent(preparedWebhook);
+    return completed;
+  }
+
+  async updateScheduleNotesD1(
+    viewer: Viewer,
+    parsed: ReturnType<typeof scheduleNotesSchema.parse>,
+    requestHash: string,
+  ) {
+    type Result = { scheduleVersionId: string; scheduleRevision: number };
+    const parseResult = (value: unknown): Result => {
+      if (!value || typeof value !== "object")
+        throw new Error("The saved schedule-notes response is invalid.");
+      const result = value as Partial<Result>;
+      if (
+        typeof result.scheduleVersionId !== "string" ||
+        !Number.isSafeInteger(result.scheduleRevision)
+      ) {
+        throw new Error("The saved schedule-notes response is invalid.");
+      }
+      return result as Result;
+    };
+    const replay = await this.replayEditorCommand(
+      viewer,
+      "schedule.notes.save",
+      parsed.idempotencyKey,
+      requestHash,
+      parseResult,
+    );
+    if (replay) return replay;
+    const workspace = await this.getWorkspace(viewer);
+    if (
+      !workspace.version ||
+      workspace.version.id !== parsed.scheduleVersionId ||
+      workspace.version.status !== "draft"
+    ) {
+      throw new ScheduleNotFoundError(
+        "Schedule notes can only be edited on an active draft.",
+      );
+    }
+    if (workspace.version.revision !== parsed.scheduleRevision)
+      throw new ScheduleRevisionConflictError();
+
+    const commandId = crypto.randomUUID();
+    const result: Result = {
+      scheduleVersionId: parsed.scheduleVersionId,
+      scheduleRevision: parsed.scheduleRevision + 1,
+    };
+    const results = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `DELETE FROM idempotency_records
+          WHERE organisation_id = ? AND event_id = ? AND actor_id = ?
+            AND scope = 'schedule.notes.save' AND idempotency_key = ?
+            AND expires_at <= unixepoch()`,
+      ).bind(
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.idempotencyKey,
+      ),
+      this.env.DB.prepare(
+        `INSERT OR IGNORE INTO idempotency_records (
+           id, organisation_id, event_id, actor_id, scope, idempotency_key,
+           request_hash, status, expires_at, created_at
+         ) VALUES (?, ?, ?, ?, 'schedule.notes.save', ?, ?, 'processing',
+                   unixepoch() + 604800, unixepoch())`,
+      ).bind(
+        commandId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.idempotencyKey,
+        requestHash,
+      ),
+      this.env.DB.prepare(
+        `UPDATE events
+            SET revision = revision + 1, last_operation_id = ?,
+                last_updated_by_person_id = ?, updated_at = unixepoch()
+          WHERE id = ? AND organisation_id = ? AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM idempotency_records command
+               WHERE command.id = ? AND command.organisation_id = ?
+                 AND command.event_id = ? AND command.actor_id = ?
+                 AND command.scope = 'schedule.notes.save'
+                 AND command.idempotency_key = ?
+                 AND command.request_hash = ? AND command.status = 'processing'
+            )`,
+      ).bind(
+        commandId,
+        viewer.personId,
+        viewer.eventId,
+        viewer.organisationId,
+        workspace.event.revision,
+        commandId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.idempotencyKey,
+        requestHash,
+      ),
+      this.env.DB.prepare(
+        `UPDATE schedule_versions
+            SET notes = ?, revision = revision + 1,
+                publication_operation_id = ?
+          WHERE id = ? AND event_id = ? AND status = 'draft' AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM events
+               WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
+            )`,
+      ).bind(
+        parsed.notes,
+        commandId,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        parsed.scheduleRevision,
+        viewer.eventId,
+        viewer.organisationId,
+        commandId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, ?, ?, ?, 'schedule.notes.updated', 'schedule_version', ?, ?,
+                unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM schedule_versions
+             WHERE id = ? AND event_id = ? AND status = 'draft'
+               AND publication_operation_id = ?
+          )`,
+      ).bind(
+        crypto.randomUUID(),
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.scheduleVersionId,
+        JSON.stringify({ scheduleRevision: result.scheduleRevision }),
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        commandId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE idempotency_records
+            SET status = 'completed', response_status = 200,
+                response_json = ?, entity_type = 'schedule_version',
+                entity_id = ?, completed_at = unixepoch()
+          WHERE id = ? AND organisation_id = ? AND event_id = ?
+            AND actor_id = ? AND scope = 'schedule.notes.save'
+            AND idempotency_key = ? AND request_hash = ?
+            AND status = 'processing'
+            AND EXISTS (
+              SELECT 1 FROM schedule_versions
+               WHERE id = ? AND event_id = ? AND status = 'draft'
+                 AND publication_operation_id = ?
+            )`,
+      ).bind(
+        JSON.stringify(result),
+        parsed.scheduleVersionId,
+        commandId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.idempotencyKey,
+        requestHash,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        commandId,
+      ),
+      this.env.DB.prepare(
+        `DELETE FROM idempotency_records
+          WHERE id = ? AND organisation_id = ? AND event_id = ?
+            AND actor_id = ? AND scope = 'schedule.notes.save'
+            AND idempotency_key = ? AND request_hash = ?
+            AND status = 'processing'
+            AND NOT EXISTS (
+              SELECT 1 FROM schedule_versions
+               WHERE id = ? AND event_id = ? AND status = 'draft'
+                 AND publication_operation_id = ?
+            )`,
+      ).bind(
+        commandId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.idempotencyKey,
+        requestHash,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        commandId,
+      ),
+    ]);
+    if (
+      (results[2]!.meta.changes ?? 0) !== 1 ||
+      (results[3]!.meta.changes ?? 0) !== 1
+    ) {
+      const racedReplay = await this.replayEditorCommand(
+        viewer,
+        "schedule.notes.save",
+        parsed.idempotencyKey,
+        requestHash,
+        parseResult,
+      );
+      if (racedReplay) return racedReplay;
+      throw new ScheduleRevisionConflictError();
+    }
+    const completed = await this.replayEditorCommand(
+      viewer,
+      "schedule.notes.save",
+      parsed.idempotencyKey,
+      requestHash,
+      parseResult,
+    );
+    if (!completed)
+      throw new Error("The schedule-notes save did not record its result.");
+    return completed;
+  }
+
+  async updatePoliciesD1(viewer: Viewer, input: unknown) {
+    const parsed = schedulePolicySchema.parse(input);
+    const workspace = await this.getWorkspace(viewer);
+    if (workspace.policyRevision !== parsed.revision)
+      throw new ScheduleRevisionConflictError();
+    const operationId = crypto.randomUUID();
+    const versionGuard = workspace.version
+      ? `EXISTS (
+           SELECT 1 FROM schedule_versions current_version
+            WHERE current_version.id = ? AND current_version.event_id = events.id
+              AND current_version.status = ? AND current_version.revision = ?
+         )`
+      : `NOT EXISTS (
+           SELECT 1 FROM schedule_versions current_version
+            WHERE current_version.event_id = events.id
+              AND current_version.status IN ('draft','published')
+         )`;
+    const versionBindings = workspace.version
+      ? [
+          workspace.version.id,
+          workspace.version.status,
+          workspace.version.revision,
+        ]
+      : [];
+    const nextPolicies: SchedulePolicies = {
+      room: schedulePolicyAction(parsed.roomAction),
+      speaker: schedulePolicyAction(parsed.speakerAction),
+      resource: schedulePolicyAction(parsed.resourceAction),
+      track: schedulePolicyAction(parsed.trackAction),
+      boundary: schedulePolicyAction(parsed.boundaryAction),
+      capacity: schedulePolicyAction(parsed.capacityAction),
+      minimumTurnaroundMinutes: parsed.minimumTurnaroundMinutes,
+    };
+    const conflicts =
+      workspace.version?.status === "draft"
+        ? detectWorkspaceConflicts({ ...workspace, policies: nextPolicies })
+        : [];
+    const statements: D1PreparedStatement[] = [
+      this.env.DB.prepare(
+        `
+        UPDATE events
+           SET revision = revision + 1, last_operation_id = ?,
+               last_updated_by_person_id = ?, updated_at = unixepoch()
+         WHERE id = ? AND organisation_id = ?
+           AND EXISTS (
+             SELECT 1 FROM schedule_policies policy
+              WHERE policy.event_id = events.id AND policy.revision = ?
+           )
+           AND ${versionGuard}
+      `,
+      ).bind(
+        operationId,
+        viewer.personId,
+        viewer.eventId,
+        viewer.organisationId,
+        parsed.revision,
+        ...versionBindings,
+      ),
+      this.env.DB.prepare(
+        `
+        UPDATE schedule_policies
+           SET room_overlap_action = ?, speaker_overlap_action = ?,
+               required_resource_overlap_action = ?,
+               exclusive_track_overlap_action = ?, event_boundary_action = ?,
+               capacity_action = ?, minimum_turnaround_minutes = ?,
+               revision = revision + 1, updated_at = unixepoch()
+         WHERE event_id = ? AND revision = ?
+           AND EXISTS (
+             SELECT 1 FROM events
+              WHERE id = schedule_policies.event_id AND organisation_id = ?
+                AND last_operation_id = ?
+           )
+      `,
+      ).bind(
+        parsed.roomAction,
+        parsed.speakerAction,
+        parsed.resourceAction,
+        parsed.trackAction,
+        parsed.boundaryAction,
+        parsed.capacityAction,
+        parsed.minimumTurnaroundMinutes,
+        viewer.eventId,
+        parsed.revision,
+        viewer.organisationId,
+        operationId,
+      ),
+    ];
+    if (workspace.version?.status === "draft") {
+      statements.push(
+        this.env.DB.prepare(
+          `
+          UPDATE schedule_versions
+             SET revision = revision + 1, publication_operation_id = ?
+           WHERE id = ? AND event_id = ? AND status = 'draft' AND revision = ?
+             AND EXISTS (
+               SELECT 1 FROM events
+                WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
+             )
+        `,
+        ).bind(
+          operationId,
+          workspace.version.id,
+          viewer.eventId,
+          workspace.version.revision,
+          viewer.eventId,
+          viewer.organisationId,
+          operationId,
+        ),
+        this.env.DB.prepare(
+          `DELETE FROM schedule_conflicts
+            WHERE event_id = ? AND schedule_version_id = ?
+              AND EXISTS (
+                SELECT 1 FROM schedule_versions
+                 WHERE id = ? AND event_id = ? AND publication_operation_id = ?
+              )`,
+        ).bind(
+          viewer.eventId,
+          workspace.version.id,
+          workspace.version.id,
+          viewer.eventId,
+          operationId,
+        ),
+        ...conflicts.map(({ entryId, conflict }) =>
+          this.conflictInsert(
+            viewer.eventId,
+            workspace.version!.id,
+            entryId,
+            conflict,
+            operationId,
+          ),
+        ),
+      );
+    }
+    const auditIndex = statements.length;
+    statements.push(
+      this.env.DB.prepare(
+        `
+        INSERT INTO audit_events (
+          id, organisation_id, event_id, actor_person_id, action,
+          entity_type, entity_id, metadata_json, created_at
+        )
+        SELECT ?, ?, ?, ?, 'schedule.policy.updated', 'schedule_policy', ?, ?, unixepoch()
+         WHERE EXISTS (
+           SELECT 1 FROM events
+            WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
+         )
+      `,
+      ).bind(
+        crypto.randomUUID(),
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        viewer.eventId,
+        JSON.stringify(parsed),
+        viewer.eventId,
+        viewer.organisationId,
+        operationId,
+      ),
+    );
+    const results = await this.env.DB.batch(statements);
+    const [eventUpdated, policyUpdated] = results;
+    const draftUpdated =
+      workspace.version?.status === "draft" ? results[2] : null;
+    const audit = results[auditIndex];
+    if (
+      (eventUpdated.meta.changes ?? 0) !== 1 ||
+      (policyUpdated.meta.changes ?? 0) !== 1 ||
+      (draftUpdated && (draftUpdated.meta.changes ?? 0) !== 1) ||
+      (audit.meta.changes ?? 0) !== 1
+    ) {
+      throw new ScheduleRevisionConflictError();
+    }
+  }
+
+  private conflictInsert(
+    eventId: string,
+    versionId: string,
+    entryId: string,
+    conflict: ScheduleConflict,
+    operationId: string,
+  ) {
+    return scheduleConflictInsert(
+      this.env,
+      eventId,
+      versionId,
+      entryId,
+      conflict,
+      operationId,
+    );
+  }
+}
