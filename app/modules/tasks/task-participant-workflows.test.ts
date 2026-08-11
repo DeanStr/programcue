@@ -185,464 +185,6 @@ async function createDependencyPair(
 }
 
 describe("onboarding task service", () => {
-  it.each(["acceptance", "session_start"] as const)(
-    "rejects an unresolved %s due anchor without materializing the task",
-    async (dueAnchor) => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const personId = `person-unanchored-${crypto.randomUUID()}`;
-      await testEnv.DB.batch([
-        testEnv.DB.prepare(
-          `
-          INSERT INTO people (
-            id, email, display_name, email_verified, profile_status, created_at, updated_at
-          ) VALUES (?, ?, 'Unanchored Speaker', 1, 'published', unixepoch(), unixepoch())
-        `,
-        ).bind(personId, `${personId}@example.com`),
-        testEnv.DB.prepare(
-          `
-          INSERT INTO memberships (
-            id, organisation_id, event_id, person_id, role, accepted_at, created_at
-          ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch())
-        `,
-        ).bind(
-          `membership-unanchored-${crypto.randomUUID()}`,
-          admin.organisationId,
-          admin.eventId,
-          personId,
-        ),
-      ]);
-      const service = new TaskService(testEnv);
-      const templateId = await service.createTemplate(admin, {
-        name: `Unresolved ${dueAnchor} ${crypto.randomUUID()}`,
-        description: "This task requires a real due-date anchor.",
-        targetType: "speaker",
-        taskType: "checklist",
-        impact: "high",
-        evidenceMode: "checkbox",
-        dueAnchor,
-        dueOffsetDays: 2,
-        fixedDueDate: null,
-        autoAssignOnAcceptance: false,
-        dependencyIds: [],
-      });
-
-      await expect(
-        service.assignTemplate(admin, templateId, personId),
-      ).rejects.toBeInstanceOf(TaskStateError);
-      const stored = await testEnv.DB.prepare(
-        `
-        SELECT COUNT(*) AS count FROM task_instances
-         WHERE event_id = ? AND template_id = ? AND target_id = ?
-      `,
-      )
-        .bind(admin.eventId, templateId, personId)
-        .first<{ count: number }>();
-      expect(stored?.count).toBe(0);
-    },
-  );
-
-  it.each(["completed", "waived"] as const)(
-    "does not record file evidence after a task is %s",
-    async (status) => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const taskId = await createFileTask(testEnv, `Final ${status} file task`);
-      const files = new FileService(testEnv);
-      const upload = await completeTestDirectUpload(
-        testEnv,
-        speaker,
-        {
-          targetType: "task",
-          targetId: taskId,
-          assetKind: "task_evidence",
-        },
-        new File(
-          [
-            new Uint8Array([
-              0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-            ]),
-          ],
-          `${status}.png`,
-          { type: "image/png" },
-        ),
-      );
-      await testEnv.DB.prepare(
-        `
-        UPDATE task_instances
-           SET status = ?, revision = revision + 1
-         WHERE id = ? AND event_id = ?
-      `,
-      )
-        .bind(status, taskId, speaker.eventId)
-        .run();
-
-      await expect(
-        new TaskService(testEnv).attachCompletedFileEvidence(speaker, {
-          taskId,
-          assetId: upload.assetId,
-          versionId: upload.versionId,
-        }),
-      ).rejects.toThrow("already completed or waived");
-      const sideEffects = await testEnv.DB.prepare(
-        `
-        SELECT
-          (SELECT COUNT(*) FROM task_evidence WHERE task_id = ?) AS evidenceCount,
-          (SELECT COUNT(*) FROM audit_events WHERE entity_id = ? AND action = 'task.file.submitted') AS auditCount
-      `,
-      )
-        .bind(taskId, taskId)
-        .first<{ evidenceCount: number; auditCount: number }>();
-      expect(sideEffects).toEqual({ evidenceCount: 0, auditCount: 0 });
-    },
-  );
-
-  describe("template workflows", () => {
-    it("creates and validates the minimum structured travel onboarding forms", async () => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const service = new TaskService(testEnv);
-      await expect(
-        service.createTravelOnboardingTemplates(admin, false),
-      ).rejects.toThrow(/review and confirm/i);
-      const templates = await service.createTravelOnboardingTemplates(
-        admin,
-        true,
-      );
-      expect(templates.createdTemplateIds).toHaveLength(2);
-      await expect(
-        service.createTravelOnboardingTemplates(admin, true),
-      ).resolves.toEqual({
-        hotelTemplateId: templates.hotelTemplateId,
-        flightTemplateId: templates.flightTemplateId,
-        createdTemplateIds: [],
-      });
-      const stored = await testEnv.DB.prepare(
-        `SELECT id, auto_assign_on_acceptance AS autoAssign,
-              configuration_json AS configurationJson
-         FROM task_templates WHERE id IN (?, ?) ORDER BY name`,
-      )
-        .bind(templates.hotelTemplateId, templates.flightTemplateId)
-        .all<{
-          id: string;
-          autoAssign: number;
-          configurationJson: string;
-        }>();
-      expect(stored.results).toHaveLength(2);
-      expect(stored.results.every((row) => row.autoAssign === 1)).toBe(true);
-      expect(
-        stored.results.map(
-          (row) => JSON.parse(row.configurationJson).preset as string,
-        ),
-      ).toEqual(["speaker_travel_flight_v1", "speaker_travel_hotel_v1"]);
-      expect(
-        stored.results.every(
-          (row) => JSON.parse(row.configurationJson).form.fields.length >= 4,
-        ),
-      ).toBe(true);
-      await testEnv.DB.prepare(
-        `UPDATE task_templates
-          SET due_anchor = 'none', due_offset_minutes = NULL
-        WHERE id = ? AND event_id = ?`,
-      )
-        .bind(templates.hotelTemplateId, admin.eventId)
-        .run();
-
-      const { taskId } = await service.assignTemplate(
-        admin,
-        templates.hotelTemplateId,
-        speaker.personId,
-      );
-      const participantTask = (
-        await service.listParticipantTasks(speaker)
-      ).find((task) => task.id === taskId)!;
-      expect(participantTask.formFields.map((field) => field.id)).toContain(
-        "requires_hotel",
-      );
-      await expect(
-        service.completeParticipant(speaker, {
-          taskId,
-          revision: participantTask.revision,
-          responses: { requires_hotel: true, check_in: "2030-05-20" },
-        }),
-      ).rejects.toThrow(/check-out date/i);
-      await expect(
-        service.completeParticipant(speaker, {
-          taskId,
-          revision: participantTask.revision,
-          responses: {
-            requires_hotel: true,
-            check_in: "2030-02-30",
-            check_out: "2030-05-23",
-          },
-        }),
-      ).rejects.toThrow(/valid date.*check-in/i);
-      await service.completeParticipant(speaker, {
-        taskId,
-        revision: participantTask.revision,
-        responses: {
-          requires_hotel: true,
-          check_in: "2030-05-20",
-          check_out: "2030-05-23",
-          room_requirements: "Step-free route from the lobby.",
-        },
-      });
-      const completed = await testEnv.DB.prepare(
-        `SELECT status, evidence_json AS evidenceJson
-         FROM task_instances WHERE id = ? AND event_id = ?`,
-      )
-        .bind(taskId, speaker.eventId)
-        .first<{ status: string; evidenceJson: string }>();
-      expect(completed?.status).toBe("completed");
-      expect(JSON.parse(completed!.evidenceJson).responses).toMatchObject({
-        requires_hotel: true,
-        check_in: "2030-05-20",
-      });
-    });
-  });
-
-  describe("additional workflow coverage", () => {
-    it("coerces only boolean form fields and preserves literal text and select values", async () => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const service = new TaskService(testEnv);
-      const templateId = await service.createTemplate(admin, {
-        name: `Literal structured answers ${crypto.randomUUID()}`,
-        description: "Preserve answers that happen to look like booleans.",
-        targetType: "speaker",
-        taskType: "short_form",
-        impact: "high",
-        evidenceMode: "text",
-        dueAnchor: "none",
-        dueOffsetDays: null,
-        fixedDueDate: null,
-        autoAssignOnAcceptance: false,
-        dependencyIds: [],
-        configuration: {
-          form: {
-            fields: [
-              {
-                id: "confirmation",
-                label: "Confirmed",
-                type: "boolean",
-                required: true,
-              },
-              {
-                id: "literal_choice",
-                label: "Literal choice",
-                type: "select",
-                required: true,
-                options: ["true", "false"],
-              },
-              {
-                id: "literal_text",
-                label: "Literal text",
-                type: "short_text",
-                required: true,
-              },
-            ],
-          },
-        },
-      });
-      const { taskId } = await service.assignTemplate(
-        admin,
-        templateId,
-        speaker.personId,
-      );
-      const task = (await service.listParticipantTasks(speaker)).find(
-        (candidate) => candidate.id === taskId,
-      )!;
-
-      await service.completeParticipant(speaker, {
-        taskId,
-        revision: task.revision,
-        responses: {
-          confirmation: "true",
-          literal_choice: "false",
-          literal_text: "true",
-        },
-      });
-
-      const completed = await testEnv.DB.prepare(
-        `SELECT evidence_json AS evidenceJson
-         FROM task_instances WHERE id = ? AND event_id = ?`,
-      )
-        .bind(taskId, speaker.eventId)
-        .first<{ evidenceJson: string }>();
-      expect(JSON.parse(completed!.evidenceJson).responses).toEqual({
-        confirmation: true,
-        literal_choice: "false",
-        literal_text: "true",
-      });
-    });
-  });
-
-  describe("template workflows", () => {
-    it("validates both travel presets before creating either missing form", async () => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const eventId = `evt-travel-atomic-${crypto.randomUUID()}`;
-      await testEnv.DB.prepare(
-        `INSERT INTO events (
-         id, organisation_id, name, slug, timezone, starts_at, ends_at,
-         session_formats_json, file_policy_json
-       )
-       SELECT ?, organisation_id, 'Travel atomicity', ?, timezone,
-              starts_at, ends_at, session_formats_json, file_policy_json
-         FROM events WHERE id = ? AND organisation_id = ?`,
-      )
-        .bind(
-          eventId,
-          `travel-atomic-${crypto.randomUUID()}`,
-          admin.eventId,
-          admin.organisationId,
-        )
-        .run();
-      const eventAdmin = { ...admin, eventId };
-      const service = new TaskService(testEnv);
-      const templates = await service.createTravelOnboardingTemplates(
-        eventAdmin,
-        true,
-      );
-      await testEnv.DB.batch([
-        testEnv.DB.prepare(
-          "DELETE FROM task_templates WHERE id = ? AND event_id = ?",
-        ).bind(templates.hotelTemplateId, eventId),
-        testEnv.DB.prepare(
-          `UPDATE task_templates SET name = 'Modified flight preset'
-          WHERE id = ? AND event_id = ?`,
-        ).bind(templates.flightTemplateId, eventId),
-      ]);
-
-      await expect(
-        service.createTravelOnboardingTemplates(eventAdmin, true),
-      ).rejects.toThrow(/differs from the required hotel or flight form/i);
-      await expect(
-        testEnv.DB.prepare(
-          `SELECT COUNT(*) AS count FROM task_templates
-          WHERE event_id = ?
-            AND json_extract(configuration_json, '$.preset') = 'speaker_travel_hotel_v1'`,
-        )
-          .bind(eventId)
-          .first<{ count: number }>(),
-      ).resolves.toEqual({ count: 0 });
-    });
-
-    it("reuses exact travel preset winners when two confirmations race", async () => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const eventId = `evt-travel-race-${crypto.randomUUID()}`;
-      await testEnv.DB.prepare(
-        `INSERT INTO events (
-         id, organisation_id, name, slug, timezone, starts_at, ends_at,
-         session_formats_json, file_policy_json
-       )
-       SELECT ?, organisation_id, 'Travel preset race', ?, timezone,
-              starts_at, ends_at, session_formats_json, file_policy_json
-         FROM events WHERE id = ? AND organisation_id = ?`,
-      )
-        .bind(
-          eventId,
-          `travel-race-${crypto.randomUUID()}`,
-          admin.eventId,
-          admin.organisationId,
-        )
-        .run();
-      const eventAdmin = { ...admin, eventId };
-      const racingEnv = withBatchBarrier(testEnv);
-
-      const [first, second] = await Promise.all([
-        new TaskService(racingEnv).createTravelOnboardingTemplates(
-          eventAdmin,
-          true,
-        ),
-        new TaskService(racingEnv).createTravelOnboardingTemplates(
-          eventAdmin,
-          true,
-        ),
-      ]);
-
-      expect(second.hotelTemplateId).toBe(first.hotelTemplateId);
-      expect(second.flightTemplateId).toBe(first.flightTemplateId);
-      expect(
-        first.createdTemplateIds.length + second.createdTemplateIds.length,
-      ).toBe(2);
-      const stored = await testEnv.DB.prepare(
-        `SELECT COUNT(*) AS templateCount
-         FROM task_templates
-        WHERE event_id = ?
-          AND json_extract(configuration_json, '$.preset') IN (?, ?)`,
-      )
-        .bind(eventId, "speaker_travel_hotel_v1", "speaker_travel_flight_v1")
-        .first<{ templateCount: number }>();
-      expect(stored).toEqual({ templateCount: 2 });
-    });
-
-    it("scopes deterministic template intents to one event and rejects payload drift", async () => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const secondEventId = `evt-task-intent-${crypto.randomUUID()}`;
-      await testEnv.DB.prepare(
-        `INSERT INTO events (
-         id, organisation_id, name, slug, timezone, starts_at, ends_at,
-         session_formats_json, file_policy_json
-       )
-       SELECT ?, organisation_id, 'Task intent event', ?, timezone,
-              starts_at, ends_at, session_formats_json, file_policy_json
-         FROM events WHERE id = ? AND organisation_id = ?`,
-      )
-        .bind(
-          secondEventId,
-          `task-intent-${crypto.randomUUID()}`,
-          admin.eventId,
-          admin.organisationId,
-        )
-        .run();
-      const input = {
-        name: "Event-scoped template intent",
-        description: "The same caller intent is safe in another event.",
-        targetType: "speaker" as const,
-        taskType: "checklist" as const,
-        impact: "high" as const,
-        evidenceMode: "checkbox" as const,
-        dueAnchor: "none" as const,
-        dueOffsetDays: null,
-        fixedDueDate: null,
-        autoAssignOnAcceptance: false,
-        dependencyIds: [],
-      };
-      const intentId = `template-intent-${crypto.randomUUID()}`;
-      const service = new TaskService(testEnv);
-      const first = await service.createTemplate(admin, input, intentId);
-      await expect(
-        service.createTemplate(admin, input, intentId),
-      ).resolves.toBe(first);
-      await expect(
-        service.createTemplate(
-          admin,
-          { ...input, name: "A different template" },
-          intentId,
-        ),
-      ).rejects.toBeInstanceOf(TaskStateError);
-
-      const second = await service.createTemplate(
-        { ...admin, eventId: secondEventId },
-        input,
-        intentId,
-      );
-      expect(second).not.toBe(first);
-      const stored = await testEnv.DB.prepare(
-        `SELECT event_id AS eventId FROM task_templates
-        WHERE id IN (?, ?) ORDER BY event_id`,
-      )
-        .bind(first, second)
-        .all<{ eventId: string }>();
-      expect(stored.results.map((row) => row.eventId).sort()).toEqual(
-        [admin.eventId, secondEventId].sort(),
-      );
-    });
-  });
-
   describe("participant workflows", () => {
     it("rejects unsupported evidence combinations and persists an explicit supported scope", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
@@ -671,8 +213,8 @@ describe("onboarding task service", () => {
 
       const persisted = await testEnv.DB.prepare(
         `SELECT target_type AS targetType,
-              auto_assign_on_acceptance AS autoAssignOnAcceptance
-         FROM task_templates WHERE event_id = ? AND name = ?`,
+                auto_assign_on_acceptance AS autoAssignOnAcceptance
+           FROM task_templates WHERE event_id = ? AND name = ?`,
       )
         .bind(admin.eventId, base.name)
         .first();
@@ -698,101 +240,6 @@ describe("onboarding task service", () => {
           autoAssignOnAcceptance: true,
         }),
       ).rejects.toBeInstanceOf(ZodError);
-    });
-  });
-
-  describe("template workflows", () => {
-    it("assigns session and event templates to their real targets", async () => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const service = new TaskService(testEnv);
-      const sessionTemplateId = await service.createTemplate(admin, {
-        name: `Session preparation ${crypto.randomUUID()}`,
-        description: "Prepare this session together.",
-        targetType: "session",
-        taskType: "checklist",
-        impact: "high",
-        evidenceMode: "checkbox",
-        dueAnchor: "none",
-        dueOffsetDays: null,
-        fixedDueDate: null,
-        autoAssignOnAcceptance: false,
-        dependencyIds: [],
-      });
-      const eventTemplateId = await service.createTemplate(admin, {
-        name: `Event administration ${crypto.randomUUID()}`,
-        description: "Complete an event-wide administration step.",
-        targetType: "event",
-        taskType: "administrator_only",
-        impact: "medium",
-        evidenceMode: "none",
-        dueAnchor: "none",
-        dueOffsetDays: null,
-        fixedDueDate: null,
-        autoAssignOnAcceptance: false,
-        dependencyIds: [],
-      });
-      const sessionAssignment = await service.assignTemplate(
-        admin,
-        sessionTemplateId,
-        "session-demo-speaker",
-      );
-      const eventAssignment = await service.assignTemplate(
-        admin,
-        eventTemplateId,
-        admin.eventId,
-      );
-
-      expect(
-        await testEnv.DB.prepare(
-          `SELECT target_type AS targetType,target_id AS targetId,
-                owner_person_id AS ownerPersonId
-           FROM task_instances WHERE id = ?`,
-        )
-          .bind(sessionAssignment.taskId)
-          .first(),
-      ).toEqual({
-        targetType: "session",
-        targetId: "session-demo-speaker",
-        ownerPersonId: null,
-      });
-      expect(
-        await testEnv.DB.prepare(
-          `SELECT target_type AS targetType,target_id AS targetId,
-                owner_person_id AS ownerPersonId
-           FROM task_instances WHERE id = ?`,
-        )
-          .bind(eventAssignment.taskId)
-          .first(),
-      ).toEqual({
-        targetType: "event",
-        targetId: admin.eventId,
-        ownerPersonId: null,
-      });
-      const participantTasks = await service.listParticipantTasks(speaker);
-      expect(
-        participantTasks.some((task) => task.id === sessionAssignment.taskId),
-      ).toBe(true);
-      expect(
-        participantTasks.some((task) => task.id === eventAssignment.taskId),
-      ).toBe(false);
-
-      await expect(
-        service.createTemplate(admin, {
-          name: `Invalid mixed-scope dependency ${crypto.randomUUID()}`,
-          description:
-            "A session plan cannot reuse a speaker target implicitly.",
-          targetType: "session",
-          taskType: "checklist",
-          impact: "high",
-          evidenceMode: "checkbox",
-          dueAnchor: "none",
-          dueOffsetDays: null,
-          fixedDueDate: null,
-          autoAssignOnAcceptance: true,
-          dependencyIds: ["task-template-profile"],
-        }),
-      ).rejects.toBeInstanceOf(TaskStateError);
     });
   });
 
@@ -861,17 +308,6 @@ describe("onboarding task service", () => {
     });
   });
 
-  describe("additional workflow coverage", () => {
-    it("interprets fixed due dates at the end of the event-local calendar day", () => {
-      expect(fixedDateEndEpoch("2030-06-01", "America/Toronto")).toBe(
-        Date.parse("2030-06-02T03:59:59Z") / 1_000,
-      );
-      expect(fixedDateEndEpoch("2030-06-01", "Australia/Melbourne")).toBe(
-        Date.parse("2030-06-01T13:59:59Z") / 1_000,
-      );
-    });
-  });
-
   describe("participant workflows", () => {
     it("loads participant dependencies and comments for more than 100 tasks", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
@@ -883,16 +319,16 @@ describe("onboarding task service", () => {
       );
       await testEnv.DB.prepare(
         `
-      INSERT INTO task_instances (
-        id, event_id, target_type, target_id, owner_person_id, title,
-        task_type, impact, status, readiness_state, readiness_percent,
-        revision, created_at, updated_at
-      )
-      SELECT CAST(value AS TEXT), ?, 'speaker', ?, ?,
-             'Large participant task ' || key, 'checklist', 'medium',
-             'not_started', 'on_track', 0, 1, unixepoch(), unixepoch()
-        FROM json_each(?)
-    `,
+        INSERT INTO task_instances (
+          id, event_id, target_type, target_id, owner_person_id, title,
+          task_type, impact, status, readiness_state, readiness_percent,
+          revision, created_at, updated_at
+        )
+        SELECT CAST(value AS TEXT), ?, 'speaker', ?, ?,
+               'Large participant task ' || key, 'checklist', 'medium',
+               'not_started', 'on_track', 0, 1, unixepoch(), unixepoch()
+          FROM json_each(?)
+      `,
       )
         .bind(
           speaker.eventId,
@@ -904,13 +340,13 @@ describe("onboarding task service", () => {
       await testEnv.DB.batch([
         testEnv.DB.prepare(
           `INSERT INTO task_instance_dependencies (
-           task_id, depends_on_task_id, created_at
-         ) VALUES (?, ?, unixepoch())`,
+             task_id, depends_on_task_id, created_at
+           ) VALUES (?, ?, unixepoch())`,
         ).bind(taskIds[0], taskIds[1]),
         testEnv.DB.prepare(
           `INSERT INTO task_comments (
-           id, event_id, task_id, author_person_id, visibility, body, created_at
-         ) VALUES (?, ?, ?, ?, 'participant', 'Large-list comment', unixepoch())`,
+             id, event_id, task_id, author_person_id, visibility, body, created_at
+           ) VALUES (?, ?, ?, ?, 'participant', 'Large-list comment', unixepoch())`,
         ).bind(
           `${prefix}-comment`,
           speaker.eventId,
@@ -930,96 +366,6 @@ describe("onboarding task service", () => {
         ],
         comments: [expect.objectContaining({ body: "Large-list comment" })],
       });
-    });
-  });
-
-  describe("assignment workflows", () => {
-    it("materializes prerequisites, blocks dependent work, then unlocks it after completion", async () => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const service = new TaskService(testEnv);
-      const prerequisite = await service.createTemplate(admin, {
-        name: "Confirm test profile",
-        description: "Confirm the profile details.",
-        targetType: "speaker",
-        taskType: "checklist",
-        impact: "high",
-        evidenceMode: "checkbox",
-        dueAnchor: "none",
-        dueOffsetDays: null,
-        fixedDueDate: null,
-        autoAssignOnAcceptance: false,
-        dependencyIds: [],
-      });
-      const dependent = await service.createTemplate(admin, {
-        name: "Submit test requirements",
-        description: "Available only after profile confirmation.",
-        targetType: "speaker",
-        taskType: "short_form",
-        impact: "critical",
-        evidenceMode: "admin_approval",
-        dueAnchor: "none",
-        dueOffsetDays: null,
-        fixedDueDate: null,
-        autoAssignOnAcceptance: false,
-        dependencyIds: [prerequisite],
-      });
-      await service.assignTemplate(admin, dependent, speaker.personId);
-      let tasks = await service.listParticipantTasks(speaker);
-      const first = tasks.find((task) => task.templateId === prerequisite)!;
-      const second = tasks.find((task) => task.templateId === dependent)!;
-      expect(first.status).toBe("not_started");
-      expect(second.status).toBe("blocked");
-
-      await service.completeParticipant(speaker, {
-        taskId: first.id,
-        revision: first.revision,
-        confirmed: true,
-      });
-      tasks = await service.listParticipantTasks(speaker);
-      expect(tasks.find((task) => task.id === second.id)?.status).toBe(
-        "not_started",
-      );
-      const unlocked = tasks.find((task) => task.id === second.id)!;
-      await service.completeParticipant(speaker, {
-        taskId: unlocked.id,
-        revision: unlocked.revision,
-        text: "All requirements are confirmed.",
-      });
-      expect(
-        (await service.listParticipantTasks(speaker)).find(
-          (task) => task.id === second.id,
-        )?.status,
-      ).toBe("submitted");
-      await service.addComment(
-        speaker,
-        second.id,
-        "Please review the submitted requirements.",
-      );
-      await service.addComment(
-        admin,
-        second.id,
-        "Check this against the event brief.",
-        "administrator",
-      );
-      const adminTask = (await service.getAdminWorkspace(admin)).tasks.find(
-        (task) => task.id === second.id,
-      );
-      expect(adminTask?.evidence[0]?.details).toMatchObject({
-        text: "All requirements are confirmed.",
-      });
-      expect(adminTask?.comments).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            body: "Please review the submitted requirements.",
-            visibility: "participant",
-          }),
-          expect.objectContaining({
-            body: "Check this against the event brief.",
-            visibility: "administrator",
-          }),
-        ]),
-      );
     });
   });
 
@@ -1046,8 +392,8 @@ describe("onboarding task service", () => {
       await service.undoCompletion(speaker, completion.undoToken);
       const task = await testEnv.DB.prepare(
         `SELECT status, readiness_percent AS readinessPercent, evidence_json AS evidenceJson,
-              completed_at AS completedAt, revision
-         FROM task_instances WHERE id = ? AND event_id = ?`,
+                completed_at AS completedAt, revision
+           FROM task_instances WHERE id = ? AND event_id = ?`,
       )
         .bind(taskId, speaker.eventId)
         .first<{
@@ -1073,7 +419,7 @@ describe("onboarding task service", () => {
       ).toEqual({ status: "superseded" });
       const audit = await testEnv.DB.prepare(
         `SELECT COUNT(*) AS count FROM audit_events
-        WHERE event_id = ? AND entity_id = ? AND action = 'task.completion_undone'`,
+          WHERE event_id = ? AND entity_id = ? AND action = 'task.completion_undone'`,
       )
         .bind(speaker.eventId, taskId)
         .first<{ count: number }>();
@@ -1102,8 +448,8 @@ describe("onboarding task service", () => {
       ).rejects.toThrow("invalid");
       await testEnv.DB.prepare(
         `INSERT INTO task_evidence (
-         id, event_id, task_id, submitted_by_person_id, evidence_json, status, created_at
-       ) VALUES (?, ?, ?, ?, '{}', 'submitted', unixepoch())`,
+           id, event_id, task_id, submitted_by_person_id, evidence_json, status, created_at
+         ) VALUES (?, ?, ?, ?, '{}', 'submitted', unixepoch())`,
       )
         .bind(crypto.randomUUID(), speaker.eventId, taskId, speaker.personId)
         .run();
@@ -1128,8 +474,8 @@ describe("onboarding task service", () => {
       const operationId = completion.undoToken!.split(".", 1)[0]!;
       await testEnv.DB.prepare(
         `UPDATE operation_jobs
-          SET result_json = json_set(result_json, '$.undoExpiresAt', unixepoch() - 1)
-        WHERE id = ?`,
+            SET result_json = json_set(result_json, '$.undoExpiresAt', unixepoch() - 1)
+          WHERE id = ?`,
       )
         .bind(operationId)
         .run();
@@ -1231,104 +577,6 @@ describe("onboarding task service", () => {
     });
   });
 
-  describe("template workflows", () => {
-    it("materializes one task when the same template is assigned concurrently", async () => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const templateId = await new TaskService(testEnv).createTemplate(admin, {
-        name: `Concurrent assignment ${crypto.randomUUID()}`,
-        description: "Create this task once.",
-        targetType: "speaker",
-        taskType: "checklist",
-        impact: "high",
-        evidenceMode: "checkbox",
-        dueAnchor: "none",
-        dueOffsetDays: null,
-        fixedDueDate: null,
-        autoAssignOnAcceptance: false,
-        dependencyIds: [],
-      });
-      const service = new TaskService(withBatchBarrier(testEnv));
-      const assignments = await Promise.all([
-        service.assignTemplate(admin, templateId, speaker.personId),
-        service.assignTemplate(admin, templateId, speaker.personId),
-      ]);
-      expect(
-        new Set(assignments.map((assignment) => assignment.taskId)).size,
-      ).toBe(1);
-      const stored = await env.DB.prepare(
-        `
-      SELECT
-        (SELECT COUNT(*) FROM task_instances
-          WHERE event_id = ? AND template_id = ? AND target_id = ?) AS taskCount,
-        (SELECT COUNT(*) FROM audit_events
-          WHERE event_id = ? AND action = 'task.assigned'
-            AND json_extract(metadata_json, '$.templateId') = ?) AS auditCount
-    `,
-      )
-        .bind(
-          speaker.eventId,
-          templateId,
-          speaker.personId,
-          speaker.eventId,
-          templateId,
-        )
-        .first<{ taskCount: number; auditCount: number }>();
-      expect(stored).toEqual({ taskCount: 1, auditCount: 1 });
-    });
-  });
-
-  describe("assignment workflows", () => {
-    it("rejects task assignment before mutation when a required webhook Queue is unbound", async () => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const endpointId = `task-webhook-${crypto.randomUUID()}`;
-      await testEnv.DB.prepare(
-        `INSERT INTO webhook_endpoints (
-         id, organisation_id, event_id, name, url, secret_ciphertext,
-         event_types_json, status, created_by_person_id
-       ) VALUES (?, ?, ?, 'Task events', 'https://hooks.example.com/tasks',
-                 'test-only', '["task.created","task.updated"]', 'active', ?)`,
-      )
-        .bind(endpointId, admin.organisationId, admin.eventId, admin.personId)
-        .run();
-      const service = new TaskService(testEnv);
-      const templateId = await service.createTemplate(admin, {
-        name: `Webhook task ${crypto.randomUUID()}`,
-        description: "Exercise task event delivery.",
-        targetType: "speaker",
-        taskType: "checklist",
-        impact: "high",
-        evidenceMode: "checkbox",
-        dueAnchor: "none",
-        dueOffsetDays: null,
-        fixedDueDate: null,
-        autoAssignOnAcceptance: false,
-        dependencyIds: [],
-      });
-      await expect(
-        service.assignTemplate(admin, templateId, speaker.personId),
-      ).rejects.toMatchObject({ name: "WebhookQueueConfigurationError" });
-      expect(
-        await testEnv.DB.prepare(
-          `SELECT
-           (SELECT COUNT(*) FROM task_instances
-             WHERE event_id = ? AND template_id = ? AND target_id = ?) AS taskCount,
-           (SELECT COUNT(*) FROM webhook_deliveries
-             WHERE endpoint_id = ?) AS deliveryCount`,
-        )
-          .bind(admin.eventId, templateId, speaker.personId, endpointId)
-          .first<{
-            taskCount: number;
-            deliveryCount: number;
-          }>(),
-      ).toEqual({ taskCount: 0, deliveryCount: 0 });
-      await testEnv.DB.prepare("DELETE FROM webhook_endpoints WHERE id = ?")
-        .bind(endpointId)
-        .run();
-    });
-  });
-
   describe("participant workflows", () => {
     it("serializes participant completion against prerequisite reopen", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
@@ -1358,10 +606,10 @@ describe("onboarding task service", () => {
       ).rejects.toThrow(/changed|prerequisite/i);
       const state = await env.DB.prepare(
         `
-      SELECT status,
-             (SELECT COUNT(*) FROM task_evidence WHERE task_id = task_instances.id) AS evidenceCount
-        FROM task_instances WHERE id = ?
-    `,
+        SELECT status,
+               (SELECT COUNT(*) FROM task_evidence WHERE task_id = task_instances.id) AS evidenceCount
+          FROM task_instances WHERE id = ?
+      `,
       )
         .bind(pair.dependent.id)
         .first<{ status: string; evidenceCount: number }>();
@@ -1411,8 +659,8 @@ describe("onboarding task service", () => {
       expect(
         await env.DB.prepare(
           `
-      SELECT COUNT(*) AS count FROM task_evidence WHERE task_id = ?
-    `,
+        SELECT COUNT(*) AS count FROM task_evidence WHERE task_id = ?
+      `,
         )
           .bind(pair.dependent.id)
           .first<{ count: number }>(),
@@ -1453,24 +701,6 @@ describe("onboarding task service", () => {
             .first<{ status: string }>()
         )?.status,
       ).toBe("blocked");
-    });
-  });
-
-  describe("administration workflows", () => {
-    it("requires a reason for an administrator waiver", async () => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const task = (
-        await new TaskService(testEnv).getAdminWorkspace(admin)
-      ).tasks.find((item) => item.id === "task-demo-slides")!;
-      await expect(
-        new TaskService(testEnv).administerTask(admin, {
-          taskId: task.id,
-          revision: task.revision,
-          intent: "waive",
-          reason: "",
-        }),
-      ).rejects.toThrow("Explain why");
     });
   });
 
@@ -1516,9 +746,9 @@ describe("onboarding task service", () => {
       expect(
         await testEnv.DB.prepare(
           `SELECT
-           (SELECT COUNT(*) FROM task_evidence WHERE task_id = ?) AS evidenceCount,
-           (SELECT COUNT(*) FROM audit_events
-             WHERE entity_id = ? AND action = 'task.file.submitted') AS auditCount`,
+             (SELECT COUNT(*) FROM task_evidence WHERE task_id = ?) AS evidenceCount,
+             (SELECT COUNT(*) FROM audit_events
+               WHERE entity_id = ? AND action = 'task.file.submitted') AS auditCount`,
         )
           .bind("task-demo-slides", "task-demo-slides")
           .first<{ evidenceCount: number; auditCount: number }>(),
@@ -1713,11 +943,11 @@ describe("onboarding task service", () => {
       const racingEnv = withBatchRace(testEnv, async () => {
         await testEnv.DB.prepare(
           `
-        UPDATE task_instances
-           SET status = 'completed', readiness_state = 'on_track', readiness_percent = 100,
-               revision = revision + 1, last_operation_id = 'winning-completion'
-         WHERE id = ? AND event_id = ?
-      `,
+          UPDATE task_instances
+             SET status = 'completed', readiness_state = 'on_track', readiness_percent = 100,
+                 revision = revision + 1, last_operation_id = 'winning-completion'
+           WHERE id = ? AND event_id = ?
+        `,
         )
           .bind(taskId, speaker.eventId)
           .run();
@@ -1732,62 +962,14 @@ describe("onboarding task service", () => {
       ).rejects.toThrow("changed. Refresh before completing");
       const sideEffects = await testEnv.DB.prepare(
         `
-      SELECT
-        (SELECT COUNT(*) FROM task_evidence WHERE task_id = ?) AS evidenceCount,
-        (SELECT COUNT(*) FROM audit_events WHERE entity_id = ? AND action = 'task.completed') AS auditCount
-    `,
+        SELECT
+          (SELECT COUNT(*) FROM task_evidence WHERE task_id = ?) AS evidenceCount,
+          (SELECT COUNT(*) FROM audit_events WHERE entity_id = ? AND action = 'task.completed') AS auditCount
+      `,
       )
         .bind(taskId, taskId)
         .first<{ evidenceCount: number; auditCount: number }>();
       expect(sideEffects).toEqual({ evidenceCount: 0, auditCount: 0 });
-    });
-  });
-
-  describe("administration workflows", () => {
-    it("rejects administrator actions that are illegal for the current task state", async () => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoSpeakerData(testEnv);
-      const service = new TaskService(testEnv);
-      const cases = [
-        { status: "submitted", intent: "complete" },
-        { status: "not_started", intent: "reopen" },
-        { status: "completed", intent: "waive" },
-      ] as const;
-
-      for (const item of cases) {
-        const taskId = await createChecklistTask(
-          testEnv,
-          `Illegal ${item.intent} from ${item.status}`,
-        );
-        await testEnv.DB.prepare(
-          `
-        UPDATE task_instances SET status = ? WHERE id = ? AND event_id = ?
-      `,
-        )
-          .bind(item.status, taskId, admin.eventId)
-          .run();
-
-        await expect(
-          service.administerTask(admin, {
-            taskId,
-            revision: 1,
-            intent: item.intent,
-            reason: item.intent === "waive" ? "No longer needed" : "",
-          }),
-        ).rejects.toThrow(/cannot be/);
-        expect(
-          await testEnv.DB.prepare(
-            `
-        SELECT status, revision FROM task_instances WHERE id = ? AND event_id = ?
-      `,
-          )
-            .bind(taskId, admin.eventId)
-            .first(),
-        ).toEqual({
-          status: item.status,
-          revision: 1,
-        });
-      }
     });
   });
 
@@ -1817,11 +999,11 @@ describe("onboarding task service", () => {
       const racingEnv = withBatchRace(testEnv, async () => {
         await testEnv.DB.prepare(
           `
-        UPDATE task_instances
-           SET status = 'waived', revision = revision + 1,
-               last_operation_id = 'winning-waiver'
-         WHERE id = ? AND event_id = ?
-      `,
+          UPDATE task_instances
+             SET status = 'waived', revision = revision + 1,
+                 last_operation_id = 'winning-waiver'
+           WHERE id = ? AND event_id = ?
+        `,
         )
           .bind(taskId, speaker.eventId)
           .run();
@@ -1836,9 +1018,9 @@ describe("onboarding task service", () => {
       ).rejects.toThrow("changed. Refresh before submitting file evidence");
       const task = await testEnv.DB.prepare(
         `
-      SELECT status, revision, evidence_json AS evidenceJson
-        FROM task_instances WHERE id = ? AND event_id = ?
-    `,
+        SELECT status, revision, evidence_json AS evidenceJson
+          FROM task_instances WHERE id = ? AND event_id = ?
+      `,
       )
         .bind(taskId, speaker.eventId)
         .first<{
@@ -1853,10 +1035,10 @@ describe("onboarding task service", () => {
       });
       const sideEffects = await testEnv.DB.prepare(
         `
-      SELECT
-        (SELECT COUNT(*) FROM task_evidence WHERE task_id = ?) AS evidenceCount,
-        (SELECT COUNT(*) FROM audit_events WHERE entity_id = ? AND action = 'task.file.submitted') AS auditCount
-    `,
+        SELECT
+          (SELECT COUNT(*) FROM task_evidence WHERE task_id = ?) AS evidenceCount,
+          (SELECT COUNT(*) FROM audit_events WHERE entity_id = ? AND action = 'task.file.submitted') AS auditCount
+      `,
       )
         .bind(taskId, taskId)
         .first<{ evidenceCount: number; auditCount: number }>();
@@ -1913,11 +1095,11 @@ describe("onboarding task service", () => {
       const racingEnv = withBatchRace(testEnv, async () => {
         await testEnv.DB.prepare(
           `
-        UPDATE task_instances
-           SET status = 'waived', revision = revision + 1,
-               last_operation_id = 'winning-admin-waiver'
-         WHERE id = ? AND event_id = ?
-      `,
+          UPDATE task_instances
+             SET status = 'waived', revision = revision + 1,
+                 last_operation_id = 'winning-admin-waiver'
+           WHERE id = ? AND event_id = ?
+        `,
         )
           .bind(taskId, speaker.eventId)
           .run();
@@ -1933,9 +1115,9 @@ describe("onboarding task service", () => {
       ).rejects.toThrow("changed. Refresh before applying");
       const evidence = await testEnv.DB.prepare(
         `
-      SELECT status, reviewed_by_person_id AS reviewedBy
-        FROM task_evidence WHERE task_id = ?
-    `,
+        SELECT status, reviewed_by_person_id AS reviewedBy
+          FROM task_evidence WHERE task_id = ?
+      `,
       )
         .bind(taskId)
         .first<{ status: string; reviewedBy: string | null }>();

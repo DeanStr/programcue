@@ -1,0 +1,485 @@
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  EvaluationRevisionConflictError,
+  EvaluationStateError,
+  EvaluationValidationError,
+} from "./evaluation-errors";
+import { calculateRubricWeightedScore } from "./evaluation-rules";
+import { EvaluationReviewerWorkspaceWorkflows } from "./evaluation-reviewer-workspace-workflows.server";
+import {
+  conflictDeclarationSchema,
+  reviewDraftSchema,
+} from "./evaluation-schema";
+
+export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationReviewerWorkspaceWorkflows {
+  async saveReview(viewer: Viewer, input: unknown) {
+    return this.projectCommand(
+      viewer,
+      "evaluation.review.save",
+      input,
+      undefined,
+      () => this.saveReviewD1(viewer, input),
+    );
+  }
+
+  protected async saveReviewD1(viewer: Viewer, input: unknown) {
+    await this.assertViewerEvent(viewer);
+    const parsed = reviewDraftSchema.parse(input);
+    const assignment = await this.env.DB.prepare(
+      `
+      SELECT a.id, a.status, a.revision,
+             a.submission_id AS submissionId, a.session_id AS sessionId,
+             a.round_id AS roundId
+        FROM evaluator_assignments a
+        JOIN evaluation_rounds r ON r.id = a.round_id AND r.event_id = a.event_id
+        LEFT JOIN submissions submission
+          ON submission.id = a.submission_id
+         AND submission.event_id = a.event_id
+        LEFT JOIN sessions session
+          ON session.id = a.session_id AND session.event_id = a.event_id
+       WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ? AND a.status IN ('assigned','in_progress','reopened') AND r.status = 'active'
+         AND (
+           (a.submission_id IS NOT NULL
+            AND submission.status IN ('submitted','assigned','in_review','decision_ready'))
+           OR
+           (a.session_id IS NOT NULL
+            AND session.status NOT IN ('cancelled','archived'))
+         )
+    `,
+    )
+      .bind(parsed.assignmentId, viewer.eventId, viewer.personId)
+      .first<{
+        id: string;
+        status: string;
+        revision: number;
+        submissionId: string | null;
+        sessionId: string | null;
+        roundId: string;
+      }>();
+    if (!assignment)
+      throw new EvaluationStateError(
+        "This assignment is unavailable or already submitted.",
+      );
+    const criteria = await this.env.DB.prepare(
+      `SELECT id, input_type AS inputType, weight_percent AS weightPercent, required FROM evaluation_criteria WHERE event_id = ? AND round_id = ? ORDER BY position`,
+    )
+      .bind(viewer.eventId, assignment.roundId)
+      .all<{
+        id: string;
+        inputType: "scale_5" | "scale_10" | "yes_no" | "free_text";
+        weightPercent: number;
+        required: number | boolean;
+      }>();
+    const criterionIds = new Set(
+      criteria.results.map((criterion) => criterion.id),
+    );
+    const unknownScoreIds = Object.keys(parsed.scores).filter(
+      (criterionId) => !criterionIds.has(criterionId),
+    );
+    if (unknownScoreIds.length) {
+      throw new EvaluationValidationError(
+        "The review contains scores for criteria that are not in this evaluation round. Refresh before saving.",
+      );
+    }
+    const responses: Record<string, string | number | boolean> = {};
+    for (const criterion of criteria.results) {
+      const raw = parsed.scores[criterion.id];
+      const empty =
+        raw === undefined || (typeof raw === "string" && raw.trim() === "");
+      if (empty) {
+        if (parsed.intent === "submit" && Boolean(criterion.required)) {
+          throw new EvaluationValidationError(
+            "Complete every required rubric criterion before submitting the review.",
+          );
+        }
+        continue;
+      }
+      if (
+        criterion.inputType === "scale_5" ||
+        criterion.inputType === "scale_10"
+      ) {
+        const value = typeof raw === "number" ? raw : Number(raw);
+        const maximum = criterion.inputType === "scale_10" ? 10 : 5;
+        if (!Number.isInteger(value) || value < 1 || value > maximum) {
+          throw new EvaluationValidationError(
+            `A rubric score must be a whole number from 1 to ${maximum}.`,
+          );
+        }
+        responses[criterion.id] = value;
+      } else if (criterion.inputType === "yes_no") {
+        if (raw !== "yes" && raw !== "no" && typeof raw !== "boolean") {
+          throw new EvaluationValidationError(
+            "A yes/no rubric response must be yes or no.",
+          );
+        }
+        responses[criterion.id] =
+          typeof raw === "boolean" ? raw : raw === "yes";
+      } else {
+        if (typeof raw !== "string") {
+          throw new EvaluationValidationError(
+            "A free-text rubric response must be text.",
+          );
+        }
+        responses[criterion.id] = raw.trim();
+      }
+    }
+    const scaledCriteria = criteria.results
+      .filter(
+        (criterion) =>
+          criterion.inputType === "scale_5" ||
+          criterion.inputType === "scale_10",
+      )
+      .map((criterion) => ({
+        id: criterion.id,
+        weightPercent: criterion.weightPercent,
+        inputType: criterion.inputType as "scale_5" | "scale_10",
+      }));
+    const weightedScore =
+      parsed.intent === "submit"
+        ? calculateRubricWeightedScore(scaledCriteria, responses)
+        : null;
+    const existing = await this.env.DB.prepare(
+      "SELECT id, revision, status FROM reviews WHERE event_id = ? AND assignment_id = ?",
+    )
+      .bind(viewer.eventId, assignment.id)
+      .first<{ id: string; revision: number; status: string }>();
+    if ((existing?.revision ?? 0) !== parsed.revision)
+      throw new EvaluationRevisionConflictError();
+    const reviewId = existing?.id ?? crypto.randomUUID();
+    const nextRevision = parsed.revision + 1;
+    const operationId = crypto.randomUUID();
+    const status = parsed.intent === "submit" ? "submitted" : "draft";
+    const auditEventId = crypto.randomUUID();
+    const webhookService = new WebhookService(this.env);
+    const preparedWebhook =
+      parsed.intent === "submit"
+        ? await webhookService.prepareEventForAudit(
+            viewer,
+            {
+              eventType: "review.submitted",
+              entityType: "review",
+              entityId: reviewId,
+              idempotencyKey: `review.submitted:${reviewId}:${nextRevision}`,
+              correlationId: operationId,
+              data: {
+                assignmentId: assignment.id,
+                revision: nextRevision,
+                weightedScore,
+              },
+            },
+            auditEventId,
+          )
+        : null;
+    const reviewMutation = existing
+      ? this.env.DB.prepare(
+          `
+      UPDATE reviews SET status = ?, scores_json = ?, weighted_score = ?, recommendation = ?, confidence = ?,
+             submitter_feedback = ?, private_notes = ?, revision = revision + 1, last_operation_id = ?,
+             updated_at = unixepoch(), submitted_at = CASE WHEN ? = 'submitted' THEN unixepoch() ELSE submitted_at END,
+             locked_at = CASE WHEN ? = 'submitted' THEN unixepoch() ELSE locked_at END
+       WHERE id = ? AND event_id = ? AND revision = ? AND status IN ('draft','reopened')
+         AND EXISTS (
+           SELECT 1 FROM evaluator_assignments assignment
+           LEFT JOIN submissions active_submission
+             ON active_submission.id = assignment.submission_id
+            AND active_submission.event_id = assignment.event_id
+           LEFT JOIN sessions active_session
+             ON active_session.id = assignment.session_id
+            AND active_session.event_id = assignment.event_id
+            WHERE assignment.id = ? AND assignment.event_id = ?
+              AND assignment.evaluator_person_id = ? AND assignment.revision = ?
+              AND assignment.status IN ('assigned','in_progress','reopened')
+              AND (
+                (assignment.submission_id IS NOT NULL
+                 AND active_submission.status IN ('submitted','assigned','in_review','decision_ready'))
+                OR
+                (assignment.session_id IS NOT NULL
+                 AND active_session.status NOT IN ('cancelled','archived'))
+              )
+         )
+    `,
+        ).bind(
+          status,
+          JSON.stringify(responses),
+          weightedScore,
+          parsed.recommendation,
+          parsed.confidence,
+          parsed.submitterFeedback || null,
+          parsed.privateNotes || null,
+          operationId,
+          status,
+          status,
+          reviewId,
+          viewer.eventId,
+          parsed.revision,
+          assignment.id,
+          viewer.eventId,
+          viewer.personId,
+          assignment.revision,
+        )
+      : this.env.DB.prepare(
+          `
+      INSERT INTO reviews (id, event_id, assignment_id, status, scores_json, weighted_score, recommendation, confidence, submitter_feedback, private_notes, revision, last_operation_id, created_at, updated_at, submitted_at, locked_at)
+      SELECT ?, ?, assignment.id, ?, ?, ?, ?, ?, ?, ?, 1, ?, unixepoch(), unixepoch(),
+             CASE WHEN ? = 'submitted' THEN unixepoch() END,
+             CASE WHEN ? = 'submitted' THEN unixepoch() END
+        FROM evaluator_assignments assignment
+        LEFT JOIN submissions active_submission
+          ON active_submission.id = assignment.submission_id
+         AND active_submission.event_id = assignment.event_id
+        LEFT JOIN sessions active_session
+          ON active_session.id = assignment.session_id
+         AND active_session.event_id = assignment.event_id
+       WHERE assignment.id = ? AND assignment.event_id = ?
+         AND assignment.evaluator_person_id = ? AND assignment.revision = ?
+         AND assignment.status IN ('assigned','in_progress','reopened')
+         AND (
+           (assignment.submission_id IS NOT NULL
+            AND active_submission.status IN ('submitted','assigned','in_review','decision_ready'))
+           OR
+           (assignment.session_id IS NOT NULL
+            AND active_session.status NOT IN ('cancelled','archived'))
+         )
+    `,
+        ).bind(
+          reviewId,
+          viewer.eventId,
+          status,
+          JSON.stringify(responses),
+          weightedScore,
+          parsed.recommendation,
+          parsed.confidence,
+          parsed.submitterFeedback || null,
+          parsed.privateNotes || null,
+          operationId,
+          status,
+          status,
+          assignment.id,
+          viewer.eventId,
+          viewer.personId,
+          assignment.revision,
+        );
+    const [saved, assignmentUpdated] = await this.env.DB.batch([
+      reviewMutation,
+      this.env.DB.prepare(
+        `
+        UPDATE evaluator_assignments
+           SET status = ?, revision = revision + 1, last_operation_id = ?,
+               submitted_at = CASE WHEN ? = 'submitted' THEN unixepoch() ELSE submitted_at END
+         WHERE id = ? AND event_id = ? AND evaluator_person_id = ? AND revision = ?
+           AND status IN ('assigned','in_progress','reopened')
+           AND EXISTS (SELECT 1 FROM reviews WHERE id = ? AND last_operation_id = ?)
+      `,
+      ).bind(
+        parsed.intent === "submit" ? "submitted" : "in_progress",
+        operationId,
+        status,
+        assignment.id,
+        viewer.eventId,
+        viewer.personId,
+        assignment.revision,
+        reviewId,
+        operationId,
+      ),
+      this.env.DB.prepare(
+        `
+        INSERT INTO review_revisions (id, event_id, review_id, revision_number, scores_json, content_json, save_kind, saved_by_person_id, idempotency_key, created_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()
+         WHERE EXISTS (SELECT 1 FROM reviews WHERE id = ? AND last_operation_id = ?)
+           AND EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND last_operation_id = ?)
+      `,
+      ).bind(
+        crypto.randomUUID(),
+        viewer.eventId,
+        reviewId,
+        nextRevision,
+        JSON.stringify(responses),
+        JSON.stringify({
+          recommendation: parsed.recommendation,
+          confidence: parsed.confidence,
+          submitterFeedback: parsed.submitterFeedback,
+          privateNotes: parsed.privateNotes,
+        }),
+        parsed.intent === "submit" ? "submitted" : "manual",
+        viewer.personId,
+        operationId,
+        reviewId,
+        operationId,
+        assignment.id,
+        operationId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE submissions SET status = 'in_review', revision = revision + 1, updated_at = unixepoch() WHERE id = ? AND event_id = ? AND status IN ('assigned','submitted') AND EXISTS (SELECT 1 FROM reviews WHERE id = ? AND last_operation_id = ?) AND EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND last_operation_id = ?)`,
+      ).bind(
+        assignment.submissionId,
+        viewer.eventId,
+        reviewId,
+        operationId,
+        assignment.id,
+        operationId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at) SELECT ?, ?, ?, ?, ?, 'review', ?, ?, unixepoch() WHERE EXISTS (SELECT 1 FROM reviews WHERE id = ? AND last_operation_id = ?) AND EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND last_operation_id = ?)`,
+      ).bind(
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        parsed.intent === "submit" ? "review.submitted" : "review.saved",
+        reviewId,
+        JSON.stringify({ revision: nextRevision }),
+        reviewId,
+        operationId,
+        assignment.id,
+        operationId,
+      ),
+      ...(preparedWebhook?.statements ?? []),
+    ]);
+    if (
+      (saved.meta.changes ?? 0) !== 1 ||
+      (assignmentUpdated.meta.changes ?? 0) !== 1
+    )
+      throw new EvaluationRevisionConflictError();
+    const webhookDeliveries = preparedWebhook
+      ? await webhookService.dispatchPreparedEvent(preparedWebhook)
+      : [];
+    const nextAssignment =
+      parsed.intent === "submit"
+        ? await this.env.DB.prepare(
+            `
+            SELECT a.id
+              FROM evaluator_assignments a
+              JOIN evaluation_rounds r
+                ON r.id = a.round_id AND r.event_id = a.event_id
+             WHERE a.event_id = ? AND a.evaluator_person_id = ?
+               AND a.id <> ? AND a.status IN ('assigned','in_progress','reopened')
+               AND r.status = 'active'
+             ORDER BY CASE a.status WHEN 'in_progress' THEN 0 WHEN 'reopened' THEN 1 ELSE 2 END,
+                      a.due_at, a.assigned_at
+             LIMIT 1
+          `,
+          )
+            .bind(viewer.eventId, viewer.personId, assignment.id)
+            .first<{ id: string }>()
+        : null;
+    return {
+      reviewId,
+      revision: nextRevision,
+      weightedScore,
+      nextAssignmentId: nextAssignment?.id ?? null,
+      webhookDeliveries,
+    };
+  }
+
+  async declareConflict(viewer: Viewer, input: unknown) {
+    return this.projectCommand(
+      viewer,
+      "evaluation.conflict.declare",
+      input,
+      undefined,
+      () => this.declareConflictD1(viewer, input),
+    );
+  }
+
+  protected async declareConflictD1(viewer: Viewer, input: unknown) {
+    await this.assertViewerEvent(viewer);
+    const parsed = conflictDeclarationSchema.parse(input);
+    const assignment = await this.env.DB.prepare(
+      `SELECT id, revision, round_id AS roundId,
+              submission_id AS submissionId, session_id AS sessionId
+         FROM evaluator_assignments
+        WHERE id = ? AND event_id = ? AND evaluator_person_id = ?
+          AND status IN ('assigned','in_progress')`,
+    )
+      .bind(parsed.assignmentId, viewer.eventId, viewer.personId)
+      .first<{
+        id: string;
+        revision: number;
+        roundId: string;
+        submissionId: string | null;
+        sessionId: string | null;
+      }>();
+    if (!assignment)
+      throw new EvaluationStateError(
+        "Assignment not found or cannot be recused.",
+      );
+    const operationId = crypto.randomUUID();
+    const conflictTargetColumn = assignment.submissionId
+      ? "submission_id"
+      : "session_id";
+    const conflictTargetId = assignment.submissionId ?? assignment.sessionId;
+    if (!conflictTargetId) {
+      throw new Error(`Evaluation assignment ${assignment.id} has no target.`);
+    }
+    const [recused] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `
+        UPDATE evaluator_assignments
+           SET status = 'recused', conflict_declared_at = unixepoch(),
+               revision = revision + 1, last_operation_id = ?
+         WHERE id = ? AND event_id = ? AND evaluator_person_id = ?
+           AND revision = ? AND status IN ('assigned','in_progress')
+      `,
+      ).bind(
+        operationId,
+        assignment.id,
+        viewer.eventId,
+        viewer.personId,
+        assignment.revision,
+      ),
+      this.env.DB.prepare(
+        `
+        INSERT INTO evaluator_conflicts (
+          id, event_id, round_id, submission_id, session_id,
+          evaluator_person_id,
+          relationship, notes, status, declared_at
+        )
+        SELECT ?, ?, ?, ?, ?, ?, 'declared', ?, 'recused', unixepoch()
+         WHERE EXISTS (
+           SELECT 1 FROM evaluator_assignments
+            WHERE id = ? AND event_id = ? AND last_operation_id = ?
+         )
+        ON CONFLICT(round_id, ${conflictTargetColumn}, evaluator_person_id)
+        WHERE ${conflictTargetColumn} IS NOT NULL DO UPDATE SET
+          notes = excluded.notes, status = 'recused', declared_at = unixepoch()
+        WHERE EXISTS (
+          SELECT 1 FROM evaluator_assignments
+           WHERE id = ? AND event_id = ? AND last_operation_id = ?
+        )
+      `,
+      ).bind(
+        crypto.randomUUID(),
+        viewer.eventId,
+        assignment.roundId,
+        assignment.submissionId,
+        assignment.sessionId,
+        viewer.personId,
+        parsed.reason,
+        assignment.id,
+        viewer.eventId,
+        operationId,
+        assignment.id,
+        viewer.eventId,
+        operationId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at) SELECT ?, ?, ?, ?, 'review.conflict.declared', 'evaluator_assignment', ?, '{}', unixepoch() WHERE EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND event_id = ? AND last_operation_id = ?)`,
+      ).bind(
+        crypto.randomUUID(),
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        assignment.id,
+        assignment.id,
+        viewer.eventId,
+        operationId,
+      ),
+    ]);
+    if ((recused.meta.changes ?? 0) !== 1) {
+      throw new EvaluationRevisionConflictError(
+        "This assignment changed before the conflict could be recorded.",
+      );
+    }
+  }
+}
