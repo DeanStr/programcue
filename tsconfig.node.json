@@ -8,6 +8,8 @@
     "vitest.worker.config.ts",
     "playwright.config.ts",
     "react-router.config.ts",
+    "scanner/src/contract.ts",
+    "scanner/src/contract.test.ts",
     "e2e/**/*.ts"
   ],
   "compilerOptions": {

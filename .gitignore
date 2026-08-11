@@ -17,4 +17,6 @@ worker-configuration.d.ts
 .DS_Store
 *.log
 *.tsbuildinfo
+__pycache__/
+*.py[cod]
 .claude/worktrees/

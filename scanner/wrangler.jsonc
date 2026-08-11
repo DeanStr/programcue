@@ -1,0 +1,68 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "program-cue-file-scanner",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "scanner.programcue.com",
+      "custom_domain": true,
+    },
+  ],
+  "vars": {
+    "APP_ENV": "production",
+    "SOURCE_REVISION": "693a89be75e81f527b1cbc3da956d768cd86e1f5",
+    "EXPECTED_CALLBACK_URL": "https://app.programcue.com/api/webhooks/file-scanner",
+    "R2_BUCKET_NAME": "program-cue-files",
+    "R2_OBJECT_HOST": "327c60945460c16be8ecdbbc7fa35447.r2.cloudflarestorage.com",
+  },
+  "workflows": [
+    {
+      "name": "program-cue-file-scans",
+      "binding": "FILE_SCAN_WORKFLOW",
+      "class_name": "FileScanWorkflow",
+    },
+  ],
+  "containers": [
+    {
+      "name": "program-cue-clamav",
+      "class_name": "FileScannerContainer",
+      "image": "./container/Dockerfile",
+      "max_instances": 1,
+      "instance_type": "standard-2",
+      "constraints": {
+        "regions": ["EEUR", "WEUR"],
+        "jurisdiction": "eu",
+      },
+      "rollout_step_percentage": 100,
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CLAMAV",
+        "class_name": "FileScannerContainer",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["FileScannerContainer"],
+    },
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1,
+    },
+  },
+  "upload_source_maps": true,
+}

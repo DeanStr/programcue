@@ -1,4 +1,5 @@
 export const nodeOnlyTestFiles = [
+  "scanner/src/contract.test.ts",
   "e2e/support/reset-demo-submissions.unit.ts",
   "app/components/admin-shell-navigation.test.ts",
   "app/components/communications-centre-panels.test.tsx",

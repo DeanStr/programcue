@@ -88,9 +88,20 @@ npm run performance:local
 
 ## Production configuration
 
-The checked-in production profile is intentionally non-deployable. Provision
-the external resources below, then replace every value reported by
-`npm run deploy:check` in `wrangler.jsonc`:
+The checked-in production profile targets `https://app.programcue.com` and is
+wired to the provisioned D1 database, private R2 buckets, Queues and Turnstile
+widget. `npm run deploy:check` passes for both the application and its dedicated
+file-scanner companion. The application remains intentionally non-deployable
+until the complete runtime secret inventory and production bootstrap values are
+supplied.
+
+For headless Wrangler access in this workspace, keep the temporary deployment
+token and account ID only in the ignored, mode-0600 `.env.cloudflare` file and
+source that file explicitly before Wrangler commands. Do not put deployment
+credentials in the root `.env`; Vite treats that file as application runtime
+input during builds.
+
+The production resource inventory is:
 
 - D1 database `program-cue-db` and its UUID.
 - Private R2 buckets `program-cue-files` and `program-cue-d1-backups`, plus R2
@@ -100,19 +111,38 @@ the external resources below, then replace every value reported by
 - Durable Object classes `EventChannel` and `ProgramCueEventAgent`, Workers AI
   binding `AI`, and Workflow `program-cue-d1-backup`; Wrangler creates these
   from the checked-in bindings and migrations.
-- A Resend sending domain and webhook, a Turnstile widget, and an HTTPS malware
-  scanner with callback credentials.
+- File-scanner Worker `program-cue-file-scanner`, Workflow
+  `program-cue-file-scans` and one EU-pinned `standard-2` Cloudflare Container
+  running the pinned ClamAV 1.4 LTS image. The container refreshes signatures
+  before becoming healthy and scales to zero after two idle minutes.
+- A Resend sending domain and webhook, the provisioned Turnstile widget, and
+  matching application/scanner credentials.
 - Google and Microsoft OAuth applications for participant sign-in and calendar
   connections. Airtable and Accelevents credentials are entered per integration
   after deployment and encrypted with `INTEGRATION_CREDENTIALS_KEY`.
 
-Replace the D1/account IDs, public/auth/scanner URLs, sender address, CORS
-origins, public-programme frame ancestors, resource-embed origins, Turnstile
-site key, and `SOURCE_REVISION`. `RESOURCE_EMBED_ORIGINS` is a comma-separated
-list of exact HTTPS origins; use the explicit value `none` when a deployment
-must reject every resource embed. The source revision
-must be the deployed 7-64 character hexadecimal Git revision. Configure the
-complete release secret inventory:
+Provider setup for this production hostname uses these exact endpoints:
+
+- Resend sender `Program Cue <auth@programcue.com>` and webhook
+  `https://app.programcue.com/api/webhooks/resend`.
+- Google redirect URIs `https://app.programcue.com/api/auth/callback/google`
+  and `https://app.programcue.com/oauth/calendar/callback`.
+- Microsoft redirect URIs
+  `https://app.programcue.com/api/auth/callback/microsoft` and
+  `https://app.programcue.com/oauth/calendar/callback`.
+- File-scanner endpoint `https://scanner.programcue.com/v1/scans` and callback
+  `https://app.programcue.com/api/webhooks/file-scanner`.
+- R2 S3 Object Read & Write credentials scoped only to
+  `program-cue-files`, and a separate durable D1 token scoped to the production
+  database for scheduled logical exports. Do not reuse the temporary deployment
+  token for either runtime credential.
+
+Before each release, set `SOURCE_REVISION` to the deployed 7-64 character
+hexadecimal Git revision and verify the production URLs, sender and origin
+allowlists in both Wrangler profiles. `RESOURCE_EMBED_ORIGINS` is a
+comma-separated list of exact HTTPS origins; the current explicit value `none`
+rejects every external resource embed. Configure the complete release secret
+inventory:
 
 ```bash
 wrangler secret put BETTER_AUTH_SECRET
@@ -151,6 +181,20 @@ npm run db:bootstrap:production -- \\
 npm run deploy
 ```
 
+The scanner is deployed separately with `npm run deploy:scanner`; the production
+Worker, Workflow, Container application and `scanner.programcue.com` Custom
+Domain were provisioned on 11 August 2026. Its temporary
+deployment token requires account-level Workers Scripts Write and Containers
+Edit plus the existing `programcue.com` Worker-route authority. Configure
+`SCANNER_API_TOKEN` on the scanner with the exact value used for the
+application's `FILE_SCANNER_API_TOKEN`; likewise, configure
+`PROGRAM_CUE_CALLBACK_SECRET` with the application's
+`FILE_SCANNER_WEBHOOK_SECRET`. Both pairs are independently random values of at
+least 32 characters. The scanner endpoint persists an idempotent Workflow before
+returning `202`, validates that the signed object URL belongs to the private
+files bucket, and returns only an HMAC-signed verdict. A failed, expired or
+ambiguous scan leaves the file quarantined.
+
 The production bootstrap is intentionally one-time and requires an empty,
 migrated application database. It atomically creates the first Better Auth
 person, organisation-wide owner membership and explicitly slugged initial event; it
@@ -169,9 +213,8 @@ Mailpit and never falls back to local capture, demo identity, stale data or
 simulated provider success.
 
 `npm run deploy` runs configuration and remote secret preflights before build or
-deployment. The current placeholders are the only expected
-`npm run deploy:check` failures. A deployed production environment has not been
-verified from this workspace.
+deployment. The scanner boundary is live, but a complete deployed application
+environment has not been verified from this workspace.
 
 Backup and point-in-time recovery procedures are in [docs/RECOVERY.md](docs/RECOVERY.md). Production configuration includes a fail-closed daily D1-export Workflow to a separate private R2 bucket; it is not evidence that a live backup has run. `npm run recovery:drill` exercises a clean-room logical export and restore without touching development or production data.
 
@@ -189,6 +232,7 @@ workers/communications-queue.ts
 workers/event-channel.ts    Event-scoped Durable Object invalidation channel
 workers/d1-backup-workflow.ts
                             Scheduled logical D1 export to private backup R2
+scanner/                    Authenticated Workflow + ClamAV Container companion
 migrations/                 Pre-release D1 baseline schema and constraints
 public/styles.css           Program Cue design tokens and component styles
 e2e/                        Browser behavior, accessibility and visual tests

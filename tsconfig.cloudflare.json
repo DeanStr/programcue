@@ -3,6 +3,7 @@
   "include": [
     ".react-router/types/**/*",
     "app/**/*",
+    "scanner/src/**/*",
     "test/**/*",
     "workers/**/*",
     "worker-configuration.d.ts"

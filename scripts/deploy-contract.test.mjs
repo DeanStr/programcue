@@ -12,6 +12,10 @@ import {
   readDeploymentConfigs,
   validateDeploymentConfigs,
 } from "./validate-deploy-config.mjs";
+import {
+  readScannerConfig,
+  validateScannerConfig,
+} from "./validate-scanner-config.mjs";
 import { missingRequiredSecretNames } from "./validate-deploy-secrets.mjs";
 import { nodeOnlyTestFiles } from "../vitest.test-files.ts";
 
@@ -57,24 +61,19 @@ test("Wrangler profiles have no structural configuration issues", () => {
     issues.filter(({ kind }) => kind === "configuration"),
     [],
   );
-  assert.ok(issues.every(({ profile }) => profile === "production"));
-  assert.deepEqual(
-    issues.map(({ message }) => message),
-    [
-      "SOURCE_REVISION must be replaced with the deployed 7-64 character hexadecimal Git revision.",
-      "DB database_id must be replaced with the provisioned D1 UUID.",
-      "BETTER_AUTH_URL still contains an example placeholder host.",
-      "AUTH_EMAIL_FROM still contains an example placeholder address.",
-      "CORS_ALLOWED_ORIGINS still contains an example placeholder host.",
-      "EMBED_FRAME_ANCESTORS still contains an example placeholder host.",
-      "RESOURCE_EMBED_ORIGINS still contains an example placeholder host.",
-      "TURNSTILE_SITE_KEY must be replaced with the production site key.",
-      "CLOUDFLARE_ACCOUNT_ID must be replaced with the 32-character account ID.",
-      "D1_DATABASE_ID must be replaced with the provisioned D1 UUID.",
-      "R2_ACCOUNT_ID must be replaced with the 32-character account ID.",
-      "FILE_SCANNER_API_URL still contains an example placeholder host.",
-    ],
-  );
+  assert.deepEqual(issues, []);
+});
+
+test("file scanner has one fail-closed EU production configuration", () => {
+  const scanner = readScannerConfig();
+  assert.deepEqual(validateScannerConfig(scanner), []);
+
+  scanner.containers[0].instance_type = "basic";
+  scanner.vars.R2_OBJECT_HOST = "attacker.example";
+  assert.deepEqual(validateScannerConfig(scanner), [
+    "Scanner R2_OBJECT_HOST must match the production file boundary.",
+    "Scanner must use one EU-pinned standard-2 ClamAV container.",
+  ]);
 });
 
 test("deployment validation rejects missing or non-Git production revisions", () => {
