@@ -85,6 +85,16 @@ describe("submission form rules", () => {
       schema: structuredClone(DEFAULT_FORM_SCHEMA),
       routing: {
         categories: {},
+        trackIds: {
+          "AI & Innovation": "track-ai",
+          "Event Operations": "track-operations",
+          "Experience Design": "track-experience",
+        },
+        trackNames: {
+          "track-ai": "AI & Innovation",
+          "track-operations": "Event Operations",
+          "track-experience": "Experience Design",
+        },
         teamNames: {},
         directSessionDurationMinutes: 30,
         passwordHash: null,
@@ -95,6 +105,18 @@ describe("submission form rules", () => {
       (field) => field.id === "title",
     )!.required = false;
     expect(saveFormSchema.safeParse(optionalTitle).success).toBe(false);
+
+    const optionalTracks = structuredClone(input);
+    optionalTracks.schema.fields.find(
+      (field) => field.id === "category",
+    )!.required = false;
+    expect(saveFormSchema.safeParse(optionalTracks).success).toBe(false);
+
+    const emptyTracks = structuredClone(input);
+    emptyTracks.schema.fields.find(
+      (field) => field.id === "category",
+    )!.options = [];
+    expect(saveFormSchema.safeParse(emptyTracks).success).toBe(false);
 
     const conditionalDirectFormat = {
       ...structuredClone(input),

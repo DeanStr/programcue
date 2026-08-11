@@ -115,6 +115,23 @@ export function AdminAssignedTasksPanel({
                             {task.evidence[0].details.text}
                           </p>
                         ) : null}
+                        {task.evidence[0].details.responses
+                          ? task.formFields.map((field) => {
+                              const value =
+                                task.evidence[0]!.details.responses?.[field.id];
+                              if (value === undefined) return null;
+                              return (
+                                <p key={field.id}>
+                                  <strong>{field.label}:</strong>{" "}
+                                  {typeof value === "boolean"
+                                    ? value
+                                      ? "Yes"
+                                      : "No"
+                                    : value}
+                                </p>
+                              );
+                            })
+                          : null}
                         {task.evidence[0].details.url ? (
                           <p>
                             <strong>Submitted link:</strong>{" "}

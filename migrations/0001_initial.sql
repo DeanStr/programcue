@@ -425,6 +425,7 @@ CREATE TABLE submission_decisions (
   decision TEXT NOT NULL CHECK (decision IN ('accepted','rejected','waitlisted')),
   decided_by_person_id TEXT NOT NULL REFERENCES people(id),
   rationale TEXT,
+  notification_feedback_json TEXT NOT NULL CHECK (json_valid(notification_feedback_json)),
   effect_preview_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(effect_preview_json)),
   idempotency_key TEXT,
   decided_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -447,6 +448,27 @@ CREATE TABLE tracks (
   is_public INTEGER NOT NULL DEFAULT 1 CHECK (is_public IN (0,1)),
   UNIQUE(event_id, slug),
   UNIQUE(id, event_id)
+);
+
+CREATE TABLE submission_track_selections (
+  submission_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  track_id TEXT NOT NULL,
+  track_name_snapshot TEXT NOT NULL,
+  position INTEGER NOT NULL CHECK (position >= 0),
+  PRIMARY KEY (submission_id, track_id),
+  UNIQUE (submission_id, position),
+  FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (track_id, event_id) REFERENCES tracks(id, event_id)
+);
+
+CREATE TABLE submission_routing_teams (
+  submission_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  team_id TEXT NOT NULL,
+  PRIMARY KEY (submission_id, team_id),
+  FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (team_id, event_id) REFERENCES evaluation_teams(id, event_id)
 );
 
 CREATE TABLE rooms (
@@ -1449,6 +1471,10 @@ CREATE INDEX idx_submissions_event_category_status ON submissions(event_id, cate
 CREATE INDEX idx_submissions_submitter ON submissions(event_id, submitter_person_id, updated_at DESC);
 CREATE INDEX idx_submissions_email ON submissions(event_id, submitter_email, updated_at DESC);
 CREATE INDEX idx_submissions_routed_team ON submissions(event_id, routed_team_id, status);
+CREATE INDEX idx_submission_track_selections_event
+  ON submission_track_selections(event_id, track_id, submission_id);
+CREATE INDEX idx_submission_routing_teams_event
+  ON submission_routing_teams(event_id, team_id, submission_id);
 CREATE INDEX idx_submission_revisions_submission ON submission_revisions(submission_id, revision_number DESC);
 CREATE INDEX idx_submission_verifications_form_email ON submission_email_verifications(event_id, form_id, email, status, expires_at);
 CREATE INDEX idx_submission_speakers_person ON submission_speakers(event_id, person_id);
@@ -1820,7 +1846,7 @@ BEGIN
 END;
 
 CREATE TRIGGER submission_decisions_participant_retention_no_pii_update
-BEFORE UPDATE OF event_id, rationale, effect_preview_json ON submission_decisions
+BEFORE UPDATE OF event_id, rationale, notification_feedback_json, effect_preview_json ON submission_decisions
 WHEN EXISTS (
   SELECT 1 FROM participant_retention_locked_events locked
   WHERE locked.event_id IN (OLD.event_id, NEW.event_id)

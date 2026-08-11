@@ -22,7 +22,7 @@ export async function ensureDemoSubmissionForm(env: CloudflareEnvironment) {
   if (existing) return;
 
   const service = new SubmissionService(env);
-  const input = service.defaultFormInput("email_verified");
+  const input = await service.getDefaultFormInput(DEMO_VIEWER);
   const formId = await service.saveForm(DEMO_VIEWER, {
     ...input,
     publicSlug: "form",

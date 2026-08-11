@@ -465,10 +465,23 @@ export class CommandPaletteService {
           SELECT s.id, 'submission' AS kind, s.title AS label,
                  s.status || ' · ' || s.public_reference AS description,
                  e.id AS eventId, e.name AS eventName
-            FROM submissions s
+           FROM submissions s
             JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
            WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
-             AND (instr(lower(s.title), lower(?)) > 0 OR instr(lower(s.public_reference), lower(?)) > 0 OR instr(lower(COALESCE(s.category, '')), lower(?)) > 0)
+             AND (
+               instr(lower(s.title), lower(?)) > 0
+               OR instr(lower(s.public_reference), lower(?)) > 0
+               OR (
+                 s.status = 'draft'
+                 AND instr(lower(COALESCE(s.category, '')), lower(?)) > 0
+               )
+               OR EXISTS (
+                 SELECT 1 FROM submission_track_selections selection
+                  WHERE selection.submission_id = s.id
+                    AND selection.event_id = s.event_id
+                    AND instr(lower(selection.track_name_snapshot), lower(?)) > 0
+               )
+             )
           UNION ALL
           SELECT s.id, 'session' AS kind, s.title AS label,
                  s.status || ' · ' || s.format AS description,
@@ -499,6 +512,7 @@ export class CommandPaletteService {
           searchTerm,
           viewer.organisationId,
           scopeBinding,
+          searchTerm,
           searchTerm,
           searchTerm,
           searchTerm,

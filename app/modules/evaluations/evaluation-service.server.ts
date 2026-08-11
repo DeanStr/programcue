@@ -730,9 +730,41 @@ export class EvaluationService {
         }>(),
       this.env.DB.prepare(
         `
-        SELECT s.id, s.public_reference AS reference, s.title, s.category, s.format, s.status,
+        SELECT s.id, s.public_reference AS reference, s.title,
+               (
+                 SELECT group_concat(selected.track_name_snapshot, ', ')
+                   FROM (
+                     SELECT selection.track_name_snapshot
+                       FROM submission_track_selections selection
+                      WHERE selection.submission_id = s.id
+                        AND selection.event_id = s.event_id
+                      ORDER BY selection.position
+                   ) selected
+               ) AS category,
+               s.format, s.status,
                s.routed_team_id AS routedTeamId,
-               routed_team.name AS routedTeamName,
+               COALESCE((
+                 SELECT json_group_array(routed.team_id)
+                   FROM (
+                     SELECT route.team_id
+                       FROM submission_routing_teams route
+                      WHERE route.submission_id = s.id
+                        AND route.event_id = s.event_id
+                      ORDER BY route.team_id
+                   ) routed
+               ), '[]') AS routedTeamIdsJson,
+               (
+                 SELECT group_concat(routed.name, ', ')
+                   FROM (
+                     SELECT team.name
+                       FROM submission_routing_teams route
+                       JOIN evaluation_teams team
+                         ON team.id = route.team_id AND team.event_id = route.event_id
+                      WHERE route.submission_id = s.id
+                        AND route.event_id = s.event_id
+                      ORDER BY team.name, team.id
+                   ) routed
+               ) AS routedTeamName,
                s.submitter_email AS submitterEmail,
                (SELECT COUNT(*) FROM submission_speakers ss
                  WHERE ss.event_id = s.event_id AND ss.submission_id = s.id
@@ -742,9 +774,6 @@ export class EvaluationService {
                AVG(r.weighted_score) AS averageScore
           FROM submissions s
           JOIN events e ON e.id = s.event_id
-          LEFT JOIN evaluation_teams routed_team
-            ON routed_team.id = s.routed_team_id
-           AND routed_team.event_id = s.event_id
           LEFT JOIN evaluator_assignments a ON a.submission_id = s.id AND a.event_id = s.event_id
           LEFT JOIN reviews r ON r.assignment_id = a.id AND r.status IN ('submitted','locked')
          WHERE s.event_id = ? AND e.organisation_id = ? AND s.status <> 'draft'
@@ -760,6 +789,7 @@ export class EvaluationService {
           format: string | null;
           status: string;
           routedTeamId: string | null;
+          routedTeamIdsJson: string;
           routedTeamName: string | null;
           submitterEmail: string | null;
           unclaimedSpeakerCount: number;
@@ -948,6 +978,34 @@ export class EvaluationService {
           Boolean(planRow.blindedReviewing),
         )
       : [];
+    const submissions = submissionRows.results.map(
+      ({ routedTeamIdsJson, ...submission }) => {
+        if (!submission.category) {
+          throw new EvaluationStateError(
+            `Submission ${submission.id} is missing persisted track selections.`,
+          );
+        }
+        const routedTeamIds = z
+          .array(z.string())
+          .parse(JSON.parse(routedTeamIdsJson));
+        if (routedTeamIds.length === 0) {
+          if (submission.routedTeamId) {
+            throw new EvaluationStateError(
+              `Submission ${submission.id} has incomplete persisted routing teams.`,
+            );
+          }
+        } else if (
+          !submission.routedTeamId ||
+          !routedTeamIds.includes(submission.routedTeamId) ||
+          !submission.routedTeamName
+        ) {
+          throw new EvaluationStateError(
+            `Submission ${submission.id} has inconsistent persisted routing teams.`,
+          );
+        }
+        return submission;
+      },
+    );
     return {
       plan: planRow
         ? {
@@ -967,7 +1025,7 @@ export class EvaluationService {
       })),
       evaluators: evaluatorRows.results,
       evaluationInvitations: evaluatorInvitationRows.results,
-      submissions: submissionRows.results,
+      submissions,
       acceptedSpeakerInvitations: acceptedSpeakerInvitationRows.results,
       sessions: sessionRows.results,
       assignments: assignmentRows.results,

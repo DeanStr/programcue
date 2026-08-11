@@ -77,6 +77,38 @@ describe("saved views", () => {
     ).toEqual({ action: "saved_view.created" });
   });
 
+  it("finds a submission by any selected track in the command palette", async () => {
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, public_reference, title, category, status,
+           submitted_snapshot_json, submitted_at
+         ) VALUES (
+           'command-multi-track-submission', ?, 'PC-MULTI-TRACK',
+           'A multi-track proposal', 'Leadership', 'submitted', '{}', unixepoch()
+         )`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO submission_track_selections (
+           submission_id, event_id, track_id, track_name_snapshot, position
+         ) VALUES
+           ('command-multi-track-submission', ?, 'demo-track-leadership', 'Leadership', 0),
+           ('command-multi-track-submission', ?, 'demo-track-experience', 'Experience Design', 1)`,
+      ).bind(viewer.eventId, viewer.eventId),
+    ]);
+
+    const records = await new CommandPaletteService(
+      env as unknown as CloudflareEnvironment,
+    ).search(viewer, { query: "Experience Design", scope: "event" });
+
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        id: "command-multi-track-submission",
+        kind: "submission",
+      }),
+    );
+  });
+
   it("searches a committee chair's exact evaluator assignments", async () => {
     await ensureDemoEvaluationData(env as unknown as CloudflareEnvironment);
     const records = await new CommandPaletteService(

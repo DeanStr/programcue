@@ -649,6 +649,8 @@ export async function action({ request, context }: Route.ActionArgs) {
         submissionId: values.get("submissionId"),
         decision: values.get("decision"),
         rationale: values.get("rationale"),
+        includeReviewerFeedback:
+          values.get("includeReviewerFeedback") === "true",
         release: released,
         confirmedWithoutReview: values.get("confirmedWithoutReview") === "true",
         sessionDurationMinutes: values.get("sessionDurationMinutes") || null,
@@ -2540,7 +2542,7 @@ export default function EvaluationAdmin({ loaderData }: Route.ComponentProps) {
               Decision
               <select className="select" name="decision">
                 <option value="accepted">Accept</option>
-                <option value="waitlisted">Waitlist</option>
+                <option value="waitlisted">Maybe</option>
                 <option value="rejected">Reject</option>
               </select>
             </label>
@@ -2548,6 +2550,22 @@ export default function EvaluationAdmin({ loaderData }: Route.ComponentProps) {
               Rationale
               <textarea className="textarea" name="rationale" />
             </label>
+            <label className="speaker-confirm">
+              <input
+                type="checkbox"
+                name="includeReviewerFeedback"
+                value="true"
+                disabled={!selectedHasCompletedReview}
+              />{" "}
+              Include submitted reviewer feedback in the decision email
+            </label>
+            <span className="help">
+              Only applicant-facing feedback from submitted or locked reviews in
+              the latest completed round is included. Private reviewer notes are
+              never sent. Decision templates can render the rationale and
+              selected feedback with {"{{decision.rationale}}"} and{" "}
+              {"{{decision.feedback}}"}.
+            </span>
             <label className="label">
               Acceptance session duration (minutes)
               <input

@@ -526,7 +526,16 @@ export class AiToolExecutor {
         WHERE s.event_id = ? AND (
           s.title LIKE ? ESCAPE '\\'
           OR s.public_reference LIKE ? ESCAPE '\\'
-          OR COALESCE(s.category, '') LIKE ? ESCAPE '\\'
+          OR (
+            s.status = 'draft'
+            AND COALESCE(s.category, '') LIKE ? ESCAPE '\\'
+          )
+          OR EXISTS (
+            SELECT 1 FROM submission_track_selections selection
+             WHERE selection.submission_id = s.id
+               AND selection.event_id = s.event_id
+               AND selection.track_name_snapshot LIKE ? ESCAPE '\\'
+          )
         )
         ORDER BY s.updated_at DESC, s.id
         LIMIT ?`,
@@ -534,6 +543,7 @@ export class AiToolExecutor {
       .bind(
         this.viewer.organisationId,
         this.viewer.eventId,
+        pattern,
         pattern,
         pattern,
         pattern,

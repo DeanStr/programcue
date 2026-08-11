@@ -94,7 +94,11 @@ function cloneTriggerConfiguration(value: string, context: string) {
   });
 }
 
-function cloneFormRouting(value: string, context: string) {
+function cloneFormRouting(
+  value: string,
+  context: string,
+  clonedTrackIds: Map<string, string>,
+) {
   let decoded: unknown;
   try {
     decoded = JSON.parse(value);
@@ -107,11 +111,32 @@ function cloneFormRouting(value: string, context: string) {
       `${context} is invalid: ${parsed.error.issues[0]?.message ?? "schema mismatch"}.`,
     );
   }
+  const trackIds: Record<string, string> = {};
+  const trackNames: Record<string, string> = {};
+  for (const [trackName, sourceTrackId] of Object.entries(
+    parsed.data.trackIds,
+  )) {
+    if (parsed.data.trackNames[sourceTrackId] !== trackName) {
+      throw new Error(
+        `${context} has inconsistent saved event-track identity.`,
+      );
+    }
+    const clonedTrackId = clonedTrackIds.get(sourceTrackId);
+    if (!clonedTrackId) {
+      throw new Error(
+        `${context} references event track ${sourceTrackId}, which is not cloneable.`,
+      );
+    }
+    trackIds[trackName] = clonedTrackId;
+    trackNames[clonedTrackId] = trackName;
+  }
   return {
     ...parsed.data,
     // Evaluation teams are event-owned and deliberately are not cloned. A
     // draft must be explicitly routed to teams created in the new event.
     categories: {},
+    trackIds,
+    trackNames,
     teamNames: {},
     passwordHash: null,
   };
@@ -308,10 +333,11 @@ export class EventCloneService {
           status: string;
         }>(),
       this.env.DB.prepare(
-        "SELECT name, slug, colour_token AS colour, position, exclusive, is_public AS isPublic FROM tracks WHERE event_id = ? ORDER BY position, id",
+        "SELECT id, name, slug, colour_token AS colour, position, exclusive, is_public AS isPublic FROM tracks WHERE event_id = ? ORDER BY position, id",
       )
         .bind(viewer.eventId)
         .all<{
+          id: string;
           name: string;
           slug: string;
           colour: string | null;
@@ -495,6 +521,9 @@ export class EventCloneService {
     const formIds = new Map(
       forms.results.map((row) => [row.id, crypto.randomUUID()]),
     );
+    const trackIds = new Map(
+      tracks.results.map((row) => [row.id, crypto.randomUUID()]),
+    );
     const formSlugs = new Map(
       forms.results.map((row) => {
         const id = formIds.get(row.id)!;
@@ -579,7 +608,7 @@ export class EventCloneService {
         this.env.DB.prepare(
           "INSERT INTO tracks (id,event_id,name,slug,colour_token,position,exclusive,is_public) VALUES (?,?,?,?,?,?,?,?)",
         ).bind(
-          crypto.randomUUID(),
+          trackIds.get(row.id),
           eventId,
           row.name,
           row.slug,
@@ -663,6 +692,7 @@ export class EventCloneService {
         const routing = cloneFormRouting(
           row.routingJson,
           `Form version ${row.id} routing`,
+          trackIds,
         );
         const settings = {
           ...jsonObject(row.settingsJson, `Form version ${row.id} settings`),

@@ -42,6 +42,36 @@ export function AdminTaskPlanPanel({
     <aside className="tasks-side stack">
       <section className="card pad">
         <div className="card-title">
+          <h2>Speaker travel onboarding</h2>
+        </div>
+        <p className="subtle">
+          Create the hotel-stay and flight-reimbursement forms confirmed as the
+          minimum speaker onboarding workflow. Both are due seven days after
+          acceptance and assigned automatically.
+        </p>
+        <ul className="help">
+          <li>Hotel stay requirements</li>
+          <li>Flight reimbursement</li>
+        </ul>
+        <Form method="post" className="stack">
+          <input type="hidden" name="intent" value="create-travel-onboarding" />
+          <label className="speaker-confirm">
+            <input
+              type="checkbox"
+              name="confirmed"
+              value="create-travel-onboarding"
+              required
+            />{" "}
+            I confirm these forms should be created and automatically assigned
+            to speakers when a submission is accepted.
+          </label>
+          <button className="btn primary" disabled={busy}>
+            <Plus aria-hidden size={15} /> Create travel forms
+          </button>
+        </Form>
+      </section>
+      <section className="card pad">
+        <div className="card-title">
           <h2>Assign a plan</h2>
           <GitBranch aria-hidden className="subtle" size={18} />
         </div>

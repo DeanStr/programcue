@@ -21,6 +21,14 @@ type ExportValue = string | number | null;
 
 const EXPORT_LIMIT = 10_000;
 
+const submissionTracksSchema = z.array(
+  z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    position: z.number().int().nonnegative(),
+  }),
+);
+
 function iso(epoch: number | null) {
   return epoch === null ? null : new Date(epoch * 1_000).toISOString();
 }
@@ -301,7 +309,7 @@ export class DataExportService {
         "id",
         "publicReference",
         "title",
-        "category",
+        "tracks",
         "format",
         "status",
         "submitterEmail",
@@ -416,7 +424,21 @@ export class DataExportService {
     if (resource === "submissions") {
       const result = await this.env.DB.prepare(
         `
-        SELECT s.id, s.public_reference AS publicReference, s.title, s.category,
+        SELECT s.id, s.public_reference AS publicReference, s.title,
+               COALESCE((
+                 SELECT json_group_array(json(selected.track))
+                   FROM (
+                     SELECT json_object(
+                              'id', selection.track_id,
+                              'name', selection.track_name_snapshot,
+                              'position', selection.position
+                            ) AS track
+                       FROM submission_track_selections selection
+                      WHERE selection.submission_id = s.id
+                        AND selection.event_id = s.event_id
+                      ORDER BY selection.position
+                   ) selected
+               ), '[]') AS tracksJson,
                s.format, s.status, s.submitter_email AS submitterEmail,
                s.submitted_at AS submittedAt, s.created_at AS createdAt,
                s.updated_at AS updatedAt
@@ -429,7 +451,7 @@ export class DataExportService {
           id: string;
           publicReference: string;
           title: string;
-          category: string | null;
+          tracksJson: string;
           format: string | null;
           status: string;
           submitterEmail: string | null;
@@ -437,12 +459,26 @@ export class DataExportService {
           createdAt: number;
           updatedAt: number;
         }>();
-      return result.results.map((row) => ({
-        ...row,
-        submittedAt: iso(row.submittedAt),
-        createdAt: iso(row.createdAt),
-        updatedAt: iso(row.updatedAt),
-      })) as Array<Record<string, ExportValue>>;
+      return result.results.map(({ tracksJson, ...row }) => {
+        const tracks = submissionTracksSchema.parse(JSON.parse(tracksJson));
+        if (row.status !== "draft" && tracks.length === 0) {
+          throw new Error(
+            `Submission ${row.id} is missing persisted track selections.`,
+          );
+        }
+        return {
+          id: row.id,
+          publicReference: row.publicReference,
+          title: row.title,
+          tracks: JSON.stringify(tracks),
+          format: row.format,
+          status: row.status,
+          submitterEmail: row.submitterEmail,
+          submittedAt: iso(row.submittedAt),
+          createdAt: iso(row.createdAt),
+          updatedAt: iso(row.updatedAt),
+        };
+      }) as Array<Record<string, ExportValue>>;
     }
     if (resource === "sessions") {
       const result = await this.env.DB.prepare(

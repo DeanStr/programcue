@@ -129,6 +129,8 @@ export const routingSchema = z.object({
   categories: z
     .record(z.string(), z.string().trim().min(1).max(100))
     .default({}),
+  trackIds: z.record(z.string(), z.string().trim().min(1).max(100)),
+  trackNames: z.record(z.string(), z.string().trim().min(1).max(120)),
   teamNames: z
     .record(z.string(), z.string().trim().min(1).max(120))
     .default({}),
@@ -244,29 +246,33 @@ export const saveFormSchema = z
           "The session title must be an always-visible required short-text field",
       });
     }
-    if (categoryField?.type !== "select") {
+    if (categoryField?.type !== "multi_select") {
       context.addIssue({
         code: "custom",
         path: ["schema", "fields"],
-        message: "The category field must be a single-choice field",
+        message: "The tracks field must allow one or more choices",
       });
     } else {
-      if (
-        Object.keys(input.routing.categories).length > 0 &&
-        (!categoryField.required || categoryField.condition !== null)
-      ) {
+      if (categoryField.options.length === 0) {
         context.addIssue({
           code: "custom",
           path: ["schema", "fields"],
-          message: "A routed category must be an always-visible required field",
+          message: "The tracks field must offer at least one event track",
         });
       }
-      for (const category of Object.keys(input.routing.categories)) {
-        if (!categoryField.options.includes(category)) {
+      if (!categoryField.required || categoryField.condition !== null) {
+        context.addIssue({
+          code: "custom",
+          path: ["schema", "fields"],
+          message: "The tracks field must be always visible and required",
+        });
+      }
+      for (const trackName of Object.keys(input.routing.categories)) {
+        if (!categoryField.options.includes(trackName)) {
           context.addIssue({
             code: "custom",
-            path: ["routing", "categories", category],
-            message: "Category routes must match a current category option",
+            path: ["routing", "categories", trackName],
+            message: "Review routes must match a current track option",
           });
         }
       }
@@ -452,7 +458,11 @@ export function validateFinalAnswers(
       (field.type === "select" || field.type === "multi_select")
     ) {
       const values = Array.isArray(answer) ? answer : [answer];
-      if (values.some((value) => !field.options.includes(value))) {
+      if (new Set(values).size !== values.length) {
+        errors[field.id] = [
+          `${field.label} must not contain duplicate choices`,
+        ];
+      } else if (values.some((value) => !field.options.includes(value))) {
         errors[field.id] = [`${field.label} contains an invalid choice`];
       }
     }
@@ -504,10 +514,10 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
     },
     {
       id: "category",
-      label: "Session category",
-      type: "select",
+      label: "Tracks",
+      type: "multi_select",
       required: true,
-      help: "",
+      help: "Choose every programme track this proposal should be reviewed for.",
       options: ["AI & Innovation", "Event Operations", "Experience Design"],
       reviewVisibility: "reviewers",
       condition: null,

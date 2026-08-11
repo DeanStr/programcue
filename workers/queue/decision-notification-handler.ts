@@ -92,7 +92,9 @@ export async function processDecisionNotification(
 
   const decision = await env.DB.prepare(
     `
-    SELECT sd.id AS decisionId, sd.decision, s.id AS submissionId, s.title AS submissionTitle,
+    SELECT sd.id AS decisionId, sd.decision, sd.rationale,
+           sd.notification_feedback_json AS notificationFeedbackJson,
+           s.id AS submissionId, s.title AS submissionTitle,
            s.submitter_person_id AS personId, COALESCE(p.email, s.submitter_email) AS address,
            COALESCE(p.display_name, s.submitter_email) AS recipientName,
            e.name AS eventName, e.brand_accent AS brandAccent,
@@ -108,6 +110,8 @@ export async function processDecisionNotification(
     .first<{
       decisionId: string;
       decision: string;
+      rationale: string | null;
+      notificationFeedbackJson: string;
       submissionId: string;
       submissionTitle: string;
       personId: string | null;
@@ -126,6 +130,10 @@ export async function processDecisionNotification(
     );
     return;
   }
+  const notificationFeedback = z
+    .array(z.string().trim().min(1).max(8_000))
+    .max(100)
+    .parse(JSON.parse(decision.notificationFeedbackJson));
   let emailProvider: ReturnType<
     typeof requireEmailProviderConfiguration
   > | null = null;
@@ -327,6 +335,8 @@ export async function processDecisionNotification(
         JSON.stringify({
           "submission.title": decision.submissionTitle,
           "decision.outcome": decision.decision,
+          "decision.rationale": decision.rationale ?? "",
+          "decision.feedback": notificationFeedback.join("\n\n"),
         }),
         emailProvider?.provider ?? null,
         deliveryKey,

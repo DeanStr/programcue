@@ -20,7 +20,7 @@ import {
   SubmissionStateError,
   type Applicant,
 } from "./submission-repository.server";
-import { DEFAULT_FORM_SCHEMA } from "./submission-schema";
+import { DEFAULT_FORM_SCHEMA, routingSchema } from "./submission-schema";
 import { SubmissionService } from "./submission-service.server";
 
 declare module "cloudflare:test" {
@@ -65,11 +65,16 @@ async function publishedForm(overrides: Record<string, unknown> = {}) {
   await ensureDemoData(testEnv);
   const service = new SubmissionService(testEnv);
   const token = crypto.randomUUID().slice(0, 8);
+  const defaults = await service.getDefaultFormInput(viewer);
   const input = {
-    ...service.defaultFormInput("email_verified"),
+    ...defaults,
     publicSlug: `test-${token}`,
     name: `Test form ${token}`,
     ...overrides,
+    routing: {
+      ...defaults.routing,
+      ...((overrides.routing as Record<string, unknown> | undefined) ?? {}),
+    },
   };
   const id = await service.saveForm(viewer, input);
   const workspace = await service.getAdminWorkspace(viewer, id);
@@ -104,10 +109,59 @@ const validAnswers = {
   title: "Useful automation without the hype",
   description:
     "A practical session about reliable event operations and measurable outcomes.",
-  category: "AI & Innovation",
+  category: ["AI & Innovation"],
   format: "Presentation",
   video: "https://example.com/pitch",
 };
+
+it("requires persisted event-track identity maps in form routing", () => {
+  expect(() =>
+    routingSchema.parse({
+      categories: {},
+      teamNames: {},
+      directSessionDurationMinutes: null,
+      passwordHash: null,
+    }),
+  ).toThrow();
+});
+
+it("reconciles protected draft track choices by stable event-track identity", async () => {
+  const testEnv = env as unknown as CloudflareEnvironment;
+  await ensureDemoData(testEnv);
+  const service = new SubmissionService(testEnv);
+  const input = await service.getDefaultFormInput(viewer);
+  const trackField = input.schema.fields.find(
+    (field) => field.id === "category",
+  )!;
+  trackField.options = ["AI & Innovation", "Event Operations"];
+  input.routing.categories = {
+    "AI & Innovation": "team-ai",
+    "Event Operations": "team-operations",
+  };
+
+  const reconciled = SubmissionService.synchronizeFormTrackChoices(input, [
+    { id: "demo-track-ai", name: "Applied AI" },
+    { id: "demo-track-experience", name: "Experience Design" },
+    { id: "track-new", name: "New track" },
+  ]);
+
+  expect(
+    reconciled.schema.fields.find((field) => field.id === "category")!.options,
+  ).toEqual(["Applied AI"]);
+  expect(reconciled.routing).toMatchObject({
+    categories: { "Applied AI": "team-ai" },
+    trackIds: { "Applied AI": "demo-track-ai" },
+    trackNames: { "demo-track-ai": "Applied AI" },
+  });
+
+  const corrupt = structuredClone(input);
+  delete corrupt.routing.trackNames["demo-track-ai"];
+  expect(() =>
+    SubmissionService.synchronizeFormTrackChoices(corrupt, [
+      { id: "demo-track-ai", name: "Applied AI" },
+    ]),
+  ).toThrow(/inconsistent saved event-track identity/i);
+});
 
 async function insertReadySubmissionVideo(
   testEnv: CloudflareEnvironment,
@@ -180,7 +234,7 @@ function withNthBatchRace(
 describe("Submissions D1 vertical slice", () => {
   it("resolves the current event's latest published application entry", async () => {
     const { service, slug, testEnv } = await publishedForm();
-    await testEnv.DB.prepare(
+    await env.DB.prepare(
       `UPDATE form_definitions
           SET updated_at = unixepoch() + 10
         WHERE event_id = ? AND public_slug = ?`,
@@ -252,6 +306,53 @@ describe("Submissions D1 vertical slice", () => {
     }
   });
 
+  it("requires a form draft to be resaved after an event track changes", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const service = new SubmissionService(testEnv);
+    const defaults = await service.getDefaultFormInput(viewer);
+    const formId = await service.saveForm(viewer, {
+      ...defaults,
+      name: `Track snapshot ${crypto.randomUUID()}`,
+      publicSlug: `track-snapshot-${crypto.randomUUID()}`,
+    });
+    const workspace = await service.getAdminWorkspace(viewer, formId);
+    const trackId =
+      workspace!.draftVersion.routing.trackIds[
+        workspace!.draftVersion.schema.fields.find(
+          (field) => field.id === "category",
+        )!.options[0]!
+      ]!;
+    const track = await testEnv.DB.prepare(
+      "SELECT name FROM tracks WHERE id = ? AND event_id = ?",
+    )
+      .bind(trackId, viewer.eventId)
+      .first<{ name: string }>();
+    expect(track).not.toBeNull();
+    try {
+      await testEnv.DB.prepare(
+        "UPDATE tracks SET name = name || ' renamed' WHERE id = ? AND event_id = ?",
+      )
+        .bind(trackId, viewer.eventId)
+        .run();
+
+      await expect(
+        service.publishForm(
+          viewer,
+          formId,
+          workspace!.revision,
+          workspace!.draftVersion.revision,
+        ),
+      ).rejects.toThrow(/track changed.*save the form again/i);
+    } finally {
+      await testEnv.DB.prepare(
+        "UPDATE tracks SET name = ? WHERE id = ? AND event_id = ?",
+      )
+        .bind(track!.name, trackId, viewer.eventId)
+        .run();
+    }
+  });
+
   it("replays exact assistant form creation and publication intents", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
@@ -266,7 +367,7 @@ describe("Submissions D1 vertical slice", () => {
       auditId: `assistant-form-audit:${proposalId}`,
     };
     const input = {
-      ...service.defaultFormInput("email_verified"),
+      ...(await service.getDefaultFormInput(viewer)),
       name: `Assistant form ${proposalId}`,
       publicSlug: `assistant-form-${proposalId}`,
     };
@@ -614,12 +715,27 @@ describe("Submissions D1 vertical slice", () => {
 
     let savedError: unknown;
     try {
-      await new D1SubmissionRepository(racingEnv).submitDraft(form, applicant, {
-        submissionId,
-        revision: draft.revision,
-        answers: validAnswers,
-        speakers: [{ name: applicant.name, email: applicant.email }],
-      });
+      await new D1SubmissionRepository(racingEnv).submitDraft(
+        form,
+        applicant,
+        {
+          submissionId,
+          revision: draft.revision,
+          answers: validAnswers,
+          speakers: [{ name: applicant.name, email: applicant.email }],
+        },
+        {
+          trackSelections: [
+            {
+              trackId: form.version.routing.trackIds["AI & Innovation"]!,
+              trackName: "AI & Innovation",
+            },
+          ],
+          routedTeamIds: [],
+          routingAssignment: null,
+          upload: null,
+        },
+      );
     } catch (error) {
       savedError = error;
     }
@@ -680,7 +796,7 @@ describe("Submissions D1 vertical slice", () => {
 
     await expect(
       service.saveForm(viewer, {
-        ...service.defaultFormInput("email_verified"),
+        ...(await service.getDefaultFormInput(viewer)),
         publicSlug,
         name: "Short password form",
         accessMode: "password_protected",
@@ -716,9 +832,15 @@ describe("Submissions D1 vertical slice", () => {
     )
       .bind(eventId, viewer.organisationId, `non-default-event-${token}`)
       .run();
+    await testEnv.DB.prepare(
+      `INSERT INTO tracks (id, event_id, name, slug, position)
+       VALUES (?, ?, 'General', 'general', 0)`,
+    )
+      .bind(`track-${token}`, eventId)
+      .run();
 
     const formId = await service.saveForm(eventViewer, {
-      ...service.defaultFormInput("email_verified"),
+      ...(await service.getDefaultFormInput(eventViewer)),
       name: "Non-default event form",
       publicSlug,
     });
@@ -737,7 +859,7 @@ describe("Submissions D1 vertical slice", () => {
     });
     await expect(
       service.saveForm(viewer, {
-        ...service.defaultFormInput("email_verified"),
+        ...(await service.getDefaultFormInput(viewer)),
         name: "Duplicate public URL",
         publicSlug,
       }),
@@ -1096,6 +1218,46 @@ describe("Submissions D1 vertical slice", () => {
     });
   });
 
+  it("does not publish a required tracks field with no selectable tracks", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const service = new SubmissionService(testEnv);
+    const input = await service.getDefaultFormInput(viewer);
+    const formId = await service.saveForm(viewer, {
+      ...input,
+      publicSlug: `empty-tracks-${crypto.randomUUID()}`,
+    });
+    const workspace = await service.getAdminWorkspace(viewer, formId);
+    const invalidSchema = structuredClone(workspace!.draftVersion.schema);
+    invalidSchema.fields.find((field) => field.id === "category")!.options = [];
+    await testEnv.DB.prepare(
+      `UPDATE form_versions SET schema_json = ?
+        WHERE id = ? AND event_id = ? AND status = 'draft'`,
+    )
+      .bind(
+        JSON.stringify(invalidSchema),
+        workspace!.draftVersion.id,
+        viewer.eventId,
+      )
+      .run();
+
+    await expect(
+      service.publishForm(
+        viewer,
+        formId,
+        workspace!.revision,
+        workspace!.draftVersion.revision,
+      ),
+    ).rejects.toThrow(/at least one option/i);
+    await expect(
+      testEnv.DB.prepare(
+        "SELECT status FROM form_definitions WHERE id = ? AND event_id = ?",
+      )
+        .bind(formId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ status: "draft" });
+  });
+
   it("does not publish a routed form when its saved team changes during publication", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
@@ -1109,10 +1271,12 @@ describe("Submissions D1 vertical slice", () => {
       .bind(teamId, viewer.eventId, teamName)
       .run();
     const service = new SubmissionService(testEnv);
+    const defaultInput = await service.getDefaultFormInput(viewer);
     const formId = await service.saveForm(viewer, {
-      ...service.defaultFormInput("email_verified"),
+      ...defaultInput,
       publicSlug: `publish-route-${token}`,
       routing: {
+        ...defaultInput.routing,
         categories: { "AI & Innovation": teamId },
         teamNames: { [teamId]: teamName },
         directSessionDurationMinutes: 30,
@@ -1544,6 +1708,17 @@ describe("Submissions D1 vertical slice", () => {
           { name: applicant.name, email: applicant.email },
           { name: "Claimed while submitting", email: coSpeakerEmail },
         ],
+      },
+      {
+        trackSelections: [
+          {
+            trackId: form.version.routing.trackIds["AI & Innovation"]!,
+            trackName: "AI & Innovation",
+          },
+        ],
+        routedTeamIds: [],
+        routingAssignment: null,
+        upload: null,
       },
     );
 
@@ -2167,7 +2342,7 @@ describe("Submissions D1 vertical slice", () => {
     const detail = await service.getAdminSubmission(viewer, submissionId);
     expect(detail).toMatchObject({
       title: immutableSnapshot.answers.title,
-      category: immutableSnapshot.answers.category,
+      category: (immutableSnapshot.answers.category as string[]).join(", "),
       format: immutableSnapshot.answers.format,
       answers: immutableSnapshot.answers,
     });
@@ -2498,6 +2673,12 @@ describe("Submissions D1 vertical slice", () => {
         passwordHash: null,
       },
     });
+    await env.DB.prepare(
+      `UPDATE tracks SET name = 'AI and Innovation (renamed)'
+        WHERE id = 'demo-track-ai' AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
     const applicant = await verifiedApplicant(service, slug);
     const firstId = await service.createDraft(slug, applicant);
     const first = (
@@ -2586,9 +2767,155 @@ describe("Submissions D1 vertical slice", () => {
     ).resolves.toEqual({ status: "draft" });
     await env.DB.batch([
       env.DB.prepare(
+        "UPDATE tracks SET name = 'AI & Innovation' WHERE id = 'demo-track-ai' AND event_id = ?",
+      ).bind(viewer.eventId),
+      env.DB.prepare(
         "UPDATE evaluation_rounds SET status = 'closed' WHERE id = ? AND event_id = ?",
       ).bind(roundId, viewer.eventId),
       env.DB.prepare(
+        "UPDATE evaluation_plans SET status = 'closed' WHERE id = ? AND event_id = ?",
+      ).bind(planId, viewer.eventId),
+    ]);
+  });
+
+  it("routes a multi-track application to the union of track reviewers", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const token = crypto.randomUUID();
+    const planId = `plan-multi-track-${token}`;
+    const roundId = `round-multi-track-${token}`;
+    const aiTeamId = `team-multi-ai-${token}`;
+    const operationsTeamId = `team-multi-operations-${token}`;
+    const secondEvaluatorId = `person-multi-track-${token}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, profile_status, created_at, updated_at
+         ) VALUES (?, ?, 'Second track reviewer', 1, 'published', unixepoch(), unixepoch())`,
+      ).bind(secondEvaluatorId, `multi-reviewer-${token}@example.com`),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, invited_at, accepted_at, created_at
+         ) VALUES (?, ?, ?, ?, 'evaluator', unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(
+        `membership-multi-track-${token}`,
+        viewer.organisationId,
+        viewer.eventId,
+        secondEvaluatorId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO evaluation_plans (id, event_id, name, status)
+         VALUES (?, ?, 'Multi-track routing', 'active')`,
+      ).bind(planId, viewer.eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO evaluation_rounds (
+           id, event_id, plan_id, round_number, name, status
+         ) VALUES (?, ?, ?, 1, 'Initial review', 'active')`,
+      ).bind(roundId, viewer.eventId, planId),
+      testEnv.DB.prepare(
+        `INSERT INTO evaluation_teams (id, event_id, name, status)
+         VALUES (?, ?, 'AI reviewers', 'active')`,
+      ).bind(aiTeamId, viewer.eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO evaluation_teams (id, event_id, name, status)
+         VALUES (?, ?, 'Operations reviewers', 'active')`,
+      ).bind(operationsTeamId, viewer.eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO evaluation_team_members (team_id, event_id, person_id, role)
+         VALUES (?, ?, 'person-demo-evaluator', 'evaluator')`,
+      ).bind(aiTeamId, viewer.eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO evaluation_team_members (team_id, event_id, person_id, role)
+         VALUES (?, ?, ?, 'evaluator')`,
+      ).bind(operationsTeamId, viewer.eventId, secondEvaluatorId),
+    ]);
+    const { service, id, slug } = await publishedForm({
+      routing: {
+        categories: {
+          "AI & Innovation": aiTeamId,
+          "Event Operations": operationsTeamId,
+        },
+        teamNames: {
+          [aiTeamId]: "AI reviewers",
+          [operationsTeamId]: "Operations reviewers",
+        },
+      },
+    });
+    const applicant = await verifiedApplicant(service, slug);
+    const submissionId = await service.createDraft(slug, applicant);
+    const draft = (
+      await service.repository.getApplicantDrafts(id, applicant)
+    ).find((candidate) => candidate.id === submissionId)!;
+    await service.submitDraft(slug, applicant, {
+      submissionId,
+      revision: draft.revision,
+      answers: {
+        ...validAnswers,
+        category: ["AI & Innovation", "Event Operations"],
+      },
+      speakers: [{ name: applicant.name, email: applicant.email }],
+    });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM submission_track_selections
+             WHERE submission_id = ? AND event_id = ?) AS trackCount,
+           (SELECT COUNT(*) FROM submission_routing_teams
+             WHERE submission_id = ? AND event_id = ?) AS teamCount,
+           (SELECT COUNT(*) FROM evaluator_assignments
+             WHERE submission_id = ? AND event_id = ?) AS reviewerCount,
+           (SELECT track_name_snapshot FROM submission_track_selections
+             WHERE submission_id = ? AND event_id = ?
+               AND track_id = 'demo-track-ai') AS aiTrackSnapshot`,
+      )
+        .bind(
+          submissionId,
+          viewer.eventId,
+          submissionId,
+          viewer.eventId,
+          submissionId,
+          viewer.eventId,
+          submissionId,
+          viewer.eventId,
+        )
+        .first(),
+    ).resolves.toEqual({
+      trackCount: 2,
+      teamCount: 2,
+      reviewerCount: 2,
+      aiTrackSnapshot: "AI & Innovation",
+    });
+    await expect(
+      service.getAdminSubmission(viewer, submissionId),
+    ).resolves.toMatchObject({
+      category: "AI & Innovation, Event Operations",
+      routedTeamIds: [aiTeamId, operationsTeamId].sort(),
+      routedTo: "AI reviewers, Operations reviewers",
+    });
+    await testEnv.DB.prepare(
+      `DELETE FROM submission_routing_teams
+        WHERE submission_id = ? AND event_id = ?`,
+    )
+      .bind(submissionId, viewer.eventId)
+      .run();
+    await expect(
+      service.listAdminSubmissions(viewer, { status: "assigned" }),
+    ).rejects.toThrow(/incomplete persisted routing teams/i);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO submission_routing_teams (submission_id, event_id, team_id)
+         VALUES (?, ?, ?)`,
+      ).bind(submissionId, viewer.eventId, aiTeamId),
+      testEnv.DB.prepare(
+        `INSERT INTO submission_routing_teams (submission_id, event_id, team_id)
+         VALUES (?, ?, ?)`,
+      ).bind(submissionId, viewer.eventId, operationsTeamId),
+    ]);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "UPDATE evaluation_rounds SET status = 'closed' WHERE id = ? AND event_id = ?",
+      ).bind(roundId, viewer.eventId),
+      testEnv.DB.prepare(
         "UPDATE evaluation_plans SET status = 'closed' WHERE id = ? AND event_id = ?",
       ).bind(planId, viewer.eventId),
     ]);
@@ -2935,6 +3262,112 @@ describe("Submissions D1 vertical slice", () => {
     });
   });
 
+  it("rejects multiple tracks before materialising a direct session", async () => {
+    const { service, id, slug } = await publishedForm({
+      kind: "direct_session",
+      routing: {
+        categories: {},
+        teamNames: {},
+        directSessionDurationMinutes: null,
+        passwordHash: null,
+      },
+    });
+    const applicant = await verifiedApplicant(service, slug);
+    const submissionId = await service.createDraft(slug, applicant);
+    const draft = (
+      await service.repository.getApplicantDrafts(id, applicant)
+    ).find((candidate) => candidate.id === submissionId)!;
+
+    await expect(
+      service.submitDraft(slug, applicant, {
+        submissionId,
+        revision: draft.revision,
+        answers: {
+          ...validAnswers,
+          category: ["AI & Innovation", "Event Operations"],
+        },
+        speakers: [{ name: applicant.name, email: applicant.email }],
+      }),
+    ).rejects.toThrow(/exactly one track for a direct session/i);
+    await expect(
+      env.DB.prepare(
+        `SELECT status,
+                (SELECT COUNT(*) FROM sessions
+                  WHERE id = submissions.last_operation_id) AS sessionCount
+           FROM submissions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(submissionId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ status: "draft", sessionCount: 0 });
+  });
+
+  it("rejects duplicate submitted tracks as a field validation error", async () => {
+    const { service, id, slug } = await publishedForm();
+    const applicant = await verifiedApplicant(service, slug);
+    const submissionId = await service.createDraft(slug, applicant);
+    const draft = (
+      await service.repository.getApplicantDrafts(id, applicant)
+    ).find((candidate) => candidate.id === submissionId)!;
+
+    await expect(
+      service.submitDraft(slug, applicant, {
+        submissionId,
+        revision: draft.revision,
+        answers: {
+          ...validAnswers,
+          category: ["AI & Innovation", "AI & Innovation"],
+        },
+        speakers: [{ name: applicant.name, email: applicant.email }],
+      }),
+    ).rejects.toThrow(/tracks must not contain duplicate choices/i);
+    await expect(
+      env.DB.prepare(
+        `SELECT status,
+                (SELECT COUNT(*) FROM submission_track_selections
+                  WHERE submission_id = submissions.id) AS trackCount
+           FROM submissions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(submissionId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ status: "draft", trackCount: 0 });
+  });
+
+  it("rejects any submission materialisation without a submitted track", async () => {
+    const { service, id, slug } = await publishedForm();
+    const applicant = await verifiedApplicant(service, slug);
+    const submissionId = await service.createDraft(slug, applicant);
+    const draft = (
+      await service.repository.getApplicantDrafts(id, applicant)
+    ).find((candidate) => candidate.id === submissionId)!;
+    const form = await service.getPublicForm(slug);
+
+    await expect(
+      service.repository.submitDraft(
+        form,
+        applicant,
+        {
+          submissionId,
+          revision: draft.revision,
+          answers: validAnswers,
+          speakers: [{ name: applicant.name, email: applicant.email }],
+        },
+        {
+          trackSelections: [],
+          routedTeamIds: [],
+          routingAssignment: null,
+          upload: null,
+        },
+      ),
+    ).rejects.toThrow(/must retain at least one submitted event track/i);
+    await expect(
+      env.DB.prepare(
+        "SELECT status, revision FROM submissions WHERE id = ? AND event_id = ?",
+      )
+        .bind(submissionId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ status: "draft", revision: draft.revision });
+  });
+
   it("does not verify a co-speaker identity when the claim token loses its CAS race", async () => {
     const { service, id, slug, testEnv } = await publishedForm();
     await testEnv.DB.batch([
@@ -3138,7 +3571,7 @@ describe("Submissions D1 vertical slice", () => {
       idempotencyKey: `manual-${crypto.randomUUID()}`,
       title: "Administrator entered proposal",
       description: "Received outside the public application form.",
-      category: "Partner",
+      trackId: "demo-track-ai",
       format: "Presentation",
       submitterName: "Partner Coordinator",
       submitterEmail: `partner-${crypto.randomUUID()}@example.com`,
@@ -3179,6 +3612,9 @@ describe("Submissions D1 vertical slice", () => {
     expect(JSON.parse(row!.snapshotJson).speakers[0].biography).toBe(
       "Manually recorded speaker biography.",
     );
+    expect(JSON.parse(row!.snapshotJson).answers.category).toEqual([
+      "AI & Innovation",
+    ]);
     expect(
       JSON.parse(row!.snapshotJson).schema.fields.map(
         (field: { id: string }) => field.id,
@@ -3191,7 +3627,23 @@ describe("Submissions D1 vertical slice", () => {
     ).toBe(teamName);
     await expect(
       service.getAdminSubmission(viewer, submissionId),
-    ).resolves.toMatchObject({ routedTo: teamName });
+    ).resolves.toMatchObject({
+      routedTo: teamName,
+      category: "AI & Innovation",
+    });
+    await expect(
+      env.DB.prepare(
+        `SELECT track_id AS trackId, track_name_snapshot AS trackName, position
+           FROM submission_track_selections
+          WHERE submission_id = ? AND event_id = ?`,
+      )
+        .bind(submissionId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({
+      trackId: "demo-track-ai",
+      trackName: "AI & Innovation",
+      position: 0,
+    });
     expect(
       await env.DB.prepare(
         `SELECT round_id AS roundId, team_id AS teamId,
@@ -3213,7 +3665,7 @@ describe("Submissions D1 vertical slice", () => {
           idempotencyKey: `manual-${crypto.randomUUID()}`,
           title: "Cross-tenant proposal",
           description: "Must not be created.",
-          category: "Partner",
+          trackId: "demo-track-ai",
           format: "Presentation",
           submitterName: "Wrong tenant",
           submitterEmail: "wrong-tenant@example.com",
@@ -3277,7 +3729,7 @@ describe("Submissions D1 vertical slice", () => {
         idempotencyKey: `manual-${crypto.randomUUID()}`,
         title: "Routing changed while saving",
         description: "This entry must leave no partial records.",
-        category: "Partner",
+        trackId: "demo-track-ai",
         format: "Presentation",
         submitterName: "Manual race submitter",
         submitterEmail,
@@ -3358,7 +3810,7 @@ describe("Submissions D1 vertical slice", () => {
       idempotencyKey: `manual-idempotent-${token}`,
       title: "Idempotent manual application",
       description: "An immutable external intake record.",
-      category: "Partner",
+      trackId: "demo-track-ai",
       format: "Presentation",
       submitterName: "Manual Submitter",
       submitterEmail: `manual-submitter-${token}@example.com`,

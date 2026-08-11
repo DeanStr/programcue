@@ -284,6 +284,7 @@ function buildDecisionStatements(input: {
   format: string;
   sessionDurationMinutes: number;
   notificationOperationId: string | null;
+  notificationFeedback: string[];
   roundId: string | null;
   speakerMemberships: Array<{ membershipId: string; personId: string }>;
   speakerInvitationPlans: AcceptedSpeakerInvitationPlan[];
@@ -305,6 +306,7 @@ function buildDecisionStatements(input: {
     format,
     sessionDurationMinutes,
     notificationOperationId,
+    notificationFeedback,
     roundId,
     speakerMemberships,
     speakerInvitationPlans,
@@ -345,6 +347,14 @@ function buildDecisionStatements(input: {
              OR ((${speakerSetGuard}) AND (${acceptanceTaskPlanGuardSql}))
            )
            AND (
+             ? <> 'published' OR ? <> 'accepted'
+             OR EXISTS (
+               SELECT 1 FROM submission_track_selections selection
+                WHERE selection.submission_id = submissions.id
+                  AND selection.event_id = submissions.event_id
+             )
+           )
+           AND (
              ? <> 'published'
              OR ? IN ('owner','administrator')
              OR (
@@ -367,6 +377,8 @@ function buildDecisionStatements(input: {
       status,
       parsed.decision,
       ...speakerSetBindings,
+      status,
+      parsed.decision,
       status,
       viewer.role,
       viewer.role,
@@ -413,10 +425,11 @@ function buildDecisionStatements(input: {
       `
         INSERT INTO submission_decisions (
           id, event_id, submission_id, round_id, revision_number, status, decision,
-          decided_by_person_id, rationale, effect_preview_json, idempotency_key,
+          decided_by_person_id, rationale, notification_feedback_json,
+          effect_preview_json, idempotency_key,
           decided_at, published_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(),
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(),
                CASE WHEN ? = 'published' THEN unixepoch() END
          WHERE EXISTS (
            SELECT 1 FROM submissions
@@ -433,6 +446,7 @@ function buildDecisionStatements(input: {
       parsed.decision,
       viewer.personId,
       parsed.rationale || null,
+      JSON.stringify(notificationFeedback),
       JSON.stringify({
         createsSession: Boolean(sessionId),
         materializesOnboardingTaskPlan: Boolean(sessionId),
@@ -451,10 +465,15 @@ function buildDecisionStatements(input: {
           env.DB.prepare(
             `
           INSERT INTO sessions (
-            id, event_id, source_submission_id, title, slug, description, format,
+            id, event_id, source_submission_id, track_id, title, slug, description, format,
             duration_minutes, status, visibility, revision, created_at, updated_at
           )
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'unscheduled', 'public', 1, unixepoch(), unixepoch()
+          SELECT ?, ?, ?, (
+                   SELECT selection.track_id
+                     FROM submission_track_selections selection
+                    WHERE selection.submission_id = ? AND selection.event_id = ?
+                    ORDER BY selection.position LIMIT 1
+                 ), ?, ?, ?, ?, ?, 'unscheduled', 'public', 1, unixepoch(), unixepoch()
            WHERE EXISTS (
              SELECT 1 FROM submission_decisions
               WHERE id = ? AND event_id = ? AND status = 'published' AND decision = 'accepted'
@@ -464,6 +483,8 @@ function buildDecisionStatements(input: {
             sessionId,
             viewer.eventId,
             submission.id,
+            submission.id,
+            viewer.eventId,
             sessionTitle,
             slug,
             sessionDescription,
@@ -974,6 +995,26 @@ export class EvaluationDecisionService {
         );
       }
     }
+    const notificationFeedback =
+      parsed.includeReviewerFeedback && completedRound
+        ? (
+            await this.env.DB.prepare(
+              `SELECT trim(review.submitter_feedback) AS feedback
+                 FROM evaluator_assignments assignment
+                 JOIN reviews review
+                   ON review.assignment_id = assignment.id
+                  AND review.event_id = assignment.event_id
+                WHERE assignment.event_id = ?
+                  AND assignment.submission_id = ?
+                  AND assignment.round_id = ?
+                  AND review.status IN ('submitted','locked')
+                  AND length(trim(COALESCE(review.submitter_feedback, ''))) > 0
+                ORDER BY assignment.assigned_at, assignment.id`,
+            )
+              .bind(viewer.eventId, submission.id, completedRound.roundId)
+              .all<{ feedback: string }>()
+          ).results.map((row) => row.feedback)
+        : [];
     const decisionId = commandId ?? crypto.randomUUID();
     const sessionId =
       parsed.release && parsed.decision === "accepted"
@@ -1201,6 +1242,7 @@ export class EvaluationDecisionService {
       format,
       sessionDurationMinutes,
       notificationOperationId,
+      notificationFeedback,
       roundId: completedRound?.roundId ?? null,
       speakerMemberships,
       speakerInvitationPlans,
@@ -1223,6 +1265,17 @@ export class EvaluationDecisionService {
         if (pendingSpeaker) {
           throw new EvaluationStateError(
             "Claim every co-speaker before releasing an accepted decision. No speaker will be silently omitted from the session.",
+          );
+        }
+        const submittedTrack = await this.env.DB.prepare(
+          `SELECT 1 FROM submission_track_selections
+            WHERE submission_id = ? AND event_id = ? LIMIT 1`,
+        )
+          .bind(submission.id, viewer.eventId)
+          .first();
+        if (!submittedTrack) {
+          throw new EvaluationStateError(
+            "An accepted submission must retain at least one submitted event track. Repair the submission before releasing it.",
           );
         }
       }

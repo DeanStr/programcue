@@ -1,5 +1,8 @@
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import type { SubmissionFormSchema } from "~/modules/submissions/submission-schema";
+import type {
+  FormRouting,
+  SubmissionFormSchema,
+} from "~/modules/submissions/submission-schema";
 
 const DEMO_ORGANISATION_ID = "org-future-events";
 const DEMO_EVENT_ID = "evt-foe-2025";
@@ -78,12 +81,19 @@ const formSchema = {
 } satisfies SubmissionFormSchema;
 
 const formRouting = {
-  categories: {
-    "Event Operations": "operations",
-    "Experience Design": "experience-design",
+  categories: {},
+  trackIds: {
+    "Event Operations": "demo-track-operations",
+    "Experience Design": "demo-track-experience",
   },
+  trackNames: {
+    "demo-track-operations": "Event Operations",
+    "demo-track-experience": "Experience Design",
+  },
+  teamNames: {},
+  directSessionDurationMinutes: null,
   passwordHash: null,
-};
+} satisfies FormRouting;
 
 const formSettings = {
   closesAt: null,
@@ -249,6 +259,20 @@ export async function ensureDemoEvaluationData(env: CloudflareEnvironment) {
         proposal.submitterPersonId,
         proposal.submitterEmail,
         proposal.speakerName,
+        proposal.id,
+        DEMO_EVENT_ID,
+      ),
+      env.DB.prepare(`
+        INSERT OR IGNORE INTO submission_track_selections (
+          event_id, submission_id, track_id, track_name_snapshot, position
+        )
+        SELECT s.event_id, s.id, t.id, t.name, 0
+          FROM submissions s
+          JOIN tracks t ON t.event_id = s.event_id AND t.id = ? AND t.name = ?
+         WHERE s.id = ? AND s.event_id = ?
+      `).bind(
+        formRouting.trackIds[proposal.category],
+        proposal.category,
         proposal.id,
         DEMO_EVENT_ID,
       ),

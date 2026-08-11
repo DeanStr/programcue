@@ -181,7 +181,86 @@ export function SpeakerTasksPanel({
                         name="revision"
                         value={task.revision}
                       />
-                      {task.taskType === "short_form" ? (
+                      {task.taskType === "short_form" &&
+                      task.formFields.length ? (
+                        <fieldset className="stack">
+                          <legend className="label">
+                            Required information
+                          </legend>
+                          {task.formFields.map((field) => {
+                            const name = `response.${field.id}`;
+                            if (field.type === "boolean") {
+                              return (
+                                <label className="label" key={field.id}>
+                                  {field.label}
+                                  <select
+                                    className="select"
+                                    name={name}
+                                    required={field.required}
+                                    defaultValue=""
+                                  >
+                                    <option value="" disabled>
+                                      Choose yes or no
+                                    </option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                  </select>
+                                  {field.help ? (
+                                    <span className="help">{field.help}</span>
+                                  ) : null}
+                                </label>
+                              );
+                            }
+                            if (field.type === "select") {
+                              return (
+                                <label className="label" key={field.id}>
+                                  {field.label}
+                                  <select
+                                    className="select"
+                                    name={name}
+                                    required={field.required}
+                                    defaultValue=""
+                                  >
+                                    <option value="">Choose an option</option>
+                                    {field.options.map((option) => (
+                                      <option value={option} key={option}>
+                                        {option}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {field.help ? (
+                                    <span className="help">{field.help}</span>
+                                  ) : null}
+                                </label>
+                              );
+                            }
+                            return (
+                              <label className="label" key={field.id}>
+                                {field.label}
+                                {field.type === "long_text" ? (
+                                  <textarea
+                                    className="textarea"
+                                    name={name}
+                                    required={field.required}
+                                  />
+                                ) : (
+                                  <input
+                                    className="field"
+                                    name={name}
+                                    type={
+                                      field.type === "date" ? "date" : "text"
+                                    }
+                                    required={field.required}
+                                  />
+                                )}
+                                {field.help ? (
+                                  <span className="help">{field.help}</span>
+                                ) : null}
+                              </label>
+                            );
+                          })}
+                        </fieldset>
+                      ) : task.taskType === "short_form" ? (
                         <label className="label">
                           Response
                           <textarea className="textarea" name="text" required />

@@ -185,6 +185,282 @@ async function createDependencyPair(
 }
 
 describe("onboarding task service", () => {
+  it("creates and validates the minimum structured travel onboarding forms", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new TaskService(testEnv);
+    await expect(
+      service.createTravelOnboardingTemplates(admin, false),
+    ).rejects.toThrow(/review and confirm/i);
+    const templates = await service.createTravelOnboardingTemplates(
+      admin,
+      true,
+    );
+    expect(templates.createdTemplateIds).toHaveLength(2);
+    await expect(
+      service.createTravelOnboardingTemplates(admin, true),
+    ).resolves.toEqual({
+      hotelTemplateId: templates.hotelTemplateId,
+      flightTemplateId: templates.flightTemplateId,
+      createdTemplateIds: [],
+    });
+    const stored = await testEnv.DB.prepare(
+      `SELECT id, auto_assign_on_acceptance AS autoAssign,
+              configuration_json AS configurationJson
+         FROM task_templates WHERE id IN (?, ?) ORDER BY name`,
+    )
+      .bind(templates.hotelTemplateId, templates.flightTemplateId)
+      .all<{
+        id: string;
+        autoAssign: number;
+        configurationJson: string;
+      }>();
+    expect(stored.results).toHaveLength(2);
+    expect(stored.results.every((row) => row.autoAssign === 1)).toBe(true);
+    expect(
+      stored.results.map(
+        (row) => JSON.parse(row.configurationJson).preset as string,
+      ),
+    ).toEqual(["speaker_travel_flight_v1", "speaker_travel_hotel_v1"]);
+    expect(
+      stored.results.every(
+        (row) => JSON.parse(row.configurationJson).form.fields.length >= 4,
+      ),
+    ).toBe(true);
+    await testEnv.DB.prepare(
+      `UPDATE task_templates
+          SET due_anchor = 'none', due_offset_minutes = NULL
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(templates.hotelTemplateId, admin.eventId)
+      .run();
+
+    const { taskId } = await service.assignTemplate(
+      admin,
+      templates.hotelTemplateId,
+      speaker.personId,
+    );
+    const participantTask = (await service.listParticipantTasks(speaker)).find(
+      (task) => task.id === taskId,
+    )!;
+    expect(participantTask.formFields.map((field) => field.id)).toContain(
+      "requires_hotel",
+    );
+    await expect(
+      service.completeParticipant(speaker, {
+        taskId,
+        revision: participantTask.revision,
+        responses: { requires_hotel: true, check_in: "2030-05-20" },
+      }),
+    ).rejects.toThrow(/check-out date/i);
+    await expect(
+      service.completeParticipant(speaker, {
+        taskId,
+        revision: participantTask.revision,
+        responses: {
+          requires_hotel: true,
+          check_in: "2030-02-30",
+          check_out: "2030-05-23",
+        },
+      }),
+    ).rejects.toThrow(/valid date.*check-in/i);
+    await service.completeParticipant(speaker, {
+      taskId,
+      revision: participantTask.revision,
+      responses: {
+        requires_hotel: true,
+        check_in: "2030-05-20",
+        check_out: "2030-05-23",
+        room_requirements: "Step-free route from the lobby.",
+      },
+    });
+    const completed = await testEnv.DB.prepare(
+      `SELECT status, evidence_json AS evidenceJson
+         FROM task_instances WHERE id = ? AND event_id = ?`,
+    )
+      .bind(taskId, speaker.eventId)
+      .first<{ status: string; evidenceJson: string }>();
+    expect(completed?.status).toBe("completed");
+    expect(JSON.parse(completed!.evidenceJson).responses).toMatchObject({
+      requires_hotel: true,
+      check_in: "2030-05-20",
+    });
+  });
+
+  it("coerces only boolean form fields and preserves literal text and select values", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new TaskService(testEnv);
+    const templateId = await service.createTemplate(admin, {
+      name: `Literal structured answers ${crypto.randomUUID()}`,
+      description: "Preserve answers that happen to look like booleans.",
+      targetType: "speaker",
+      taskType: "short_form",
+      impact: "high",
+      evidenceMode: "text",
+      dueAnchor: "none",
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: false,
+      dependencyIds: [],
+      configuration: {
+        form: {
+          fields: [
+            {
+              id: "confirmation",
+              label: "Confirmed",
+              type: "boolean",
+              required: true,
+            },
+            {
+              id: "literal_choice",
+              label: "Literal choice",
+              type: "select",
+              required: true,
+              options: ["true", "false"],
+            },
+            {
+              id: "literal_text",
+              label: "Literal text",
+              type: "short_text",
+              required: true,
+            },
+          ],
+        },
+      },
+    });
+    const { taskId } = await service.assignTemplate(
+      admin,
+      templateId,
+      speaker.personId,
+    );
+    const task = (await service.listParticipantTasks(speaker)).find(
+      (candidate) => candidate.id === taskId,
+    )!;
+
+    await service.completeParticipant(speaker, {
+      taskId,
+      revision: task.revision,
+      responses: {
+        confirmation: "true",
+        literal_choice: "false",
+        literal_text: "true",
+      },
+    });
+
+    const completed = await testEnv.DB.prepare(
+      `SELECT evidence_json AS evidenceJson
+         FROM task_instances WHERE id = ? AND event_id = ?`,
+    )
+      .bind(taskId, speaker.eventId)
+      .first<{ evidenceJson: string }>();
+    expect(JSON.parse(completed!.evidenceJson).responses).toEqual({
+      confirmation: true,
+      literal_choice: "false",
+      literal_text: "true",
+    });
+  });
+
+  it("validates both travel presets before creating either missing form", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const eventId = `evt-travel-atomic-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO events (
+         id, organisation_id, name, slug, timezone, starts_at, ends_at,
+         session_formats_json, file_policy_json
+       )
+       SELECT ?, organisation_id, 'Travel atomicity', ?, timezone,
+              starts_at, ends_at, session_formats_json, file_policy_json
+         FROM events WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(
+        eventId,
+        `travel-atomic-${crypto.randomUUID()}`,
+        admin.eventId,
+        admin.organisationId,
+      )
+      .run();
+    const eventAdmin = { ...admin, eventId };
+    const service = new TaskService(testEnv);
+    const templates = await service.createTravelOnboardingTemplates(
+      eventAdmin,
+      true,
+    );
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "DELETE FROM task_templates WHERE id = ? AND event_id = ?",
+      ).bind(templates.hotelTemplateId, eventId),
+      testEnv.DB.prepare(
+        `UPDATE task_templates SET name = 'Modified flight preset'
+          WHERE id = ? AND event_id = ?`,
+      ).bind(templates.flightTemplateId, eventId),
+    ]);
+
+    await expect(
+      service.createTravelOnboardingTemplates(eventAdmin, true),
+    ).rejects.toThrow(/differs from the required hotel or flight form/i);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM task_templates
+          WHERE event_id = ?
+            AND json_extract(configuration_json, '$.preset') = 'speaker_travel_hotel_v1'`,
+      )
+        .bind(eventId)
+        .first<{ count: number }>(),
+    ).resolves.toEqual({ count: 0 });
+  });
+
+  it("reuses exact travel preset winners when two confirmations race", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const eventId = `evt-travel-race-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO events (
+         id, organisation_id, name, slug, timezone, starts_at, ends_at,
+         session_formats_json, file_policy_json
+       )
+       SELECT ?, organisation_id, 'Travel preset race', ?, timezone,
+              starts_at, ends_at, session_formats_json, file_policy_json
+         FROM events WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(
+        eventId,
+        `travel-race-${crypto.randomUUID()}`,
+        admin.eventId,
+        admin.organisationId,
+      )
+      .run();
+    const eventAdmin = { ...admin, eventId };
+    const racingEnv = withBatchBarrier(testEnv);
+
+    const [first, second] = await Promise.all([
+      new TaskService(racingEnv).createTravelOnboardingTemplates(
+        eventAdmin,
+        true,
+      ),
+      new TaskService(racingEnv).createTravelOnboardingTemplates(
+        eventAdmin,
+        true,
+      ),
+    ]);
+
+    expect(second.hotelTemplateId).toBe(first.hotelTemplateId);
+    expect(second.flightTemplateId).toBe(first.flightTemplateId);
+    expect(
+      first.createdTemplateIds.length + second.createdTemplateIds.length,
+    ).toBe(2);
+    const stored = await testEnv.DB.prepare(
+      `SELECT COUNT(*) AS templateCount
+         FROM task_templates
+        WHERE event_id = ?
+          AND json_extract(configuration_json, '$.preset') IN (?, ?)`,
+    )
+      .bind(eventId, "speaker_travel_hotel_v1", "speaker_travel_flight_v1")
+      .first<{ templateCount: number }>();
+    expect(stored).toEqual({ templateCount: 2 });
+  });
+
   it("scopes deterministic template intents to one event and rejects payload drift", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);

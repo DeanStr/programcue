@@ -29,12 +29,21 @@ export async function action({ request, context }: Route.ActionArgs) {
   try {
     if (intent === "complete-task") {
       const taskId = String(form.get("taskId") ?? "");
+      const responses = Object.fromEntries(
+        [...form.entries()]
+          .filter(([name]) => name.startsWith("response."))
+          .map(([name, value]) => [
+            name.slice("response.".length),
+            String(value),
+          ]),
+      );
       const result = await new TaskService(env).completeParticipant(viewer, {
         taskId,
         revision: form.get("revision"),
         confirmed: form.get("confirmed") ?? "false",
         text: form.get("text") || undefined,
         url: form.get("url") || undefined,
+        responses,
       });
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "task_instance",

@@ -138,9 +138,7 @@ test.describe.serial("submissions vertical slice", () => {
       .fill(
         "A detailed, practical case study about removing ambiguity from event programme delivery.",
       );
-    await page
-      .getByLabel("Session category *")
-      .selectOption("Event Operations");
+    await page.getByLabel("Event Operations").check();
     await page.getByLabel("Format *").selectOption("Workshop");
     await expect(page.getByLabel("Materials and room setup *")).toBeVisible();
     await page

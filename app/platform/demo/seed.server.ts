@@ -119,6 +119,30 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
     `,
       ).bind(id, DEMO_EVENT_ID, name, capacity, position),
     ),
+    ...[
+      ["demo-track-leadership", "Leadership", "leadership", "#7c3aed", 0],
+      ["demo-track-ai", "AI & Innovation", "ai-innovation", "#4f46e5", 1],
+      [
+        "demo-track-experience",
+        "Experience Design",
+        "experience-design",
+        "#0f766e",
+        2,
+      ],
+      [
+        "demo-track-operations",
+        "Event Operations",
+        "event-operations",
+        "#b45309",
+        3,
+      ],
+    ].map(([id, name, slug, colour, position]) =>
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO tracks (
+           id, event_id, name, slug, colour_token, position, exclusive, is_public
+         ) VALUES (?, ?, ?, ?, ?, ?, 0, 1)`,
+      ).bind(id, DEMO_EVENT_ID, name, slug, colour, position),
+    ),
   ]);
 }
 

@@ -896,6 +896,7 @@ export const submissionDecisions = sqliteTable(
       .notNull()
       .references(() => people.id),
     rationale: text("rationale"),
+    notificationFeedbackJson: text("notification_feedback_json").notNull(),
     effectPreviewJson: text("effect_preview_json").notNull().default("{}"),
     idempotencyKey: text("idempotency_key"),
     decidedAt: integer("decided_at").notNull().default(epochNow),
@@ -926,7 +927,7 @@ export const tracks = sqliteTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     colourToken: text("colour_token"),
-    position: integer("position").notNull().default(0),
+    position: integer("position").notNull(),
     exclusive: integer("exclusive", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -934,6 +935,62 @@ export const tracks = sqliteTable(
   },
   (table) => [
     uniqueIndex("tracks_event_slug_unique").on(table.eventId, table.slug),
+  ],
+);
+
+export const submissionTrackSelections = sqliteTable(
+  "submission_track_selections",
+  {
+    submissionId: text("submission_id").notNull(),
+    eventId: text("event_id").notNull(),
+    trackId: text("track_id").notNull(),
+    trackNameSnapshot: text("track_name_snapshot").notNull(),
+    position: integer("position").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.submissionId, table.trackId] }),
+    uniqueIndex("submission_track_selections_position_unique").on(
+      table.submissionId,
+      table.position,
+    ),
+    index("idx_submission_track_selections_event").on(
+      table.eventId,
+      table.trackId,
+      table.submissionId,
+    ),
+    foreignKey({
+      columns: [table.submissionId, table.eventId],
+      foreignColumns: [submissions.id, submissions.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.trackId, table.eventId],
+      foreignColumns: [tracks.id, tracks.eventId],
+    }),
+  ],
+);
+
+export const submissionRoutingTeams = sqliteTable(
+  "submission_routing_teams",
+  {
+    submissionId: text("submission_id").notNull(),
+    eventId: text("event_id").notNull(),
+    teamId: text("team_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.submissionId, table.teamId] }),
+    index("idx_submission_routing_teams_event").on(
+      table.eventId,
+      table.teamId,
+      table.submissionId,
+    ),
+    foreignKey({
+      columns: [table.submissionId, table.eventId],
+      foreignColumns: [submissions.id, submissions.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.teamId, table.eventId],
+      foreignColumns: [evaluationTeams.id, evaluationTeams.eventId],
+    }),
   ],
 );
 

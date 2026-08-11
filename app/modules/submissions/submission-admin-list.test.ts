@@ -24,16 +24,19 @@ describe("submission administration list", () => {
     const titlePrefix = `Grid ${token}`;
     const categoryPrefix = `Grid ${token} category`;
     const otherEventId = `other-grid-event-${token}`;
+    const formId = `grid-form-${token}`;
+    const formVersionId = `grid-form-version-${token}`;
 
     const inserts = Array.from({ length: 55 }, (_, index) =>
       testEnv.DB.prepare(
         `INSERT INTO submissions (
-           id, event_id, public_reference, title, category, status,
+           id, event_id, form_version_id, public_reference, title, category, status,
            answers_json, revision, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, 'draft', '{}', 1, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, 'draft', '{}', 1, ?, ?)`,
       ).bind(
         `grid-submission-${token}-${index}`,
         viewer.eventId,
+        formVersionId,
         `GRID-${token}-${index}`,
         `${titlePrefix} application ${String(index).padStart(2, "0")}`,
         `${categoryPrefix} ${String(index).padStart(2, "0")}`,
@@ -43,6 +46,21 @@ describe("submission administration list", () => {
     );
 
     await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO form_definitions (
+           id, event_id, name, kind, status, public_slug, min_speakers,
+           max_speakers, access_mode, created_by_person_id
+         ) VALUES (?, ?, 'Grid fixture', 'submission', 'draft', ?, 1, 4,
+                   'email_verified', ?)`,
+      ).bind(formId, viewer.eventId, formId, viewer.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO form_versions (
+           id, event_id, form_id, version_number, schema_json, routing_json,
+           settings_snapshot_json, status, created_by_person_id
+         ) VALUES (?, ?, ?, 1, '[]',
+                   '{"categories":{},"trackIds":{},"trackNames":{},"teamNames":{},"directSessionDurationMinutes":null,"passwordHash":null}',
+                   '{}', 'draft', ?)`,
+      ).bind(formVersionId, viewer.eventId, formId, viewer.personId),
       testEnv.DB.prepare(
         `INSERT INTO events (
            id, organisation_id, name, slug, timezone, starts_at, ends_at,
@@ -109,6 +127,29 @@ describe("submission administration list", () => {
         category.startsWith(categoryPrefix),
       ),
     ).toHaveLength(55);
+
+    await testEnv.DB.prepare(
+      `INSERT INTO submissions (
+         id, event_id, form_version_id, public_reference, title, category,
+         status, answers_json, submitted_snapshot_json, submitted_at
+       ) VALUES (?, ?, ?, ?, 'Missing track projection', ?, 'submitted',
+                 '{}', '{}', unixepoch())`,
+    )
+      .bind(
+        `grid-missing-track-${token}`,
+        viewer.eventId,
+        formVersionId,
+        `GRID-MISSING-${token}`,
+        `${categoryPrefix} hidden fallback`,
+      )
+      .run();
+    await expect(
+      service.listAdminSubmissionPage(
+        viewer,
+        { query: "Missing track projection" },
+        1,
+      ),
+    ).rejects.toThrow(/missing persisted track selections/i);
   });
 
   it("does not read the D1 projection when Airtable freshness fails", async () => {

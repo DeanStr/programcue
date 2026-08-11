@@ -6,12 +6,14 @@ import { requireEventRole } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   EventConfigurationDataError,
+  INITIAL_EVENT_SESSION_FORMATS_JSON,
   parseSessionFormatsConfiguration,
 } from "~/modules/events/event-configuration";
 import {
   CANONICAL_EVENT_FILE_POLICY,
   parseEventFilePolicy,
 } from "~/modules/files/file-policy";
+import { TaskService } from "~/modules/tasks/task-service.server";
 import {
   EventCloneService,
   EventCloneSlugConflictError,
@@ -81,14 +83,19 @@ describe("event cloning", () => {
         "INSERT OR IGNORE INTO form_definitions (id,event_id,name,kind,status,public_slug,closes_at,min_speakers,access_mode,access_password_hash,created_by_person_id) VALUES ('clone-form',?,'Call for speakers','submission','published','clone-form-public',unixepoch()+86400,1,'password_protected','source-password-hash',?)",
       ).bind(viewer.eventId, viewer.personId),
       env.DB.prepare(
-        'INSERT OR IGNORE INTO form_versions (id,event_id,form_id,version_number,schema_json,routing_json,settings_snapshot_json,status,published_at,created_by_person_id) VALUES (\'clone-form-v1\',?,\'clone-form\',1,\'{"components":[]}\',\'{"passwordHash":"source-password-hash"}\',\'{"publicSlug":"clone-form-public","closesAt":1893456000,"accessMode":"password_protected"}\',\'published\',unixepoch(),?)',
+        'INSERT OR IGNORE INTO form_versions (id,event_id,form_id,version_number,schema_json,routing_json,settings_snapshot_json,status,published_at,created_by_person_id) VALUES (\'clone-form-v1\',?,\'clone-form\',1,\'{"components":[]}\',\'{"categories":{},"trackIds":{},"trackNames":{},"teamNames":{},"directSessionDurationMinutes":null,"passwordHash":"source-password-hash"}\',\'{"publicSlug":"clone-form-public","closesAt":1893456000,"accessMode":"password_protected"}\',\'published\',unixepoch(),?)',
       ).bind(viewer.eventId, viewer.personId),
       env.DB.prepare(
         "INSERT OR IGNORE INTO form_definitions (id,event_id,name,kind,status,public_slug,min_speakers,access_mode,created_by_person_id) VALUES ('clone-archived-form',?,'Old form','submission','archived','clone-archived-form-public',1,'email_verified',?)",
       ).bind(viewer.eventId, viewer.personId),
       env.DB.prepare(
-        "INSERT OR IGNORE INTO form_versions (id,event_id,form_id,version_number,schema_json,routing_json,settings_snapshot_json,status,created_by_person_id) VALUES ('clone-archived-form-v1',?,'clone-archived-form',1,'{\"components\":[]}','{}','{}','draft',?)",
+        'INSERT OR IGNORE INTO form_versions (id,event_id,form_id,version_number,schema_json,routing_json,settings_snapshot_json,status,created_by_person_id) VALUES (\'clone-archived-form-v1\',?,\'clone-archived-form\',1,\'{"components":[]}\',\'{"categories":{},"trackIds":{},"trackNames":{},"teamNames":{},"directSessionDurationMinutes":null,"passwordHash":null}\',\'{}\',\'draft\',?)',
       ).bind(viewer.eventId, viewer.personId),
+      env.DB.prepare(
+        `UPDATE form_versions
+            SET routing_json = '{"categories":{},"trackIds":{},"trackNames":{},"teamNames":{},"directSessionDurationMinutes":null,"passwordHash":"source-password-hash"}'
+          WHERE id = 'clone-form-v1' AND event_id = ?`,
+      ).bind(viewer.eventId),
       env.DB.prepare(
         "INSERT OR IGNORE INTO communication_templates (id,event_id,name,category,status,created_by_person_id) VALUES ('clone-archived-comm',?,'Old reminder','task_reminder','archived',?)",
       ).bind(viewer.eventId, viewer.personId),
@@ -403,7 +410,9 @@ describe("event cloning", () => {
           WHERE id = 'clone-form-v1' AND event_id = ?`,
       ).bind(
         JSON.stringify({
-          categories: { Accessibility: "source-evaluation-team" },
+          categories: { Operations: "source-evaluation-team" },
+          trackIds: { Operations: "clone-track" },
+          trackNames: { "clone-track": "Operations" },
           teamNames: { "source-evaluation-team": "Source review team" },
           directSessionDurationMinutes: 75,
           passwordHash: "source-password-hash",
@@ -438,14 +447,18 @@ describe("event cloning", () => {
     });
 
     const routing = await env.DB.prepare(
-      `SELECT routing_json AS routingJson
-         FROM form_versions
-        WHERE event_id = ?`,
+      `SELECT version.routing_json AS routingJson, track.id AS clonedTrackId
+         FROM form_versions version
+         JOIN tracks track ON track.event_id = version.event_id
+          AND track.slug = 'operations'
+        WHERE version.event_id = ?`,
     )
       .bind(cloned.eventId)
-      .first<{ routingJson: string }>();
+      .first<{ routingJson: string; clonedTrackId: string }>();
     expect(JSON.parse(routing!.routingJson)).toEqual({
       categories: {},
+      trackIds: { Operations: routing!.clonedTrackId },
+      trackNames: { [routing!.clonedTrackId]: "Operations" },
       teamNames: {},
       directSessionDurationMinutes: 75,
       passwordHash: null,
@@ -555,5 +568,54 @@ describe("event cloning", () => {
         .bind("invalid-configuration-copy")
         .first(),
     ).resolves.toBeNull();
+  });
+
+  it("recognizes cloned travel onboarding presets without creating duplicates", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await testEnv.DB.prepare(
+      "UPDATE events SET session_formats_json = ? WHERE id = ?",
+    )
+      .bind(INITIAL_EVENT_SESSION_FORMATS_JSON, viewer.eventId)
+      .run();
+    await new TaskService(testEnv).createTravelOnboardingTemplates(
+      viewer,
+      true,
+    );
+    const token = crypto.randomUUID().slice(0, 8);
+    const cloned = await new EventCloneService(testEnv).clone(viewer, {
+      name: `Travel preset clone ${token}`,
+      slug: `travel-preset-clone-${token}`,
+      timezone: "America/Toronto",
+      startDate: "2027-05-20",
+      endDate: "2027-05-22",
+    });
+    const clonedViewer = { ...viewer, eventId: cloned.eventId };
+    const before = await testEnv.DB.prepare(
+      `SELECT id, json_extract(configuration_json, '$.preset') AS preset
+         FROM task_templates
+        WHERE event_id = ?
+          AND json_extract(configuration_json, '$.preset') IS NOT NULL
+        ORDER BY preset`,
+    )
+      .bind(cloned.eventId)
+      .all<{ id: string; preset: string }>();
+    expect(before.results).toHaveLength(2);
+
+    const result = await new TaskService(
+      testEnv,
+    ).createTravelOnboardingTemplates(clonedViewer, true);
+
+    expect(result.createdTemplateIds).toEqual([]);
+    expect(result.flightTemplateId).toBe(before.results[0]?.id);
+    expect(result.hotelTemplateId).toBe(before.results[1]?.id);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM task_templates
+          WHERE event_id = ?
+            AND json_extract(configuration_json, '$.preset') IS NOT NULL`,
+      )
+        .bind(cloned.eventId)
+        .first<{ count: number }>(),
+    ).resolves.toEqual({ count: 2 });
   });
 });

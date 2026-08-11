@@ -3605,6 +3605,55 @@
         "properties": {
           "id": {
             "type": "string"
+          },
+          "tracks": {
+            "type": "array",
+            "description": "Ordered immutable event-track selections on submission records.",
+            "items": {
+              "$ref": "#/components/schemas/SubmissionTrackSelection"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "SubmissionTrackSelection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "position"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "AdministrationSubmissionRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "tracks"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubmissionTrackSelection"
+            }
           }
         },
         "additionalProperties": true
@@ -4316,7 +4365,7 @@
           "submissions": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ApiRecord"
+              "$ref": "#/components/schemas/AdministrationSubmissionRecord"
             }
           },
           "forms": {
@@ -6463,6 +6512,10 @@
             "type": "string",
             "maxLength": 4000
           },
+          "includeReviewerFeedback": {
+            "default": false,
+            "type": "boolean"
+          },
           "confirmedWithoutReview": {
             "default": false,
             "type": "boolean"
@@ -6732,6 +6785,28 @@
                   "maxLength": 100
                 }
               },
+              "trackIds": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                }
+              },
+              "trackNames": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                }
+              },
               "teamNames": {
                 "default": {},
                 "type": "object",
@@ -6770,7 +6845,9 @@
               }
             },
             "required": [
-              "categories"
+              "categories",
+              "trackIds",
+              "trackNames"
             ],
             "additionalProperties": false
           }
@@ -7272,6 +7349,104 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "configuration": {
+            "default": {},
+            "type": "object",
+            "properties": {
+              "preset": {
+                "type": "string",
+                "enum": [
+                  "speaker_travel_hotel_v1",
+                  "speaker_travel_flight_v1"
+                ]
+              },
+              "form": {
+                "type": "object",
+                "properties": {
+                  "fields": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{1,39}$"
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "short_text",
+                            "long_text",
+                            "date",
+                            "boolean",
+                            "select"
+                          ]
+                        },
+                        "required": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "help": {
+                          "default": "",
+                          "type": "string",
+                          "maxLength": 300
+                        },
+                        "options": {
+                          "default": [],
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          }
+                        },
+                        "requiredWhen": {
+                          "type": "object",
+                          "properties": {
+                            "fieldId": {
+                              "type": "string",
+                              "pattern": "^[a-z][a-z0-9_]{1,39}$"
+                            },
+                            "equals": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 100
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "fieldId",
+                            "equals"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "type"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "fields"
+                ]
+              }
+            }
           }
         },
         "required": [
@@ -7643,6 +7818,24 @@
             "type": "string",
             "maxLength": 1000,
             "format": "uri"
+          },
+          "responses": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
           }
         },
         "required": [

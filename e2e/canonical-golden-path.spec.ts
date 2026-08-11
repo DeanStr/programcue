@@ -83,6 +83,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
   test("publishes category routing and submits into the active review round", async ({
     page,
   }) => {
+    test.setTimeout(45_000);
     await switchDemoRole(page, "administrator");
     await waitForInterface(page, "/admin/review");
     await page.getByText("Create evaluation team", { exact: true }).click();
@@ -109,9 +110,19 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     const routing = page.locator("section").filter({
       has: page.getByRole("heading", { name: "Field settings" }),
     });
-    await routing.getByLabel("Event Operations").selectOption({
-      label: TEAM_NAME,
+    const formStructure = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Form structure" }),
     });
+    await formStructure.getByRole("button", { name: /Tracks/ }).click();
+    await expect(
+      routing.getByRole("checkbox", { name: "Event Operations" }),
+    ).toBeChecked();
+    await routing.getByRole("checkbox", { name: "Leadership" }).uncheck();
+    await routing
+      .getByRole("combobox", { name: "Event Operations" })
+      .selectOption({
+        label: TEAM_NAME,
+      });
     await page.getByRole("button", { name: "Save draft" }).click();
     await expectStatus(page, "Draft form saved to D1");
     await page.getByRole("button", { name: "Publish version" }).click();
@@ -120,6 +131,17 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       .getByRole("button", { name: "Confirm publication" })
       .click();
     await expectStatus(page, "Published a new immutable form version");
+
+    await waitForInterface(page, "/admin/tasks");
+    await page.getByLabel(/I confirm these forms should be created/i).check();
+    await page.getByRole("button", { name: "Create travel forms" }).click();
+    await expectStatus(
+      page,
+      "Hotel stay and flight reimbursement forms are ready",
+    );
+    await page.getByLabel(/I confirm these forms should be created/i).check();
+    await page.getByRole("button", { name: "Create travel forms" }).click();
+    await expectStatus(page, "were already ready. No duplicates were created");
 
     await waitForInterface(page, "/apply/form");
     await page.getByLabel("Email address").fill(APPLICANT_EMAIL);
@@ -145,9 +167,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       .fill(
         "A practical operating model for accountable handoffs across programme, speaker and venue teams.",
       );
-    await page
-      .getByLabel("Session category *")
-      .selectOption("Event Operations");
+    await page.getByLabel("Event Operations").check();
     await page.getByLabel("Format *").selectOption("Presentation");
     await page.getByLabel("Speaker 1 name").fill(SPEAKER_NAME);
     await page.getByRole("button", { name: "Save draft" }).click();
@@ -231,6 +251,9 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       .getByLabel("Rationale")
       .fill("Two completed rounds support programme acceptance.");
     await decision
+      .getByLabel("Include submitted reviewer feedback in the decision email")
+      .check();
+    await decision
       .getByLabel("Acceptance session duration (minutes)")
       .fill("60");
     await decision.getByRole("button", { name: "Release decision" }).click();
@@ -247,7 +270,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       "1",
     );
     await expect(speakerRow.locator('td[data-label="Tasks"]')).toContainText(
-      "3 outstanding",
+      "5 outstanding",
     );
 
     await waitForInterface(page, "/admin/tasks");
@@ -255,6 +278,8 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       "Complete your speaker profile",
       "Upload presentation slides",
       "Read the speaker handbook",
+      "Hotel stay requirements",
+      "Flight reimbursement",
     ]) {
       const taskRow = page.getByRole("row", {
         name: new RegExp(`${taskTitle}.*${SPEAKER_NAME}`, "i"),

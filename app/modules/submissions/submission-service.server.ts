@@ -108,7 +108,7 @@ const manualApplicationSchema = z.object({
   idempotencyKey: adminIdempotencyKeySchema,
   title: z.string().trim().min(3).max(180),
   description: z.string().trim().min(1).max(5_000),
-  category: z.string().trim().min(1).max(80),
+  trackId: z.string().trim().min(1).max(100),
   format: z.string().trim().min(1).max(80),
   submitterName: z.string().trim().min(1).max(120),
   submitterEmail: z.string().trim().toLowerCase().email().max(254),
@@ -354,7 +354,13 @@ export class SubmissionService {
     return form?.publicSlug ?? null;
   }
 
-  defaultFormInput(accessMode: SaveFormInput["accessMode"]): SaveFormInput {
+  defaultFormInput(
+    accessMode: SaveFormInput["accessMode"],
+    tracks: Array<{ id: string; name: string }>,
+  ): SaveFormInput {
+    const schema = structuredClone(DEFAULT_FORM_SCHEMA);
+    const trackField = schema.fields.find((field) => field.id === "category")!;
+    trackField.options = tracks.map((track) => track.name);
     return {
       name: "Call for Speakers",
       kind: "submission",
@@ -365,9 +371,15 @@ export class SubmissionService {
       maxSpeakers: 4,
       accessMode,
       accessPassword: "",
-      schema: DEFAULT_FORM_SCHEMA,
+      schema,
       routing: {
         categories: {},
+        trackIds: Object.fromEntries(
+          tracks.map((track) => [track.name, track.id]),
+        ),
+        trackNames: Object.fromEntries(
+          tracks.map((track) => [track.id, track.name]),
+        ),
         teamNames: {},
         directSessionDurationMinutes: null,
         passwordHash: null,
@@ -377,15 +389,18 @@ export class SubmissionService {
 
   async getDefaultFormInput(viewer: Viewer) {
     await this.airtable.assertReadable(viewer);
-    const event = await this.env.DB.prepare(
-      `SELECT submission_access_mode AS accessMode
-         FROM events
-        WHERE id = ? AND organisation_id = ?`,
-    )
-      .bind(viewer.eventId, viewer.organisationId)
-      .first<{ accessMode: SaveFormInput["accessMode"] }>();
+    const [event, tracks] = await Promise.all([
+      this.env.DB.prepare(
+        `SELECT submission_access_mode AS accessMode
+           FROM events
+          WHERE id = ? AND organisation_id = ?`,
+      )
+        .bind(viewer.eventId, viewer.organisationId)
+        .first<{ accessMode: SaveFormInput["accessMode"] }>(),
+      this.listRoutingTracks(viewer),
+    ]);
     if (!event) throw new Response("Event not found", { status: 404 });
-    return this.defaultFormInput(event.accessMode);
+    return this.defaultFormInput(event.accessMode, tracks);
   }
 
   async saveForm(
@@ -445,6 +460,28 @@ export class SubmissionService {
     },
   ) {
     const input = saveFormSchema.parse(rawInput);
+    const categoryField = input.schema.fields.find(
+      (field) => field.id === "category",
+    )!;
+    const configuredTracks = await this.listRoutingTracks(viewer);
+    const tracksByName = new Map<string, Array<{ id: string; name: string }>>();
+    for (const track of configuredTracks) {
+      tracksByName.set(track.name, [
+        ...(tracksByName.get(track.name) ?? []),
+        track,
+      ]);
+    }
+    const selectedTracks = categoryField.options.map((name) => {
+      const matches = tracksByName.get(name) ?? [];
+      if (matches.length !== 1) {
+        throw new SubmissionStateError(
+          matches.length === 0
+            ? `Track “${name}” is not configured for this event.`
+            : `Track name “${name}” is ambiguous. Give every event track a unique name before using it in a form.`,
+        );
+      }
+      return matches[0]!;
+    });
     if (input.kind === "direct_session") {
       const { formats: configuredFormats } =
         await this.getConfiguredSessionFormatSnapshotD1(viewer);
@@ -519,7 +556,7 @@ export class SubmissionService {
         .all<{ id: string; name: string }>();
       if (teams.results.length !== configuredTeamIds.length) {
         throw new SubmissionStateError(
-          "Every category route must reference an active evaluation team in this event.",
+          "Every track route must reference an active evaluation team in this event.",
         );
       }
       teamNames = Object.fromEntries(
@@ -528,6 +565,12 @@ export class SubmissionService {
     }
     const routing = routingSchema.parse({
       ...input.routing,
+      trackIds: Object.fromEntries(
+        selectedTracks.map((track) => [track.name, track.id]),
+      ),
+      trackNames: Object.fromEntries(
+        selectedTracks.map((track) => [track.id, track.name]),
+      ),
       teamNames,
       passwordHash,
     });
@@ -649,6 +692,55 @@ export class SubmissionService {
         "Set and save an access password before publishing this form.",
       );
     }
+    const trackField = workspace.draftVersion.schema.fields.find(
+      (field) => field.id === "category",
+    )!;
+    if (trackField.options.length === 0) {
+      throw new SubmissionStateError(
+        "Configure at least one selectable event track before publishing this form.",
+      );
+    }
+    const mappedTrackIds = trackField.options.map((trackName) => {
+      const trackId = workspace.draftVersion.routing.trackIds[trackName];
+      if (
+        !trackId ||
+        workspace.draftVersion.routing.trackNames[trackId] !== trackName
+      ) {
+        throw new SubmissionStateError(
+          "The form's track identities are incomplete. Save the form again before publishing.",
+        );
+      }
+      return trackId;
+    });
+    const currentTracks = await this.env.DB.prepare(
+      `SELECT track.id, track.name
+         FROM tracks track
+         JOIN events event
+           ON event.id = track.event_id AND event.organisation_id = ?
+        WHERE track.event_id = ?
+          AND track.id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
+    )
+      .bind(
+        viewer.organisationId,
+        viewer.eventId,
+        JSON.stringify(mappedTrackIds),
+      )
+      .all<{ id: string; name: string }>();
+    const currentTrackNames = new Map(
+      currentTracks.results.map((track) => [track.id, track.name]),
+    );
+    if (
+      currentTracks.results.length !== mappedTrackIds.length ||
+      mappedTrackIds.some(
+        (trackId) =>
+          currentTrackNames.get(trackId) !==
+          workspace.draftVersion.routing.trackNames[trackId],
+      )
+    ) {
+      throw new SubmissionStateError(
+        "An event track changed after this form draft was saved. Save the form again before publishing.",
+      );
+    }
     let expectedSessionFormatsJson: string | null = null;
     if (workspace.kind === "direct_session") {
       const formatSnapshot =
@@ -688,7 +780,7 @@ export class SubmissionService {
         .all<{ id: string; name: string }>();
       if (teams.results.length !== configuredTeamIds.length) {
         throw new SubmissionStateError(
-          "Every category route must reference an active evaluation team in this event.",
+          "Every track route must reference an active evaluation team in this event.",
         );
       }
       const names = new Map(teams.results.map((team) => [team.id, team.name]));
@@ -726,6 +818,20 @@ export class SubmissionService {
       .bind(viewer.organisationId, viewer.eventId)
       .all<{ id: string; name: string }>();
     return teams.results;
+  }
+
+  async listRoutingTracks(viewer: Viewer) {
+    await this.airtable.assertReadable(viewer);
+    const tracks = await this.env.DB.prepare(
+      `SELECT track.id, track.name
+         FROM tracks track
+         JOIN events event ON event.id = track.event_id AND event.organisation_id = ?
+        WHERE track.event_id = ?
+        ORDER BY track.position, track.name, track.id`,
+    )
+      .bind(viewer.organisationId, viewer.eventId)
+      .all<{ id: string; name: string }>();
+    return tracks.results;
   }
 
   async getPublicForm(publicSlug: string) {
@@ -1144,17 +1250,20 @@ export class SubmissionService {
 
   private async resolveAutomaticRouting(
     form: Pick<PublicForm, "eventId">,
-    teamId: string,
+    teamIds: string[],
   ) {
-    const team = await this.env.DB.prepare(
+    const uniqueTeamIds = [...new Set(teamIds)];
+    if (!uniqueTeamIds.length) return null;
+    const teams = await this.env.DB.prepare(
       `SELECT id FROM evaluation_teams
-        WHERE id = ? AND event_id = ? AND status = 'active'`,
+        WHERE event_id = ? AND status = 'active'
+          AND id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
     )
-      .bind(teamId, form.eventId)
-      .first<{ id: string }>();
-    if (!team) {
+      .bind(form.eventId, JSON.stringify(uniqueTeamIds))
+      .all<{ id: string }>();
+    if (teams.results.length !== uniqueTeamIds.length) {
       throw new SubmissionStateError(
-        "The evaluation team configured for this category is no longer active. Your draft was not submitted.",
+        "An evaluation team configured for a selected track is no longer active. Your draft was not submitted.",
       );
     }
     const rounds = await this.env.DB.prepare(
@@ -1171,12 +1280,12 @@ export class SubmissionService {
     if (rounds.results.length !== 1) {
       throw new SubmissionStateError(
         rounds.results.length === 0
-          ? "Automatic category routing requires one active evaluation round. Activate a round before applications are submitted."
-          : "Automatic category routing is ambiguous because this event has more than one active evaluation round.",
+          ? "Automatic track routing requires one active evaluation round. Activate a round before applications are submitted."
+          : "Automatic track routing is ambiguous because this event has more than one active evaluation round.",
       );
     }
     const members = await this.env.DB.prepare(
-      `SELECT member.person_id AS personId,
+      `SELECT member.team_id AS teamId, member.person_id AS personId,
               EXISTS (
                 SELECT 1 FROM memberships membership
                  WHERE membership.event_id = member.event_id
@@ -1186,16 +1295,19 @@ export class SubmissionService {
                    AND membership.revoked_at IS NULL
               ) AS eligible
          FROM evaluation_team_members member
-        WHERE member.team_id = ? AND member.event_id = ?
+        WHERE member.event_id = ?
+          AND member.team_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
           AND member.removed_at IS NULL
-        ORDER BY member.person_id`,
+        ORDER BY member.team_id, member.person_id`,
     )
-      .bind(teamId, form.eventId)
-      .all<{ personId: string; eligible: number }>();
-    if (!members.results.length) {
-      throw new SubmissionStateError(
-        "The evaluation team configured for this category has no active members. Your draft was not submitted.",
-      );
+      .bind(form.eventId, JSON.stringify(uniqueTeamIds))
+      .all<{ teamId: string; personId: string; eligible: number }>();
+    for (const teamId of uniqueTeamIds) {
+      if (!members.results.some((member) => member.teamId === teamId)) {
+        throw new SubmissionStateError(
+          "An evaluation team configured for a selected track has no active members. Your draft was not submitted.",
+        );
+      }
     }
     if (members.results.some((member) => !member.eligible)) {
       throw new SubmissionStateError(
@@ -1203,9 +1315,23 @@ export class SubmissionService {
       );
     }
     return {
-      teamId,
       roundId: rounds.results[0]!.id,
-      evaluatorPersonIds: members.results.map((member) => member.personId),
+      teamIds: uniqueTeamIds,
+      assignments: [
+        ...new Map(
+          uniqueTeamIds.flatMap((teamId) =>
+            members.results
+              .filter((member) => member.teamId === teamId)
+              .map(
+                (member) =>
+                  [
+                    member.personId,
+                    { teamId, evaluatorPersonId: member.personId },
+                  ] as const,
+              ),
+          ),
+        ).values(),
+      ],
     };
   }
 
@@ -1307,14 +1433,37 @@ export class SubmissionService {
     if (Object.keys(errors).length) {
       throw answerValidationError(errors);
     }
-    const category = String(submittedPayload.answers.category ?? "");
-    const routedTeamId =
+    const selectedTrackNames = Array.isArray(submittedPayload.answers.category)
+      ? submittedPayload.answers.category
+      : [];
+    if (form.kind === "direct_session" && selectedTrackNames.length !== 1) {
+      throw new SubmissionStateError(
+        "Choose exactly one track for a direct session. A scheduled session cannot silently discard additional track choices.",
+      );
+    }
+    const trackSelections = selectedTrackNames.map((trackName) => {
+      const trackId = form.version.routing.trackIds[trackName];
+      if (!trackId || form.version.routing.trackNames[trackId] !== trackName) {
+        throw new SubmissionStateError(
+          `Track “${trackName}” is no longer valid for this form version.`,
+        );
+      }
+      return { trackId, trackName };
+    });
+    const routedTeamIds =
       form.kind === "submission"
-        ? (form.version.routing.categories[category] ?? null)
-        : null;
-    const routingAssignment = routedTeamId
-      ? await this.resolveAutomaticRouting(form, routedTeamId)
-      : null;
+        ? [
+            ...new Set(
+              selectedTrackNames
+                .map((trackName) => form.version.routing.categories[trackName])
+                .filter((teamId): teamId is string => Boolean(teamId)),
+            ),
+          ]
+        : [];
+    const routingAssignment = await this.resolveAutomaticRouting(
+      form,
+      routedTeamIds,
+    );
     for (const [fieldId, reference] of Object.entries(
       submittedPayload.uploads,
     )) {
@@ -1372,7 +1521,8 @@ export class SubmissionService {
       }
     }
     return this.repository.submitDraft(form, applicant, submittedPayload, {
-      routedTeamId,
+      trackSelections,
+      routedTeamIds,
       routingAssignment,
       upload:
         Object.entries(submittedPayload.uploads).map(
@@ -2288,6 +2438,18 @@ export class SubmissionService {
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ id: string }>();
     if (!event) throw new Response("Event not found", { status: 404 });
+    const track = await this.env.DB.prepare(
+      `SELECT track.id, track.name
+         FROM tracks track
+        WHERE track.id = ? AND track.event_id = ?`,
+    )
+      .bind(input.trackId, viewer.eventId)
+      .first<{ id: string; name: string }>();
+    if (!track) {
+      throw new SubmissionStateError(
+        "The selected track is unavailable in this event.",
+      );
+    }
     const routedTeam = input.routedTeamId
       ? await this.env.DB.prepare(
           `SELECT id, name FROM evaluation_teams
@@ -2302,10 +2464,9 @@ export class SubmissionService {
       );
     }
     const routingAssignment = input.routedTeamId
-      ? await this.resolveAutomaticRouting(
-          { eventId: viewer.eventId },
+      ? await this.resolveAutomaticRouting({ eventId: viewer.eventId }, [
           input.routedTeamId,
-        )
+        ])
       : null;
     const submissionId = crypto.randomUUID();
     const operationId = crypto.randomUUID();
@@ -2344,7 +2505,7 @@ export class SubmissionService {
     const answers = {
       title: input.title,
       description: input.description,
-      category: input.category,
+      category: [track.name],
       format: input.format,
     };
     const manualSchema = {
@@ -2358,7 +2519,7 @@ export class SubmissionService {
           required: true,
           condition: null,
           ...(field.id === "category"
-            ? { options: [input.category] }
+            ? { options: [track.name] }
             : field.id === "format"
               ? { options: [input.format] }
               : {}),
@@ -2370,8 +2531,10 @@ export class SubmissionService {
       schema: manualSchema,
       routing: {
         categories: input.routedTeamId
-          ? { [input.category]: input.routedTeamId }
+          ? { [track.name]: input.routedTeamId }
           : {},
+        trackIds: { [track.name]: track.id },
+        trackNames: { [track.id]: track.name },
         teamNames:
           input.routedTeamId && routedTeam
             ? { [input.routedTeamId]: routedTeam.name }
@@ -2398,6 +2561,10 @@ export class SubmissionService {
                   unixepoch(), unixepoch(), unixepoch()
             WHERE EXISTS (
                 SELECT 1 FROM events WHERE id = ? AND organisation_id = ?
+              )
+              AND EXISTS (
+                SELECT 1 FROM tracks track
+                 WHERE track.id = ? AND track.event_id = ?
               )
               AND (
                 ? IS NULL OR EXISTS (
@@ -2458,7 +2625,7 @@ export class SubmissionService {
         input.routedTeamId,
         `PC-MANUAL-${submissionId.slice(0, 8).toUpperCase()}`,
         input.title,
-        input.category,
+        track.name,
         input.format,
         routingAssignment ? "assigned" : "submitted",
         JSON.stringify(answers),
@@ -2466,6 +2633,8 @@ export class SubmissionService {
         operationId,
         viewer.eventId,
         viewer.organisationId,
+        track.id,
+        viewer.eventId,
         input.routedTeamId,
         input.routedTeamId,
         viewer.eventId,
@@ -2473,12 +2642,12 @@ export class SubmissionService {
         routingAssignment?.roundId ?? null,
         viewer.eventId,
         viewer.eventId,
-        routingAssignment?.teamId ?? null,
+        routingAssignment?.teamIds[0] ?? null,
         viewer.eventId,
-        routingAssignment?.evaluatorPersonIds.length ?? 0,
-        routingAssignment?.teamId ?? null,
+        routingAssignment?.assignments.length ?? 0,
+        routingAssignment?.teamIds[0] ?? null,
         viewer.eventId,
-        routingAssignment?.evaluatorPersonIds.length ?? 0,
+        routingAssignment?.assignments.length ?? 0,
         command.recordId,
         command.organisationId,
         command.eventId,
@@ -2486,6 +2655,49 @@ export class SubmissionService {
         command.scope,
         command.idempotencyKey,
         command.requestHash,
+      ),
+    );
+    if (input.routedTeamId) {
+      statements.push(
+        this.env.DB.prepare(
+          `INSERT INTO submission_routing_teams (submission_id, event_id, team_id)
+           SELECT ?, ?, ? WHERE EXISTS (
+             SELECT 1 FROM submissions
+              WHERE id = ? AND event_id = ? AND last_operation_id = ? AND status = 'assigned'
+           )`,
+        ).bind(
+          submissionId,
+          viewer.eventId,
+          input.routedTeamId,
+          submissionId,
+          viewer.eventId,
+          operationId,
+        ),
+      );
+    }
+    statements.push(
+      this.env.DB.prepare(
+        `INSERT INTO submission_track_selections (
+           submission_id, event_id, track_id, track_name_snapshot, position
+         )
+         SELECT ?, ?, ?, ?, 0 WHERE EXISTS (
+           SELECT 1 FROM submissions
+            WHERE id = ? AND event_id = ? AND last_operation_id = ?
+              AND status <> 'draft'
+         ) AND EXISTS (
+           SELECT 1 FROM tracks
+            WHERE id = ? AND event_id = ?
+         )`,
+      ).bind(
+        submissionId,
+        viewer.eventId,
+        track.id,
+        track.name,
+        submissionId,
+        viewer.eventId,
+        operationId,
+        track.id,
+        viewer.eventId,
       ),
     );
     statements.push(
@@ -2580,7 +2792,7 @@ export class SubmissionService {
       );
     });
     if (routingAssignment) {
-      for (const evaluatorPersonId of routingAssignment.evaluatorPersonIds) {
+      for (const assignment of routingAssignment.assignments) {
         statements.push(
           this.env.DB.prepare(
             `INSERT INTO evaluator_assignments (
@@ -2625,18 +2837,18 @@ export class SubmissionService {
             viewer.eventId,
             routingAssignment.roundId,
             submissionId,
-            evaluatorPersonId,
-            routingAssignment.teamId,
+            assignment.evaluatorPersonId,
+            assignment.teamId,
             operationId,
             submissionId,
             viewer.eventId,
-            routingAssignment.teamId,
+            assignment.teamId,
             operationId,
             routingAssignment.roundId,
             viewer.eventId,
-            routingAssignment.teamId,
+            assignment.teamId,
             viewer.eventId,
-            evaluatorPersonId,
+            assignment.evaluatorPersonId,
           ),
         );
       }
@@ -2651,7 +2863,7 @@ export class SubmissionService {
             WHERE (
               SELECT COUNT(*) FROM evaluator_assignments assignment
                WHERE assignment.event_id = ? AND assignment.round_id = ?
-                 AND assignment.submission_id = ? AND assignment.team_id = ?
+                 AND assignment.submission_id = ?
                  AND assignment.last_operation_id = ?
             ) = ?`,
         ).bind(
@@ -2662,15 +2874,14 @@ export class SubmissionService {
           submissionId,
           JSON.stringify({
             roundId: routingAssignment.roundId,
-            teamId: routingAssignment.teamId,
-            evaluatorCount: routingAssignment.evaluatorPersonIds.length,
+            teamIds: routingAssignment.teamIds,
+            evaluatorCount: routingAssignment.assignments.length,
           }),
           viewer.eventId,
           routingAssignment.roundId,
           submissionId,
-          routingAssignment.teamId,
           operationId,
-          routingAssignment.evaluatorPersonIds.length,
+          routingAssignment.assignments.length,
         ),
       );
     }
@@ -2766,6 +2977,87 @@ export class SubmissionService {
       accessPassword: "",
       schema: workspace.draftVersion.schema,
       routing: { ...workspace.draftVersion.routing, passwordHash: null },
+    };
+  }
+
+  static synchronizeFormTrackChoices(
+    input: SaveFormInput,
+    currentTracks: Array<{ id: string; name: string }>,
+  ): SaveFormInput {
+    const trackField = input.schema.fields.find(
+      (field) => field.id === "category",
+    );
+    if (!trackField) {
+      throw new SubmissionStateError(
+        "This form draft is missing its protected tracks field.",
+      );
+    }
+    if (
+      new Set(currentTracks.map((track) => track.id)).size !==
+        currentTracks.length ||
+      new Set(currentTracks.map((track) => track.name)).size !==
+        currentTracks.length
+    ) {
+      throw new SubmissionStateError(
+        "Event track IDs and names must be unique before editing submission forms.",
+      );
+    }
+    const trackIdForSavedName = (trackName: string) => {
+      const trackId = input.routing.trackIds[trackName];
+      if (!trackId || input.routing.trackNames[trackId] !== trackName) {
+        throw new SubmissionStateError(
+          "This form draft has inconsistent saved event-track identity. Repair the draft before editing it.",
+        );
+      }
+      return trackId;
+    };
+    const selectedTrackIds = new Set(
+      trackField.options.map(trackIdForSavedName),
+    );
+    if (selectedTrackIds.size !== trackField.options.length) {
+      throw new SubmissionStateError(
+        "This form draft maps multiple track choices to the same event track.",
+      );
+    }
+    const routedTeamByTrackId = new Map<string, string>();
+    for (const [trackName, teamId] of Object.entries(
+      input.routing.categories,
+    )) {
+      if (!trackField.options.includes(trackName)) {
+        throw new SubmissionStateError(
+          "This form draft contains a review route for an unavailable track choice.",
+        );
+      }
+      routedTeamByTrackId.set(trackIdForSavedName(trackName), teamId);
+    }
+    const selectedTracks = currentTracks.filter((track) =>
+      selectedTrackIds.has(track.id),
+    );
+    return {
+      ...input,
+      schema: {
+        ...input.schema,
+        fields: input.schema.fields.map((field) =>
+          field.id === "category"
+            ? { ...field, options: selectedTracks.map((track) => track.name) }
+            : field,
+        ),
+      },
+      routing: {
+        ...input.routing,
+        categories: Object.fromEntries(
+          selectedTracks.flatMap((track) => {
+            const teamId = routedTeamByTrackId.get(track.id);
+            return teamId ? [[track.name, teamId]] : [];
+          }),
+        ),
+        trackIds: Object.fromEntries(
+          selectedTracks.map((track) => [track.name, track.id]),
+        ),
+        trackNames: Object.fromEntries(
+          selectedTracks.map((track) => [track.id, track.name]),
+        ),
+      },
     };
   }
 }

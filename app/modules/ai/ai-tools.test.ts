@@ -40,6 +40,44 @@ describe("AI tool authority boundary", () => {
     expect(assertReadable).toHaveBeenCalledWith(viewer);
   });
 
+  it("finds a submission by any selected track", async () => {
+    const workerEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(workerEnv);
+    await workerEnv.DB.batch([
+      workerEnv.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, public_reference, title, category, status,
+           submitted_snapshot_json, submitted_at
+         ) VALUES (
+           'ai-multi-track-submission', ?, 'AI-MULTI-TRACK',
+           'A searchable multi-track proposal', 'Leadership', 'submitted',
+           '{}', unixepoch()
+         )`,
+      ).bind(viewer.eventId),
+      workerEnv.DB.prepare(
+        `INSERT INTO submission_track_selections (
+           submission_id, event_id, track_id, track_name_snapshot, position
+         ) VALUES
+           ('ai-multi-track-submission', ?, 'demo-track-leadership', 'Leadership', 0),
+           ('ai-multi-track-submission', ?, 'demo-track-experience', 'Experience Design', 1)`,
+      ).bind(viewer.eventId, viewer.eventId),
+    ]);
+
+    const execution = await new AiToolExecutor(
+      workerEnv,
+      viewer,
+      crypto.randomUUID(),
+      "test-model",
+    ).execute(
+      "search_submissions",
+      JSON.stringify({ query: "Experience Design", limit: 10 }),
+    );
+
+    expect(execution.evidence).toContainEqual(
+      expect.objectContaining({ id: "submission:ai-multi-track-submission" }),
+    );
+  });
+
   it("persists the exact Accelevents provider target and rejects approval after it changes", async () => {
     const workerEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(workerEnv);

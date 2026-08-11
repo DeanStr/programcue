@@ -1309,7 +1309,8 @@ export class ParticipantRetentionService {
       ),
       guarded(
         `UPDATE submission_decisions
-            SET rationale = NULL, effect_preview_json = ?, idempotency_key = NULL
+            SET rationale = NULL, notification_feedback_json = '[]',
+                effect_preview_json = ?, idempotency_key = NULL
           WHERE event_id = ?`,
         REDACTED_JSON,
         viewer.eventId,

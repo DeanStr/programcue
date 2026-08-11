@@ -14,6 +14,7 @@ import {
 import {
   participantEvidenceSchema,
   taskEvidenceUrlSchema,
+  taskTemplateConfigurationSchema,
   taskTemplateInputSchema,
 } from "./task-schema";
 
@@ -44,6 +45,11 @@ export function taskTemplateIdForIntent(eventId: string, intentId: string) {
     );
   return `task-template:${normalizedEventId.length}:${normalizedEventId}:${normalizedIntentId}`;
 }
+
+const TRAVEL_ONBOARDING_TEMPLATE_INTENTS = {
+  hotel: "preset:travel-onboarding:v1:hotel",
+  flight: "preset:travel-onboarding:v1:flight",
+} as const;
 
 type TemplateRow = {
   id: string;
@@ -97,6 +103,7 @@ type TaskRow = {
   completedAt: number | null;
   completedByPersonId: string | null;
   lastOperationId: string | null;
+  configurationJson: string;
 };
 
 const completionUndoResultSchema = z.object({
@@ -160,6 +167,65 @@ function equalHash(left: string, right: string) {
   return difference === 0;
 }
 
+function structuredTaskForm(configurationJson: string) {
+  try {
+    return taskTemplateConfigurationSchema.parse(JSON.parse(configurationJson))
+      .form;
+  } catch {
+    throw new TaskStateError(
+      "This task has invalid structured-form configuration. Ask an administrator to repair the template.",
+    );
+  }
+}
+
+function structuredTaskEvidence(
+  configurationJson: string,
+  responses: Record<string, string | boolean>,
+) {
+  const form = structuredTaskForm(configurationJson);
+  if (!form) return null;
+  const allowedIds = new Set(form.fields.map((field) => field.id));
+  if (Object.keys(responses).some((fieldId) => !allowedIds.has(fieldId))) {
+    throw new TaskStateError(
+      "The task form changed. Refresh before submitting it.",
+    );
+  }
+  const normalized: Record<string, string | boolean> = {};
+  for (const field of form.fields) {
+    const raw = responses[field.id];
+    const conditionallyRequired = field.requiredWhen
+      ? normalized[field.requiredWhen.fieldId] === field.requiredWhen.equals
+      : false;
+    const required = field.required || conditionallyRequired;
+    if (field.type === "boolean") {
+      if (raw === undefined || raw === "") {
+        if (required) throw new TaskStateError(`Answer “${field.label}”.`);
+        continue;
+      }
+      if (typeof raw !== "boolean" && raw !== "true" && raw !== "false") {
+        throw new TaskStateError(
+          `Choose a valid yes or no answer for “${field.label}”.`,
+        );
+      }
+      normalized[field.id] = typeof raw === "boolean" ? raw : raw === "true";
+      continue;
+    }
+    const value = typeof raw === "string" ? raw.trim() : "";
+    if (!value) {
+      if (required) throw new TaskStateError(`Answer “${field.label}”.`);
+      continue;
+    }
+    if (field.type === "date" && !z.string().date().safeParse(value).success) {
+      throw new TaskStateError(`Enter a valid date for “${field.label}”.`);
+    }
+    if (field.type === "select" && !field.options.includes(value)) {
+      throw new TaskStateError(`Choose a valid option for “${field.label}”.`);
+    }
+    normalized[field.id] = value;
+  }
+  return normalized;
+}
+
 function parseJson(value: string, context: string) {
   try {
     return JSON.parse(value) as unknown;
@@ -176,6 +242,9 @@ const taskEvidenceDetailsSchema = z
     fileAssetId: z.string().optional(),
     fileVersionId: z.string().optional(),
     scanStatus: z.string().optional(),
+    responses: z
+      .record(z.string(), z.union([z.string(), z.boolean()]))
+      .optional(),
   })
   .passthrough();
 
@@ -362,6 +431,19 @@ export class TaskService {
     rawInput: unknown,
     intentId: string = crypto.randomUUID(),
   ) {
+    const result = await this.createTemplateWithResult(
+      viewer,
+      rawInput,
+      intentId,
+    );
+    return result.id;
+  }
+
+  private async createTemplateWithResult(
+    viewer: Viewer,
+    rawInput: unknown,
+    intentId: string,
+  ) {
     return this.projectIntentCommand(
       viewer,
       "task.template.create",
@@ -369,6 +451,247 @@ export class TaskService {
       rawInput,
       () => this.createTemplateD1(viewer, rawInput, intentId),
     );
+  }
+
+  async createTravelOnboardingTemplates(viewer: Viewer, confirmed: unknown) {
+    if (confirmed !== true) {
+      throw new TaskStateError(
+        "Review and confirm the two automatically assigned travel onboarding forms before creating them.",
+      );
+    }
+    const common = {
+      targetType: "speaker" as const,
+      taskType: "short_form" as const,
+      impact: "high" as const,
+      evidenceMode: "text" as const,
+      dueAnchor: "acceptance" as const,
+      dueOffsetDays: 7,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: true,
+      dependencyIds: [],
+    };
+    const presets = [
+      {
+        preset: "speaker_travel_hotel_v1" as const,
+        intent: TRAVEL_ONBOARDING_TEMPLATE_INTENTS.hotel,
+        input: {
+          ...common,
+          name: "Hotel stay requirements",
+          description:
+            "Confirm whether you need event-arranged accommodation and provide the dates and room requirements the team needs.",
+          configuration: {
+            preset: "speaker_travel_hotel_v1" as const,
+            form: {
+              fields: [
+                {
+                  id: "requires_hotel",
+                  label: "Do you need event-arranged accommodation?",
+                  type: "boolean",
+                  required: true,
+                  help: "Choose no if you are arranging your own stay.",
+                },
+                {
+                  id: "check_in",
+                  label: "Check-in date",
+                  type: "date",
+                  required: false,
+                  requiredWhen: {
+                    fieldId: "requires_hotel",
+                    equals: true,
+                  },
+                  help: "Required when event-arranged accommodation is needed.",
+                },
+                {
+                  id: "check_out",
+                  label: "Check-out date",
+                  type: "date",
+                  required: false,
+                  requiredWhen: {
+                    fieldId: "requires_hotel",
+                    equals: true,
+                  },
+                  help: "Required when event-arranged accommodation is needed.",
+                },
+                {
+                  id: "room_requirements",
+                  label: "Accessibility, room or arrival requirements",
+                  type: "long_text",
+                  required: false,
+                  help: "Share only details the event team needs to arrange your stay.",
+                },
+              ],
+            },
+          },
+        },
+      },
+      {
+        preset: "speaker_travel_flight_v1" as const,
+        intent: TRAVEL_ONBOARDING_TEMPLATE_INTENTS.flight,
+        input: {
+          ...common,
+          name: "Flight reimbursement",
+          description:
+            "Tell the event team whether you plan to claim flight reimbursement and provide the booking details needed for approval.",
+          configuration: {
+            preset: "speaker_travel_flight_v1" as const,
+            form: {
+              fields: [
+                {
+                  id: "requires_reimbursement",
+                  label: "Will you request flight reimbursement?",
+                  type: "boolean",
+                  required: true,
+                  help: "Choose no if no flight reimbursement is needed.",
+                },
+                {
+                  id: "traveller_name",
+                  label: "Traveller name used for booking",
+                  type: "short_text",
+                  required: false,
+                  requiredWhen: {
+                    fieldId: "requires_reimbursement",
+                    equals: true,
+                  },
+                  help: "Required when reimbursement is requested. Use the name that will appear on the booking.",
+                },
+                {
+                  id: "departure_airport",
+                  label: "Departure airport",
+                  type: "short_text",
+                  required: false,
+                  requiredWhen: {
+                    fieldId: "requires_reimbursement",
+                    equals: true,
+                  },
+                  help: "Required when reimbursement is requested. Enter a city or IATA airport code.",
+                },
+                {
+                  id: "estimated_fare",
+                  label: "Estimated round-trip fare and currency",
+                  type: "short_text",
+                  required: false,
+                  requiredWhen: {
+                    fieldId: "requires_reimbursement",
+                    equals: true,
+                  },
+                  help: "Required when reimbursement is requested. For example, USD 450. Do not enter payment-card details.",
+                },
+                {
+                  id: "reimbursement_notes",
+                  label: "Route or reimbursement notes",
+                  type: "long_text",
+                  required: false,
+                  help: "Include constraints or approval questions for the event team.",
+                },
+              ],
+            },
+          },
+        },
+      },
+    ] as const;
+    const existingTemplates = await this.env.DB.prepare(
+      `SELECT id, name, description, target_type AS targetType,
+              task_type AS taskType, impact, evidence_mode AS evidenceMode,
+              due_anchor AS dueAnchor, due_offset_minutes AS dueOffsetMinutes,
+              fixed_due_at AS fixedDueAt,
+              auto_assign_on_acceptance AS autoAssignOnAcceptance,
+              configuration_json AS configurationJson, status,
+              (SELECT COUNT(*) FROM task_template_dependencies dependency
+                WHERE dependency.template_id = task_templates.id) AS dependencyCount
+         FROM task_templates
+        WHERE event_id = ?
+          AND json_extract(configuration_json, '$.preset') IN (?, ?)`,
+    )
+      .bind(viewer.eventId, presets[0].preset, presets[1].preset)
+      .all<TemplateRow & { dependencyCount: number }>();
+    const resolved = new Map<
+      (typeof presets)[number]["preset"],
+      { id: string; created: boolean }
+    >();
+    const missingPresets: (typeof presets)[number][] = [];
+    for (const preset of presets) {
+      const matches = existingTemplates.results.filter((template) => {
+        try {
+          return (
+            taskTemplateConfigurationSchema.parse(
+              JSON.parse(template.configurationJson),
+            ).preset === preset.preset
+          );
+        } catch {
+          throw new TaskStateError(
+            "A travel onboarding preset has invalid stored configuration.",
+          );
+        }
+      });
+      if (matches.length > 1) {
+        throw new TaskStateError(
+          "This event contains duplicate travel onboarding presets. Repair the duplicate preset markers before continuing.",
+        );
+      }
+      const existing = matches[0];
+      if (!existing) {
+        missingPresets.push(preset);
+        continue;
+      }
+      if (existing.status !== "active") {
+        throw new TaskStateError(
+          "A travel onboarding preset is archived. Restore it before creating the preset forms again.",
+        );
+      }
+      let storedInput;
+      try {
+        storedInput = taskTemplateInputSchema.parse({
+          name: existing.name,
+          description: existing.description ?? "",
+          targetType: existing.targetType,
+          taskType: existing.taskType,
+          impact: existing.impact,
+          evidenceMode: existing.evidenceMode,
+          dueAnchor: existing.dueAnchor,
+          dueOffsetDays:
+            existing.dueOffsetMinutes === null
+              ? null
+              : existing.dueOffsetMinutes / 1_440,
+          fixedDueDate: null,
+          autoAssignOnAcceptance: Boolean(existing.autoAssignOnAcceptance),
+          dependencyIds: [],
+          configuration: JSON.parse(existing.configurationJson),
+        });
+      } catch {
+        throw new TaskStateError(
+          "A travel onboarding preset has invalid stored configuration.",
+        );
+      }
+      const expectedInput = taskTemplateInputSchema.parse(preset.input);
+      if (
+        existing.dependencyCount !== 0 ||
+        JSON.stringify(storedInput) !== JSON.stringify(expectedInput)
+      ) {
+        throw new TaskStateError(
+          "A travel onboarding preset differs from the required hotel or flight form. Restore the preset before continuing.",
+        );
+      }
+      resolved.set(preset.preset, { id: existing.id, created: false });
+    }
+    for (const preset of missingPresets) {
+      resolved.set(
+        preset.preset,
+        await this.createTemplateWithResult(
+          viewer,
+          preset.input,
+          preset.intent,
+        ),
+      );
+    }
+    const hotel = resolved.get("speaker_travel_hotel_v1")!;
+    const flight = resolved.get("speaker_travel_flight_v1")!;
+    return {
+      hotelTemplateId: hotel.id,
+      flightTemplateId: flight.id,
+      createdTemplateIds: [hotel, flight]
+        .filter((template) => template.created)
+        .map((template) => template.id),
+    };
   }
 
   private async createTemplateD1(
@@ -416,30 +739,34 @@ export class TaskService {
         input.dueOffsetDays === null ? null : input.dueOffsetDays * 1_440,
       fixedDueAt: fixedDateEndEpoch(input.fixedDueDate, event.timezone),
       autoAssignOnAcceptance: input.autoAssignOnAcceptance ? 1 : 0,
+      configurationJson: JSON.stringify(input.configuration),
     };
-    const recovered = await this.env.DB.prepare(
-      `SELECT id, name, description, target_type AS targetType,
-              task_type AS taskType, impact, evidence_mode AS evidenceMode,
-              due_anchor AS dueAnchor, due_offset_minutes AS dueOffsetMinutes,
-              fixed_due_at AS fixedDueAt,
-              auto_assign_on_acceptance AS autoAssignOnAcceptance
-         FROM task_templates WHERE id = ? AND event_id = ?`,
-    )
-      .bind(id, viewer.eventId)
-      .first<{
-        id: string;
-        name: string;
-        description: string | null;
-        targetType: string;
-        taskType: string;
-        impact: string;
-        evidenceMode: string;
-        dueAnchor: string;
-        dueOffsetMinutes: number | null;
-        fixedDueAt: number | null;
-        autoAssignOnAcceptance: number;
-      }>();
-    if (recovered) {
+    const recoverExactTemplate = async () => {
+      const recovered = await this.env.DB.prepare(
+        `SELECT id, name, description, target_type AS targetType,
+                task_type AS taskType, impact, evidence_mode AS evidenceMode,
+                due_anchor AS dueAnchor, due_offset_minutes AS dueOffsetMinutes,
+                fixed_due_at AS fixedDueAt,
+                auto_assign_on_acceptance AS autoAssignOnAcceptance,
+                configuration_json AS configurationJson
+           FROM task_templates WHERE id = ? AND event_id = ?`,
+      )
+        .bind(id, viewer.eventId)
+        .first<{
+          id: string;
+          name: string;
+          description: string | null;
+          targetType: string;
+          taskType: string;
+          impact: string;
+          evidenceMode: string;
+          dueAnchor: string;
+          dueOffsetMinutes: number | null;
+          fixedDueAt: number | null;
+          autoAssignOnAcceptance: number;
+          configurationJson: string;
+        }>();
+      if (!recovered) return null;
       const recoveredDependencies = await this.env.DB.prepare(
         `SELECT depends_on_template_id AS dependencyId
            FROM task_template_dependencies
@@ -458,58 +785,67 @@ export class TaskService {
           "This task-template creation intent was already used with different configuration.",
         );
       return recovered.id;
-    }
-    await this.env.DB.batch([
-      this.env.DB.prepare(
-        `
-        INSERT INTO task_templates (
-          id, event_id, name, description, target_type, task_type, impact, evidence_mode,
-          due_anchor, due_offset_minutes, fixed_due_at, auto_assign_on_acceptance,
-          configuration_json, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', unixepoch(), unixepoch())
-      `,
-      ).bind(
-        id,
-        viewer.eventId,
-        expected.name,
-        expected.description,
-        expected.targetType,
-        expected.taskType,
-        expected.impact,
-        expected.evidenceMode,
-        expected.dueAnchor,
-        expected.dueOffsetMinutes,
-        expected.fixedDueAt,
-        expected.autoAssignOnAcceptance,
-      ),
-      ...dependencyIds.map((dependencyId) =>
+    };
+    const recoveredId = await recoverExactTemplate();
+    if (recoveredId) return { id: recoveredId, created: false };
+    try {
+      await this.env.DB.batch([
         this.env.DB.prepare(
           `
-        INSERT INTO task_template_dependencies (template_id, depends_on_template_id, created_at) VALUES (?, ?, unixepoch())
-      `,
-        ).bind(id, dependencyId),
-      ),
-      this.env.DB.prepare(
-        `
-        INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-        ) VALUES (?, ?, ?, ?, 'task_template.created', 'task_template', ?, ?, unixepoch())
-      `,
-      ).bind(
-        `audit:${id}`,
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        id,
-        JSON.stringify({
-          taskType: input.taskType,
-          targetType: input.targetType,
-          autoAssignOnAcceptance: input.autoAssignOnAcceptance,
-          dependencies: input.dependencyIds,
-        }),
-      ),
-    ]);
-    return id;
+          INSERT INTO task_templates (
+            id, event_id, name, description, target_type, task_type, impact, evidence_mode,
+            due_anchor, due_offset_minutes, fixed_due_at, auto_assign_on_acceptance,
+            configuration_json, status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', unixepoch(), unixepoch())
+        `,
+        ).bind(
+          id,
+          viewer.eventId,
+          expected.name,
+          expected.description,
+          expected.targetType,
+          expected.taskType,
+          expected.impact,
+          expected.evidenceMode,
+          expected.dueAnchor,
+          expected.dueOffsetMinutes,
+          expected.fixedDueAt,
+          expected.autoAssignOnAcceptance,
+          expected.configurationJson,
+        ),
+        ...dependencyIds.map((dependencyId) =>
+          this.env.DB.prepare(
+            `
+          INSERT INTO task_template_dependencies (template_id, depends_on_template_id, created_at) VALUES (?, ?, unixepoch())
+        `,
+          ).bind(id, dependencyId),
+        ),
+        this.env.DB.prepare(
+          `
+          INSERT OR IGNORE INTO audit_events (
+            id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+          ) VALUES (?, ?, ?, ?, 'task_template.created', 'task_template', ?, ?, unixepoch())
+        `,
+        ).bind(
+          `audit:${id}`,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          id,
+          JSON.stringify({
+            taskType: input.taskType,
+            targetType: input.targetType,
+            autoAssignOnAcceptance: input.autoAssignOnAcceptance,
+            dependencies: input.dependencyIds,
+          }),
+        ),
+      ]);
+    } catch (error) {
+      const concurrentWinnerId = await recoverExactTemplate();
+      if (concurrentWinnerId) return { id: concurrentWinnerId, created: false };
+      throw error;
+    }
+    return { id, created: true };
   }
 
   private async getTemplate(eventId: string, templateId: string) {
@@ -1001,8 +1337,11 @@ export class TaskService {
              ti.evidence_json AS evidenceJson, ti.waiver_json AS waiverJson,
              ti.submitted_at AS submittedAt, ti.completed_at AS completedAt,
              ti.completed_by_person_id AS completedByPersonId,
-             ti.last_operation_id AS lastOperationId
-        FROM task_instances ti LEFT JOIN people p ON p.id = ti.owner_person_id
+             ti.last_operation_id AS lastOperationId,
+             COALESCE(tt.configuration_json, '{}') AS configurationJson
+        FROM task_instances ti
+        LEFT JOIN people p ON p.id = ti.owner_person_id
+        LEFT JOIN task_templates tt ON tt.id = ti.template_id AND tt.event_id = ti.event_id
        WHERE ti.event_id = ? AND ${this.taskAccessClause()}
        ORDER BY CASE ti.status WHEN 'overdue' THEN 0 WHEN 'blocked' THEN 1 WHEN 'not_started' THEN 2 WHEN 'in_progress' THEN 3 WHEN 'submitted' THEN 4 ELSE 5 END,
                 ti.due_at IS NULL, ti.due_at, ti.title
@@ -1050,6 +1389,7 @@ export class TaskService {
       : { results: [] };
     return tasks.results.map((task) => ({
       ...task,
+      formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
       dependencies: dependencies.results.filter(
         (dependency) => dependency.taskId === task.id,
       ),
@@ -1070,7 +1410,8 @@ export class TaskService {
              ti.submitted_at AS submittedAt, ti.completed_at AS completedAt,
              ti.completed_by_person_id AS completedByPersonId,
              ti.last_operation_id AS lastOperationId,
-             tt.evidence_mode AS evidenceMode
+             tt.evidence_mode AS evidenceMode,
+             COALESCE(tt.configuration_json, '{}') AS configurationJson
         FROM task_instances ti
         LEFT JOIN people p ON p.id = ti.owner_person_id
         LEFT JOIN task_templates tt ON tt.id = ti.template_id
@@ -1181,9 +1522,17 @@ export class TaskService {
       evidence.confirmed = true;
     }
     if (task.taskType === "short_form") {
-      if (!input.text)
-        throw new TaskStateError("Enter the requested response.");
-      evidence.text = input.text;
+      const responses = structuredTaskEvidence(
+        task.configurationJson,
+        input.responses,
+      );
+      if (responses) {
+        evidence.responses = responses;
+      } else {
+        if (!input.text)
+          throw new TaskStateError("Enter the requested response.");
+        evidence.text = input.text;
+      }
     }
     if (task.taskType === "link_visit") {
       if (!input.url) throw new TaskStateError("Enter the link you visited.");
@@ -2070,8 +2419,11 @@ export class TaskService {
                ti.evidence_json AS evidenceJson, ti.waiver_json AS waiverJson,
                ti.submitted_at AS submittedAt, ti.completed_at AS completedAt,
                ti.completed_by_person_id AS completedByPersonId,
-               ti.last_operation_id AS lastOperationId
-          FROM task_instances ti LEFT JOIN people p ON p.id = ti.owner_person_id
+               ti.last_operation_id AS lastOperationId,
+               COALESCE(tt.configuration_json, '{}') AS configurationJson
+          FROM task_instances ti
+          LEFT JOIN people p ON p.id = ti.owner_person_id
+          LEFT JOIN task_templates tt ON tt.id = ti.template_id AND tt.event_id = ti.event_id
          WHERE ti.event_id = ? ORDER BY ti.status, ti.due_at IS NULL, ti.due_at, ti.title
       `,
       )
@@ -2168,6 +2520,7 @@ export class TaskService {
       })),
       tasks: tasks.results.map((task) => ({
         ...task,
+        formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
         evidence: evidence.results
           .filter((item) => item.taskId === task.id)
           .map((item) => ({
