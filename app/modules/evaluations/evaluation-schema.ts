@@ -198,6 +198,7 @@ export const decisionSchema = z.object({
   submissionId: z.string().trim().min(1),
   decision: z.enum(["accepted", "rejected", "waitlisted"]),
   rationale: z.string().trim().max(4_000),
+  includeReviewerFeedback: z.boolean().default(false),
   release: z.boolean().default(false),
   confirmedWithoutReview: z.boolean().default(false),
   sessionDurationMinutes: z.coerce

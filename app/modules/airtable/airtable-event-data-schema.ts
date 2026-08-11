@@ -578,7 +578,8 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
     entityType: "submission_decision",
     query: `SELECT id, event_id, submission_id, round_id, revision_number,
                    status, decision, decided_by_person_id, rationale,
-                   effect_preview_json, decided_at, published_at
+                   notification_feedback_json, effect_preview_json,
+                   decided_at, published_at
               FROM submission_decisions WHERE event_id = ? ORDER BY id`,
     schema: z
       .object({
@@ -590,6 +591,7 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
         decision: z.enum(["accepted", "rejected", "waitlisted"]),
         decided_by_person_id: text.min(1),
         rationale: nullableText,
+        notification_feedback_json: jsonText,
         effect_preview_json: jsonText,
         decided_at: integer,
         published_at: nullableInteger,

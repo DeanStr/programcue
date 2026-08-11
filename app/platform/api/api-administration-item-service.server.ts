@@ -1,4 +1,5 @@
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { z } from "zod";
 import {
   isAirtableManagedAdminResource,
   type AdminApiResource,
@@ -8,6 +9,14 @@ import { ApiError, type ApiPrincipal } from "./api.server";
 
 type EventPrincipal = ApiPrincipal & { eventId: string };
 type ApiRecord = Record<string, unknown> & { id: string };
+
+const submissionTracksSchema = z.array(
+  z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    position: z.number().int().nonnegative(),
+  }),
+);
 
 function parseJson(value: unknown, label: string) {
   if (value === null) return null;
@@ -70,6 +79,18 @@ function serialise(row: ApiRecord) {
   ]) {
     if (field in result) result[field] = Boolean(result[field]);
   }
+  if ("tracksJson" in result) {
+    const tracks = submissionTracksSchema.parse(
+      parseJson(result.tracksJson, `${String(result.id)} tracks`),
+    );
+    if (result.status !== "draft" && tracks.length === 0) {
+      throw new Error(
+        `Submission ${String(result.id)} is missing persisted track selections.`,
+      );
+    }
+    result.tracks = tracks;
+    delete result.tracksJson;
+  }
   return result;
 }
 
@@ -118,6 +139,20 @@ export class ApiAdministrationItemService {
                 submission.submitter_email AS submitterEmail,
                 submission.title, submission.category, submission.format,
                 submission.routed_team_id AS routedTeamId, submission.status,
+                COALESCE((
+                  SELECT json_group_array(json(selected.track))
+                    FROM (
+                      SELECT json_object(
+                               'id', selection.track_id,
+                               'name', selection.track_name_snapshot,
+                               'position', selection.position
+                             ) AS track
+                        FROM submission_track_selections selection
+                       WHERE selection.submission_id = submission.id
+                         AND selection.event_id = submission.event_id
+                       ORDER BY selection.position
+                    ) selected
+                ), '[]') AS tracksJson,
                 submission.answers_json AS answersJson,
                 submission.submitted_snapshot_json AS submittedSnapshotJson,
                 submission.revision, submission.submitted_at AS submittedAt,

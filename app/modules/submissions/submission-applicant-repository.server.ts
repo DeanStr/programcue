@@ -703,7 +703,10 @@ export class SubmissionApplicantRepository {
     const title =
       String(payload.answers.title || "Untitled application").trim() ||
       "Untitled application";
-    const category = String(payload.answers.category || "").trim() || null;
+    const categoryAnswer = payload.answers.category;
+    const category = Array.isArray(categoryAnswer)
+      ? String(categoryAnswer[0] ?? "").trim() || null
+      : String(categoryAnswer || "").trim() || null;
     const format = String(payload.answers.format || "").trim() || null;
     const statements: D1PreparedStatement[] = [
       this.env.DB.prepare(
@@ -1125,30 +1128,45 @@ export class SubmissionApplicantRepository {
     applicant: Applicant,
     payload: DraftPayload,
     options: {
-      routedTeamId: string | null;
+      trackSelections: Array<{ trackId: string; trackName: string }>;
+      routedTeamIds: string[];
       routingAssignment?: {
-        teamId: string;
         roundId: string;
-        evaluatorPersonIds: string[];
+        teamIds: string[];
+        assignments: Array<{
+          teamId: string;
+          evaluatorPersonId: string;
+        }>;
       } | null;
       upload?: { fieldId: string; assetId: string; versionId: string } | null;
       operationId?: string;
-    } = { routedTeamId: null, routingAssignment: null, upload: null },
+    },
   ) {
     if (!applicant.verified) {
       throw new SubmissionStateError(
         "Verify your email before submitting this application.",
       );
     }
-    if (
-      Boolean(options.routedTeamId) !== Boolean(options.routingAssignment) ||
-      (options.routingAssignment &&
-        options.routingAssignment.teamId !== options.routedTeamId)
-    ) {
-      throw new Error(
-        "Submission routing must include one matching automatic assignment plan.",
+    if (options.trackSelections.length === 0) {
+      throw new SubmissionStateError(
+        "A submission must retain at least one submitted event track.",
       );
     }
+    if (
+      Boolean(options.routedTeamIds.length) !==
+        Boolean(options.routingAssignment) ||
+      (options.routingAssignment &&
+        (options.routingAssignment.teamIds.length !==
+          options.routedTeamIds.length ||
+          options.routingAssignment.teamIds.some(
+            (teamId) => !options.routedTeamIds.includes(teamId),
+          )))
+    ) {
+      throw new Error(
+        "Submission routing teams must match the automatic assignment plan.",
+      );
+    }
+    const primaryRoutedTeamId = options.routedTeamIds[0] ?? null;
     const operationsQueue = this.env.OPERATIONS_QUEUE;
     if (!operationsQueue) {
       throw new Error("Required OPERATIONS_QUEUE binding is unavailable.");
@@ -1408,14 +1426,32 @@ export class SubmissionApplicantRepository {
              )
            )
            AND (
-             ? IS NULL OR EXISTS (
-               SELECT 1 FROM evaluation_teams routed_team
-                WHERE routed_team.id = ? AND routed_team.event_id = submissions.event_id
-                  AND routed_team.status = 'active'
+             ? = 0 OR NOT EXISTS (
+               SELECT 1 FROM json_each(?) expected_team
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM evaluation_teams routed_team
+                   WHERE routed_team.id = CAST(expected_team.value AS TEXT)
+                     AND routed_team.event_id = submissions.event_id
+                     AND routed_team.status = 'active'
+                     AND EXISTS (
+                       SELECT 1 FROM evaluation_team_members routed_member
+                        WHERE routed_member.team_id = routed_team.id
+                          AND routed_member.event_id = routed_team.event_id
+                          AND routed_member.removed_at IS NULL
+                     )
+                )
              )
            )
+           AND NOT EXISTS (
+             SELECT 1 FROM json_each(?) expected_track
+              WHERE NOT EXISTS (
+                SELECT 1 FROM tracks current_track
+                 WHERE current_track.id = json_extract(expected_track.value, '$.trackId')
+                   AND current_track.event_id = submissions.event_id
+              )
+           )
            AND (
-             ? IS NULL OR NOT EXISTS (
+             ? = 0 OR NOT EXISTS (
                SELECT 1 FROM evaluator_assignments existing_assignment
                 WHERE existing_assignment.event_id = submissions.event_id
                   AND existing_assignment.submission_id = submissions.id
@@ -1442,27 +1478,40 @@ export class SubmissionApplicantRepository {
                   AND active_round.status = 'active'
                   AND active_plan.status = 'active'
                ) = 1
-               AND (
-                 SELECT COUNT(*) FROM evaluation_team_members routed_member
-                  WHERE routed_member.team_id = ?
-                    AND routed_member.event_id = submissions.event_id
-                    AND routed_member.removed_at IS NULL
-               ) = ?
-               AND (
-                 SELECT COUNT(DISTINCT routed_member.person_id)
-                   FROM evaluation_team_members routed_member
-                  WHERE routed_member.team_id = ?
-                    AND routed_member.event_id = submissions.event_id
-                    AND routed_member.removed_at IS NULL
-                    AND EXISTS (
-                      SELECT 1 FROM memberships routed_membership
-                       WHERE routed_membership.event_id = routed_member.event_id
-                         AND routed_membership.person_id = routed_member.person_id
-                         AND routed_membership.role IN ('evaluator','committee_chair')
-                         AND routed_membership.accepted_at IS NOT NULL
-                         AND routed_membership.revoked_at IS NULL
+               AND NOT EXISTS (
+                 SELECT 1 FROM json_each(?) expected_assignment
+                  WHERE NOT EXISTS (
+                    SELECT 1 FROM evaluation_team_members routed_member
+                    JOIN evaluation_teams routed_team
+                      ON routed_team.id = routed_member.team_id
+                     AND routed_team.event_id = routed_member.event_id
+                     AND routed_team.status = 'active'
+                   WHERE routed_member.event_id = submissions.event_id
+                     AND routed_member.team_id = json_extract(expected_assignment.value, '$.teamId')
+                     AND routed_member.person_id = json_extract(expected_assignment.value, '$.evaluatorPersonId')
+                     AND routed_member.removed_at IS NULL
+                     AND EXISTS (
+                       SELECT 1 FROM memberships routed_membership
+                        WHERE routed_membership.event_id = routed_member.event_id
+                          AND routed_membership.person_id = routed_member.person_id
+                          AND routed_membership.role IN ('evaluator','committee_chair')
+                          AND routed_membership.accepted_at IS NOT NULL
+                          AND routed_membership.revoked_at IS NULL
+                     )
+                  )
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM evaluation_team_members active_member
+                  WHERE active_member.event_id = submissions.event_id
+                    AND active_member.team_id IN (
+                      SELECT CAST(value AS TEXT) FROM json_each(?)
                     )
-               ) = ?
+                    AND active_member.removed_at IS NULL
+                    AND NOT EXISTS (
+                      SELECT 1 FROM json_each(?) expected_assignment
+                       WHERE json_extract(expected_assignment.value, '$.evaluatorPersonId') = active_member.person_id
+                    )
+               )
              )
            )
            AND EXISTS (
@@ -1483,7 +1532,7 @@ export class SubmissionApplicantRepository {
       `,
       ).bind(
         finalStatus,
-        options.routedTeamId,
+        primaryRoutedTeamId,
         submissionSnapshot,
         operationId,
         payload.submissionId,
@@ -1497,15 +1546,15 @@ export class SubmissionApplicantRepository {
         options.upload?.assetId ?? null,
         options.upload?.versionId ?? null,
         options.upload?.assetId ?? null,
-        options.routedTeamId,
-        options.routedTeamId,
-        options.routedTeamId,
+        options.routedTeamIds.length,
+        JSON.stringify(options.routedTeamIds),
+        JSON.stringify(options.trackSelections),
+        options.routedTeamIds.length,
         options.routingAssignment?.roundId ?? null,
         options.routingAssignment?.roundId ?? null,
-        options.routingAssignment?.teamId ?? null,
-        options.routingAssignment?.evaluatorPersonIds.length ?? 0,
-        options.routingAssignment?.teamId ?? null,
-        options.routingAssignment?.evaluatorPersonIds.length ?? 0,
+        JSON.stringify(options.routingAssignment?.assignments ?? []),
+        JSON.stringify(options.routedTeamIds),
+        JSON.stringify(options.routingAssignment?.assignments ?? []),
         form.id,
         form.eventId,
       ),
@@ -1604,9 +1653,66 @@ export class SubmissionApplicantRepository {
         form.eventId,
       ),
     ];
+    options.trackSelections.forEach((track, position) => {
+      finalStatements.push(
+        this.env.DB.prepare(
+          `INSERT INTO submission_track_selections (
+             submission_id, event_id, track_id, track_name_snapshot, position
+           )
+           SELECT ?, ?, ?, ?, ?
+            WHERE EXISTS (
+              SELECT 1 FROM submissions submission
+               WHERE submission.id = ? AND submission.event_id = ?
+                 AND submission.last_operation_id = ? AND submission.status <> 'draft'
+            )
+              AND EXISTS (
+                SELECT 1 FROM tracks track
+                 WHERE track.id = ? AND track.event_id = ?
+              )`,
+        ).bind(
+          payload.submissionId,
+          form.eventId,
+          track.trackId,
+          track.trackName,
+          position,
+          payload.submissionId,
+          form.eventId,
+          operationId,
+          track.trackId,
+          form.eventId,
+        ),
+      );
+    });
+    for (const teamId of options.routedTeamIds) {
+      finalStatements.push(
+        this.env.DB.prepare(
+          `INSERT INTO submission_routing_teams (
+             submission_id, event_id, team_id
+           )
+           SELECT ?, ?, ?
+            WHERE EXISTS (
+              SELECT 1 FROM submissions submission
+               WHERE submission.id = ? AND submission.event_id = ?
+                 AND submission.last_operation_id = ? AND submission.status = 'assigned'
+            )
+              AND EXISTS (
+                SELECT 1 FROM evaluation_teams team
+                 WHERE team.id = ? AND team.event_id = ? AND team.status = 'active'
+              )`,
+        ).bind(
+          payload.submissionId,
+          form.eventId,
+          teamId,
+          payload.submissionId,
+          form.eventId,
+          operationId,
+          teamId,
+          form.eventId,
+        ),
+      );
+    }
     if (options.routingAssignment) {
-      for (const evaluatorPersonId of options.routingAssignment
-        .evaluatorPersonIds) {
+      for (const assignment of options.routingAssignment.assignments) {
         finalStatements.push(
           this.env.DB.prepare(
             `INSERT INTO evaluator_assignments (
@@ -1618,7 +1724,12 @@ export class SubmissionApplicantRepository {
                 SELECT 1 FROM submissions submission
                  WHERE submission.id = ? AND submission.event_id = ?
                    AND submission.status = 'assigned'
-                   AND submission.routed_team_id = ?
+                   AND EXISTS (
+                     SELECT 1 FROM submission_routing_teams routed
+                      WHERE routed.submission_id = submission.id
+                        AND routed.event_id = submission.event_id
+                        AND routed.team_id = ?
+                   )
                    AND submission.last_operation_id = ?
               )
                 AND EXISTS (
@@ -1651,18 +1762,18 @@ export class SubmissionApplicantRepository {
             form.eventId,
             options.routingAssignment.roundId,
             payload.submissionId,
-            evaluatorPersonId,
-            options.routingAssignment.teamId,
+            assignment.evaluatorPersonId,
+            assignment.teamId,
             operationId,
             payload.submissionId,
             form.eventId,
-            options.routingAssignment.teamId,
+            assignment.teamId,
             operationId,
             options.routingAssignment.roundId,
             form.eventId,
-            options.routingAssignment.teamId,
+            assignment.teamId,
             form.eventId,
-            evaluatorPersonId,
+            assignment.evaluatorPersonId,
           ),
         );
       }
@@ -1677,7 +1788,7 @@ export class SubmissionApplicantRepository {
             WHERE (
               SELECT COUNT(*) FROM evaluator_assignments assignment
                WHERE assignment.event_id = ? AND assignment.round_id = ?
-                 AND assignment.submission_id = ? AND assignment.team_id = ?
+                 AND assignment.submission_id = ?
                  AND assignment.last_operation_id = ?
             ) = ?`,
         ).bind(
@@ -1688,15 +1799,14 @@ export class SubmissionApplicantRepository {
           payload.submissionId,
           JSON.stringify({
             roundId: options.routingAssignment.roundId,
-            teamId: options.routingAssignment.teamId,
-            evaluatorCount: options.routingAssignment.evaluatorPersonIds.length,
+            teamIds: options.routingAssignment.teamIds,
+            evaluatorCount: options.routingAssignment.assignments.length,
           }),
           form.eventId,
           options.routingAssignment.roundId,
           payload.submissionId,
-          options.routingAssignment.teamId,
           operationId,
-          options.routingAssignment.evaluatorPersonIds.length,
+          options.routingAssignment.assignments.length,
         ),
       );
     }
@@ -1735,9 +1845,9 @@ export class SubmissionApplicantRepository {
       finalStatements.push(
         this.env.DB.prepare(
           `INSERT INTO sessions (
-             id, event_id, source_submission_id, title, slug, description, format,
+             id, event_id, source_submission_id, track_id, title, slug, description, format,
              duration_minutes, status, visibility, created_at, updated_at
-           ) SELECT ?, ?, NULL, ?, ?, ?, ?, ?, 'unscheduled', 'public', unixepoch(), unixepoch()
+           ) SELECT ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'unscheduled', 'public', unixepoch(), unixepoch()
                WHERE EXISTS (
                  SELECT 1 FROM submissions
                   WHERE id = ? AND event_id = ? AND last_operation_id = ?
@@ -1746,6 +1856,7 @@ export class SubmissionApplicantRepository {
         ).bind(
           directSessionId,
           form.eventId,
+          options.trackSelections[0]!.trackId,
           title,
           directSessionSlug(title, directSessionId),
           String(payload.answers.description ?? "").trim() || null,

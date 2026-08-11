@@ -425,6 +425,7 @@ CREATE TABLE submission_decisions (
   decision TEXT NOT NULL CHECK (decision IN ('accepted','rejected','waitlisted')),
   decided_by_person_id TEXT NOT NULL REFERENCES people(id),
   rationale TEXT,
+  notification_feedback_json TEXT NOT NULL CHECK (json_valid(notification_feedback_json)),
   effect_preview_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(effect_preview_json)),
   idempotency_key TEXT,
   decided_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -1845,7 +1846,7 @@ BEGIN
 END;
 
 CREATE TRIGGER submission_decisions_participant_retention_no_pii_update
-BEFORE UPDATE OF event_id, rationale, effect_preview_json ON submission_decisions
+BEFORE UPDATE OF event_id, rationale, notification_feedback_json, effect_preview_json ON submission_decisions
 WHEN EXISTS (
   SELECT 1 FROM participant_retention_locked_events locked
   WHERE locked.event_id IN (OLD.event_id, NEW.event_id)

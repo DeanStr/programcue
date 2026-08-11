@@ -72,15 +72,18 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     query: url.searchParams.get("query") ?? "",
   };
   const requestedPage = Number(url.searchParams.get("page") ?? "1");
-  const [submissionPage, routingTeams, sessionFormats] = await Promise.all([
-    service.listAdminSubmissionPage(viewer, filters, requestedPage),
-    service.listRoutingTeams(viewer),
-    service.getConfiguredSessionFormats(viewer),
-  ]);
+  const [submissionPage, routingTeams, routingTracks, sessionFormats] =
+    await Promise.all([
+      service.listAdminSubmissionPage(viewer, filters, requestedPage),
+      service.listRoutingTeams(viewer),
+      service.listRoutingTracks(viewer),
+      service.getConfiguredSessionFormats(viewer),
+    ]);
   return {
     mode: "list" as const,
     ...submissionPage,
     routingTeams,
+    routingTracks,
     sessionFormats,
     filters,
     manualApplicationIdempotencyKey: crypto.randomUUID(),
@@ -221,7 +224,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         idempotencyKey: formData.get("idempotencyKey"),
         title: formData.get("title"),
         description: formData.get("description"),
-        category: formData.get("category"),
+        trackId: formData.get("trackId"),
         format: formData.get("format"),
         submitterName: formData.get("submitterName"),
         submitterEmail: formData.get("submitterEmail"),
@@ -405,12 +408,12 @@ function Detail({
           <section className="card pad">
             <h2>Routing</h2>
             <p>
-              <span className="label">Category</span>
+              <span className="label">Tracks</span>
               <br />
               {submission.category ?? "Uncategorised"}
             </p>
             <p>
-              <span className="label">Assigned team</span>
+              <span className="label">Assigned teams</span>
               <br />
               {submission.routedTo}
             </p>
@@ -600,12 +603,14 @@ function DuplicatePersonWarning({
 
 function ManualEntryPanels({
   routingTeams,
+  routingTracks,
   sessionFormats,
   manualApplicationIdempotencyKey,
   directSessionIdempotencyKey,
   actionResult,
 }: {
   routingTeams: Array<{ id: string; name: string }>;
+  routingTracks: Array<{ id: string; name: string }>;
   sessionFormats: Awaited<
     ReturnType<SubmissionService["getConfiguredSessionFormats"]>
   >;
@@ -655,8 +660,22 @@ function ManualEntryPanels({
               <input className="field" name="title" required />
             </label>
             <label className="label">
-              Category
-              <input className="field" name="category" required />
+              Track
+              <select
+                className="select"
+                name="trackId"
+                required
+                defaultValue=""
+              >
+                <option value="" disabled>
+                  Choose a current event track
+                </option>
+                {routingTracks.map((track) => (
+                  <option key={track.id} value={track.id}>
+                    {track.name}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="label">
               Format
@@ -857,13 +876,17 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
           <div className="value">{drafts}</div>
         </section>
         <section className="card metric">
-          <div className="label">Category routes</div>
+          <div className="label">Reviewer teams</div>
           <div className="value">
             {
               new Set(
-                submissions
-                  .map((submission) => submission.routedTeamId)
-                  .filter(Boolean),
+                submissions.flatMap((submission) =>
+                  submission.routedTeamIds.length
+                    ? submission.routedTeamIds
+                    : submission.routedTeamId
+                      ? [submission.routedTeamId]
+                      : [],
+                ),
               ).size
             }
           </div>
@@ -906,13 +929,13 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
             </select>
           </label>
           <label className="label">
-            Category
+            Track
             <select
               className="select"
               name="category"
               defaultValue={filters.category}
             >
-              <option value="">All categories</option>
+              <option value="">All tracks</option>
               {categories.map((category) => (
                 <option key={category}>{category}</option>
               ))}
@@ -967,6 +990,7 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
       </section>
       <ManualEntryPanels
         routingTeams={routingTeams}
+        routingTracks={loaderData.routingTracks}
         sessionFormats={loaderData.sessionFormats}
         manualApplicationIdempotencyKey={
           loaderData.manualApplicationIdempotencyKey

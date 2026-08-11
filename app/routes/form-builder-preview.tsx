@@ -97,12 +97,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const requestedFormId = url.searchParams.get("form");
   const creating = url.searchParams.get("new") === "1";
-  const [workspace, forms, routingTeams] = await Promise.all([
+  const [workspace, forms, routingTeams, routingTracks] = await Promise.all([
     creating
       ? Promise.resolve(null)
       : service.getAdminWorkspace(viewer, requestedFormId ?? undefined),
     service.listAdminForms(viewer),
     service.listRoutingTeams(viewer),
+    service.listRoutingTracks(viewer),
   ]);
   if (requestedFormId !== null && !workspace) {
     throw new Response("Form not found", { status: 404 });
@@ -128,19 +129,24 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           : null,
       }
     : null;
+  const input = workspace
+    ? SubmissionService.synchronizeFormTrackChoices(
+        SubmissionService.workspaceToInput(workspace),
+        routingTracks,
+      )
+    : await service.getDefaultFormInput(viewer);
   return {
     workspace: browserWorkspace,
     forms,
     routingTeams,
+    routingTracks,
     passwordConfigured: Boolean(workspace?.draftVersion.routing.passwordHash),
     recoveryScope: {
       eventId: viewer.eventId,
       personId: viewer.personId,
     },
     createdFromLocalDraft: url.searchParams.get("created") === "1",
-    input: workspace
-      ? SubmissionService.workspaceToInput(workspace)
-      : await service.getDefaultFormInput(viewer),
+    input,
   };
 }
 
@@ -771,6 +777,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           moveField={moveField}
           setSelectedId={setSelectedId}
           routingTeams={loaderData.routingTeams}
+          routingTracks={loaderData.routingTracks}
         />
         <ApplicantPreviewPanel
           input={input}

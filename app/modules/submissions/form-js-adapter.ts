@@ -154,10 +154,10 @@ function fieldTypeFor(
     component.type === "textarea"
       ? "long_text"
       : component.type === "select" ||
-          component.type === PROGRAM_CUE_FORM_JS_TYPES.category ||
           component.type === PROGRAM_CUE_FORM_JS_TYPES.format
         ? "select"
-        : component.type === "checklist"
+        : component.type === "checklist" ||
+            component.type === PROGRAM_CUE_FORM_JS_TYPES.category
           ? "multi_select"
           : component.type === PROGRAM_CUE_FORM_JS_TYPES.url
             ? "url"

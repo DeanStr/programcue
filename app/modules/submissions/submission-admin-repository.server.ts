@@ -2,12 +2,46 @@ import {
   formSchemaSchema,
   routingSchema,
   submittedSnapshotSchema,
+  type FormRouting,
   type SubmittedSnapshot,
 } from "./submission-schema";
+import { z } from "zod";
 import {
   parseJson,
   type AdminSubmission,
 } from "./submission-repository-shared";
+
+function requireRoutedTeamSummary(
+  submissionId: string,
+  primaryTeamId: string | null,
+  routedTeamIds: string[],
+  routing: FormRouting,
+) {
+  if (routedTeamIds.length === 0) {
+    if (primaryTeamId) {
+      throw new Error(
+        `Submission ${submissionId} has incomplete persisted routing teams.`,
+      );
+    }
+    return "Unassigned";
+  }
+  if (!primaryTeamId || !routedTeamIds.includes(primaryTeamId)) {
+    throw new Error(
+      `Submission ${submissionId} has inconsistent persisted routing teams.`,
+    );
+  }
+  return routedTeamIds
+    .map((teamId) => {
+      const teamName = routing.teamNames[teamId];
+      if (!teamName) {
+        throw new Error(
+          `Submission ${submissionId} is missing an immutable routed-team name.`,
+        );
+      }
+      return teamName;
+    })
+    .join(", ");
+}
 
 function requireSubmittedSnapshot(
   submissionId: string,
@@ -58,16 +92,27 @@ export class SubmissionAdminRepository {
   ): Promise<string[]> {
     const rows = await this.env.DB.prepare(
       `
+      SELECT DISTINCT selection.track_name_snapshot AS category
+        FROM submission_track_selections selection
+        JOIN submissions s
+          ON s.id = selection.submission_id AND s.event_id = selection.event_id
+        JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
+       WHERE selection.event_id = ?
+         AND trim(selection.track_name_snapshot) <> ''
+      UNION
       SELECT DISTINCT trim(s.category) AS category
         FROM submissions s
         JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
-       WHERE s.event_id = ?
-         AND s.category IS NOT NULL
-         AND trim(s.category) <> ''
+       WHERE s.event_id = ? AND s.category IS NOT NULL AND trim(s.category) <> ''
+         AND s.status = 'draft'
+         AND NOT EXISTS (
+           SELECT 1 FROM submission_track_selections selection
+            WHERE selection.submission_id = s.id AND selection.event_id = s.event_id
+         )
        ORDER BY category COLLATE NOCASE, category
     `,
     )
-      .bind(organisationId, eventId)
+      .bind(organisationId, eventId, organisationId, eventId)
       .all<{ category: string }>();
     return rows.results.map((row) => row.category);
   }
@@ -90,13 +135,33 @@ export class SubmissionAdminRepository {
     const query = `%${filters.query ?? ""}%`;
     const rows = await this.env.DB.prepare(
       `
-      SELECT s.id, s.public_reference AS publicReference, s.title, COALESCE(s.category, '') AS category,
+      SELECT s.id, s.public_reference AS publicReference, s.title,
+             CASE WHEN s.status = 'draft' THEN COALESCE(s.category, '')
+                  ELSE (
+                    SELECT group_concat(selected.track_name_snapshot, ', ')
+                      FROM (
+                        SELECT track_name_snapshot
+                          FROM submission_track_selections
+                         WHERE submission_id = s.id AND event_id = s.event_id
+                         ORDER BY position
+                      ) selected
+                  )
+             END AS category,
              COALESCE(s.format, '') AS format, s.status,
              COALESCE(p.display_name, s.submitter_email, 'Unknown') AS submitterName,
              COALESCE(p.email, s.submitter_email, '') AS submitterEmail,
              (SELECT COUNT(*) FROM submission_speakers ss WHERE ss.submission_id = s.id) AS speakerCount,
              fv.version_number AS versionNumber, s.submitted_at AS submittedAt, s.updated_at AS updatedAt,
              s.routed_team_id AS routedTeamId,
+             COALESCE((
+               SELECT json_group_array(routed.team_id)
+                 FROM (
+                   SELECT route.team_id
+                     FROM submission_routing_teams route
+                    WHERE route.submission_id = s.id AND route.event_id = s.event_id
+                    ORDER BY route.team_id
+                 ) routed
+             ), '[]') AS routedTeamIdsJson,
              COALESCE(
                fv.routing_json,
                json_extract(s.submitted_snapshot_json, '$.routing'),
@@ -108,7 +173,12 @@ export class SubmissionAdminRepository {
         LEFT JOIN form_versions fv ON fv.id = s.form_version_id
        WHERE s.event_id = ?
          AND (? = '' OR s.status = ?)
-         AND (? = '' OR s.category = ?)
+         AND (? = '' OR (s.status = 'draft' AND s.category = ?) OR EXISTS (
+           SELECT 1 FROM submission_track_selections selected_filter
+            WHERE selected_filter.submission_id = s.id
+              AND selected_filter.event_id = s.event_id
+              AND selected_filter.track_name_snapshot = ?
+         ))
          AND (? = '%%' OR s.title LIKE ? OR p.display_name LIKE ? OR COALESCE(p.email, s.submitter_email) LIKE ?)
        ORDER BY COALESCE(s.submitted_at, s.updated_at) DESC, s.id DESC
        LIMIT ? OFFSET ?
@@ -121,6 +191,7 @@ export class SubmissionAdminRepository {
         filters.status ?? "",
         filters.category ?? "",
         filters.category ?? "",
+        filters.category ?? "",
         query,
         query,
         query,
@@ -128,15 +199,34 @@ export class SubmissionAdminRepository {
         pagination.limit,
         pagination.offset,
       )
-      .all<Omit<AdminSubmission, "routedTo"> & { routingJson: string }>();
-    return rows.results.map(({ routingJson, ...row }) => {
+      .all<
+        Omit<AdminSubmission, "category" | "routedTo" | "routedTeamIds"> & {
+          category: string | null;
+          routingJson: string;
+          routedTeamIdsJson: string;
+        }
+      >();
+    return rows.results.map(({ routingJson, routedTeamIdsJson, ...row }) => {
+      if (row.status !== "draft" && !row.category) {
+        throw new Error(
+          `Submission ${row.id} is missing persisted track selections.`,
+        );
+      }
       const routing = routingSchema.parse(JSON.parse(routingJson));
+      const routedTeamIds = z
+        .array(z.string())
+        .parse(JSON.parse(routedTeamIdsJson));
       return {
         ...row,
+        category: row.category ?? "",
         speakerCount: Number(row.speakerCount),
-        routedTo: row.routedTeamId
-          ? (routing.teamNames[row.routedTeamId] ?? row.routedTeamId)
-          : "Unassigned",
+        routedTeamIds,
+        routedTo: requireRoutedTeamSummary(
+          row.id,
+          row.routedTeamId,
+          routedTeamIds,
+          routing,
+        ),
       };
     });
   }
@@ -155,6 +245,15 @@ export class SubmissionAdminRepository {
              COALESCE(p.email, s.submitter_email) AS submitterEmail,
              fv.version_number AS versionNumber, fv.schema_json AS schemaJson,
              s.routed_team_id AS routedTeamId,
+             COALESCE((
+               SELECT json_group_array(routed.team_id)
+                 FROM (
+                   SELECT route.team_id
+                     FROM submission_routing_teams route
+                    WHERE route.submission_id = s.id AND route.event_id = s.event_id
+                    ORDER BY route.team_id
+                 ) routed
+             ), '[]') AS routedTeamIdsJson,
              COALESCE(
                fv.routing_json,
                json_extract(s.submitted_snapshot_json, '$.routing'),
@@ -192,6 +291,7 @@ export class SubmissionAdminRepository {
         schemaJson: string | null;
         routingJson: string;
         routedTeamId: string | null;
+        routedTeamIdsJson: string;
         snapshotJson: string | null;
         latestSpeakerSnapshotJson: string | null;
       }>();
@@ -224,6 +324,9 @@ export class SubmissionAdminRepository {
         ? null
         : requireSubmittedSnapshot(row.id, row.snapshotJson);
     const routing = routingSchema.parse(JSON.parse(row.routingJson));
+    const routedTeamIds = z
+      .array(z.string())
+      .parse(JSON.parse(row.routedTeamIdsJson));
     const sourceSpeakers = snapshot
       ? snapshot.speakers
       : row.latestSpeakerSnapshotJson
@@ -250,6 +353,7 @@ export class SubmissionAdminRepository {
       answersJson: _answersJson,
       schemaJson: _schemaJson,
       routingJson: _routingJson,
+      routedTeamIdsJson: _routedTeamIdsJson,
       snapshotJson: _snapshotJson,
       latestSpeakerSnapshotJson: _latestSpeakerSnapshotJson,
       ...summary
@@ -265,9 +369,13 @@ export class SubmissionAdminRepository {
         : {}),
       answers,
       schema,
-      routedTo: row.routedTeamId
-        ? (routing.teamNames[row.routedTeamId] ?? row.routedTeamId)
-        : "Unassigned",
+      routedTeamIds,
+      routedTo: requireRoutedTeamSummary(
+        row.id,
+        row.routedTeamId,
+        routedTeamIds,
+        routing,
+      ),
       uploads: snapshot ? snapshot.uploads : {},
       speakers: speakers.results.map(({ currentBiography, ...speaker }) => {
         const submittedBiography =

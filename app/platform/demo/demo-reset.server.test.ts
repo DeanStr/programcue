@@ -220,10 +220,7 @@ describe("complete evaluator demo reset", () => {
         fixtureProposalId,
         crypto.randomUUID(),
         JSON.stringify(
-          taskProposalMetadata(
-            fixtureProposalId,
-            DEMO_ASSISTANT_FIXTURE_MODEL,
-          ),
+          taskProposalMetadata(fixtureProposalId, DEMO_ASSISTANT_FIXTURE_MODEL),
         ),
       ),
       testEnvironment.DB.prepare(
@@ -276,9 +273,7 @@ describe("complete evaluator demo reset", () => {
     const tombstone = fixtureAudits.results.find(
       ({ action }) => action === "assistant.proposal.superseded",
     );
-    expect(
-      JSON.parse(tombstone?.metadataJson ?? "{}"),
-    ).toMatchObject({
+    expect(JSON.parse(tombstone?.metadataJson ?? "{}")).toMatchObject({
       proposalId: fixtureProposalId,
       reason: "demo_fixture_reset",
       fixtureModel: DEMO_ASSISTANT_FIXTURE_MODEL,

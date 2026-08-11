@@ -691,7 +691,7 @@ describe("participant submission commands", () => {
         title: "A participant API session",
         description:
           "A practical session explaining how participant APIs improve reliable event operations.",
-        category: "AI & Innovation",
+        category: ["AI & Innovation"],
         format: "Presentation",
         video: "https://example.com/pitch",
       },
@@ -819,7 +819,7 @@ describe("participant submission commands", () => {
         title: "Recovering a participant API submission",
         description:
           "A practical explanation of durable application commands and idempotent downstream event orchestration.",
-        category: "AI & Innovation",
+        category: ["AI & Innovation"],
         format: "Presentation",
         video: "https://example.com/recovery",
       },
@@ -957,7 +957,7 @@ describe("participant submission commands", () => {
         title: "Recovering an unrecorded participant webhook",
         description:
           "A complete application proving exact retries resume outbound webhook intent after a committed participant submission.",
-        category: "AI & Innovation",
+        category: ["AI & Innovation"],
         format: "Presentation",
         video: "https://example.com/webhook-recovery",
       },
@@ -1076,7 +1076,7 @@ describe("participant submission commands", () => {
         title: "A withdrawal recovery example",
         description:
           "A complete application used to verify durable withdrawal recovery behavior.",
-        category: "AI & Innovation",
+        category: ["AI & Innovation"],
         format: "Presentation",
         video: "https://example.com/withdrawal",
       },

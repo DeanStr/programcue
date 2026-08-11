@@ -82,6 +82,53 @@ describe("event CSV exports", () => {
     );
   });
 
+  it("exports every ordered submission track from authoritative selections", async () => {
+    const submissionId = `export-multi-track-${crypto.randomUUID()}`;
+    const reference = `EXPORT-MULTI-${crypto.randomUUID()}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, public_reference, title, category, format, status,
+           answers_json, submitted_snapshot_json, submitted_at, created_at, updated_at
+         ) VALUES (?, ?, ?, 'Multi-track export proposal', 'AI & Innovation',
+                   'Presentation', 'submitted', '{}', '{"answers":{},"speakers":[]}',
+                   unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(submissionId, viewer.eventId, reference),
+      env.DB.prepare(
+        `INSERT INTO submission_track_selections (
+           submission_id, event_id, track_id, track_name_snapshot, position
+         ) VALUES (?, ?, 'demo-track-ai', 'AI & Innovation', 0)`,
+      ).bind(submissionId, viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO submission_track_selections (
+           submission_id, event_id, track_id, track_name_snapshot, position
+         ) VALUES (?, ?, 'demo-track-operations', 'Event Operations', 1)`,
+      ).bind(submissionId, viewer.eventId),
+    ]);
+    try {
+      const exported = await new DataExportService(
+        env as unknown as CloudflareEnvironment,
+      ).export(viewer, "submissions", crypto.randomUUID());
+      expect(exported.csv).toContain(
+        "id,publicReference,title,tracks,format,status,submitterEmail",
+      );
+      const row = exported.csv
+        .split("\r\n")
+        .find((candidate) => candidate.includes(reference));
+      expect(row).toContain("demo-track-ai");
+      expect(row).toContain("demo-track-operations");
+      expect(row!.indexOf("demo-track-ai")).toBeLessThan(
+        row!.indexOf("demo-track-operations"),
+      );
+    } finally {
+      await env.DB.prepare(
+        "DELETE FROM submissions WHERE id = ? AND event_id = ?",
+      )
+        .bind(submissionId, viewer.eventId)
+        .run();
+    }
+  });
+
   it("fails closed when the event is outside the viewer organisation", async () => {
     await expect(
       new DataExportService(env as unknown as CloudflareEnvironment).export(

@@ -8,6 +8,7 @@ import {
   type Viewer,
 } from "~/platform/auth/authorize.server";
 import { DEMO_IDENTITIES } from "~/platform/demo/demo-identities";
+import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import {
   D1EventRepository,
   EventPublishedScheduleConflictError,
@@ -16,6 +17,7 @@ import {
   EventRevisionConflictError,
   EventRoomOwnershipError,
   EventSlugConflictError,
+  EventTrackInUseError,
 } from "./event-repository.server";
 import { eventSetupInputSchema } from "./event-schema";
 import { EventService } from "./event-service.server";
@@ -193,6 +195,42 @@ describe("Event Setup D1 service", () => {
       defaultDurationMinutes: 75,
       position: original.sessionFormats.length,
     });
+  });
+
+  it("rejects removing a track used by a published form with a specific error", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const submissions = new SubmissionService(testEnv);
+    const formInput = await submissions.getDefaultFormInput(viewer);
+    const formId = await submissions.saveForm(viewer, {
+      ...formInput,
+      name: `Published track guard ${crypto.randomUUID()}`,
+      publicSlug: `published-track-guard-${crypto.randomUUID()}`,
+    });
+    const form = await submissions.getAdminWorkspace(viewer, formId);
+    await submissions.publishForm(
+      viewer,
+      formId,
+      form!.revision,
+      form!.draftVersion.revision,
+    );
+
+    const events = new EventService(testEnv);
+    const current = await events.getSetup(viewer);
+    const referencedTrackId =
+      form!.draftVersion.routing.trackIds[
+        form!.draftVersion.schema.fields.find(
+          (field) => field.id === "category",
+        )!.options[0]!
+      ]!;
+    await expect(
+      events.saveSetup(viewer, {
+        ...inputFrom(current),
+        tracks: current.tracks.filter(
+          (track) => track.id !== referencedTrackId,
+        ),
+      }),
+    ).rejects.toBeInstanceOf(EventTrackInUseError);
   });
 
   it("rejects removing a required resource from its scheduled room", async () => {

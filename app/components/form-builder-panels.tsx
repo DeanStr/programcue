@@ -374,6 +374,7 @@ export function FieldSettingsPanel({
   moveField,
   setSelectedId,
   routingTeams,
+  routingTracks,
 }: {
   input: SaveFormInput;
   selected: FormField | undefined;
@@ -383,7 +384,40 @@ export function FieldSettingsPanel({
   moveField: (direction: -1 | 1) => void;
   setSelectedId: (fieldId: string) => void;
   routingTeams: Array<{ id: string; name: string }>;
+  routingTracks: Array<{ id: string; name: string }>;
 }) {
+  const selectedTrackNames = new Set(categoryField?.options ?? []);
+  function updateTrackChoices(trackId: string, selected: boolean) {
+    const nextTracks = routingTracks.filter((track) =>
+      track.id === trackId ? selected : selectedTrackNames.has(track.name),
+    );
+    const nextTrackNames = new Set(nextTracks.map((track) => track.name));
+    change({
+      ...input,
+      schema: {
+        ...input.schema,
+        fields: input.schema.fields.map((field) =>
+          field.id === "category"
+            ? { ...field, options: nextTracks.map((track) => track.name) }
+            : field,
+        ),
+      },
+      routing: {
+        ...input.routing,
+        categories: Object.fromEntries(
+          Object.entries(input.routing.categories).filter(([trackName]) =>
+            nextTrackNames.has(trackName),
+          ),
+        ),
+        trackIds: Object.fromEntries(
+          nextTracks.map((track) => [track.name, track.id]),
+        ),
+        trackNames: Object.fromEntries(
+          nextTracks.map((track) => [track.id, track.name]),
+        ),
+      },
+    });
+  }
   return (
     <section className="card builder-panel settings-panel">
       <div className="card-title">
@@ -436,7 +470,8 @@ export function FieldSettingsPanel({
               onChange={(event) => patchField({ help: event.target.value })}
             />
           </label>
-          {selected.type === "select" || selected.type === "multi_select" ? (
+          {(selected.type === "select" || selected.type === "multi_select") &&
+          selected.id !== "category" ? (
             <label className="label mt">
               Options, one per line
               <textarea
@@ -452,6 +487,31 @@ export function FieldSettingsPanel({
                 }
               />
             </label>
+          ) : selected.id === "category" ? (
+            <fieldset className="stack mt">
+              <legend className="label">Available event tracks</legend>
+              <p className="help">
+                Track choices come from Event Setup so submissions and schedule
+                records use the same track identities.
+              </p>
+              {routingTracks.map((track) => (
+                <label className="toggle" key={track.id}>
+                  <input
+                    type="checkbox"
+                    checked={selectedTrackNames.has(track.name)}
+                    onChange={(event) =>
+                      updateTrackChoices(track.id, event.target.checked)
+                    }
+                  />{" "}
+                  {track.name}
+                </label>
+              ))}
+              {!routingTracks.length ? (
+                <p className="help">
+                  Configure at least one event track in Event Setup.
+                </p>
+              ) : null}
+            </fieldset>
           ) : null}
           <label className="label mt">
             Blinded-review visibility
@@ -583,7 +643,7 @@ export function FieldSettingsPanel({
         <p className="subtle">Select a field to configure it.</p>
       )}
       <div className="divider" />
-      <h3>Category routing</h3>
+      <h3>Track routing</h3>
       {categoryField?.options.map((category) => (
         <label className="label mt" key={category}>
           {category}
@@ -600,6 +660,8 @@ export function FieldSettingsPanel({
                 routing: {
                   ...input.routing,
                   categories,
+                  trackIds: input.routing.trackIds,
+                  trackNames: input.routing.trackNames,
                   teamNames: Object.fromEntries(
                     routingTeams.map((team) => [team.id, team.name]),
                   ),
@@ -620,6 +682,11 @@ export function FieldSettingsPanel({
         <p className="help mt">
           Create an active evaluation team before configuring automatic category
           routing.
+        </p>
+      ) : null}
+      {!routingTracks.length ? (
+        <p className="help mt">
+          Configure at least one event track before publishing this form.
         </p>
       ) : null}
     </section>

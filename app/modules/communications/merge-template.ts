@@ -4,7 +4,9 @@ export type MergeValues = Record<string, string | number | null | undefined>;
 
 export class UnknownMergeVariableError extends Error {
   constructor(readonly variables: string[]) {
-    super(`Unknown merge ${variables.length === 1 ? "variable" : "variables"}: ${variables.join(", ")}`);
+    super(
+      `Unknown merge ${variables.length === 1 ? "variable" : "variables"}: ${variables.join(", ")}`,
+    );
     this.name = "UnknownMergeVariableError";
   }
 }
@@ -12,7 +14,9 @@ export class UnknownMergeVariableError extends Error {
 export function mergeTemplateVariables(template: string) {
   return [...template.matchAll(new RegExp(VARIABLE_PATTERN.source, "g"))]
     .map((match) => match[1]!)
-    .filter((variable, index, variables) => variables.indexOf(variable) === index);
+    .filter(
+      (variable, index, variables) => variables.indexOf(variable) === index,
+    );
 }
 
 export function renderMergeTemplate(template: string, values: MergeValues) {
@@ -45,5 +49,9 @@ export const representativeMergeValues: MergeValues = {
   "event.dates": "20–22 May 2025",
   "submission.title": "A practical session proposal",
   "decision.outcome": "accepted",
+  "decision.rationale":
+    "The proposal is a strong fit for the programme and audience.",
+  "decision.feedback":
+    "The reviewers appreciated the practical examples and suggested clarifying the intended audience.",
   "task.title": "Upload final presentation",
 };

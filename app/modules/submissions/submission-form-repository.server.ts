@@ -449,6 +449,25 @@ export class SubmissionFormRepository {
     const auditId = operation?.auditId ?? crypto.randomUUID();
     const publicationId = operation?.operationId ?? crypto.randomUUID();
     const version = workspace.draftVersion;
+    const routedTrackBindings = Object.entries(
+      version.routing.trackIds,
+    ).flatMap(([trackName, trackId]) => {
+      if (version.routing.trackNames[trackId] !== trackName) {
+        throw new SubmissionStateError(
+          "A track route is missing its saved event-track identity. Save the form again before publishing.",
+        );
+      }
+      return [trackId, trackName];
+    });
+    const routedTrackPredicates = Object.keys(version.routing.trackIds)
+      .map(
+        () => `AND EXISTS (
+          SELECT 1 FROM tracks routed_track
+           WHERE routed_track.id = ? AND routed_track.name = ?
+             AND routed_track.event_id = form_definitions.event_id
+        )`,
+      )
+      .join("\n");
     const routedTeamIds = [
       ...new Set(Object.values(version.routing.categories)),
     ];
@@ -511,6 +530,7 @@ export class SubmissionFormRepository {
              )
            )
            ${routedTeamPredicates}
+           ${routedTrackPredicates}
       `,
       ).bind(
         workspace.name,
@@ -535,6 +555,7 @@ export class SubmissionFormRepository {
         organisationId,
         expectedSessionFormatsJson,
         ...routedTeamBindings,
+        ...routedTrackBindings,
       ),
       this.env.DB.prepare(
         `

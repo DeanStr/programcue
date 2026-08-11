@@ -182,6 +182,14 @@ const sourceVariableRequirements: Record<
     audiences: new Set(["decision_recipients"]),
     categories: new Set(["decision"]),
   },
+  "decision.rationale": {
+    audiences: new Set(["decision_recipients"]),
+    categories: new Set(["decision"]),
+  },
+  "decision.feedback": {
+    audiences: new Set(["decision_recipients"]),
+    categories: new Set(["decision"]),
+  },
   "task.title": {
     audiences: new Set([
       "incomplete_speakers",
@@ -248,25 +256,79 @@ export async function snapshotSourceValues(
     );
   }
   for (const sourceId of sourceIds) snapshots.set(sourceId, {});
+  const requiresDecision = variables.some((variable) =>
+    variable.startsWith("decision."),
+  );
 
-  if (variables.some((variable) => variable.startsWith("submission."))) {
+  if (
+    variables.some(
+      (variable) =>
+        variable.startsWith("submission.") || variable.startsWith("decision."),
+    )
+  ) {
     const rows = await env.DB.prepare(
-      `SELECT id, title, status FROM submissions
-        WHERE event_id = ? AND id IN (SELECT value FROM json_each(?))`,
+      `SELECT submission.id, submission.title,
+              decision.id AS decisionId, decision.decision AS decisionOutcome,
+              decision.rationale,
+              decision.notification_feedback_json AS notificationFeedbackJson
+         FROM submissions submission
+         LEFT JOIN submission_decisions decision
+           ON decision.submission_id = submission.id
+          AND decision.event_id = submission.event_id
+          AND decision.status = 'published'
+        WHERE submission.event_id = ?
+          AND submission.id IN (SELECT value FROM json_each(?))`,
     )
       .bind(eventId, JSON.stringify(sourceIds))
-      .all<{ id: string; title: string; status: string }>();
+      .all<{
+        id: string;
+        title: string;
+        decisionId: string | null;
+        decisionOutcome: string | null;
+        rationale: string | null;
+        notificationFeedbackJson: string | null;
+      }>();
     if (rows.results.length !== sourceIds.length) {
       throw new CommunicationStateError(
         "A submission required by this audience is no longer available. Preview again.",
       );
     }
     for (const row of rows.results) {
+      if (requiresDecision && (!row.decisionId || !row.decisionOutcome)) {
+        throw new CommunicationStateError(
+          "A published decision required by this audience is unavailable. Preview again.",
+        );
+      }
       const values = snapshots.get(row.id)!;
       if (variables.includes("submission.title"))
         values["submission.title"] = row.title;
       if (variables.includes("decision.outcome"))
-        values["decision.outcome"] = row.status;
+        values["decision.outcome"] = row.decisionOutcome!;
+      if (variables.includes("decision.rationale"))
+        values["decision.rationale"] = row.rationale ?? "";
+      if (variables.includes("decision.feedback")) {
+        if (row.notificationFeedbackJson === null) {
+          throw new CommunicationStateError(
+            "A decision required by this audience contains invalid feedback.",
+          );
+        }
+        let feedback: unknown;
+        try {
+          feedback = JSON.parse(row.notificationFeedbackJson);
+        } catch {
+          throw new CommunicationStateError(
+            "A decision required by this audience contains invalid feedback.",
+          );
+        }
+        if (
+          !Array.isArray(feedback) ||
+          feedback.some((item) => typeof item !== "string")
+        )
+          throw new CommunicationStateError(
+            "A decision required by this audience contains invalid feedback.",
+          );
+        values["decision.feedback"] = feedback.join("\n\n");
+      }
     }
   }
 

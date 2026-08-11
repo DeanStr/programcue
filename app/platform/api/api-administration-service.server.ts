@@ -227,6 +227,14 @@ export function parseAdminQuery(
 type EventPrincipal = ApiPrincipal & { eventId: string };
 type PageRow = { id: string; sort: number } & Record<string, unknown>;
 
+const submissionTracksSchema = z.array(
+  z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    position: z.number().int().nonnegative(),
+  }),
+);
+
 function jsonValue(value: unknown, label: string) {
   if (typeof value !== "string") return value;
   try {
@@ -378,6 +386,20 @@ export class ApiAdministrationService {
                     submission.submitter_email AS submitterEmail,
                     submission.title, submission.category, submission.format,
                     submission.routed_team_id AS routedTeamId,
+                    COALESCE((
+                      SELECT json_group_array(json(selected.track))
+                        FROM (
+                          SELECT json_object(
+                                   'id', selection.track_id,
+                                   'name', selection.track_name_snapshot,
+                                   'position', selection.position
+                                 ) AS track
+                            FROM submission_track_selections selection
+                           WHERE selection.submission_id = submission.id
+                             AND selection.event_id = submission.event_id
+                           ORDER BY selection.position
+                        ) selected
+                    ), '[]') AS tracksJson,
                     submission.status, submission.revision,
                     submission.submitted_at AS submittedAt,
                     submission.withdrawn_at AS withdrawnAt,
@@ -805,6 +827,18 @@ export class ApiAdministrationService {
     }
     if (resource === "speakers" || resource === "people")
       result.emailVerified = Boolean(result.emailVerified);
+    if (resource === "submissions") {
+      const tracks = submissionTracksSchema.parse(
+        jsonValue(result.tracksJson, `Submission ${String(result.id)} tracks`),
+      );
+      if (result.status !== "draft" && tracks.length === 0) {
+        throw new Error(
+          `Submission ${String(result.id)} is missing persisted track selections.`,
+        );
+      }
+      result.tracks = tracks;
+      delete result.tracksJson;
+    }
     if (resource === "sessions") {
       result.requiredResources = jsonValue(
         result.requiredResourcesJson,

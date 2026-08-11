@@ -119,9 +119,9 @@ const conferenceFields: Array<[string, FormFieldRenderer]> = [
   [
     PROGRAM_CUE_FORM_JS_TYPES.category,
     extendField(
-      Select as unknown as FormFieldRenderer,
+      Checklist as unknown as FormFieldRenderer,
       PROGRAM_CUE_FORM_JS_TYPES.category,
-      "Session category (Program Cue)",
+      "Session tracks (Program Cue)",
       choiceEntries,
     ),
   ],
@@ -176,6 +176,20 @@ function errorMessage(error: unknown) {
   return "The visual form editor failed with an unknown error.";
 }
 
+function labelFormJsControls(container: HTMLElement) {
+  const paletteSearch = container.querySelector<HTMLInputElement>(
+    ".fjs-palette-search",
+  );
+  if (
+    paletteSearch &&
+    !paletteSearch.labels?.length &&
+    !paletteSearch.hasAttribute("aria-label") &&
+    !paletteSearch.hasAttribute("aria-labelledby")
+  ) {
+    paletteSearch.setAttribute("aria-label", "Search form components");
+  }
+}
+
 export default function FormJsEditorClient({
   schema,
   onChange,
@@ -198,9 +212,10 @@ export default function FormJsEditorClient({
 
   useEffect(() => {
     if (!containerRef.current) return;
+    const container = containerRef.current;
     let disposed = false;
     const editor = new FormEditor({
-      container: containerRef.current,
+      container,
       additionalModules: [programCueConferenceFieldsModule],
       // Program Cue's normalized RHF value is the save source of truth. Do not
       // leave a visually edited form-js property pending when save is invoked.
@@ -208,6 +223,14 @@ export default function FormJsEditorClient({
       exporter: { name: "Program Cue form adapter", version: "1" },
     });
     editorRef.current = editor;
+    const accessibilityObserver = new MutationObserver(() =>
+      labelFormJsControls(container),
+    );
+    accessibilityObserver.observe(container, {
+      childList: true,
+      subtree: true,
+    });
+    labelFormJsControls(container);
     const importQueue = createFormJsImportQueue();
     importQueueRef.current = importQueue;
 
@@ -270,6 +293,7 @@ export default function FormJsEditorClient({
 
     return () => {
       disposed = true;
+      accessibilityObserver.disconnect();
       importQueue.dispose();
       editor.off("changed", handleChanged);
       editor.destroy();

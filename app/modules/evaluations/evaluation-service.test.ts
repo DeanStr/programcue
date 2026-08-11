@@ -369,7 +369,18 @@ describe("evaluation demo data", () => {
     expect(
       demoFormFields.every((field) => field.reviewVisibility === "reviewers"),
     ).toBe(true);
-    expect(JSON.parse(version?.routingJson ?? "null")).toMatchObject({
+    expect(JSON.parse(version?.routingJson ?? "null")).toEqual({
+      categories: {},
+      trackIds: {
+        "Event Operations": "demo-track-operations",
+        "Experience Design": "demo-track-experience",
+      },
+      trackNames: {
+        "demo-track-operations": "Event Operations",
+        "demo-track-experience": "Experience Design",
+      },
+      teamNames: {},
+      directSessionDurationMinutes: null,
       passwordHash: null,
     });
     expect(JSON.parse(version?.settingsJson ?? "null")).toMatchObject({
@@ -454,7 +465,7 @@ describe("evaluation vertical slice", () => {
         `INSERT OR IGNORE INTO form_definitions (id, event_id, name, kind, status, public_slug, min_speakers, max_speakers, access_mode, revision, created_by_person_id, created_at, updated_at) VALUES ('eval-test-form', ?, 'Evaluation fixture', 'submission', 'published', 'eval-test-form', 1, 4, 'email_verified', 1, ?, unixepoch(), unixepoch())`,
       ).bind(admin.eventId, admin.personId),
       env.DB.prepare(
-        `INSERT OR IGNORE INTO form_versions (id, event_id, form_id, version_number, schema_json, routing_json, settings_snapshot_json, status, revision, published_at, created_by_person_id, created_at, updated_at) VALUES ('eval-test-form-v1', ?, 'eval-test-form', 1, '[]', '{}', '{}', 'published', 1, unixepoch(), ?, unixepoch(), unixepoch())`,
+        `INSERT OR IGNORE INTO form_versions (id, event_id, form_id, version_number, schema_json, routing_json, settings_snapshot_json, status, revision, published_at, created_by_person_id, created_at, updated_at) VALUES ('eval-test-form-v1', ?, 'eval-test-form', 1, '[]', '{"categories":{},"trackIds":{"Operations":"demo-track-operations"},"trackNames":{"demo-track-operations":"Operations"},"teamNames":{},"directSessionDurationMinutes":null,"passwordHash":null}', '{}', 'published', 1, unixepoch(), ?, unixepoch(), unixepoch())`,
       ).bind(admin.eventId, admin.personId),
       env.DB.prepare(
         `INSERT OR IGNORE INTO submissions (id, event_id, form_version_id, submitter_person_id, submitter_email, public_reference, title, category, format, status, answers_json, submitted_snapshot_json, revision, submitted_at, created_at, updated_at) VALUES ('eval-test-submission', ?, 'eval-test-form-v1', 'person-demo-submitter', 'alex.submitter@example.com', 'SUB-EVAL-1', 'A practical event proposal', 'Operations', 'Presentation', 'submitted', ?, ?, 1, unixepoch(), unixepoch(), unixepoch())`,
@@ -473,6 +484,11 @@ describe("evaluation vertical slice", () => {
       ),
       env.DB.prepare(
         `INSERT OR IGNORE INTO submission_speakers (id, event_id, submission_id, person_id, email, display_name, position, invitation_status, is_primary, claimed_at, created_at, updated_at) VALUES ('eval-test-speaker', ?, 'eval-test-submission', 'person-demo-submitter', 'alex.submitter@example.com', 'Alex Morgan', 0, 'claimed', 1, unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(admin.eventId),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO submission_track_selections (
+           submission_id, event_id, track_id, track_name_snapshot, position
+         ) VALUES ('eval-test-submission', ?, 'demo-track-operations', 'Operations', 0)`,
       ).bind(admin.eventId),
     ]);
   });
@@ -986,6 +1002,16 @@ describe("evaluation vertical slice", () => {
     )
       .bind(admin.eventId, submittedSnapshot())
       .run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO submission_track_selections (
+         submission_id, event_id, track_id, track_name_snapshot, position
+       ) VALUES (
+         'eval-explicit-selection-submission', ?,
+         'demo-track-operations', 'Operations', 0
+       )`,
+    )
+      .bind(admin.eventId)
+      .run();
     await service.assign(admin, {
       roundId,
       targetType: "submission",
@@ -1173,6 +1199,18 @@ describe("evaluation vertical slice", () => {
     `,
     )
       .bind(admin.eventId, submittedSnapshot())
+      .run();
+    await testEnv.DB.prepare(
+      `
+      INSERT INTO submission_track_selections (
+        submission_id, event_id, track_id, track_name_snapshot, position
+      ) VALUES (
+        'eval-assignment-boundary-submission', ?, 'demo-track-operations',
+        'Operations', 0
+      )
+    `,
+    )
+      .bind(admin.eventId)
       .run();
     const auditBefore = await testEnv.DB.prepare(
       `
@@ -1495,6 +1533,16 @@ describe("evaluation vertical slice", () => {
     )
       .bind(admin.eventId, submittedSnapshot())
       .run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO submission_track_selections (
+         submission_id, event_id, track_id, track_name_snapshot, position
+       ) VALUES (
+         'eval-conflict-race-submission', ?,
+         'demo-track-operations', 'Operations', 0
+       )`,
+    )
+      .bind(admin.eventId)
+      .run();
     await service.assign(admin, {
       roundId: adminWorkspace.plan!.rounds[0]!.id,
       targetType: "submission",
@@ -1557,6 +1605,43 @@ describe("evaluation vertical slice", () => {
       { status: "submitted", reviewStatus: "submitted", conflictCount: 0 },
       { status: "recused", reviewStatus: null, conflictCount: 1 },
     ]).toContainEqual(state);
+  });
+
+  it("rejects accepted-session release when submitted track identity is missing", async () => {
+    await resetEvaluationFixture();
+    await env.DB.prepare(
+      `DELETE FROM submission_track_selections
+        WHERE submission_id = 'eval-test-submission' AND event_id = ?`,
+    )
+      .bind(admin.eventId)
+      .run();
+
+    await expect(
+      new EvaluationService(evaluationEnvironment()).decide(admin, {
+        submissionId: "eval-test-submission",
+        decision: "accepted",
+        rationale: "A trackless acceptance must not be released.",
+        release: true,
+        confirmedWithoutReview: true,
+        sessionDurationMinutes: 60,
+      }),
+    ).rejects.toThrow(/must retain at least one submitted event track/i);
+    await expect(
+      env.DB.prepare(
+        `SELECT status,
+                (SELECT COUNT(*) FROM submission_decisions
+                  WHERE submission_id = submissions.id) AS decisionCount,
+                (SELECT COUNT(*) FROM sessions
+                  WHERE source_submission_id = submissions.id) AS sessionCount
+           FROM submissions WHERE id = 'eval-test-submission' AND event_id = ?`,
+      )
+        .bind(admin.eventId)
+        .first(),
+    ).resolves.toEqual({
+      status: "submitted",
+      decisionCount: 0,
+      sessionCount: 0,
+    });
   });
 
   it("publishes an accepted decision atomically and records honest notification state", async () => {
@@ -1686,6 +1771,67 @@ describe("evaluation vertical slice", () => {
     });
   });
 
+  it("snapshots selected applicant-facing reviewer feedback for the decision email", async () => {
+    await resetEvaluationFixture();
+    const token = crypto.randomUUID();
+    const planId = `feedback-plan-${token}`;
+    const roundId = `feedback-round-${token}`;
+    const assignmentId = `feedback-assignment-${token}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO evaluation_plans (id, event_id, name, status)
+         VALUES (?, ?, 'Decision feedback plan', 'active')`,
+      ).bind(planId, admin.eventId),
+      env.DB.prepare(
+        `INSERT INTO evaluation_rounds (
+           id, event_id, plan_id, round_number, name, status
+         ) VALUES (?, ?, ?, 1, 'Completed review round', 'active')`,
+      ).bind(roundId, admin.eventId, planId),
+      env.DB.prepare(
+        `INSERT INTO evaluator_assignments (
+           id, event_id, round_id, submission_id, evaluator_person_id,
+           status, assigned_at, submitted_at
+         ) VALUES (?, ?, ?, 'eval-test-submission', 'person-demo-evaluator',
+                   'submitted', unixepoch(), unixepoch())`,
+      ).bind(assignmentId, admin.eventId, roundId),
+      env.DB.prepare(
+        `INSERT INTO reviews (
+           id, event_id, assignment_id, status, scores_json,
+           recommendation, confidence, submitter_feedback, submitted_at
+         ) VALUES (?, ?, ?, 'submitted', '{}', 'minor_changes', 4, ?, unixepoch())`,
+      ).bind(
+        `feedback-review-${token}`,
+        admin.eventId,
+        assignmentId,
+        "Clarify the intended experience level in the final description.",
+      ),
+    ]);
+    const result = await new EvaluationService(evaluationEnvironment()).decide(
+      admin,
+      {
+        submissionId: "eval-test-submission",
+        decision: "rejected",
+        rationale: "The programme is already full in this area.",
+        includeReviewerFeedback: true,
+        release: true,
+      },
+    );
+    await expect(
+      env.DB.prepare(
+        `SELECT rationale,
+                notification_feedback_json AS notificationFeedbackJson
+           FROM submission_decisions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(result.decisionId, admin.eventId)
+        .first(),
+    ).resolves.toEqual({
+      rationale: "The programme is already full in this area.",
+      notificationFeedbackJson: JSON.stringify([
+        "Clarify the intended experience level in the final description.",
+      ]),
+    });
+  });
+
   it("persists accepted-speaker sign-in intent before Queue delivery and recovers it exactly", async () => {
     await resetEvaluationFixture();
     await env.DB.prepare(
@@ -1773,9 +1919,7 @@ describe("evaluation vertical slice", () => {
     );
     expect(callbackUrl.pathname).toBe("/events/select");
     expect(callbackUrl.searchParams.get("eventId")).toBe(admin.eventId);
-    expect(callbackUrl.searchParams.get("returnTo")).toBe(
-      "/speaker/dashboard",
-    );
+    expect(callbackUrl.searchParams.get("returnTo")).toBe("/speaker/dashboard");
     expect(intent?.identifier).not.toContain("person-demo-submitter");
     expect(JSON.parse(intent!.value)).toEqual({
       email: "alex.submitter@example.com",
@@ -2459,6 +2603,14 @@ describe("evaluation vertical slice", () => {
         )
       `,
       ).bind(admin.eventId),
+      env.DB.prepare(
+        `INSERT INTO submission_track_selections (
+           submission_id, event_id, track_id, track_name_snapshot, position
+         ) VALUES (
+           'eval-unclaimed-submission', ?,
+           'demo-track-operations', 'Operations', 0
+         )`,
+      ).bind(admin.eventId),
     ]);
 
     const service = new EvaluationService(evaluationEnvironment());
@@ -2520,6 +2672,16 @@ describe("evaluation vertical slice", () => {
     `,
     )
       .bind(admin.eventId, submittedSnapshot())
+      .run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO submission_track_selections (
+         submission_id, event_id, track_id, track_name_snapshot, position
+       ) VALUES (
+         'eval-active-decision-submission', ?,
+         'demo-track-operations', 'Operations', 0
+       )`,
+    )
+      .bind(admin.eventId)
       .run();
     await service.assign(admin, {
       roundId: adminWorkspace.plan!.rounds[0]!.id,
@@ -2625,6 +2787,16 @@ describe("evaluation vertical slice", () => {
     `,
     )
       .bind(admin.eventId, submittedSnapshot())
+      .run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO submission_track_selections (
+         submission_id, event_id, track_id, track_name_snapshot, position
+       ) VALUES (
+         'eval-revoked-submission', ?,
+         'demo-track-operations', 'Operations', 0
+       )`,
+    )
+      .bind(admin.eventId)
       .run();
     await expect(
       service.assign(admin, {
@@ -2741,6 +2913,59 @@ describe("evaluation vertical slice", () => {
         (assignment) => assignment.submissionId === "eval-test-submission",
       )?.teamId,
     ).toBe(teamId);
+  });
+
+  it("fails the admin queue when legacy routing lacks authoritative team joins", async () => {
+    await resetEvaluationFixture();
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const service = new EvaluationService(evaluationEnvironment(testEnv));
+    const teamId = `eval-incomplete-routing-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO evaluation_teams (
+         id, event_id, name, description, chair_person_id, status,
+         created_at, updated_at
+       ) VALUES (?, ?, ?, '', NULL, 'active', unixepoch(), unixepoch())`,
+    )
+      .bind(teamId, admin.eventId, `Incomplete routing ${teamId}`)
+      .run();
+    try {
+      await testEnv.DB.prepare(
+        `UPDATE submissions
+            SET status = 'assigned', routed_team_id = ?
+          WHERE id = 'eval-test-submission' AND event_id = ?`,
+      )
+        .bind(teamId, admin.eventId)
+        .run();
+
+      await expect(service.getAdminWorkspace(admin)).rejects.toThrow(
+        /incomplete persisted routing teams/i,
+      );
+    } finally {
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `UPDATE submissions
+              SET status = 'submitted', routed_team_id = NULL
+            WHERE id = 'eval-test-submission' AND event_id = ?`,
+        ).bind(admin.eventId),
+        testEnv.DB.prepare(
+          `DELETE FROM evaluation_teams WHERE id = ? AND event_id = ?`,
+        ).bind(teamId, admin.eventId),
+      ]);
+    }
+  });
+
+  it("fails the admin queue when a submission lacks authoritative tracks", async () => {
+    await resetEvaluationFixture();
+    await env.DB.prepare(
+      `DELETE FROM submission_track_selections
+        WHERE submission_id = 'eval-test-submission' AND event_id = ?`,
+    )
+      .bind(admin.eventId)
+      .run();
+
+    await expect(
+      new EvaluationService(evaluationEnvironment()).getAdminWorkspace(admin),
+    ).rejects.toThrow(/missing persisted track selections/i);
   });
 
   it("replays an assistant assignment command for the authenticated administrator", async () => {

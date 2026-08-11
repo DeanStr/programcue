@@ -14,6 +14,7 @@ import {
   CommunicationQueueUnavailableError,
   CommunicationService,
 } from "./communication-service.server";
+import { snapshotSourceValues } from "./communication-service-shared";
 import { CommunicationDeliveryService } from "./communication-delivery-service.server";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { CommunicationTemplateService } from "./communication-template-service.server";
@@ -38,6 +39,48 @@ const viewer: Viewer = {
 };
 
 afterEach(() => vi.restoreAllMocks());
+
+it("rejects decision merge values when no published decision exists", async () => {
+  const { testEnv } = await communicationEnvironment();
+  const submissionId = `decision-source-${crypto.randomUUID()}`;
+  await testEnv.DB.prepare(
+    `INSERT INTO submissions (
+       id, event_id, submitter_email, public_reference, title, status,
+       answers_json, submitted_snapshot_json, submitted_at, created_at, updated_at
+     ) VALUES (?, ?, 'decision-source@example.com', ?, 'Decision source',
+               'submitted', '{}', '{"answers":{},"speakers":[]}',
+               unixepoch(), unixepoch(), unixepoch())`,
+  )
+    .bind(submissionId, viewer.eventId, `SOURCE-${submissionId.slice(-8)}`)
+    .run();
+  const recipients = [
+    {
+      personId: null,
+      address: "decision-source@example.com",
+      name: "Decision source",
+      sourceId: submissionId,
+    },
+  ];
+
+  await expect(
+    snapshotSourceValues(
+      testEnv,
+      viewer.eventId,
+      ["decision.outcome"],
+      recipients,
+    ),
+  ).rejects.toThrow(/published decision.*unavailable/i);
+  await expect(
+    snapshotSourceValues(
+      testEnv,
+      viewer.eventId,
+      ["submission.title"],
+      recipients,
+    ),
+  ).resolves.toEqual(
+    new Map([[submissionId, { "submission.title": "Decision source" }]]),
+  );
+});
 
 async function communicationEnvironment() {
   const sent: unknown[] = [];
@@ -308,6 +351,74 @@ describe("Communications D1 vertical slice", () => {
       }),
     ).rejects.toBe(unavailable);
     expect(assertReadable).toHaveBeenCalledWith(viewer);
+  });
+
+  it("limits decision audiences to submissions with published decisions", async () => {
+    const { testEnv } = await communicationEnvironment();
+    const token = crypto.randomUUID();
+    const decidedSubmissionId = `decided-audience-${token}`;
+    const directSubmissionId = `direct-audience-${token}`;
+    const decidedAddress = `decided-${token}@example.com`;
+    const directAddress = `direct-${token}@example.com`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, submitter_email, public_reference, title, status,
+           answers_json, submitted_snapshot_json, submitted_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'Decided proposal', 'accepted', '{}',
+                   '{"answers":{},"speakers":[]}', unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(
+        decidedSubmissionId,
+        viewer.eventId,
+        decidedAddress,
+        `DECIDED-${token}`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, submitter_email, public_reference, title, status,
+           answers_json, submitted_snapshot_json, submitted_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'Direct-session intake', 'accepted', '{}',
+                   '{"answers":{},"speakers":[]}', unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(
+        directSubmissionId,
+        viewer.eventId,
+        directAddress,
+        `DIRECT-${token}`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO submission_decisions (
+           id, event_id, submission_id, revision_number, status, decision,
+           decided_by_person_id, notification_feedback_json, effect_preview_json,
+           decided_at, published_at
+         ) VALUES (?, ?, ?, 1, 'published', 'accepted', ?, '[]', '{}',
+                   unixepoch(), unixepoch())`,
+      ).bind(
+        `decision-audience-${token}`,
+        viewer.eventId,
+        decidedSubmissionId,
+        viewer.personId,
+      ),
+    ]);
+
+    const preview = await new RecipientQuery(testEnv).preview(viewer, {
+      audienceType: "decision_recipients",
+      manualRecipients: "",
+      category: "decision",
+      kind: "transactional",
+    });
+
+    expect(preview.deliverable).toContainEqual(
+      expect.objectContaining({
+        address: decidedAddress,
+        sourceId: decidedSubmissionId,
+      }),
+    );
+    expect(preview.deliverable).not.toContainEqual(
+      expect.objectContaining({
+        address: directAddress,
+        sourceId: directSubmissionId,
+      }),
+    );
   });
 
   it("rejects email template versions without a real subject", async () => {
@@ -2989,7 +3100,7 @@ describe("Communications D1 vertical slice", () => {
       category: "decision",
       subject: "Your proposal was {{decision.outcome}}",
       content: {
-        body: "Hi {{recipient.firstName}},\n\n{{submission.title}} was {{decision.outcome}}.",
+        body: "Hi {{recipient.firstName}},\n\n{{submission.title}} was {{decision.outcome}}.\n\n{{decision.rationale}}\n\nReviewer feedback:\n{{decision.feedback}}",
         physicalAddress: "100 Programme Way, Toronto",
       },
     });
@@ -3028,13 +3139,18 @@ describe("Communications D1 vertical slice", () => {
       env.DB.prepare(
         `INSERT INTO submission_decisions (
         id, event_id, submission_id, revision_number, status, decision, decided_by_person_id,
-        effect_preview_json, idempotency_key, decided_at, published_at
-      ) VALUES (?, ?, ?, 1, 'published', 'accepted', ?, '{}', ?, unixepoch(), unixepoch())`,
+        rationale, notification_feedback_json, effect_preview_json,
+        idempotency_key, decided_at, published_at
+      ) VALUES (?, ?, ?, 1, 'published', 'accepted', ?, ?, ?, '{}', ?, unixepoch(), unixepoch())`,
       ).bind(
         decisionId,
         viewer.eventId,
         submissionId,
         viewer.personId,
+        "A strong fit for this audience.",
+        JSON.stringify([
+          "Clarify the intended experience level in the final description.",
+        ]),
         `decision-${token}`,
       ),
       env.DB.prepare(
@@ -3111,6 +3227,12 @@ describe("Communications D1 vertical slice", () => {
       to: ["alex.submitter@example.com"],
       subject: "Your proposal was accepted",
     });
+    expect(JSON.stringify(requests[0])).toContain(
+      "A strong fit for this audience.",
+    );
+    expect(JSON.stringify(requests[0])).toContain(
+      "Clarify the intended experience level",
+    );
     const result = await env.DB.prepare(
       `
       SELECT o.status AS operationStatus, c.status AS communicationStatus,

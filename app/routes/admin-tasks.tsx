@@ -93,6 +93,37 @@ export async function action({ request, context }: Route.ActionArgs) {
   const intent = String(form.get("intent") ?? "");
   const service = new TaskService(env);
   try {
+    if (intent === "create-travel-onboarding") {
+      const templates = await service.createTravelOnboardingTemplates(
+        viewer,
+        form.get("confirmed") === "create-travel-onboarding",
+      );
+      const realtimeFailures = await Promise.all(
+        templates.createdTemplateIds.map((templateId) =>
+          recordRouteChange(env, viewer, {
+            entityType: "task_template",
+            entityId: templateId,
+            changeType: "created",
+          }),
+        ),
+      );
+      const warning = realtimeFailures
+        .map((failure) => failure?.message)
+        .filter(Boolean)
+        .join(" ");
+      if (warning)
+        return data(
+          { ok: false, committed: true, message: warning },
+          { status: 207 },
+        );
+      return data({
+        ok: true,
+        message:
+          templates.createdTemplateIds.length === 0
+            ? "Hotel stay and flight reimbursement forms were already ready. No duplicates were created."
+            : "Hotel stay and flight reimbursement forms are ready and will be assigned automatically on acceptance.",
+      });
+    }
     if (intent === "create-template") {
       const templateId = await service.createTemplate(
         viewer,
@@ -110,6 +141,7 @@ export async function action({ request, context }: Route.ActionArgs) {
             form.get("fixedDueDate") === "" ? null : form.get("fixedDueDate"),
           autoAssignOnAcceptance: form.get("autoAssignOnAcceptance") === "true",
           dependencyIds: form.getAll("dependencyIds").map(String),
+          configuration: {},
         },
         String(form.get("intentId") ?? ""),
       );

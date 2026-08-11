@@ -143,7 +143,7 @@ describe("public application mutations", () => {
       answers: JSON.stringify({
         title: "Lifecycle webhook contract",
         description: "Exercise every public application lifecycle event.",
-        category: "AI & Innovation",
+        category: ["AI & Innovation"],
         format: "Presentation",
         video: "https://example.com/lifecycle-video",
       }),

@@ -86,6 +86,9 @@ for (const path of [
 ] as const) {
   test(`${path} exposes a name for every form control`, async ({ page }) => {
     await waitForInterface(page, path);
+    if (path === "/admin/submissions/form") {
+      await page.locator(".fjs-palette-search").waitFor();
+    }
     const unnamedControls = await page
       .locator("input:not([type='hidden']), select, textarea")
       .evaluateAll((controls) =>

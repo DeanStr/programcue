@@ -432,6 +432,76 @@ describe("administration API reads", () => {
     }
   });
 
+  it("returns every ordered submission track in collection and item records", async () => {
+    const token = crypto.randomUUID();
+    const submissionId = `api-multi-track-${token}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, public_reference, title, category, format, status,
+           answers_json, submitted_snapshot_json, submitted_at, created_at, updated_at
+         ) VALUES (?, ?, ?, 'Multi-track API proposal', 'AI & Innovation',
+                   'Presentation', 'submitted', '{}', '{"answers":{},"speakers":[]}',
+                   unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(submissionId, principal.eventId, `API-MULTI-${token}`),
+      testEnv.DB.prepare(
+        `INSERT INTO submission_track_selections (
+           submission_id, event_id, track_id, track_name_snapshot, position
+         ) VALUES (?, ?, 'demo-track-ai', 'AI & Innovation', 0)`,
+      ).bind(submissionId, principal.eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO submission_track_selections (
+           submission_id, event_id, track_id, track_name_snapshot, position
+         ) VALUES (?, ?, 'demo-track-operations', 'Event Operations', 1)`,
+      ).bind(submissionId, principal.eventId),
+    ]);
+    try {
+      const collection = (await new ApiAdministrationService(testEnv).list(
+        principal,
+        "submissions",
+        { limit: 100 },
+      )) as unknown as { submissions: Array<Record<string, unknown>> };
+      expect(
+        collection.submissions.find(
+          (submission) => submission.id === submissionId,
+        ),
+      ).toMatchObject({
+        tracks: [
+          { id: "demo-track-ai", name: "AI & Innovation", position: 0 },
+          {
+            id: "demo-track-operations",
+            name: "Event Operations",
+            position: 1,
+          },
+        ],
+      });
+      await expect(
+        new ApiAdministrationItemService(testEnv).get(
+          principal,
+          "submissions",
+          submissionId,
+        ),
+      ).resolves.toMatchObject({
+        item: {
+          tracks: [
+            { id: "demo-track-ai", name: "AI & Innovation", position: 0 },
+            {
+              id: "demo-track-operations",
+              name: "Event Operations",
+              position: 1,
+            },
+          ],
+        },
+      });
+    } finally {
+      await testEnv.DB.prepare(
+        "DELETE FROM submissions WHERE id = ? AND event_id = ?",
+      )
+        .bind(submissionId, principal.eventId)
+        .run();
+    }
+  });
+
   it("returns one deterministic, filter-consistent people membership", async () => {
     const suffix = crypto.randomUUID();
     const personId = `person-multi-role-${suffix}`;

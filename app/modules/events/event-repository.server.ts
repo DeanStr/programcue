@@ -480,8 +480,8 @@ export class D1EventRepository implements EventRepository {
     const removedTrackReference = await this.env.DB.prepare(
       `SELECT 1
          FROM tracks removed
-         WHERE removed.event_id = ?
-           AND removed.id NOT IN (SELECT value FROM json_each(?))
+        WHERE removed.event_id = ?
+          AND removed.id NOT IN (SELECT value FROM json_each(?))
           AND (
             EXISTS (
               SELECT 1 FROM sessions session
@@ -501,7 +501,7 @@ export class D1EventRepository implements EventRepository {
                  AND routed_track.key = removed.id
             )
           )
-         LIMIT 1`,
+        LIMIT 1`,
     )
       .bind(eventId, trackIdsJson)
       .first();
@@ -1044,7 +1044,8 @@ export class D1EventRepository implements EventRepository {
       input.scope === "organisation"
         ? "membership.event_id IS NULL AND membership.role IN ('owner', 'administrator')"
         : "((membership.event_id IS NULL AND membership.role IN ('owner', 'administrator')) OR (membership.event_id = ? AND membership.role = 'administrator'))";
-    const active = await this.env.DB.prepare(`
+    const active = await this.env.DB.prepare(
+      `
       SELECT membership.id
         FROM memberships membership
        WHERE membership.organisation_id = ?
@@ -1053,7 +1054,8 @@ export class D1EventRepository implements EventRepository {
          AND membership.revoked_at IS NULL
          AND (${activeAccessPredicate})
        LIMIT 1
-    `)
+    `,
+    )
       .bind(
         organisationId,
         person.id,
@@ -1064,12 +1066,14 @@ export class D1EventRepository implements EventRepository {
 
     const targetPredicate =
       input.scope === "organisation" ? "event_id IS NULL" : "event_id = ?";
-    const existing = await this.env.DB.prepare(`
+    const existing = await this.env.DB.prepare(
+      `
       SELECT id
         FROM memberships
        WHERE organisation_id = ? AND person_id = ? AND role = 'administrator'
          AND ${targetPredicate}
-    `)
+    `,
+    )
       .bind(
         organisationId,
         person.id,
@@ -1082,41 +1086,47 @@ export class D1EventRepository implements EventRepository {
     const membershipId =
       existing?.id ?? command?.membershipId ?? crypto.randomUUID();
     const membershipStatement = existing
-      ? this.env.DB.prepare(`
+      ? this.env.DB.prepare(
+          `
         UPDATE memberships
            SET invited_at = unixepoch(), invitation_expires_at = unixepoch() + 604800,
                accepted_at = NULL, revoked_at = NULL, last_operation_id = ?
          WHERE id = ? AND organisation_id = ? AND role = 'administrator'
            AND ${targetPredicate}
-      `).bind(
-        command?.operationId ?? null,
-        membershipId,
-        organisationId,
-        ...(input.scope === "event" ? [eventId] : []),
-      )
-      : this.env.DB.prepare(`
+      `,
+        ).bind(
+          command?.operationId ?? null,
+          membershipId,
+          organisationId,
+          ...(input.scope === "event" ? [eventId] : []),
+        )
+      : this.env.DB.prepare(
+          `
         INSERT INTO memberships (
           id, organisation_id, event_id, person_id, role, invited_at,
           invitation_expires_at, accepted_at, last_operation_id, created_at
         )
         VALUES (?, ?, ?, ?, 'administrator', unixepoch(), unixepoch() + 604800, NULL, ?, unixepoch())
-      `).bind(
-        membershipId,
-        organisationId,
-        input.scope === "event" ? eventId : null,
-        person.id,
-        command?.operationId ?? null,
-      );
+      `,
+        ).bind(
+          membershipId,
+          organisationId,
+          input.scope === "event" ? eventId : null,
+          person.id,
+          command?.operationId ?? null,
+        );
     const results = await this.env.DB.batch([
       membershipStatement,
-      this.env.DB.prepare(`
+      this.env.DB.prepare(
+        `
         INSERT OR IGNORE INTO audit_events (
           id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at
         )
         SELECT ?, ?, ?, ?, 'membership.administrator.invited',
                'membership', ?, ?, ?, unixepoch()
          WHERE changes() = 1
-      `).bind(
+      `,
+      ).bind(
         command?.auditId ?? crypto.randomUUID(),
         organisationId,
         eventId,
@@ -1147,7 +1157,8 @@ export class D1EventRepository implements EventRepository {
     membershipId: string,
     command?: { operationId: string; auditId: string },
   ): Promise<{ membershipId: string; scope: "event" | "organisation" }> {
-    const membership = await this.env.DB.prepare(`
+    const membership = await this.env.DB.prepare(
+      `
       SELECT membership.id, person.email,
              CASE WHEN membership.event_id IS NULL
                   THEN 'organisation' ELSE 'event' END AS scope
@@ -1157,7 +1168,8 @@ export class D1EventRepository implements EventRepository {
          AND membership.role = 'administrator'
          AND membership.revoked_at IS NULL
          AND (membership.event_id = ? OR membership.event_id IS NULL)
-    `)
+    `,
+    )
       .bind(membershipId, organisationId, eventId)
       .first<{
         id: string;
@@ -1173,12 +1185,7 @@ export class D1EventRepository implements EventRepository {
               AND revoked_at IS NOT NULL AND last_operation_id = ?
               AND (event_id = ? OR event_id IS NULL)`,
         )
-          .bind(
-            membershipId,
-            organisationId,
-            command.operationId,
-            eventId,
-          )
+          .bind(membershipId, organisationId, command.operationId, eventId)
           .first<{ scope: "event" | "organisation" }>();
         if (recovered) return { membershipId, scope: recovered.scope };
       }
@@ -1186,20 +1193,23 @@ export class D1EventRepository implements EventRepository {
     }
 
     const results = await this.env.DB.batch([
-      this.env.DB.prepare(`
+      this.env.DB.prepare(
+        `
         UPDATE memberships
            SET revoked_at = unixepoch(), invitation_expires_at = NULL,
                last_operation_id = ?
          WHERE id = ? AND organisation_id = ? AND role = 'administrator'
            AND revoked_at IS NULL
            AND (event_id = ? OR event_id IS NULL)
-      `).bind(
+      `,
+      ).bind(
         command?.operationId ?? null,
         membershipId,
         organisationId,
         eventId,
       ),
-      this.env.DB.prepare(`
+      this.env.DB.prepare(
+        `
         INSERT OR IGNORE INTO audit_events (
           id, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, correlation_id, metadata_json, created_at
@@ -1207,7 +1217,8 @@ export class D1EventRepository implements EventRepository {
         SELECT ?, ?, ?, ?, 'membership.administrator.revoked',
                'membership', ?, ?, ?, unixepoch()
          WHERE changes() = 1
-      `).bind(
+      `,
+      ).bind(
         command?.auditId ?? crypto.randomUUID(),
         organisationId,
         eventId,

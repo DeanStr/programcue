@@ -68,6 +68,7 @@ for table, expected in {
     "submissions": {"submitted_snapshot_json", "revision", "last_operation_id", "routed_team_id"},
     "submission_track_selections": {"submission_id", "event_id", "track_id", "track_name_snapshot", "position"},
     "submission_routing_teams": {"submission_id", "event_id", "team_id"},
+    "submission_decisions": {"notification_feedback_json", "effect_preview_json"},
     "submission_revisions": {"answers_json", "speaker_snapshot_json", "save_kind", "idempotency_key"},
     "submission_email_verifications": {"form_id", "token_hash", "status", "attempt_count", "verified_at", "consumed_at"},
     "submission_speakers": {"person_id", "email", "invitation_status", "claim_token_hash", "claimed_at"},

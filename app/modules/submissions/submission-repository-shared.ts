@@ -132,6 +132,7 @@ export type AdminSubmission = {
   updatedAt: number;
   routedTo: string;
   routedTeamId: string | null;
+  routedTeamIds: string[];
 };
 
 export function parseJson<T>(

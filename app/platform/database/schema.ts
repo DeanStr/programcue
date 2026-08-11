@@ -896,6 +896,7 @@ export const submissionDecisions = sqliteTable(
       .notNull()
       .references(() => people.id),
     rationale: text("rationale"),
+    notificationFeedbackJson: text("notification_feedback_json").notNull(),
     effectPreviewJson: text("effect_preview_json").notNull().default("{}"),
     idempotencyKey: text("idempotency_key"),
     decidedAt: integer("decided_at").notNull().default(epochNow),

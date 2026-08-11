@@ -174,6 +174,13 @@ export class RecipientQuery {
                 LEFT JOIN people p ON p.id = s.submitter_person_id
                WHERE s.event_id = ?
                  AND s.status IN ('accepted','waitlisted','rejected')
+                 AND EXISTS (
+                   SELECT 1
+                     FROM submission_decisions decision
+                    WHERE decision.submission_id = s.id
+                      AND decision.event_id = s.event_id
+                      AND decision.status = 'published'
+                 )
                  AND COALESCE(p.email, s.submitter_email) IS NOT NULL
             ) recipients
            WHERE recipientRank = 1

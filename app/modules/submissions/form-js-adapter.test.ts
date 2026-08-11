@@ -23,8 +23,8 @@ const form: SubmissionFormSchema = {
     },
     {
       id: "category",
-      label: "Category",
-      type: "select",
+      label: "Tracks",
+      type: "multi_select",
       required: true,
       help: "",
       options: ["Operations", 'People "and" culture'],
