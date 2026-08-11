@@ -2,21 +2,50 @@
 
 Program Cue is a pre-release conference programme operations platform. It is one React Router/TypeScript modular monolith on Cloudflare Workers, with D1 for relational state, R2 for private files, Queues for provider work and an event-scoped Durable Object for realtime invalidation.
 
-The repository contains server-backed slices for event setup, submissions, evaluation and decisions, speaker workspaces, resources, schedule publication, the public programme, communications, operations and scoped REST APIs. Published forms, resource pages and communication templates keep version-scoped content and metadata; retryable provider work is recorded durably and claimed idempotently. It is not feature-complete against the full product specification. Provider and speaker-identity onboarding, automatic reminders, malware-scanner integration, abuse controls, Airtable/Accelevents, AI and several competition UX requirements remain; see [implementation status](docs/IMPLEMENTATION_STATUS.md).
+The repository contains connected server-backed slices for event setup, submissions, evaluation and decisions, automatic speaker onboarding, resources/files, FullCalendar scheduling and publication, communications/calendars, Airtable and Accelevents integrations, operations, a permissioned AI assistant and a documented 32-path REST/webhook API. Published forms, resources, schedule content and communication templates keep immutable version snapshots; retryable provider work is recorded durably and claimed idempotently. The remaining boundaries are deployment, live-provider and independent acceptance evidence rather than simulated success; see [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Local development
 
-Requirements: Node.js 22+, Python 3.9+ for migration validation and Chromium for browser tests.
+Requirements: Node.js 22.18+ on the Node 22 line, or Node.js 24.11+, Python 3.9+ for migration validation, Chromium for the primary browser suite, and Playwright Firefox/WebKit for the full cross-browser smoke gate.
 
 ```bash
-npm install
+IBM_TELEMETRY_DISABLED=true npm install
+cp .dev.vars.example .dev.vars
+node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
+# Paste the generated value into BETTER_AUTH_SECRET in .dev.vars.
 npm run dev
 ```
 
-The development command applies the baseline migration to the local Wrangler D1 database and starts the application at `http://127.0.0.1:5173`. Demo identities and seed data are enabled only by `wrangler.demo.jsonc`.
+The install command disables optional IBM Carbon package telemetry inherited through form-js.
+
+The ignored `.dev.vars` file contains secrets and optional remote-provider
+credentials only; runtime mode, URLs and local binding names stay canonical in
+`wrangler.development.jsonc`. Local development selects Mailpit explicitly and
+never sends through Resend. The app starts without Mailpit, but an action that
+actually sends email fails honestly until the pinned capture service is running:
+
+```bash
+docker compose -f compose.mailpit.yaml up -d
+```
+
+Inspect captured messages and calendar attachments at `http://127.0.0.1:8025`.
+There is no Resend fallback or simulated delivery. Demo/E2E verification codes
+are shown as an explicit no-send fixture, and the E2E server creates a private,
+ephemeral auth signing value rather than using a checked-in credential.
+
+The development command applies the baseline migration to Wrangler's local D1
+emulator and starts the application at `http://127.0.0.1:5173`. D1, R2, Queues
+and Durable Objects are local. Backup Workflow bindings and the daily backup
+cron exist only in production because D1 export requires remote Cloudflare
+authority. Direct multipart upload, malware scanning, connected calendars,
+external integrations and non-Workers-AI providers remain unavailable locally
+until their optional `.dev.vars` credentials are supplied; they fail fast when
+selected. Demo identities and seed data exist only in the explicit development
+and demo profiles.
 
 Useful routes:
 
+- Evaluator guide and complete demo reset: `http://127.0.0.1:5173/demo`
 - Command Centre: `http://127.0.0.1:5173/admin/command`
 - Event Setup: `http://127.0.0.1:5173/admin/event`
 - Submissions and forms: `http://127.0.0.1:5173/admin/submissions`
@@ -37,7 +66,7 @@ Event slugs are globally unique. Canonical public programme and calendar-session
 npm run check
 ```
 
-This runs TypeScript and React Router type generation, fast Node rule tests, isolated workerd/D1/R2 integration tests, one production build, migration and OpenAPI validation, and Playwright behavior/accessibility/visual coverage against a freshly built local production Worker in Chromium.
+This runs configuration contracts, TypeScript and React Router type generation, fast Node rule tests, isolated workerd/D1/R2/Agent integration tests, one production build, migration/recovery/OpenAPI validation, and Playwright behavior/accessibility/visual coverage against a freshly built local production Worker in Chromium plus Firefox/WebKit smoke coverage.
 
 Use the smaller commands while developing:
 
@@ -47,21 +76,60 @@ npm run typecheck
 npm test
 npm run test:unit
 npm run test:worker
+npm run test:config
 npm run build
 npm run test:e2e
+npm run performance:local
 ```
 
 `test:unit` runs deterministic Node-compatible rules without starting Workerd or applying D1 migrations. `test:worker` runs the service, route and provider-boundary suites against the Cloudflare runtime. `npm test` runs both projects; neither focused command replaces the complete validation gate.
 
 ## Production configuration
 
-Create the D1, private R2, Queue and Durable Object resources, replace placeholder resource IDs and example origins in `wrangler.jsonc`, then configure the secrets needed by the enabled workflows:
+The checked-in production profile is intentionally non-deployable. Provision
+the external resources below, then replace every value reported by
+`npm run deploy:check` in `wrangler.jsonc`:
+
+- D1 database `program-cue-db` and its UUID.
+- Private R2 buckets `program-cue-files` and `program-cue-d1-backups`, plus R2
+  S3 API credentials scoped to the files bucket.
+- Queue `program-cue-operations` and dead-letter queue
+  `program-cue-operations-dlq`.
+- Durable Object classes `EventChannel` and `ProgramCueEventAgent`, Workers AI
+  binding `AI`, and Workflow `program-cue-d1-backup`; Wrangler creates these
+  from the checked-in bindings and migrations.
+- A Resend sending domain and webhook, a Turnstile widget, and an HTTPS malware
+  scanner with callback credentials.
+- Google and Microsoft OAuth applications for participant sign-in and calendar
+  connections. Airtable and Accelevents credentials are entered per integration
+  after deployment and encrypted with `INTEGRATION_CREDENTIALS_KEY`.
+
+Replace the D1/account IDs, public/auth/scanner URLs, sender address, CORS and
+embed origins, Turnstile site key, and `SOURCE_REVISION`. The source revision
+must be the deployed 7-64 character hexadecimal Git revision. Configure the
+complete release secret inventory:
 
 ```bash
 wrangler secret put BETTER_AUTH_SECRET
 wrangler secret put RESEND_API_KEY
 wrangler secret put RESEND_WEBHOOK_SECRET
 wrangler secret put CALENDAR_CREDENTIALS_KEY
+wrangler secret put GOOGLE_CALENDAR_CLIENT_ID
+wrangler secret put GOOGLE_CALENDAR_CLIENT_SECRET
+wrangler secret put MICROSOFT_CALENDAR_CLIENT_ID
+wrangler secret put MICROSOFT_CALENDAR_CLIENT_SECRET
+wrangler secret put GOOGLE_AUTH_CLIENT_ID
+wrangler secret put GOOGLE_AUTH_CLIENT_SECRET
+wrangler secret put MICROSOFT_AUTH_CLIENT_ID
+wrangler secret put MICROSOFT_AUTH_CLIENT_SECRET
+wrangler secret put INTEGRATION_CREDENTIALS_KEY
+wrangler secret put WEBHOOK_CREDENTIALS_KEY
+wrangler secret put TURNSTILE_SECRET_KEY
+wrangler secret put FILE_SCANNER_API_TOKEN
+wrangler secret put FILE_SCANNER_WEBHOOK_SECRET
+wrangler secret put R2_ACCESS_KEY_ID
+wrangler secret put R2_SECRET_ACCESS_KEY
+wrangler secret put D1_REST_API_TOKEN
 
 npm run db:migrate:remote
 npm run db:bootstrap:production -- \\
@@ -83,9 +151,25 @@ person, organisation-wide owner membership and configured default event; it
 does not enable public sign-up or install a permanent bootstrap endpoint. After
 deployment, that owner requests their first magic link at `/sign-in`.
 
-`BETTER_AUTH_SECRET` must contain at least 32 characters. `CALENDAR_CREDENTIALS_KEY` is required only for encrypted Google or Microsoft calendar credentials and must be a base64-encoded 32-byte AES-GCM key. Missing auth, queue, realtime or provider configuration fails explicitly; production never falls back to demo identity or simulated delivery.
+`BETTER_AUTH_SECRET` must contain at least 32 characters.
+`CALENDAR_CREDENTIALS_KEY`, `INTEGRATION_CREDENTIALS_KEY` and
+`WEBHOOK_CREDENTIALS_KEY` must each be an independently generated,
+base64-encoded 32-byte AES-GCM key. Workers AI is the provisioned default;
+`OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is an additional Cloudflare secret only
+when that provider is deliberately selected. `npm run deploy:secrets` queries
+the configured Worker and fails if the complete required secret inventory is
+missing. Production fixes `EMAIL_PROVIDER=resend`; runtime validation rejects
+Mailpit and never falls back to local capture, demo identity, stale data or
+simulated provider success.
 
-The checked-in production configuration still contains placeholder resource identifiers and example URLs. `npm run deploy` intentionally fails its configuration preflight until they are replaced. A deployed production environment has not been verified from this workspace.
+`npm run deploy` runs configuration and remote secret preflights before build or
+deployment. The current placeholders are the only expected
+`npm run deploy:check` failures. A deployed production environment has not been
+verified from this workspace.
+
+Backup and point-in-time recovery procedures are in [docs/RECOVERY.md](docs/RECOVERY.md). Production configuration includes a fail-closed daily D1-export Workflow to a separate private R2 bucket; it is not evidence that a live backup has run. `npm run recovery:drill` exercises a clean-room logical export and restore without touching development or production data.
+
+The repeatable local browser-budget method, isolated 10,000-record fixture and latest measurements are in [docs/PERFORMANCE.md](docs/PERFORMANCE.md). These local results do not replace deployed p75/RUM and production-like scale acceptance.
 
 ## Repository map
 
@@ -95,8 +179,10 @@ app/modules/                Vertical-slice rules and D1/R2/provider services
 app/platform/               Auth, database, API, operations and realtime infrastructure
 workers/index.ts            Single Worker entry and React Router request handler
 workers/communications-queue.ts
-                            Email, submission/decision-notification and calendar consumers
+                            Email, notifications, calendars, integrations and webhook consumers
 workers/event-channel.ts    Event-scoped Durable Object invalidation channel
+workers/d1-backup-workflow.ts
+                            Scheduled logical D1 export to private backup R2
 migrations/                 Pre-release D1 baseline schema and constraints
 public/styles.css           Program Cue design tokens and component styles
 e2e/                        Browser behavior, accessibility and visual tests

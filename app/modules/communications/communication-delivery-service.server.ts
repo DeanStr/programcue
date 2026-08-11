@@ -1,12 +1,22 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { sourceRevisionForLog } from "~/platform/observability/source-revision.server";
+import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
   confirmCommunicationSchema,
   previewCommunicationSchema,
+  scheduleCommunicationSchema,
+  testCommunicationSchema,
   type ConfirmCommunicationInput,
   type PreviewCommunicationInput,
+  type ScheduleCommunicationInput,
+  type TestCommunicationInput,
 } from "./communication-schema";
 import { renderProgramCueEmail } from "./email-templates/render-email.server";
-import { renderMergeTemplate } from "./merge-template";
+import {
+  renderMergeTemplate,
+  representativeMergeValues,
+} from "./merge-template";
 import { RecipientQuery } from "./recipient-query.server";
 import {
   assertMergeAudienceCompatible,
@@ -26,14 +36,33 @@ import {
   type SenderRow,
 } from "./communication-service-shared";
 import { CommunicationTemplateService } from "./communication-template-service.server";
+import {
+  emailProviderConfigurationIssue,
+  requireEmailProviderConfiguration,
+} from "./email-provider.server";
+
+function representativeSourceSnapshot(variables: string[]) {
+  return Object.fromEntries(
+    variables.map((variable) => [
+      variable,
+      representativeMergeValues[variable],
+    ]),
+  );
+}
 
 export class CommunicationDeliveryService {
   private readonly templates: CommunicationTemplateService;
   private readonly recipients: RecipientQuery;
+  private readonly airtable: AirtableProviderBoundary;
 
-  constructor(private readonly env: CloudflareEnvironment) {
+  constructor(
+    private readonly env: CloudflareEnvironment,
+    dependencies: { airtable?: AirtableProviderBoundary } = {},
+  ) {
     this.templates = new CommunicationTemplateService(env);
     this.recipients = new RecipientQuery(env);
+    this.airtable =
+      dependencies.airtable ?? new AirtableProviderBoundary(this.env);
   }
 
   async preview(
@@ -41,12 +70,23 @@ export class CommunicationDeliveryService {
     input: PreviewCommunicationInput,
   ): Promise<CommunicationPreview> {
     const parsed = previewCommunicationSchema.parse(input);
+    return this.previewParsed(viewer, parsed, false);
+  }
+
+  private async previewParsed(
+    viewer: Viewer,
+    parsed: PreviewCommunicationInput,
+    representativeTest: boolean,
+  ): Promise<CommunicationPreview> {
+    if (!representativeTest && parsed.audienceType !== "manual")
+      await this.airtable.assertReadable(viewer);
     const [template, event, sender] = await Promise.all([
       this.templates.getTemplateVersion(viewer, parsed.templateVersionId),
       this.getEvent(viewer),
       this.getVerifiedSender(viewer),
     ]);
-    assertMergeAudienceCompatible(template, parsed.audienceType);
+    if (!representativeTest)
+      assertMergeAudienceCompatible(template, parsed.audienceType);
     const recipients = await this.recipients.preview(viewer, {
       audienceType: parsed.audienceType,
       manualRecipients: parsed.manualRecipients,
@@ -54,7 +94,15 @@ export class CommunicationDeliveryService {
       kind: parsed.kind,
     });
     const requiredSourceVariables = sourceVariables(template);
+    const representativeSources = representativeSourceSnapshot(
+      requiredSourceVariables,
+    );
+    const allValidRecipients = [
+      ...recipients.deliverable,
+      ...recipients.suppressed,
+    ];
     if (
+      !representativeTest &&
       requiredSourceVariables.length &&
       recipients.deliverable.some((recipient) => !recipient.sourceId)
     ) {
@@ -62,15 +110,18 @@ export class CommunicationDeliveryService {
         "The selected audience contains a recipient without the source record required by this template.",
       );
     }
-    const sourceSnapshots = await snapshotSourceValues(
-      this.env,
-      viewer.eventId,
-      requiredSourceVariables,
-      recipients.deliverable,
-    );
+    const sourceSnapshots = representativeTest
+      ? new Map<string, typeof representativeMergeValues>()
+      : await snapshotSourceValues(
+          this.env,
+          viewer.eventId,
+          requiredSourceVariables,
+          allValidRecipients,
+        );
     const representativeRecipient = recipients.deliverable[0];
     const values = {
       ...mergeValues(event, representativeRecipient),
+      ...(representativeTest ? representativeSources : {}),
       ...(representativeRecipient?.sourceId
         ? sourceSnapshots.get(representativeRecipient.sourceId)
         : {}),
@@ -82,15 +133,46 @@ export class CommunicationDeliveryService {
       heading: subject,
       body,
       eventName: event.eventName,
+      accent: event.brandAccent,
       physicalAddress: template.content.physicalAddress,
       buttonText: template.content.buttonText,
       buttonUrl: template.content.buttonUrl,
     });
+    const contentAuthority = {
+      schemaVersion: 1,
+      template: {
+        id: template.id,
+        subject: template.subject,
+        content: template.content,
+      },
+      event,
+      sender,
+      sources: allValidRecipients
+        .map((recipient) => ({
+          address: recipient.address,
+          personId: recipient.personId,
+          sourceId: recipient.sourceId,
+          values: recipient.sourceId
+            ? (sourceSnapshots.get(recipient.sourceId) ?? {})
+            : {},
+        }))
+        .sort((left, right) =>
+          JSON.stringify(left).localeCompare(JSON.stringify(right), "en"),
+        ),
+      invalid: recipients.invalid
+        .map((recipient) => ({
+          address: recipient.address,
+          name: recipient.name,
+        }))
+        .sort((left, right) =>
+          JSON.stringify(left).localeCompare(JSON.stringify(right), "en"),
+        ),
+    };
     const confirmation = {
-      recipientFingerprint: await recipientFingerprint([
-        ...recipients.deliverable,
-        ...recipients.suppressed,
-      ]),
+      recipientFingerprint: await recipientFingerprint(
+        [...recipients.deliverable, ...recipients.suppressed],
+        contentAuthority,
+      ),
       deliverableFingerprint: await recipientFingerprint(
         recipients.deliverable,
       ),
@@ -101,9 +183,16 @@ export class CommunicationDeliveryService {
       recipients,
       confirmation,
       rendered: { subject, ...rendered },
+      mergeSnapshot: {
+        event,
+        sourceValues: Object.fromEntries(sourceSnapshots),
+      },
       provider: {
-        configured: Boolean(this.env.RESEND_API_KEY?.trim() && sender),
+        configured: Boolean(
+          !emailProviderConfigurationIssue(this.env) && sender,
+        ),
         sender: sender ? `${sender.fromName} <${sender.fromEmail}>` : null,
+        senderProfile: sender,
         queueConfigured: Boolean(this.env.OPERATIONS_QUEUE),
       },
     };
@@ -111,7 +200,55 @@ export class CommunicationDeliveryService {
 
   async confirm(viewer: Viewer, input: ConfirmCommunicationInput) {
     const parsed = confirmCommunicationSchema.parse(input);
-    const requestHash = await communicationRequestHash(parsed);
+    return this.record(viewer, parsed, null, false);
+  }
+
+  async schedule(viewer: Viewer, input: ScheduleCommunicationInput) {
+    const parsed = scheduleCommunicationSchema.parse(input);
+    if (!this.env.OPERATIONS_QUEUE)
+      throw new CommunicationStateError(
+        "Required OPERATIONS_QUEUE binding is unavailable; scheduled delivery cannot be enabled.",
+      );
+    const now = Math.floor(Date.now() / 1_000);
+    if (parsed.scheduledAt <= now + 60)
+      throw new CommunicationStateError(
+        "Scheduled delivery must be at least one minute in the future.",
+      );
+    return this.record(viewer, parsed, parsed.scheduledAt, false);
+  }
+
+  async testSend(viewer: Viewer, input: TestCommunicationInput) {
+    const parsed = testCommunicationSchema.parse(input);
+    const previewInput: PreviewCommunicationInput = {
+      templateVersionId: parsed.templateVersionId,
+      audienceType: "manual",
+      manualRecipients: `Alex Morgan <${parsed.recipient}>`,
+      kind: "transactional",
+    };
+    const preview = await this.previewParsed(viewer, previewInput, true);
+    return this.record(
+      viewer,
+      {
+        ...previewInput,
+        idempotencyKey: parsed.idempotencyKey,
+        ...preview.confirmation,
+      },
+      null,
+      true,
+    );
+  }
+
+  private async record(
+    viewer: Viewer,
+    parsed: ConfirmCommunicationInput,
+    scheduledAt: number | null,
+    representativeTest: boolean,
+  ) {
+    const requestHash = await communicationRequestHash({
+      ...parsed,
+      scheduledAt,
+      mode: representativeTest ? "test" : "send",
+    });
     const existing = await this.env.DB.prepare(
       `
       SELECT c.id, c.operation_id AS operationId, c.status,
@@ -128,12 +265,16 @@ export class CommunicationDeliveryService {
       .first<ExistingCommunication>();
     if (existing) return communicationReplay(existing, requestHash);
 
-    const preview = await this.preview(viewer, parsed);
+    const preview = await this.previewParsed(
+      viewer,
+      parsed,
+      representativeTest,
+    );
     if (
       preview.confirmation.recipientFingerprint !== parsed.recipientFingerprint
     ) {
       throw new CommunicationStateError(
-        "The audience changed after it was previewed. Preview the recipients again before confirming.",
+        "The audience changed after it was previewed, or its content or sender is no longer exact. Preview again before confirming.",
       );
     }
     if (
@@ -153,25 +294,32 @@ export class CommunicationDeliveryService {
       throw new CommunicationStateError(
         "The audience contains no deliverable recipients.",
       );
-    const sender = await this.getVerifiedSender(viewer);
+    const sender = preview.provider.senderProfile;
     if (!sender)
       throw new CommunicationStateError(
-        "A verified Resend sender profile is required before sending.",
+        "A verified sender profile is required before sending.",
       );
-    if (!this.env.RESEND_API_KEY?.trim())
+    let emailProvider;
+    try {
+      emailProvider = requireEmailProviderConfiguration(this.env);
+    } catch (error) {
       throw new CommunicationStateError(
-        "RESEND_API_KEY is required before sending.",
+        error instanceof Error
+          ? error.message
+          : "Email provider configuration is invalid.",
       );
+    }
+    await new WebhookService(this.env).assertEventDeliveryReady(
+      viewer,
+      "communication.completed",
+    );
 
     const communicationId = crypto.randomUUID();
     const operationId = crypto.randomUUID();
     const correlationId = crypto.randomUUID();
     const requiredSourceVariables = sourceVariables(preview.template);
-    const sourceSnapshots = await snapshotSourceValues(
-      this.env,
-      viewer.eventId,
+    const representativeSources = representativeSourceSnapshot(
       requiredSourceVariables,
-      preview.recipients.deliverable,
     );
     const deliveries = await Promise.all(
       preview.recipients.deliverable.map(async (recipient) => ({
@@ -180,9 +328,11 @@ export class CommunicationDeliveryService {
         address: recipient.address,
         name: recipient.name,
         sourceId: recipient.sourceId,
-        sourceValues: recipient.sourceId
-          ? (sourceSnapshots.get(recipient.sourceId) ?? {})
-          : {},
+        sourceValues: representativeTest
+          ? representativeSources
+          : recipient.sourceId
+            ? (preview.mergeSnapshot.sourceValues[recipient.sourceId] ?? {})
+            : {},
         idempotencyKey: await communicationDeliveryIdempotencyKey(
           parsed.idempotencyKey,
           recipient.address,
@@ -194,7 +344,8 @@ export class CommunicationDeliveryService {
       category: preview.template.category,
       subjectTemplate: preview.template.subject,
       content: preview.template.content,
-      event: await this.getEvent(viewer),
+      event: preview.mergeSnapshot.event,
+      sender,
     };
     const audienceSnapshot = {
       type: parsed.audienceType,
@@ -203,6 +354,7 @@ export class CommunicationDeliveryService {
       invalid: preview.recipients.invalid.length,
       suppressed: preview.recipients.suppressed.length,
       requestHash,
+      test: representativeTest,
     };
     const queueMessage = {
       type: "communication.send",
@@ -219,22 +371,36 @@ export class CommunicationDeliveryService {
         INSERT OR IGNORE INTO communications (
           id, event_id, template_version_id, sender_profile_id, operation_id, idempotency_key,
           kind, channel, status, audience_json, content_snapshot_json, recipient_count,
-          queued_at, created_by_person_id, created_at, updated_at
-        ) SELECT ?, e.id, ?, ?, ?, ?, ?, 'email', 'queued', ?, ?, ?, unixepoch(), ?, unixepoch(), unixepoch()
+          scheduled_at, queued_at, created_by_person_id, created_at, updated_at
+        ) SELECT ?, e.id, ?, exact_sender.id, ?, ?, ?, 'email', ?, ?, ?, ?, ?,
+                 CASE WHEN ? IS NULL THEN unixepoch() ELSE NULL END,
+                 ?, unixepoch(), unixepoch()
             FROM events e
+            JOIN sender_profiles exact_sender
+              ON exact_sender.id = ? AND exact_sender.event_id = e.id
+             AND exact_sender.status = 'verified' AND exact_sender.provider = ?
+             AND exact_sender.from_name = ? AND exact_sender.from_email = ?
+             AND exact_sender.reply_to_email IS ?
            WHERE e.id = ? AND e.organisation_id = ?
       `,
       ).bind(
         communicationId,
         preview.template.id,
-        sender.id,
-        operationId,
+        scheduledAt === null ? operationId : null,
         parsed.idempotencyKey,
         parsed.kind,
+        scheduledAt === null ? "queued" : "scheduled",
         JSON.stringify(audienceSnapshot),
         JSON.stringify(contentSnapshot),
         deliveries.length,
+        scheduledAt,
+        scheduledAt,
         viewer.personId,
+        sender.id,
+        emailProvider.provider,
+        sender.fromName,
+        sender.fromEmail,
+        sender.replyToEmail,
         viewer.eventId,
         viewer.organisationId,
       ),
@@ -247,13 +413,14 @@ export class CommunicationDeliveryService {
         SELECT json_extract(value, '$.id'), ?, ?, json_extract(value, '$.personId'),
                json_extract(value, '$.address'), json_extract(value, '$.name'),
                json_extract(value, '$.sourceId'), json_extract(value, '$.sourceValues'),
-               'email', 'resend', json_extract(value, '$.idempotencyKey'), 'queued', unixepoch(), unixepoch()
+               'email', ?, json_extract(value, '$.idempotencyKey'), 'queued', unixepoch(), unixepoch()
           FROM json_each(?)
          WHERE EXISTS (SELECT 1 FROM communications WHERE id = ? AND event_id = ?)
       `,
       ).bind(
         viewer.eventId,
         communicationId,
+        emailProvider.provider,
         deliveriesJson,
         communicationId,
         viewer.eventId,
@@ -265,7 +432,8 @@ export class CommunicationDeliveryService {
           correlation_id, status, payload_json, progress_total, progress_completed,
           progress_failed, cancellable, created_at, updated_at
         ) SELECT ?, ?, ?, ?, 'communication.send', ?, ?, 'queued', ?, ?, 0, 0, 1, unixepoch(), unixepoch()
-           WHERE EXISTS (SELECT 1 FROM communications WHERE id = ? AND event_id = ?)
+           WHERE ? IS NULL
+             AND EXISTS (SELECT 1 FROM communications WHERE id = ? AND event_id = ? AND status = 'queued')
       `,
       ).bind(
         operationId,
@@ -276,6 +444,7 @@ export class CommunicationDeliveryService {
         correlationId,
         JSON.stringify(queueMessage),
         deliveries.length,
+        scheduledAt,
         communicationId,
         viewer.eventId,
       ),
@@ -293,7 +462,7 @@ export class CommunicationDeliveryService {
         `
         INSERT INTO audit_events (
           id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'communication.queued', 'communication', ?, ?, unixepoch()
+        ) SELECT ?, ?, ?, ?, ?, 'communication', ?, ?, unixepoch()
            WHERE EXISTS (SELECT 1 FROM communications WHERE id = ?)
       `,
       ).bind(
@@ -301,11 +470,15 @@ export class CommunicationDeliveryService {
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
+        scheduledAt === null
+          ? "communication.queued"
+          : "communication.scheduled",
         communicationId,
         JSON.stringify({
-          operationId,
+          operationId: scheduledAt === null ? operationId : null,
           recipientCount: deliveries.length,
           category: preview.template.category,
+          scheduledAt,
         }),
         communicationId,
       ),
@@ -339,15 +512,34 @@ export class CommunicationDeliveryService {
       );
     }
 
+    if (scheduledAt !== null) {
+      return {
+        communicationId,
+        operationId: null,
+        status: "scheduled",
+        operationStatus: null,
+        duplicate: false as const,
+      };
+    }
+
     try {
       if (!this.env.OPERATIONS_QUEUE)
         throw new Error("Required OPERATIONS_QUEUE binding is unavailable.");
       await this.env.OPERATIONS_QUEUE.send(queueMessage);
     } catch (error) {
-      console.error("Communication Queue dispatch failed", {
-        operationId,
-        cause: error instanceof Error ? error.message : String(error),
-      });
+      console.error(
+        JSON.stringify({
+          level: "error",
+          subsystem: "communication-dispatch",
+          event: "queue-dispatch-failed",
+          sourceRevision: sourceRevisionForLog(this.env),
+          eventId: viewer.eventId,
+          operationId,
+          provider: "cloudflare-queue",
+          errorName: error instanceof Error ? error.name : "UnknownError",
+          message: "The durable communication operation could not be queued.",
+        }),
+      );
       await this.env.DB.batch([
         this.env.DB.prepare(
           "UPDATE operation_jobs SET status = 'queue_failed', last_error = ?, updated_at = unixepoch() WHERE id = ? AND status = 'queued'",
@@ -477,7 +669,8 @@ export class CommunicationDeliveryService {
   private async getEvent(viewer: Viewer) {
     const event = await this.env.DB.prepare(
       `
-      SELECT e.name AS eventName, e.starts_at AS startsAt, e.ends_at AS endsAt
+      SELECT e.name AS eventName, e.brand_accent AS brandAccent,
+             e.starts_at AS startsAt, e.ends_at AS endsAt
         FROM events e WHERE e.id = ? AND e.organisation_id = ?
     `,
     )
@@ -491,17 +684,27 @@ export class CommunicationDeliveryService {
   }
 
   private async getVerifiedSender(viewer: Viewer) {
+    let provider: "resend" | "mailpit";
+    try {
+      provider = requireEmailProviderConfiguration(this.env).provider;
+    } catch (error) {
+      throw new CommunicationStateError(
+        error instanceof Error
+          ? error.message
+          : "Email provider configuration is invalid.",
+      );
+    }
     return this.env.DB.prepare(
       `
       SELECT sp.id, sp.from_name AS fromName, sp.from_email AS fromEmail,
              sp.reply_to_email AS replyToEmail
         FROM sender_profiles sp
         JOIN events e ON e.id = sp.event_id AND e.organisation_id = ?
-       WHERE sp.event_id = ? AND sp.status = 'verified' AND sp.provider = 'resend'
+       WHERE sp.event_id = ? AND sp.status = 'verified' AND sp.provider = ?
        ORDER BY sp.updated_at DESC LIMIT 1
     `,
     )
-      .bind(viewer.organisationId, viewer.eventId)
+      .bind(viewer.organisationId, viewer.eventId, provider)
       .first<SenderRow>();
   }
 }

@@ -1,7 +1,7 @@
 import type { DirectCalendarProvider } from "../../app/modules/calendars/calendar-providers.server";
-import type { ResendEmailProvider } from "../../app/modules/communications/resend.server";
+import type { EmailProvider } from "../../app/modules/communications/email-provider";
 
 export type QueueProviderDependencies = {
-  resend?: ResendEmailProvider;
+  email?: EmailProvider;
   directCalendar?: DirectCalendarProvider;
 };

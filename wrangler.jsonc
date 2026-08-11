@@ -3,43 +3,61 @@
   "name": "program-cue",
   "main": "workers/index.ts",
   "compatibility_date": "2026-08-08",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "program-cue-db",
       "database_id": "REPLACE_WITH_D1_DATABASE_ID",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   "r2_buckets": [
     {
       "binding": "FILES",
-      "bucket_name": "program-cue-files"
-    }
+      "bucket_name": "program-cue-files",
+    },
+    {
+      "binding": "BACKUPS",
+      "bucket_name": "program-cue-d1-backups",
+    },
+  ],
+  "ai": { "binding": "AI" },
+  "workflows": [
+    {
+      "name": "program-cue-d1-backup",
+      "binding": "D1_BACKUP_WORKFLOW",
+      "class_name": "D1BackupWorkflow",
+    },
   ],
   "durable_objects": {
     "bindings": [
       {
         "name": "EVENT_CHANNEL",
-        "class_name": "EventChannel"
-      }
-    ]
+        "class_name": "EventChannel",
+      },
+      {
+        "name": "PROGRAM_CUE_AGENT",
+        "class_name": "ProgramCueEventAgent",
+      },
+    ],
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["EventChannel"]
-    }
+      "new_sqlite_classes": ["EventChannel"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["ProgramCueEventAgent"],
+    },
   ],
   "queues": {
     "producers": [
       {
         "binding": "OPERATIONS_QUEUE",
-        "queue": "program-cue-operations"
-      }
+        "queue": "program-cue-operations",
+      },
     ],
     "consumers": [
       {
@@ -47,20 +65,41 @@
         "max_batch_size": 20,
         "max_batch_timeout": 5,
         "max_retries": 3,
-        "dead_letter_queue": "program-cue-operations-dlq"
-      }
-    ]
+        "dead_letter_queue": "program-cue-operations-dlq",
+      },
+    ],
+  },
+  "triggers": {
+    "crons": ["* * * * *", "17 2 * * *"],
   },
   "vars": {
     "APP_ENV": "production",
     "DEMO_MODE": "false",
+    "SOURCE_REVISION": "REPLACE_WITH_SOURCE_REVISION",
     "DEFAULT_EVENT_ID": "evt-foe-2025",
     "BETTER_AUTH_URL": "https://app.example.invalid",
     "AUTH_EMAIL_FROM": "Program Cue <auth@example.invalid>",
+    "EMAIL_PROVIDER": "resend",
     "PUBLIC_EVENT_SLUG": "future-of-events-2025",
+    "TURNSTILE_SITE_KEY": "REPLACE_WITH_TURNSTILE_SITE_KEY",
+    "CLOUDFLARE_ACCOUNT_ID": "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID",
+    "D1_DATABASE_ID": "REPLACE_WITH_D1_DATABASE_ID",
+    "R2_ACCOUNT_ID": "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID",
+    "R2_BUCKET_NAME": "program-cue-files",
+    "FILE_SCANNER_API_URL": "https://scanner.example.invalid",
     "CORS_ALLOWED_ORIGINS": "https://app.example.invalid",
-    "EMBED_FRAME_ANCESTORS": "https://www.programcue.example"
+    "EMBED_FRAME_ANCESTORS": "https://www.programcue.example",
   },
-  "observability": { "enabled": true },
-  "upload_source_maps": true
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1,
+    },
+  },
+  "upload_source_maps": true,
 }

@@ -9,13 +9,82 @@ export default [
   index("routes/home.tsx"),
   route("sign-in", "routes/sign-in.tsx"),
   route("sign-out", "routes/sign-out.ts"),
+  route("events/select", "routes/event-selector.tsx"),
+  route("demo", "routes/demo-guide.tsx"),
   route("demo/role", "routes/demo-role.ts"),
   route("demo/reset/submissions", "routes/demo-reset-submissions.ts"),
   route(
     "demo/fixtures/communication-unsubscribe",
     "routes/demo-communication-unsubscribe-fixture.ts",
   ),
+  route(
+    "demo/fixtures/assistant-proposal",
+    "routes/demo-assistant-proposal-fixture.ts",
+  ),
+  route("demo/fixtures/golden-path", "routes/demo-golden-path-fixture.ts"),
   route("api/v1/health", "routes/api-health.ts"),
+  route("api/v1/events/:eventId", "routes/api-event.ts"),
+  route(
+    "api/v1/events/:eventId/evaluation/:resource",
+    "routes/api-evaluation-resources.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/evaluation/me/:command",
+    "routes/api-evaluation-person-command.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/evaluation/rounds/advance",
+    "routes/api-evaluation-advance.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/integrations/:resource",
+    "routes/api-integration-resources.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/integrations/accelevents/exports",
+    "routes/api-accelevents-exports.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/participant/:resource",
+    "routes/api-participant-resources.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/participant/submissions/:submissionId/:command",
+    "routes/api-participant-submission-command.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/participant/tasks/:taskId/complete",
+    "routes/api-participant-task-completion.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/sessions/direct",
+    "routes/api-direct-sessions.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/communications/:command",
+    "routes/api-communication-command.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/operations/:operationId/:command",
+    "routes/api-operation-command.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/administration/:family/:itemId/:command",
+    "routes/api-administration-command.ts",
+  ),
+  route("api/v1/events/:eventId/tasks/:taskId", "routes/api-task-item.ts"),
+  route(
+    "api/v1/events/:eventId/:resource/:itemId",
+    "routes/api-administration-item.ts",
+  ),
+  route(
+    "api/v1/events/:eventId/:resource",
+    "routes/api-administration-resources.ts",
+  ),
+  route("api/v1/public/events/:slug", "routes/api-public-event.ts"),
+  route("api/v1/public/events/:slug/sessions", "routes/api-public-sessions.ts"),
+  route("api/v1/public/events/:slug/speakers", "routes/api-public-speakers.ts"),
+  route("api/v1/public/events/:slug/schedule", "routes/api-public-schedule.ts"),
   route("api/v1/events/:eventId/operations", "routes/api-operations.ts"),
   route("api/v1/events/:eventId/tasks", "routes/api-tasks.ts"),
   route(
@@ -31,15 +100,31 @@ export default [
     "routes/api-public-calendar.ts",
   ),
   route("api/webhooks/resend", "routes/api-resend-webhook.ts"),
+  route("api/webhooks/file-scanner", "routes/api-file-scanner-webhook.ts"),
+  route("files/multipart/:operation", "routes/file-multipart.ts"),
+  route("files/resource-attachment", "routes/resource-attachment.ts"),
+  route("files/task-evidence", "routes/task-evidence-attachment.ts"),
+  route(
+    "apply/:slug/files/multipart/:operation",
+    "routes/applicant-file-multipart.ts",
+  ),
   route("api/docs", "routes/api-docs.tsx"),
   route("api/auth/*", "routes/auth-api.ts"),
+  route("oauth/calendar/:provider", "routes/calendar-oauth-start.ts"),
+  route("oauth/calendar/callback", "routes/calendar-oauth-callback.ts"),
   route(
     "communications/unsubscribe/:token",
     "routes/communication-unsubscribe.tsx",
   ),
   route("admin/events/:eventId/changes", "routes/event-changes.ts"),
+  route("ai/context", "routes/ai-context-action.ts"),
+  route("admin/exports/:resource.csv", "routes/admin-data-export.ts"),
   layout("routes/admin-layout.tsx", [
     route("admin/command", "routes/command-centre.tsx"),
+    route("admin/assistant", "routes/assistant.tsx"),
+    route("admin/events/clone", "routes/admin-event-clone.tsx"),
+    route("admin/search", "routes/admin-command-search.ts"),
+    route("admin/views", "routes/admin-saved-views.ts"),
     route("admin/event", "routes/event-setup.tsx"),
     route("admin/operations", "routes/operation-centre.tsx"),
     route("admin/communications", "routes/communications-centre.tsx"),
@@ -50,10 +135,18 @@ export default [
       "routes/admin-task-file-download.ts",
     ),
     route("admin/tasks", "routes/admin-tasks.tsx"),
+    route("admin/tasks/bulk", "routes/admin-task-bulk.tsx"),
+    route("admin/files/retention", "routes/admin-file-retention.tsx"),
     route("admin/resources", "routes/admin-resources.tsx"),
     route("admin/settings", "routes/api-settings.tsx"),
+    route("admin/integrations", "routes/integrations-admin.tsx"),
+    route(
+      "admin/integrations/accelevents/runs/:runId/reconciliation.csv",
+      "routes/accelevents-reconciliation-report.ts",
+    ),
     route("admin/submissions/form", "routes/form-builder-preview.tsx"),
     route("admin/schedule", "routes/schedule-planner.tsx"),
+    route("admin/sessions/bulk", "routes/admin-session-bulk.tsx"),
     route("admin/submissions", "routes/submissions-admin.tsx", {
       id: "submissions-admin",
     }),
@@ -63,6 +156,7 @@ export default [
     route("admin/:section", "routes/admin-section.tsx"),
   ]),
   route("review/workbench", "routes/review-workbench.tsx"),
+  route("review/files/:assetId", "routes/review-file-download.ts"),
   route("speaker/dashboard", "routes/speaker-dashboard.tsx"),
   route("speaker/resources", "routes/speaker-resources.tsx"),
   route("speaker/files/:assetId", "routes/speaker-file-download.ts"),
@@ -76,6 +170,10 @@ export default [
   route("public/programme/:slug", "routes/public-programme.tsx", {
     id: "public-programme-by-slug",
   }),
+  route(
+    "public/programme/:slug/speakers/:personId/headshot",
+    "routes/public-headshot.ts",
+  ),
   route("embed/:slug", "routes/public-programme.tsx", {
     id: "embed-programme",
   }),

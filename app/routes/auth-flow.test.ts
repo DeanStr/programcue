@@ -4,19 +4,30 @@ import { serializeSignedCookie } from "better-call";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
-import { createAuth } from "~/platform/auth/auth.server";
+import {
+  createAuth,
+  ParticipantOAuthConfigurationError,
+  participantOAuthConfiguration,
+  participantOAuthProviderOptions,
+} from "~/platform/auth/auth.server";
+import {
+  currentEventCookie,
+  resolveCurrentEventId,
+} from "~/platform/auth/current-event.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { action as applicationAction } from "./application-form";
+import { loader as authApiLoader } from "./auth-api";
 import { loader as homeLoader } from "./home";
-import { action as signInAction } from "./sign-in";
+import { action as signInAction, loader as signInLoader } from "./sign-in";
 import { action as signOutAction } from "./sign-out";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
     BETTER_AUTH_SECRET: string;
     AUTH_EMAIL_FROM: string;
+    EMAIL_PROVIDER: string;
     RESEND_API_KEY: string;
   }
 }
@@ -24,8 +35,16 @@ declare module "cloudflare:test" {
 function productionEnv() {
   return {
     ...(env as unknown as CloudflareEnvironment),
+    APP_ENV: "production",
     DEMO_MODE: "false",
+    EMAIL_PROVIDER: "resend",
+    TURNSTILE_SITE_KEY: "test-turnstile-site-key",
+    TURNSTILE_SECRET_KEY: "test-turnstile-secret-key",
   } as CloudflareEnvironment;
+}
+
+function validatedProductionEnv() {
+  return productionEnv();
 }
 
 function context(testEnv: CloudflareEnvironment) {
@@ -125,6 +144,215 @@ describe("production authentication routes", () => {
     );
   });
 
+  it.each([
+    [
+      "Google",
+      {
+        GOOGLE_AUTH_CLIENT_ID: "google-auth-client",
+        GOOGLE_AUTH_CLIENT_SECRET: undefined,
+      },
+      "GOOGLE_AUTH_CLIENT_ID",
+      "GOOGLE_AUTH_CLIENT_SECRET",
+    ],
+    [
+      "Microsoft",
+      {
+        MICROSOFT_AUTH_CLIENT_ID: undefined,
+        MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+      },
+      "MICROSOFT_AUTH_CLIENT_ID",
+      "MICROSOFT_AUTH_CLIENT_SECRET",
+    ],
+  ])(
+    "fails fast when the %s participant OAuth credential pair is partial",
+    (_provider, override, clientIdName, clientSecretName) => {
+      let thrown: unknown;
+      try {
+        participantOAuthConfiguration({
+          ...productionEnv(),
+          ...override,
+        } as unknown as CloudflareEnvironment);
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(ParticipantOAuthConfigurationError);
+      expect((thrown as Error).message).toContain(
+        `${clientIdName} and ${clientSecretName}`,
+      );
+    },
+  );
+
+  it("keeps partial OAuth credential details out of the public sign-in response", async () => {
+    const logging = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    let thrown: unknown;
+    try {
+      await signInLoader({
+        request: new Request("http://localhost/sign-in"),
+        params: {},
+        context: context({
+          ...productionEnv(),
+          GOOGLE_AUTH_CLIENT_ID: "google-auth-client",
+          GOOGLE_AUTH_CLIENT_SECRET: undefined,
+        } as unknown as CloudflareEnvironment),
+      } as never);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Response);
+    expect((thrown as Response).status).toBe(503);
+    const body = await (thrown as Response).text();
+    expect(body).toContain("provider is misconfigured");
+    expect(body).not.toContain("GOOGLE_AUTH_CLIENT");
+    expect(logging).toHaveBeenCalledOnce();
+    const logEntry = String(logging.mock.calls[0]?.[0]);
+    expect(JSON.parse(logEntry)).toMatchObject({
+      subsystem: "authentication",
+      event: "participant-oauth-configuration-invalid",
+      errorName: "ParticipantOAuthConfigurationError",
+    });
+    expect(logEntry).not.toContain("GOOGLE_AUTH_CLIENT");
+  });
+
+  it("configures optional social providers for invited-user sign-in only", () => {
+    expect(participantOAuthProviderOptions(productionEnv())).toEqual({});
+    const providers = participantOAuthProviderOptions({
+      ...productionEnv(),
+      GOOGLE_AUTH_CLIENT_ID: "google-auth-client",
+      GOOGLE_AUTH_CLIENT_SECRET: "google-auth-secret",
+      MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+      MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+    } as unknown as CloudflareEnvironment);
+    expect(providers.google).toMatchObject({
+      disableSignUp: true,
+      disableIdTokenSignIn: true,
+      disableDefaultScope: true,
+      scope: ["openid", "email", "profile"],
+    });
+    expect(providers.microsoft).toMatchObject({
+      disableSignUp: true,
+      disableIdTokenSignIn: true,
+      disableDefaultScope: true,
+      scope: ["openid", "email", "profile"],
+    });
+  });
+
+  it.each([
+    [
+      "google",
+      {
+        GOOGLE_AUTH_CLIENT_ID: "google-auth-client",
+        GOOGLE_AUTH_CLIENT_SECRET: "google-auth-secret",
+      },
+      "accounts.google.com",
+    ],
+    [
+      "microsoft",
+      {
+        MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+        MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+      },
+      "login.microsoftonline.com",
+    ],
+  ] as const)(
+    "starts %s participant OAuth with state and identity-only scopes",
+    async (provider, override, expectedHost) => {
+      const tokenValidation = vi.fn(async () =>
+        Response.json({
+          success: true,
+          hostname: "localhost",
+          action: "social_sign_in",
+        }),
+      );
+      vi.stubGlobal("fetch", tokenValidation);
+      const response = await signInAction({
+        request: formRequest(
+          "http://localhost/sign-in",
+          {
+            _intent: "social_sign_in",
+            provider,
+            returnTo: "/speaker/dashboard?tab=calendar",
+            "turnstile-token": "social-turnstile-token",
+          },
+          { "cf-connecting-ip": "203.0.113.13" },
+        ),
+        params: {},
+        context: context({
+          ...productionEnv(),
+          ...override,
+        } as unknown as CloudflareEnvironment),
+      } as never);
+
+      expect(response).toBeInstanceOf(Response);
+      const redirectResponse = response as Response;
+      expect(redirectResponse.status).toBe(302);
+      const destination = new URL(redirectResponse.headers.get("location")!);
+      expect(destination.hostname).toBe(expectedHost);
+      expect(
+        new Set(destination.searchParams.get("scope")?.split(" ")),
+      ).toEqual(new Set(["openid", "email", "profile"]));
+      expect(destination.searchParams.get("scope")).not.toMatch(
+        /calendar|User\.Read|offline_access/i,
+      );
+      expect(destination.toString()).not.toContain("attacker.example");
+      expect(redirectResponse.headers.get("set-cookie")).toContain(
+        "better-auth.state",
+      );
+      expect(tokenValidation).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("redacts OAuth state details reported by the authentication library", async () => {
+    const logging = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const sensitiveState = "oauth-state-secret-that-must-not-be-logged";
+
+    const response = await authApiLoader({
+      request: new Request(
+        `http://localhost/api/auth/callback/google?state=${sensitiveState}&code=invalid-code`,
+      ),
+      params: { "*": "callback/google" },
+      context: context({
+        ...productionEnv(),
+        GOOGLE_AUTH_CLIENT_ID: "google-auth-client",
+        GOOGLE_AUTH_CLIENT_SECRET: "google-auth-secret",
+      } as unknown as CloudflareEnvironment),
+    } as never);
+
+    expect(response.status).toBe(302);
+    expect(logging).toHaveBeenCalledOnce();
+    const output = String(logging.mock.calls[0]?.[0]);
+    expect(JSON.parse(output)).toMatchObject({
+      subsystem: "better-auth",
+      event: "library-report",
+      errorName: "StateError",
+    });
+    expect(output).not.toContain(sensitiveState);
+    expect(output).not.toContain("invalid-code");
+  });
+
+  it("reports only configured social providers to the sign-in interface", async () => {
+    const loaded = await signInLoader({
+      request: new Request("http://localhost/sign-in"),
+      params: {},
+      context: context({
+        ...productionEnv(),
+        GOOGLE_AUTH_CLIENT_ID: "google-auth-client",
+        GOOGLE_AUTH_CLIENT_SECRET: "google-auth-secret",
+      } as unknown as CloudflareEnvironment),
+    } as never);
+    if (loaded instanceof Response) {
+      throw new Error("The anonymous sign-in loader unexpectedly redirected.");
+    }
+    expect(loaded.socialProviders).toEqual({
+      google: true,
+      microsoft: false,
+    });
+  });
+
   it("creates a hashed magic-link verification for an invited person and calls the configured delivery boundary", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     const delivery = vi.fn(
@@ -187,28 +415,47 @@ describe("production authentication routes", () => {
 
   it("keeps eligible and unknown sign-in requests observationally identical", async () => {
     const delivery = vi.fn(
-      async () =>
-        new Response(JSON.stringify({ id: "email-test" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      async (input: RequestInfo | URL) =>
+        new Response(
+          JSON.stringify(
+            String(input).includes("siteverify")
+              ? { success: true, hostname: "localhost", action: "sign_in" }
+              : { id: "email-test" },
+          ),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
     );
     vi.stubGlobal("fetch", delivery);
     const testContext = context(productionEnv());
 
     const eligible = await signInAction({
-      request: formRequest("http://localhost/sign-in", {
-        email: "olivia@example.com",
-        returnTo: "/speaker/dashboard?tab=files",
-      }),
+      request: formRequest(
+        "http://localhost/sign-in",
+        {
+          _intent: "email_magic_link",
+          email: "olivia@example.com",
+          returnTo: "/speaker/dashboard?tab=files",
+          "turnstile-token": "turnstile-token",
+        },
+        { "cf-connecting-ip": "203.0.113.10" },
+      ),
       params: {},
       context: testContext,
     } as never);
     const unknown = await signInAction({
-      request: formRequest("http://localhost/sign-in", {
-        email: `unknown-${crypto.randomUUID()}@example.com`,
-        returnTo: "/speaker/dashboard?tab=files",
-      }),
+      request: formRequest(
+        "http://localhost/sign-in",
+        {
+          _intent: "email_magic_link",
+          email: `unknown-${crypto.randomUUID()}@example.com`,
+          returnTo: "/speaker/dashboard?tab=files",
+          "turnstile-token": "turnstile-token",
+        },
+        { "cf-connecting-ip": "203.0.113.11" },
+      ),
       params: {},
       context: testContext,
     } as never);
@@ -224,10 +471,11 @@ describe("production authentication routes", () => {
       message:
         "If this address is eligible, a one-time sign-in link will arrive shortly.",
     });
-    expect(delivery).toHaveBeenCalledTimes(2);
-    for (const [, init] of delivery.mock.calls as unknown as Array<
-      [string, RequestInit]
-    >) {
+    const emailCalls = (
+      delivery.mock.calls as unknown as Array<[string, RequestInit]>
+    ).filter(([url]) => !String(url).includes("siteverify"));
+    expect(emailCalls).toHaveLength(2);
+    for (const [, init] of emailCalls) {
       const delivered = JSON.parse(String(init.body)) as { text: string };
       const link = delivered.text.match(/https?:\/\/\S+/)?.[0];
       expect(new URL(link!).searchParams.get("callbackURL")).toBe(
@@ -239,17 +487,31 @@ describe("production authentication routes", () => {
   it("does not disclose provider errors and rejects non-POST sign-in requests", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        async () => new Response("provider-secret-detail", { status: 500 }),
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes("siteverify")
+          ? Response.json({
+              success: true,
+              hostname: "localhost",
+              action: "sign_in",
+            })
+          : new Response("provider-secret-detail", { status: 500 }),
       ),
     );
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const logging = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     const testContext = context(productionEnv());
     const failed = await signInAction({
-      request: formRequest("http://localhost/sign-in", {
-        email: "olivia@example.com",
-        returnTo: "/admin/event",
-      }),
+      request: formRequest(
+        "http://localhost/sign-in",
+        {
+          _intent: "email_magic_link",
+          email: "olivia@example.com",
+          returnTo: "/admin/event",
+          "turnstile-token": "turnstile-token",
+        },
+        { "cf-connecting-ip": "203.0.113.12" },
+      ),
       params: {},
       context: testContext,
     } as never);
@@ -266,6 +528,15 @@ describe("production authentication routes", () => {
         "Sign-in email could not be requested right now. Please try again later.",
     });
     expect(JSON.stringify(failed.data)).not.toContain("provider-secret-detail");
+    expect(logging).toHaveBeenCalledOnce();
+    const output = String(logging.mock.calls[0]?.[0]);
+    expect(JSON.parse(output)).toMatchObject({
+      subsystem: "authentication",
+      event: "magic-link-request-failed",
+      errorName: "ResendDeliveryError",
+    });
+    expect(output).not.toContain("provider-secret-detail");
+    expect(output).not.toContain("olivia@example.com");
 
     const rejected = await signInAction({
       request: new Request("http://localhost/sign-in", { method: "PUT" }),
@@ -282,7 +553,7 @@ describe("production authentication routes", () => {
   });
 
   it("routes each authenticated event role to its own surface", async () => {
-    const testEnv = productionEnv();
+    const testEnv = validatedProductionEnv();
     for (const [personId, expected] of [
       ["person-demo-admin", "/admin/event"],
       ["person-demo-evaluator", "/review/workbench"],
@@ -290,9 +561,13 @@ describe("production authentication routes", () => {
       ["person-demo-submitter", "/apply/form"],
     ] as const) {
       const { cookie } = await sessionCookie(personId);
+      const eventCookie = currentEventCookie("evt-foe-2025", testEnv).split(
+        ";",
+        1,
+      )[0];
       const response = await homeLoader({
         request: new Request("http://localhost/", {
-          headers: { cookie },
+          headers: { cookie: `${cookie}; ${eventCookie}` },
         }),
         params: {},
         context: context(testEnv),
@@ -302,8 +577,82 @@ describe("production authentication routes", () => {
     }
   });
 
+  it("establishes an initial event only on safe navigation and never during a mutation", async () => {
+    const testEnv = validatedProductionEnv();
+    const { cookie } = await sessionCookie("person-demo-admin");
+    const initial = await resolveCurrentEventId(
+      new Request("http://localhost/admin/event", { headers: { cookie } }),
+      testEnv,
+      ["administrator"],
+    ).catch((error: unknown) => error);
+    expect(initial).toBeInstanceOf(Response);
+    expect((initial as Response).status).toBe(302);
+    expect((initial as Response).headers.get("location")).toBe("/admin/event");
+    expect((initial as Response).headers.get("set-cookie")).toContain(
+      "__Host-program_cue_event=evt-foe-2025",
+    );
+
+    await expect(
+      resolveCurrentEventId(
+        new Request("http://localhost/admin/event", {
+          method: "POST",
+          headers: { cookie, origin: "http://localhost" },
+        }),
+        testEnv,
+        ["administrator"],
+      ),
+    ).rejects.toMatchObject({ status: 428 });
+  });
+
+  it("redirects a sole pending invitation to explicit selection without accepting it during navigation", async () => {
+    const testEnv = validatedProductionEnv();
+    const { cookie } = await sessionCookie("person-demo-evaluator");
+    await env.DB.prepare(
+      `UPDATE memberships
+          SET accepted_at = NULL, invited_at = unixepoch(),
+              invitation_expires_at = unixepoch() + 300, revoked_at = NULL
+        WHERE id = 'membership-demo-evaluator'`,
+    ).run();
+    const auditBefore = await env.DB.prepare(
+      `SELECT COUNT(*) AS count
+         FROM audit_events
+        WHERE entity_id = 'membership-demo-evaluator'
+          AND action = 'membership.accepted'`,
+    ).first<{ count: number }>();
+
+    const result = await resolveCurrentEventId(
+      new Request("http://localhost/review/workbench", {
+        headers: { cookie },
+      }),
+      testEnv,
+      ["evaluator"],
+    ).catch((error: unknown) => error);
+
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).status).toBe(302);
+    expect((result as Response).headers.get("location")).toBe(
+      "/events/select?returnTo=%2Freview%2Fworkbench",
+    );
+    expect((result as Response).headers.has("set-cookie")).toBe(false);
+    expect(
+      await env.DB.prepare(
+        `SELECT accepted_at AS acceptedAt
+           FROM memberships
+          WHERE id = 'membership-demo-evaluator'`,
+      ).first<{ acceptedAt: number | null }>(),
+    ).toEqual({ acceptedAt: null });
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS count
+           FROM audit_events
+          WHERE entity_id = 'membership-demo-evaluator'
+            AND action = 'membership.accepted'`,
+      ).first<{ count: number }>(),
+    ).toEqual(auditBefore);
+  });
+
   it("deletes the durable session through a same-origin POST sign-out", async () => {
-    const testEnv = productionEnv();
+    const testEnv = validatedProductionEnv();
     const { token, cookie } = await sessionCookie("person-demo-admin");
     const response = await signOutAction({
       request: formRequest(
@@ -326,6 +675,9 @@ describe("production authentication routes", () => {
       "better-auth.session_token=",
     );
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+    expect(response.headers.get("set-cookie")).toContain(
+      "__Host-program_cue_event=",
+    );
     expect(
       await env.DB.prepare("SELECT id FROM auth_sessions WHERE token = ?")
         .bind(token)

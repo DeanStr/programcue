@@ -2,10 +2,9 @@ import {
   requireEventRole,
   type Viewer,
 } from "~/platform/auth/authorize.server";
-import { DEMO_IDENTITIES, ensureDemoData } from "~/platform/demo/seed.server";
+import { ensureDemoData } from "~/platform/demo/seed.server";
 
 const EVENT_ID = "evt-foe-2025";
-const DEMO_ORGANISATION_ID = "org-future-events";
 const SPEAKER_ID = "person-demo-speaker";
 const ADMIN_ID = "person-demo-admin";
 
@@ -116,10 +115,11 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       `
       INSERT OR IGNORE INTO task_templates (
         id, event_id, name, description, target_type, task_type, impact, evidence_mode,
-        due_anchor, due_offset_minutes, configuration_json, status, created_at, updated_at
+        due_anchor, due_offset_minutes, auto_assign_on_acceptance,
+        configuration_json, status, created_at, updated_at
       ) VALUES (
         'task-template-profile', ?, 'Complete your speaker profile', 'Confirm your biography, role and pronunciation.',
-        'speaker', 'short_form', 'high', 'checkbox', 'none', NULL, '{}', 'active', unixepoch(), unixepoch()
+        'speaker', 'short_form', 'high', 'checkbox', 'none', NULL, 1, '{}', 'active', unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID),
@@ -127,10 +127,12 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       `
       INSERT OR IGNORE INTO task_templates (
         id, event_id, name, description, target_type, task_type, impact, evidence_mode,
-        due_anchor, due_offset_minutes, configuration_json, status, created_at, updated_at
+        due_anchor, due_offset_minutes, fixed_due_at, auto_assign_on_acceptance,
+        configuration_json, status, created_at, updated_at
       ) VALUES (
         'task-template-slides', ?, 'Upload presentation slides', 'Upload the final PDF, PPT or PPTX deck.',
-        'speaker', 'file_upload', 'critical', 'file', 'fixed', NULL, '{}', 'active', unixepoch(), unixepoch()
+        'speaker', 'file_upload', 'critical', 'file', 'fixed', NULL,
+        unixepoch('2025-05-10T16:00:00Z'), 1, '{}', 'active', unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID),
@@ -138,10 +140,11 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       `
       INSERT OR IGNORE INTO task_templates (
         id, event_id, name, description, target_type, task_type, impact, evidence_mode,
-        due_anchor, due_offset_minutes, configuration_json, status, created_at, updated_at
+        due_anchor, due_offset_minutes, auto_assign_on_acceptance,
+        configuration_json, status, created_at, updated_at
       ) VALUES (
         'task-template-handbook', ?, 'Read the speaker handbook', 'Read and acknowledge the current handbook.',
-        'speaker', 'acknowledgement', 'medium', 'checkbox', 'none', NULL,
+        'speaker', 'acknowledgement', 'medium', 'checkbox', 'none', NULL, 1,
         '{"resourcePageId":"resource-speaker-handbook"}', 'active', unixepoch(), unixepoch()
       )
     `,
@@ -225,21 +228,5 @@ export async function requireSpeakerViewer(
   env: CloudflareEnvironment,
   eventId: string,
 ): Promise<Viewer> {
-  if (String(env.DEMO_MODE) === "true") {
-    const cookie = request.headers.get("cookie") ?? "";
-    const selected = cookie.match(
-      /(?:^|;\s*)program_cue_demo_role=([^;]+)/,
-    )?.[1];
-    if (!selected || selected === "speaker") {
-      const identity = DEMO_IDENTITIES.speaker;
-      return {
-        ...identity,
-        role: "speaker",
-        organisationId: DEMO_ORGANISATION_ID,
-        eventId,
-        demo: true,
-      };
-    }
-  }
   return requireEventRole(request, env, eventId, ["speaker"]);
 }

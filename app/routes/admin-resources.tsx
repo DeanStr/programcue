@@ -5,11 +5,10 @@ import {
   BookOpenCheck,
   CheckCircle2,
   ExternalLink,
-  FileUp,
   Globe2,
   Plus,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   data,
   Form,
@@ -21,25 +20,69 @@ import {
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-resources";
-import { Dialog } from "~/components/dialog";
-import { FilePolicyError } from "~/modules/files/file-policy";
-import { FileService } from "~/modules/files/file-service.server";
 import {
+  DirectMultipartUpload,
+  DirectUploadCompletionConflictError,
+} from "~/components/direct-multipart-upload";
+import { Dialog } from "~/components/dialog";
+import {
+  DraftRecoveryFeedback,
+  DraftRecoveryStatus,
+} from "~/components/draft-recovery-feedback";
+import {
+  appendEmbeds,
+  renderResourceDocument,
   ResourceContentError,
   type TiptapNode,
 } from "~/modules/resources/resource-content";
 import {
+  ResourceAudienceError,
   ResourceRevisionConflictError,
   ResourceService,
   ResourceSlugConflictError,
   ResourceTaskDependencyError,
 } from "~/modules/resources/resource-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
-import { requireEventRole } from "~/platform/auth/authorize.server";
+import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import {
+  clearDraftRecoveryScope,
+  useDraftRecovery,
+} from "~/platform/drafts/draft-recovery";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import { maximumMegabytes } from "~/modules/files/file-policy";
 
 export const meta = () => [{ title: "Speaker Resources · Program Cue" }];
+
+type ResourceAttachmentCompletion = {
+  ok?: boolean;
+  committed?: boolean;
+  error?: string;
+  message?: string;
+};
+
+export async function readResourceAttachmentCompletion(response: Response) {
+  const result = (await response.json()) as ResourceAttachmentCompletion;
+  if (response.status === 409)
+    throw new DirectUploadCompletionConflictError(
+      result.error ??
+        "The resource draft changed during upload. Reload the latest draft before choosing the file again.",
+    );
+  if (response.status === 207 && result.committed === true) {
+    return {
+      message:
+        result.message ??
+        "The attachment was saved, but live updates need attention. Reload other open views before continuing.",
+    };
+  }
+  if (!response.ok || result.ok !== true)
+    throw new Error(
+      result.error ??
+        result.message ??
+        `Attachment request failed (${response.status}).`,
+    );
+  return { message: result.message };
+}
 
 const emptyDocument: TiptapNode = {
   type: "doc",
@@ -53,10 +96,8 @@ async function administrator(
   context: Route.LoaderArgs["context"],
 ) {
   const { env } = getCloudflareContext(context);
-  if (!env.DEFAULT_EVENT_ID)
-    throw new Response("DEFAULT_EVENT_ID is not configured", { status: 503 });
   await ensureDemoSpeakerData(env);
-  const viewer = await requireEventRole(request, env, env.DEFAULT_EVENT_ID, [
+  const viewer = await requireCurrentEventRole(request, env, [
     "owner",
     "administrator",
   ]);
@@ -65,10 +106,17 @@ async function administrator(
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await administrator(request, context);
-  return new ResourceService(env).getAdminWorkspace(
+  const url = new URL(request.url);
+  const workspace = await new ResourceService(env).getAdminWorkspace(
     viewer,
-    new URL(request.url).searchParams.get("resource"),
+    url.searchParams.get("resource"),
   );
+  return {
+    ...workspace,
+    recoveryScope: { eventId: viewer.eventId, personId: viewer.personId },
+    createdFromLocalDraft: url.searchParams.get("created") === "1",
+    liveUpdateDelayed: url.searchParams.get("liveUpdateDelayed") === "1",
+  };
 }
 
 function actionError(error: unknown) {
@@ -76,10 +124,10 @@ function actionError(error: unknown) {
     return error.issues[0]?.message ?? "Review the resource fields.";
   if (
     error instanceof ResourceContentError ||
+    error instanceof ResourceAudienceError ||
     error instanceof ResourceRevisionConflictError ||
     error instanceof ResourceSlugConflictError ||
     error instanceof ResourceTaskDependencyError ||
-    error instanceof FilePolicyError ||
     error instanceof InvalidResourcePayloadError
   )
     return error.message;
@@ -90,11 +138,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const { env, viewer } = await administrator(request, context);
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
-  if (
-    intent !== "save" &&
-    intent !== "publish" &&
-    intent !== "upload-attachment"
-  ) {
+  if (intent !== "save" && intent !== "publish") {
     return data(
       { ok: false, message: "Unsupported resource action." },
       { status: 400 },
@@ -110,52 +154,13 @@ export async function action({ request, context }: Route.ActionArgs) {
         entityId: pageId,
         changeType: "published",
       });
-      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
+      if (realtimeFailure)
+        return data({ ...realtimeFailure, intent }, { status: 207 });
       return data({
         ok: true,
+        intent,
         message:
           "Resource version published and acknowledgement tasks synchronised.",
-      });
-    }
-    if (intent === "upload-attachment") {
-      const pageId = String(form.get("id") ?? "");
-      const versionId = String(form.get("versionId") ?? "");
-      const revision = Number(form.get("revision"));
-      const file = form.get("file");
-      if (!(file instanceof File))
-        throw new FilePolicyError("Choose an attachment.");
-      const fileService = new FileService(env);
-      const upload = await fileService.uploadAdminFile(
-        viewer,
-        {
-          targetType: "resource",
-          targetId: pageId,
-          assetKind: "resource_attachment",
-        },
-        file,
-      );
-      try {
-        await service.attachToDraft(
-          viewer,
-          pageId,
-          versionId,
-          revision,
-          upload.assetId,
-        );
-      } catch (error) {
-        await fileService.discardUnattachedResourceUpload(viewer, upload);
-        throw error;
-      }
-      const realtimeFailure = await recordRouteChange(env, viewer, {
-        entityType: "resource_page",
-        entityId: pageId,
-        changeType: "updated",
-      });
-      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
-      return data({
-        ok: true,
-        message:
-          "Attachment stored in R2 quarantine. It will remain hidden from speakers until a scanner reports it clean.",
       });
     }
     let rawDocument: unknown;
@@ -174,6 +179,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       slug: form.get("slug"),
       category: form.get("category"),
       audienceScope: form.get("audienceScope"),
+      audiencePersonIds: form.getAll("audiencePersonIds"),
       acknowledgementRequired: form.get("acknowledgementRequired")
         ? "true"
         : "false",
@@ -188,17 +194,30 @@ export async function action({ request, context }: Route.ActionArgs) {
       entityId: id,
       changeType: existingId ? "updated" : "created",
     });
-    if (realtimeFailure) return data(realtimeFailure, { status: 207 });
-    if (!existingId) return redirect(`/admin/resources?resource=${id}`);
+    if (realtimeFailure) {
+      if (!existingId)
+        return redirect(
+          `/admin/resources?resource=${encodeURIComponent(id)}&created=1&liveUpdateDelayed=1`,
+        );
+      return data({ ...realtimeFailure, intent }, { status: 207 });
+    }
+    if (!existingId)
+      return redirect(`/admin/resources?resource=${id}&created=1`);
     return data({
       ok: true,
+      intent,
       message: "A new immutable draft version was saved.",
     });
   } catch (error) {
     const message = actionError(error);
     if (message) {
       return data(
-        { ok: false, message },
+        {
+          ok: false,
+          intent,
+          message,
+          conflict: error instanceof ResourceRevisionConflictError,
+        },
         {
           status:
             error instanceof ResourceRevisionConflictError ||
@@ -263,67 +282,85 @@ function RichResourceEditor({
         role="toolbar"
         aria-label="Resource formatting"
       >
-        <button
-          type="button"
-          className={editor.isActive("bold") ? "active" : ""}
-          aria-label="Bold"
-          aria-pressed={editor.isActive("bold")}
-          onClick={() => editor.chain().focus().toggleBold().run()}
+        <span
+          className="resource-editor-toolbar-group"
+          role="group"
+          aria-label="Text styles"
         >
-          <strong>B</strong>
-        </button>
-        <button
-          type="button"
-          className={editor.isActive("italic") ? "active" : ""}
-          aria-label="Italic"
-          aria-pressed={editor.isActive("italic")}
-          onClick={() => editor.chain().focus().toggleItalic().run()}
+          <button
+            type="button"
+            className={editor.isActive("bold") ? "active" : ""}
+            aria-label="Bold"
+            aria-pressed={editor.isActive("bold")}
+            onClick={() => editor.chain().focus().toggleBold().run()}
+          >
+            <strong>B</strong>
+          </button>{" "}
+          <button
+            type="button"
+            className={editor.isActive("italic") ? "active" : ""}
+            aria-label="Italic"
+            aria-pressed={editor.isActive("italic")}
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+          >
+            <em>I</em>
+          </button>{" "}
+          <button
+            type="button"
+            className={editor.isActive("heading", { level: 2 }) ? "active" : ""}
+            aria-label="Heading level 2"
+            aria-pressed={editor.isActive("heading", { level: 2 })}
+            onClick={() =>
+              editor.chain().focus().toggleHeading({ level: 2 }).run()
+            }
+          >
+            H2
+          </button>
+        </span>
+        <span
+          className="resource-editor-toolbar-group"
+          role="group"
+          aria-label="Block styles"
         >
-          <em>I</em>
-        </button>
-        <button
-          type="button"
-          className={editor.isActive("heading", { level: 2 }) ? "active" : ""}
-          aria-label="Heading level 2"
-          aria-pressed={editor.isActive("heading", { level: 2 })}
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 2 }).run()
-          }
+          <button
+            type="button"
+            className={editor.isActive("bulletList") ? "active" : ""}
+            aria-label="Bulleted list"
+            aria-pressed={editor.isActive("bulletList")}
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+          >
+            • List
+          </button>{" "}
+          <button
+            type="button"
+            className={editor.isActive("blockquote") ? "active" : ""}
+            aria-label="Block quote"
+            aria-pressed={editor.isActive("blockquote")}
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          >
+            Quote
+          </button>
+        </span>
+        <span
+          className="resource-editor-toolbar-group"
+          role="group"
+          aria-label="Edit history"
         >
-          H2
-        </button>
-        <button
-          type="button"
-          className={editor.isActive("bulletList") ? "active" : ""}
-          aria-label="Bulleted list"
-          aria-pressed={editor.isActive("bulletList")}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-        >
-          • List
-        </button>
-        <button
-          type="button"
-          className={editor.isActive("blockquote") ? "active" : ""}
-          aria-label="Block quote"
-          aria-pressed={editor.isActive("blockquote")}
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        >
-          Quote
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().undo().run()}
-          disabled={!editor.can().undo()}
-        >
-          Undo
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().redo().run()}
-          disabled={!editor.can().redo()}
-        >
-          Redo
-        </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().undo().run()}
+            disabled={!editor.can().undo()}
+          >
+            Undo
+          </button>{" "}
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().redo().run()}
+            disabled={!editor.can().redo()}
+          >
+            Redo
+          </button>
+        </span>
       </div>
       <EditorContent editor={editor} />
     </div>
@@ -347,14 +384,127 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
     selected?.document ?? emptyDocument,
   );
   const [creating, setCreating] = useState(!selected);
+  const [audienceScope, setAudienceScope] = useState(
+    selected?.audienceScope ?? "all_speakers",
+  );
+  const [title, setTitle] = useState(selected?.title ?? "");
+  const [slug, setSlug] = useState(selected?.slug ?? "");
+  const [category, setCategory] = useState(selected?.category ?? "");
+  const [embedUrls, setEmbedUrls] = useState(
+    selected ? embeddedUrls(selected.document) : "",
+  );
+  const [audiencePersonIds, setAudiencePersonIds] = useState<string[]>(
+    selected?.audiencePersonIds ?? [],
+  );
+  const [acknowledgementRequired, setAcknowledgementRequired] = useState(
+    selected?.acknowledgementRequired ?? false,
+  );
+  const [dirty, setDirty] = useState(false);
   const [publishConfirmationOpen, setPublishConfirmationOpen] = useState(false);
+  const [previewViewport, setPreviewViewport] = useState<"mobile" | "desktop">(
+    "desktop",
+  );
+  const recoveryPayload = useMemo(
+    () => ({
+      title,
+      slug,
+      category,
+      audienceScope,
+      audiencePersonIds,
+      acknowledgementRequired,
+      document,
+      embedUrls,
+    }),
+    [
+      acknowledgementRequired,
+      audiencePersonIds,
+      audienceScope,
+      category,
+      document,
+      embedUrls,
+      slug,
+      title,
+    ],
+  );
+  const resourcePreview = useMemo(() => {
+    try {
+      const urls = embedUrls
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      return {
+        html: renderResourceDocument(appendEmbeds(document, urls)),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        html: "",
+        error:
+          error instanceof Error
+            ? error.message
+            : "The resource preview could not be rendered.",
+      };
+    }
+  }, [document, embedUrls]);
+  const restoreDraft = useCallback((payload: typeof recoveryPayload) => {
+    setTitle(payload.title);
+    setSlug(payload.slug);
+    setCategory(payload.category);
+    setAudienceScope(payload.audienceScope);
+    setAudiencePersonIds(payload.audiencePersonIds);
+    setAcknowledgementRequired(payload.acknowledgementRequired);
+    setDocument(payload.document);
+    setEmbedUrls(payload.embedUrls);
+    setDirty(true);
+  }, []);
+  const editing = creating ? null : selected;
+  const editorKey = editing?.versionId ?? "new";
+  const recovery = useDraftRecovery({
+    scope: {
+      ...loaderData.recoveryScope,
+      recordType: "resource_page",
+      recordId: editing?.id ?? "new",
+    },
+    serverRevision: `${editing?.revision ?? 0}:${editing?.versionId ?? "new"}`,
+    payload: recoveryPayload,
+    dirty,
+    onRestore: restoreDraft,
+  });
   useEffect(() => {
     setDocument(selected?.document ?? emptyDocument);
     setCreating(!selected);
+    setAudienceScope(selected?.audienceScope ?? "all_speakers");
+    setTitle(selected?.title ?? "");
+    setSlug(selected?.slug ?? "");
+    setCategory(selected?.category ?? "");
+    setEmbedUrls(selected ? embeddedUrls(selected.document) : "");
+    setAudiencePersonIds(selected?.audiencePersonIds ?? []);
+    setAcknowledgementRequired(selected?.acknowledgementRequired ?? false);
+    setDirty(false);
     setPublishConfirmationOpen(false);
   }, [selected?.id, selected?.versionId]);
-  const editing = creating ? null : selected;
-  const editorKey = editing?.versionId ?? "new";
+  useEffect(() => {
+    const committed = Boolean(
+      actionData && "committed" in actionData && actionData.committed === true,
+    );
+    if (
+      actionData &&
+      (actionData.ok || committed) &&
+      "intent" in actionData &&
+      (actionData.intent === "save" || actionData.intent === "publish")
+    ) {
+      setDirty(false);
+      void recovery.markServerSaved();
+    }
+  }, [actionData, recovery.markServerSaved]);
+  useEffect(() => {
+    if (!loaderData.createdFromLocalDraft) return;
+    void clearDraftRecoveryScope({
+      ...loaderData.recoveryScope,
+      recordType: "resource_page",
+      recordId: "new",
+    });
+  }, [loaderData.createdFromLocalDraft, loaderData.recoveryScope]);
   return (
     <>
       <div className="page-head pc-page-header">
@@ -371,9 +521,10 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
             className="btn"
             to="/speaker/resources"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
           >
             <ExternalLink aria-hidden size={15} /> Speaker view
+            <span className="sr-only"> (opens in a new tab)</span>
           </Link>
           <button
             className="btn primary"
@@ -381,6 +532,14 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
             onClick={() => {
               setCreating(true);
               setDocument(emptyDocument);
+              setAudienceScope("all_speakers");
+              setTitle("");
+              setSlug("");
+              setCategory("");
+              setEmbedUrls("");
+              setAudiencePersonIds([]);
+              setAcknowledgementRequired(false);
+              setDirty(false);
             }}
           >
             <Plus aria-hidden size={15} /> New resource
@@ -401,6 +560,65 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
             <strong>{actionData.ok ? "Saved" : "Action needed"}</strong>
             <div>{actionData.message}</div>
           </div>
+        </div>
+      ) : null}
+      {loaderData.liveUpdateDelayed ? (
+        <div className="pc-status-notice is-warning mb" role="status">
+          <AlertTriangle aria-hidden size={18} />
+          <div className="pc-status-notice-copy">
+            <strong>Draft saved · live update delayed</strong>
+            <div>
+              The new resource draft is authoritative in D1. Refresh other open
+              views before continuing.
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <DraftRecoveryFeedback recovery={recovery} />
+      {actionData && "conflict" in actionData && actionData.conflict ? (
+        <div className="validation-item error card pad mb" role="alert">
+          <strong>Draft conflict</strong>
+          <span>
+            The editor and browser recovery copy remain intact. Export them or
+            explicitly load the latest server version.
+          </span>
+          <span className="row-actions right">
+            <button
+              className="btn small"
+              type="button"
+              onClick={() => {
+                const blob = new Blob(
+                  [JSON.stringify(recoveryPayload, null, 2)],
+                  {
+                    type: "application/json",
+                  },
+                );
+                const href = URL.createObjectURL(blob);
+                const link = window.document.createElement("a");
+                link.href = href;
+                link.download = `${slug || "resource"}-recovery.json`;
+                link.click();
+                URL.revokeObjectURL(href);
+              }}
+            >
+              Export local edits
+            </button>
+            <button
+              className="btn small"
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Discard the current editor contents and load the latest server version?",
+                  )
+                ) {
+                  void recovery.clear().then(() => window.location.reload());
+                }
+              }}
+            >
+              Load server version
+            </button>
+          </span>
         </div>
       ) : null}
       <div className="resource-admin-layout">
@@ -463,7 +681,11 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
                 <input
                   className="field"
                   name="title"
-                  defaultValue={editing?.title ?? ""}
+                  value={title}
+                  onChange={(event) => {
+                    setTitle(event.target.value);
+                    setDirty(true);
+                  }}
                   required
                   maxLength={180}
                 />
@@ -473,7 +695,11 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
                 <input
                   className="field"
                   name="slug"
-                  defaultValue={editing?.slug ?? ""}
+                  value={slug}
+                  onChange={(event) => {
+                    setSlug(event.target.value);
+                    setDirty(true);
+                  }}
                   required
                   pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
                 />
@@ -483,7 +709,11 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
                 <input
                   className="field"
                   name="category"
-                  defaultValue={editing?.category ?? ""}
+                  value={category}
+                  onChange={(event) => {
+                    setCategory(event.target.value);
+                    setDirty(true);
+                  }}
                 />
               </label>
               <label className="label">
@@ -491,23 +721,72 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
                 <select
                   className="select"
                   name="audienceScope"
-                  defaultValue={editing?.audienceScope ?? "all_speakers"}
+                  value={audienceScope}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (
+                      value === "all_speakers" ||
+                      value === "accepted_speakers" ||
+                      value === "custom"
+                    ) {
+                      setAudienceScope(value);
+                      setDirty(true);
+                    }
+                  }}
                 >
                   <option value="all_speakers">All speakers</option>
                   <option value="accepted_speakers">
                     Speakers with accepted sessions
                   </option>
-                  {editing?.audienceScope === "custom" ? (
-                    <option value="custom">Existing custom audience</option>
-                  ) : null}
+                  <option value="custom">Selected speakers</option>
                 </select>
               </label>
             </div>
+            {audienceScope === "custom" ? (
+              <fieldset className="card pad mt">
+                <legend>Selected speakers</legend>
+                {loaderData.audienceCandidates.length ? (
+                  <div className="stack">
+                    {loaderData.audienceCandidates.map((person) => (
+                      <label className="toggle" key={person.id}>
+                        <input
+                          type="checkbox"
+                          name="audiencePersonIds"
+                          value={person.id}
+                          checked={audiencePersonIds.includes(person.id)}
+                          onChange={(event) => {
+                            setAudiencePersonIds((current) =>
+                              event.target.checked
+                                ? [...new Set([...current, person.id])]
+                                : current.filter((id) => id !== person.id),
+                            );
+                            setDirty(true);
+                          }}
+                        />{" "}
+                        <span>
+                          <strong>{person.displayName}</strong>
+                          <small>{person.email}</small>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="help">
+                    Add speakers to sessions before creating a selected-speaker
+                    audience.
+                  </p>
+                )}
+              </fieldset>
+            ) : null}
             <label className="speaker-confirm">
               <input
                 type="checkbox"
                 name="acknowledgementRequired"
-                defaultChecked={editing?.acknowledgementRequired ?? false}
+                checked={acknowledgementRequired}
+                onChange={(event) => {
+                  setAcknowledgementRequired(event.target.checked);
+                  setDirty(true);
+                }}
               />{" "}
               Create and track an acknowledgement task for this resource
             </label>
@@ -516,8 +795,11 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
                 <label className="label">Page content</label>
                 <RichResourceEditor
                   key={editorKey}
-                  document={editing?.document ?? emptyDocument}
-                  onChange={setDocument}
+                  document={document}
+                  onChange={(next) => {
+                    setDocument(next);
+                    setDirty(true);
+                  }}
                 />
               </div>
               <aside>
@@ -526,7 +808,11 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
                   <textarea
                     className="textarea"
                     name="embedUrls"
-                    defaultValue={editing ? embeddedUrls(editing.document) : ""}
+                    value={embedUrls}
+                    onChange={(event) => {
+                      setEmbedUrls(event.target.value);
+                      setDirty(true);
+                    }}
                     placeholder="One HTTPS URL per line"
                     rows={6}
                   />
@@ -537,10 +823,79 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
                 </p>
               </aside>
             </div>
+            <section
+              className="resource-live-preview mt"
+              aria-label="Live speaker resource preview"
+            >
+              <div className="card-title">
+                <div>
+                  <span className="pc-section-kicker">Live speaker view</span>
+                  <h3>Resource preview</h3>
+                </div>
+                <span
+                  className="preview-viewport-controls right"
+                  role="group"
+                  aria-label="Resource preview size"
+                >
+                  <button
+                    className="btn small"
+                    type="button"
+                    aria-pressed={previewViewport === "mobile"}
+                    onClick={() => setPreviewViewport("mobile")}
+                  >
+                    Mobile
+                  </button>
+                  <button
+                    className="btn small"
+                    type="button"
+                    aria-pressed={previewViewport === "desktop"}
+                    onClick={() => setPreviewViewport("desktop")}
+                  >
+                    Desktop
+                  </button>
+                </span>
+              </div>
+              {resourcePreview.error ? (
+                <div className="validation-item error" role="alert">
+                  <strong>Preview unavailable</strong>
+                  <span>{resourcePreview.error}</span>
+                </div>
+              ) : (
+                <article
+                  className={`resource-preview-device event-branded is-${previewViewport}`}
+                  style={
+                    {
+                      "--event-accent": loaderData.previewEvent.brandAccent,
+                    } as React.CSSProperties
+                  }
+                >
+                  <header>
+                    <span className="brand-mark small">P</span>
+                    <span>
+                      <strong>{loaderData.previewEvent.name}</strong>
+                      <small>Speaker resources</small>
+                    </span>
+                  </header>
+                  <div className="speaker-resource-content">
+                    <span className="pill">{category.trim() || "General"}</span>
+                    <h2>{title.trim() || "Untitled resource"}</h2>
+                    <div
+                      className="resource-rendered"
+                      dangerouslySetInnerHTML={{ __html: resourcePreview.html }}
+                    />
+                  </div>
+                </article>
+              )}
+              <p className="help">
+                Preview content stays local. Saving creates the authoritative D1
+                draft version; publishing controls what speakers can see.
+              </p>
+            </section>
             <div className="sticky-actions">
               <span className="subtle">
                 Saving creates a new immutable draft version.
               </span>
+              <DraftRecoveryStatus state={recovery.state} />
               <span className="spacer" />
               <button
                 className="btn primary"
@@ -560,42 +915,55 @@ export default function AdminResources({ loaderData }: Route.ComponentProps) {
                 onClick={() => setPublishConfirmationOpen(true)}
                 disabled={
                   editing.versionStatus !== "draft" ||
+                  dirty ||
                   navigation.state !== "idle"
                 }
               >
                 <BookOpenCheck aria-hidden size={15} /> Publish current draft
               </button>
-              <Form
-                method="post"
-                encType="multipart/form-data"
-                className="resource-attachment-upload"
-              >
-                <input type="hidden" name="intent" value="upload-attachment" />
-                <input type="hidden" name="id" value={editing.id} />
-                <input
-                  type="hidden"
-                  name="versionId"
-                  value={editing.versionId ?? ""}
-                />
-                <input type="hidden" name="revision" value={editing.revision} />
-                <label className="label">
-                  Private attachment
-                  <input className="field" type="file" name="file" required />
-                </label>
-                <button
-                  className="btn"
+              {editing.versionId ? (
+                <DirectMultipartUpload
+                  key={`${editing.versionId}:${editing.revision}`}
+                  target={{ targetType: "resource", targetId: editing.id }}
+                  kinds={[
+                    {
+                      value: "resource_attachment",
+                      label: "Resource attachment",
+                      accept:
+                        ".pdf,.doc,.docx,.xls,.xlsx,.zip,application/pdf,application/zip",
+                      maximumBytes:
+                        loaderData.previewEvent.filePolicy
+                          .supportingDocumentMaximumBytes,
+                    },
+                  ]}
+                  heading="Private resource attachment"
+                  description={`The browser uploads PDF, Office document or ZIP attachments directly to private R2 (maximum ${maximumMegabytes(loaderData.previewEvent.filePolicy.supportingDocumentMaximumBytes)} MB). Save page edits first; the completed file is linked only to this exact draft revision and remains quarantined until scanning passes.`}
                   disabled={
                     editing.versionStatus !== "draft" ||
+                    dirty ||
                     navigation.state !== "idle"
                   }
-                >
-                  <FileUp aria-hidden size={15} />{" "}
-                  {navigation.state === "submitting" &&
-                  pendingIntent === "upload-attachment"
-                    ? "Uploading…"
-                    : "Upload to quarantine"}
-                </button>
-              </Form>
+                  onCompleted={async ({ assetId, versionId }) => {
+                    const response = await fetch("/files/resource-attachment", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({
+                        pageId: editing.id,
+                        pageVersionId: editing.versionId,
+                        revision: editing.revision,
+                        assetId,
+                        fileVersionId: versionId,
+                      }),
+                    });
+                    return readResourceAttachmentCompletion(response);
+                  }}
+                />
+              ) : (
+                <div className="validation-item error" role="alert">
+                  This resource has no current draft version. Save a draft
+                  before uploading an attachment.
+                </div>
+              )}
               {editing.attachments.length ? (
                 <div className="stack resource-admin-attachments">
                   {editing.attachments.map((attachment) => (

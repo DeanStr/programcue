@@ -1,10 +1,11 @@
 import { z } from "zod";
 
-import { API_KEY_SCOPES } from "./api-key-service.server";
+import { API_KEY_SCOPES, type ApiKeyScope } from "./api-key-service.server";
 import {
   readBoundedText,
   RequestBodyTooLargeError,
 } from "~/platform/http/read-body";
+import { requestCorrelationId } from "~/platform/observability/request-correlation";
 import { mayExposeInternalErrors } from "~/platform/runtime-environment.server";
 
 const encoder = new TextEncoder();
@@ -25,7 +26,7 @@ export type ApiPrincipal = {
   keyId: string;
   organisationId: string;
   eventId: string | null;
-  scopes: ReadonlySet<string>;
+  scopes: ReadonlySet<ApiKeyScope>;
 };
 
 function json(body: unknown, init: ResponseInit = {}) {
@@ -36,11 +37,7 @@ function json(body: unknown, init: ResponseInit = {}) {
 }
 
 export function correlationId(request: Request) {
-  return (
-    request.headers.get("cf-ray") ??
-    request.headers.get("x-correlation-id") ??
-    crypto.randomUUID()
-  );
+  return requestCorrelationId(request);
 }
 
 export function apiSuccess(
@@ -75,10 +72,12 @@ export function apiFailure(
   console.error(
     JSON.stringify({
       level: "error",
+      subsystem: "api-request",
+      event: "unhandled-error",
       correlationId: requestId,
       method: request.method,
-      path: new URL(request.url).pathname,
-      message: error instanceof Error ? error.message : String(error),
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      message: "The API request failed unexpectedly.",
     }),
   );
   return json(
@@ -133,7 +132,7 @@ export function requireApiMethod(request: Request, method: "POST") {
 export async function requireApiKey(
   request: Request,
   env: CloudflareEnvironment,
-  requiredScope: string,
+  requiredScope: ApiKeyScope,
   requestedEventId?: string,
 ): Promise<ApiPrincipal> {
   const authorization = request.headers.get("authorization") ?? "";
@@ -177,7 +176,7 @@ export async function requireApiKey(
       "The supplied API key is not authorised",
     );
 
-  let scopes: string[];
+  let scopes: ApiKeyScope[];
   try {
     scopes = scopesSchema.parse(JSON.parse(key.scopesJson));
   } catch {
@@ -187,7 +186,7 @@ export async function requireApiKey(
       "The API key scope record is invalid",
     );
   }
-  if (!scopes.includes(requiredScope as (typeof API_KEY_SCOPES)[number])) {
+  if (!scopes.includes(requiredScope)) {
     throw new ApiError(
       403,
       "SCOPE_FORBIDDEN",
@@ -227,8 +226,9 @@ export async function readJson(
   request: Request,
   maxBytes = 256_000,
 ): Promise<unknown> {
-  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!contentType.startsWith("application/json")) {
+  const contentType = request.headers.get("content-type") ?? "";
+  const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
     throw new ApiError(
       415,
       "UNSUPPORTED_MEDIA_TYPE",

@@ -23,7 +23,10 @@ export const calendarQueueMessageSchema = z.object({
   attemptId: z.string().min(1),
   eventId: z.string().min(1),
   organisationId: z.string().min(1),
+  sessionId: z.string().min(1),
+  personId: z.string().min(1),
   provider: calendarProviderSchema,
+  connectionId: z.string().min(1).nullable(),
   idempotencyKey: z.string().min(8),
   payload: z.object({
     uid: z.string().min(1),
@@ -39,6 +42,7 @@ export const calendarQueueMessageSchema = z.object({
     attendeeEmail: z.email(),
     organizerName: z.string().min(1),
     organizerEmail: z.email(),
+    brandAccent: z.string().regex(/^#[0-9a-f]{6}$/i),
   }),
 });
 

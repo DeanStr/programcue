@@ -4,9 +4,14 @@ import {
   ListChecks,
   ShieldCheck,
 } from "lucide-react";
+import { Link } from "react-router";
 
 import { AdminAssignedTasksPanel } from "~/components/admin-assigned-tasks-panel";
 import { AdminTaskPlanPanel } from "~/components/admin-task-plan-panel";
+import {
+  TaskCompletionUndoControl,
+  type TaskCompletionUndoNotice,
+} from "~/components/task-completion-undo-control";
 import type { AdminTasksData } from "~/routes/admin-tasks";
 
 export function AdminTasksWorkspace({
@@ -15,7 +20,7 @@ export function AdminTasksWorkspace({
   busy,
 }: {
   data: AdminTasksData;
-  actionNotice?: { ok: boolean; message: string };
+  actionNotice?: { ok: boolean; message: string } & TaskCompletionUndoNotice;
   busy: boolean;
 }) {
   const overdue = data.tasks.filter((task) => task.isOverdue).length;
@@ -42,6 +47,9 @@ export function AdminTasksWorkspace({
           </p>
         </div>
         <div className="page-actions">
+          <Link className="btn" to="/admin/tasks/bulk">
+            Bulk actions
+          </Link>
           <span className="status info">
             <ShieldCheck aria-hidden size={14} /> Server authorised
           </span>
@@ -54,7 +62,7 @@ export function AdminTasksWorkspace({
             <strong>Filtered task records</strong>
             <div>
               Showing {data.tasks.length} of {data.totalTaskCount} tasks.{" "}
-              <a href="/admin/tasks">Clear filters</a>
+              <Link to="/admin/tasks">Clear filters</Link>
             </div>
           </div>
         </div>
@@ -72,6 +80,7 @@ export function AdminTasksWorkspace({
           <div className="pc-status-notice-copy">
             <strong>{actionNotice.ok ? "Saved" : "Action needed"}</strong>
             <div>{actionNotice.message}</div>
+            <TaskCompletionUndoControl notice={actionNotice} />
           </div>
         </div>
       ) : null}

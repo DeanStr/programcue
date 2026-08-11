@@ -17,27 +17,29 @@ tables = {
     )
 }
 required = {
-    "organisations", "people", "events", "memberships",
+    "organisations", "people", "organisation_ai_settings", "events", "memberships",
     "form_definitions", "form_versions", "submissions", "submission_revisions",
     "submission_email_verifications", "submission_speakers",
     "evaluation_plans", "evaluation_teams", "evaluation_team_members", "evaluation_rounds",
     "evaluation_criteria", "evaluator_conflicts", "evaluator_assignments", "reviews",
     "review_revisions", "review_moderations", "submission_decisions",
     "tracks", "rooms", "schedule_policies", "sessions", "session_speakers",
-    "schedule_versions", "schedule_entries", "schedule_conflicts",
+    "tags", "session_tags", "session_archives",
+    "schedule_versions", "schedule_session_contents", "schedule_entries", "schedule_conflicts",
     "public_itineraries", "public_itinerary_items",
     "task_templates", "task_template_dependencies", "task_instances",
     "task_instance_dependencies", "task_comments", "task_evidence",
-    "file_assets", "file_versions", "resource_pages", "resource_page_versions",
+    "file_assets", "file_versions", "file_multipart_uploads", "resource_pages", "resource_page_versions",
     "resource_audiences", "resource_attachments", "resource_acknowledgements",
     "sender_profiles", "communication_templates", "communication_template_versions",
     "communication_triggers", "communications", "communication_deliveries",
     "communication_delivery_events", "communication_unsubscribes",
     "calendar_connections", "calendar_invitations", "calendar_sync_attempts",
-    "integration_connections", "integration_runs", "integration_run_items",
+    "integration_connections", "integration_runs", "integration_run_items", "integration_entity_mappings",
     "operation_jobs", "operation_items", "event_changes", "saved_views",
-    "idempotency_records", "webhook_endpoints", "webhook_deliveries",
+    "idempotency_records", "abuse_rate_limits", "webhook_endpoints", "webhook_deliveries",
     "webhook_delivery_attempts", "webhook_receipts", "audit_events",
+    "assistant_proposal_executions",
     "auth_sessions", "auth_accounts", "verification_tokens", "api_keys",
 }
 if tables != required:
@@ -59,23 +61,34 @@ def columns(table: str) -> set[str]:
 
 
 for table, expected in {
+    "organisation_ai_settings": {"provider", "model", "revision", "last_updated_by_person_id", "last_operation_id"},
     "memberships": {"organisation_id", "event_id", "person_id", "role", "revoked_at"},
     "form_versions": {"event_id", "schema_json", "routing_json", "settings_snapshot_json", "revision"},
-    "submissions": {"submitted_snapshot_json", "revision", "last_operation_id"},
+    "submissions": {"submitted_snapshot_json", "revision", "last_operation_id", "routed_team_id"},
     "submission_revisions": {"answers_json", "speaker_snapshot_json", "save_kind", "idempotency_key"},
     "submission_email_verifications": {"form_id", "token_hash", "status", "attempt_count", "verified_at", "consumed_at"},
     "submission_speakers": {"person_id", "email", "invitation_status", "claim_token_hash", "claimed_at"},
-    "evaluation_rounds": {"plan_id", "round_number", "advancement_rule_json", "revision"},
+    "evaluation_rounds": {"plan_id", "round_number", "advancement_rule_json", "revision", "last_operation_id"},
     "evaluation_criteria": {"round_id", "input_type", "weight_percent", "required"},
-    "evaluator_assignments": {"round_id", "team_id", "revision", "due_at"},
+    "evaluator_conflicts": {"round_id", "submission_id", "session_id", "evaluator_person_id"},
+    "evaluator_assignments": {"round_id", "submission_id", "session_id", "session_snapshot_json", "team_id", "revision", "due_at"},
     "reviews": {"status", "scores_json", "revision", "locked_at"},
     "file_versions": {"object_key", "upload_status", "signature_status", "scan_status", "released_at"},
+    "file_multipart_uploads": {"version_id", "asset_id", "upload_id", "idempotency_key", "status", "manifest_json", "expires_at"},
     "schedule_policies": {"room_overlap_action", "speaker_overlap_action", "required_resource_overlap_action"},
     "rooms": {"status"},
+    "tags": {"event_id", "name", "colour_token"},
+    "session_archives": {"event_id", "previous_status", "archive_operation_id"},
+    "schedule_versions": {"status", "revision", "notes"},
+    "schedule_session_contents": {"schedule_version_id", "event_id", "session_id", "title", "slug", "description", "track_id", "format", "duration_minutes", "required_resources_json", "visibility", "last_operation_id"},
     "communications": {"idempotency_key", "content_snapshot_json", "recipient_count", "operation_id"},
     "calendar_invitations": {"ical_uid", "sequence_number", "method", "provider_event_id", "status"},
     "operation_jobs": {"correlation_id", "progress_total", "progress_completed", "progress_failed", "result_json", "claim_token", "claim_expires_at"},
-    "webhook_deliveries": {"idempotency_key", "payload_json", "attempt_count", "next_attempt_at"},
+    "abuse_rate_limits": {"scope_key", "window_started_at", "request_count", "blocked_until"},
+    "integration_entity_mappings": {"connection_id", "entity_type", "entity_id", "external_id", "source_hash"},
+    "integration_connections": {"event_id", "provider", "revision", "last_operation_id"},
+    "webhook_deliveries": {"idempotency_key", "request_hash", "payload_json", "attempt_count", "next_attempt_at"},
+    "assistant_proposal_executions": {"proposal_id", "organisation_id", "event_id", "actor_person_id", "tool_name", "status", "claim_token", "claim_expires_at", "result_json", "completed_at"},
 }.items():
     absent = expected - columns(table)
     if absent:
@@ -104,12 +117,13 @@ if missing_drizzle_indexes:
 
 required_indexes = {
     "idx_submissions_event_status", "idx_assignments_evaluator_status",
-    "idx_schedule_entries_room_time", "idx_schedule_conflicts_open",
-    "idx_tasks_event_status_due", "ux_task_instances_template_target", "ux_file_assets_logical_active", "idx_file_versions_release",
+    "idx_schedule_session_contents_event", "idx_schedule_entries_room_time", "idx_schedule_conflicts_open", "ux_tags_event_name",
+    "idx_tasks_event_status_due", "ux_task_instances_template_target", "ux_file_assets_logical_active", "idx_file_versions_release", "idx_file_multipart_status_expiry",
     "idx_deliveries_communication_status", "idx_calendar_invitation_status",
     "idx_operation_jobs_event_status", "idx_operation_items_status",
     "idx_event_changes_cursor", "idx_webhook_deliveries_status",
     "idx_audit_event_created",
+    "assistant_proposal_executions_claim_idx",
 }
 if required_indexes - indexes:
     raise SystemExit(f"Migration missing indexes: {sorted(required_indexes - indexes)}")
@@ -118,12 +132,32 @@ if required_indexes - indexes:
 connection.executescript("""
 INSERT INTO organisations (id,name,slug) VALUES ('org-a','A','a'),('org-b','B','b');
 INSERT INTO people (id,email,display_name) VALUES ('person-a','a@example.test','A');
-INSERT INTO events (id,organisation_id,name,slug,timezone,starts_at,ends_at)
-VALUES ('event-a','org-a','A','a','UTC',100,200),('event-b','org-b','B','b','UTC',100,200);
+INSERT INTO events (id,organisation_id,name,slug,timezone,starts_at,ends_at,file_policy_json)
+VALUES
+  ('event-a','org-a','A','a','UTC',100,200,'{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}'),
+  ('event-b','org-b','B','b','UTC',100,200,'{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}');
 INSERT INTO memberships (id,organisation_id,event_id,person_id,role)
 VALUES ('member-a','org-a','event-a','person-a','committee_chair');
 INSERT INTO file_assets (id,event_id,owner_person_id,target_type,target_id,asset_kind)
-VALUES ('asset-a','event-a','person-a','person','person-a','headshot');
+VALUES
+  ('asset-a','event-a','person-a','person','person-a','headshot'),
+  ('asset-b','event-a','person-a','resource','asset-b','resource_attachment');
+INSERT INTO file_versions (
+  id,event_id,asset_id,version_number,object_key,original_filename,
+  declared_content_type,size_bytes
+) VALUES ('version-a','event-a','asset-a',1,'version-a','a.jpg','image/jpeg',10);
+INSERT INTO sessions (
+  id,event_id,title,slug,format,duration_minutes,status,visibility
+) VALUES ('session-a','event-a','Session A','session-a','presentation',30,'unscheduled','public');
+INSERT INTO operation_jobs (
+  id,organisation_id,event_id,type,idempotency_key,correlation_id,status,payload_json
+) VALUES
+  ('operation-a','org-a','event-a','test','operation-a-key','operation-a-correlation','completed','{}'),
+  ('operation-b','org-b','event-b','test','operation-b-key','operation-b-correlation','completed','{}');
+INSERT INTO tags (id,event_id,name,created_by_person_id)
+VALUES ('tag-a','event-a','Featured','person-a');
+INSERT INTO schedule_versions (id,event_id,version_number,status)
+VALUES ('draft-a','event-a',1,'draft');
 """)
 
 
@@ -136,8 +170,8 @@ def must_fail(statement: str, message: str) -> None:
 
 
 must_fail(
-    "INSERT INTO events (id,organisation_id,name,slug,timezone,starts_at,ends_at) "
-    "VALUES ('duplicate-event-slug','org-b','Duplicate','a','UTC',100,200)",
+    "INSERT INTO events (id,organisation_id,name,slug,timezone,starts_at,ends_at,file_policy_json) "
+    "VALUES ('duplicate-event-slug','org-b','Duplicate','a','UTC',100,200,'{\"headshotMaximumBytes\":10485760,\"slidesMaximumBytes\":104857600,\"supportingDocumentMaximumBytes\":104857600,\"videoMaximumBytes\":1073741824}')",
     "A duplicate event slug was accepted across organisations",
 )
 must_fail(
@@ -178,6 +212,54 @@ must_fail(
     "VALUES ('bad-progress','event-a','test','key','correlation','running','{}',1,2)",
     "Invalid operation progress was accepted",
 )
+must_fail(
+    "INSERT INTO file_multipart_uploads "
+    "(version_id,event_id,asset_id,idempotency_key,part_size_bytes,expires_at) "
+    "VALUES ('version-a','event-a','asset-b','mismatched-asset',5242880,unixepoch()+3600)",
+    "A multipart upload was allowed to pair a version with the wrong asset",
+)
+must_fail(
+    "INSERT INTO session_archives "
+    "(session_id,event_id,previous_status,archived_by_person_id,archive_operation_id) "
+    "VALUES ('session-a','event-a','unscheduled','person-a','operation-b')",
+    "A session archive was allowed to cite an operation from another event",
+)
+must_fail(
+    "INSERT INTO tags (id,event_id,name,created_by_person_id) "
+    "VALUES ('tag-case-duplicate','event-a','featured','person-a')",
+    "A case-only duplicate event tag was accepted",
+)
+must_fail(
+    "INSERT INTO schedule_versions (id,event_id,version_number,status) "
+    "VALUES ('draft-b','event-a',2,'draft')",
+    "A second draft schedule version was accepted for one event",
+)
+must_fail(
+    "INSERT INTO integration_connections "
+    "(id,organisation_id,event_id,provider,status,direction) "
+    "VALUES ('cross-tenant-integration','org-b','event-a','test','connected','outbound')",
+    "A cross-tenant integration connection was accepted",
+)
+must_fail(
+    "INSERT INTO calendar_connections "
+    "(id,organisation_id,event_id,person_id,provider,account_reference,encrypted_credentials,scopes_json,status,expires_at) "
+    "VALUES ('cross-tenant-calendar','org-b','event-a','person-a','google','account','sealed','[]','connected',unixepoch()+3600)",
+    "A cross-tenant calendar connection was accepted",
+)
+must_fail(
+    "INSERT INTO calendar_connections "
+    "(id,organisation_id,event_id,person_id,provider,account_reference,scopes_json,status) "
+    "VALUES ('missing-calendar-credentials','org-a','event-a','person-a','google','missing','[]','connected')",
+    "A connected calendar account without durable credentials was accepted",
+)
+
+connection.execute(
+    "UPDATE events SET participant_retention_completed_at=unixepoch() WHERE id='event-a'"
+)
+must_fail(
+    "UPDATE events SET participant_retention_completed_at=NULL WHERE id='event-a'",
+    "The participant-retention completion tombstone was cleared",
+)
 
 connection.execute(
     "INSERT INTO audit_events (id,event_id,action,entity_type,metadata_json) "
@@ -195,6 +277,16 @@ required_triggers = {
     "audit_events_no_update",
     "audit_events_no_delete",
     "events_create_schedule_policy",
+    "schedule_versions_seed_session_content",
+    "sessions_seed_draft_schedule_content",
+    "events_participant_retention_tombstone_immutable",
+    "submission_revisions_participant_retention_no_pii_update",
+    "review_revisions_participant_retention_no_pii_update",
+    "communication_delivery_events_participant_retention_no_pii_update",
+    "calendar_sync_attempts_participant_retention_no_pii_insert",
+    "calendar_sync_attempts_participant_retention_no_pii_update",
+    "schedule_session_contents_participant_retention_no_pii_insert",
+    "schedule_session_contents_participant_retention_no_pii_update",
 }
 if required_triggers - triggers:
     raise SystemExit(f"Migration triggers are missing: {sorted(required_triggers - triggers)}")

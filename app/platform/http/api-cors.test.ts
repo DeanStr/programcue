@@ -87,4 +87,28 @@ describe("versioned API CORS", () => {
       "idempotency-key",
     );
   });
+
+  it("advertises PATCH for the versioned participant profile contract", () => {
+    const response = apiPreflightResponse(
+      new Request(
+        "https://programcue.test/api/v1/events/event-1/participant/profile",
+        {
+          method: "OPTIONS",
+          headers: {
+            origin: "https://ops.example",
+            "access-control-request-method": "PATCH",
+            "access-control-request-headers":
+              "content-type,idempotency-key,x-correlation-id",
+          },
+        },
+      ),
+      env,
+      "request-patch",
+    );
+
+    expect(response?.status).toBe(204);
+    expect(response?.headers.get("access-control-allow-methods")).toContain(
+      "PATCH",
+    );
+  });
 });

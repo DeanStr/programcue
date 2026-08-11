@@ -10,6 +10,7 @@ export type ScheduleCandidate = {
   trackId: string | null;
   trackExclusive: boolean;
   speakerIds: ReadonlyArray<string>;
+  requiredResources: ReadonlyArray<string>;
   expectedAttendance: number | null;
 };
 
@@ -21,10 +22,20 @@ export type ScheduledItem = ScheduleCandidate & {
 export type ScheduleRoom = {
   id: string;
   capacity: number;
+  resources: ReadonlyArray<string>;
 };
 
 export type ScheduleConflict = {
-  type: "event_boundary" | "room" | "speaker" | "track" | "capacity";
+  type:
+    | "event_boundary"
+    | "room"
+    | "speaker"
+    | "track"
+    | "capacity"
+    | "required_resource"
+    | "resource_configuration"
+    | "room_resource"
+    | "turnaround";
   severity: "warning" | "blocking";
   message: string;
   conflictingEntryId?: string;
@@ -33,8 +44,11 @@ export type ScheduleConflict = {
 export type SchedulePolicies = {
   room: ConflictPolicy;
   speaker: ConflictPolicy;
+  resource: ConflictPolicy;
   track: ConflictPolicy;
+  boundary: ConflictPolicy;
   capacity: ConflictPolicy;
+  minimumTurnaroundMinutes: number;
 };
 
 export function intervalsOverlap(
@@ -90,14 +104,19 @@ export function detectScheduleConflicts({
     candidate.startsAt < eventLocalStartsAt ||
     candidate.endsAt > eventLocalEndsAtExclusive
   ) {
-    conflicts.push({
-      type: "event_boundary",
-      severity: "blocking",
-      message: "The session must remain within the event dates.",
-    });
+    const level = severity(policies.boundary);
+    if (level)
+      conflicts.push({
+        type: "event_boundary",
+        severity: level,
+        message: "The session must remain within the event dates.",
+      });
   }
 
   const room = rooms.find((item) => item.id === candidate.roomId);
+  const configuredResources = new Set(
+    rooms.flatMap((configuredRoom) => configuredRoom.resources),
+  );
   if (!room) {
     conflicts.push({
       type: "room",
@@ -116,6 +135,21 @@ export function detectScheduleConflicts({
         message: `Expected attendance (${candidate.expectedAttendance}) exceeds room capacity (${room.capacity}).`,
       });
   }
+  for (const resource of candidate.requiredResources) {
+    if (!configuredResources.has(resource)) {
+      conflicts.push({
+        type: "resource_configuration",
+        severity: "blocking",
+        message: `Required resource “${resource}” is not configured in any active room.`,
+      });
+    } else if (room && !room.resources.includes(resource)) {
+      conflicts.push({
+        type: "room_resource",
+        severity: "blocking",
+        message: `Required resource “${resource}” is not available in this room.`,
+      });
+    }
+  }
 
   for (const item of existing) {
     if (
@@ -123,15 +157,36 @@ export function detectScheduleConflicts({
       item.sessionId === candidate.sessionId
     )
       continue;
-    if (
-      !intervalsOverlap(
-        candidate.startsAt,
-        candidate.endsAt,
-        item.startsAt,
-        item.endsAt,
-      )
-    )
+    const overlaps = intervalsOverlap(
+      candidate.startsAt,
+      candidate.endsAt,
+      item.startsAt,
+      item.endsAt,
+    );
+    const sharedSpeaker = candidate.speakerIds.find((personId) =>
+      item.speakerIds.includes(personId),
+    );
+    if (!overlaps) {
+      const gapSeconds =
+        candidate.startsAt >= item.endsAt
+          ? candidate.startsAt - item.endsAt
+          : item.startsAt - candidate.endsAt;
+      if (
+        sharedSpeaker &&
+        policies.minimumTurnaroundMinutes > 0 &&
+        gapSeconds < policies.minimumTurnaroundMinutes * 60
+      ) {
+        const level = severity(policies.speaker);
+        if (level)
+          conflicts.push({
+            type: "turnaround",
+            severity: level,
+            message: `A speaker has less than ${policies.minimumTurnaroundMinutes} minutes between this session and “${item.title}”.`,
+            conflictingEntryId: item.entryId,
+          });
+      }
       continue;
+    }
 
     if (item.roomId === candidate.roomId) {
       const level = severity(policies.room);
@@ -143,9 +198,6 @@ export function detectScheduleConflicts({
           conflictingEntryId: item.entryId,
         });
     }
-    const sharedSpeaker = candidate.speakerIds.find((personId) =>
-      item.speakerIds.includes(personId),
-    );
     if (sharedSpeaker) {
       const level = severity(policies.speaker);
       if (level)
@@ -153,6 +205,19 @@ export function detectScheduleConflicts({
           type: "speaker",
           severity: level,
           message: `A speaker also appears in “${item.title}”.`,
+          conflictingEntryId: item.entryId,
+        });
+    }
+    const sharedResource = candidate.requiredResources.find((resource) =>
+      item.requiredResources.includes(resource),
+    );
+    if (sharedResource) {
+      const level = severity(policies.resource);
+      if (level)
+        conflicts.push({
+          type: "required_resource",
+          severity: level,
+          message: `Required resource “${sharedResource}” is also needed by “${item.title}”.`,
           conflictingEntryId: item.entryId,
         });
     }

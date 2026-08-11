@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  acceptTestFileScanDispatch,
+  completeTestDirectUpload,
+} from "~/modules/files/direct-upload.test-helper";
 import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
@@ -42,9 +46,11 @@ async function createFileTask(testEnv: CloudflareEnvironment, name: string) {
     dueAnchor: "none",
     dueOffsetDays: null,
     fixedDueDate: null,
+    autoAssignOnAcceptance: false,
     dependencyIds: [],
   });
-  return tasks.assignTemplate(admin, templateId, speaker.personId);
+  return (await tasks.assignTemplate(admin, templateId, speaker.personId))
+    .taskId;
 }
 
 async function createChecklistTask(
@@ -62,9 +68,11 @@ async function createChecklistTask(
     dueAnchor: "none",
     dueOffsetDays: null,
     fixedDueDate: null,
+    autoAssignOnAcceptance: false,
     dependencyIds: [],
   });
-  return tasks.assignTemplate(admin, templateId, speaker.personId);
+  return (await tasks.assignTemplate(admin, templateId, speaker.personId))
+    .taskId;
 }
 
 function withBatchRace(
@@ -139,6 +147,7 @@ async function createDependencyPair(
     dueAnchor: "none",
     dueOffsetDays: null,
     fixedDueDate: null,
+    autoAssignOnAcceptance: false,
     dependencyIds: [],
   });
   const dependentTemplateId = await tasks.createTemplate(admin, {
@@ -151,9 +160,10 @@ async function createDependencyPair(
     dueAnchor: "none",
     dueOffsetDays: null,
     fixedDueDate: null,
+    autoAssignOnAcceptance: false,
     dependencyIds: [prerequisiteTemplateId],
   });
-  const dependentTaskId = await tasks.assignTemplate(
+  const { taskId: dependentTaskId } = await tasks.assignTemplate(
     admin,
     dependentTemplateId,
     speaker.personId,
@@ -175,7 +185,71 @@ async function createDependencyPair(
 }
 
 describe("onboarding task service", () => {
-  it("rejects task scopes and evidence combinations that have no implemented workflow", async () => {
+  it("scopes deterministic template intents to one event and rejects payload drift", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const secondEventId = `evt-task-intent-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO events (
+         id, organisation_id, name, slug, timezone, starts_at, ends_at,
+         session_formats_json, file_policy_json
+       )
+       SELECT ?, organisation_id, 'Task intent event', ?, timezone,
+              starts_at, ends_at, session_formats_json, file_policy_json
+         FROM events WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(
+        secondEventId,
+        `task-intent-${crypto.randomUUID()}`,
+        admin.eventId,
+        admin.organisationId,
+      )
+      .run();
+    const input = {
+      name: "Event-scoped template intent",
+      description: "The same caller intent is safe in another event.",
+      targetType: "speaker" as const,
+      taskType: "checklist" as const,
+      impact: "high" as const,
+      evidenceMode: "checkbox" as const,
+      dueAnchor: "none" as const,
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: false,
+      dependencyIds: [],
+    };
+    const intentId = `template-intent-${crypto.randomUUID()}`;
+    const service = new TaskService(testEnv);
+    const first = await service.createTemplate(admin, input, intentId);
+    await expect(service.createTemplate(admin, input, intentId)).resolves.toBe(
+      first,
+    );
+    await expect(
+      service.createTemplate(
+        admin,
+        { ...input, name: "A different template" },
+        intentId,
+      ),
+    ).rejects.toBeInstanceOf(TaskStateError);
+
+    const second = await service.createTemplate(
+      { ...admin, eventId: secondEventId },
+      input,
+      intentId,
+    );
+    expect(second).not.toBe(first);
+    const stored = await testEnv.DB.prepare(
+      `SELECT event_id AS eventId FROM task_templates
+        WHERE id IN (?, ?) ORDER BY event_id`,
+    )
+      .bind(first, second)
+      .all<{ eventId: string }>();
+    expect(stored.results.map((row) => row.eventId).sort()).toEqual(
+      [admin.eventId, secondEventId].sort(),
+    );
+  });
+
+  it("rejects unsupported evidence combinations and persists an explicit supported scope", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
     const service = new TaskService(testEnv);
@@ -189,6 +263,7 @@ describe("onboarding task service", () => {
       dueAnchor: "none",
       dueOffsetDays: null,
       fixedDueDate: null,
+      autoAssignOnAcceptance: false,
       dependencyIds: [],
     } as const;
 
@@ -197,14 +272,127 @@ describe("onboarding task service", () => {
     ).rejects.toBeInstanceOf(ZodError);
     await expect(
       service.createTemplate(admin, { ...base, targetType: "session" }),
-    ).rejects.toBeInstanceOf(ZodError);
+    ).resolves.toEqual(expect.any(String));
 
     const persisted = await testEnv.DB.prepare(
-      "SELECT COUNT(*) AS count FROM task_templates WHERE event_id = ? AND name = ?",
+      `SELECT target_type AS targetType,
+              auto_assign_on_acceptance AS autoAssignOnAcceptance
+         FROM task_templates WHERE event_id = ? AND name = ?`,
     )
       .bind(admin.eventId, base.name)
-      .first<{ count: number }>();
-    expect(persisted?.count).toBe(0);
+      .first();
+    expect(persisted).toEqual({
+      targetType: "session",
+      autoAssignOnAcceptance: 0,
+    });
+
+    const withoutPolicy = Object.fromEntries(
+      Object.entries(base).filter(([key]) => key !== "autoAssignOnAcceptance"),
+    );
+    await expect(
+      service.createTemplate(admin, withoutPolicy),
+    ).rejects.toBeInstanceOf(ZodError);
+    await expect(
+      service.createTemplate(admin, {
+        ...base,
+        name: "Invalid automatic session-start task",
+        dueAnchor: "session_start",
+        dueOffsetDays: -7,
+        autoAssignOnAcceptance: true,
+      }),
+    ).rejects.toBeInstanceOf(ZodError);
+  });
+
+  it("assigns session and event templates to their real targets", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new TaskService(testEnv);
+    const sessionTemplateId = await service.createTemplate(admin, {
+      name: `Session preparation ${crypto.randomUUID()}`,
+      description: "Prepare this session together.",
+      targetType: "session",
+      taskType: "checklist",
+      impact: "high",
+      evidenceMode: "checkbox",
+      dueAnchor: "none",
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: false,
+      dependencyIds: [],
+    });
+    const eventTemplateId = await service.createTemplate(admin, {
+      name: `Event administration ${crypto.randomUUID()}`,
+      description: "Complete an event-wide administration step.",
+      targetType: "event",
+      taskType: "administrator_only",
+      impact: "medium",
+      evidenceMode: "none",
+      dueAnchor: "none",
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: false,
+      dependencyIds: [],
+    });
+    const sessionAssignment = await service.assignTemplate(
+      admin,
+      sessionTemplateId,
+      "session-demo-speaker",
+    );
+    const eventAssignment = await service.assignTemplate(
+      admin,
+      eventTemplateId,
+      admin.eventId,
+    );
+
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT target_type AS targetType,target_id AS targetId,
+                owner_person_id AS ownerPersonId
+           FROM task_instances WHERE id = ?`,
+      )
+        .bind(sessionAssignment.taskId)
+        .first(),
+    ).toEqual({
+      targetType: "session",
+      targetId: "session-demo-speaker",
+      ownerPersonId: null,
+    });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT target_type AS targetType,target_id AS targetId,
+                owner_person_id AS ownerPersonId
+           FROM task_instances WHERE id = ?`,
+      )
+        .bind(eventAssignment.taskId)
+        .first(),
+    ).toEqual({
+      targetType: "event",
+      targetId: admin.eventId,
+      ownerPersonId: null,
+    });
+    const participantTasks = await service.listParticipantTasks(speaker);
+    expect(
+      participantTasks.some((task) => task.id === sessionAssignment.taskId),
+    ).toBe(true);
+    expect(
+      participantTasks.some((task) => task.id === eventAssignment.taskId),
+    ).toBe(false);
+
+    await expect(
+      service.createTemplate(admin, {
+        name: `Invalid mixed-scope dependency ${crypto.randomUUID()}`,
+        description: "A session plan cannot reuse a speaker target implicitly.",
+        targetType: "session",
+        taskType: "checklist",
+        impact: "high",
+        evidenceMode: "checkbox",
+        dueAnchor: "none",
+        dueOffsetDays: null,
+        fixedDueDate: null,
+        autoAssignOnAcceptance: true,
+        dependencyIds: ["task-template-profile"],
+      }),
+    ).rejects.toBeInstanceOf(TaskStateError);
   });
 
   it("rejects ineligible task uploads before any file storage begins", async () => {
@@ -234,9 +422,10 @@ describe("onboarding task service", () => {
       dueAnchor: "none",
       dueOffsetDays: null,
       fixedDueDate: null,
+      autoAssignOnAcceptance: false,
       dependencyIds: [],
     });
-    const taskId = await service.assignTemplate(
+    const { taskId } = await service.assignTemplate(
       admin,
       templateId,
       speaker.personId,
@@ -254,7 +443,11 @@ describe("onboarding task service", () => {
       "SELECT status, evidence_json AS evidenceJson, revision FROM task_instances WHERE id = ?",
     )
       .bind(taskId)
-      .first<{ status: string; evidenceJson: string | null; revision: number }>();
+      .first<{
+        status: string;
+        evidenceJson: string | null;
+        revision: number;
+      }>();
     expect(task).toEqual({
       status: "not_started",
       evidenceJson: null,
@@ -337,6 +530,7 @@ describe("onboarding task service", () => {
       dueAnchor: "none",
       dueOffsetDays: null,
       fixedDueDate: null,
+      autoAssignOnAcceptance: false,
       dependencyIds: [],
     });
     const dependent = await service.createTemplate(admin, {
@@ -349,6 +543,7 @@ describe("onboarding task service", () => {
       dueAnchor: "none",
       dueOffsetDays: null,
       fixedDueDate: null,
+      autoAssignOnAcceptance: false,
       dependencyIds: [prerequisite],
     });
     await service.assignTemplate(admin, dependent, speaker.personId);
@@ -409,6 +604,210 @@ describe("onboarding task service", () => {
     );
   });
 
+  it("issues a one-use five-minute token and safely undoes participant completion", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new TaskService(testEnv);
+    const taskId = await createChecklistTask(
+      testEnv,
+      `Undo participant completion ${crypto.randomUUID()}`,
+    );
+
+    const completion = await service.completeParticipant(speaker, {
+      taskId,
+      revision: 1,
+      confirmed: true,
+    });
+    expect(completion.undoToken).toMatch(/^[^.]+\.[A-Za-z0-9_-]{43}$/);
+    expect(completion.undoExpiresAt).toBeGreaterThan(
+      Math.floor(Date.now() / 1_000),
+    );
+
+    await service.undoCompletion(speaker, completion.undoToken);
+    const task = await testEnv.DB.prepare(
+      `SELECT status, readiness_percent AS readinessPercent, evidence_json AS evidenceJson,
+              completed_at AS completedAt, revision
+         FROM task_instances WHERE id = ? AND event_id = ?`,
+    )
+      .bind(taskId, speaker.eventId)
+      .first<{
+        status: string;
+        readinessPercent: number;
+        evidenceJson: string | null;
+        completedAt: number | null;
+        revision: number;
+      }>();
+    expect(task).toEqual({
+      status: "not_started",
+      readinessPercent: 0,
+      evidenceJson: null,
+      completedAt: null,
+      revision: 3,
+    });
+    expect(
+      await testEnv.DB.prepare(
+        "SELECT status FROM task_evidence WHERE task_id = ?",
+      )
+        .bind(taskId)
+        .first(),
+    ).toEqual({ status: "superseded" });
+    const audit = await testEnv.DB.prepare(
+      `SELECT COUNT(*) AS count FROM audit_events
+        WHERE event_id = ? AND entity_id = ? AND action = 'task.completion_undone'`,
+    )
+      .bind(speaker.eventId, taskId)
+      .first<{ count: number }>();
+    expect(audit?.count).toBe(1);
+    await expect(
+      service.undoCompletion(speaker, completion.undoToken),
+    ).rejects.toThrow("already undone");
+  });
+
+  it("binds completion undo to its actor and rejects later evidence", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new TaskService(testEnv);
+    const taskId = await createChecklistTask(
+      testEnv,
+      `Scoped participant undo ${crypto.randomUUID()}`,
+    );
+    const completion = await service.completeParticipant(speaker, {
+      taskId,
+      revision: 1,
+      confirmed: true,
+    });
+    expect(completion.undoToken).toBeTruthy();
+    await expect(
+      service.undoCompletion(admin, completion.undoToken),
+    ).rejects.toThrow("invalid");
+    await testEnv.DB.prepare(
+      `INSERT INTO task_evidence (
+         id, event_id, task_id, submitted_by_person_id, evidence_json, status, created_at
+       ) VALUES (?, ?, ?, ?, '{}', 'submitted', unixepoch())`,
+    )
+      .bind(crypto.randomUUID(), speaker.eventId, taskId, speaker.personId)
+      .run();
+    await expect(
+      service.undoCompletion(speaker, completion.undoToken),
+    ).rejects.toThrow("evidence or dependent work changed");
+  });
+
+  it("enforces the server-side completion undo expiry", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new TaskService(testEnv);
+    const taskId = await createChecklistTask(
+      testEnv,
+      `Expired participant undo ${crypto.randomUUID()}`,
+    );
+    const completion = await service.completeParticipant(speaker, {
+      taskId,
+      revision: 1,
+      confirmed: true,
+    });
+    const operationId = completion.undoToken!.split(".", 1)[0]!;
+    await testEnv.DB.prepare(
+      `UPDATE operation_jobs
+          SET result_json = json_set(result_json, '$.undoExpiresAt', unixepoch() - 1)
+        WHERE id = ?`,
+    )
+      .bind(operationId)
+      .run();
+    await expect(
+      service.undoCompletion(speaker, completion.undoToken),
+    ).rejects.toThrow("five-minute undo window has expired");
+  });
+
+  it("undoes a direct administrator completion but blocks undo after downstream work", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new TaskService(testEnv);
+    const adminTaskId = await createChecklistTask(
+      testEnv,
+      `Undo administrator completion ${crypto.randomUUID()}`,
+    );
+    const adminCompletion = await service.administerTask(admin, {
+      taskId: adminTaskId,
+      revision: 1,
+      intent: "complete",
+      reason: "",
+    });
+    expect(adminCompletion.undoToken).toBeTruthy();
+    await service.undoCompletion(admin, adminCompletion.undoToken);
+    expect(
+      await testEnv.DB.prepare(
+        "SELECT status, revision FROM task_instances WHERE id = ?",
+      )
+        .bind(adminTaskId)
+        .first(),
+    ).toEqual({ status: "not_started", revision: 3 });
+
+    const prerequisiteTemplateId = await service.createTemplate(admin, {
+      name: `Undo dependency ${crypto.randomUUID()}`,
+      description: "Complete this first.",
+      targetType: "speaker",
+      taskType: "checklist",
+      impact: "high",
+      evidenceMode: "checkbox",
+      dueAnchor: "none",
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: false,
+      dependencyIds: [],
+    });
+    const dependentTemplateId = await service.createTemplate(admin, {
+      name: `Undo dependent ${crypto.randomUUID()}`,
+      description: "Completing this makes the prerequisite undo unsafe.",
+      targetType: "speaker",
+      taskType: "checklist",
+      impact: "high",
+      evidenceMode: "checkbox",
+      dueAnchor: "none",
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: false,
+      dependencyIds: [prerequisiteTemplateId],
+    });
+    const { taskId: dependentTaskId } = await service.assignTemplate(
+      admin,
+      dependentTemplateId,
+      speaker.personId,
+    );
+    let tasks = await service.listParticipantTasks(speaker);
+    const prerequisite = tasks.find(
+      (task) => task.templateId === prerequisiteTemplateId,
+    )!;
+    const completion = await service.completeParticipant(speaker, {
+      taskId: prerequisite.id,
+      revision: prerequisite.revision,
+      confirmed: true,
+    });
+    expect(completion.undoToken).toBeTruthy();
+    tasks = await service.listParticipantTasks(speaker);
+    const dependent = tasks.find((task) => task.id === dependentTaskId)!;
+    await service.administerTask(admin, {
+      taskId: dependent.id,
+      revision: dependent.revision,
+      intent: "complete",
+      reason: "",
+    });
+    await service.administerTask(admin, {
+      taskId: dependent.id,
+      revision: dependent.revision + 1,
+      intent: "reopen",
+      reason: "",
+    });
+
+    await expect(
+      service.undoCompletion(speaker, completion.undoToken),
+    ).rejects.toThrow("dependent work changed");
+    expect(
+      await testEnv.DB.prepare("SELECT status FROM task_instances WHERE id = ?")
+        .bind(prerequisite.id)
+        .first(),
+    ).toEqual({ status: "completed" });
+  });
+
   it.each(["acceptance", "session_start"] as const)(
     "rejects an unresolved %s due anchor without materializing the task",
     async (dueAnchor) => {
@@ -447,6 +846,7 @@ describe("onboarding task service", () => {
         dueAnchor,
         dueOffsetDays: 2,
         fixedDueDate: null,
+        autoAssignOnAcceptance: false,
         dependencyIds: [],
       });
 
@@ -478,14 +878,17 @@ describe("onboarding task service", () => {
       dueAnchor: "none",
       dueOffsetDays: null,
       fixedDueDate: null,
+      autoAssignOnAcceptance: false,
       dependencyIds: [],
     });
     const service = new TaskService(withBatchBarrier(testEnv));
-    const ids = await Promise.all([
+    const assignments = await Promise.all([
       service.assignTemplate(admin, templateId, speaker.personId),
       service.assignTemplate(admin, templateId, speaker.personId),
     ]);
-    expect(new Set(ids).size).toBe(1);
+    expect(
+      new Set(assignments.map((assignment) => assignment.taskId)).size,
+    ).toBe(1);
     const stored = await env.DB.prepare(
       `
       SELECT
@@ -505,6 +908,55 @@ describe("onboarding task service", () => {
       )
       .first<{ taskCount: number; auditCount: number }>();
     expect(stored).toEqual({ taskCount: 1, auditCount: 1 });
+  });
+
+  it("rejects task assignment before mutation when a required webhook Queue is unbound", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const endpointId = `task-webhook-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO webhook_endpoints (
+         id, organisation_id, event_id, name, url, secret_ciphertext,
+         event_types_json, status, created_by_person_id
+       ) VALUES (?, ?, ?, 'Task events', 'https://hooks.example.com/tasks',
+                 'test-only', '["task.created","task.updated"]', 'active', ?)`,
+    )
+      .bind(endpointId, admin.organisationId, admin.eventId, admin.personId)
+      .run();
+    const service = new TaskService(testEnv);
+    const templateId = await service.createTemplate(admin, {
+      name: `Webhook task ${crypto.randomUUID()}`,
+      description: "Exercise task event delivery.",
+      targetType: "speaker",
+      taskType: "checklist",
+      impact: "high",
+      evidenceMode: "checkbox",
+      dueAnchor: "none",
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: false,
+      dependencyIds: [],
+    });
+    await expect(
+      service.assignTemplate(admin, templateId, speaker.personId),
+    ).rejects.toMatchObject({ name: "WebhookQueueConfigurationError" });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM task_instances
+             WHERE event_id = ? AND template_id = ? AND target_id = ?) AS taskCount,
+           (SELECT COUNT(*) FROM webhook_deliveries
+             WHERE endpoint_id = ?) AS deliveryCount`,
+      )
+        .bind(admin.eventId, templateId, speaker.personId, endpointId)
+        .first<{
+          taskCount: number;
+          deliveryCount: number;
+        }>(),
+    ).toEqual({ taskCount: 0, deliveryCount: 0 });
+    await testEnv.DB.prepare("DELETE FROM webhook_endpoints WHERE id = ?")
+      .bind(endpointId)
+      .run();
   });
 
   it("serializes participant completion against prerequisite reopen", async () => {
@@ -552,7 +1004,8 @@ describe("onboarding task service", () => {
       taskType: "file_upload",
       evidenceMode: "file",
     });
-    const upload = await new FileService(testEnv).uploadParticipantFile(
+    const upload = await completeTestDirectUpload(
+      testEnv,
       speaker,
       {
         targetType: "task",
@@ -578,11 +1031,11 @@ describe("onboarding task service", () => {
       });
     });
     await expect(
-      new TaskService(racingEnv).submitFileEvidence(
-        speaker,
-        pair.dependent.id,
-        upload.assetId,
-      ),
+      new TaskService(racingEnv).attachCompletedFileEvidence(speaker, {
+        taskId: pair.dependent.id,
+        assetId: upload.assetId,
+        versionId: upload.versionId,
+      }),
     ).rejects.toThrow(/changed|prerequisite/i);
     expect(
       await env.DB.prepare(
@@ -661,7 +1114,8 @@ describe("onboarding task service", () => {
       "evidence.png",
       { type: "image/png" },
     );
-    const upload = await files.uploadParticipantFile(
+    const upload = await completeTestDirectUpload(
+      testEnv,
       speaker,
       {
         targetType: "task",
@@ -670,7 +1124,30 @@ describe("onboarding task service", () => {
       },
       png,
     );
-    await tasks.submitFileEvidence(speaker, "task-demo-slides", upload.assetId);
+    await expect(
+      tasks.attachCompletedFileEvidence(speaker, {
+        taskId: "task-demo-slides",
+        assetId: upload.assetId,
+        versionId: upload.versionId,
+      }),
+    ).resolves.toMatchObject({ duplicate: false });
+    await expect(
+      tasks.attachCompletedFileEvidence(speaker, {
+        taskId: "task-demo-slides",
+        assetId: upload.assetId,
+        versionId: upload.versionId,
+      }),
+    ).resolves.toMatchObject({ duplicate: true });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM task_evidence WHERE task_id = ?) AS evidenceCount,
+           (SELECT COUNT(*) FROM audit_events
+             WHERE entity_id = ? AND action = 'task.file.submitted') AS auditCount`,
+      )
+        .bind("task-demo-slides", "task-demo-slides")
+        .first<{ evidenceCount: number; auditCount: number }>(),
+    ).toEqual({ evidenceCount: 1, auditCount: 1 });
     const submitted = (await tasks.getAdminWorkspace(admin)).tasks.find(
       (item) => item.id === "task-demo-slides",
     )!;
@@ -684,10 +1161,16 @@ describe("onboarding task service", () => {
     ).rejects.toThrow("still quarantined");
 
     await files.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        testEnv,
+        speaker.eventId,
+        upload.versionId,
+      )),
       eventId: speaker.eventId,
       versionId: upload.versionId,
       provider: "test-scanner",
-      clean: true,
+      callbackId: `callback-${upload.versionId}`,
+      status: "clean",
       result: { verdict: "clean" },
     });
     const download = await files.administratorTaskEvidenceDownload(
@@ -717,6 +1200,44 @@ describe("onboarding task service", () => {
     ).toBe("completed");
   });
 
+  it("attaches only the exact completed task-evidence version", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const taskId = await createFileTask(testEnv, "Exact file version");
+    const upload = await completeTestDirectUpload(
+      testEnv,
+      speaker,
+      {
+        targetType: "task",
+        targetId: taskId,
+        assetKind: "task_evidence",
+      },
+      new File(
+        [
+          new Uint8Array([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
+          ]),
+        ],
+        "exact-version.png",
+        { type: "image/png" },
+      ),
+    );
+    await expect(
+      new TaskService(testEnv).attachCompletedFileEvidence(speaker, {
+        taskId,
+        assetId: upload.assetId,
+        versionId: crypto.randomUUID(),
+      }),
+    ).rejects.toThrow("exact file version");
+    expect(
+      await testEnv.DB.prepare(
+        "SELECT COUNT(*) AS count FROM task_evidence WHERE task_id = ?",
+      )
+        .bind(taskId)
+        .first<{ count: number }>(),
+    ).toEqual({ count: 0 });
+  });
+
   it("reopens infected file evidence and accepts a replacement upload", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
@@ -733,7 +1254,8 @@ describe("onboarding task service", () => {
         name,
         { type: "image/png" },
       );
-    const infected = await files.uploadParticipantFile(
+    const infected = await completeTestDirectUpload(
+      testEnv,
       speaker,
       {
         targetType: "task",
@@ -742,13 +1264,23 @@ describe("onboarding task service", () => {
       },
       evidenceFile("infected.png"),
     );
-    await tasks.submitFileEvidence(speaker, taskId, infected.assetId);
+    await tasks.attachCompletedFileEvidence(speaker, {
+      taskId,
+      assetId: infected.assetId,
+      versionId: infected.versionId,
+    });
 
     await files.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        testEnv,
+        speaker.eventId,
+        infected.versionId,
+      )),
       eventId: speaker.eventId,
       versionId: infected.versionId,
       provider: "test-scanner",
-      clean: false,
+      callbackId: `callback-${infected.versionId}`,
+      status: "infected",
       result: { verdict: "infected" },
     });
 
@@ -764,7 +1296,8 @@ describe("onboarding task service", () => {
         .first<{ status: string }>(),
     ).toEqual({ status: "rejected" });
 
-    const replacement = await files.uploadParticipantFile(
+    const replacement = await completeTestDirectUpload(
+      testEnv,
       speaker,
       {
         targetType: "task",
@@ -773,7 +1306,11 @@ describe("onboarding task service", () => {
       },
       evidenceFile("replacement.png"),
     );
-    await tasks.submitFileEvidence(speaker, taskId, replacement.assetId);
+    await tasks.attachCompletedFileEvidence(speaker, {
+      taskId,
+      assetId: replacement.assetId,
+      versionId: replacement.versionId,
+    });
 
     expect(
       (await tasks.listParticipantTasks(speaker)).find(
@@ -883,7 +1420,8 @@ describe("onboarding task service", () => {
       await ensureDemoSpeakerData(testEnv);
       const taskId = await createFileTask(testEnv, `Final ${status} file task`);
       const files = new FileService(testEnv);
-      const upload = await files.uploadParticipantFile(
+      const upload = await completeTestDirectUpload(
+        testEnv,
         speaker,
         {
           targetType: "task",
@@ -911,11 +1449,11 @@ describe("onboarding task service", () => {
         .run();
 
       await expect(
-        new TaskService(testEnv).submitFileEvidence(
-          speaker,
+        new TaskService(testEnv).attachCompletedFileEvidence(speaker, {
           taskId,
-          upload.assetId,
-        ),
+          assetId: upload.assetId,
+          versionId: upload.versionId,
+        }),
       ).rejects.toThrow("already completed or waived");
       const sideEffects = await testEnv.DB.prepare(
         `
@@ -934,7 +1472,8 @@ describe("onboarding task service", () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
     const taskId = await createFileTask(testEnv, "Raced file task");
-    const upload = await new FileService(testEnv).uploadParticipantFile(
+    const upload = await completeTestDirectUpload(
+      testEnv,
       speaker,
       {
         targetType: "task",
@@ -965,11 +1504,11 @@ describe("onboarding task service", () => {
     });
 
     await expect(
-      new TaskService(racingEnv).submitFileEvidence(
-        speaker,
+      new TaskService(racingEnv).attachCompletedFileEvidence(speaker, {
         taskId,
-        upload.assetId,
-      ),
+        assetId: upload.assetId,
+        versionId: upload.versionId,
+      }),
     ).rejects.toThrow("changed. Refresh before submitting file evidence");
     const task = await testEnv.DB.prepare(
       `
@@ -1002,7 +1541,8 @@ describe("onboarding task service", () => {
     const taskId = await createFileTask(testEnv, "Concurrent approval");
     const files = new FileService(testEnv);
     const tasks = new TaskService(testEnv);
-    const upload = await files.uploadParticipantFile(
+    const upload = await completeTestDirectUpload(
+      testEnv,
       speaker,
       {
         targetType: "task",
@@ -1019,12 +1559,22 @@ describe("onboarding task service", () => {
         { type: "image/png" },
       ),
     );
-    await tasks.submitFileEvidence(speaker, taskId, upload.assetId);
+    await tasks.attachCompletedFileEvidence(speaker, {
+      taskId,
+      assetId: upload.assetId,
+      versionId: upload.versionId,
+    });
     await files.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        testEnv,
+        speaker.eventId,
+        upload.versionId,
+      )),
       eventId: speaker.eventId,
       versionId: upload.versionId,
       provider: "test-scanner",
-      clean: true,
+      callbackId: `callback-${upload.versionId}`,
+      status: "clean",
       result: { verdict: "clean" },
     });
     const submitted = await testEnv.DB.prepare(

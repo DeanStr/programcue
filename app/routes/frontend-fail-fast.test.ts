@@ -15,6 +15,7 @@ import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   action as adminResourceAction,
   loader as adminResourceLoader,
+  readResourceAttachmentCompletion,
 } from "./admin-resources";
 import { loader as applicationLoader } from "./application-form";
 import { loader as communicationsLoader } from "./communications-centre";
@@ -29,6 +30,8 @@ import {
 import {
   action as reviewAction,
   loader as reviewLoader,
+  reviewCanAdoptServerPayload,
+  reviewSaveCoversCurrentEdits,
 } from "./review-workbench";
 
 function context() {
@@ -43,7 +46,10 @@ function context() {
 function formRequest(url: string, values: Record<string, string>) {
   return new Request(url, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      cookie: "program_cue_event=evt-foe-2025",
+    },
     body: new URLSearchParams(values),
   });
 }
@@ -65,6 +71,57 @@ afterEach(() => {
 });
 
 describe("frontend route fail-fast boundaries", () => {
+  it("reports a committed resource attachment as saved when realtime delivery degrades", async () => {
+    await expect(
+      readResourceAttachmentCompletion(
+        Response.json(
+          {
+            ok: false,
+            committed: true,
+            message:
+              "Attachment saved, but realtime invalidation needs an Operations retry.",
+          },
+          { status: 207 },
+        ),
+      ),
+    ).resolves.toEqual({
+      message:
+        "Attachment saved, but realtime invalidation needs an Operations retry.",
+    });
+  });
+
+  it("keeps newer review edits recoverable when an older autosave finishes", () => {
+    const savedEditGeneration = 1;
+    const newerEditGeneration = 2;
+    const previouslySyncedGeneration = 0;
+
+    expect(
+      reviewSaveCoversCurrentEdits(
+        savedEditGeneration,
+        newerEditGeneration,
+      ),
+    ).toBe(false);
+    expect(
+      reviewCanAdoptServerPayload(
+        newerEditGeneration,
+        previouslySyncedGeneration,
+      ),
+    ).toBe(false);
+
+    expect(
+      reviewSaveCoversCurrentEdits(
+        newerEditGeneration,
+        newerEditGeneration,
+      ),
+    ).toBe(true);
+    expect(
+      reviewCanAdoptServerPayload(
+        newerEditGeneration,
+        newerEditGeneration,
+      ),
+    ).toBe(true);
+  });
+
   it("shows committee-chair release only for an active plan grant", () => {
     expect(
       canReleaseEvaluationDecisions("committee_chair", {

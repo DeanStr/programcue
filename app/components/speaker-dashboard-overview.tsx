@@ -1,6 +1,12 @@
 import { AlertTriangle, CheckCircle2, Mic2 } from "lucide-react";
 
 import {
+  TaskCompletionUndoControl,
+  type TaskCompletionUndoNotice,
+} from "~/components/task-completion-undo-control";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EventDateTime } from "~/components/ui/event-date-time";
+import {
   speakerStatusClass,
   type SpeakerPortal,
   type SpeakerTask,
@@ -15,7 +21,7 @@ export function SpeakerDashboardOverview({
   portal: SpeakerPortal;
   next: SpeakerTask | undefined;
   progress: number;
-  actionNotice?: { ok: boolean; message: string };
+  actionNotice?: { ok: boolean; message: string } & TaskCompletionUndoNotice;
 }) {
   const waitingOnTeam = next
     ? ["submitted", "blocked"].includes(next.status)
@@ -50,6 +56,7 @@ export function SpeakerDashboardOverview({
           <div className="pc-status-notice-copy">
             <strong>{actionNotice.ok ? "Saved" : "Action needed"}</strong>
             <div>{actionNotice.message}</div>
+            <TaskCompletionUndoControl notice={actionNotice} />
           </div>
         </div>
       ) : null}
@@ -105,11 +112,6 @@ export function SpeakerDashboardOverview({
 }
 
 export function SpeakerSessionsPanel({ portal }: { portal: SpeakerPortal }) {
-  const dateTime = new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: portal.event.timezone,
-  });
   return (
     <section className="mt" id="sessions">
       <div className="card-title">
@@ -124,11 +126,7 @@ export function SpeakerSessionsPanel({ portal }: { portal: SpeakerPortal }) {
           portal.sessions.map((session) => (
             <article className="card pad speaker-session-card" key={session.id}>
               <div className="card-title">
-                <span
-                  className={`status ${speakerStatusClass(session.status)}`}
-                >
-                  {session.status}
-                </span>
+                <DomainStatusBadge domain="session" status={session.status} />
                 <span className="pill right">
                   {session.durationMinutes} min
                 </span>
@@ -143,9 +141,15 @@ export function SpeakerSessionsPanel({ portal }: { portal: SpeakerPortal }) {
                 <div>
                   <dt>When</dt>
                   <dd>
-                    {session.startsAt
-                      ? dateTime.format(new Date(session.startsAt * 1_000))
-                      : "Scheduling pending"}
+                    {session.startsAt ? (
+                      <EventDateTime
+                        epochSeconds={session.startsAt}
+                        timeZone={portal.event.timezone}
+                        showTimeZone
+                      />
+                    ) : (
+                      "Scheduling pending"
+                    )}
                   </dd>
                 </div>
                 <div>

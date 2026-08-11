@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
@@ -7,13 +7,17 @@ import {
   handleProgramCueQueueMessage,
   processCommunicationSend,
   processDecisionNotification,
+  processSubmissionNotification,
   QUEUE_CLAIM_LEASE_SECONDS,
 } from "../../../workers/communications-queue";
 import {
   CommunicationQueueUnavailableError,
   CommunicationService,
 } from "./communication-service.server";
+import { CommunicationDeliveryService } from "./communication-delivery-service.server";
+import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { CommunicationTemplateService } from "./communication-template-service.server";
+import { MailpitEmailProvider } from "./mailpit.server";
 import { RecipientQuery } from "./recipient-query.server";
 import { ResendEmailProvider } from "./resend.server";
 import {
@@ -33,6 +37,8 @@ const viewer: Viewer = {
   demo: true,
 };
 
+afterEach(() => vi.restoreAllMocks());
+
 async function communicationEnvironment() {
   const sent: unknown[] = [];
   const realtime: unknown[] = [];
@@ -51,6 +57,7 @@ async function communicationEnvironment() {
   };
   const testEnv = {
     ...(env as unknown as CloudflareEnvironment),
+    SOURCE_REVISION: "test-revision",
     DB: env.DB,
     RESEND_API_KEY: "test-resend-key",
     OPERATIONS_QUEUE: {
@@ -62,12 +69,24 @@ async function communicationEnvironment() {
   } as unknown as CloudflareEnvironment;
   await ensureDemoData(testEnv);
   await env.DB.prepare(
+    "DELETE FROM webhook_endpoints WHERE event_id = ? AND name = 'Communication completion receiver'",
+  )
+    .bind(viewer.eventId)
+    .run();
+  await env.DB.prepare(
     `
     INSERT OR IGNORE INTO sender_profiles (
       id, event_id, name, from_name, from_email, reply_to_email, provider, status, created_at, updated_at
     ) VALUES ('sender-test-communications', ?, 'Test communications', 'Program Cue', 'events@example.com',
               'reply@example.com', 'resend', 'verified', unixepoch(), unixepoch())
   `,
+  )
+    .bind(viewer.eventId)
+    .run();
+  await env.DB.prepare(
+    `UPDATE sender_profiles
+        SET provider = 'resend', status = 'verified'
+      WHERE id = 'sender-test-communications' AND event_id = ?`,
   )
     .bind(viewer.eventId)
     .run();
@@ -88,6 +107,29 @@ async function confirmPreviewed(
 }
 
 describe("Communications D1 vertical slice", () => {
+  it("fails closed before resolving a non-manual audience from an unreadable Airtable projection", async () => {
+    const unavailable = new Error("Airtable projection is unavailable.");
+    const assertReadable = vi.fn(async () => {
+      throw unavailable;
+    });
+    const service = new CommunicationDeliveryService(
+      env as unknown as CloudflareEnvironment,
+      {
+        airtable: { assertReadable } as unknown as AirtableProviderBoundary,
+      },
+    );
+
+    await expect(
+      service.preview(viewer, {
+        templateVersionId: "00000000-0000-4000-8000-000000000001",
+        audienceType: "accepted_speakers",
+        manualRecipients: "",
+        kind: "transactional",
+      }),
+    ).rejects.toBe(unavailable);
+    expect(assertReadable).toHaveBeenCalledWith(viewer);
+  });
+
   it("rejects email template versions without a real subject", async () => {
     const { testEnv } = await communicationEnvironment();
     const service = new CommunicationService(testEnv);
@@ -125,8 +167,10 @@ describe("Communications D1 vertical slice", () => {
     const statements: D1PreparedStatement[] = [
       testEnv.DB.prepare(
         `INSERT INTO events (
-           id, organisation_id, name, slug, timezone, starts_at, ends_at
-         ) VALUES (?, ?, 'Recipient cap fixture', ?, 'UTC', 1893456000, 1893542400)`,
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           file_policy_json
+         ) VALUES (?, ?, 'Recipient cap fixture', ?, 'UTC', 1893456000, 1893542400,
+                   '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')`,
       ).bind(eventId, viewer.organisationId, `recipient-cap-${token}`),
     ];
     for (let personIndex = 0; personIndex < 2; personIndex += 1) {
@@ -221,6 +265,44 @@ describe("Communications D1 vertical slice", () => {
     });
     expect(preview.deliverable).toContainEqual(
       expect.objectContaining({ address, sourceId: sessionId }),
+    );
+  });
+
+  it("includes accepted organisation administrators in an event-administrator audience", async () => {
+    const { testEnv } = await communicationEnvironment();
+    const token = crypto.randomUUID();
+    const personId = `organisation-admin-${token}`;
+    const address = `organisation-admin-${token}@example.com`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, profile_status,
+           created_at, updated_at
+         ) VALUES (?, ?, 'Organisation administrator', 1, 'published',
+                   unixepoch(), unixepoch())`,
+      ).bind(personId, address),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, invited_at,
+           invitation_expires_at, accepted_at, created_at
+         ) VALUES (?, ?, NULL, ?, 'administrator', unixepoch() - 60,
+                   unixepoch() + 604800, unixepoch() - 30, unixepoch())`,
+      ).bind(
+        `organisation-admin-membership-${token}`,
+        viewer.organisationId,
+        personId,
+      ),
+    ]);
+
+    const preview = await new RecipientQuery(testEnv).preview(viewer, {
+      audienceType: "event_administrators",
+      manualRecipients: "",
+      category: "ad_hoc",
+      kind: "transactional",
+    });
+
+    expect(preview.deliverable).toContainEqual(
+      expect.objectContaining({ personId, address }),
     );
   });
 
@@ -341,6 +423,11 @@ describe("Communications D1 vertical slice", () => {
   it("versions and publishes templates, previews exact exclusions, and records intent before enqueue", async () => {
     const { testEnv, sent } = await communicationEnvironment();
     const service = new CommunicationService(testEnv);
+    await testEnv.DB.prepare(
+      "UPDATE events SET brand_accent = '#0f766e' WHERE id = ?",
+    )
+      .bind(viewer.eventId)
+      .run();
     const saved = await service.saveTemplate(viewer, {
       name: "Optional event update",
       category: "ad_hoc",
@@ -381,6 +468,7 @@ describe("Communications D1 vertical slice", () => {
     ]);
     expect(preview.rendered.subject).toContain("Deliverable");
     expect(preview.rendered.html).toContain("Program Cue");
+    expect(preview.rendered.html).toContain("#0f766e");
 
     const input = {
       templateVersionId: saved.versionId,
@@ -477,6 +565,7 @@ describe("Communications D1 vertical slice", () => {
   });
 
   it("keeps a queue-failed replay failed and points to the durable operation", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { testEnv } = await communicationEnvironment();
     let dispatchAttempts = 0;
     testEnv.OPERATIONS_QUEUE = {
@@ -517,6 +606,18 @@ describe("Communications D1 vertical slice", () => {
     );
     const operationId = (initialError as CommunicationQueueUnavailableError)
       .operationId;
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+      subsystem: "communication-dispatch",
+      event: "queue-dispatch-failed",
+      sourceRevision: "test-revision",
+      eventId: viewer.eventId,
+      operationId,
+      provider: "cloudflare-queue",
+      message: "The durable communication operation could not be queued.",
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(
+      "private queue transport detail",
+    );
 
     await expect(service.confirm(viewer, confirmation)).rejects.toMatchObject({
       name: "CommunicationQueueUnavailableError",
@@ -615,8 +716,127 @@ describe("Communications D1 vertical slice", () => {
         return Response.json({ id: "resend-long-address-001" });
       },
     );
-    await processCommunicationSend(sent[0], testEnv, { resend: provider });
+    await processCommunicationSend(sent[0], testEnv, { email: provider });
     expect(providerKeys).toEqual([expectedKey]);
+  });
+
+  it("rejects provider drift before claiming or sending a queued communication", async () => {
+    const { testEnv, sent } = await communicationEnvironment();
+    const service = new CommunicationService(testEnv);
+    const saved = await service.saveTemplate(viewer, {
+      name: "Provider-bound update",
+      category: "ad_hoc",
+      subject: "Provider-bound update",
+      content: {
+        body: "This delivery must use its recorded provider.",
+        physicalAddress: "100 Programme Way, Toronto",
+      },
+    });
+    await service.publishTemplate(viewer, saved.versionId);
+    const confirmed = await confirmPreviewed(service, {
+      templateVersionId: saved.versionId,
+      audienceType: "manual",
+      manualRecipients: "provider-bound@example.com",
+      kind: "transactional",
+      idempotencyKey: `provider-bound-${crypto.randomUUID()}`,
+    });
+    await testEnv.DB.prepare(
+      "UPDATE communication_deliveries SET provider = 'mailpit' WHERE communication_id = ?",
+    )
+      .bind(confirmed.communicationId)
+      .run();
+    let providerCalls = 0;
+    const provider = new ResendEmailProvider(
+      "provider-drift-test-key",
+      async () => {
+        providerCalls += 1;
+        return Response.json({ id: "must-not-send-provider-drift" });
+      },
+    );
+
+    await expect(
+      processCommunicationSend(sent[0], testEnv, { email: provider }),
+    ).rejects.toThrow(/provider does not match its durable intent/i);
+    expect(providerCalls).toBe(0);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT communication.status, operation.status AS operationStatus,
+                operation.claim_token AS claimToken
+           FROM communications communication
+           JOIN operation_jobs operation ON operation.id = communication.operation_id
+          WHERE communication.id = ?`,
+      )
+        .bind(confirmed.communicationId)
+        .first(),
+    ).resolves.toEqual({
+      status: "queued",
+      operationStatus: "queued",
+      claimToken: null,
+    });
+  });
+
+  it("uses a verified Mailpit sender when local capture is explicitly selected", async () => {
+    const { testEnv, sent } = await communicationEnvironment();
+    const mailpitEnv = {
+      ...testEnv,
+      APP_ENV: "test",
+      EMAIL_PROVIDER: "mailpit",
+      RESEND_API_KEY: undefined,
+      MAILPIT_SEND_API_URL: "https://mailpit.test/api/v1/send",
+    } as unknown as CloudflareEnvironment;
+    await mailpitEnv.DB.prepare(
+      `UPDATE sender_profiles
+          SET provider = 'mailpit', status = 'verified'
+        WHERE id = 'sender-test-communications' AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const service = new CommunicationService(mailpitEnv);
+    const saved = await service.saveTemplate(viewer, {
+      name: "Explicit Mailpit delivery",
+      category: "ad_hoc",
+      subject: "Captured locally",
+      content: {
+        body: "This message must use only the selected local provider.",
+        physicalAddress: "100 Programme Way, Toronto",
+      },
+    });
+    await service.publishTemplate(viewer, saved.versionId);
+    const confirmed = await confirmPreviewed(service, {
+      templateVersionId: saved.versionId,
+      audienceType: "manual",
+      manualRecipients: "mailpit-recipient@example.com",
+      kind: "transactional",
+      idempotencyKey: `mailpit-explicit-${crypto.randomUUID()}`,
+    });
+    expect(
+      await mailpitEnv.DB.prepare(
+        "SELECT provider FROM communication_deliveries WHERE communication_id = ?",
+      )
+        .bind(confirmed.communicationId)
+        .first(),
+    ).toEqual({ provider: "mailpit" });
+    let providerCalls = 0;
+    const provider = new MailpitEmailProvider(
+      "https://mailpit.test/api/v1/send",
+      undefined,
+      undefined,
+      async () => {
+        providerCalls += 1;
+        return Response.json({ ID: "mailpit-local-message" });
+      },
+    );
+
+    await processCommunicationSend(sent[0], mailpitEnv, { email: provider });
+
+    expect(providerCalls).toBe(1);
+    expect(
+      await mailpitEnv.DB.prepare(
+        "SELECT provider, status FROM communication_deliveries WHERE communication_id = ?",
+      )
+        .bind(confirmed.communicationId)
+        .first(),
+    ).toEqual({ provider: "mailpit", status: "sent" });
   });
 
   it("requires a new preview when the recipient set changes before confirmation", async () => {
@@ -688,6 +908,206 @@ describe("Communications D1 vertical slice", () => {
         .bind(viewer.eventId, input.idempotencyKey)
         .first(),
     ).toEqual({ count: 0 });
+  });
+
+  it("requires a new preview when sender-backed content changes before confirmation", async () => {
+    const { testEnv, sent } = await communicationEnvironment();
+    const service = new CommunicationService(testEnv);
+    const saved = await service.saveTemplate(viewer, {
+      name: "Content-bound update",
+      category: "ad_hoc",
+      subject: "Update from {{event.name}}",
+      content: {
+        body: "Hello {{recipient.firstName}}.",
+        physicalAddress: "100 Programme Way, Toronto",
+      },
+    });
+    await service.publishTemplate(viewer, saved.versionId);
+    const input = {
+      templateVersionId: saved.versionId,
+      audienceType: "manual" as const,
+      manualRecipients: "content-bound@example.com",
+      kind: "transactional" as const,
+      idempotencyKey: `content-bound-${crypto.randomUUID()}`,
+    };
+    const preview = await service.preview(viewer, input);
+    const sender = preview.provider.senderProfile!;
+    await testEnv.DB.prepare(
+      "UPDATE sender_profiles SET from_name = 'Changed after preview' WHERE id = ? AND event_id = ?",
+    )
+      .bind(sender.id, viewer.eventId)
+      .run();
+
+    await expect(
+      service.confirm(viewer, { ...input, ...preview.confirmation }),
+    ).rejects.toThrow(/content or sender is no longer exact/i);
+    expect(sent).toHaveLength(0);
+    await testEnv.DB.prepare(
+      "UPDATE sender_profiles SET from_name = ? WHERE id = ? AND event_id = ?",
+    )
+      .bind(sender.fromName, sender.id, viewer.eventId)
+      .run();
+  });
+
+  it("preflights communication webhook Queue readiness before recording send intent", async () => {
+    const { testEnv } = await communicationEnvironment();
+    const endpointId = crypto.randomUUID();
+    await testEnv.DB.prepare(
+      `INSERT INTO webhook_endpoints (
+         id, organisation_id, event_id, name, url, secret_ciphertext,
+         event_types_json, status, created_at, updated_at
+       ) VALUES (?, ?, ?, 'Unbound communication webhook',
+                 'https://hooks.example.com/unbound-communications', 'unused-in-queue-test',
+                 '["communication.completed"]', 'active', unixepoch(), unixepoch())`,
+    )
+      .bind(endpointId, viewer.organisationId, viewer.eventId)
+      .run();
+    const missingQueueEnv = {
+      ...testEnv,
+      OPERATIONS_QUEUE: undefined,
+    } as unknown as CloudflareEnvironment;
+    const service = new CommunicationService(missingQueueEnv);
+    const saved = await service.saveTemplate(viewer, {
+      name: "Webhook readiness template",
+      category: "ad_hoc",
+      subject: "Webhook readiness update",
+      content: {
+        body: "The send must not start without its required webhook Queue.",
+        physicalAddress: "100 Programme Way, Toronto",
+      },
+    });
+    await service.publishTemplate(viewer, saved.versionId);
+    const input = {
+      templateVersionId: saved.versionId,
+      audienceType: "manual" as const,
+      manualRecipients: "webhook-readiness@example.com",
+      kind: "transactional" as const,
+      idempotencyKey: `webhook-readiness-${crypto.randomUUID()}`,
+    };
+    const preview = await service.preview(viewer, input);
+
+    await expect(
+      service.confirm(viewer, { ...input, ...preview.confirmation }),
+    ).rejects.toMatchObject({ name: "WebhookQueueConfigurationError" });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM communications
+             WHERE event_id = ? AND idempotency_key = ?) AS communicationCount,
+           (SELECT COUNT(*) FROM webhook_deliveries
+             WHERE endpoint_id = ?) AS webhookCount`,
+      )
+        .bind(viewer.eventId, input.idempotencyKey, endpointId)
+        .first(),
+    ).resolves.toEqual({ communicationCount: 0, webhookCount: 0 });
+    await testEnv.DB.prepare("DELETE FROM webhook_endpoints WHERE id = ?")
+      .bind(endpointId)
+      .run();
+  });
+
+  it("queues the advertised communication.completed webhook from terminal recipient state", async () => {
+    const { testEnv, sent } = await communicationEnvironment();
+    const endpointId = crypto.randomUUID();
+    await testEnv.DB.prepare(
+      `INSERT INTO webhook_endpoints (
+         id, organisation_id, event_id, name, url, secret_ciphertext,
+         event_types_json, status, created_at, updated_at
+       ) VALUES (?, ?, ?, 'Communication completion receiver',
+                 'https://hooks.example.com/communications', 'unused-in-queue-test',
+                 '["communication.completed"]', 'active', unixepoch(), unixepoch())`,
+    )
+      .bind(endpointId, viewer.organisationId, viewer.eventId)
+      .run();
+    const service = new CommunicationService(testEnv);
+    const saved = await service.saveTemplate(viewer, {
+      name: "Completion webhook template",
+      category: "ad_hoc",
+      subject: "Update from {{event.name}}",
+      content: {
+        body: "Hello {{recipient.firstName}}.",
+        physicalAddress: "100 Programme Way, Toronto",
+      },
+    });
+    await service.publishTemplate(viewer, saved.versionId);
+    const confirmed = await confirmPreviewed(service, {
+      templateVersionId: saved.versionId,
+      audienceType: "manual",
+      manualRecipients: "Webhook Recipient <completion-webhook@example.com>",
+      kind: "transactional",
+      idempotencyKey: `completion-webhook-${crypto.randomUUID()}`,
+    });
+    let providerCalls = 0;
+    const provider = new ResendEmailProvider(
+      "completion-webhook-provider-key",
+      async () => {
+        providerCalls += 1;
+        return Response.json({ id: "resend-completion-webhook" });
+      },
+    );
+
+    let injectedWebhookFailure = false;
+    const interruptedDb = new Proxy(testEnv.DB, {
+      get(target, property) {
+        if (property === "batch") {
+          return async (statements: D1PreparedStatement[]) => {
+            if (
+              providerCalls === 1 &&
+              statements.length === 9 &&
+              !injectedWebhookFailure
+            ) {
+              injectedWebhookFailure = true;
+              throw new Error("Injected webhook outbox persistence failure");
+            }
+            return target.batch(statements);
+          };
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    await expect(
+      processCommunicationSend(
+        sent[0],
+        { ...testEnv, DB: interruptedDb } as CloudflareEnvironment,
+        { email: provider },
+      ),
+    ).rejects.toThrow("Injected webhook outbox persistence failure");
+    expect(providerCalls).toBe(1);
+
+    await processCommunicationSend(sent[0], testEnv, { email: provider });
+
+    expect(providerCalls).toBe(1);
+    expect(sent).toHaveLength(2);
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT event_type AS eventType, entity_id AS entityId, payload_json AS payloadJson
+           FROM webhook_deliveries
+          WHERE endpoint_id = ?`,
+      )
+        .bind(endpointId)
+        .first<{ eventType: string; entityId: string; payloadJson: string }>(),
+    ).toMatchObject({
+      eventType: "communication.completed",
+      entityId: confirmed.communicationId,
+    });
+    const delivery = await testEnv.DB.prepare(
+      `SELECT payload_json AS payloadJson
+         FROM webhook_deliveries
+        WHERE endpoint_id = ?`,
+    )
+      .bind(endpointId)
+      .first<{ payloadJson: string }>();
+    expect(JSON.parse(delivery!.payloadJson)).toMatchObject({
+      type: "communication.completed",
+      data: {
+        entityId: confirmed.communicationId,
+        status: "sent",
+        total: 1,
+        succeeded: 1,
+        failed: 0,
+      },
+    });
   });
 
   it("honours new suppressions without expanding the previewed audience", async () => {
@@ -848,7 +1268,7 @@ describe("Communications D1 vertical slice", () => {
         });
       },
     );
-    await processCommunicationSend(sent[0], testEnv, { resend: provider });
+    await processCommunicationSend(sent[0], testEnv, { email: provider });
 
     const snapshottedRequest = requests.find(
       (request) => request.subject === "Reminder: Confirmed source title",
@@ -910,7 +1330,7 @@ describe("Communications D1 vertical slice", () => {
         return Response.json({ id: `resend-optional-${requests.length}` });
       },
     );
-    await processCommunicationSend(sent[0], testEnv, { resend: provider });
+    await processCommunicationSend(sent[0], testEnv, { email: provider });
     expect(requests).toHaveLength(1);
     const html = String(requests[0]?.html);
     const href = html.match(
@@ -970,7 +1390,7 @@ describe("Communications D1 vertical slice", () => {
       new URL(lateUrl).pathname.split("/").at(-1)!,
     );
     await unsubscribeFromOptionalCommunication(testEnv, lateToken);
-    await processCommunicationSend(sent[1], testEnv, { resend: provider });
+    await processCommunicationSend(sent[1], testEnv, { email: provider });
     expect(requests).toHaveLength(1);
     expect(
       await env.DB.prepare(
@@ -1027,7 +1447,7 @@ describe("Communications D1 vertical slice", () => {
       ...testEnv,
       BETTER_AUTH_SECRET: undefined,
     } as CloudflareEnvironment;
-    await processCommunicationSend(sent[0], insecureEnv, { resend: provider });
+    await processCommunicationSend(sent[0], insecureEnv, { email: provider });
     expect(providerCalls).toBe(0);
     expect(
       await env.DB.prepare(
@@ -1101,7 +1521,7 @@ describe("Communications D1 vertical slice", () => {
     );
 
     await expect(
-      processCommunicationSend(sent[0], crashEnv, { resend: provider }),
+      processCommunicationSend(sent[0], crashEnv, { email: provider }),
     ).rejects.toThrow("Injected crash after communication claim commit");
     expect(providerCalls).toBe(0);
     expect(
@@ -1121,7 +1541,7 @@ describe("Communications D1 vertical slice", () => {
     )
       .bind(confirmed.operationId)
       .run();
-    await processCommunicationSend(sent[0], testEnv, { resend: provider });
+    await processCommunicationSend(sent[0], testEnv, { email: provider });
     expect(providerCalls).toBe(1);
     expect(
       await env.DB.prepare(
@@ -1271,13 +1691,25 @@ describe("Communications D1 vertical slice", () => {
     ).toMatchObject({
       operationStatus: "failed",
       lastError: expect.stringContaining(
-        "verified Resend sender is unavailable",
+        "verified sender profile is unavailable",
       ),
       claimToken: null,
       communicationStatus: "failed",
       deliveryStatus: "failed",
       itemStatus: "failed",
     });
+
+    let duplicateProviderCalls = 0;
+    await processCommunicationSend(sent[0], testEnv, {
+      email: new ResendEmailProvider(
+        "terminal-redelivery-provider-key",
+        async () => {
+          duplicateProviderCalls += 1;
+          return Response.json({ id: "unexpected-duplicate-send" });
+        },
+      ),
+    });
+    expect(duplicateProviderCalls).toBe(0);
   });
 
   it("fails durably and retries when an owned delivery becomes unclaimable", async () => {
@@ -1607,7 +2039,7 @@ describe("Communications D1 vertical slice", () => {
         return Response.json({ id: "resend-message-001" });
       },
     );
-    await processCommunicationSend(sent[0], testEnv, { resend: provider });
+    await processCommunicationSend(sent[0], testEnv, { email: provider });
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
       to: ["avery@example.com"],
@@ -1812,6 +2244,24 @@ describe("Communications D1 vertical slice", () => {
         "provider-event-005",
       ),
     ).resolves.toEqual({ matched: true, duplicate: true });
+    const newerGenericFailure = JSON.stringify({
+      type: "email.failed",
+      created_at: new Date(Date.now() + 120_000).toISOString(),
+      data: { email_id: "resend-message-001" },
+    });
+    await service.reconcileResendEvent(
+      JSON.parse(newerGenericFailure),
+      newerGenericFailure,
+      "provider-event-006",
+    );
+    await expect(
+      env.DB.prepare(
+        "SELECT status, failure_code AS failureCode FROM communication_deliveries WHERE provider_message_id = 'resend-message-001'",
+      ).first(),
+    ).resolves.toEqual({
+      status: "suppressed",
+      failureCode: "email.complained",
+    });
     expect(
       await env.DB.prepare(
         `
@@ -1886,7 +2336,7 @@ describe("Communications D1 vertical slice", () => {
       },
     );
 
-    await processCommunicationSend(sent[0], testEnv, { resend: provider });
+    await processCommunicationSend(sent[0], testEnv, { email: provider });
     expect(providerRequests).toHaveLength(10);
     expect(sent).toHaveLength(2);
     expect(
@@ -1906,7 +2356,7 @@ describe("Communications D1 vertical slice", () => {
       progressCompleted: 10,
     });
 
-    await processCommunicationSend(sent[1], testEnv, { resend: provider });
+    await processCommunicationSend(sent[1], testEnv, { email: provider });
     expect(providerRequests).toHaveLength(12);
     expect(sent).toHaveLength(2);
     expect(
@@ -1924,6 +2374,110 @@ describe("Communications D1 vertical slice", () => {
       operationStatus: "completed",
       progressTotal: 12,
       progressCompleted: 12,
+    });
+  });
+
+  it("selects the delivery batch after a delayed worker acquires the claim", async () => {
+    const { testEnv, sent } = await communicationEnvironment();
+    const service = new CommunicationService(testEnv);
+    const saved = await service.saveTemplate(viewer, {
+      name: "Delayed claim delivery update",
+      category: "ad_hoc",
+      subject: "Update from {{event.name}}",
+      content: {
+        body: "Hello {{recipient.firstName}}.",
+        physicalAddress: "100 Programme Way, Toronto",
+      },
+    });
+    await service.publishTemplate(viewer, saved.versionId);
+    const recipients = Array.from(
+      { length: 12 },
+      (_, index) => `Delayed ${index} <delayed-${index}@example.com>`,
+    ).join(", ");
+    const confirmed = await confirmPreviewed(service, {
+      templateVersionId: saved.versionId,
+      audienceType: "manual",
+      manualRecipients: recipients,
+      kind: "transactional",
+      idempotencyKey: `delayed-claim-send-${crypto.randomUUID()}`,
+    });
+    const providerRequests: string[] = [];
+    const provider = new ResendEmailProvider(
+      "delayed-claim-provider-key",
+      async (_input, init) => {
+        const request = JSON.parse(String(init?.body)) as { to: string[] };
+        providerRequests.push(request.to[0]);
+        return Response.json({
+          id: `delayed-claim-provider-${providerRequests.length}`,
+        });
+      },
+    );
+
+    let releaseClaim!: () => void;
+    const claimReleased = new Promise<void>((resolve) => {
+      releaseClaim = resolve;
+    });
+    let claimReachedResolve!: () => void;
+    const claimReached = new Promise<void>((resolve) => {
+      claimReachedResolve = resolve;
+    });
+    let interceptedClaim = false;
+    const delayedDb = new Proxy(testEnv.DB, {
+      get(target, property) {
+        if (property === "batch") {
+          return async (statements: D1PreparedStatement[]) => {
+            if (!interceptedClaim) {
+              interceptedClaim = true;
+              claimReachedResolve();
+              await claimReleased;
+            }
+            return target.batch(statements);
+          };
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const staleEnv = { ...testEnv, DB: delayedDb } as CloudflareEnvironment;
+    const staleWorker = processCommunicationSend(sent[0], staleEnv, {
+      email: provider,
+    });
+    await claimReached;
+    try {
+      await processCommunicationSend(sent[0], testEnv, { email: provider });
+    } finally {
+      releaseClaim();
+    }
+    await staleWorker;
+
+    expect(providerRequests).toHaveLength(12);
+    expect(new Set(providerRequests).size).toBe(12);
+    expect(sent).toHaveLength(2);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT c.status AS communicationStatus,
+                o.status AS operationStatus,
+                o.progress_total AS progressTotal,
+                o.progress_completed AS progressCompleted,
+                o.progress_failed AS progressFailed,
+                SUM(CASE WHEN d.status = 'sent' THEN 1 ELSE 0 END) AS sentCount,
+                SUM(CASE WHEN d.status = 'failed' THEN 1 ELSE 0 END) AS failedCount
+           FROM communications c
+           JOIN operation_jobs o ON o.id = c.operation_id
+           JOIN communication_deliveries d ON d.communication_id = c.id
+          WHERE c.id = ?
+          GROUP BY c.id, o.id`,
+      )
+        .bind(confirmed.communicationId)
+        .first(),
+    ).resolves.toEqual({
+      communicationStatus: "sent",
+      operationStatus: "completed",
+      progressTotal: 12,
+      progressCompleted: 12,
+      progressFailed: 0,
+      sentCount: 12,
+      failedCount: 0,
     });
   });
 
@@ -1957,7 +2511,7 @@ describe("Communications D1 vertical slice", () => {
       .run();
     let providerCalls = 0;
     await processCommunicationSend(sent[0], testEnv, {
-      resend: new ResendEmailProvider("suppressed-provider-key", async () => {
+      email: new ResendEmailProvider("suppressed-provider-key", async () => {
         providerCalls += 1;
         return Response.json({ id: "must-not-send-suppressed" });
       }),
@@ -2040,7 +2594,7 @@ describe("Communications D1 vertical slice", () => {
     );
 
     const worker = processCommunicationSend(sent[0], workerEnv, {
-      resend: provider,
+      email: provider,
     });
     await claimReached;
     try {
@@ -2080,6 +2634,171 @@ describe("Communications D1 vertical slice", () => {
       cancellationAuditCount: 1,
       completionAuditCount: 0,
     });
+  });
+
+  it("rechecks sender authority after acquiring the send claim", async () => {
+    const { testEnv, sent } = await communicationEnvironment();
+    const service = new CommunicationService(testEnv);
+    const saved = await service.saveTemplate(viewer, {
+      name: "Sender disable race update",
+      category: "ad_hoc",
+      subject: "Update from {{event.name}}",
+      content: {
+        body: "Hello {{recipient.firstName}}.",
+        physicalAddress: "100 Programme Way, Toronto",
+      },
+    });
+    await service.publishTemplate(viewer, saved.versionId);
+    const confirmed = await confirmPreviewed(service, {
+      templateVersionId: saved.versionId,
+      audienceType: "manual",
+      manualRecipients: "Casey Example <casey@example.com>",
+      kind: "transactional",
+      idempotencyKey: `disable-sender-race-${crypto.randomUUID()}`,
+    });
+
+    let releaseClaim!: () => void;
+    const claimReleased = new Promise<void>((resolve) => {
+      releaseClaim = resolve;
+    });
+    let claimReachedResolve!: () => void;
+    const claimReached = new Promise<void>((resolve) => {
+      claimReachedResolve = resolve;
+    });
+    let interceptedClaim = false;
+    const delayedDb = new Proxy(testEnv.DB, {
+      get(target, property) {
+        if (property === "batch") {
+          return async (statements: D1PreparedStatement[]) => {
+            if (!interceptedClaim) {
+              interceptedClaim = true;
+              claimReachedResolve();
+              await claimReleased;
+            }
+            return target.batch(statements);
+          };
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const workerEnv = { ...testEnv, DB: delayedDb } as CloudflareEnvironment;
+    const providerRequests: unknown[] = [];
+    const worker = processCommunicationSend(sent[0], workerEnv, {
+      email: new ResendEmailProvider("disable-race-provider-key", async () => {
+        providerRequests.push({ sent: true });
+        return Response.json({ id: "must-not-send" });
+      }),
+    });
+    await claimReached;
+    try {
+      await testEnv.DB.prepare(
+        "UPDATE sender_profiles SET status = 'disabled' WHERE id = ? AND event_id = ?",
+      )
+        .bind("sender-test-communications", viewer.eventId)
+        .run();
+    } finally {
+      releaseClaim();
+    }
+
+    await expect(worker).rejects.toThrow(
+      "A verified sender profile is unavailable.",
+    );
+    expect(providerRequests).toHaveLength(0);
+    await env.DB.prepare(
+      "UPDATE sender_profiles SET status = 'verified' WHERE id = ? AND event_id = ?",
+    )
+      .bind("sender-test-communications", viewer.eventId)
+      .run();
+    await expect(
+      env.DB.prepare(
+        `SELECT status, last_error AS lastError, claim_token AS claimToken
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(confirmed.operationId)
+        .first(),
+    ).resolves.toMatchObject({
+      status: "failed",
+      lastError: expect.stringContaining("verified sender profile"),
+      claimToken: null,
+    });
+  });
+
+  it("rejects notification bodies that substitute a same-event domain entity", async () => {
+    const { testEnv } = await communicationEnvironment();
+    const decisionOperationId = `decision-payload-${crypto.randomUUID()}`;
+    const submissionOperationId = `submission-payload-${crypto.randomUUID()}`;
+    const decisionMessage = {
+      type: "decision.notification" as const,
+      operationId: decisionOperationId,
+      eventId: viewer.eventId,
+      organisationId: viewer.organisationId,
+      idempotencyKey: `decision-payload-${crypto.randomUUID()}`,
+      payload: { decisionId: "durable-decision-a" },
+    };
+    const submissionMessage = {
+      type: "submission.notification" as const,
+      operationId: submissionOperationId,
+      communicationId: `submission-communication-${crypto.randomUUID()}`,
+      submissionId: "durable-submission-a",
+      eventId: viewer.eventId,
+      organisationId: viewer.organisationId,
+      idempotencyKey: `submission-payload-${crypto.randomUUID()}`,
+    };
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json
+         ) VALUES (?, ?, ?, ?, 'decision.notification', ?, ?, 'queued', ?)`,
+      ).bind(
+        decisionOperationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        decisionMessage.idempotencyKey,
+        crypto.randomUUID(),
+        JSON.stringify(decisionMessage),
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json
+         ) VALUES (?, ?, ?, ?, 'submission.notification', ?, ?, 'queued', ?)`,
+      ).bind(
+        submissionOperationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        submissionMessage.idempotencyKey,
+        crypto.randomUUID(),
+        JSON.stringify(submissionMessage),
+      ),
+    ]);
+
+    await expect(
+      processDecisionNotification(
+        {
+          ...decisionMessage,
+          payload: { decisionId: "substituted-decision-b" },
+        },
+        testEnv,
+      ),
+    ).rejects.toThrow("does not match its durable operation payload");
+    await expect(
+      processSubmissionNotification(
+        { ...submissionMessage, submissionId: "substituted-submission-b" },
+        testEnv,
+      ),
+    ).rejects.toThrow("does not match its durable operation payload");
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM communications
+          WHERE operation_id IN (?, ?)`,
+      )
+        .bind(decisionOperationId, submissionOperationId)
+        .first(),
+    ).resolves.toEqual({ count: 0 });
   });
 
   it("keeps a released-decision delivery terminal when a stale duplicate resumes materialisation", async () => {
@@ -2154,9 +2873,13 @@ describe("Communications D1 vertical slice", () => {
       ),
     ]);
     const requests: Array<Record<string, unknown>> = [];
+    const providerKeys: string[] = [];
     const provider = new ResendEmailProvider(
       "decision-provider-key",
       async (_input, init) => {
+        providerKeys.push(
+          new Headers(init?.headers).get("idempotency-key") ?? "",
+        );
         requests.push(
           JSON.parse(String(init?.body)) as Record<string, unknown>,
         );
@@ -2191,16 +2914,19 @@ describe("Communications D1 vertical slice", () => {
     const staleWorker = processDecisionNotification(
       message,
       { ...testEnv, DB: delayedDb },
-      { resend: provider },
+      { email: provider },
     );
     await staleMaterialisationReached;
     try {
-      await processDecisionNotification(message, testEnv, { resend: provider });
+      await processDecisionNotification(message, testEnv, { email: provider });
     } finally {
       releaseStaleMaterialisation();
     }
     await staleWorker;
     expect(requests).toHaveLength(1);
+    expect(providerKeys[0]).toMatch(
+      /^programcue:communication-delivery:v1:[0-9a-f]{64}$/,
+    );
     expect(requests[0]).toMatchObject({
       to: ["alex.submitter@example.com"],
       subject: "Your proposal was accepted",

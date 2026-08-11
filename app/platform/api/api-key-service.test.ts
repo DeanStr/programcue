@@ -127,8 +127,10 @@ describe("event API key lifecycle", () => {
     const otherEventId = `api-key-event-${crypto.randomUUID()}`;
     await env.DB.prepare(
       `INSERT INTO events (
-        id, organisation_id, name, slug, timezone, starts_at, ends_at
-      ) VALUES (?, ?, 'Other API key event', ?, 'UTC', 2_000_000_000, 2_000_086_400)`,
+        id, organisation_id, name, slug, timezone, starts_at, ends_at,
+        file_policy_json
+      ) VALUES (?, ?, 'Other API key event', ?, 'UTC', 2_000_000_000, 2_000_086_400,
+                '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')`,
     )
       .bind(
         otherEventId,

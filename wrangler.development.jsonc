@@ -1,0 +1,69 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "program-cue-development",
+  "main": "workers/index.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "program-cue-db",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "program-cue-files" }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "EVENT_CHANNEL", "class_name": "EventChannel" },
+      { "name": "PROGRAM_CUE_AGENT", "class_name": "ProgramCueEventAgent" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["EventChannel"] },
+    { "tag": "v2", "new_sqlite_classes": ["ProgramCueEventAgent"] },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "OPERATIONS_QUEUE",
+        "queue": "program-cue-operations-development",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "program-cue-operations-development",
+        "max_batch_size": 20,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "program-cue-operations-development-dlq",
+      },
+    ],
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "APP_ENV": "development",
+    "DEMO_MODE": "true",
+    "SOURCE_REVISION": "local-development",
+    "DEFAULT_EVENT_ID": "evt-foe-2025",
+    "BETTER_AUTH_URL": "http://localhost:5173",
+    "AUTH_EMAIL_FROM": "Program Cue Local <program-cue@localhost.test>",
+    "EMAIL_PROVIDER": "mailpit",
+    "MAILPIT_SEND_API_URL": "http://127.0.0.1:8025/api/v1/send",
+    "PUBLIC_EVENT_SLUG": "future-of-events-2025",
+    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+    "CORS_ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173",
+    "EMBED_FRAME_ANCESTORS": "*",
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+    },
+  },
+}

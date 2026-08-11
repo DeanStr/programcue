@@ -1,4 +1,5 @@
 import { EventRealtimeService } from "../../app/platform/realtime/event-realtime.server";
+import { sourceRevisionForLog } from "../../app/platform/observability/source-revision.server";
 
 export const QUEUE_CLAIM_LEASE_SECONDS = 60;
 
@@ -114,6 +115,8 @@ export async function notifyRealtimeAfterCommit(
   sequence: number | null,
   operationId: string,
 ) {
+  let warningKind: "missing-sequence" | "delivery-failed" | null =
+    sequence === null ? "missing-sequence" : null;
   let warning: string | null =
     sequence === null
       ? "The committed event change did not return a sequence."
@@ -125,6 +128,7 @@ export async function notifyRealtimeAfterCommit(
         sequence,
       );
     } catch (error) {
+      warningKind = "delivery-failed";
       warning = `Realtime invalidation failed after commit: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
@@ -142,20 +146,27 @@ export async function notifyRealtimeAfterCommit(
     console.error(
       JSON.stringify({
         level: "error",
+        sourceRevision: sourceRevisionForLog(env),
         subsystem: "realtime-invalidation",
+        event: "warning-persistence-failed",
         operationId,
-        message: `Could not persist realtime warning: ${error instanceof Error ? error.message : String(error)}`,
+        eventId: scope.eventId,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        message: "The committed realtime warning could not be persisted.",
       }),
     );
   }
   console.warn(
     JSON.stringify({
       level: "warning",
+      sourceRevision: sourceRevisionForLog(env),
       subsystem: "realtime-invalidation",
+      event: "delivery-degraded",
       operationId,
       eventId: scope.eventId,
       changeSequence: sequence,
-      message,
+      warningKind,
+      message: "Realtime invalidation was degraded after commit.",
     }),
   );
 }

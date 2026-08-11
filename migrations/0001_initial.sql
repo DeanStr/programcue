@@ -28,6 +28,17 @@ CREATE TABLE people (
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
+CREATE TABLE organisation_ai_settings (
+  organisation_id TEXT PRIMARY KEY REFERENCES organisations(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('workers_ai','openai','anthropic')),
+  model TEXT NOT NULL CHECK (length(trim(model)) > 0),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  last_updated_by_person_id TEXT REFERENCES people(id),
+  last_operation_id TEXT UNIQUE,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
 CREATE TABLE events (
   id TEXT PRIMARY KEY,
   organisation_id TEXT NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
@@ -44,12 +55,30 @@ CREATE TABLE events (
     AND substr(brand_accent, 1, 1) = '#'
     AND substr(brand_accent, 2) NOT GLOB '*[^0-9A-Fa-f]*'
   ),
+  session_formats_json TEXT NOT NULL DEFAULT '[{"key":"keynote","label":"Keynote","defaultDurationMinutes":60,"position":0},{"key":"presentation","label":"Presentation","defaultDurationMinutes":45,"position":1},{"key":"panel","label":"Panel","defaultDurationMinutes":60,"position":2},{"key":"workshop","label":"Workshop","defaultDurationMinutes":90,"position":3},{"key":"breakout","label":"Breakout","defaultDurationMinutes":45,"position":4},{"key":"break","label":"Break","defaultDurationMinutes":30,"position":5},{"key":"other","label":"Other","defaultDurationMinutes":30,"position":6}]' CHECK (json_valid(session_formats_json)),
   repository_provider TEXT NOT NULL DEFAULT 'd1' CHECK (repository_provider IN ('d1','airtable')),
   repository_locked_at INTEGER,
   retention_months INTEGER NOT NULL DEFAULT 24 CHECK (retention_months IN (12,24,36)),
+  file_retention_hold_at INTEGER,
+  participant_retention_completed_at INTEGER,
   submission_access_mode TEXT NOT NULL DEFAULT 'email_verified' CHECK (submission_access_mode IN ('email_verified','account_required','password_protected')),
   allow_anonymous_drafts INTEGER NOT NULL DEFAULT 1 CHECK (allow_anonymous_drafts IN (0,1)),
   duplicate_person_warnings INTEGER NOT NULL DEFAULT 1 CHECK (duplicate_person_warnings IN (0,1)),
+  file_policy_json TEXT NOT NULL CHECK (
+    json_valid(file_policy_json)
+    AND json_type(file_policy_json, '$.headshotMaximumBytes') = 'integer'
+    AND json_extract(file_policy_json, '$.headshotMaximumBytes') BETWEEN 1048576 AND 10485760
+    AND json_extract(file_policy_json, '$.headshotMaximumBytes') % 1048576 = 0
+    AND json_type(file_policy_json, '$.slidesMaximumBytes') = 'integer'
+    AND json_extract(file_policy_json, '$.slidesMaximumBytes') BETWEEN 1048576 AND 104857600
+    AND json_extract(file_policy_json, '$.slidesMaximumBytes') % 1048576 = 0
+    AND json_type(file_policy_json, '$.supportingDocumentMaximumBytes') = 'integer'
+    AND json_extract(file_policy_json, '$.supportingDocumentMaximumBytes') BETWEEN 1048576 AND 104857600
+    AND json_extract(file_policy_json, '$.supportingDocumentMaximumBytes') % 1048576 = 0
+    AND json_type(file_policy_json, '$.videoMaximumBytes') = 'integer'
+    AND json_extract(file_policy_json, '$.videoMaximumBytes') BETWEEN 1048576 AND 1073741824
+    AND json_extract(file_policy_json, '$.videoMaximumBytes') % 1048576 = 0
+  ),
   revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
   last_operation_id TEXT,
   last_updated_by_person_id TEXT REFERENCES people(id),
@@ -70,6 +99,7 @@ CREATE TABLE memberships (
   invitation_expires_at INTEGER,
   accepted_at INTEGER,
   revoked_at INTEGER,
+  last_operation_id TEXT,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   CHECK (role IN ('owner','administrator') OR event_id IS NOT NULL),
   FOREIGN KEY (event_id, organisation_id) REFERENCES events(id, organisation_id) ON DELETE CASCADE
@@ -132,6 +162,7 @@ CREATE TABLE submissions (
   title TEXT NOT NULL DEFAULT '',
   category TEXT,
   format TEXT,
+  routed_team_id TEXT,
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','submitted','assigned','in_review','decision_ready','accepted','waitlisted','rejected','withdrawn')),
   answers_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(answers_json)),
   submitted_snapshot_json TEXT CHECK (submitted_snapshot_json IS NULL OR json_valid(submitted_snapshot_json)),
@@ -144,6 +175,7 @@ CREATE TABLE submissions (
   UNIQUE(event_id, public_reference),
   UNIQUE(id, event_id),
   FOREIGN KEY (form_version_id, event_id) REFERENCES form_versions(id, event_id),
+  FOREIGN KEY (routed_team_id, event_id) REFERENCES evaluation_teams(id, event_id),
   CHECK (
     (status = 'draft' AND submitted_at IS NULL AND submitted_snapshot_json IS NULL)
     OR
@@ -257,6 +289,7 @@ CREATE TABLE evaluation_rounds (
   closes_at INTEGER,
   advancement_rule_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(advancement_rule_json)),
   revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  last_operation_id TEXT,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
   UNIQUE(plan_id, round_number),
@@ -284,7 +317,8 @@ CREATE TABLE evaluator_conflicts (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL,
   round_id TEXT NOT NULL,
-  submission_id TEXT NOT NULL,
+  submission_id TEXT,
+  session_id TEXT,
   evaluator_person_id TEXT NOT NULL REFERENCES people(id),
   relationship TEXT,
   notes TEXT,
@@ -292,16 +326,19 @@ CREATE TABLE evaluator_conflicts (
   declared_at INTEGER NOT NULL DEFAULT (unixepoch()),
   resolved_by_person_id TEXT REFERENCES people(id),
   resolved_at INTEGER,
-  UNIQUE(round_id, submission_id, evaluator_person_id),
   FOREIGN KEY (round_id, event_id) REFERENCES evaluation_rounds(id, event_id) ON DELETE CASCADE,
-  FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE
+  FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (session_id, event_id) REFERENCES sessions(id, event_id) ON DELETE CASCADE,
+  CHECK ((submission_id IS NOT NULL) <> (session_id IS NOT NULL))
 );
 
 CREATE TABLE evaluator_assignments (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL,
   round_id TEXT NOT NULL,
-  submission_id TEXT NOT NULL,
+  submission_id TEXT,
+  session_id TEXT,
+  session_snapshot_json TEXT CHECK (session_snapshot_json IS NULL OR json_valid(session_snapshot_json)),
   evaluator_person_id TEXT NOT NULL REFERENCES people(id),
   team_id TEXT,
   status TEXT NOT NULL DEFAULT 'assigned' CHECK (status IN ('assigned','in_progress','submitted','recused','reopened','cancelled')),
@@ -311,11 +348,16 @@ CREATE TABLE evaluator_assignments (
   conflict_declared_at INTEGER,
   assigned_at INTEGER NOT NULL DEFAULT (unixepoch()),
   submitted_at INTEGER,
-  UNIQUE(round_id, submission_id, evaluator_person_id),
   UNIQUE(id, event_id),
   FOREIGN KEY (round_id, event_id) REFERENCES evaluation_rounds(id, event_id) ON DELETE CASCADE,
   FOREIGN KEY (submission_id, event_id) REFERENCES submissions(id, event_id) ON DELETE CASCADE,
-  FOREIGN KEY (team_id, event_id) REFERENCES evaluation_teams(id, event_id)
+  FOREIGN KEY (session_id, event_id) REFERENCES sessions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (team_id, event_id) REFERENCES evaluation_teams(id, event_id),
+  CHECK (
+    (submission_id IS NOT NULL AND session_id IS NULL AND session_snapshot_json IS NULL)
+    OR
+    (submission_id IS NULL AND session_id IS NOT NULL AND session_snapshot_json IS NOT NULL)
+  )
 );
 
 CREATE TABLE reviews (
@@ -447,7 +489,7 @@ CREATE TABLE sessions (
   title TEXT NOT NULL,
   slug TEXT NOT NULL,
   description TEXT,
-  format TEXT NOT NULL CHECK (format IN ('keynote','presentation','panel','workshop','breakout','break','other')),
+  format TEXT NOT NULL,
   duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
   expected_attendance INTEGER CHECK (expected_attendance IS NULL OR expected_attendance >= 0),
   required_resources_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(required_resources_json)),
@@ -474,11 +516,45 @@ CREATE TABLE session_speakers (
   FOREIGN KEY (session_id, event_id) REFERENCES sessions(id, event_id) ON DELETE CASCADE
 );
 
+CREATE TABLE tags (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  name TEXT NOT NULL COLLATE NOCASE CHECK (length(trim(name)) BETWEEN 1 AND 80),
+  colour_token TEXT,
+  created_by_person_id TEXT NOT NULL REFERENCES people(id),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(id, event_id)
+);
+
+CREATE TABLE session_tags (
+  event_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  tag_id TEXT NOT NULL,
+  created_by_person_id TEXT NOT NULL REFERENCES people(id),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  PRIMARY KEY (session_id, tag_id),
+  FOREIGN KEY (session_id, event_id) REFERENCES sessions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id, event_id) REFERENCES tags(id, event_id) ON DELETE CASCADE
+);
+
+CREATE TABLE session_archives (
+  session_id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  previous_status TEXT NOT NULL CHECK (previous_status IN ('unscheduled','cancelled')),
+  archived_by_person_id TEXT NOT NULL REFERENCES people(id),
+  archive_operation_id TEXT NOT NULL,
+  archived_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  FOREIGN KEY (session_id, event_id) REFERENCES sessions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (archive_operation_id, event_id) REFERENCES operation_jobs(id, event_id)
+);
+
 CREATE TABLE schedule_versions (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   version_number INTEGER NOT NULL CHECK (version_number > 0),
   name TEXT,
+  notes TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','publishing','published','archived','failed')),
   revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
   publication_operation_id TEXT,
@@ -489,6 +565,62 @@ CREATE TABLE schedule_versions (
   UNIQUE(id, event_id),
   CHECK ((status = 'published' AND published_at IS NOT NULL) OR status <> 'published')
 );
+
+CREATE TABLE schedule_session_contents (
+  schedule_version_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  track_id TEXT,
+  format TEXT NOT NULL,
+  duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
+  required_resources_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(required_resources_json)),
+  visibility TEXT NOT NULL CHECK (visibility IN ('public','private','hidden')),
+  last_operation_id TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  PRIMARY KEY (schedule_version_id, session_id),
+  UNIQUE(schedule_version_id, session_id, event_id),
+  FOREIGN KEY (schedule_version_id, event_id) REFERENCES schedule_versions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (session_id, event_id) REFERENCES sessions(id, event_id) ON DELETE CASCADE,
+  FOREIGN KEY (track_id, event_id) REFERENCES tracks(id, event_id)
+);
+
+-- Every draft begins with a complete, version-owned content snapshot. New
+-- sessions are also captured when a draft already exists. Commands update the
+-- draft row explicitly; published rows are never derived from mutable sessions.
+CREATE TRIGGER schedule_versions_seed_session_content
+AFTER INSERT ON schedule_versions
+BEGIN
+  INSERT INTO schedule_session_contents (
+    schedule_version_id, event_id, session_id, title, slug, description,
+    track_id, format, duration_minutes, required_resources_json, visibility,
+    created_at, updated_at
+  )
+  SELECT NEW.id, session.event_id, session.id, session.title, session.slug,
+         session.description, session.track_id, session.format,
+         session.duration_minutes, session.required_resources_json,
+         session.visibility, unixepoch(), unixepoch()
+    FROM sessions session
+   WHERE session.event_id = NEW.event_id;
+END;
+
+CREATE TRIGGER sessions_seed_draft_schedule_content
+AFTER INSERT ON sessions
+BEGIN
+  INSERT INTO schedule_session_contents (
+    schedule_version_id, event_id, session_id, title, slug, description,
+    track_id, format, duration_minutes, required_resources_json, visibility,
+    created_at, updated_at
+  )
+  SELECT version.id, NEW.event_id, NEW.id, NEW.title, NEW.slug,
+         NEW.description, NEW.track_id, NEW.format, NEW.duration_minutes,
+         NEW.required_resources_json, NEW.visibility, unixepoch(), unixepoch()
+    FROM schedule_versions version
+   WHERE version.event_id = NEW.event_id AND version.status = 'draft';
+END;
 
 CREATE TABLE schedule_entries (
   id TEXT PRIMARY KEY,
@@ -512,7 +644,7 @@ CREATE TABLE schedule_conflicts (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL,
   schedule_version_id TEXT NOT NULL,
-  conflict_type TEXT NOT NULL CHECK (conflict_type IN ('room','speaker','track','event_boundary','capacity','required_resource','turnaround')),
+  conflict_type TEXT NOT NULL CHECK (conflict_type IN ('room','speaker','track','event_boundary','capacity','required_resource','resource_configuration','room_resource','turnaround')),
   severity TEXT NOT NULL CHECK (severity IN ('warning','blocking')),
   fingerprint TEXT NOT NULL,
   primary_entry_id TEXT,
@@ -559,11 +691,15 @@ CREATE TABLE task_templates (
   due_anchor TEXT NOT NULL DEFAULT 'none' CHECK (due_anchor IN ('none','acceptance','session_start','fixed')),
   due_offset_minutes INTEGER,
   fixed_due_at INTEGER,
+  auto_assign_on_acceptance INTEGER NOT NULL CHECK (auto_assign_on_acceptance IN (0,1)),
   configuration_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(configuration_json)),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived')),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  UNIQUE(id, event_id)
+  UNIQUE(id, event_id),
+  CHECK (due_anchor <> 'fixed' OR fixed_due_at IS NOT NULL),
+  CHECK (due_anchor NOT IN ('acceptance','session_start') OR due_offset_minutes IS NOT NULL),
+  CHECK (auto_assign_on_acceptance = 0 OR due_anchor <> 'session_start')
 );
 
 CREATE TABLE task_template_dependencies (
@@ -664,8 +800,27 @@ CREATE TABLE file_versions (
   deleted_at INTEGER,
   UNIQUE(asset_id, version_number),
   UNIQUE(id, event_id),
+  UNIQUE(id, event_id, asset_id),
   FOREIGN KEY (asset_id, event_id) REFERENCES file_assets(id, event_id) ON DELETE CASCADE,
   CHECK (released_at IS NULL OR (upload_status = 'uploaded' AND signature_status = 'valid' AND scan_status = 'clean'))
+);
+
+CREATE TABLE file_multipart_uploads (
+  version_id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  asset_id TEXT NOT NULL,
+  upload_id TEXT,
+  idempotency_key TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'requested' CHECK (status IN ('requested','initiated','completing','completed','aborted','failed')),
+  part_size_bytes INTEGER NOT NULL CHECK (part_size_bytes > 0),
+  manifest_json TEXT CHECK (manifest_json IS NULL OR json_valid(manifest_json)),
+  manifest_hash TEXT,
+  expires_at INTEGER NOT NULL,
+  last_error TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  FOREIGN KEY (version_id, event_id, asset_id) REFERENCES file_versions(id, event_id, asset_id) ON DELETE CASCADE,
+  FOREIGN KEY (asset_id, event_id) REFERENCES file_assets(id, event_id) ON DELETE CASCADE
 );
 
 CREATE TABLE task_evidence (
@@ -765,7 +920,7 @@ CREATE TABLE sender_profiles (
   from_name TEXT NOT NULL,
   from_email TEXT NOT NULL COLLATE NOCASE,
   reply_to_email TEXT COLLATE NOCASE,
-  provider TEXT NOT NULL DEFAULT 'resend' CHECK (provider IN ('resend')),
+  provider TEXT NOT NULL CHECK (provider IN ('resend','mailpit')),
   provider_sender_id TEXT,
   status TEXT NOT NULL DEFAULT 'unverified' CHECK (status IN ('unverified','verified','disabled')),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -906,11 +1061,11 @@ CREATE TABLE communication_unsubscribes (
 CREATE TABLE calendar_connections (
   id TEXT PRIMARY KEY,
   organisation_id TEXT NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
-  event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
+  event_id TEXT,
   person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
   provider TEXT NOT NULL CHECK (provider IN ('google','microsoft')),
   account_reference TEXT NOT NULL,
-  encrypted_credentials TEXT NOT NULL,
+  encrypted_credentials TEXT,
   scopes_json TEXT NOT NULL CHECK (json_valid(scopes_json)),
   status TEXT NOT NULL DEFAULT 'connected' CHECK (status IN ('connected','needs_attention','revoked','disconnected')),
   expires_at INTEGER,
@@ -918,7 +1073,9 @@ CREATE TABLE calendar_connections (
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
   UNIQUE(person_id, provider, account_reference),
-  UNIQUE(id, event_id)
+  UNIQUE(id, event_id),
+  FOREIGN KEY (event_id, organisation_id) REFERENCES events(id, organisation_id) ON DELETE CASCADE,
+  CHECK (status <> 'connected' OR (encrypted_credentials IS NOT NULL AND expires_at IS NOT NULL))
 );
 
 CREATE TABLE calendar_invitations (
@@ -960,16 +1117,19 @@ CREATE TABLE calendar_sync_attempts (
 CREATE TABLE integration_connections (
   id TEXT PRIMARY KEY,
   organisation_id TEXT NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
-  event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
+  event_id TEXT,
   provider TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('connected','needs_attention','failed','disconnected')),
   direction TEXT NOT NULL CHECK (direction IN ('outbound','inbound','bidirectional')),
   conflict_policy TEXT,
   encrypted_credentials TEXT,
   configuration_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(configuration_json)),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  last_operation_id TEXT,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  UNIQUE(id, event_id)
+  UNIQUE(id, event_id),
+  FOREIGN KEY (event_id, organisation_id) REFERENCES events(id, organisation_id) ON DELETE CASCADE
 );
 
 CREATE TABLE integration_runs (
@@ -1003,6 +1163,22 @@ CREATE TABLE integration_run_items (
   UNIQUE(run_id, entity_type, entity_id)
 );
 
+CREATE TABLE integration_entity_mappings (
+  id TEXT PRIMARY KEY,
+  connection_id TEXT NOT NULL REFERENCES integration_connections(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  source_hash TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(metadata_json)),
+  last_operation_id TEXT,
+  last_synced_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(connection_id, entity_type, entity_id),
+  UNIQUE(connection_id, entity_type, external_id)
+);
+
 CREATE TABLE operation_jobs (
   id TEXT PRIMARY KEY,
   organisation_id TEXT REFERENCES organisations(id) ON DELETE CASCADE,
@@ -1022,12 +1198,14 @@ CREATE TABLE operation_jobs (
   cancellable INTEGER NOT NULL DEFAULT 0 CHECK (cancellable IN (0,1)),
   claim_token TEXT,
   claim_expires_at INTEGER,
+  dispatched_at INTEGER,
   started_at INTEGER,
   completed_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
   UNIQUE(event_id, idempotency_key),
-  UNIQUE(correlation_id)
+  UNIQUE(correlation_id),
+  UNIQUE(id, event_id)
 );
 
 CREATE TABLE operation_items (
@@ -1088,6 +1266,14 @@ CREATE TABLE idempotency_records (
   completed_at INTEGER
 );
 
+CREATE TABLE abuse_rate_limits (
+  scope_key TEXT PRIMARY KEY,
+  window_started_at INTEGER NOT NULL,
+  request_count INTEGER NOT NULL DEFAULT 0 CHECK (request_count >= 0),
+  blocked_until INTEGER,
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
 CREATE TABLE webhook_endpoints (
   id TEXT PRIMARY KEY,
   organisation_id TEXT NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
@@ -1098,6 +1284,7 @@ CREATE TABLE webhook_endpoints (
   event_types_json TEXT NOT NULL CHECK (json_valid(event_types_json)),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled','failing')),
   failure_count INTEGER NOT NULL DEFAULT 0 CHECK (failure_count >= 0),
+  last_operation_id TEXT,
   created_by_person_id TEXT REFERENCES people(id),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -1111,6 +1298,7 @@ CREATE TABLE webhook_deliveries (
   entity_type TEXT NOT NULL,
   entity_id TEXT,
   idempotency_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL CHECK (length(request_hash) = 64 AND request_hash NOT GLOB '*[^0-9a-f]*'),
   payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
   status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','delivering','delivered','failed','cancelled')),
   attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
@@ -1162,6 +1350,35 @@ CREATE TABLE audit_events (
   metadata_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(metadata_json)),
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
+
+CREATE TABLE assistant_proposal_executions (
+  proposal_id TEXT PRIMARY KEY,
+  organisation_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  actor_person_id TEXT NOT NULL REFERENCES people(id),
+  tool_name TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('processing','completed')),
+  claim_token TEXT UNIQUE,
+  claim_expires_at INTEGER,
+  result_json TEXT CHECK (result_json IS NULL OR json_valid(result_json)),
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  completed_at INTEGER,
+  FOREIGN KEY (event_id, organisation_id)
+    REFERENCES events(id, organisation_id) ON DELETE CASCADE,
+  CHECK (
+    (status = 'processing' AND claim_token IS NOT NULL
+      AND claim_expires_at IS NOT NULL AND result_json IS NULL
+      AND completed_at IS NULL)
+    OR
+    (status = 'completed' AND claim_token IS NULL
+      AND claim_expires_at IS NULL AND result_json IS NOT NULL
+      AND completed_at IS NOT NULL)
+  )
+);
+
+CREATE INDEX assistant_proposal_executions_claim_idx
+  ON assistant_proposal_executions(status, claim_expires_at);
 
 CREATE TABLE auth_sessions (
   id TEXT PRIMARY KEY,
@@ -1219,6 +1436,7 @@ CREATE TABLE api_keys (
 CREATE INDEX idx_events_org ON events(organisation_id);
 CREATE UNIQUE INDEX ux_api_keys_event_active_name ON api_keys(event_id, name) WHERE revoked_at IS NULL;
 CREATE INDEX idx_memberships_person_event ON memberships(person_id, event_id, accepted_at, revoked_at);
+CREATE INDEX idx_memberships_event_role_status ON memberships(event_id, role, accepted_at, revoked_at, person_id);
 CREATE UNIQUE INDEX ux_memberships_org_role ON memberships(organisation_id, person_id, role) WHERE event_id IS NULL;
 CREATE UNIQUE INDEX ux_memberships_event_role ON memberships(event_id, person_id, role) WHERE event_id IS NOT NULL;
 
@@ -1226,8 +1444,10 @@ CREATE INDEX idx_form_public_status ON form_definitions(public_slug, status);
 CREATE UNIQUE INDEX ux_form_versions_one_published ON form_versions(form_id) WHERE status = 'published';
 CREATE INDEX idx_form_versions_lookup ON form_versions(event_id, form_id, version_number DESC);
 CREATE INDEX idx_submissions_event_status ON submissions(event_id, status, updated_at DESC);
+CREATE INDEX idx_submissions_event_category_status ON submissions(event_id, category, status, updated_at DESC);
 CREATE INDEX idx_submissions_submitter ON submissions(event_id, submitter_person_id, updated_at DESC);
 CREATE INDEX idx_submissions_email ON submissions(event_id, submitter_email, updated_at DESC);
+CREATE INDEX idx_submissions_routed_team ON submissions(event_id, routed_team_id, status);
 CREATE INDEX idx_submission_revisions_submission ON submission_revisions(submission_id, revision_number DESC);
 CREATE INDEX idx_submission_verifications_form_email ON submission_email_verifications(event_id, form_id, email, status, expires_at);
 CREATE INDEX idx_submission_speakers_person ON submission_speakers(event_id, person_id);
@@ -1236,8 +1456,21 @@ CREATE INDEX idx_evaluation_plans_event ON evaluation_plans(event_id, status);
 CREATE INDEX idx_evaluation_rounds_active ON evaluation_rounds(event_id, status, round_number);
 CREATE INDEX idx_team_members_person ON evaluation_team_members(event_id, person_id, removed_at);
 CREATE INDEX idx_evaluator_conflicts_open ON evaluator_conflicts(event_id, evaluator_person_id, status);
+CREATE UNIQUE INDEX ux_evaluator_conflicts_submission
+  ON evaluator_conflicts(round_id, submission_id, evaluator_person_id)
+  WHERE submission_id IS NOT NULL;
+CREATE UNIQUE INDEX ux_evaluator_conflicts_session
+  ON evaluator_conflicts(round_id, session_id, evaluator_person_id)
+  WHERE session_id IS NOT NULL;
 CREATE INDEX idx_assignments_evaluator_status ON evaluator_assignments(event_id, evaluator_person_id, status, due_at);
 CREATE INDEX idx_assignments_submission ON evaluator_assignments(event_id, submission_id, round_id);
+CREATE INDEX idx_assignments_session ON evaluator_assignments(event_id, session_id, round_id);
+CREATE UNIQUE INDEX ux_evaluator_assignments_submission
+  ON evaluator_assignments(round_id, submission_id, evaluator_person_id)
+  WHERE submission_id IS NOT NULL;
+CREATE UNIQUE INDEX ux_evaluator_assignments_session
+  ON evaluator_assignments(round_id, session_id, evaluator_person_id)
+  WHERE session_id IS NOT NULL;
 CREATE INDEX idx_reviews_status ON reviews(event_id, status, updated_at DESC);
 CREATE UNIQUE INDEX ux_review_moderations_current ON review_moderations(round_id, submission_id) WHERE status IN ('draft','confirmed');
 CREATE UNIQUE INDEX ux_decisions_one_published ON submission_decisions(submission_id) WHERE status = 'published';
@@ -1245,7 +1478,12 @@ CREATE UNIQUE INDEX ux_decisions_one_published ON submission_decisions(submissio
 CREATE INDEX idx_sessions_event_status ON sessions(event_id, status, updated_at DESC);
 CREATE UNIQUE INDEX ux_sessions_source_submission ON sessions(source_submission_id) WHERE source_submission_id IS NOT NULL;
 CREATE INDEX idx_session_speakers_person ON session_speakers(event_id, person_id);
+CREATE UNIQUE INDEX ux_tags_event_name ON tags(event_id, name);
+CREATE INDEX idx_session_tags_tag ON session_tags(event_id, tag_id, session_id);
+CREATE INDEX idx_session_archives_event ON session_archives(event_id, archived_at DESC);
+CREATE UNIQUE INDEX ux_schedule_versions_one_draft ON schedule_versions(event_id) WHERE status = 'draft';
 CREATE UNIQUE INDEX ux_schedule_versions_one_published ON schedule_versions(event_id) WHERE status = 'published';
+CREATE INDEX idx_schedule_session_contents_event ON schedule_session_contents(event_id, session_id, schedule_version_id);
 CREATE INDEX idx_schedule_entries_version_time ON schedule_entries(schedule_version_id, starts_at);
 CREATE INDEX idx_schedule_entries_room_time ON schedule_entries(schedule_version_id, room_id, starts_at, ends_at);
 CREATE INDEX idx_schedule_conflicts_open ON schedule_conflicts(event_id, schedule_version_id, resolved_at, severity);
@@ -1253,6 +1491,7 @@ CREATE INDEX idx_itinerary_person ON public_itineraries(event_id, person_id);
 
 CREATE INDEX idx_tasks_event_status_due ON task_instances(event_id, status, due_at);
 CREATE INDEX idx_tasks_target ON task_instances(event_id, target_type, target_id, status);
+CREATE INDEX idx_tasks_owner_status ON task_instances(event_id, owner_person_id, status);
 CREATE UNIQUE INDEX ux_task_instances_template_target
   ON task_instances(event_id, template_id, target_type, target_id)
   WHERE template_id IS NOT NULL;
@@ -1261,10 +1500,14 @@ CREATE INDEX idx_task_comments_task ON task_comments(task_id, created_at);
 CREATE INDEX idx_task_evidence_task ON task_evidence(task_id, status, created_at DESC);
 
 CREATE INDEX idx_files_target ON file_assets(event_id, target_type, target_id, status);
+CREATE INDEX idx_files_owner_status ON file_assets(event_id, owner_person_id, status);
 CREATE UNIQUE INDEX ux_file_assets_logical_active
   ON file_assets(event_id, owner_person_id, target_type, target_id, asset_kind)
   WHERE status <> 'deleted' AND target_type NOT IN ('task','resource');
 CREATE INDEX idx_file_versions_release ON file_versions(asset_id, scan_status, released_at, version_number DESC);
+CREATE UNIQUE INDEX ux_file_multipart_upload_id ON file_multipart_uploads(upload_id);
+CREATE UNIQUE INDEX ux_file_multipart_idempotency ON file_multipart_uploads(event_id, idempotency_key);
+CREATE INDEX idx_file_multipart_status_expiry ON file_multipart_uploads(status, expires_at);
 CREATE UNIQUE INDEX ux_file_assets_current_version ON file_assets(current_version_id) WHERE current_version_id IS NOT NULL;
 CREATE INDEX idx_resource_pages_audience ON resource_pages(event_id, status, audience_scope);
 CREATE UNIQUE INDEX ux_resource_versions_one_published ON resource_page_versions(resource_page_id) WHERE status = 'published';
@@ -1279,20 +1522,760 @@ CREATE INDEX idx_calendar_invitation_status ON calendar_invitations(event_id, st
 CREATE INDEX idx_calendar_attempt_status ON calendar_sync_attempts(status, created_at);
 
 CREATE INDEX idx_integration_runs_connection ON integration_runs(connection_id, created_at DESC);
+CREATE UNIQUE INDEX ux_integration_connections_event_provider
+  ON integration_connections(event_id, provider) WHERE event_id IS NOT NULL;
 CREATE INDEX idx_integration_items_status ON integration_run_items(run_id, status);
 CREATE INDEX idx_operation_jobs_event_status ON operation_jobs(event_id, status, created_at DESC);
+CREATE INDEX idx_operation_jobs_undispatched ON operation_jobs(type, status, dispatched_at, created_at);
 CREATE INDEX idx_operation_items_status ON operation_items(operation_id, status, updated_at);
 CREATE INDEX idx_event_changes_cursor ON event_changes(event_id, sequence);
 CREATE INDEX idx_saved_views_owner ON saved_views(event_id, owner_person_id, area);
 CREATE UNIQUE INDEX ux_idempotency_event ON idempotency_records(event_id, actor_id, scope, idempotency_key) WHERE event_id IS NOT NULL;
 CREATE UNIQUE INDEX ux_idempotency_org ON idempotency_records(organisation_id, actor_id, scope, idempotency_key) WHERE event_id IS NULL;
 CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
+CREATE INDEX idx_abuse_rate_limits_blocked_until ON abuse_rate_limits(blocked_until);
 CREATE INDEX idx_webhook_deliveries_status ON webhook_deliveries(status, next_attempt_at);
 CREATE INDEX idx_webhook_attempts_delivery ON webhook_delivery_attempts(delivery_id, attempt_number DESC);
 CREATE INDEX idx_audit_event_created ON audit_events(event_id, created_at DESC);
 CREATE INDEX idx_auth_sessions_person_expiry ON auth_sessions(person_id, expires_at);
 CREATE INDEX idx_verification_identifier_expiry ON verification_tokens(identifier, expires_at);
 CREATE INDEX idx_api_keys_event ON api_keys(event_id, revoked_at, expires_at);
+
+-- Participant-PII ingress is closed after the durable retention tombstone.
+-- Guards are intentionally limited to identity, participant content, recipient,
+-- credential and private-file columns. Audit, operation, event-change, generic
+-- webhook and backup/recovery bookkeeping remain writable.
+-- The durable event tombstone is exposed through two small views so every
+-- participant-data ingress guard uses the same boundary and identity set.
+CREATE TRIGGER events_participant_retention_tombstone_immutable
+BEFORE UPDATE OF participant_retention_completed_at ON events
+WHEN OLD.participant_retention_completed_at IS NOT NULL
+AND NEW.participant_retention_completed_at IS NOT OLD.participant_retention_completed_at
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention completion is immutable');
+END;
+
+CREATE VIEW participant_retention_locked_events AS
+SELECT id AS event_id, organisation_id, participant_retention_completed_at AS completed_at
+  FROM events
+ WHERE participant_retention_completed_at IS NOT NULL;
+
+CREATE VIEW participant_retention_locked_identities AS
+SELECT audit.event_id, audit.entity_id AS person_id, 'pseudonym' AS identity_kind
+  FROM audit_events audit
+  JOIN participant_retention_locked_events locked ON locked.event_id = audit.event_id
+ WHERE audit.action = 'participant.retention.subject_anonymised'
+   AND audit.entity_type = 'person' AND audit.entity_id IS NOT NULL
+UNION ALL
+SELECT locked.event_id, person.id AS person_id, 'retired' AS identity_kind
+  FROM participant_retention_locked_events locked
+  JOIN people person
+    ON person.last_operation_id = 'participant-retention:' || locked.event_id;
+
+CREATE TRIGGER memberships_participant_retention_no_pii_insert
+BEFORE INSERT ON memberships
+WHEN NEW.event_id IS NOT NULL
+AND NEW.role IN ('submitter','speaker')
+AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER memberships_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, person_id, role ON memberships
+WHEN (OLD.role IN ('submitter','speaker') OR NEW.role IN ('submitter','speaker'))
+AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER form_definitions_participant_retention_no_pii_insert
+BEFORE INSERT ON form_definitions
+WHEN NEW.status = 'published' AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER form_definitions_participant_retention_no_pii_update
+BEFORE UPDATE OF status ON form_definitions
+WHEN NEW.status = 'published' AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER form_versions_participant_retention_no_pii_insert
+BEFORE INSERT ON form_versions
+WHEN NEW.status = 'published' AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER form_versions_participant_retention_no_pii_update
+BEFORE UPDATE OF status ON form_versions
+WHEN NEW.status = 'published' AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER submissions_participant_retention_no_pii_insert
+BEFORE INSERT ON submissions
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER submissions_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, form_version_id, submitter_person_id, submitter_email, public_reference, title, category, format, routed_team_id, answers_json, submitted_snapshot_json ON submissions
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER submission_revisions_participant_retention_no_pii_insert
+BEFORE INSERT ON submission_revisions
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER submission_revisions_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, submission_id, form_version_id, answers_json, speaker_snapshot_json, saved_by_person_id ON submission_revisions
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER submission_email_verifications_participant_retention_no_pii_insert
+BEFORE INSERT ON submission_email_verifications
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER submission_speakers_participant_retention_no_pii_insert
+BEFORE INSERT ON submission_speakers
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER submission_speakers_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, submission_id, person_id, email, display_name, role_label, invitation_status, claim_token_hash, invitation_expires_at ON submission_speakers
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER evaluator_assignments_participant_retention_no_pii_insert
+BEFORE INSERT ON evaluator_assignments
+WHEN NEW.session_snapshot_json IS NOT NULL AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER evaluator_assignments_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, session_snapshot_json ON evaluator_assignments
+WHEN (OLD.session_snapshot_json IS NOT NULL OR NEW.session_snapshot_json IS NOT NULL)
+AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER evaluator_conflicts_participant_retention_no_pii_insert
+BEFORE INSERT ON evaluator_conflicts
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER evaluator_conflicts_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, relationship, notes ON evaluator_conflicts
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER reviews_participant_retention_no_pii_insert
+BEFORE INSERT ON reviews
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER reviews_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, scores_json, submitter_feedback, private_notes ON reviews
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER review_revisions_participant_retention_no_pii_insert
+BEFORE INSERT ON review_revisions
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER review_revisions_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, review_id, scores_json, content_json, saved_by_person_id ON review_revisions
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER review_moderations_participant_retention_no_pii_insert
+BEFORE INSERT ON review_moderations
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER review_moderations_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, notes ON review_moderations
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER submission_decisions_participant_retention_no_pii_insert
+BEFORE INSERT ON submission_decisions
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER submission_decisions_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, rationale, effect_preview_json ON submission_decisions
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER sessions_participant_retention_no_pii_insert
+BEFORE INSERT ON sessions
+WHEN NEW.source_submission_id IS NOT NULL AND NEW.description IS NOT NULL
+AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER sessions_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, source_submission_id, description ON sessions
+WHEN (OLD.source_submission_id IS NOT NULL OR NEW.source_submission_id IS NOT NULL)
+AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER schedule_session_contents_participant_retention_no_pii_insert
+BEFORE INSERT ON schedule_session_contents
+WHEN NEW.description IS NOT NULL
+AND EXISTS (
+  SELECT 1
+    FROM sessions session
+    JOIN participant_retention_locked_events locked
+      ON locked.event_id = session.event_id
+   WHERE session.id = NEW.session_id
+     AND session.event_id = NEW.event_id
+     AND session.source_submission_id IS NOT NULL
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER schedule_session_contents_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, session_id, description ON schedule_session_contents
+WHEN EXISTS (
+  SELECT 1
+    FROM sessions session
+    JOIN participant_retention_locked_events locked
+      ON locked.event_id = session.event_id
+   WHERE session.id IN (OLD.session_id, NEW.session_id)
+     AND session.event_id IN (OLD.event_id, NEW.event_id)
+     AND session.source_submission_id IS NOT NULL
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER session_speakers_participant_retention_no_pii_insert
+BEFORE INSERT ON session_speakers
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER session_speakers_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, session_id, person_id ON session_speakers
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER public_itineraries_participant_retention_no_pii_insert
+BEFORE INSERT ON public_itineraries
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER task_instances_participant_retention_no_pii_insert
+BEFORE INSERT ON task_instances
+WHEN NEW.target_type = 'speaker' AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER task_instances_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, target_type, target_id, owner_person_id, title, description, evidence_json, waiver_json, completed_by_person_id ON task_instances
+WHEN (OLD.target_type = 'speaker' OR NEW.target_type = 'speaker')
+AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER task_comments_participant_retention_no_pii_insert
+BEFORE INSERT ON task_comments
+WHEN EXISTS (
+  SELECT 1 FROM task_instances task
+  JOIN participant_retention_locked_events locked ON locked.event_id = task.event_id
+  WHERE task.id = NEW.task_id AND task.event_id = NEW.event_id
+    AND task.target_type = 'speaker'
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER task_comments_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, task_id, author_person_id, body ON task_comments
+WHEN EXISTS (
+  SELECT 1 FROM task_instances task
+  JOIN participant_retention_locked_events locked ON locked.event_id = task.event_id
+  WHERE task.id IN (OLD.task_id, NEW.task_id)
+    AND task.event_id IN (OLD.event_id, NEW.event_id)
+    AND task.target_type = 'speaker'
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER task_evidence_participant_retention_no_pii_insert
+BEFORE INSERT ON task_evidence
+WHEN EXISTS (
+  SELECT 1 FROM task_instances task
+  JOIN participant_retention_locked_events locked ON locked.event_id = task.event_id
+  WHERE task.id = NEW.task_id AND task.event_id = NEW.event_id
+    AND task.target_type = 'speaker'
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER task_evidence_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, task_id, submitted_by_person_id, file_asset_id, evidence_json ON task_evidence
+WHEN EXISTS (
+  SELECT 1 FROM task_instances task
+  JOIN participant_retention_locked_events locked ON locked.event_id = task.event_id
+  WHERE task.id IN (OLD.task_id, NEW.task_id)
+    AND task.event_id IN (OLD.event_id, NEW.event_id)
+    AND task.target_type = 'speaker'
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER file_assets_participant_retention_no_pii_insert
+BEFORE INSERT ON file_assets
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER file_assets_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, owner_person_id, target_type, target_id, current_version_id, status ON file_assets
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER file_versions_participant_retention_no_pii_insert
+BEFORE INSERT ON file_versions
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER file_versions_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, asset_id, object_key, multipart_upload_id, original_filename, declared_content_type, detected_content_type, checksum_sha256, object_etag, scan_provider, scan_result_json, scan_error, created_by_person_id, released_at, deleted_at ON file_versions
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER file_multipart_uploads_participant_retention_no_pii_insert
+BEFORE INSERT ON file_multipart_uploads
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER file_multipart_uploads_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, asset_id, upload_id, idempotency_key, manifest_json, manifest_hash, last_error ON file_multipart_uploads
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER resource_audiences_participant_retention_no_pii_insert
+BEFORE INSERT ON resource_audiences
+WHEN NEW.target_type = 'person' AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER resource_audiences_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, target_type, target_id ON resource_audiences
+WHEN (OLD.target_type = 'person' OR NEW.target_type = 'person')
+AND EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER resource_acknowledgements_participant_retention_no_pii_insert
+BEFORE INSERT ON resource_acknowledgements
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER resource_acknowledgements_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, resource_page_id, resource_page_version_id, person_id, user_agent ON resource_acknowledgements
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER communications_participant_retention_no_pii_insert
+BEFORE INSERT ON communications
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER communications_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, audience_json, content_snapshot_json ON communications
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER communication_deliveries_participant_retention_no_pii_insert
+BEFORE INSERT ON communication_deliveries
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER communication_deliveries_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, communication_id, person_id, recipient_address, recipient_name, source_id, source_values_json, provider, provider_message_id, idempotency_key, failure_code, failure_message ON communication_deliveries
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER communication_delivery_events_participant_retention_no_pii_insert
+BEFORE INSERT ON communication_delivery_events
+WHEN EXISTS (
+  SELECT 1 FROM communication_deliveries delivery
+  JOIN participant_retention_locked_events locked ON locked.event_id = delivery.event_id
+  WHERE delivery.id = NEW.delivery_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER communication_delivery_events_participant_retention_no_pii_update
+BEFORE UPDATE OF delivery_id, provider_event_id, payload_json ON communication_delivery_events
+WHEN EXISTS (
+  SELECT 1 FROM communication_deliveries delivery
+  JOIN participant_retention_locked_events locked ON locked.event_id = delivery.event_id
+  WHERE delivery.id IN (OLD.delivery_id, NEW.delivery_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER communication_unsubscribes_participant_retention_no_pii_insert
+BEFORE INSERT ON communication_unsubscribes
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER communication_unsubscribes_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, person_id, address, reason ON communication_unsubscribes
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER calendar_connections_participant_retention_no_pii_insert
+BEFORE INSERT ON calendar_connections
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER calendar_connections_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, person_id, account_reference, encrypted_credentials, scopes_json ON calendar_connections
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER calendar_invitations_participant_retention_no_pii_insert
+BEFORE INSERT ON calendar_invitations
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id = NEW.event_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER calendar_invitations_participant_retention_no_pii_update
+BEFORE UPDATE OF event_id, session_id, person_id, connection_id, delivery_id, ical_uid, method, provider_event_id, status, last_payload_hash, current_attempt_id ON calendar_invitations
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_events locked
+  WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER calendar_sync_attempts_participant_retention_no_pii_insert
+BEFORE INSERT ON calendar_sync_attempts
+WHEN EXISTS (
+  SELECT 1 FROM calendar_invitations invitation
+  JOIN participant_retention_locked_events locked ON locked.event_id = invitation.event_id
+  WHERE invitation.id = NEW.invitation_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER calendar_sync_attempts_participant_retention_no_pii_update
+BEFORE UPDATE OF invitation_id, provider_event_id, error_message ON calendar_sync_attempts
+WHEN EXISTS (
+  SELECT 1 FROM calendar_invitations invitation
+  JOIN participant_retention_locked_events locked ON locked.event_id = invitation.event_id
+  WHERE invitation.id IN (OLD.invitation_id, NEW.invitation_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER people_participant_retention_no_pii_update
+BEFORE UPDATE OF id, email, display_name, email_verified, image_url, biography,
+  pronunciation, organisation_name, job_title, profile_status, last_operation_id ON people
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_identities locked
+  WHERE locked.person_id = OLD.id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER auth_sessions_participant_retention_no_pii_insert
+BEFORE INSERT ON auth_sessions
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_identities locked
+  WHERE locked.person_id = NEW.person_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER auth_accounts_participant_retention_no_pii_insert
+BEFORE INSERT ON auth_accounts
+WHEN EXISTS (
+  SELECT 1 FROM participant_retention_locked_identities locked
+  WHERE locked.person_id = NEW.person_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
+CREATE TRIGGER verification_tokens_participant_retention_no_pii_insert
+BEFORE INSERT ON verification_tokens
+WHEN EXISTS (
+  SELECT 1 FROM form_definitions form
+  JOIN participant_retention_locked_events locked ON locked.event_id = form.event_id
+  WHERE substr(NEW.identifier, 1, length('application-session:' || form.id || ':')) =
+          'application-session:' || form.id || ':'
+     OR substr(NEW.identifier, 1, length('anonymous-application-session:' || form.id || ':')) =
+          'anonymous-application-session:' || form.id || ':'
+)
+OR EXISTS (
+  SELECT 1 FROM participant_retention_locked_identities identity_link
+  JOIN people person ON person.id = identity_link.person_id
+  WHERE identity_link.identity_kind = 'retired'
+    AND person.email = NEW.identifier COLLATE NOCASE
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event participant retention is complete; participant PII is read-only');
+END;
+
 
 -- Audit history is append-only at the database boundary.
 CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events BEGIN

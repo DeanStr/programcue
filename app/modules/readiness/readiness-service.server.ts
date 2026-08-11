@@ -1,3 +1,4 @@
+import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   calculateOverallReadiness,
@@ -254,9 +255,18 @@ async function loadCommandCentreRecords(
 }
 
 export class ReadinessService {
-  constructor(private readonly env: CloudflareEnvironment) {}
+  private readonly airtable: AirtableProviderBoundary;
+
+  constructor(
+    private readonly env: CloudflareEnvironment,
+    dependencies: { airtable?: AirtableProviderBoundary } = {},
+  ) {
+    this.airtable =
+      dependencies.airtable ?? new AirtableProviderBoundary(this.env);
+  }
 
   async getCommandCentre(viewer: Viewer): Promise<CommandCentreSnapshot> {
+    await this.airtable.assertReadable(viewer);
     const event = await this.env.DB.prepare(
       `
       SELECT id, timezone FROM events WHERE id = ? AND organisation_id = ?

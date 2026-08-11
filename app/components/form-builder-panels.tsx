@@ -1,7 +1,12 @@
+import { useEffect, useState } from "react";
+
 import type { FormWorkspace } from "~/modules/submissions/submission-repository.server";
-import type {
-  FormField,
-  SaveFormInput,
+import {
+  validateAnswerShapes,
+  validateFinalAnswers,
+  visibleFields,
+  type FormField,
+  type SaveFormInput,
 } from "~/modules/submissions/submission-schema";
 
 const FIELD_TYPES: Array<{ value: FormField["type"]; label: string }> = [
@@ -10,6 +15,7 @@ const FIELD_TYPES: Array<{ value: FormField["type"]; label: string }> = [
   { value: "select", label: "Dropdown" },
   { value: "multi_select", label: "Multiple choice" },
   { value: "url", label: "URL" },
+  { value: "video", label: "Video upload or URL" },
 ];
 
 function newField(type: FormField["type"], index: number): FormField {
@@ -43,40 +49,79 @@ function publishedLabel(epoch: number, timezone: string) {
   }).format(new Date(epoch * 1_000));
 }
 
-function FieldPreview({ field }: { field: FormField }) {
+function FieldPreview({
+  field,
+  value,
+  onChange,
+}: {
+  field: FormField;
+  value: string | string[] | undefined;
+  onChange(value: string | string[]): void;
+}) {
   if (field.type === "long_text")
-    return <textarea className="textarea" disabled />;
+    return (
+      <textarea
+        className="textarea"
+        maxLength={5_000}
+        value={String(value ?? "")}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    );
   if (field.type === "select")
     return (
-      <select className="select" disabled>
-        <option>{field.options[0] ?? "Choose…"}</option>
+      <select
+        className="select"
+        value={String(value ?? "")}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">Choose…</option>
+        {field.options.map((option) => (
+          <option key={option}>{option}</option>
+        ))}
       </select>
     );
-  if (field.type === "multi_select")
+  if (field.type === "multi_select") {
+    const selected = Array.isArray(value) ? value : [];
     return (
       <div className="stack">
-        {field.options.slice(0, 3).map((option) => (
+        {field.options.map((option) => (
           <label key={option}>
-            <input type="checkbox" disabled /> {option}
+            <input
+              type="checkbox"
+              checked={selected.includes(option)}
+              onChange={(event) =>
+                onChange(
+                  event.target.checked
+                    ? [...selected, option]
+                    : selected.filter((item) => item !== option),
+                )
+              }
+            />{" "}
+            {option}
           </label>
         ))}
       </div>
     );
+  }
   return (
     <input
       className="field"
-      type={field.type === "url" ? "url" : "text"}
-      disabled
+      type={field.type === "url" || field.type === "video" ? "url" : "text"}
+      maxLength={field.id === "title" ? 180 : 5_000}
+      value={String(value ?? "")}
+      onChange={(event) => onChange(event.target.value)}
     />
   );
 }
 
 export function FieldLibraryPanel({
   input,
+  passwordConfigured,
   change,
   onSelect,
 }: {
   input: SaveFormInput;
+  passwordConfigured: boolean;
   change: (next: SaveFormInput) => void;
   onSelect: (fieldId: string) => void;
 }) {
@@ -201,24 +246,58 @@ export function FieldLibraryPanel({
       </label>
       {input.accessMode === "password_protected" ? (
         <label className="label mt">
-          {input.routing.passwordHash
-            ? "Replace form password"
-            : "Form password"}
+          {passwordConfigured ? "Replace form password" : "Form password"}
           <input
             className="field"
             name="accessPassword"
             type="password"
             minLength={8}
+            required={!passwordConfigured}
+            value={input.accessPassword}
+            onChange={(event) =>
+              change({ ...input, accessPassword: event.target.value })
+            }
             placeholder={
-              input.routing.passwordHash
+              passwordConfigured
                 ? "Leave blank to keep current"
                 : "At least 8 characters"
             }
           />
+          <span className="help">
+            Passwords are never stored in browser recovery. Re-enter a new value
+            after refreshing this page.
+          </span>
         </label>
       ) : (
         <input type="hidden" name="accessPassword" value="" />
       )}
+      {input.kind === "direct_session" ? (
+        <label className="label mt">
+          Session duration override (minutes)
+          <input
+            className="field"
+            type="number"
+            min={5}
+            max={480}
+            value={input.routing.directSessionDurationMinutes ?? ""}
+            placeholder="Use the selected format default"
+            onChange={(event) =>
+              change({
+                ...input,
+                routing: {
+                  ...input.routing,
+                  directSessionDurationMinutes: event.target.value
+                    ? Number(event.target.value)
+                    : null,
+                },
+              })
+            }
+          />
+          <span className="help">
+            Leave blank to use the selected Event Setup format’s default.
+          </span>
+        </label>
+      ) : null}
     </section>
   );
 }
@@ -294,6 +373,7 @@ export function FieldSettingsPanel({
   patchField,
   moveField,
   setSelectedId,
+  routingTeams,
 }: {
   input: SaveFormInput;
   selected: FormField | undefined;
@@ -302,6 +382,7 @@ export function FieldSettingsPanel({
   patchField: (patch: Partial<FormField>) => void;
   moveField: (direction: -1 | 1) => void;
   setSelectedId: (fieldId: string) => void;
+  routingTeams: Array<{ id: string; name: string }>;
 }) {
   return (
     <section className="card builder-panel settings-panel">
@@ -427,7 +508,10 @@ export function FieldSettingsPanel({
                     (field) => field.id === selected.id,
                   ),
                 )
-                .filter((field) => field.type === "select")
+                .filter(
+                  (field) =>
+                    field.type === "select" || field.type === "multi_select",
+                )
                 .map((field) => (
                   <option value={field.id} key={field.id}>
                     {field.label}
@@ -503,25 +587,41 @@ export function FieldSettingsPanel({
       {categoryField?.options.map((category) => (
         <label className="label mt" key={category}>
           {category}
-          <input
-            className="field"
+          <select
+            className="select"
             value={input.routing.categories[category] ?? ""}
-            onChange={(event) =>
+            onChange={(event) => {
+              const teamId = event.target.value;
+              const categories = { ...input.routing.categories };
+              if (teamId) categories[category] = teamId;
+              else delete categories[category];
               change({
                 ...input,
                 routing: {
                   ...input.routing,
-                  categories: {
-                    ...input.routing.categories,
-                    [category]: event.target.value,
-                  },
+                  categories,
+                  teamNames: Object.fromEntries(
+                    routingTeams.map((team) => [team.id, team.name]),
+                  ),
                 },
-              })
-            }
-            placeholder="Committee or owner"
-          />
+              });
+            }}
+          >
+            <option value="">No automatic team route</option>
+            {routingTeams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
         </label>
       ))}
+      {!routingTeams.length ? (
+        <p className="help mt">
+          Create an active evaluation team before configuring automatic category
+          routing.
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -535,13 +635,78 @@ export function ApplicantPreviewPanel({
   brandAccent?: string;
   eventName?: string;
 }) {
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
+  const [speakerCount, setSpeakerCount] = useState(input.minSpeakers);
+  const [errors, setErrors] = useState<Record<string, string[]>>({});
+  const [validated, setValidated] = useState(false);
+  const [viewport, setViewport] = useState<"mobile" | "desktop">("mobile");
+  useEffect(() => {
+    setAnswers({});
+    setSpeakerCount(input.minSpeakers);
+    setErrors({});
+    setValidated(false);
+  }, [input.id, input.schema, input.minSpeakers]);
+  const previewFields = visibleFields(input.schema, answers);
+
+  function updateAnswer(fieldId: string, value: string | string[]) {
+    setAnswers((current) => ({ ...current, [fieldId]: value }));
+    setErrors({});
+    setValidated(false);
+  }
+
+  function validatePreview() {
+    const speakers = Array.from({ length: speakerCount }, (_, index) => ({
+      name: `Test speaker ${index + 1}`,
+      email: `test-speaker-${index + 1}@example.invalid`,
+    }));
+    const nextErrors = {
+      ...validateAnswerShapes(input.schema, answers),
+      ...validateFinalAnswers(
+        input.schema,
+        answers,
+        speakers,
+        input.minSpeakers,
+        input.maxSpeakers,
+      ),
+    };
+    setErrors(nextErrors);
+    setValidated(true);
+  }
+
   return (
-    <section className="card builder-panel preview-panel">
+    <section
+      className={`card builder-panel preview-panel${viewport === "desktop" ? " preview-desktop" : ""}`}
+    >
       <div className="card-title">
         <h2>Live applicant preview</h2>
-        <span className="status info right">Structure preview</span>
+        <span
+          className="preview-viewport-controls right"
+          role="group"
+          aria-label="Applicant preview size"
+        >
+          <button
+            className="btn small"
+            type="button"
+            aria-pressed={viewport === "mobile"}
+            onClick={() => setViewport("mobile")}
+          >
+            Mobile
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            aria-pressed={viewport === "desktop"}
+            onClick={() => setViewport("desktop")}
+          >
+            Desktop
+          </button>
+        </span>
       </div>
-      <div className="phone">
+      <p className="help mb">
+        Isolated test mode exercises conditional fields and validation without
+        creating applicant or submission records.
+      </p>
+      <div className={`phone preview-device-${viewport}`}>
         <div
           className="phone-head"
           style={{
@@ -557,17 +722,81 @@ export function ApplicantPreviewPanel({
         </div>
         <div className="phone-body">
           <p className="tiny subtle">{input.schema.introduction}</p>
-          {input.schema.fields.slice(0, 6).map((field) => (
-            <label className="label" key={field.id}>
-              {field.label}
-              {field.required ? " *" : ""}
-              {field.help ? <span className="help">{field.help}</span> : null}
-              <FieldPreview field={field} />
-            </label>
-          ))}
-          <button className="btn primary" type="button" disabled>
-            Preview only
+          {previewFields.map((field) =>
+            field.type === "multi_select" ? (
+              <fieldset className="application-choice-field" key={field.id}>
+                <legend className="label">
+                  {field.label}
+                  {field.required ? " *" : ""}
+                </legend>
+                {field.help ? <span className="help">{field.help}</span> : null}
+                <FieldPreview
+                  field={field}
+                  value={answers[field.id]}
+                  onChange={(value) => updateAnswer(field.id, value)}
+                />
+                {errors[field.id]?.[0] ? (
+                  <span className="field-error">{errors[field.id][0]}</span>
+                ) : null}
+              </fieldset>
+            ) : (
+              <label className="label" key={field.id}>
+                {field.label}
+                {field.required ? " *" : ""}
+                {field.help ? <span className="help">{field.help}</span> : null}
+                <FieldPreview
+                  field={field}
+                  value={answers[field.id]}
+                  onChange={(value) => updateAnswer(field.id, value)}
+                />
+                {errors[field.id]?.[0] ? (
+                  <span className="field-error">{errors[field.id][0]}</span>
+                ) : null}
+              </label>
+            ),
+          )}
+          <label className="label">
+            Test speaker count
+            <input
+              className="field"
+              type="number"
+              min={1}
+              max={20}
+              value={speakerCount}
+              onChange={(event) => {
+                setSpeakerCount(Number(event.target.value));
+                setErrors({});
+                setValidated(false);
+              }}
+            />
+            {errors.speakers?.[0] ? (
+              <span className="field-error">{errors.speakers[0]}</span>
+            ) : null}
+          </label>
+          {validated ? (
+            <div
+              className={`validation-item ${Object.keys(errors).length ? "error" : "ok"}`}
+              role={Object.keys(errors).length ? "alert" : "status"}
+            >
+              <strong>{Object.keys(errors).length ? "△" : "✓"}</strong>
+              <span>
+                {Object.keys(errors).length
+                  ? "This test submission needs the highlighted changes."
+                  : "This test submission passes the current form rules."}
+              </span>
+            </div>
+          ) : null}
+          <button
+            className="btn primary"
+            type="button"
+            onClick={validatePreview}
+          >
+            Validate test submission
           </button>
+          <small className="help">
+            Test values stay in this preview. No applicant or submission record
+            is saved.
+          </small>
         </div>
       </div>
     </section>

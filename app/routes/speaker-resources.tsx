@@ -18,6 +18,7 @@ import {
   requireSpeakerViewer,
 } from "~/modules/speakers/demo.server";
 import { SpeakerService } from "~/modules/speakers/speaker-service.server";
+import { resolveCurrentEventId } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
@@ -28,10 +29,9 @@ async function participant(
   context: Route.LoaderArgs["context"],
 ) {
   const { env } = getCloudflareContext(context);
-  if (!env.DEFAULT_EVENT_ID)
-    throw new Response("DEFAULT_EVENT_ID is not configured", { status: 503 });
   await ensureDemoSpeakerData(env);
-  const viewer = await requireSpeakerViewer(request, env, env.DEFAULT_EVENT_ID);
+  const eventId = await resolveCurrentEventId(request, env, ["speaker"]);
+  const viewer = await requireSpeakerViewer(request, env, eventId);
   return { env, viewer };
 }
 
@@ -54,6 +54,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     timezone: portal.event.timezone,
     event: {
       name: portal.event.name,
+      brandAccent: portal.event.brandAccent,
       dateLabel: `${date.format(new Date(portal.event.startsAt * 1_000))}–${date.format(new Date(portal.event.endsAt * 1_000))}`,
       locationLabel: [portal.event.venue, portal.event.city]
         .filter(Boolean)

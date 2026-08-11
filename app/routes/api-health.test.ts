@@ -15,10 +15,14 @@ function context(testEnvironment: CloudflareEnvironment) {
 }
 
 async function health(testEnvironment: CloudflareEnvironment) {
+  const environment = {
+    ...testEnvironment,
+    SOURCE_REVISION: testEnvironment.SOURCE_REVISION ?? "test-revision",
+  } as unknown as CloudflareEnvironment;
   return loader({
     request: new Request("https://programcue.test/api/v1/health"),
     params: {},
-    context: context(testEnvironment),
+    context: context(environment),
   } as never);
 }
 
@@ -32,6 +36,7 @@ describe("service readiness", () => {
       ok: true,
       service: "program-cue",
       environment: "test",
+      sourceRevision: "test-revision",
     });
   });
 
@@ -67,4 +72,111 @@ describe("service readiness", () => {
       error: { code: "DATABASE_UNAVAILABLE" },
     });
   });
+
+  it("fails without exposing an invalid production source revision", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await health({
+      ...(env as unknown as CloudflareEnvironment),
+      APP_ENV: "production",
+      DEMO_MODE: "false",
+      SOURCE_REVISION: "not-a-git-revision",
+    } as unknown as CloudflareEnvironment);
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "RUNTIME_CONFIGURATION_INVALID" },
+    });
+    expect(log).toHaveBeenCalledOnce();
+    expect(String(log.mock.calls[0]?.[0])).toContain(
+      '"sourceRevision":"invalid"',
+    );
+    expect(String(log.mock.calls[0]?.[0])).not.toContain("not-a-git-revision");
+  });
+
+  it("fails production readiness when a required platform binding is missing", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const production = completeProductionEnvironment();
+    const response = await health({
+      ...production,
+      OPERATIONS_QUEUE: undefined,
+    } as unknown as CloudflareEnvironment);
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "RUNTIME_CONFIGURATION_INVALID" },
+    });
+  });
+
+  it("fails production readiness when the selected email provider is not production-safe", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await health({
+      ...completeProductionEnvironment(),
+      EMAIL_PROVIDER: "mailpit",
+    } as unknown as CloudflareEnvironment);
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "RUNTIME_CONFIGURATION_INVALID" },
+    });
+  });
+
+  it("accepts complete local production bindings without calling providers", async () => {
+    const response = await health(completeProductionEnvironment());
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      environment: "production",
+      sourceRevision: "1234567",
+    });
+  });
 });
+
+function completeProductionEnvironment() {
+  return {
+    ...(env as unknown as CloudflareEnvironment),
+    APP_ENV: "production",
+    DEMO_MODE: "false",
+    SOURCE_REVISION: "1234567",
+    DB: env.DB,
+    FILES: {},
+    BACKUPS: {},
+    OPERATIONS_QUEUE: {},
+    EVENT_CHANNEL: {},
+    PROGRAM_CUE_AGENT: {},
+    D1_BACKUP_WORKFLOW: {},
+    AI: {},
+    DEFAULT_EVENT_ID: "evt-production",
+    PUBLIC_EVENT_SLUG: "production-event",
+    BETTER_AUTH_URL: "https://programcue.test",
+    AUTH_EMAIL_FROM: "Program Cue <ops@programcue.test>",
+    EMAIL_PROVIDER: "resend",
+    TURNSTILE_SITE_KEY: "turnstile-site-key",
+    CLOUDFLARE_ACCOUNT_ID: "a".repeat(32),
+    D1_DATABASE_ID: "11111111-1111-4111-8111-111111111111",
+    R2_ACCOUNT_ID: "b".repeat(32),
+    R2_BUCKET_NAME: "program-cue-files",
+    FILE_SCANNER_API_URL: "https://scanner.programcue.test",
+    CORS_ALLOWED_ORIGINS: "https://programcue.test",
+    EMBED_FRAME_ANCESTORS: "https://programme.programcue.test",
+    BETTER_AUTH_SECRET: "a".repeat(32),
+    RESEND_API_KEY: "resend-key",
+    RESEND_WEBHOOK_SECRET: "resend-webhook-secret",
+    CALENDAR_CREDENTIALS_KEY: "calendar-key",
+    GOOGLE_CALENDAR_CLIENT_ID: "google-calendar-client",
+    GOOGLE_CALENDAR_CLIENT_SECRET: "google-calendar-secret",
+    MICROSOFT_CALENDAR_CLIENT_ID: "microsoft-calendar-client",
+    MICROSOFT_CALENDAR_CLIENT_SECRET: "microsoft-calendar-secret",
+    GOOGLE_AUTH_CLIENT_ID: "google-auth-client",
+    GOOGLE_AUTH_CLIENT_SECRET: "google-auth-secret",
+    MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+    MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+    INTEGRATION_CREDENTIALS_KEY: "integration-key",
+    WEBHOOK_CREDENTIALS_KEY: "webhook-key",
+    TURNSTILE_SECRET_KEY: "turnstile-secret",
+    FILE_SCANNER_API_TOKEN: "scanner-token",
+    FILE_SCANNER_WEBHOOK_SECRET: "scanner-webhook-secret",
+    R2_ACCESS_KEY_ID: "r2-access-key",
+    R2_SECRET_ACCESS_KEY: "r2-secret-key",
+    D1_REST_API_TOKEN: "d1-api-token",
+  } as unknown as CloudflareEnvironment;
+}

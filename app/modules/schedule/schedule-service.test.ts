@@ -4,10 +4,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
+import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { processScheduleCalendarFanout } from "../../../workers/communications-queue";
 import {
   ScheduleConfigurationError,
+  ScheduleIdempotencyConflictError,
   SchedulePlacementBlockedError,
+  SchedulePublicationBlockedError,
+  ScheduleRevisionConflictError,
   ScheduleService,
 } from "./schedule-service.server";
 import { eventLocalTimeEpoch } from "./schedule-time";
@@ -21,6 +25,18 @@ const viewer: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+
+const scheduleTestEnv = new Proxy(env as unknown as CloudflareEnvironment, {
+  get(target, property, receiver) {
+    if (property === "OPERATIONS_QUEUE")
+      return {
+        send: async () => ({
+          metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
+        }),
+      } satisfies Pick<Queue, "send">;
+    return Reflect.get(target, property, receiver);
+  },
+});
 
 beforeEach(async () => {
   await ensureDemoData(env as unknown as CloudflareEnvironment);
@@ -37,7 +53,10 @@ beforeEach(async () => {
     env.DB.prepare(
       `UPDATE schedule_policies
           SET room_overlap_action = 'block', speaker_overlap_action = 'block',
-              exclusive_track_overlap_action = 'warn', capacity_action = 'warn'
+              required_resource_overlap_action = 'block',
+              exclusive_track_overlap_action = 'warn',
+              event_boundary_action = 'block', capacity_action = 'warn',
+              minimum_turnaround_minutes = 0
         WHERE event_id = ?`,
     ).bind(viewer.eventId),
     env.DB.prepare(
@@ -50,7 +69,14 @@ beforeEach(async () => {
       `INSERT OR IGNORE INTO sessions (id, event_id, track_id, title, slug, format, duration_minutes, expected_attendance, status, visibility, revision, created_at, updated_at) VALUES ('schedule-test-two', ?, 'schedule-test-track', 'Second test session', 'second-test-session', 'panel', 60, 100, 'unscheduled', 'public', 1, unixepoch(), unixepoch())`,
     ).bind(viewer.eventId),
     env.DB.prepare(
-      "UPDATE sessions SET status = 'unscheduled' WHERE event_id = ? AND id IN ('schedule-test-one', 'schedule-test-two')",
+      `UPDATE sessions
+          SET status = 'unscheduled', required_resources_json = '[]'
+        WHERE event_id = ?
+          AND id IN ('schedule-test-one', 'schedule-test-two')`,
+    ).bind(viewer.eventId),
+    env.DB.prepare(
+      `UPDATE rooms SET resources_json = '[]'
+        WHERE event_id = ? AND id IN ('main', '301a')`,
     ).bind(viewer.eventId),
     env.DB.prepare(
       "INSERT OR IGNORE INTO session_speakers (session_id, event_id, person_id, position, role_label, visibility) VALUES ('schedule-test-one', ?, 'person-demo-speaker', 0, 'Speaker', 'public')",
@@ -114,6 +140,722 @@ describe("schedule D1 vertical slice", () => {
     expect((await service.getWorkspace(viewer)).entries).toHaveLength(1);
   });
 
+  it("rejects a placement when Event Setup changes after conflict validation", async () => {
+    const service = new ScheduleService(
+      env as unknown as CloudflareEnvironment,
+    );
+    await env.DB.prepare(
+      "UPDATE schedule_policies SET capacity_action = 'block' WHERE event_id = ?",
+    )
+      .bind(viewer.eventId)
+      .run();
+    const versionId = await service.createDraft(viewer);
+    const workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+
+    class RacingScheduleService extends ScheduleService {
+      override async getWorkspace(
+        scope: Pick<Viewer, "organisationId" | "eventId">,
+      ) {
+        const loaded = await super.getWorkspace(scope);
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE events
+                SET revision = revision + 1, updated_at = unixepoch()
+              WHERE id = ? AND organisation_id = ?`,
+          ).bind(scope.eventId, scope.organisationId),
+          env.DB.prepare(
+            "UPDATE rooms SET capacity = 1 WHERE id = 'main' AND event_id = ?",
+          ).bind(scope.eventId),
+        ]);
+        return loaded;
+      }
+    }
+
+    await expect(
+      new RacingScheduleService(env as unknown as CloudflareEnvironment).place(
+        viewer,
+        {
+          scheduleVersionId: versionId,
+          scheduleRevision: workspace.version!.revision,
+          sessionId: "schedule-test-one",
+          roomId: "main",
+          startsAt,
+          endsAt: startsAt + 3_600,
+        },
+      ),
+    ).rejects.toBeInstanceOf(ScheduleRevisionConflictError);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM schedule_entries WHERE schedule_version_id = ?",
+      )
+        .bind(versionId)
+        .first(),
+    ).toEqual({ count: 0 });
+
+    const current = await service.getWorkspace(viewer);
+    await expect(
+      service.place(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: current.version!.revision,
+        sessionId: "schedule-test-one",
+        roomId: "main",
+        startsAt,
+        endsAt: startsAt + 3_600,
+      }),
+    ).rejects.toBeInstanceOf(SchedulePlacementBlockedError);
+    await env.DB.prepare(
+      "UPDATE rooms SET capacity = ? WHERE id = 'main' AND event_id = ?",
+    )
+      .bind(
+        workspace.rooms.find((room) => room.id === "main")!.capacity,
+        viewer.eventId,
+      )
+      .run();
+  });
+
+  it("previews Event Setup conflicts with the same rules used by publication", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    await env.DB.prepare(
+      "UPDATE schedule_policies SET capacity_action = 'block' WHERE event_id = ?",
+    )
+      .bind(viewer.eventId)
+      .run();
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    const originalCapacity = workspace.rooms.find(
+      (room) => room.id === "main",
+    )!.capacity;
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE events
+            SET revision = revision + 1, updated_at = unixepoch()
+          WHERE id = ? AND organisation_id = ?`,
+      ).bind(viewer.eventId, viewer.organisationId),
+      env.DB.prepare(
+        "UPDATE rooms SET capacity = 1 WHERE id = 'main' AND event_id = ?",
+      ).bind(viewer.eventId),
+    ]);
+
+    try {
+      workspace = await service.getWorkspace(viewer);
+      expect(workspace.conflicts).toEqual([]);
+      expect(workspace.publicationConflicts).toEqual([
+        expect.objectContaining({ type: "capacity", severity: "blocking" }),
+      ]);
+      const publication = service.publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      });
+      await expect(publication).rejects.toBeInstanceOf(
+        SchedulePublicationBlockedError,
+      );
+      await expect(publication).rejects.toMatchObject({
+        conflicts: workspace.publicationConflicts,
+      });
+    } finally {
+      await env.DB.prepare(
+        "UPDATE rooms SET capacity = ? WHERE id = 'main' AND event_id = ?",
+      )
+        .bind(originalCapacity, viewer.eventId)
+        .run();
+    }
+  });
+
+  it("durably replays one authenticated assistant placement across concurrent retries", async () => {
+    const firstService = new ScheduleService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const secondService = new ScheduleService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const versionId = await firstService.createDraft(viewer);
+    const workspace = await firstService.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    const input = {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    };
+    const command = {
+      actorId: `assistant:${viewer.personId}`,
+      idempotencyKey: `assistant:${crypto.randomUUID()}`,
+      requestHash: "a".repeat(64),
+    };
+
+    const [first, replay] = await Promise.all([
+      firstService.place(viewer, input, command),
+      secondService.place(viewer, input, command),
+    ]);
+    expect(replay).toEqual(first);
+    expect(first.scheduleRevision).toBe(input.scheduleRevision + 1);
+    expect((await firstService.getWorkspace(viewer)).entries).toEqual([
+      expect.objectContaining({
+        id: first.entryId,
+        sessionId: input.sessionId,
+        startsAt,
+      }),
+    ]);
+    expect(
+      await env.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM audit_events
+             WHERE event_id = ? AND action = 'schedule.entry.placed'
+               AND entity_id = ?) AS audits,
+           (SELECT COUNT(*) FROM idempotency_records
+             WHERE event_id = ? AND actor_id = ?
+               AND scope = 'schedule.entry.place' AND idempotency_key = ?
+               AND status = 'completed') AS commands`,
+      )
+        .bind(
+          viewer.eventId,
+          first.entryId,
+          viewer.eventId,
+          command.actorId,
+          command.idempotencyKey,
+        )
+        .first(),
+    ).toEqual({ audits: 1, commands: 1 });
+
+    const reusedCommand = firstService.place(viewer, input, {
+      ...command,
+      requestHash: "b".repeat(64),
+    });
+    await expect(reusedCommand).rejects.toBeInstanceOf(
+      ScheduleIdempotencyConflictError,
+    );
+    await expect(reusedCommand).rejects.toMatchObject({
+      code: "IDEMPOTENCY_KEY_REUSED",
+    });
+    await expect(
+      firstService.place(viewer, input, {
+        ...command,
+        actorId: "assistant:another-person",
+      }),
+    ).rejects.toThrow(/match the authenticated person/i);
+  });
+
+  it("unassigns and safely undoes only the latest authoritative schedule change", async () => {
+    const service = new ScheduleService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    const placement = await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    expect(placement.scheduleRevision).toBe(workspace.version!.revision + 1);
+    workspace = await service.getWorkspace(viewer);
+    const entry = workspace.entries[0]!;
+    const unassignment = await service.unassign(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      entryId: entry.id,
+    });
+    expect(unassignment.scheduleRevision).toBe(placement.scheduleRevision + 1);
+    workspace = await service.getWorkspace(viewer);
+    expect(workspace.entries).toEqual([]);
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM sessions WHERE id = 'schedule-test-one' AND event_id = ?",
+      )
+        .bind(viewer.eventId)
+        .first(),
+    ).toEqual({ status: "unscheduled" });
+
+    await expect(
+      service.undo(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: unassignment.scheduleRevision,
+        undoToken: placement.undo.token,
+      }),
+    ).rejects.toThrow(/can no longer be undone/i);
+
+    const restored = await service.undo(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: unassignment.scheduleRevision,
+      undoToken: unassignment.undo.token,
+    });
+    expect(restored).toMatchObject({
+      entryId: entry.id,
+      scheduleRevision: unassignment.scheduleRevision + 1,
+      sessionId: "schedule-test-one",
+      restoredPlacement: {
+        roomId: "main",
+        startsAt,
+        endsAt: startsAt + 3_600,
+      },
+    });
+    workspace = await service.getWorkspace(viewer);
+    expect(workspace.entries).toEqual([
+      expect.objectContaining({
+        id: entry.id,
+        sessionId: "schedule-test-one",
+        roomId: "main",
+        startsAt,
+      }),
+    ]);
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM sessions WHERE id = 'schedule-test-one' AND event_id = ?",
+      )
+        .bind(viewer.eventId)
+        .first(),
+    ).toEqual({ status: "scheduled" });
+  });
+
+  it("restores a cross-day move from the authoritative snapshot exactly once", async () => {
+    const service = new ScheduleService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const originalStartsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt: originalStartsAt,
+      endsAt: originalStartsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const movedStartsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt + 86_400,
+      workspace.event.timezone,
+      11,
+    );
+    const move = await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "301a",
+      startsAt: movedStartsAt,
+      endsAt: movedStartsAt + 5_400,
+    });
+    workspace = await service.getWorkspace(viewer);
+    expect(workspace.entries[0]).toMatchObject({
+      roomId: "301a",
+      startsAt: movedStartsAt,
+      endsAt: movedStartsAt + 5_400,
+    });
+
+    const restored = await service.undo(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: move.scheduleRevision,
+      undoToken: move.undo.token,
+    });
+    expect(restored).toMatchObject({
+      scheduleRevision: move.scheduleRevision + 1,
+      sessionId: "schedule-test-one",
+      restoredPlacement: {
+        roomId: "main",
+        startsAt: originalStartsAt,
+        endsAt: originalStartsAt + 3_600,
+      },
+    });
+    workspace = await service.getWorkspace(viewer);
+    expect(workspace.entries[0]).toMatchObject({
+      roomId: "main",
+      startsAt: originalStartsAt,
+      endsAt: originalStartsAt + 3_600,
+    });
+    await expect(
+      service.undo(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        undoToken: move.undo.token,
+      }),
+    ).rejects.toThrow(/can no longer be undone/i);
+  });
+
+  it("creates placeable breaks and enforces exclusive resource overlap policy", async () => {
+    const service = new ScheduleService(
+      env as unknown as CloudflareEnvironment,
+    );
+    await env.DB.prepare(
+      `UPDATE rooms SET resources_json = '["livestream crew"]'
+        WHERE event_id = ? AND id IN ('main', '301a')`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const { sessionId: breakId } = await service.createBreak(viewer, {
+      title: "Livestream reset",
+      durationMinutes: 30,
+      requiredResources: ["livestream crew"],
+    });
+    await env.DB.prepare(
+      `UPDATE sessions SET required_resources_json = '["livestream crew"]'
+        WHERE id = 'schedule-test-one' AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    await expect(
+      service.place(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: breakId,
+        roomId: "301a",
+        startsAt,
+        endsAt: startsAt + 1_800,
+      }),
+    ).rejects.toMatchObject({
+      conflicts: [
+        expect.objectContaining({
+          type: "required_resource",
+          severity: "blocking",
+        }),
+      ],
+    });
+  });
+
+  it("updates required resources with authoritative revisions and room validation", async () => {
+    const service = new ScheduleService(
+      env as unknown as CloudflareEnvironment,
+    );
+    await env.DB.prepare(
+      `UPDATE rooms
+          SET resources_json = CASE id
+            WHEN 'main' THEN '["livestream crew"]'
+            ELSE '[]'
+          END
+        WHERE event_id = ? AND id IN ('main', '301a')`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const firstSessionRevision = workspace.sessions.find(
+      (session) => session.id === "schedule-test-one",
+    )!.revision;
+
+    const updated = await service.updateSessionResources(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      sessionRevision: firstSessionRevision,
+      requiredResources: ["livestream crew"],
+    });
+    expect(updated).toMatchObject({
+      sessionId: "schedule-test-one",
+      revision: firstSessionRevision + 1,
+      warnings: [],
+    });
+    workspace = await service.getWorkspace(viewer);
+    expect(
+      workspace.sessions.find((session) => session.id === "schedule-test-one"),
+    ).toMatchObject({
+      revision: firstSessionRevision + 1,
+      requiredResources: ["livestream crew"],
+    });
+    await expect(
+      service.updateSessionResources(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: "schedule-test-one",
+        sessionRevision: firstSessionRevision,
+        requiredResources: [],
+      }),
+    ).rejects.toBeInstanceOf(ScheduleRevisionConflictError);
+    await expect(
+      service.updateSessionResources(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: "schedule-test-two",
+        sessionRevision: workspace.sessions.find(
+          (session) => session.id === "schedule-test-two",
+        )!.revision,
+        requiredResources: ["unconfigured kit"],
+      }),
+    ).rejects.toBeInstanceOf(ScheduleConfigurationError);
+
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-two",
+      roomId: "301a",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const secondSessionRevision = workspace.sessions.find(
+      (session) => session.id === "schedule-test-two",
+    )!.revision;
+    await expect(
+      service.updateSessionResources(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: "schedule-test-two",
+        sessionRevision: secondSessionRevision,
+        requiredResources: ["livestream crew"],
+      }),
+    ).rejects.toMatchObject({
+      conflicts: [
+        expect.objectContaining({
+          type: "room_resource",
+          severity: "blocking",
+        }),
+      ],
+    });
+    expect(
+      (await service.getWorkspace(viewer)).sessions.find(
+        (session) => session.id === "schedule-test-two",
+      ),
+    ).toMatchObject({
+      revision: secondSessionRevision,
+      requiredResources: [],
+    });
+  });
+
+  it("autosaves revisioned session content once and replays the exact idempotent result", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === "schedule-test-one",
+    )!;
+    const idempotencyKey = crypto.randomUUID();
+    const input = {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: session.id,
+      sessionRevision: session.revision,
+      idempotencyKey,
+      title: "A frozen draft title",
+      description: "The exact public and calendar description.",
+      format: "presentation",
+      durationMinutes: 45,
+      trackId: "schedule-test-track",
+      visibility: "public",
+      requiredResources: [],
+    };
+
+    const first = await service.updateSessionContent(viewer, input);
+    const replay = await service.updateSessionContent(viewer, input);
+    expect(replay).toEqual(first);
+    workspace = await service.getWorkspace(viewer);
+    expect(
+      workspace.sessions.find((candidate) => candidate.id === session.id),
+    ).toMatchObject({
+      title: input.title,
+      description: input.description,
+      durationMinutes: 45,
+      revision: first.revision,
+    });
+    expect(
+      workspace.entries.find((entry) => entry.sessionId === session.id),
+    ).toMatchObject({ startsAt, endsAt: startsAt + 45 * 60 });
+    expect(
+      await env.DB.prepare(
+        `SELECT title, description, duration_minutes AS durationMinutes,
+                last_operation_id AS lastOperationId
+           FROM schedule_session_contents
+          WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+      )
+        .bind(versionId, viewer.eventId, session.id)
+        .first(),
+    ).toMatchObject({
+      title: input.title,
+      description: input.description,
+      durationMinutes: 45,
+      lastOperationId: expect.any(String),
+    });
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM audit_events
+          WHERE event_id = ? AND entity_id = ?
+            AND action = 'session.content.updated'`,
+      )
+        .bind(viewer.eventId, session.id)
+        .first(),
+    ).toEqual({ count: 1 });
+    await expect(
+      service.updateSessionContent(viewer, {
+        ...input,
+        title: "A different payload with the same key",
+      }),
+    ).rejects.toThrow(/already used for different content/i);
+  });
+
+  it("keeps schedule notes revisioned, idempotent and immutable after publication", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const idempotencyKey = crypto.randomUUID();
+    const input = {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      idempotencyKey,
+      notes: "Hold room 301A for the production rehearsal.",
+    };
+    const first = await service.updateScheduleNotes(viewer, input);
+    await expect(service.updateScheduleNotes(viewer, input)).resolves.toEqual(
+      first,
+    );
+    workspace = await service.getWorkspace(viewer);
+    expect(workspace.version).toMatchObject({
+      id: versionId,
+      notes: input.notes,
+      revision: first.scheduleRevision,
+    });
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+    workspace = await service.getWorkspace(viewer);
+    await expect(
+      service.updateScheduleNotes(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        idempotencyKey: crypto.randomUUID(),
+        notes: "This must not mutate the published version.",
+      }),
+    ).rejects.toThrow(/only be edited on an active draft/i);
+    expect(
+      await env.DB.prepare(
+        "SELECT notes FROM schedule_versions WHERE id = ? AND event_id = ?",
+      )
+        .bind(versionId, viewer.eventId)
+        .first(),
+    ).toEqual({ notes: input.notes });
+
+    const nextDraftId = await service.createDraft(viewer);
+    expect(nextDraftId).not.toBe(versionId);
+    expect((await service.getWorkspace(viewer)).version).toMatchObject({
+      id: nextDraftId,
+      status: "draft",
+      notes: input.notes,
+    });
+  });
+
+  it("updates every schedule policy with a revision guard and serializes publication", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    await service.createDraft(viewer);
+    const before = await service.getWorkspace(viewer);
+    await service.updatePolicies(viewer, {
+      revision: before.policyRevision,
+      roomAction: "warn",
+      speakerAction: "block",
+      resourceAction: "warn",
+      trackAction: "allow",
+      boundaryAction: "block",
+      capacityAction: "block",
+      minimumTurnaroundMinutes: 15,
+    });
+    const after = await service.getWorkspace(viewer);
+    expect(after.policyRevision).toBe(before.policyRevision + 1);
+    expect(after.event.revision).toBe(before.event.revision + 1);
+    expect(after.version?.revision).toBe(before.version!.revision + 1);
+    expect(after.policies).toEqual({
+      room: "warn",
+      speaker: "block",
+      resource: "warn",
+      track: "ignore",
+      boundary: "block",
+      capacity: "block",
+      minimumTurnaroundMinutes: 15,
+    });
+    await expect(
+      service.updatePolicies(viewer, {
+        revision: before.policyRevision,
+        roomAction: "block",
+        speakerAction: "block",
+        resourceAction: "block",
+        trackAction: "block",
+        boundaryAction: "block",
+        capacityAction: "block",
+        minimumTurnaroundMinutes: 0,
+      }),
+    ).rejects.toThrow(/schedule changed/i);
+  });
+
   it("excludes cancelled sessions and rejects cancellation racing a placement", async () => {
     const service = new ScheduleService(
       env as unknown as CloudflareEnvironment,
@@ -174,9 +916,7 @@ describe("schedule D1 vertical slice", () => {
   });
 
   it("persists one warning for an unordered overlapping entry pair", async () => {
-    const service = new ScheduleService(
-      env as unknown as CloudflareEnvironment,
-    );
+    const service = new ScheduleService(scheduleTestEnv);
     await env.DB.prepare(
       `UPDATE schedule_policies
           SET room_overlap_action = 'warn', speaker_overlap_action = 'allow',
@@ -217,6 +957,15 @@ describe("schedule D1 vertical slice", () => {
         .bind(viewer.eventId, versionId)
         .first(),
     ).toEqual({ count: 1 });
+    await expect(
+      service.getConflictedSessionIds(viewer, versionId),
+    ).resolves.toEqual(["schedule-test-one", "schedule-test-two"]);
+    await expect(
+      service.getConflictedSessionIds(
+        { ...viewer, organisationId: "org-not-authorised" },
+        versionId,
+      ),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it("returns one winning draft when two administrators create it concurrently", async () => {
@@ -292,9 +1041,7 @@ describe("schedule D1 vertical slice", () => {
   });
 
   it("rebuilds published warnings in a cloned draft and preserves them on publication", async () => {
-    const service = new ScheduleService(
-      env as unknown as CloudflareEnvironment,
-    );
+    const service = new ScheduleService(scheduleTestEnv);
     const eventWorkspace = await service.getWorkspace(viewer);
     const startsAt = eventLocalTimeEpoch(
       eventWorkspace.event.startsAt,
@@ -417,9 +1164,7 @@ describe("schedule D1 vertical slice", () => {
   });
 
   it("keeps the live published programme intact while a published session moves in a draft", async () => {
-    const schedule = new ScheduleService(
-      env as unknown as CloudflareEnvironment,
-    );
+    const schedule = new ScheduleService(scheduleTestEnv);
     const publicProgramme = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
@@ -493,9 +1238,36 @@ describe("schedule D1 vertical slice", () => {
       ),
     ).toEqual(sessionBefore);
 
-    await schedule.publish(viewer, {
+    const draftSession = draftAfter.sessions.find(
+      (session) => session.id === "schedule-test-one",
+    )!;
+    await schedule.updateSessionContent(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: draftAfter.version!.revision,
+      sessionId: draftSession.id,
+      sessionRevision: draftSession.revision,
+      idempotencyKey: crypto.randomUUID(),
+      title: "Draft-only replacement title",
+      description: "Draft-only replacement description.",
+      format: draftSession.format,
+      durationMinutes: draftSession.durationMinutes,
+      trackId: draftSession.trackId,
+      visibility: draftSession.visibility,
+      requiredResources: draftSession.requiredResources,
+    });
+    const [contentDraft, liveWhileContentDraft] = await Promise.all([
+      schedule.getWorkspace(viewer),
+      publicProgramme.getPublished("future-of-events-2025"),
+    ]);
+    expect(
+      liveWhileContentDraft?.sessions.find(
+        (session) => session.id === "schedule-test-one",
+      ),
+    ).toEqual(sessionBefore);
+
+    await schedule.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: contentDraft.version!.revision,
     });
     const liveAfterPublication = await publicProgramme.getPublished(
       "future-of-events-2025",
@@ -506,12 +1278,18 @@ describe("schedule D1 vertical slice", () => {
         (session) => session.id === "schedule-test-one",
       )?.startsAt,
     ).toBe(movedStartsAt);
+    expect(
+      liveAfterPublication?.sessions.find(
+        (session) => session.id === "schedule-test-one",
+      ),
+    ).toMatchObject({
+      title: "Draft-only replacement title",
+      description: "Draft-only replacement description.",
+    });
   });
 
   it("publishes a conflict-free version and retains an audit event", async () => {
-    const service = new ScheduleService(
-      env as unknown as CloudflareEnvironment,
-    );
+    const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);
     let workspace = await service.getWorkspace(viewer);
     const startsAt = eventLocalTimeEpoch(
@@ -555,15 +1333,166 @@ describe("schedule D1 vertical slice", () => {
     expect(audit?.action).toBe("schedule.published");
     expect(publication.published).toBe(true);
     expect(publication.calendar).toMatchObject({
-      status: "queue_failed",
-      dispatchError: expect.stringContaining("OPERATIONS_QUEUE"),
+      status: "queued",
+      dispatchError: null,
     });
   });
 
-  it("treats an expired publication idempotency key as a new command", async () => {
+  it("fails before publication when the required operations Queue binding is absent", async () => {
     const service = new ScheduleService(
       env as unknown as CloudflareEnvironment,
     );
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+
+    await expect(
+      service.publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toThrow(/requires the OPERATIONS_QUEUE binding/i);
+    await expect(
+      env.DB.prepare(
+        `SELECT status FROM schedule_versions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(versionId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ status: "draft" });
+  });
+
+  it("reports a transient Queue send failure honestly after the durable publication commits", async () => {
+    const failingQueueEnv = new Proxy(scheduleTestEnv, {
+      get(target, property, receiver) {
+        if (property === "OPERATIONS_QUEUE")
+          return {
+            send: async () => {
+              throw new Error("temporary Queue transport failure");
+            },
+          } satisfies Pick<Queue, "send">;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const service = new ScheduleService(failingQueueEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+
+    const result = await service.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+    expect(result.calendar).toMatchObject({
+      status: "queue_failed",
+      dispatchError: "temporary Queue transport failure",
+    });
+    await expect(
+      env.DB.prepare(
+        `SELECT status FROM schedule_versions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(versionId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ status: "published" });
+  });
+
+  it("fails publication before the D1 CAS when Airtable is authoritative but unavailable", async () => {
+    const suffix = crypto.randomUUID();
+    const eventId = `airtable-schedule-${suffix}`;
+    const roomId = `airtable-room-${suffix}`;
+    const sessionId = `airtable-session-${suffix}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           repository_provider, file_policy_json, revision, created_at, updated_at
+         ) VALUES (?, ?, 'Airtable schedule test', ?, 'UTC', 4070908800,
+                   4070995200, 'd1', ?, 1, unixepoch(), unixepoch())`,
+      ).bind(
+        eventId,
+        viewer.organisationId,
+        eventId,
+        CANONICAL_EVENT_FILE_POLICY_JSON,
+      ),
+      env.DB.prepare(
+        `INSERT INTO rooms (
+           id, event_id, name, capacity, resources_json, position, status
+         ) VALUES (?, ?, 'Test room', 100, '[]', 0, 'active')`,
+      ).bind(roomId, eventId),
+      env.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes, status,
+           visibility, revision, created_at, updated_at
+         ) VALUES (?, ?, 'Airtable session', ?, 'presentation', 60,
+                   'unscheduled', 'public', 1, unixepoch(), unixepoch())`,
+      ).bind(sessionId, eventId, sessionId),
+    ]);
+    const airtableViewer = { ...viewer, eventId };
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(airtableViewer);
+    let workspace = await service.getWorkspace(airtableViewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(airtableViewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId,
+      roomId,
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(airtableViewer);
+    await env.DB.prepare(
+      "UPDATE events SET repository_provider = 'airtable' WHERE id = ? AND organisation_id = ?",
+    )
+      .bind(eventId, viewer.organisationId)
+      .run();
+
+    await expect(
+      service.publish(airtableViewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toThrow(/configure and validate an airtable repository/i);
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM schedule_versions WHERE id = ? AND event_id = ?",
+      )
+        .bind(versionId, eventId)
+        .first<{ status: string }>(),
+    ).toEqual({ status: "draft" });
+  });
+
+  it("treats an expired publication idempotency key as a new command", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);
     let workspace = await service.getWorkspace(viewer);
     const startsAt = eventLocalTimeEpoch(
@@ -624,9 +1553,7 @@ describe("schedule D1 vertical slice", () => {
   });
 
   it("rejects publication when Event Setup changes after validation is loaded", async () => {
-    const service = new ScheduleService(
-      env as unknown as CloudflareEnvironment,
-    );
+    const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);
     let workspace = await service.getWorkspace(viewer);
     const startsAt = eventLocalTimeEpoch(
@@ -660,9 +1587,7 @@ describe("schedule D1 vertical slice", () => {
         return loaded;
       }
     }
-    const racing = new RacingScheduleService(
-      env as unknown as CloudflareEnvironment,
-    );
+    const racing = new RacingScheduleService(scheduleTestEnv);
     const input = {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,

@@ -4,20 +4,35 @@ import { Form, useActionData, useFetcher, useNavigation } from "react-router";
 import { Dialog } from "~/components/dialog";
 import {
   EventAccessPanels,
+  EventFilePolicyPanel,
   EventIdentityPanels,
   EventRoomsPanel,
 } from "~/components/event-setup-panels";
+import { EventScheduleConfigurationPanels } from "~/components/event-schedule-configuration-panel";
 import type { EventSetup } from "~/modules/events/event-repository.server";
 import type { action, ActionResponse } from "~/routes/event-setup";
 
-export function EventSetupForm({ event }: { event: EventSetup }) {
+export function EventSetupForm({
+  event,
+  canManageFileRetention,
+  canManageOrganisationAdministrators,
+}: {
+  event: EventSetup;
+  canManageFileRetention: boolean;
+  canManageOrganisationAdministrators: boolean;
+}) {
   const actionData = useActionData<typeof action>() as
     ActionResponse | undefined;
   const inviteFetcher = useFetcher<typeof action>();
+  const repositoryFetcher = useFetcher<typeof action>();
   const navigation = useNavigation();
   const [rooms, setRooms] = useState(event.rooms);
+  const [tracks, setTracks] = useState(event.tracks);
+  const [sessionFormats, setSessionFormats] = useState(event.sessionFormats);
   const [addRoomOpen, setAddRoomOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [airtableOpen, setAirtableOpen] = useState(false);
+  const [migrationOpen, setMigrationOpen] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomCapacity, setNewRoomCapacity] = useState("100");
   const saving =
@@ -27,17 +42,37 @@ export function EventSetupForm({ event }: { event: EventSetup }) {
   // Invitation fetchers revalidate this route without changing the persisted
   // event revision. Preserve local room edits across that revalidation and only
   // replace them after Event Setup itself commits a newer revision.
-  useEffect(() => setRooms(event.rooms), [event.revision]);
+  useEffect(() => {
+    setRooms(event.rooms);
+    setTracks(event.tracks);
+    setSessionFormats(event.sessionFormats);
+  }, [event.revision]);
   useEffect(() => {
     if (inviteFetcher.data && (inviteFetcher.data as ActionResponse).ok)
       setInviteOpen(false);
   }, [inviteFetcher.data]);
+  useEffect(() => {
+    const response = repositoryFetcher.data as ActionResponse | undefined;
+    if (response?.ok && response.intent === "configure_airtable")
+      setAirtableOpen(false);
+    if (response?.ok && response.intent === "confirm_repository_migration")
+      setMigrationOpen(false);
+  }, [repositoryFetcher.data]);
 
   const orderedRooms = useMemo(
     () => rooms.map((room, position) => ({ ...room, position })),
     [rooms],
   );
+  const orderedTracks = useMemo(
+    () => tracks.map((track, position) => ({ ...track, position })),
+    [tracks],
+  );
+  const orderedSessionFormats = useMemo(
+    () => sessionFormats.map((format, position) => ({ ...format, position })),
+    [sessionFormats],
+  );
   const inviteData = inviteFetcher.data as ActionResponse | undefined;
+  const repositoryData = repositoryFetcher.data as ActionResponse | undefined;
 
   function addRoom() {
     const capacity = Number(newRoomCapacity);
@@ -49,12 +84,30 @@ export function EventSetupForm({ event }: { event: EventSetup }) {
         id: `room-${crypto.randomUUID()}`,
         name: newRoomName.trim(),
         capacity,
+        resources: [],
         position: current.length,
       },
     ]);
     setNewRoomName("");
     setNewRoomCapacity("100");
     setAddRoomOpen(false);
+  }
+
+  function revokeAdministrator(
+    membershipId: string,
+    name: string,
+    scope: "event" | "organisation",
+  ) {
+    const impact =
+      scope === "organisation"
+        ? "every event in this organisation"
+        : "this event";
+    if (!window.confirm(`Revoke ${name}'s administrator access to ${impact}?`))
+      return;
+    void inviteFetcher.submit(
+      { _intent: "revoke_administrator", membershipId },
+      { method: "post" },
+    );
   }
 
   return (
@@ -66,6 +119,16 @@ export function EventSetupForm({ event }: { event: EventSetup }) {
           type="hidden"
           name="rooms"
           value={JSON.stringify(orderedRooms)}
+        />
+        <input
+          type="hidden"
+          name="tracks"
+          value={JSON.stringify(orderedTracks)}
+        />
+        <input
+          type="hidden"
+          name="sessionFormats"
+          value={JSON.stringify(orderedSessionFormats)}
         />
 
         <div className="page-head">
@@ -101,6 +164,16 @@ export function EventSetupForm({ event }: { event: EventSetup }) {
             <span>{inviteData.message}</span>
           </div>
         ) : null}
+        {repositoryData &&
+        repositoryData.intent !== "preview_repository_migration" ? (
+          <div
+            className={`card pad mb validation-item ${repositoryData.ok ? "ok" : "error"}`}
+            role={repositoryData.ok ? "status" : "alert"}
+          >
+            <strong>{repositoryData.ok ? "✓" : "△"}</strong>
+            <span>{repositoryData.message}</span>
+          </div>
+        ) : null}
 
         <div className="grid grid-2">
           <EventIdentityPanels event={event} actionData={actionData} />
@@ -110,9 +183,22 @@ export function EventSetupForm({ event }: { event: EventSetup }) {
             actionData={actionData}
             onAdd={() => setAddRoomOpen(true)}
           />
+          <EventScheduleConfigurationPanels
+            tracks={tracks}
+            setTracks={setTracks}
+            sessionFormats={sessionFormats}
+            setSessionFormats={setSessionFormats}
+            actionData={actionData}
+          />
+          <EventFilePolicyPanel event={event} actionData={actionData} />
           <EventAccessPanels
             event={event}
             onInvite={() => setInviteOpen(true)}
+            onRevoke={revokeAdministrator}
+            onConfigureAirtable={() => setAirtableOpen(true)}
+            onMigrateRepository={() => setMigrationOpen(true)}
+            canManageFileRetention={canManageFileRetention}
+            canManageAdministrators={canManageOrganisationAdministrators}
           />
         </div>
       </Form>
@@ -168,11 +254,24 @@ export function EventSetupForm({ event }: { event: EventSetup }) {
 
       {inviteOpen ? (
         <Dialog
-          title="Invite event administrator"
+          title="Invite administrator"
           onClose={() => setInviteOpen(false)}
         >
           <inviteFetcher.Form method="post">
             <input type="hidden" name="_intent" value="invite" />
+            {canManageOrganisationAdministrators ? (
+              <label className="label">
+                Permission scope
+                <select className="select" name="scope" defaultValue="event">
+                  <option value="event">Current event only</option>
+                  <option value="organisation">
+                    Every event in this organisation
+                  </option>
+                </select>
+              </label>
+            ) : (
+              <input type="hidden" name="scope" value="event" />
+            )}
             <label className="label">
               Name
               <input
@@ -214,6 +313,225 @@ export function EventSetupForm({ event }: { event: EventSetup }) {
               </button>
             </div>
           </inviteFetcher.Form>
+        </Dialog>
+      ) : null}
+
+      {airtableOpen ? (
+        <Dialog
+          title="Configure Airtable event repository"
+          onClose={() => setAirtableOpen(false)}
+        >
+          <repositoryFetcher.Form method="post">
+            <input type="hidden" name="_intent" value="configure_airtable" />
+            <p className="help">
+              The token must be able to read and write records and read and
+              change base schema. Managed schema v3 validates or provisions 36
+              tables covering event setup, forms, submissions, evaluations,
+              sessions, schedules, tasks and the versioned published programme.
+              The credential is encrypted only after every managed table passes
+              validation.
+            </p>
+            <label className="label mt">
+              Airtable base ID
+              <input
+                className="field"
+                name="baseId"
+                required
+                defaultValue={event.repositoryConnection?.baseId ?? ""}
+                placeholder="app…"
+                autoComplete="off"
+              />
+            </label>
+            <label className="label mt">
+              Managed table name
+              <input
+                className="field"
+                name="tableName"
+                required
+                defaultValue={
+                  event.repositoryConnection?.tableName ?? "Program Cue Rooms"
+                }
+                maxLength={100}
+              />
+            </label>
+            <label className="label mt">
+              Personal access token
+              <input
+                className="field"
+                name="personalAccessToken"
+                type="password"
+                required
+                autoComplete="new-password"
+              />
+            </label>
+            {repositoryData?.intent === "configure_airtable" ? (
+              <p
+                className={`validation-item ${repositoryData.ok ? "ok" : "error"}`}
+                role={repositoryData.ok ? "status" : "alert"}
+              >
+                {repositoryData.message}
+              </p>
+            ) : null}
+            <div className="modal-foot" style={{ margin: "18px -18px -18px" }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setAirtableOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn primary"
+                disabled={repositoryFetcher.state !== "idle"}
+              >
+                {repositoryFetcher.state === "submitting"
+                  ? "Validating…"
+                  : "Validate and save"}
+              </button>
+            </div>
+          </repositoryFetcher.Form>
+        </Dialog>
+      ) : null}
+
+      {migrationOpen ? (
+        <Dialog
+          title={`Migrate event-data authority to ${event.repositoryProvider === "d1" ? "Airtable" : "D1"}`}
+          onClose={() => setMigrationOpen(false)}
+        >
+          {repositoryData?.intent === "preview_repository_migration" &&
+          repositoryData.preview ? (
+            <>
+              <p className="help">
+                This preview expires at{" "}
+                {new Date(
+                  repositoryData.preview.expiresAt * 1_000,
+                ).toLocaleTimeString()}
+                . Confirmation rechecks Airtable and the D1 event revision.
+              </p>
+              <div
+                className="table-wrap mt"
+                tabIndex={0}
+                aria-label="Airtable repository migration changes"
+              >
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Record</th>
+                      <th>Action</th>
+                      <th>Before</th>
+                      <th>After</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {repositoryData.preview.items.map((item) => (
+                      <tr key={`${item.entityType}:${item.entityId}`}>
+                        <td>{item.entityType.replaceAll("_", " ")}</td>
+                        <td>{item.label}</td>
+                        <td>{item.action}</td>
+                        <td>{item.beforeLabel}</td>
+                        <td>{item.afterLabel}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <repositoryFetcher.Form method="post">
+                <input
+                  type="hidden"
+                  name="_intent"
+                  value="confirm_repository_migration"
+                />
+                <input
+                  type="hidden"
+                  name="previewId"
+                  value={repositoryData.preview.previewId}
+                />
+                <div
+                  className="modal-foot"
+                  style={{ margin: "18px -18px -18px" }}
+                >
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setMigrationOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn primary"
+                    disabled={repositoryFetcher.state !== "idle"}
+                  >
+                    {repositoryFetcher.state === "submitting"
+                      ? "Reconciling…"
+                      : "Confirm authority switch"}
+                  </button>
+                </div>
+              </repositoryFetcher.Form>
+            </>
+          ) : (
+            <repositoryFetcher.Form method="post">
+              <input
+                type="hidden"
+                name="_intent"
+                value="preview_repository_migration"
+              />
+              <input
+                type="hidden"
+                name="targetProvider"
+                value={event.repositoryProvider === "d1" ? "airtable" : "d1"}
+              />
+              <p>
+                Program Cue will read both repositories, show the exact managed
+                event-data creates, updates and retirements across the full
+                authoritative scope, and make no authority change until you
+                confirm that diff.
+              </p>
+              {event.repositoryProvider === "airtable" ? (
+                <p className="help">
+                  Moving back to D1 is allowed only when its synchronized
+                  projection still matches Airtable. Any Airtable-only edit or
+                  schema divergence blocks confirmation; it is never silently
+                  discarded.
+                </p>
+              ) : null}
+              {repositoryData?.intent === "preview_repository_migration" &&
+              !repositoryData.ok ? (
+                <p className="validation-item error" role="alert">
+                  {repositoryData.message}
+                </p>
+              ) : null}
+              <div
+                className="modal-foot"
+                style={{ margin: "18px -18px -18px" }}
+              >
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setMigrationOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn primary"
+                  disabled={repositoryFetcher.state !== "idle"}
+                >
+                  {repositoryFetcher.state === "submitting"
+                    ? "Comparing…"
+                    : "Create migration preview"}
+                </button>
+              </div>
+            </repositoryFetcher.Form>
+          )}
+          {repositoryData?.intent === "confirm_repository_migration" &&
+          !repositoryData.ok ? (
+            <p className="validation-item error" role="alert">
+              {repositoryData.message}
+            </p>
+          ) : null}
         </Dialog>
       ) : null}
     </>

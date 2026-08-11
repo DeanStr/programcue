@@ -1,7 +1,12 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  acceptTestFileScanDispatch,
+  completeTestDirectUpload,
+} from "~/modules/files/direct-upload.test-helper";
 import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { TaskService } from "~/modules/tasks/task-service.server";
@@ -11,6 +16,7 @@ import {
   renderResourceDocument,
 } from "./resource-content";
 import {
+  ResourceAudienceError,
   ResourceInvariantError,
   ResourceRevisionConflictError,
   ResourceService,
@@ -18,6 +24,7 @@ import {
   ResourceTaskDependencyError,
 } from "./resource-service.server";
 import { ResourceAuthoringService } from "./resource-authoring-service.server";
+import { ResourceParticipantService } from "./resource-participant-service.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",
@@ -37,6 +44,37 @@ const speaker: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+
+describe("resource Airtable authority", () => {
+  it("routes publication and acknowledgement task changes through the provider boundary", async () => {
+    const unavailable = new Error(
+      "Airtable projection command is unavailable.",
+    );
+    const executeIdempotent = vi.fn(async (..._arguments: unknown[]) => {
+      throw unavailable;
+    });
+    const airtable = {
+      executeIdempotent,
+      assertReadable: vi.fn(async () => null),
+    } as unknown as AirtableProviderBoundary;
+
+    await expect(
+      new ResourceAuthoringService(env as unknown as CloudflareEnvironment, {
+        airtable,
+      }).publish(admin, "resource-id", 1),
+    ).rejects.toBe(unavailable);
+    await expect(
+      new ResourceParticipantService(env as unknown as CloudflareEnvironment, {
+        airtable,
+      }).acknowledge(speaker, "resource-id", "version-id", null),
+    ).rejects.toBe(unavailable);
+    expect(executeIdempotent).toHaveBeenCalledTimes(2);
+    expect(executeIdempotent.mock.calls.map((call) => call[1])).toEqual([
+      expect.objectContaining({ operation: "resource.publish" }),
+      expect.objectContaining({ operation: "resource.acknowledge" }),
+    ]);
+  });
+});
 
 function withBatchRace(
   testEnv: CloudflareEnvironment,
@@ -66,6 +104,204 @@ function withBatchRace(
 }
 
 describe("speaker resource service", () => {
+  it("rejects custom-audience people who are not speakers in the event", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new ResourceService(testEnv);
+    const slug = `invalid-custom-audience-${crypto.randomUUID()}`;
+
+    await expect(
+      service.save(admin, {
+        title: "Invalid custom audience",
+        slug,
+        category: "Preparation",
+        audienceScope: "custom",
+        audiencePersonIds: [admin.personId],
+        acknowledgementRequired: false,
+        document: {
+          type: "doc",
+          content: [{ type: "paragraph" }],
+        },
+        embedUrls: [],
+      }),
+    ).rejects.toBeInstanceOf(ResourceAudienceError);
+    await expect(
+      testEnv.DB.prepare(
+        "SELECT COUNT(*) AS count FROM resource_pages WHERE event_id = ? AND slug = ?",
+      )
+        .bind(admin.eventId, slug)
+        .first<{ count: number }>(),
+    ).resolves.toEqual({ count: 0 });
+  });
+
+  it("returns a typed conflict when acknowledgement is not required", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new ResourceService(testEnv);
+    const token = crypto.randomUUID();
+    const pageId = await service.save(admin, {
+      title: "Optional reading guide",
+      slug: `optional-reading-${token}`,
+      category: "Preparation",
+      audienceScope: "all_speakers",
+      acknowledgementRequired: false,
+      document: { type: "doc", content: [{ type: "paragraph" }] },
+      embedUrls: [],
+    });
+    const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
+    await service.publish(admin, pageId, draft.revision);
+
+    await expect(
+      service.acknowledge(speaker, pageId, draft.versionId!, "vitest"),
+    ).rejects.toMatchObject({
+      name: "ResourceRevisionConflictError",
+      message: "This published resource does not require acknowledgement.",
+    });
+  });
+
+  it("rejects publication when a custom-audience person stops being a speaker during commit", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const token = crypto.randomUUID();
+    const personId = `resource-raced-audience-${token}`;
+    const membershipId = `resource-raced-membership-${token}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (id, email, display_name, email_verified)
+         VALUES (?, ?, 'Raced audience speaker', 1)`,
+      ).bind(personId, `${personId}@example.com`),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, accepted_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch())`,
+      ).bind(membershipId, admin.organisationId, admin.eventId, personId),
+    ]);
+    const service = new ResourceService(testEnv);
+    const pageId = await service.save(admin, {
+      title: "Publication-boundary audience guide",
+      slug: `publication-audience-${token}`,
+      category: "Preparation",
+      audienceScope: "custom",
+      audiencePersonIds: [personId],
+      acknowledgementRequired: true,
+      document: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Read me" }] },
+        ],
+      },
+      embedUrls: [],
+    });
+    const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
+    const racingEnv = withBatchRace(testEnv, async () => {
+      await testEnv.DB.prepare(
+        `UPDATE memberships SET revoked_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(membershipId, admin.eventId)
+        .run();
+    });
+
+    await expect(
+      new ResourceService(racingEnv).publish(admin, pageId, draft.revision),
+    ).rejects.toBeInstanceOf(ResourceAudienceError);
+
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT page.status, version.status AS versionStatus,
+                (SELECT COUNT(*) FROM audit_events audit
+                  WHERE audit.action = 'resource.published'
+                    AND audit.entity_id = page.id) AS publishAudits,
+                (SELECT COUNT(*) FROM task_instances task
+                  WHERE task.template_id = 'resource-ack:' || page.id) AS acknowledgementTasks
+           FROM resource_pages page
+           JOIN resource_page_versions version
+             ON version.resource_page_id = page.id AND version.event_id = page.event_id
+          WHERE page.id = ? AND version.id = ?`,
+      )
+        .bind(pageId, draft.versionId)
+        .first(),
+    ).resolves.toEqual({
+      status: "draft",
+      versionStatus: "draft",
+      publishAudits: 0,
+      acknowledgementTasks: 0,
+    });
+  });
+
+  it("rejects publication when the acknowledgement recipient set changes during commit", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const token = crypto.randomUUID();
+    const service = new ResourceService(testEnv);
+    const pageId = await service.save(admin, {
+      title: "Publication-boundary recipient guide",
+      slug: `publication-recipients-${token}`,
+      category: "Preparation",
+      audienceScope: "all_speakers",
+      acknowledgementRequired: true,
+      document: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Read me" }] },
+        ],
+      },
+      embedUrls: [],
+    });
+    const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
+    const addedPersonId = `resource-added-speaker-${token}`;
+    const racingEnv = withBatchRace(testEnv, async () => {
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO people (id, email, display_name, email_verified)
+           VALUES (?, ?, 'New audience speaker', 1)`,
+        ).bind(addedPersonId, `${addedPersonId}@example.com`),
+        testEnv.DB.prepare(
+          `INSERT INTO memberships (
+             id, organisation_id, event_id, person_id, role, accepted_at
+           ) VALUES (?, ?, ?, ?, 'speaker', unixepoch())`,
+        ).bind(
+          `resource-added-membership-${token}`,
+          admin.organisationId,
+          admin.eventId,
+          addedPersonId,
+        ),
+      ]);
+    });
+
+    await expect(
+      new ResourceService(racingEnv).publish(admin, pageId, draft.revision),
+    ).rejects.toBeInstanceOf(ResourceRevisionConflictError);
+
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT page.status, version.status AS versionStatus,
+                (SELECT COUNT(*) FROM audit_events audit
+                  WHERE audit.action = 'resource.published'
+                    AND audit.entity_id = page.id) AS publishAudits,
+                (SELECT COUNT(*) FROM task_instances task
+                  WHERE task.template_id = 'resource-ack:' || page.id) AS acknowledgementTasks
+           FROM resource_pages page
+           JOIN resource_page_versions version
+             ON version.resource_page_id = page.id AND version.event_id = page.event_id
+          WHERE page.id = ? AND version.id = ?`,
+      )
+        .bind(pageId, draft.versionId)
+        .first(),
+    ).resolves.toEqual({
+      status: "draft",
+      versionStatus: "draft",
+      publishAudits: 0,
+      acknowledgementTasks: 0,
+    });
+    await testEnv.DB.batch([
+      testEnv.DB.prepare("DELETE FROM memberships WHERE id = ?").bind(
+        `resource-added-membership-${token}`,
+      ),
+      testEnv.DB.prepare("DELETE FROM people WHERE id = ?").bind(addedPersonId),
+    ]);
+  });
+
   it("rejects explicit unknown resource selectors instead of opening the first page", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
@@ -84,6 +320,12 @@ describe("speaker resource service", () => {
     await expect(service.getAdminWorkspace(admin)).resolves.toHaveProperty(
       "selected",
     );
+    await expect(service.getAdminWorkspace(admin)).resolves.toMatchObject({
+      previewEvent: {
+        name: "Future of Events 2025",
+        brandAccent: expect.any(String),
+      },
+    });
     await expect(
       service.getParticipantWorkspace(speaker),
     ).resolves.toHaveProperty("selected");
@@ -399,9 +641,9 @@ describe("speaker resource service", () => {
       testEnv.DB.prepare(
         `INSERT INTO task_templates (
            id, event_id, name, target_type, task_type, impact, evidence_mode,
-           due_anchor, status, created_at, updated_at
+           due_anchor, auto_assign_on_acceptance, status, created_at, updated_at
          ) VALUES (?, ?, 'Dependent task', 'speaker', 'checklist', 'medium',
-                   'checkbox', 'none', 'active', unixepoch(), unixepoch())`,
+                   'checkbox', 'none', 0, 'active', unixepoch(), unixepoch())`,
       ).bind(dependentTemplateId, admin.eventId),
       testEnv.DB.prepare(
         `INSERT INTO task_template_dependencies (
@@ -515,6 +757,7 @@ describe("speaker resource service", () => {
       dueAnchor: "none",
       dueOffsetDays: null,
       fixedDueDate: null,
+      autoAssignOnAcceptance: false,
       dependencyIds: [`resource-ack:${pageId}`],
     });
     const newSpeakerId = `post-ack-speaker-${token}`;
@@ -564,7 +807,7 @@ describe("speaker resource service", () => {
         .bind(dependentTemplateId, `resource-ack:${pageId}`)
         .first(),
     ).toEqual({ count: 0 });
-    const assignedTaskId = await tasks.assignTemplate(
+    const { taskId: assignedTaskId } = await tasks.assignTemplate(
       admin,
       dependentTemplateId,
       newSpeakerId,
@@ -656,12 +899,14 @@ describe("speaker resource service", () => {
       slug: published.slug,
       category: published.category ?? "",
       audienceScope: "custom",
+      audiencePersonIds: [speaker.personId],
       acknowledgementRequired: true,
       document: published.document,
       embedUrls: [],
     });
     const customDraft = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
+    expect(customDraft.audiencePersonIds).toEqual([speaker.personId]);
     const liveBeforePublish = await service.getParticipantWorkspace(
       hiddenSpeaker,
       published.slug,
@@ -678,14 +923,6 @@ describe("speaker resource service", () => {
         .bind(`resource-ack:${pageId}`, hiddenSpeaker.personId)
         .first<{ status: string }>(),
     ).toEqual({ status: "not_started" });
-    await env.DB.prepare(
-      `
-      INSERT INTO resource_audiences (resource_page_version_id, event_id, target_type, target_id)
-      VALUES (?, ?, 'person', ?)
-    `,
-    )
-      .bind(customDraft.versionId, admin.eventId, speaker.personId)
-      .run();
     const customImpact = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
     expect(customImpact.publicationImpact).toEqual({
@@ -1014,7 +1251,8 @@ describe("speaker resource service", () => {
       },
       embedUrls: [],
     });
-    const upload = await files.uploadAdminFile(
+    const upload = await completeTestDirectUpload(
+      testEnv,
       admin,
       {
         targetType: "resource",
@@ -1033,6 +1271,7 @@ describe("speaker resource service", () => {
         currentVersionId: string,
         currentRevision: number,
         assetId: string,
+        fileVersionId: string,
       ) => Promise<D1Result<unknown>>;
     };
     const insert = internal.insertDraftAttachment.bind(resources);
@@ -1056,6 +1295,7 @@ describe("speaker resource service", () => {
         draft.versionId!,
         draft.revision,
         upload.assetId,
+        upload.versionId,
       ),
     ).rejects.toBeInstanceOf(ResourceRevisionConflictError);
     expect(
@@ -1116,7 +1356,8 @@ describe("speaker resource service", () => {
       embedUrls: [],
     });
     const upload = (name: string, marker: string) =>
-      files.uploadAdminFile(
+      completeTestDirectUpload(
+        testEnv,
         admin,
         {
           targetType: "resource",
@@ -1129,10 +1370,16 @@ describe("speaker resource service", () => {
     const firstDraft = (await resources.getAdminWorkspace(admin, pageId))
       .selected!;
     await files.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        testEnv,
+        admin.eventId,
+        first.versionId,
+      )),
       eventId: admin.eventId,
       versionId: first.versionId,
       provider: "test-scanner",
-      clean: true,
+      callbackId: `callback-${first.versionId}`,
+      status: "clean",
       result: { verdict: "clean" },
     });
     await resources.attachToDraft(
@@ -1141,7 +1388,36 @@ describe("speaker resource service", () => {
       firstDraft.versionId!,
       firstDraft.revision,
       first.assetId,
+      first.versionId,
     );
+    await expect(
+      resources.attachToDraft(
+        admin,
+        pageId,
+        firstDraft.versionId!,
+        firstDraft.revision,
+        first.assetId,
+        first.versionId,
+      ),
+    ).resolves.toBeUndefined();
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM resource_attachments
+          WHERE resource_page_version_id = ? AND file_asset_id = ?`,
+      )
+        .bind(firstDraft.versionId, first.assetId)
+        .first<{ count: number }>(),
+    ).toEqual({ count: 1 });
+    await expect(
+      resources.attachToDraft(
+        admin,
+        pageId,
+        firstDraft.versionId!,
+        firstDraft.revision,
+        first.assetId,
+        crypto.randomUUID(),
+      ),
+    ).rejects.toBeInstanceOf(ResourceRevisionConflictError);
     await resources.publish(admin, pageId, firstDraft.revision);
 
     const published = (await resources.getAdminWorkspace(admin, pageId))
@@ -1160,10 +1436,16 @@ describe("speaker resource service", () => {
     const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
     const second = await upload("draft.pdf", "new draft attachment bytes");
     await files.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        testEnv,
+        admin.eventId,
+        second.versionId,
+      )),
       eventId: admin.eventId,
       versionId: second.versionId,
       provider: "test-scanner",
-      clean: true,
+      callbackId: `callback-${second.versionId}`,
+      status: "clean",
       result: { verdict: "clean" },
     });
     await resources.attachToDraft(
@@ -1172,6 +1454,7 @@ describe("speaker resource service", () => {
       draft.versionId!,
       draft.revision,
       second.assetId,
+      second.versionId,
     );
 
     expect(second.assetId).not.toBe(first.assetId);

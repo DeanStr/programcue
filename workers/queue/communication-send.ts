@@ -6,8 +6,11 @@ import {
   formatEventDateMarkers,
   renderMergeTemplate,
 } from "../../app/modules/communications/merge-template";
-import { ResendEmailProvider } from "../../app/modules/communications/resend.server";
+import type { EmailProvider } from "../../app/modules/communications/email-provider";
+import { createEmailProvider } from "../../app/modules/communications/email-provider.server";
 import { createCommunicationUnsubscribeUrl } from "../../app/modules/communications/unsubscribe.server";
+import { WebhookService } from "../../app/platform/operations/webhook-service.server";
+import { sourceRevisionForLog } from "../../app/platform/observability/source-revision.server";
 import {
   assertOperationClaim,
   errorDetails,
@@ -54,6 +57,7 @@ const contentSnapshotSchema = z.object({
   content: templateContentSchema,
   event: z.object({
     eventName: z.string(),
+    brandAccent: z.string().regex(/^#[0-9a-f]{6}$/i),
     startsAt: z.number(),
     endsAt: z.number(),
   }),
@@ -190,7 +194,7 @@ async function deliverCommunicationBatch(input: {
   snapshot: CommunicationSnapshot;
   deliveries: { results: CommunicationDelivery[] };
   claimToken: string;
-  provider: ResendEmailProvider;
+  provider: EmailProvider;
 }) {
   const {
     env,
@@ -208,6 +212,80 @@ async function deliverCommunicationBatch(input: {
       message.operationId,
       claimToken,
     );
+    if (snapshot.category === "accepted_speaker_invitation") {
+      const invitationAuthority = await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE communication_deliveries
+              SET status = 'suppressed', failure_code = 'invitation_unavailable',
+                  failure_message = 'Speaker invitation is no longer pending.',
+                  next_attempt_at = NULL, updated_at = unixepoch()
+            WHERE id = ? AND communication_id = ? AND event_id = ?
+              AND status IN ('queued','failed','sending')
+              AND NOT EXISTS (
+                SELECT 1 FROM memberships membership
+                 WHERE membership.id = communication_deliveries.source_id
+                   AND membership.organisation_id = ?
+                   AND membership.event_id = communication_deliveries.event_id
+                   AND membership.person_id = communication_deliveries.person_id
+                   AND membership.role = 'speaker'
+                   AND membership.accepted_at IS NULL
+                   AND membership.revoked_at IS NULL
+                   AND membership.invitation_expires_at > unixepoch()
+              )
+              AND EXISTS (
+                SELECT 1 FROM communications claimed_communication
+                JOIN operation_jobs claimed_operation
+                  ON claimed_operation.id = claimed_communication.operation_id
+                 AND claimed_operation.event_id = claimed_communication.event_id
+                 WHERE claimed_communication.id = communication_deliveries.communication_id
+                   AND claimed_communication.event_id = communication_deliveries.event_id
+                   AND claimed_communication.status = 'sending'
+                   AND claimed_operation.status = 'running'
+                   AND claimed_operation.claim_token = ?
+              )`,
+        ).bind(
+          delivery.id,
+          message.communicationId,
+          message.eventId,
+          message.organisationId,
+          claimToken,
+        ),
+        env.DB.prepare(
+          `UPDATE operation_items
+              SET status = 'skipped',
+                  result_json = json_object('reason', 'invitation_unavailable'),
+                  completed_at = unixepoch(), updated_at = unixepoch()
+            WHERE operation_id = ? AND entity_id = ?
+              AND status IN ('pending','failed','running')
+              AND EXISTS (
+                SELECT 1 FROM communication_deliveries suppressed_delivery
+                JOIN operation_jobs claimed_operation
+                  ON claimed_operation.id = operation_items.operation_id
+                 WHERE suppressed_delivery.id = operation_items.entity_id
+                   AND suppressed_delivery.communication_id = ?
+                   AND suppressed_delivery.event_id = ?
+                   AND suppressed_delivery.status = 'suppressed'
+                   AND suppressed_delivery.failure_code = 'invitation_unavailable'
+                   AND claimed_operation.status = 'running'
+                   AND claimed_operation.claim_token = ?
+              )`,
+        ).bind(
+          message.operationId,
+          delivery.id,
+          message.communicationId,
+          message.eventId,
+          claimToken,
+        ),
+      ]);
+      if ((invitationAuthority[0].meta.changes ?? 0) === 1) {
+        if ((invitationAuthority[1].meta.changes ?? 0) !== 1) {
+          throw new Error(
+            "The unavailable speaker invitation could not be recorded consistently.",
+          );
+        }
+        continue;
+      }
+    }
     const deliveryClaimResults = await env.DB.batch([
       env.DB.prepare(
         `
@@ -374,6 +452,7 @@ async function deliverCommunicationBatch(input: {
         heading: subject,
         body,
         eventName: snapshot.event.eventName,
+        accent: snapshot.event.brandAccent,
         physicalAddress: snapshot.content.physicalAddress,
         buttonText: snapshot.content.buttonText,
         buttonUrl: snapshot.content.buttonUrl,
@@ -393,7 +472,7 @@ async function deliverCommunicationBatch(input: {
       });
       const deliveryCompletionResults = await env.DB.batch([
         env.DB.prepare(
-          `UPDATE communication_deliveries SET status = 'sent', provider = ?, provider_message_id = ?,
+          `UPDATE communication_deliveries SET status = 'sent', provider_message_id = ?,
         failure_code = NULL, failure_message = NULL, updated_at = unixepoch()
         WHERE id = ? AND communication_id = ? AND event_id = ? AND status = 'sending'
           AND EXISTS (
@@ -409,7 +488,6 @@ async function deliverCommunicationBatch(input: {
                AND claimed_operation.claim_token = ?
           )`,
         ).bind(
-          result.provider,
           result.messageId,
           delivery.id,
           message.communicationId,
@@ -433,7 +511,7 @@ async function deliverCommunicationBatch(input: {
           )`,
         ).bind(
           JSON.stringify({
-            provider: result.provider,
+            provider: provider.name,
             providerMessageId: result.messageId,
           }),
           message.operationId,
@@ -543,23 +621,38 @@ export async function processCommunicationSend(
     throw new Error(
       "Communication operation does not exist in the authorised event.",
     );
-  if (operation.status === "completed" || operation.status === "cancelled")
-    return;
+  if (["completed", "cancelled"].includes(operation.status)) return;
+  let recoverOwnedFailure = false;
+  if (["failed", "partially_failed"].includes(operation.status)) {
+    const completedAggregate = await env.DB.prepare(
+      `SELECT 1
+         FROM audit_events
+        WHERE organisation_id = ? AND event_id = ?
+          AND action = 'communication.delivery.finished'
+          AND entity_type = 'communication' AND entity_id = ?
+          AND json_extract(metadata_json, '$.operationId') = ?
+        LIMIT 1`,
+    )
+      .bind(
+        message.organisationId,
+        message.eventId,
+        message.communicationId,
+        message.operationId,
+      )
+      .first();
+    if (completedAggregate) return;
+    recoverOwnedFailure = true;
+  }
   const includeFailed =
-    message.includeFailed === true ||
-    ["failed", "partially_failed", "retrying", "running"].includes(
-      operation.status,
-    );
+    !recoverOwnedFailure &&
+    (message.includeFailed === true ||
+      ["retrying", "running"].includes(operation.status));
 
   const communication = await env.DB.prepare(
     `
     SELECT c.id, c.status, c.kind, c.recipient_count AS recipientCount,
-           c.content_snapshot_json AS contentSnapshotJson,
-           sp.from_name AS fromName, sp.from_email AS fromEmail,
-           sp.reply_to_email AS replyToEmail
+           c.content_snapshot_json AS contentSnapshotJson
       FROM communications c
-      LEFT JOIN sender_profiles sp ON sp.id = c.sender_profile_id AND sp.event_id = c.event_id
-        AND sp.status = 'verified' AND sp.provider = 'resend'
      WHERE c.id = ? AND c.event_id = ? AND c.operation_id = ? AND c.idempotency_key = ?
   `,
   )
@@ -575,54 +668,31 @@ export async function processCommunicationSend(
       kind: "transactional" | "optional";
       recipientCount: number;
       contentSnapshotJson: string;
-      fromName: string | null;
-      fromEmail: string | null;
-      replyToEmail: string | null;
     }>();
   if (!communication)
     throw new Error(
       "Communication does not exist for this operation in the authorised event.",
     );
   if (communication.status === "cancelled") return;
-  if (!communication.fromName || !communication.fromEmail)
-    throw new Error("A verified Resend sender is unavailable.");
-  const claimedCommunication: ClaimedCommunication = {
-    kind: communication.kind,
-    fromName: communication.fromName,
-    fromEmail: communication.fromEmail,
-    replyToEmail: communication.replyToEmail,
-  };
   const snapshot = contentSnapshotSchema.parse(
     JSON.parse(communication.contentSnapshotJson),
   );
-  const deliveries = await env.DB.prepare(
-    `
-    SELECT d.id, d.person_id AS personId, d.recipient_address AS address,
-           COALESCE(d.recipient_name, d.recipient_address) AS name,
-           d.idempotency_key AS idempotencyKey,
-           d.source_values_json AS sourceValuesJson
-      FROM communication_deliveries d
-     WHERE d.communication_id = ? AND d.event_id = ?
-       AND d.status IN ('queued','failed','sending')
-       AND (? = 1 OR d.status <> 'failed')
-     ORDER BY d.created_at, d.id
-     LIMIT ?
-  `,
+  const provider = dependencies.email ?? createEmailProvider(env);
+  const durableProviders = await env.DB.prepare(
+    `SELECT DISTINCT provider
+       FROM communication_deliveries
+      WHERE communication_id = ? AND event_id = ?`,
   )
-    .bind(
-      message.communicationId,
-      message.eventId,
-      includeFailed ? 1 : 0,
-      COMMUNICATION_SEND_BATCH_SIZE,
-    )
-    .all<{
-      id: string;
-      personId: string | null;
-      address: string;
-      name: string;
-      idempotencyKey: string;
-      sourceValuesJson: string;
-    }>();
+    .bind(message.communicationId, message.eventId)
+    .all<{ provider: string | null }>();
+  if (
+    durableProviders.results.length !== 1 ||
+    durableProviders.results[0]?.provider !== provider.name
+  ) {
+    throw new Error(
+      "The communication delivery provider does not match its durable intent.",
+    );
+  }
 
   // The immutable operation ID plus the queued/sending transition is the send
   // claim. This batch serialises against CommunicationService.cancel's batch.
@@ -641,7 +711,8 @@ export async function processCommunicationSend(
             WHERE claim_operation.id = communications.operation_id
               AND claim_operation.event_id = communications.event_id
               AND (
-                claim_operation.status IN ('queued','received','retrying','queue_failed','failed','partially_failed')
+                claim_operation.status IN ('queued','received','retrying','queue_failed')
+                OR (? = 1 AND claim_operation.status IN ('failed','partially_failed'))
                 OR (
                   claim_operation.status = 'running'
                   AND COALESCE(claim_operation.claim_expires_at, 0) <= unixepoch()
@@ -655,6 +726,7 @@ export async function processCommunicationSend(
       message.eventId,
       message.operationId,
       message.idempotencyKey,
+      recoverOwnedFailure ? 1 : 0,
       message.organisationId,
     ),
     env.DB.prepare(
@@ -666,7 +738,8 @@ export async function processCommunicationSend(
              updated_at = unixepoch()
        WHERE id = ? AND event_id = ? AND organisation_id = ?
          AND (
-           status IN ('queued','received','retrying','queue_failed','failed','partially_failed')
+           status IN ('queued','received','retrying','queue_failed')
+           OR (? = 1 AND status IN ('failed','partially_failed'))
            OR (status = 'running' AND COALESCE(claim_expires_at, 0) <= unixepoch())
          )
          AND EXISTS (
@@ -685,6 +758,7 @@ export async function processCommunicationSend(
       message.operationId,
       message.eventId,
       message.organisationId,
+      recoverOwnedFailure ? 1 : 0,
       message.communicationId,
       message.idempotencyKey,
     ),
@@ -715,8 +789,54 @@ export async function processCommunicationSend(
   }
 
   try {
-    const provider =
-      dependencies.resend ?? new ResendEmailProvider(env.RESEND_API_KEY);
+    // Resolve mutable sender authority only after this worker owns the
+    // operation. A sender disabled before the claim must never be used from a
+    // stale pre-claim read.
+    const claimedCommunication = await env.DB.prepare(
+      `SELECT c.kind, sp.from_name AS fromName, sp.from_email AS fromEmail,
+              sp.reply_to_email AS replyToEmail
+         FROM communications c
+         JOIN sender_profiles sp
+           ON sp.id = c.sender_profile_id AND sp.event_id = c.event_id
+          AND sp.status = 'verified' AND sp.provider = ?
+         JOIN operation_jobs operation
+           ON operation.id = c.operation_id AND operation.event_id = c.event_id
+          AND operation.status = 'running' AND operation.claim_token = ?
+        WHERE c.id = ? AND c.event_id = ? AND c.operation_id = ?
+          AND c.idempotency_key = ? AND c.status = 'sending'`,
+    )
+      .bind(
+        provider.name,
+        claimToken,
+        message.communicationId,
+        message.eventId,
+        message.operationId,
+        message.idempotencyKey,
+      )
+      .first<ClaimedCommunication>();
+    if (!claimedCommunication)
+      throw new Error("A verified sender profile is unavailable.");
+    const deliveries = await env.DB.prepare(
+      `
+      SELECT d.id, d.person_id AS personId, d.recipient_address AS address,
+             COALESCE(d.recipient_name, d.recipient_address) AS name,
+             d.idempotency_key AS idempotencyKey,
+             d.source_values_json AS sourceValuesJson
+        FROM communication_deliveries d
+       WHERE d.communication_id = ? AND d.event_id = ?
+         AND d.status IN ('queued','failed','sending')
+         AND (? = 1 OR d.status <> 'failed')
+       ORDER BY d.created_at, d.id
+       LIMIT ?
+    `,
+    )
+      .bind(
+        message.communicationId,
+        message.eventId,
+        includeFailed ? 1 : 0,
+        COMMUNICATION_SEND_BATCH_SIZE,
+      )
+      .all<CommunicationDelivery>();
     await deliverCommunicationBatch({
       env,
       message,
@@ -893,7 +1013,33 @@ export async function processCommunicationSend(
       failed === 0 ? "completed" : succeeded ? "partially_failed" : "failed";
     const communicationStatus =
       failed === 0 ? "sent" : succeeded ? "partially_failed" : "failed";
-    const completionResults = await env.DB.batch([
+
+    const completionAuditEventId = crypto.randomUUID();
+    const webhookService = new WebhookService(env);
+    const preparedWebhook = await webhookService.prepareEventForAudit(
+      {
+        organisationId: message.organisationId,
+        eventId: message.eventId,
+        personId: null,
+        actorId: "system:communications-queue",
+      },
+      {
+        eventType: "communication.completed",
+        entityType: "communication",
+        entityId: message.communicationId,
+        idempotencyKey: `communication.completed:${message.communicationId}:${message.operationId}`,
+        correlationId: message.operationId,
+        data: {
+          status: communicationStatus,
+          total,
+          succeeded,
+          failed,
+        },
+      },
+      completionAuditEventId,
+    );
+
+    const completionStatements: D1PreparedStatement[] = [
       env.DB.prepare(
         `UPDATE communications SET status = ?, sent_at = CASE WHEN ? = 'sent' THEN unixepoch() ELSE sent_at END,
       updated_at = unixepoch()
@@ -950,7 +1096,7 @@ export async function processCommunicationSend(
             AND changes() = 1
        )`,
       ).bind(
-        crypto.randomUUID(),
+        completionAuditEventId,
         message.organisationId,
         message.eventId,
         message.communicationId,
@@ -976,7 +1122,10 @@ export async function processCommunicationSend(
         message.eventId,
         operationStatus,
       ),
-    ]);
+    ];
+    const completionChangeIndex = completionStatements.length - 1;
+    completionStatements.push(...preparedWebhook.statements);
+    const completionResults = await env.DB.batch(completionStatements);
     const communicationCompleted =
       (completionResults[0].meta.changes ?? 0) === 1;
     const operationCompleted = (completionResults[1].meta.changes ?? 0) === 1;
@@ -995,10 +1144,11 @@ export async function processCommunicationSend(
         "The communication completion could not be recorded consistently.",
       );
     }
+    await webhookService.dispatchPreparedEvent(preparedWebhook);
     await notifyRealtimeAfterCommit(
       env,
       { organisationId: message.organisationId, eventId: message.eventId },
-      returnedChangeSequence(completionResults.at(-1)),
+      returnedChangeSequence(completionResults[completionChangeIndex]),
       message.operationId,
     );
   } catch (error) {
@@ -1008,9 +1158,18 @@ export async function processCommunicationSend(
       console.error(
         JSON.stringify({
           level: "error",
-          subsystem: "communications-queue",
+          sourceRevision: sourceRevisionForLog(env),
+          subsystem: "operations-queue",
+          event: "owned-failure-persistence-failed",
           operationId: message.operationId,
-          message: `Could not persist the owned communication failure: ${failureError instanceof Error ? failureError.message : String(failureError)}`,
+          eventId: message.eventId,
+          provider:
+            env.EMAIL_PROVIDER === "resend" || env.EMAIL_PROVIDER === "mailpit"
+              ? env.EMAIL_PROVIDER
+              : "email-unconfigured",
+          errorName:
+            failureError instanceof Error ? failureError.name : "UnknownError",
+          message: "The owned communication failure could not be persisted.",
         }),
       );
     }

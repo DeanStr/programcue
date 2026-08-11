@@ -98,11 +98,20 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       result.changeSequence,
       result.task.id,
     );
+    const webhookWarning = result.webhookDeliveries.some(
+      (delivery) => delivery.status === "queue_failed",
+    )
+      ? "The task was created, but one or more outbound webhook deliveries require retry."
+      : null;
     return apiSuccess(
       {
         task: result.task,
         changeCursor: realtime.changeCursor,
         realtimeWarning: realtime.realtimeWarning,
+        webhookDeliveries: result.webhookDeliveries.map(
+          ({ duplicate: _duplicate, ...delivery }) => delivery,
+        ),
+        webhookWarning,
         correlationId: requestCorrelationId,
       },
       201,

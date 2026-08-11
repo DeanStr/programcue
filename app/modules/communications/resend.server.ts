@@ -1,23 +1,11 @@
 import { z } from "zod";
 
-const resendResponseSchema = z.object({ id: z.string().min(1) });
+import { readBoundedResponseJson } from "~/platform/http/read-response";
+import type { EmailProvider, SendEmailInput } from "./email-provider";
 
-export type EmailAttachment = {
-  filename: string;
-  content: string;
-  contentType: string;
-};
-
-export type SendEmailInput = {
-  from: string;
-  replyTo?: string | null;
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-  idempotencyKey: string;
-  attachments?: EmailAttachment[];
-};
+const resendResponseSchema = z.object({ id: z.string().min(1).max(512) });
+const PROVIDER_REQUEST_TIMEOUT_MS = 20_000;
+const PROVIDER_RESPONSE_MAX_BYTES = 64 * 1_024;
 
 export class ResendConfigurationError extends Error {
   constructor() {
@@ -42,7 +30,8 @@ function bytesToBase64(value: string) {
   return btoa(binary);
 }
 
-export class ResendEmailProvider {
+export class ResendEmailProvider implements EmailProvider {
+  readonly name = "resend" as const;
   constructor(
     private readonly apiKey: string | undefined,
     private readonly fetcher: typeof fetch = fetch,
@@ -58,6 +47,7 @@ export class ResendEmailProvider {
         "content-type": "application/json",
         "idempotency-key": input.idempotencyKey,
       },
+      signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
       body: JSON.stringify({
         from: input.from,
         to: [input.to],
@@ -74,19 +64,24 @@ export class ResendEmailProvider {
         } : {}),
       }),
     });
-    const body = await response.json().catch(() => null);
+    const body = await readBoundedResponseJson(
+      response,
+      PROVIDER_RESPONSE_MAX_BYTES,
+    ).catch(() => null);
     if (!response.ok) {
       const error = body && typeof body === "object" ? body as Record<string, unknown> : {};
       throw new ResendDeliveryError(
         response.status,
-        String(error.name ?? error.code ?? "RESEND_ERROR"),
-        String(error.message ?? `Resend returned HTTP ${response.status}.`),
+        String(error.name ?? error.code ?? "RESEND_ERROR").slice(0, 128),
+        String(
+          error.message ?? `Resend returned HTTP ${response.status}.`,
+        ).slice(0, 500),
       );
     }
     const parsed = resendResponseSchema.safeParse(body);
     if (!parsed.success) {
       throw new ResendDeliveryError(response.status, "INVALID_PROVIDER_RESPONSE", "Resend accepted the request without returning a message id.");
     }
-    return { provider: "resend" as const, messageId: parsed.data.id };
+    return { provider: this.name, messageId: parsed.data.id };
   }
 }

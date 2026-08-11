@@ -8,7 +8,7 @@ import {
   TaskService,
   TaskStateError,
 } from "~/modules/tasks/task-service.server";
-import { requireEventRole } from "~/platform/auth/authorize.server";
+import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
@@ -19,10 +19,8 @@ async function administrator(
   context: Route.LoaderArgs["context"],
 ) {
   const { env } = getCloudflareContext(context);
-  if (!env.DEFAULT_EVENT_ID)
-    throw new Response("DEFAULT_EVENT_ID is not configured", { status: 503 });
   await ensureDemoSpeakerData(env);
-  const viewer = await requireEventRole(request, env, env.DEFAULT_EVENT_ID, [
+  const viewer = await requireCurrentEventRole(request, env, [
     "owner",
     "administrator",
   ]);
@@ -33,7 +31,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await administrator(request, context);
   const workspace = await new TaskService(env).getAdminWorkspace(viewer);
   const search = new URL(request.url).searchParams;
+  const requestedTaskId = search.get("task")?.trim() ?? "";
+  if (requestedTaskId.length > 200)
+    throw new Response("Invalid task focus", { status: 400 });
+  if (
+    requestedTaskId &&
+    !workspace.tasks.some((task) => task.id === requestedTaskId)
+  )
+    throw new Response("Task not found in this event", { status: 404 });
   const filters = {
+    task: requestedTaskId,
     state: search.get("state") ?? "",
     impact: search.get("impact") ?? "",
     target: search.get("target") ?? "",
@@ -62,6 +69,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
             ? isOverdue(task)
             : task.status === filters.state);
       return (
+        (!filters.task || task.id === filters.task) &&
         stateMatches &&
         (!filters.impact || task.impact === filters.impact) &&
         (!filters.target || task.targetType === filters.target) &&
@@ -73,7 +81,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     ...workspace,
     tasks,
     filters,
+    focusedTaskId: requestedTaskId || null,
     totalTaskCount: workspace.tasks.length,
+    intentId: crypto.randomUUID(),
   };
 }
 
@@ -84,20 +94,25 @@ export async function action({ request, context }: Route.ActionArgs) {
   const service = new TaskService(env);
   try {
     if (intent === "create-template") {
-      const templateId = await service.createTemplate(viewer, {
-        name: form.get("name"),
-        description: form.get("description"),
-        targetType: form.get("targetType"),
-        taskType: form.get("taskType"),
-        impact: form.get("impact"),
-        evidenceMode: form.get("evidenceMode"),
-        dueAnchor: form.get("dueAnchor"),
-        dueOffsetDays:
-          form.get("dueOffsetDays") === "" ? null : form.get("dueOffsetDays"),
-        fixedDueDate:
-          form.get("fixedDueDate") === "" ? null : form.get("fixedDueDate"),
-        dependencyIds: form.getAll("dependencyIds").map(String),
-      });
+      const templateId = await service.createTemplate(
+        viewer,
+        {
+          name: form.get("name"),
+          description: form.get("description"),
+          targetType: form.get("targetType"),
+          taskType: form.get("taskType"),
+          impact: form.get("impact"),
+          evidenceMode: form.get("evidenceMode"),
+          dueAnchor: form.get("dueAnchor"),
+          dueOffsetDays:
+            form.get("dueOffsetDays") === "" ? null : form.get("dueOffsetDays"),
+          fixedDueDate:
+            form.get("fixedDueDate") === "" ? null : form.get("fixedDueDate"),
+          autoAssignOnAcceptance: form.get("autoAssignOnAcceptance") === "true",
+          dependencyIds: form.getAll("dependencyIds").map(String),
+        },
+        String(form.get("intentId") ?? ""),
+      );
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "task_template",
         entityId: templateId,
@@ -107,17 +122,24 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data({ ok: true, message: "Task template created." });
     }
     if (intent === "assign") {
-      const taskId = await service.assignTemplate(
+      const result = await service.assignTemplate(
         viewer,
         String(form.get("templateId") ?? ""),
-        String(form.get("personId") ?? ""),
+        String(form.get("targetId") ?? ""),
       );
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "task_instance",
-        entityId: taskId,
+        entityId: result.taskId,
         changeType: "updated",
       });
-      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning)
+        return data(
+          { ok: false, committed: true, message: warning },
+          { status: 207 },
+        );
       return data({
         ok: true,
         message: "Task plan assigned, including any missing prerequisites.",
@@ -125,7 +147,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
     if (["approve", "complete", "waive", "reopen"].includes(intent)) {
       const taskId = String(form.get("taskId") ?? "");
-      await service.administerTask(viewer, {
+      const result = await service.administerTask(viewer, {
         taskId,
         revision: form.get("revision"),
         intent,
@@ -136,26 +158,72 @@ export async function action({ request, context }: Route.ActionArgs) {
         entityId: taskId,
         changeType: "progress",
       });
-      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
+      const undo = result.undoToken
+        ? {
+            undoToken: result.undoToken,
+            undoTaskId: taskId,
+            undoExpiresAt: result.undoExpiresAt,
+          }
+        : {};
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning)
+        return data(
+          { ok: false, committed: true, message: warning, ...undo },
+          { status: 207 },
+        );
       return data({
         ok: true,
-        message: `Task ${intent === "approve" ? "approved" : intent === "waive" ? "waived" : intent === "reopen" ? "reopened" : "completed"}.`,
+        message:
+          intent === "complete" && result.undoToken
+            ? "Task completed. You can undo this for five minutes."
+            : `Task ${intent === "approve" ? "approved" : intent === "waive" ? "waived" : intent === "reopen" ? "reopened" : "completed"}.`,
+        ...undo,
       });
+    }
+    if (intent === "undo-task-completion") {
+      const result = await service.undoCompletion(
+        viewer,
+        form.get("undoToken"),
+      );
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "task_instance",
+        entityId: result.taskId,
+        changeType: "progress",
+      });
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning)
+        return data(
+          { ok: false, committed: true, message: warning },
+          { status: 207 },
+        );
+      return data({ ok: true, message: "Task completion undone." });
     }
     if (intent === "comment") {
       const taskId = String(form.get("taskId") ?? "");
-      await service.addComment(
+      const result = await service.addComment(
         viewer,
         taskId,
         String(form.get("body") ?? ""),
         form.get("administratorOnly") ? "administrator" : "participant",
+        String(form.get("intentId") ?? ""),
       );
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "task_instance",
         entityId: taskId,
         changeType: "updated",
       });
-      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning)
+        return data(
+          { ok: false, committed: true, message: warning },
+          { status: 207 },
+        );
       return data({ ok: true, message: "Comment added." });
     }
     return data(

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
+import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
   action as operationsAction,
   loader as operationsLoader,
@@ -179,8 +180,33 @@ describe("API method boundaries", () => {
     expect(cancelled).toBe(true);
   });
 
+  it("accepts JSON parameters but rejects lookalike media types", async () => {
+    await expect(
+      readJson(
+        new Request("https://example.test/api", {
+          method: "POST",
+          headers: { "content-type": "application/json; charset=utf-8" },
+          body: '{"valid":true}',
+        }),
+      ),
+    ).resolves.toEqual({ valid: true });
+
+    await expect(
+      readJson(
+        new Request("https://example.test/api", {
+          method: "POST",
+          headers: { "content-type": "application/jsonp" },
+          body: '{"valid":true}',
+        }),
+      ),
+    ).rejects.toMatchObject({
+      status: 415,
+      code: "UNSUPPORTED_MEDIA_TYPE",
+    } satisfies Partial<ApiError>);
+  });
+
   it("redacts internal errors when APP_ENV is missing or invalid", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     for (const environment of ["unknown", "prodution", ""]) {
       const response = apiFailure(
         new Error("sensitive database details"),
@@ -191,6 +217,17 @@ describe("API method boundaries", () => {
         error: { message: "Unexpected server error" },
       });
     }
+    expect(JSON.stringify(log.mock.calls)).not.toContain(
+      "sensitive database details",
+    );
+    expect(log.mock.calls.map(([entry]) => JSON.parse(String(entry)))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          subsystem: "api-request",
+          event: "unhandled-error",
+        }),
+      ]),
+    );
   });
 });
 
@@ -251,6 +288,79 @@ describe("versioned API route methods", () => {
 
     expect(response.status).toBe(405);
     expect(await errorCode(response)).toBe("METHOD_NOT_ALLOWED");
+  });
+
+  it("reports the service-owned task webhook result without queueing it again", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const suffix = crypto.randomUUID();
+    const token = `pc_task_route_${suffix}`;
+    await env.DB.prepare(
+      `INSERT INTO api_keys (
+         id, organisation_id, event_id, name, key_prefix, key_hash,
+         scopes_json, created_at
+       ) VALUES (?, 'org-future-events', ?, ?, 'pc_task_', ?,
+                 '["tasks:write"]', unixepoch())`,
+    )
+      .bind(
+        `api-task-route-${suffix}`,
+        eventId,
+        `Task route ${suffix}`,
+        await hash(token),
+      )
+      .run();
+    const queueEvent = vi.spyOn(WebhookService.prototype, "queueEvent");
+    vi.spyOn(
+      WebhookService.prototype,
+      "dispatchPreparedEvent",
+    ).mockResolvedValue([
+      {
+        endpointId: `endpoint-${suffix}`,
+        deliveryId: `delivery-${suffix}`,
+        operationId: `operation-${suffix}`,
+        status: "queue_failed",
+        duplicate: false,
+      },
+    ]);
+
+    const response = await tasksAction({
+      request: new Request(
+        `https://programcue.test/api/v1/events/${eventId}/tasks`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+            "idempotency-key": `task-route-${suffix}`,
+          },
+          body: JSON.stringify({
+            title: "Confirm API task webhook recovery",
+            targetType: "event",
+            targetId: eventId,
+            taskType: "checklist",
+            impact: "medium",
+          }),
+        },
+      ),
+      params: { eventId },
+      context: routeContext(),
+    } as never);
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      task: { title: "Confirm API task webhook recovery" },
+      webhookDeliveries: [
+        {
+          endpointId: `endpoint-${suffix}`,
+          deliveryId: `delivery-${suffix}`,
+          operationId: `operation-${suffix}`,
+          status: "queue_failed",
+        },
+      ],
+      webhookWarning:
+        "The task was created, but one or more outbound webhook deliveries require retry.",
+    });
+    expect(queueEvent).not.toHaveBeenCalled();
   });
 
   it("rejects generic operation creation synchronously because no generic consumer exists", async () => {

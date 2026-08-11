@@ -1,0 +1,1612 @@
+import { z } from "zod";
+
+import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  readBoundedResponseText,
+  ResponseBodyTooLargeError,
+} from "~/platform/http/read-response";
+import {
+  assetKindSchema,
+  detectInspectionContentType,
+  DIRECT_MULTIPART_PART_SIZE_BYTES,
+  type FileInspectionSource,
+  FilePolicyError,
+  parseEventFilePolicy,
+  validateDirectFileDeclaration,
+  validateFileSignature,
+} from "./file-policy";
+import {
+  FileAccessError,
+  FileService,
+  isMissingR2MultipartUpload,
+  stableLogicalAssetId,
+  uploadTargetSchema,
+  type UploadTarget,
+} from "./file-service.server";
+import {
+  assertFileScanDispatchConfigured,
+  enqueueFileScan,
+  type FileScanQueueMessage,
+} from "./file-scan-dispatch.server";
+import {
+  presignR2S3Request,
+  requireR2S3Configuration,
+  R2S3ConfigurationError,
+} from "./r2-s3-signing.server";
+
+const MULTIPART_EXPIRY_SECONDS = 24 * 60 * 60;
+const REQUEST_CLAIM_SECONDS = 60;
+
+export const multipartInitiateSchema = z.object({
+  target: uploadTargetSchema,
+  filename: z.string().trim().min(1).max(180),
+  contentType: z.string().trim().toLowerCase().min(1).max(160),
+  sizeBytes: z.number().int().positive().max(1_073_741_824),
+  idempotencyKey: z
+    .string()
+    .trim()
+    .min(16)
+    .max(160)
+    .regex(/^[a-zA-Z0-9._:-]+$/),
+});
+
+export const multipartPartUrlSchema = z.object({
+  versionId: z.string().min(1).max(160),
+  partNumber: z.number().int().min(1).max(10_000),
+});
+
+export const multipartResumeSchema = multipartInitiateSchema;
+
+export const multipartListPartsSchema = z.object({
+  versionId: z.string().min(1).max(160),
+});
+
+export const multipartCompleteSchema = z.object({
+  versionId: z.string().min(1).max(160),
+  parts: z
+    .array(
+      z.object({
+        partNumber: z.number().int().min(1).max(10_000),
+        etag: z.string().trim().min(1).max(200),
+      }),
+    )
+    .min(1)
+    .max(10_000),
+});
+
+export const multipartAbortSchema = z.object({
+  versionId: z.string().min(1).max(160),
+});
+
+export class FileMultipartStateError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "FileMultipartStateError";
+  }
+}
+
+export class FileMultipartConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FileMultipartConflictError";
+  }
+}
+
+export class FileMultipartIncompleteError extends Error {
+  constructor(
+    message: string,
+    readonly committed: boolean,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "FileMultipartIncompleteError";
+  }
+}
+
+type MultipartRow = {
+  versionId: string;
+  eventId: string;
+  organisationId: string;
+  assetId: string;
+  assetKind: string;
+  targetType: string;
+  targetId: string;
+  ownerPersonId: string | null;
+  assetStatus: string;
+  erasureRequested: number;
+  createdByPersonId: string | null;
+  objectKey: string;
+  filename: string;
+  contentType: string;
+  detectedContentType: string | null;
+  sizeBytes: number;
+  objectEtag: string | null;
+  uploadStatus: string;
+  signatureStatus: string;
+  scanStatus: string;
+  versionDeletedAt: number | null;
+  uploadId: string | null;
+  idempotencyKey: string;
+  status: string;
+  partSizeBytes: number;
+  manifestJson: string | null;
+  manifestHash: string | null;
+  expiresAt: number;
+  createdAt: number;
+  updatedAt: number;
+  filePolicyJson: string;
+};
+
+export type ApplicantMultipartActor = {
+  kind: "applicant";
+  organisationId: string;
+  eventId: string;
+  personId: string | null;
+  submissionId: string;
+  fieldId: string;
+};
+
+type MultipartActor = Viewer | ApplicantMultipartActor;
+
+function isApplicantActor(
+  actor: MultipartActor,
+): actor is ApplicantMultipartActor {
+  return "kind" in actor && actor.kind === "applicant";
+}
+
+function multipartIdempotencyKey(actor: MultipartActor, key: string) {
+  const identity = isApplicantActor(actor)
+    ? `applicant:${actor.submissionId}`
+    : actor.personId;
+  return `${identity}:${key}`;
+}
+
+function expectedPartCount(
+  row: Pick<MultipartRow, "sizeBytes" | "partSizeBytes">,
+) {
+  return Math.ceil(row.sizeBytes / row.partSizeBytes);
+}
+
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function normalizedManifest(
+  parts: z.infer<typeof multipartCompleteSchema>["parts"],
+  expected: number,
+) {
+  const normalized = parts
+    .map((part) => ({
+      partNumber: part.partNumber,
+      etag: part.etag.replace(/^"|"$/g, ""),
+    }))
+    .sort((left, right) => left.partNumber - right.partNumber);
+  if (normalized.length !== expected)
+    throw new FileMultipartStateError(
+      `Completion requires exactly ${expected} uploaded parts.`,
+    );
+  normalized.forEach((part, index) => {
+    if (part.partNumber !== index + 1)
+      throw new FileMultipartStateError(
+        "Multipart completion requires one contiguous entry for every part.",
+      );
+    if (!/^[\x21-\x7e]{1,200}$/.test(part.etag))
+      throw new FileMultipartStateError(
+        `Part ${part.partNumber} has an invalid R2 ETag.`,
+      );
+  });
+  return normalized;
+}
+
+function decodeXmlText(value: string) {
+  return value.replace(
+    /&(?:quot|apos|lt|gt|amp|#\d+|#x[\da-f]+);/gi,
+    (entity) => {
+      const named: Record<string, string> = {
+        "&quot;": '"',
+        "&apos;": "'",
+        "&lt;": "<",
+        "&gt;": ">",
+        "&amp;": "&",
+      };
+      const normalized = entity.toLowerCase();
+      if (named[normalized] !== undefined) return named[normalized];
+      const hexadecimal = normalized.startsWith("&#x");
+      const raw = normalized.slice(hexadecimal ? 3 : 2, -1);
+      const codePoint = Number.parseInt(raw, hexadecimal ? 16 : 10);
+      return Number.isSafeInteger(codePoint) &&
+        codePoint >= 0 &&
+        codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : entity;
+    },
+  );
+}
+
+function xmlElement(source: string, name: string) {
+  const match = source.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`));
+  return match ? decodeXmlText(match[1]!.trim()) : null;
+}
+
+function parseR2ListParts(
+  xml: string,
+  row: Pick<MultipartRow, "sizeBytes" | "partSizeBytes">,
+) {
+  if (xml.length > 2_000_000)
+    throw new FileMultipartStateError(
+      "R2 returned an unexpectedly large multipart part list.",
+    );
+  const truncated = xmlElement(xml, "IsTruncated");
+  if (truncated !== "false")
+    throw new FileMultipartStateError(
+      "R2 returned an incomplete multipart part list.",
+    );
+  const parts: Array<{ PartNumber: number; Size: number; ETag: string }> = [];
+  const partPattern = /<Part>([\s\S]*?)<\/Part>/g;
+  for (const match of xml.matchAll(partPattern)) {
+    const source = match[1]!;
+    const partNumber = Number(xmlElement(source, "PartNumber"));
+    const size = Number(xmlElement(source, "Size"));
+    const etag = xmlElement(source, "ETag");
+    if (
+      !Number.isInteger(partNumber) ||
+      partNumber < 1 ||
+      partNumber > expectedPartCount(row) ||
+      !Number.isInteger(size) ||
+      size < 1 ||
+      !etag ||
+      !/^[\x21-\x7e]{1,200}$/.test(etag)
+    )
+      throw new FileMultipartStateError(
+        "R2 returned invalid multipart part metadata.",
+      );
+    const expectedSize = Math.min(
+      row.partSizeBytes,
+      row.sizeBytes - (partNumber - 1) * row.partSizeBytes,
+    );
+    if (size !== expectedSize)
+      throw new FileMultipartStateError(
+        `R2 part ${partNumber} does not match the declared upload chunk size.`,
+      );
+    parts.push({ PartNumber: partNumber, Size: size, ETag: etag });
+  }
+  parts.sort((left, right) => left.PartNumber - right.PartNumber);
+  parts.forEach((part, index) => {
+    if (index > 0 && parts[index - 1]!.PartNumber === part.PartNumber)
+      throw new FileMultipartStateError(
+        "R2 returned duplicate multipart part metadata.",
+      );
+  });
+  return parts;
+}
+
+export class MultipartUploadService {
+  private readonly fetcher: typeof fetch;
+
+  constructor(
+    private readonly env: CloudflareEnvironment,
+    dependencies?: { fetch?: typeof fetch },
+  ) {
+    this.fetcher = dependencies?.fetch ?? fetch;
+  }
+
+  private requireBucket() {
+    if (!this.env.FILES)
+      throw new R2S3ConfigurationError(
+        "Required private R2 binding FILES is unavailable.",
+      );
+    return this.env.FILES;
+  }
+
+  private async assertTarget(actor: MultipartActor, target: UploadTarget) {
+    if (isApplicantActor(actor)) {
+      if (
+        target.targetType !== "submission" ||
+        target.targetId !== actor.submissionId ||
+        target.assetKind !== "video"
+      )
+        throw new FileAccessError(
+          "Applicant multipart uploads are limited to the authorized draft video field.",
+        );
+      const owned = await this.env.DB.prepare(
+        `SELECT 1
+           FROM submissions submission
+           JOIN events event
+             ON event.id = submission.event_id AND event.organisation_id = ?
+          WHERE submission.id = ? AND submission.event_id = ?
+            AND submission.status = 'draft'
+            AND (
+              (? IS NOT NULL AND submission.submitter_person_id = ?)
+              OR (? IS NULL AND submission.submitter_person_id IS NULL)
+            )`,
+      )
+        .bind(
+          actor.organisationId,
+          actor.submissionId,
+          actor.eventId,
+          actor.personId,
+          actor.personId,
+          actor.personId,
+        )
+        .first();
+      if (!owned)
+        throw new FileAccessError(
+          "The draft submission is no longer available for this applicant.",
+        );
+      return;
+    }
+    const files = new FileService(this.env);
+    if (
+      ["owner", "administrator"].includes(actor.role) &&
+      target.targetType !== "person"
+    ) {
+      await files.assertAdminTarget(actor, target);
+    } else {
+      await files.assertParticipantTarget(actor, target);
+    }
+  }
+
+  private async loadEventFilePolicy(actor: MultipartActor) {
+    const event = await this.env.DB.prepare(
+      `SELECT file_policy_json AS filePolicyJson
+         FROM events WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(actor.eventId, actor.organisationId)
+      .first<{ filePolicyJson: string }>();
+    if (!event) throw new FileAccessError("Event file policy not found.");
+    return parseEventFilePolicy(event.filePolicyJson);
+  }
+
+  private async loadByIdempotency(
+    actor: MultipartActor,
+    idempotencyKey: string,
+  ) {
+    const row = await this.env.DB.prepare(
+      `
+      SELECT upload.version_id AS versionId, upload.event_id AS eventId,
+             event.organisation_id AS organisationId,
+             upload.asset_id AS assetId, asset.asset_kind AS assetKind,
+             asset.target_type AS targetType, asset.target_id AS targetId,
+             asset.owner_person_id AS ownerPersonId,
+             asset.status AS assetStatus,
+             EXISTS (
+               SELECT 1 FROM audit_events audit
+                WHERE audit.id = 'file-erasure:' || asset.id
+             ) AS erasureRequested,
+             version.created_by_person_id AS createdByPersonId,
+             version.object_key AS objectKey,
+             version.original_filename AS filename,
+             version.declared_content_type AS contentType,
+             version.detected_content_type AS detectedContentType,
+             version.size_bytes AS sizeBytes, version.object_etag AS objectEtag,
+             version.upload_status AS uploadStatus,
+             version.signature_status AS signatureStatus,
+             version.scan_status AS scanStatus,
+             version.deleted_at AS versionDeletedAt,
+             upload.upload_id AS uploadId,
+             upload.idempotency_key AS idempotencyKey,
+             upload.status, upload.part_size_bytes AS partSizeBytes,
+             upload.manifest_json AS manifestJson,
+             upload.manifest_hash AS manifestHash,
+             upload.expires_at AS expiresAt, upload.created_at AS createdAt,
+             upload.updated_at AS updatedAt,
+             event.file_policy_json AS filePolicyJson
+        FROM file_multipart_uploads upload
+        JOIN file_versions version
+          ON version.id = upload.version_id AND version.event_id = upload.event_id
+        JOIN file_assets asset
+          ON asset.id = upload.asset_id AND asset.event_id = upload.event_id
+        JOIN events event ON event.id = upload.event_id
+       WHERE upload.event_id = ? AND upload.idempotency_key = ?
+         AND event.organisation_id = ?
+    `,
+    )
+      .bind(actor.eventId, idempotencyKey, actor.organisationId)
+      .first<MultipartRow>();
+    if (row) this.assertRowAccess(actor, row);
+    return row;
+  }
+
+  private async loadByVersion(actor: MultipartActor, versionId: string) {
+    const row = await this.env.DB.prepare(
+      `
+      SELECT upload.version_id AS versionId, upload.event_id AS eventId,
+             event.organisation_id AS organisationId,
+             upload.asset_id AS assetId, asset.asset_kind AS assetKind,
+             asset.target_type AS targetType, asset.target_id AS targetId,
+             asset.owner_person_id AS ownerPersonId,
+             asset.status AS assetStatus,
+             EXISTS (
+               SELECT 1 FROM audit_events audit
+                WHERE audit.id = 'file-erasure:' || asset.id
+             ) AS erasureRequested,
+             version.created_by_person_id AS createdByPersonId,
+             version.object_key AS objectKey,
+             version.original_filename AS filename,
+             version.declared_content_type AS contentType,
+             version.detected_content_type AS detectedContentType,
+             version.size_bytes AS sizeBytes, version.object_etag AS objectEtag,
+             version.upload_status AS uploadStatus,
+             version.signature_status AS signatureStatus,
+             version.scan_status AS scanStatus,
+             version.deleted_at AS versionDeletedAt,
+             upload.upload_id AS uploadId,
+             upload.idempotency_key AS idempotencyKey,
+             upload.status, upload.part_size_bytes AS partSizeBytes,
+             upload.manifest_json AS manifestJson,
+             upload.manifest_hash AS manifestHash,
+             upload.expires_at AS expiresAt, upload.created_at AS createdAt,
+             upload.updated_at AS updatedAt,
+             event.file_policy_json AS filePolicyJson
+        FROM file_multipart_uploads upload
+        JOIN file_versions version
+          ON version.id = upload.version_id AND version.event_id = upload.event_id
+        JOIN file_assets asset
+          ON asset.id = upload.asset_id AND asset.event_id = upload.event_id
+        JOIN events event ON event.id = upload.event_id
+       WHERE upload.version_id = ? AND upload.event_id = ?
+         AND event.organisation_id = ?
+    `,
+    )
+      .bind(versionId, actor.eventId, actor.organisationId)
+      .first<MultipartRow>();
+    if (!row)
+      throw new FileAccessError("Multipart upload not found in this event.");
+    this.assertRowAccess(actor, row);
+    return row;
+  }
+
+  private assertRowAccess(actor: MultipartActor, row: MultipartRow) {
+    if (
+      row.eventId !== actor.eventId ||
+      row.organisationId !== actor.organisationId
+    )
+      throw new FileAccessError("Multipart upload not found in this event.");
+    if (
+      row.assetStatus === "deleted" ||
+      row.versionDeletedAt !== null ||
+      row.erasureRequested === 1
+    )
+      throw new FileMultipartStateError(
+        "This multipart upload was revoked by permanent file erasure.",
+      );
+    if (isApplicantActor(actor)) {
+      const ownedByApplicant = actor.personId
+        ? row.ownerPersonId === actor.personId &&
+          row.createdByPersonId === actor.personId
+        : row.ownerPersonId === null && row.createdByPersonId === null;
+      if (
+        row.targetType !== "submission" ||
+        row.targetId !== actor.submissionId ||
+        row.assetKind !== "video" ||
+        !ownedByApplicant
+      )
+        throw new FileAccessError(
+          "This multipart upload belongs to another application draft.",
+        );
+      return;
+    }
+    if (
+      !["owner", "administrator"].includes(actor.role) &&
+      row.createdByPersonId !== actor.personId &&
+      row.ownerPersonId !== actor.personId
+    )
+      throw new FileAccessError(
+        "This multipart upload belongs to another person.",
+      );
+  }
+
+  private assertSameRequest(
+    row: MultipartRow,
+    input: z.infer<typeof multipartInitiateSchema>,
+  ) {
+    if (
+      row.targetType !== input.target.targetType ||
+      row.targetId !== input.target.targetId ||
+      row.assetKind !== input.target.assetKind ||
+      row.filename !== input.filename ||
+      row.contentType !== input.contentType ||
+      row.sizeBytes !== input.sizeBytes
+    )
+      throw new FileMultipartConflictError(
+        "This idempotency key was already used for a different multipart upload.",
+      );
+  }
+
+  private uploadTarget(row: MultipartRow) {
+    return uploadTargetSchema.parse({
+      targetType: row.targetType,
+      targetId: row.targetId,
+      assetKind: row.assetKind,
+    });
+  }
+
+  private assertCurrentDeclaration(row: MultipartRow) {
+    const target = this.uploadTarget(row);
+    validateDirectFileDeclaration(
+      target.assetKind,
+      { name: row.filename, type: row.contentType, size: row.sizeBytes },
+      parseEventFilePolicy(row.filePolicyJson),
+    );
+  }
+
+  private async assertCurrentUploadAllowed(
+    actor: MultipartActor,
+    row: MultipartRow,
+  ) {
+    const target = this.uploadTarget(row);
+    await this.assertTarget(actor, target);
+    this.assertCurrentDeclaration(row);
+  }
+
+  private response(row: MultipartRow, duplicate: boolean) {
+    if (!row.uploadId || row.status !== "initiated")
+      throw new FileMultipartStateError(
+        `Multipart upload is ${row.status}; it cannot accept parts.`,
+      );
+    return {
+      assetId: row.assetId,
+      versionId: row.versionId,
+      partSizeBytes: row.partSizeBytes,
+      partCount: expectedPartCount(row),
+      expiresAt: row.expiresAt,
+      duplicate,
+    };
+  }
+
+  private resumableResponse(row: MultipartRow) {
+    if (
+      !row.uploadId ||
+      !["initiated", "completing", "completed"].includes(row.status)
+    )
+      throw new FileMultipartStateError(
+        `Multipart upload is ${row.status}; it cannot be resumed.`,
+      );
+    if (
+      row.status === "initiated" &&
+      row.expiresAt <= Math.floor(Date.now() / 1_000)
+    )
+      throw new FileMultipartStateError(
+        "This multipart upload has expired. Abort it and begin a new upload.",
+      );
+    return {
+      assetId: row.assetId,
+      versionId: row.versionId,
+      partSizeBytes: row.partSizeBytes,
+      partCount: expectedPartCount(row),
+      expiresAt: row.expiresAt,
+      duplicate: true,
+      state: row.status as "initiated" | "completing" | "completed",
+    };
+  }
+
+  private async allocateIntent(
+    actor: MultipartActor,
+    input: z.infer<typeof multipartInitiateSchema>,
+    storedIdempotencyKey: string,
+  ) {
+    const target = input.target;
+    const reusable = !["task", "resource"].includes(target.targetType);
+    const existing = reusable
+      ? await this.env.DB.prepare(
+          `SELECT id FROM file_assets
+            WHERE event_id = ? AND owner_person_id IS ?
+              AND target_type = ? AND target_id = ? AND asset_kind = ?
+              AND status <> 'deleted'
+              AND NOT EXISTS (
+                SELECT 1 FROM audit_events audit
+                 WHERE audit.id = 'file-erasure:' || file_assets.id
+              )
+            ORDER BY created_at DESC LIMIT 1`,
+        )
+          .bind(
+            actor.eventId,
+            actor.personId,
+            target.targetType,
+            target.targetId,
+            target.assetKind,
+          )
+          .first<{ id: string }>()
+      : null;
+    let assetId = existing?.id;
+    if (!assetId) {
+      if (!reusable) {
+        assetId = crypto.randomUUID();
+      } else {
+        const logicalId = await stableLogicalAssetId(actor, target);
+        const prior = await this.env.DB.prepare(
+          "SELECT COUNT(*) AS count FROM file_assets WHERE id = ? OR id GLOB ?",
+        )
+          .bind(logicalId, `${logicalId}-generation-*`)
+          .first<{ count: number }>();
+        const generation = Number(prior?.count ?? 0);
+        assetId = generation
+          ? `${logicalId}-generation-${generation + 1}`
+          : logicalId;
+      }
+    }
+    const versionId = crypto.randomUUID();
+    const objectKey = `private/events/${actor.eventId}/${target.targetType}/${target.targetId}/${assetId}/${versionId}`;
+    const results = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `INSERT OR IGNORE INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, 'pending', unixepoch(), unixepoch())`,
+      ).bind(
+        assetId,
+        actor.eventId,
+        target.targetType === "resource" ? null : actor.personId,
+        target.targetType,
+        target.targetId,
+        target.assetKind,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, size_bytes,
+           upload_status, signature_status, scan_status,
+           created_by_person_id, created_at
+         )
+         SELECT ?, ?, ?, COALESCE(MAX(version_number), 0) + 1, ?, ?, ?, ?,
+                'requested', 'pending', 'pending', ?, unixepoch()
+           FROM file_versions
+          WHERE asset_id = ?
+            AND EXISTS (
+              SELECT 1 FROM file_assets
+               WHERE id = ? AND event_id = ? AND status <> 'deleted'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM audit_events audit
+                    WHERE audit.id = 'file-erasure:' || file_assets.id
+                 )
+            )
+         HAVING EXISTS (
+           SELECT 1 FROM file_assets
+            WHERE id = ? AND event_id = ? AND status <> 'deleted'
+              AND NOT EXISTS (
+                SELECT 1 FROM audit_events audit
+                 WHERE audit.id = 'file-erasure:' || file_assets.id
+              )
+         )
+         RETURNING version_number AS versionNumber`,
+      ).bind(
+        versionId,
+        actor.eventId,
+        assetId,
+        objectKey,
+        input.filename,
+        input.contentType,
+        input.sizeBytes,
+        actor.personId,
+        assetId,
+        assetId,
+        actor.eventId,
+        assetId,
+        actor.eventId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO file_multipart_uploads (
+           version_id, event_id, asset_id, upload_id, idempotency_key,
+           status, part_size_bytes, expires_at, created_at, updated_at
+         )
+         SELECT ?, ?, ?, NULL, ?, 'requested', ?,
+                unixepoch() + ?, unixepoch(), unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM file_versions
+             WHERE id = ? AND event_id = ? AND asset_id = ?
+          )`,
+      ).bind(
+        versionId,
+        actor.eventId,
+        assetId,
+        storedIdempotencyKey,
+        DIRECT_MULTIPART_PART_SIZE_BYTES,
+        MULTIPART_EXPIRY_SECONDS,
+        versionId,
+        actor.eventId,
+        assetId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, ?, ?, ?, 'file.multipart.requested', 'file_version', ?, ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM file_multipart_uploads
+             WHERE version_id = ? AND event_id = ? AND asset_id = ?
+          )`,
+      ).bind(
+        crypto.randomUUID(),
+        actor.organisationId,
+        actor.eventId,
+        actor.personId,
+        versionId,
+        JSON.stringify({
+          assetId,
+          assetKind: target.assetKind,
+          sizeBytes: input.sizeBytes,
+        }),
+        versionId,
+        actor.eventId,
+        assetId,
+      ),
+    ]);
+    const version = results[1]?.results?.[0] as
+      { versionNumber?: number } | undefined;
+    if (!Number.isSafeInteger(Number(version?.versionNumber)))
+      throw new Error(
+        "The multipart file version could not be allocated atomically.",
+      );
+    const row = await this.loadByVersion(actor, versionId);
+    return row;
+  }
+
+  private async createProviderUpload(actor: MultipartActor, row: MultipartRow) {
+    let multipart: R2MultipartUpload;
+    try {
+      multipart = await this.requireBucket().createMultipartUpload(
+        row.objectKey,
+        {
+          httpMetadata: { contentType: row.contentType },
+          customMetadata: {
+            eventId: row.eventId,
+            assetId: row.assetId,
+            versionId: row.versionId,
+            quarantine: "pending-scan",
+          },
+        },
+      );
+    } catch (error) {
+      await this.env.DB.batch([
+        this.env.DB.prepare(
+          `UPDATE file_multipart_uploads
+              SET status = 'failed', last_error = ?, updated_at = unixepoch()
+            WHERE version_id = ? AND event_id = ? AND status = 'requested'`,
+        ).bind(
+          (error instanceof Error ? error.message : String(error)).slice(
+            0,
+            2_000,
+          ),
+          row.versionId,
+          actor.eventId,
+        ),
+        this.env.DB.prepare(
+          `UPDATE file_versions
+              SET upload_status = 'failed', scan_status = 'failed',
+                  scan_error = 'R2 multipart initialization failed.'
+            WHERE id = ? AND event_id = ? AND upload_status = 'requested'`,
+        ).bind(row.versionId, actor.eventId),
+      ]);
+      throw new FileMultipartIncompleteError(
+        "R2 could not initialize the direct multipart upload.",
+        true,
+        { cause: error },
+      );
+    }
+    try {
+      const [uploadUpdated, versionUpdated] = await this.env.DB.batch([
+        this.env.DB.prepare(
+          `UPDATE file_multipart_uploads
+              SET upload_id = ?, status = 'initiated', last_error = NULL,
+                  updated_at = unixepoch()
+            WHERE version_id = ? AND event_id = ? AND status = 'requested'
+              AND upload_id IS NULL
+              AND EXISTS (
+                SELECT 1 FROM file_assets asset
+                 WHERE asset.id = file_multipart_uploads.asset_id
+                   AND asset.event_id = file_multipart_uploads.event_id
+                   AND asset.status <> 'deleted'
+                   AND NOT EXISTS (
+                     SELECT 1 FROM audit_events audit
+                      WHERE audit.id = 'file-erasure:' || asset.id
+                   )
+              )`,
+        ).bind(multipart.uploadId, row.versionId, actor.eventId),
+        this.env.DB.prepare(
+          `UPDATE file_versions
+              SET multipart_upload_id = ?, upload_status = 'uploading'
+            WHERE id = ? AND event_id = ? AND upload_status = 'requested'
+              AND deleted_at IS NULL
+              AND EXISTS (
+                SELECT 1 FROM file_assets asset
+                 WHERE asset.id = file_versions.asset_id
+                   AND asset.event_id = file_versions.event_id
+                   AND asset.status <> 'deleted'
+                   AND NOT EXISTS (
+                     SELECT 1 FROM audit_events audit
+                      WHERE audit.id = 'file-erasure:' || asset.id
+                   )
+              )`,
+        ).bind(multipart.uploadId, row.versionId, actor.eventId),
+      ]);
+      if (
+        (uploadUpdated.meta.changes ?? 0) !== 1 ||
+        (versionUpdated.meta.changes ?? 0) !== 1
+      )
+        throw new Error(
+          "The multipart intent changed before R2 initialization committed.",
+        );
+    } catch (error) {
+      const failures: unknown[] = [error];
+      let providerAborted = false;
+      try {
+        await multipart.abort();
+        providerAborted = true;
+      } catch (abortError) {
+        if (isMissingR2MultipartUpload(abortError)) providerAborted = true;
+        else failures.push(abortError);
+      }
+      try {
+        await this.env.DB.batch([
+          this.env.DB.prepare(
+            `UPDATE file_multipart_uploads
+                SET upload_id = ?, status = 'failed', last_error = ?,
+                    updated_at = unixepoch()
+              WHERE version_id = ? AND event_id = ?
+                AND status IN ('requested','initiated')`,
+          ).bind(
+            providerAborted ? null : multipart.uploadId,
+            providerAborted
+              ? "R2 multipart initialization metadata did not commit; provider upload was aborted."
+              : "R2 multipart initialization metadata did not commit; provider abort must be retried.",
+            row.versionId,
+            actor.eventId,
+          ),
+          this.env.DB.prepare(
+            `UPDATE file_versions
+                SET multipart_upload_id = ?, upload_status = 'failed',
+                    scan_status = 'failed',
+                    scan_error = 'R2 multipart initialization metadata did not commit.'
+              WHERE id = ? AND event_id = ?
+                AND upload_status IN ('requested','uploading')
+                AND deleted_at IS NULL`,
+          ).bind(
+            providerAborted ? null : multipart.uploadId,
+            row.versionId,
+            actor.eventId,
+          ),
+        ]);
+      } catch (cleanupError) {
+        failures.push(cleanupError);
+      }
+      throw new FileMultipartIncompleteError(
+        providerAborted
+          ? "The R2 multipart upload was aborted because its metadata could not be committed."
+          : "The multipart intent was revoked, but the R2 provider upload could not be aborted. Retry abort.",
+        true,
+        {
+          cause:
+            failures.length === 1
+              ? error
+              : new AggregateError(
+                  failures,
+                  "Multipart initialization compensation was incomplete.",
+                ),
+        },
+      );
+    }
+    return this.loadByVersion(actor, row.versionId);
+  }
+
+  async initiate(actor: MultipartActor, rawInput: unknown) {
+    requireR2S3Configuration(this.env);
+    this.requireBucket();
+    const input = multipartInitiateSchema.parse(rawInput);
+    const declaration = {
+      name: input.filename,
+      type: input.contentType,
+      size: input.sizeBytes,
+    };
+    await this.assertTarget(actor, input.target);
+    assertFileScanDispatchConfigured(this.env);
+    validateDirectFileDeclaration(
+      input.target.assetKind,
+      declaration,
+      await this.loadEventFilePolicy(actor),
+    );
+    const storedKey = multipartIdempotencyKey(actor, input.idempotencyKey);
+    let row = await this.loadByIdempotency(actor, storedKey);
+    if (row) {
+      this.assertSameRequest(row, input);
+      if (row.status === "initiated") return this.response(row, true);
+      if (["completed", "completing", "aborted", "failed"].includes(row.status))
+        throw new FileMultipartStateError(
+          `This idempotent multipart upload is already ${row.status}.`,
+        );
+      const claimed = await this.env.DB.prepare(
+        `UPDATE file_multipart_uploads
+            SET updated_at = unixepoch()
+          WHERE version_id = ? AND event_id = ? AND status = 'requested'
+            AND upload_id IS NULL AND updated_at <= unixepoch() - ?`,
+      )
+        .bind(row.versionId, actor.eventId, REQUEST_CLAIM_SECONDS)
+        .run();
+      if ((claimed.meta.changes ?? 0) !== 1)
+        throw new FileMultipartStateError(
+          "Multipart initialization is already in progress. Retry shortly.",
+        );
+    } else {
+      try {
+        row = await this.allocateIntent(actor, input, storedKey);
+      } catch (error) {
+        row = await this.loadByIdempotency(actor, storedKey);
+        if (!row) throw error;
+        this.assertSameRequest(row, input);
+        if (row.status === "initiated") return this.response(row, true);
+        throw new FileMultipartStateError(
+          "Multipart initialization is already in progress. Retry shortly.",
+        );
+      }
+    }
+    return this.response(await this.createProviderUpload(actor, row), false);
+  }
+
+  async resume(actor: MultipartActor, rawInput: unknown) {
+    requireR2S3Configuration(this.env);
+    this.requireBucket();
+    const input = multipartResumeSchema.parse(rawInput);
+    await this.assertTarget(actor, input.target);
+    validateDirectFileDeclaration(
+      input.target.assetKind,
+      {
+        name: input.filename,
+        type: input.contentType,
+        size: input.sizeBytes,
+      },
+      await this.loadEventFilePolicy(actor),
+    );
+    const row = await this.loadByIdempotency(
+      actor,
+      multipartIdempotencyKey(actor, input.idempotencyKey),
+    );
+    if (!row) return null;
+    this.assertSameRequest(row, input);
+    return this.resumableResponse(row);
+  }
+
+  async listParts(actor: MultipartActor, rawInput: unknown) {
+    requireR2S3Configuration(this.env);
+    this.requireBucket();
+    const input = multipartListPartsSchema.parse(rawInput);
+    const row = await this.loadByVersion(actor, input.versionId);
+    if (["completing", "completed"].includes(row.status)) {
+      if (!row.manifestJson)
+        throw new FileMultipartStateError(
+          "Multipart completion metadata is unavailable for recovery.",
+        );
+      let storedParts: unknown;
+      try {
+        storedParts = JSON.parse(row.manifestJson);
+      } catch (error) {
+        throw new FileMultipartStateError(
+          "Multipart completion metadata is invalid.",
+          { cause: error },
+        );
+      }
+      const parts = normalizedManifest(
+        multipartCompleteSchema.shape.parts.parse(storedParts),
+        expectedPartCount(row),
+      );
+      return {
+        versionId: row.versionId,
+        state: row.status as "completing" | "completed",
+        parts: parts.map((part) => ({
+          PartNumber: part.partNumber,
+          Size: Math.min(
+            row.partSizeBytes,
+            row.sizeBytes - (part.partNumber - 1) * row.partSizeBytes,
+          ),
+          ETag: part.etag,
+        })),
+      };
+    }
+    if (row.status !== "initiated" || !row.uploadId)
+      throw new FileMultipartStateError(
+        `Multipart upload is ${row.status}; its parts cannot be listed.`,
+      );
+    await this.assertCurrentUploadAllowed(actor, row);
+    if (row.expiresAt <= Math.floor(Date.now() / 1_000))
+      throw new FileMultipartStateError(
+        "This multipart upload has expired. Abort it and begin a new upload.",
+      );
+    const url = await presignR2S3Request({
+      env: this.env,
+      method: "GET",
+      objectKey: row.objectKey,
+      query: {
+        uploadId: row.uploadId,
+        "max-parts": String(Math.min(expectedPartCount(row), 1_000)),
+      },
+      expiresSeconds: 60,
+    });
+    let providerResponse: Response;
+    try {
+      providerResponse = await this.fetcher(url, {
+        method: "GET",
+        headers: { accept: "application/xml" },
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (error) {
+      throw new FileMultipartIncompleteError(
+        "R2 could not list the uploaded parts. Retry resume.",
+        false,
+        { cause: error },
+      );
+    }
+    if (providerResponse.status === 404)
+      throw new FileMultipartStateError(
+        "R2 no longer has this multipart upload. Abort it and begin a new upload.",
+      );
+    if (!providerResponse.ok)
+      throw new FileMultipartIncompleteError(
+        `R2 could not list the uploaded parts (${providerResponse.status}). Retry resume.`,
+        false,
+      );
+    let xml: string;
+    try {
+      xml = await readBoundedResponseText(providerResponse, 2_000_000);
+    } catch (error) {
+      if (error instanceof ResponseBodyTooLargeError) {
+        throw new FileMultipartStateError(
+          "R2 returned an unexpectedly large multipart part list.",
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+    const parts = parseR2ListParts(xml, row);
+    return {
+      versionId: row.versionId,
+      state: "initiated" as const,
+      parts,
+    };
+  }
+
+  async createPartUrl(actor: MultipartActor, rawInput: unknown) {
+    requireR2S3Configuration(this.env);
+    this.requireBucket();
+    const input = multipartPartUrlSchema.parse(rawInput);
+    const row = await this.loadByVersion(actor, input.versionId);
+    if (row.status !== "initiated" || !row.uploadId)
+      throw new FileMultipartStateError(
+        `Multipart upload is ${row.status}; no more part URLs can be issued.`,
+      );
+    await this.assertCurrentUploadAllowed(actor, row);
+    if (row.expiresAt <= Math.floor(Date.now() / 1_000))
+      throw new FileMultipartStateError(
+        "This multipart upload has expired. Abort it and begin a new upload.",
+      );
+    const partCount = expectedPartCount(row);
+    if (input.partNumber > partCount)
+      throw new FileMultipartStateError(
+        `Part number must be between 1 and ${partCount}.`,
+      );
+    return {
+      versionId: row.versionId,
+      partNumber: input.partNumber,
+      url: await presignR2S3Request({
+        env: this.env,
+        method: "PUT",
+        objectKey: row.objectKey,
+        query: {
+          partNumber: String(input.partNumber),
+          uploadId: row.uploadId,
+        },
+        expiresSeconds: 900,
+      }),
+      expiresInSeconds: 900,
+    };
+  }
+
+  private inspectionSource(row: MultipartRow): FileInspectionSource {
+    const bucket = this.requireBucket();
+    return {
+      name: row.filename,
+      type: row.contentType,
+      size: row.sizeBytes,
+      readRange: async (start, end) => {
+        const boundedEnd = Math.min(end, row.sizeBytes);
+        const expected = boundedEnd - start;
+        if (start < 0 || end < start || start > row.sizeBytes || expected < 1)
+          throw new FileMultipartStateError(
+            "Signature inspection requested an invalid R2 byte range.",
+          );
+        const object = await bucket.get(row.objectKey, {
+          range: { offset: start, length: expected },
+        });
+        if (!object)
+          throw new FileMultipartStateError(
+            "The completed R2 object disappeared during signature inspection.",
+          );
+        const bytes = await object.arrayBuffer();
+        if (bytes.byteLength !== expected)
+          throw new FileMultipartStateError(
+            "R2 returned an incomplete range during signature inspection.",
+          );
+        return bytes;
+      },
+    };
+  }
+
+  private async failInvalidObject(
+    actor: MultipartActor,
+    row: MultipartRow,
+    detected: string | null,
+    error: unknown,
+  ): Promise<never> {
+    const failures: unknown[] = [error];
+    try {
+      await this.requireBucket().delete(row.objectKey);
+    } catch (deleteError) {
+      failures.push(deleteError);
+    }
+    try {
+      await this.env.DB.batch([
+        this.env.DB.prepare(
+          `UPDATE file_multipart_uploads
+              SET status = 'failed', last_error = ?, updated_at = unixepoch()
+            WHERE version_id = ? AND event_id = ? AND status = 'completing'`,
+        ).bind(
+          "Completed object failed signature validation.",
+          row.versionId,
+          actor.eventId,
+        ),
+        this.env.DB.prepare(
+          `UPDATE file_versions
+              SET upload_status = 'failed', signature_status = 'invalid',
+                  scan_status = 'failed', detected_content_type = ?,
+                  scan_error = 'Completed object failed signature validation.'
+            WHERE id = ? AND event_id = ?`,
+        ).bind(detected, row.versionId, actor.eventId),
+        this.env.DB.prepare(
+          `UPDATE file_assets
+              SET status = CASE WHEN current_version_id IS NULL THEN 'rejected' ELSE status END,
+                  updated_at = unixepoch()
+            WHERE id = ? AND event_id = ?`,
+        ).bind(row.assetId, actor.eventId),
+      ]);
+    } catch (stateError) {
+      failures.push(stateError);
+    }
+    if (failures.length > 1)
+      throw new AggregateError(
+        failures,
+        "Invalid multipart content could not be fully removed and recorded.",
+      );
+    throw error;
+  }
+
+  private async ensureScan(actor: MultipartActor, row: MultipartRow) {
+    if (!row.objectEtag)
+      throw new FileMultipartStateError(
+        "Completed multipart metadata is missing the R2 object ETag.",
+      );
+    return enqueueFileScan(this.env, actor, {
+      versionId: row.versionId,
+      assetId: row.assetId,
+      objectKey: row.objectKey,
+      objectEtag: row.objectEtag,
+      sizeBytes: row.sizeBytes,
+    });
+  }
+
+  async complete(actor: MultipartActor, rawInput: unknown) {
+    requireR2S3Configuration(this.env);
+    this.requireBucket();
+    const input = multipartCompleteSchema.parse(rawInput);
+    assertFileScanDispatchConfigured(this.env);
+    let row = await this.loadByVersion(actor, input.versionId);
+    const parts = normalizedManifest(input.parts, expectedPartCount(row));
+    const manifestJson = JSON.stringify(parts);
+    const manifestHash = await sha256(manifestJson);
+    if (row.status === "completed") {
+      if (row.manifestHash !== manifestHash)
+        throw new FileMultipartConflictError(
+          "This upload was already completed with a different part manifest.",
+        );
+      const scan = await this.ensureScan(actor, row);
+      return {
+        assetId: row.assetId,
+        versionId: row.versionId,
+        scanStatus: "pending" as const,
+        scanOperationId: scan.operationId,
+        duplicate: true,
+      };
+    }
+    if (row.status === "initiated")
+      await this.assertCurrentUploadAllowed(actor, row);
+    else if (row.status === "completing") this.assertCurrentDeclaration(row);
+    if (row.status === "initiated") {
+      if (row.expiresAt <= Math.floor(Date.now() / 1_000))
+        throw new FileMultipartStateError(
+          "This multipart upload expired before completion. Abort it and begin a new upload.",
+        );
+      const started = await this.env.DB.prepare(
+        `UPDATE file_multipart_uploads
+            SET status = 'completing', manifest_json = ?, manifest_hash = ?,
+                last_error = NULL, updated_at = unixepoch()
+          WHERE version_id = ? AND event_id = ? AND status = 'initiated'
+            AND upload_id IS NOT NULL
+            AND EXISTS (
+              SELECT 1
+                FROM file_versions version
+                JOIN file_assets asset
+                  ON asset.id = version.asset_id
+                 AND asset.event_id = version.event_id
+               WHERE version.id = file_multipart_uploads.version_id
+                 AND version.event_id = file_multipart_uploads.event_id
+                 AND version.deleted_at IS NULL
+                 AND asset.status <> 'deleted'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM audit_events audit
+                    WHERE audit.id = 'file-erasure:' || asset.id
+                 )
+            )`,
+      )
+        .bind(manifestJson, manifestHash, row.versionId, actor.eventId)
+        .run();
+      if ((started.meta.changes ?? 0) !== 1)
+        row = await this.loadByVersion(actor, row.versionId);
+      else row = { ...row, status: "completing", manifestJson, manifestHash };
+    }
+    if (row.status !== "completing" || !row.uploadId)
+      throw new FileMultipartStateError(
+        `Multipart upload is ${row.status}; it cannot be completed.`,
+      );
+    if (row.manifestHash !== manifestHash || row.manifestJson !== manifestJson)
+      throw new FileMultipartConflictError(
+        "Multipart completion is already using a different part manifest.",
+      );
+
+    let object = await this.requireBucket().head(row.objectKey);
+    if (!object) {
+      try {
+        object = await this.requireBucket()
+          .resumeMultipartUpload(row.objectKey, row.uploadId)
+          .complete(parts);
+      } catch (error) {
+        object = await this.requireBucket().head(row.objectKey);
+        if (!object) {
+          await this.env.DB.prepare(
+            `UPDATE file_multipart_uploads
+                SET last_error = ?, updated_at = unixepoch()
+              WHERE version_id = ? AND event_id = ? AND status = 'completing'`,
+          )
+            .bind(
+              (error instanceof Error ? error.message : String(error)).slice(
+                0,
+                2_000,
+              ),
+              row.versionId,
+              actor.eventId,
+            )
+            .run();
+          throw new FileMultipartIncompleteError(
+            "R2 multipart completion did not finish. Retry with the same part manifest.",
+            true,
+            { cause: error },
+          );
+        }
+      }
+    }
+    if (
+      object.size !== row.sizeBytes ||
+      object.customMetadata?.eventId !== row.eventId ||
+      object.customMetadata.assetId !== row.assetId ||
+      object.customMetadata.versionId !== row.versionId ||
+      object.customMetadata.quarantine !== "pending-scan"
+    ) {
+      return this.failInvalidObject(
+        actor,
+        row,
+        null,
+        new FilePolicyError(
+          "The completed R2 object does not match the declared multipart upload.",
+        ),
+      );
+    }
+    let detected: string | null = null;
+    try {
+      const source = this.inspectionSource(row);
+      detected = await detectInspectionContentType(source);
+      validateFileSignature(
+        row.assetKind as z.infer<typeof assetKindSchema>,
+        source,
+        detected,
+      );
+    } catch (error) {
+      return this.failInvalidObject(actor, row, detected, error);
+    }
+    const [versionCommitted, uploadCommitted] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `UPDATE file_versions
+            SET upload_status = 'uploaded', signature_status = 'valid',
+                detected_content_type = ?, object_etag = ?, uploaded_at = unixepoch()
+          WHERE id = ? AND event_id = ?
+            AND upload_status IN ('uploading','uploaded')
+            AND signature_status IN ('pending','valid') AND scan_status = 'pending'
+            AND deleted_at IS NULL
+            AND EXISTS (
+              SELECT 1
+                FROM file_assets asset
+                JOIN events policy_event
+                  ON policy_event.id = asset.event_id
+               WHERE asset.id = file_versions.asset_id
+                 AND asset.event_id = file_versions.event_id
+                 AND asset.status <> 'deleted'
+                 AND file_versions.size_bytes <= CASE asset.asset_kind
+                   WHEN 'headshot' THEN json_extract(
+                     policy_event.file_policy_json,
+                     '$.headshotMaximumBytes'
+                   )
+                   WHEN 'slides' THEN json_extract(
+                     policy_event.file_policy_json,
+                     '$.slidesMaximumBytes'
+                   )
+                   WHEN 'video' THEN json_extract(
+                     policy_event.file_policy_json,
+                     '$.videoMaximumBytes'
+                   )
+                   WHEN 'supporting_document' THEN json_extract(
+                     policy_event.file_policy_json,
+                     '$.supportingDocumentMaximumBytes'
+                   )
+                   WHEN 'resource_attachment' THEN json_extract(
+                     policy_event.file_policy_json,
+                     '$.supportingDocumentMaximumBytes'
+                   )
+                   WHEN 'task_evidence' THEN json_extract(
+                     policy_event.file_policy_json,
+                     '$.supportingDocumentMaximumBytes'
+                   )
+                   WHEN 'other' THEN json_extract(
+                     policy_event.file_policy_json,
+                     '$.supportingDocumentMaximumBytes'
+                   )
+                 END
+                 AND NOT EXISTS (
+                   SELECT 1 FROM audit_events audit
+                    WHERE audit.id = 'file-erasure:' || asset.id
+                 )
+            )`,
+      ).bind(detected, object.httpEtag, row.versionId, actor.eventId),
+      this.env.DB.prepare(
+        `UPDATE file_multipart_uploads
+            SET status = 'completed', last_error = NULL, updated_at = unixepoch()
+          WHERE version_id = ? AND event_id = ?
+            AND status IN ('completing','completed') AND manifest_hash = ?
+            AND EXISTS (
+              SELECT 1 FROM file_versions version
+               WHERE version.id = file_multipart_uploads.version_id
+                 AND version.event_id = file_multipart_uploads.event_id
+                 AND version.upload_status = 'uploaded'
+                 AND version.signature_status = 'valid'
+                 AND version.scan_status = 'pending'
+                 AND version.object_etag = ?
+                 AND version.deleted_at IS NULL
+                 AND EXISTS (
+                   SELECT 1 FROM file_assets asset
+                    WHERE asset.id = version.asset_id
+                      AND asset.event_id = version.event_id
+                      AND asset.status <> 'deleted'
+                      AND NOT EXISTS (
+                        SELECT 1 FROM audit_events audit
+                         WHERE audit.id = 'file-erasure:' || asset.id
+                      )
+                 )
+            )`,
+      ).bind(row.versionId, actor.eventId, manifestHash, object.httpEtag),
+      this.env.DB.prepare(
+        `UPDATE file_assets SET updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND status <> 'deleted'
+            AND NOT EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = 'file-erasure:' || file_assets.id
+            )`,
+      ).bind(row.assetId, actor.eventId),
+      this.env.DB.prepare(
+        `INSERT OR IGNORE INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, ?, ?, ?, 'file.upload.quarantined', 'file_version', ?, ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM file_versions version
+             WHERE version.id = ? AND version.event_id = ?
+               AND version.upload_status = 'uploaded'
+               AND version.signature_status = 'valid'
+               AND version.scan_status = 'pending'
+               AND version.deleted_at IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM file_multipart_uploads upload
+                  WHERE upload.version_id = version.id
+                    AND upload.event_id = version.event_id
+                    AND upload.status = 'completed'
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM audit_events erasure
+                  WHERE erasure.id = 'file-erasure:' || version.asset_id
+               )
+          )`,
+      ).bind(
+        `file-multipart-complete:${row.versionId}`,
+        actor.organisationId,
+        actor.eventId,
+        actor.personId,
+        row.versionId,
+        JSON.stringify({ assetId: row.assetId, scanStatus: "pending" }),
+        row.versionId,
+        actor.eventId,
+      ),
+    ]);
+    if (
+      (versionCommitted.meta.changes ?? 0) !== 1 ||
+      (uploadCommitted.meta.changes ?? 0) !== 1
+    ) {
+      const failures: unknown[] = [];
+      try {
+        await this.requireBucket().delete(row.objectKey);
+      } catch (error) {
+        failures.push(error);
+      }
+      try {
+        await this.env.DB.batch([
+          this.env.DB.prepare(
+            `UPDATE file_multipart_uploads
+                SET status = 'failed',
+                    last_error = 'Completed object metadata did not commit.',
+                    updated_at = unixepoch()
+              WHERE version_id = ? AND event_id = ?
+                AND status IN ('completing','completed')
+                AND NOT EXISTS (
+                  SELECT 1 FROM audit_events audit
+                   WHERE audit.id = 'file-erasure:' || file_multipart_uploads.asset_id
+                )`,
+          ).bind(row.versionId, actor.eventId),
+          this.env.DB.prepare(
+            `UPDATE file_versions
+                SET upload_status = 'failed', signature_status = 'invalid',
+                    scan_status = 'failed', object_etag = NULL,
+                    scan_error = 'Completed object metadata did not commit.'
+              WHERE id = ? AND event_id = ? AND deleted_at IS NULL
+                AND upload_status IN ('uploading','uploaded')
+                AND NOT EXISTS (
+                  SELECT 1 FROM audit_events audit
+                   WHERE audit.id = 'file-erasure:' || file_versions.asset_id
+                )`,
+          ).bind(row.versionId, actor.eventId),
+        ]);
+      } catch (error) {
+        failures.push(error);
+      }
+      throw new FileMultipartIncompleteError(
+        "The completed R2 object was revoked before its quarantined metadata could commit.",
+        true,
+        failures.length
+          ? {
+              cause: new AggregateError(
+                failures,
+                "Completed multipart compensation was incomplete.",
+              ),
+            }
+          : undefined,
+      );
+    }
+    row = await this.loadByVersion(actor, row.versionId);
+    if (
+      row.status !== "completed" ||
+      row.uploadStatus !== "uploaded" ||
+      row.signatureStatus !== "valid" ||
+      row.objectEtag !== object.httpEtag
+    )
+      throw new FileMultipartIncompleteError(
+        "The R2 object completed, but its quarantined metadata did not commit. Retry completion.",
+        true,
+      );
+    const scan = await this.ensureScan(actor, row);
+    return {
+      assetId: row.assetId,
+      versionId: row.versionId,
+      scanStatus: "pending" as const,
+      scanOperationId: scan.operationId,
+      duplicate: false,
+    };
+  }
+
+  async abort(actor: MultipartActor, rawInput: unknown) {
+    const input = multipartAbortSchema.parse(rawInput);
+    let row = await this.loadByVersion(actor, input.versionId);
+    if (row.status === "completed" || row.status === "completing")
+      throw new FileMultipartStateError(
+        "A completing or completed upload cannot be aborted.",
+      );
+    if (row.status !== "aborted") {
+      const [aborted] = await this.env.DB.batch([
+        this.env.DB.prepare(
+          `UPDATE file_multipart_uploads
+              SET status = 'aborted', last_error = NULL, updated_at = unixepoch()
+            WHERE version_id = ? AND event_id = ?
+              AND status IN ('requested','initiated','failed')`,
+        ).bind(row.versionId, actor.eventId),
+        this.env.DB.prepare(
+          `UPDATE file_versions
+              SET upload_status = 'aborted', scan_status = 'failed',
+                  scan_error = 'Multipart upload aborted before completion.'
+            WHERE id = ? AND event_id = ? AND upload_status IN ('requested','uploading','failed')`,
+        ).bind(row.versionId, actor.eventId),
+        this.env.DB.prepare(
+          `UPDATE file_assets
+              SET status = CASE WHEN current_version_id IS NULL THEN 'rejected' ELSE status END,
+                  updated_at = unixepoch()
+            WHERE id = ? AND event_id = ?`,
+        ).bind(row.assetId, actor.eventId),
+      ]);
+      if ((aborted.meta.changes ?? 0) !== 1)
+        throw new FileMultipartStateError(
+          "The multipart upload changed before it could be aborted.",
+        );
+      row = { ...row, status: "aborted" };
+    }
+    if (row.uploadId) {
+      try {
+        await this.requireBucket()
+          .resumeMultipartUpload(row.objectKey, row.uploadId)
+          .abort();
+      } catch (error) {
+        if (isMissingR2MultipartUpload(error)) {
+          await this.env.DB.prepare(
+            `UPDATE file_multipart_uploads
+                SET last_error = NULL, updated_at = unixepoch()
+              WHERE version_id = ? AND event_id = ? AND status = 'aborted'`,
+          )
+            .bind(row.versionId, actor.eventId)
+            .run();
+        } else {
+          await this.env.DB.prepare(
+            `UPDATE file_multipart_uploads SET last_error = ?, updated_at = unixepoch()
+            WHERE version_id = ? AND event_id = ? AND status = 'aborted'`,
+          )
+            .bind(
+              (error instanceof Error ? error.message : String(error)).slice(
+                0,
+                2_000,
+              ),
+              row.versionId,
+              actor.eventId,
+            )
+            .run();
+          throw new FileMultipartIncompleteError(
+            "File access was revoked, but the incomplete R2 multipart upload could not be aborted. Retry abort.",
+            true,
+            { cause: error },
+          );
+        }
+      }
+    }
+    await this.env.DB.prepare(
+      `INSERT OR IGNORE INTO audit_events (
+         id, organisation_id, event_id, actor_person_id, action,
+         entity_type, entity_id, metadata_json, created_at
+       ) VALUES (?, ?, ?, ?, 'file.multipart.aborted', 'file_version', ?, ?, unixepoch())`,
+    )
+      .bind(
+        `file-multipart-abort:${row.versionId}`,
+        actor.organisationId,
+        actor.eventId,
+        actor.personId,
+        row.versionId,
+        JSON.stringify({ assetId: row.assetId }),
+      )
+      .run();
+    return { versionId: row.versionId, aborted: true };
+  }
+}
+
+export type { FileScanQueueMessage };

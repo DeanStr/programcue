@@ -13,9 +13,7 @@ export const taskTemplateInputSchema = z
   .object({
     name: z.string().trim().min(3).max(160),
     description: z.string().trim().max(1_000),
-    targetType: z.literal("speaker", {
-      error: "Only speaker-scoped task templates can currently be assigned.",
-    }),
+    targetType: z.enum(["speaker", "session", "event"]),
     taskType: z.enum([
       "checklist",
       "acknowledgement",
@@ -36,6 +34,7 @@ export const taskTemplateInputSchema = z
     dueAnchor: z.enum(["none", "acceptance", "session_start", "fixed"]),
     dueOffsetDays: z.coerce.number().int().min(-365).max(365).nullable(),
     fixedDueDate: z.string().date().nullable(),
+    autoAssignOnAcceptance: z.boolean(),
     dependencyIds: z.array(z.string().min(1)).max(30).default([]),
   })
   .superRefine((input, context) => {
@@ -75,6 +74,14 @@ export const taskTemplateInputSchema = z
         code: "custom",
         path: ["dueOffsetDays"],
         message: "Set the number of days relative to the anchor.",
+      });
+    }
+    if (input.autoAssignOnAcceptance && input.dueAnchor === "session_start") {
+      context.addIssue({
+        code: "custom",
+        path: ["dueAnchor"],
+        message:
+          "Automatic acceptance tasks cannot use session start because accepted sessions are initially unscheduled.",
       });
     }
   });

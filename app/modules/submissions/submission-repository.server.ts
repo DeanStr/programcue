@@ -86,6 +86,14 @@ export class D1SubmissionRepository {
     return this.applicants.getApplicantDraftForm(...args);
   }
 
+  findDraftCreationReplay(
+    ...args: Parameters<
+      SubmissionApplicantRepository["findDraftCreationReplay"]
+    >
+  ) {
+    return this.applicants.findDraftCreationReplay(...args);
+  }
+
   createDraft(
     ...args: Parameters<SubmissionApplicantRepository["createDraft"]>
   ) {
@@ -94,6 +102,12 @@ export class D1SubmissionRepository {
 
   saveDraft(...args: Parameters<SubmissionApplicantRepository["saveDraft"]>) {
     return this.applicants.saveDraft(...args);
+  }
+
+  withdrawSubmission(
+    ...args: Parameters<SubmissionApplicantRepository["withdrawSubmission"]>
+  ) {
+    return this.applicants.withdrawSubmission(...args);
   }
 
   submitDraft(
@@ -106,6 +120,14 @@ export class D1SubmissionRepository {
     ...args: Parameters<SubmissionAdminRepository["listAdminSubmissions"]>
   ) {
     return this.administration.listAdminSubmissions(...args);
+  }
+
+  listAdminSubmissionCategories(
+    ...args: Parameters<
+      SubmissionAdminRepository["listAdminSubmissionCategories"]
+    >
+  ) {
+    return this.administration.listAdminSubmissionCategories(...args);
   }
 
   getAdminSubmission(

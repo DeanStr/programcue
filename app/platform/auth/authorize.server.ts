@@ -1,9 +1,19 @@
 import { redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
-import { DEMO_IDENTITIES, ensureDemoData, type DemoRole } from "~/platform/demo/seed.server";
+import {
+  DEMO_IDENTITIES,
+  ensureDemoData,
+  type DemoRole,
+} from "~/platform/demo/seed.server";
 
-export type ViewerRole = "owner" | "administrator" | "committee_chair" | "evaluator" | "submitter" | "speaker";
+export type ViewerRole =
+  | "owner"
+  | "administrator"
+  | "committee_chair"
+  | "evaluator"
+  | "submitter"
+  | "speaker";
 
 export type Viewer = {
   personId: string;
@@ -15,8 +25,27 @@ export type Viewer = {
   demo: boolean;
 };
 
+const DEMO_ROLE_COOKIE = "program_cue_demo_role";
+
+function invalidDemoRoleCookie(): never {
+  throw new Response(
+    "The demo role selection is invalid. Choose a role again.",
+    {
+      status: 400,
+      statusText: "Invalid demo identity",
+      headers: {
+        "cache-control": "no-store",
+        "set-cookie": `${DEMO_ROLE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+      },
+    },
+  );
+}
+
 function forbidden(message: string, status = 403): never {
-  throw new Response(message, { status, statusText: status === 401 ? "Unauthorized" : "Forbidden" });
+  throw new Response(message, {
+    status,
+    statusText: status === 401 ? "Unauthorized" : "Forbidden",
+  });
 }
 
 function signInLocation(request: Request) {
@@ -29,7 +58,12 @@ function cookieValue(request: Request, name: string) {
   const cookie = request.headers.get("cookie") ?? "";
   for (const part of cookie.split(";")) {
     const [key, ...value] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(value.join("="));
+    if (key !== name) continue;
+    try {
+      return decodeURIComponent(value.join("="));
+    } catch {
+      invalidDemoRoleCookie();
+    }
   }
   return null;
 }
@@ -39,18 +73,26 @@ export async function requireAuthenticatedPerson(
   env: CloudflareEnvironment,
   unauthenticatedBehavior: "redirect" | "response" = "redirect",
 ) {
-  await ensureDemoData(env);
   if (String(env.DEMO_MODE) === "true") {
-    const requestedRole = cookieValue(request, "program_cue_demo_role");
-    const role: DemoRole = requestedRole && requestedRole in DEMO_IDENTITIES
-      ? requestedRole as DemoRole
-      : "administrator";
+    const requestedRole = cookieValue(request, DEMO_ROLE_COOKIE);
+    if (
+      requestedRole !== null &&
+      !Object.hasOwn(DEMO_IDENTITIES, requestedRole)
+    ) {
+      invalidDemoRoleCookie();
+    }
+    const role: DemoRole =
+      requestedRole === null ? "administrator" : (requestedRole as DemoRole);
+    await ensureDemoData(env);
     return { ...DEMO_IDENTITIES[role], demo: true, demoRole: role };
   }
 
-  const session = await createAuth(env).api.getSession({ headers: request.headers });
+  const session = await createAuth(env).api.getSession({
+    headers: request.headers,
+  });
   if (!session?.user) {
-    if (unauthenticatedBehavior === "redirect") throw redirect(signInLocation(request));
+    if (unauthenticatedBehavior === "redirect")
+      throw redirect(signInLocation(request));
     forbidden("Authentication is required", 401);
   }
   return {
@@ -62,12 +104,13 @@ export async function requireAuthenticatedPerson(
   };
 }
 
-export async function requireEventRole(
+async function resolveEventRole(
   request: Request,
   env: CloudflareEnvironment,
   eventId: string,
   allowedRoles: ReadonlyArray<Viewer["role"]>,
-  unauthenticatedBehavior: "redirect" | "response" = "redirect",
+  unauthenticatedBehavior: "redirect" | "response",
+  acceptPendingInvitation: boolean,
 ): Promise<Viewer> {
   const { personId, name, email, demo } = await requireAuthenticatedPerson(
     request,
@@ -75,16 +118,18 @@ export async function requireEventRole(
     unauthenticatedBehavior,
   );
 
-  if (allowedRoles.length === 0) forbidden("You do not have permission to manage this event");
+  if (allowedRoles.length === 0)
+    forbidden("You do not have permission to manage this event");
   const rolePlaceholders = allowedRoles.map(() => "?").join(",");
 
-  let membership = await env.DB.prepare(`
+  let membership = await env.DB.prepare(
+    `
     SELECT m.id, m.organisation_id AS organisationId, m.event_id AS eventId, m.role
       FROM memberships m
       JOIN events e ON e.organisation_id = m.organisation_id
      WHERE e.id = ?
        AND m.person_id = ?
-       AND (m.event_id = e.id OR (m.event_id IS NULL AND m.role = 'owner'))
+       AND (m.event_id = e.id OR (m.event_id IS NULL AND m.role IN ('owner', 'administrator')))
        AND m.role IN (${rolePlaceholders})
        AND m.accepted_at IS NOT NULL
        AND m.revoked_at IS NULL
@@ -99,21 +144,30 @@ export async function requireEventRole(
               END,
               CASE WHEN m.event_id = e.id THEN 0 ELSE 1 END
      LIMIT 1
-  `).bind(eventId, personId, ...allowedRoles).first<{ id: string; organisationId: string; eventId: string | null; role: ViewerRole }>();
+  `,
+  )
+    .bind(eventId, personId, ...allowedRoles)
+    .first<{
+      id: string;
+      organisationId: string;
+      eventId: string | null;
+      role: ViewerRole;
+    }>();
 
-  if (!membership) {
-    const invitation = await env.DB.prepare(`
+  if (!membership && acceptPendingInvitation) {
+    const invitation = await env.DB.prepare(
+      `
       SELECT m.id, m.organisation_id AS organisationId, m.event_id AS eventId, m.role
         FROM memberships m
         JOIN events e ON e.organisation_id = m.organisation_id
        WHERE e.id = ?
          AND m.person_id = ?
-         AND (m.event_id = e.id OR (m.event_id IS NULL AND m.role = 'owner'))
+         AND (m.event_id = e.id OR (m.event_id IS NULL AND m.role IN ('owner', 'administrator')))
          AND m.role IN (${rolePlaceholders})
          AND m.accepted_at IS NULL
          AND m.invited_at IS NOT NULL
          AND m.revoked_at IS NULL
-         AND (m.invitation_expires_at IS NULL OR m.invitation_expires_at > unixepoch())
+         AND m.invitation_expires_at > unixepoch()
        ORDER BY CASE m.role
                   WHEN 'owner' THEN 0
                   WHEN 'administrator' THEN 1
@@ -125,19 +179,30 @@ export async function requireEventRole(
                 END,
                 CASE WHEN m.event_id = e.id THEN 0 ELSE 1 END
        LIMIT 1
-    `).bind(eventId, personId, ...allowedRoles).first<{ id: string; organisationId: string; eventId: string | null; role: ViewerRole }>();
+    `,
+    )
+      .bind(eventId, personId, ...allowedRoles)
+      .first<{
+        id: string;
+        organisationId: string;
+        eventId: string | null;
+        role: ViewerRole;
+      }>();
 
     if (invitation) {
       const [accepted] = await env.DB.batch([
-        env.DB.prepare(`
+        env.DB.prepare(
+          `
           UPDATE memberships
              SET accepted_at = unixepoch()
            WHERE id = ? AND accepted_at IS NULL AND invited_at IS NOT NULL
              AND revoked_at IS NULL
-             AND (invitation_expires_at IS NULL OR invitation_expires_at > unixepoch())
+             AND invitation_expires_at > unixepoch()
           RETURNING id, organisation_id AS organisationId, event_id AS eventId, role
-        `).bind(invitation.id),
-        env.DB.prepare(`
+        `,
+        ).bind(invitation.id),
+        env.DB.prepare(
+          `
           INSERT INTO audit_events (
             id, organisation_id, event_id, actor_person_id, action,
             entity_type, entity_id, metadata_json, created_at
@@ -146,7 +211,8 @@ export async function requireEventRole(
                  'membership', m.id, ?, unixepoch()
             FROM memberships m
            WHERE m.id = ? AND changes() = 1
-        `).bind(
+        `,
+        ).bind(
           crypto.randomUUID(),
           eventId,
           personId,
@@ -154,7 +220,32 @@ export async function requireEventRole(
           invitation.id,
         ),
       ]);
-      membership = accepted.results[0] as typeof membership | undefined ?? null;
+      membership =
+        (accepted.results[0] as typeof membership | undefined) ??
+        (await env.DB.prepare(
+          `
+          SELECT m.id, m.organisation_id AS organisationId,
+                 m.event_id AS eventId, m.role
+            FROM memberships m
+            JOIN events e ON e.organisation_id = m.organisation_id
+           WHERE m.id = ? AND e.id = ? AND m.person_id = ?
+             AND (m.event_id = e.id
+                  OR (m.event_id IS NULL
+                      AND m.role IN ('owner', 'administrator')))
+             AND m.role IN (${rolePlaceholders})
+             AND m.accepted_at IS NOT NULL
+             AND m.revoked_at IS NULL
+           LIMIT 1
+        `,
+        )
+          .bind(invitation.id, eventId, personId, ...allowedRoles)
+          .first<{
+            id: string;
+            organisationId: string;
+            eventId: string | null;
+            role: ViewerRole;
+          }>()) ??
+        null;
     }
   }
 
@@ -171,4 +262,52 @@ export async function requireEventRole(
     eventId,
     demo,
   };
+}
+
+export function requireEventRole(
+  request: Request,
+  env: CloudflareEnvironment,
+  eventId: string,
+  allowedRoles: ReadonlyArray<Viewer["role"]>,
+  unauthenticatedBehavior: "redirect" | "response" = "redirect",
+): Promise<Viewer> {
+  return resolveEventRole(
+    request,
+    env,
+    eventId,
+    allowedRoles,
+    unauthenticatedBehavior,
+    false,
+  );
+}
+
+/**
+ * Accepts a pending invitation only through an explicit same-origin POST.
+ * Ordinary loaders must use requireEventRole so navigation and prefetch remain
+ * read-only.
+ */
+export function acceptEventInvitation(
+  request: Request,
+  env: CloudflareEnvironment,
+  eventId: string,
+  allowedRoles: ReadonlyArray<Viewer["role"]>,
+  unauthenticatedBehavior: "redirect" | "response" = "redirect",
+): Promise<Viewer> {
+  if (request.method.toUpperCase() !== "POST") {
+    throw new Response("Invitation acceptance requires POST.", {
+      status: 405,
+      headers: { allow: "POST", "cache-control": "no-store" },
+    });
+  }
+  if (request.headers.get("origin") !== new URL(request.url).origin) {
+    forbidden("A same-origin request is required to accept an invitation");
+  }
+  return resolveEventRole(
+    request,
+    env,
+    eventId,
+    allowedRoles,
+    unauthenticatedBehavior,
+    true,
+  );
 }

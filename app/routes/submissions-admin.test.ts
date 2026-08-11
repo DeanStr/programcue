@@ -1,0 +1,108 @@
+import { env } from "cloudflare:test";
+import { RouterContextProvider } from "react-router";
+import { beforeEach, describe, expect, it } from "vitest";
+
+import { cloudflareContext } from "~/platform/cloudflare-context";
+import { currentEventCookie } from "~/platform/auth/current-event.server";
+import { ensureDemoData } from "~/platform/demo/seed.server";
+import { action } from "./submissions-admin";
+
+function context() {
+  const value = new RouterContextProvider();
+  value.set(cloudflareContext, {
+    env: env as unknown as CloudflareEnvironment,
+    ctx: {} as ExecutionContext,
+  });
+  return value;
+}
+
+function adminRequest(body: URLSearchParams) {
+  const eventCookie = currentEventCookie(
+    "evt-foe-2025",
+    env as unknown as CloudflareEnvironment,
+  ).split(";", 1)[0];
+  return new Request("http://localhost/admin/submissions", {
+    method: "POST",
+    headers: {
+      cookie: `program_cue_demo_role=administrator; ${eventCookie}`,
+      origin: "http://localhost",
+    },
+    body,
+  });
+}
+
+beforeEach(async () => {
+  await ensureDemoData(env as unknown as CloudflareEnvironment);
+  await env.DB.prepare(
+    "UPDATE events SET duplicate_person_warnings = 1 WHERE id = ?",
+  )
+    .bind("evt-foe-2025")
+    .run();
+});
+
+describe("manual person creation warnings", () => {
+  it("blocks a direct session until an administrator reviews likely duplicates", async () => {
+    const title = `Duplicate warning ${crypto.randomUUID()}`;
+    const idempotencyKey = crypto.randomUUID();
+    const base = {
+      _intent: "create_direct_session",
+      idempotencyKey,
+      title,
+      description: "A direct session created after reviewing identity matches.",
+      format: "presentation",
+      durationMinutes: "45",
+      speakers: JSON.stringify([
+        {
+          name: "Priya Shah",
+          email: "priya.speaker@example.com",
+          biography: "Existing speaker",
+        },
+      ]),
+    };
+
+    const warning = await action({
+      request: adminRequest(new URLSearchParams(base)),
+      params: {},
+      context: context(),
+    } as never);
+    if (warning instanceof Response)
+      throw new Error("Duplicate warning returned a raw response.");
+    expect(warning.init?.status).toBe(409);
+    expect(warning.data).toMatchObject({
+      ok: false,
+      duplicateCheck: {
+        intent: "create_direct_session",
+        matches: [
+          expect.objectContaining({
+            personId: "person-demo-speaker",
+            reasons: expect.arrayContaining(["same_email", "same_name"]),
+          }),
+        ],
+      },
+    });
+    const beforeConfirmation = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM sessions WHERE event_id = ? AND title = ?",
+    )
+      .bind("evt-foe-2025", title)
+      .first<{ count: number }>();
+    expect(Number(beforeConfirmation?.count ?? 0)).toBe(0);
+
+    const confirmed = await action({
+      request: adminRequest(
+        new URLSearchParams({ ...base, confirmDuplicatePeople: "yes" }),
+      ),
+      params: {},
+      context: context(),
+    } as never);
+    if (confirmed instanceof Response)
+      throw new Error("Confirmed direct session returned a raw response.");
+    expect(confirmed.init?.status ?? 200).toBe(200);
+    expect(confirmed.data).toMatchObject({ ok: true });
+    const afterConfirmation = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM sessions WHERE event_id = ? AND title = ?",
+    )
+      .bind("evt-foe-2025", title)
+      .first<{ count: number }>();
+    expect(Number(afterConfirmation?.count ?? 0)).toBe(1);
+  });
+});

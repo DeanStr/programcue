@@ -103,8 +103,13 @@ export async function processScheduleCalendarFanout(
     throw new Error(
       "Schedule calendar fan-out operation does not exist in the authorised event.",
     );
-  if (operation.status === "completed" || operation.status === "cancelled")
+  if (
+    ["completed", "cancelled", "failed", "partially_failed"].includes(
+      operation.status,
+    )
+  ) {
     return;
+  }
   const saved = scheduleCalendarFanoutMessageSchema.safeParse(
     JSON.parse(operation.payloadJson),
   );
@@ -158,8 +163,9 @@ export async function processScheduleCalendarFanout(
             claim_token = ?, claim_expires_at = unixepoch() + ?, updated_at = unixepoch()
       WHERE id = ? AND event_id = ? AND organisation_id = ?
         AND type = 'schedule.calendar_fanout' AND idempotency_key = ?
+        AND payload_json = ?
         AND (
-          status IN ('queued','received','retrying','queue_failed','failed','partially_failed')
+          status IN ('queued','received','retrying','queue_failed')
           OR (status = 'running' AND COALESCE(claim_expires_at, 0) <= unixepoch())
         )`,
   )
@@ -170,15 +176,70 @@ export async function processScheduleCalendarFanout(
       message.eventId,
       message.organisationId,
       message.idempotencyKey,
+      operation.payloadJson,
     )
     .run();
   if ((claimed.meta.changes ?? 0) !== 1) {
-    const current = await loadOperationClaim(
-      env,
-      message.operationId,
-      message.eventId,
-    );
-    if (current?.status === "completed" || current?.status === "cancelled")
+    const current = await env.DB.prepare(
+      `SELECT status, payload_json AS payloadJson,
+              claim_token AS claimToken, claim_expires_at AS claimExpiresAt
+         FROM operation_jobs
+        WHERE id = ? AND event_id = ? AND organisation_id = ?
+          AND type = 'schedule.calendar_fanout' AND idempotency_key = ?`,
+    )
+      .bind(
+        message.operationId,
+        message.eventId,
+        message.organisationId,
+        message.idempotencyKey,
+      )
+      .first<{
+        status: string;
+        payloadJson: string;
+        claimToken: string | null;
+        claimExpiresAt: number | null;
+      }>();
+    if (
+      current &&
+      ["completed", "cancelled", "failed", "partially_failed"].includes(
+        current.status,
+      )
+    ) {
+      return;
+    }
+    if (
+      current?.status === "queued" &&
+      current.payloadJson !== operation.payloadJson
+    ) {
+      const currentSaved = scheduleCalendarFanoutMessageSchema.safeParse(
+        JSON.parse(current.payloadJson),
+      );
+      if (!currentSaved.success) {
+        throw new Error(
+          "The durable schedule calendar fan-out payload is invalid.",
+        );
+      }
+      const currentHasSameIdentity =
+        currentSaved.data.type === message.type &&
+        currentSaved.data.operationId === message.operationId &&
+        currentSaved.data.scheduleVersionId === message.scheduleVersionId &&
+        currentSaved.data.eventId === message.eventId &&
+        currentSaved.data.organisationId === message.organisationId &&
+        currentSaved.data.idempotencyKey === message.idempotencyKey;
+      if (!currentHasSameIdentity) {
+        throw new Error(
+          "The schedule calendar fan-out message does not match its durable operation identity.",
+        );
+      }
+      if (!env.OPERATIONS_QUEUE)
+        throw new Error("Required OPERATIONS_QUEUE binding is unavailable.");
+      await env.OPERATIONS_QUEUE.send(currentSaved.data);
+      return;
+    }
+    if (
+      current?.status === "queue_failed" &&
+      current.payloadJson !== operation.payloadJson
+    )
       return;
     if (
       current?.status === "running" &&

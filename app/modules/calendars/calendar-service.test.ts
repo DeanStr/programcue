@@ -235,6 +235,21 @@ describe("calendar lifecycle", () => {
         .bind(operationId)
         .first(),
     ).toEqual({ status: "queued", progressTotal: 12, progressCompleted: 10 });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT status, COUNT(*) AS count
+           FROM operation_items
+          WHERE operation_id = ? AND entity_type = 'schedule_calendar_target'
+          GROUP BY status ORDER BY status`,
+      )
+        .bind(operationId)
+        .all(),
+    ).toMatchObject({
+      results: [
+        { status: "completed", count: 10 },
+        { status: "pending", count: 2 },
+      ],
+    });
 
     const completed = await processScheduleCalendarFanout(
       continuation,
@@ -267,6 +282,195 @@ describe("calendar lifecycle", () => {
       progressCompleted: 12,
       progressFailed: 0,
     });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT status, COUNT(*) AS count
+           FROM operation_items
+          WHERE operation_id = ? AND entity_type = 'schedule_calendar_target'
+          GROUP BY status`,
+      )
+        .bind(operationId)
+        .all(),
+    ).toMatchObject({ results: [{ status: "completed", count: 12 }] });
+  });
+
+  it("does not rewind a durable fan-out cursor from a delayed stale claim", async () => {
+    const { testEnv, queued, sessionId, scheduleVersionId } =
+      await scheduledSpeakerEnvironment();
+    const extraSpeakerStatements: D1PreparedStatement[] = [];
+    for (let index = 0; index < 21; index += 1) {
+      const personId = `calendar-stale-speaker-${index}-${crypto.randomUUID()}`;
+      extraSpeakerStatements.push(
+        testEnv.DB.prepare(
+          `INSERT INTO people (
+             id, email, display_name, email_verified, profile_status, created_at, updated_at
+           ) VALUES (?, ?, ?, 1, 'published', unixepoch(), unixepoch())`,
+        ).bind(
+          personId,
+          `${personId}@example.com`,
+          `Calendar stale speaker ${index}`,
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO session_speakers (
+             session_id, event_id, person_id, position, visibility
+           ) VALUES (?, ?, ?, ?, 'public')`,
+        ).bind(sessionId, viewer.eventId, personId, index + 1),
+      );
+    }
+    await testEnv.DB.batch(extraSpeakerStatements);
+    const operationId = `calendar-stale-fanout-${crypto.randomUUID()}`;
+    const message = {
+      type: "schedule.calendar_fanout" as const,
+      operationId,
+      scheduleVersionId,
+      eventId: viewer.eventId,
+      organisationId: viewer.organisationId,
+      idempotencyKey: `calendar-stale-fanout-${crypto.randomUUID()}`,
+    };
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json,
+           progress_total, progress_completed, progress_failed, cancellable,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'schedule.calendar_fanout', ?, ?, 'queued', ?,
+                   0, 0, 0, 0, unixepoch(), unixepoch())`,
+      ).bind(
+        operationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        message.idempotencyKey,
+        message.idempotencyKey,
+        JSON.stringify(message),
+      ),
+      ...scheduleCalendarFanoutSnapshotStatements(
+        testEnv,
+        viewer,
+        scheduleVersionId,
+        operationId,
+      ),
+    ]);
+
+    let releaseClaim!: () => void;
+    const claimReleased = new Promise<void>((resolve) => {
+      releaseClaim = resolve;
+    });
+    let claimReachedResolve!: () => void;
+    const claimReached = new Promise<void>((resolve) => {
+      claimReachedResolve = resolve;
+    });
+    let interceptedClaim = false;
+    const delayedDb = new Proxy(testEnv.DB, {
+      get(target, property) {
+        if (property === "prepare") {
+          return (query: string) => {
+            const statement = target.prepare(query);
+            if (
+              !query.includes("UPDATE operation_jobs") ||
+              !query.includes("type = 'schedule.calendar_fanout'") ||
+              !query.includes("claim_token = ?")
+            ) {
+              return statement;
+            }
+            return new Proxy(statement, {
+              get(statementTarget, statementProperty) {
+                if (statementProperty === "bind") {
+                  return (...values: unknown[]) => {
+                    const bound = statementTarget.bind(...values);
+                    return new Proxy(bound, {
+                      get(boundTarget, boundProperty) {
+                        if (boundProperty === "run") {
+                          return async () => {
+                            if (!interceptedClaim) {
+                              interceptedClaim = true;
+                              claimReachedResolve();
+                              await claimReleased;
+                            }
+                            return boundTarget.run();
+                          };
+                        }
+                        const value = Reflect.get(
+                          boundTarget,
+                          boundProperty,
+                          boundTarget,
+                        ) as unknown;
+                        return typeof value === "function"
+                          ? value.bind(boundTarget)
+                          : value;
+                      },
+                    });
+                  };
+                }
+                const value = Reflect.get(
+                  statementTarget,
+                  statementProperty,
+                  statementTarget,
+                ) as unknown;
+                return typeof value === "function"
+                  ? value.bind(statementTarget)
+                  : value;
+              },
+            });
+          };
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const staleEnv = { ...testEnv, DB: delayedDb } as CloudflareEnvironment;
+    const staleWorker = processScheduleCalendarFanout(message, staleEnv);
+    await claimReached;
+
+    let stateAfterTwoPasses: {
+      status: string;
+      payloadJson: string;
+      resultJson: string | null;
+      progressTotal: number;
+      progressCompleted: number;
+    } | null = null;
+    try {
+      await processScheduleCalendarFanout(message, testEnv);
+      const firstContinuation = queued.find(
+        (item) =>
+          (item as { type?: string }).type === "schedule.calendar_fanout",
+      );
+      expect(firstContinuation).toBeDefined();
+      await processScheduleCalendarFanout(firstContinuation, testEnv);
+      stateAfterTwoPasses = await testEnv.DB.prepare(
+        `SELECT status, payload_json AS payloadJson, result_json AS resultJson,
+                progress_total AS progressTotal,
+                progress_completed AS progressCompleted
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(operationId)
+        .first();
+    } finally {
+      releaseClaim();
+    }
+    const staleResult = await staleWorker;
+    const finalState = await testEnv.DB.prepare(
+      `SELECT status, payload_json AS payloadJson, result_json AS resultJson,
+              progress_total AS progressTotal,
+              progress_completed AS progressCompleted
+         FROM operation_jobs WHERE id = ?`,
+    )
+      .bind(operationId)
+      .first();
+
+    expect(stateAfterTwoPasses).toMatchObject({
+      status: "queued",
+      progressTotal: 22,
+      progressCompleted: 20,
+    });
+    expect(staleResult).toBeUndefined();
+    expect(finalState).toEqual(stateAfterTwoPasses);
+    expect(
+      queued.filter(
+        (item) => (item as { type?: string }).type === "calendar.sync",
+      ),
+    ).toHaveLength(20);
   });
 
   it("restarts a terminal fan-out retry with a fresh progress aggregate", async () => {
@@ -325,6 +529,24 @@ describe("calendar lifecycle", () => {
         operationId,
       ),
     ]);
+
+    const queuedBeforeRedelivery = queued.length;
+    await expect(
+      processScheduleCalendarFanout(message, testEnv),
+    ).resolves.toBeUndefined();
+    expect(queued).toHaveLength(queuedBeforeRedelivery);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT status, progress_completed AS completed, progress_failed AS failed
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(operationId)
+        .first(),
+    ).resolves.toEqual({
+      status: "partially_failed",
+      completed: 1,
+      failed: 1,
+    });
 
     await new OperationService(testEnv).retry(viewer, operationId);
     expect(
@@ -587,7 +809,7 @@ describe("calendar lifecycle", () => {
         return Response.json({ id: "must-not-send-removed-session" });
       },
     );
-    await processCalendarSync(firstRequest!, testEnv, { resend: provider });
+    await processCalendarSync(firstRequest!, testEnv, { email: provider });
     expect(providerCalls).toBe(0);
   });
 
@@ -598,7 +820,7 @@ describe("calendar lifecycle", () => {
     await service.queuePublishedSchedule(viewer, scheduleVersionId);
     const deliveredRequest = calendarQueueMessageSchema.parse(queued[0]);
     await processCalendarSync(deliveredRequest, testEnv, {
-      resend: new ResendEmailProvider("calendar-provider-key", async () =>
+      email: new ResendEmailProvider("calendar-provider-key", async () =>
         Response.json({ id: "calendar-delivered-before-failure" }),
       ),
     });
@@ -612,7 +834,7 @@ describe("calendar lifecycle", () => {
     });
     const failedUpdate = calendarQueueMessageSchema.parse(queued.at(-1));
     await processCalendarSync(failedUpdate, testEnv, {
-      resend: new ResendEmailProvider("calendar-provider-key", async () =>
+      email: new ResendEmailProvider("calendar-provider-key", async () =>
         Response.json({ message: "provider rejected update" }, { status: 500 }),
       ),
     });
@@ -696,6 +918,35 @@ describe("calendar lifecycle", () => {
     expect(cancel).toContain("SEQUENCE:3");
   });
 
+  it("requires the operations Queue before claiming a calendar lifecycle", async () => {
+    const { testEnv, sessionId } = await scheduledSpeakerEnvironment();
+    const idempotencyKey = `calendar-missing-queue-${crypto.randomUUID()}`;
+    const unavailableEnvironment = {
+      ...testEnv,
+      OPERATIONS_QUEUE: undefined,
+    } as unknown as CloudflareEnvironment;
+
+    await expect(
+      new CalendarService(unavailableEnvironment).queueLifecycle(viewer, {
+        sessionId,
+        personId: "person-demo-speaker",
+        method: "REQUEST",
+        provider: "email_ics",
+        idempotencyKey,
+      }),
+    ).rejects.toThrow("Required OPERATIONS_QUEUE binding is unavailable");
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM operation_jobs WHERE idempotency_key = ?) AS operationCount,
+           (SELECT COUNT(*) FROM calendar_invitations
+             WHERE event_id = ? AND session_id = ?) AS invitationCount`,
+      )
+        .bind(idempotencyKey, viewer.eventId, sessionId)
+        .first(),
+    ).resolves.toEqual({ operationCount: 0, invitationCount: 0 });
+  });
+
   it("persists an email-ICS operation before queueing and records the provider result", async () => {
     const { testEnv, queued, realtime, sessionId } =
       await scheduledSpeakerEnvironment();
@@ -715,7 +966,8 @@ describe("calendar lifecycle", () => {
     expect(queued).toHaveLength(1);
     const before = await env.DB.prepare(
       `
-      SELECT ci.status, c.status AS communicationStatus, d.status AS deliveryStatus, o.status AS operationStatus
+      SELECT ci.status, c.status AS communicationStatus, d.status AS deliveryStatus,
+             o.status AS operationStatus, o.cancellable
         FROM calendar_invitations ci
         JOIN communication_deliveries d ON d.id = ci.delivery_id
         JOIN communications c ON c.id = d.communication_id
@@ -730,6 +982,7 @@ describe("calendar lifecycle", () => {
       communicationStatus: "queued",
       deliveryStatus: "queued",
       operationStatus: "queued",
+      cancellable: 0,
     });
 
     let calendarAttachment = "";
@@ -743,7 +996,7 @@ describe("calendar lifecycle", () => {
         return Response.json({ id: "resend-calendar-001" });
       },
     );
-    await processCalendarSync(queued[0], testEnv, { resend: provider });
+    await processCalendarSync(queued[0], testEnv, { email: provider });
     expect(calendarAttachment).toContain("METHOD:REQUEST");
     expect(calendarAttachment).toContain("SEQUENCE:0");
     expect(realtime).toHaveLength(1);
@@ -772,6 +1025,209 @@ describe("calendar lifecycle", () => {
       communicationStatus: "sent",
       providerMessageId: "resend-calendar-001",
       operationStatus: "completed",
+    });
+  });
+
+  it("rejects calendar email provider drift before claiming the delivery or sending", async () => {
+    const { testEnv, queued, sessionId } = await scheduledSpeakerEnvironment();
+    const service = new CalendarService(testEnv);
+    const result = await service.queueLifecycle(viewer, {
+      sessionId,
+      personId: "person-demo-speaker",
+      method: "REQUEST",
+      provider: "email_ics",
+      idempotencyKey: `calendar-provider-bound-${crypto.randomUUID()}`,
+    });
+    await testEnv.DB.prepare(
+      `UPDATE communication_deliveries
+          SET provider = 'mailpit'
+        WHERE id = (
+          SELECT delivery_id FROM calendar_invitations WHERE id = ?
+        )`,
+    )
+      .bind(result.invitationId)
+      .run();
+    let providerCalls = 0;
+    const provider = new ResendEmailProvider(
+      "calendar-provider-drift-key",
+      async () => {
+        providerCalls += 1;
+        return Response.json({ id: "must-not-send-calendar-provider-drift" });
+      },
+    );
+
+    await processCalendarSync(queued[0], testEnv, { email: provider });
+
+    expect(providerCalls).toBe(0);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT invitation.status, attempt.status AS attemptStatus,
+                delivery.status AS deliveryStatus, delivery.provider,
+                operation.status AS operationStatus, operation.last_error AS lastError
+           FROM calendar_invitations invitation
+           JOIN calendar_sync_attempts attempt
+             ON attempt.id = invitation.current_attempt_id
+           JOIN communication_deliveries delivery
+             ON delivery.id = invitation.delivery_id
+           JOIN communications communication
+             ON communication.id = delivery.communication_id
+           JOIN operation_jobs operation
+             ON operation.id = communication.operation_id
+          WHERE invitation.id = ?`,
+      )
+        .bind(result.invitationId)
+        .first(),
+    ).resolves.toEqual({
+      status: "failed",
+      attemptStatus: "failed",
+      deliveryStatus: "failed",
+      provider: "mailpit",
+      operationStatus: "failed",
+      lastError:
+        "The calendar email delivery provider does not match its durable intent.",
+    });
+  });
+
+  it("records a direct-calendar intent before refreshing an expiring provider token", async () => {
+    const { testEnv, queued, sessionId } = await scheduledSpeakerEnvironment();
+    const connectionId = `calendar-expiring-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO calendar_connections (
+         id, organisation_id, event_id, person_id, provider, account_reference,
+         encrypted_credentials, scopes_json, status, expires_at, created_at, updated_at
+       ) VALUES (?, ?, ?, 'person-demo-speaker', 'google', ?, ?, '[]',
+                 'connected', unixepoch() + 60, unixepoch(), unixepoch())`,
+    )
+      .bind(
+        connectionId,
+        viewer.organisationId,
+        viewer.eventId,
+        `expiring-${crypto.randomUUID()}`,
+        "encrypted-credentials-are-consumed-only-by-the-queue-worker",
+      )
+      .run();
+
+    const result = await new CalendarService(testEnv).queueLifecycle(viewer, {
+      sessionId,
+      personId: "person-demo-speaker",
+      method: "REQUEST",
+      provider: "google",
+      connectionId,
+      idempotencyKey: `calendar-expiring-intent-${crypto.randomUUID()}`,
+    });
+
+    expect(queued).toHaveLength(1);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT operation.status AS operationStatus,
+                invitation.status AS invitationStatus,
+                attempt.status AS attemptStatus
+           FROM operation_jobs operation
+           JOIN calendar_invitations invitation
+             ON invitation.current_attempt_id = ?
+           JOIN calendar_sync_attempts attempt
+             ON attempt.id = invitation.current_attempt_id
+          WHERE operation.id = ? AND operation.event_id = ?`,
+      )
+        .bind(
+          calendarQueueMessageSchema.parse(queued[0]).attemptId,
+          result.operationId,
+          viewer.eventId,
+        )
+        .first(),
+    ).resolves.toEqual({
+      operationStatus: "queued",
+      invitationStatus: "queued",
+      attemptStatus: "queued",
+    });
+  });
+
+  it("requires an active invitation to be cancelled before changing its provider or connected account", async () => {
+    const { testEnv, queued, sessionId } = await scheduledSpeakerEnvironment();
+    const googleConnection = `calendar-google-primary-${crypto.randomUUID()}`;
+    const otherGoogleConnection = `calendar-google-other-${crypto.randomUUID()}`;
+    const microsoftConnection = `calendar-microsoft-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO calendar_connections (
+           id, organisation_id, event_id, person_id, provider, account_reference,
+           encrypted_credentials, scopes_json, status, expires_at, created_at, updated_at
+         ) VALUES (?, ?, ?, 'person-demo-speaker', 'google', ?, 'injected-test-provider',
+                   '[]', 'connected', unixepoch() + 3600, unixepoch(), unixepoch())`,
+      ).bind(
+        googleConnection,
+        viewer.organisationId,
+        viewer.eventId,
+        `google-primary-${crypto.randomUUID()}`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO calendar_connections (
+           id, organisation_id, event_id, person_id, provider, account_reference,
+           encrypted_credentials, scopes_json, status, expires_at, created_at, updated_at
+         ) VALUES (?, ?, ?, 'person-demo-speaker', 'google', ?, 'injected-test-provider',
+                   '[]', 'connected', unixepoch() + 3600, unixepoch(), unixepoch())`,
+      ).bind(
+        otherGoogleConnection,
+        viewer.organisationId,
+        viewer.eventId,
+        `google-other-${crypto.randomUUID()}`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO calendar_connections (
+           id, organisation_id, event_id, person_id, provider, account_reference,
+           encrypted_credentials, scopes_json, status, expires_at, created_at, updated_at
+         ) VALUES (?, ?, ?, 'person-demo-speaker', 'microsoft', ?, 'injected-test-provider',
+                   '[]', 'connected', unixepoch() + 3600, unixepoch(), unixepoch())`,
+      ).bind(
+        microsoftConnection,
+        viewer.organisationId,
+        viewer.eventId,
+        `microsoft-${crypto.randomUUID()}`,
+      ),
+    ]);
+    const service = new CalendarService(testEnv);
+    const initial = await service.queueLifecycle(viewer, {
+      sessionId,
+      personId: "person-demo-speaker",
+      method: "REQUEST",
+      provider: "google",
+      connectionId: googleConnection,
+      idempotencyKey: `calendar-provider-authority-${crypto.randomUUID()}`,
+    });
+
+    await expect(
+      service.queueLifecycle(viewer, {
+        sessionId,
+        personId: "person-demo-speaker",
+        method: "REQUEST",
+        provider: "google",
+        connectionId: otherGoogleConnection,
+        idempotencyKey: `calendar-account-switch-${crypto.randomUUID()}`,
+      }),
+    ).rejects.toThrow("before changing its provider or connected account");
+    await expect(
+      service.queueLifecycle(viewer, {
+        sessionId,
+        personId: "person-demo-speaker",
+        method: "REQUEST",
+        provider: "microsoft",
+        connectionId: microsoftConnection,
+        idempotencyKey: `calendar-provider-switch-${crypto.randomUUID()}`,
+      }),
+    ).rejects.toThrow("before changing its provider or connected account");
+    expect(queued).toHaveLength(1);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT connection_id AS connectionId, sequence_number AS sequenceNumber,
+                current_attempt_id AS currentAttemptId
+           FROM calendar_invitations WHERE id = ?`,
+      )
+        .bind(initial.invitationId)
+        .first(),
+    ).resolves.toEqual({
+      connectionId: googleConnection,
+      sequenceNumber: 0,
+      currentAttemptId: calendarQueueMessageSchema.parse(queued[0]).attemptId,
     });
   });
 
@@ -814,7 +1270,7 @@ describe("calendar lifecycle", () => {
     );
 
     await expect(
-      processCalendarSync(queued[0], crashEnv, { resend: provider }),
+      processCalendarSync(queued[0], crashEnv, { email: provider }),
     ).rejects.toThrow("Injected crash after calendar claim commit");
     expect(providerCalls).toBe(0);
     expect(
@@ -841,7 +1297,7 @@ describe("calendar lifecycle", () => {
     )
       .bind(result.operationId)
       .run();
-    await processCalendarSync(queued[0], testEnv, { resend: provider });
+    await processCalendarSync(queued[0], testEnv, { email: provider });
     expect(providerCalls).toBe(1);
     expect(
       await env.DB.prepare(
@@ -951,6 +1407,32 @@ describe("calendar lifecycle", () => {
     expect(invitation).toEqual({ sequenceNumber: 0, attemptCount: 1 });
   });
 
+  it("rejects a calendar idempotency key reused for another lifecycle request", async () => {
+    const { testEnv, queued, sessionId } = await scheduledSpeakerEnvironment();
+    const service = new CalendarService(testEnv);
+    const idempotencyKey = `calendar-bound-${crypto.randomUUID()}`;
+    await service.queueLifecycle(viewer, {
+      sessionId,
+      personId: "person-demo-speaker",
+      method: "REQUEST",
+      provider: "email_ics",
+      idempotencyKey,
+    });
+
+    await expect(
+      service.queueLifecycle(viewer, {
+        sessionId,
+        personId: "person-demo-speaker",
+        method: "CANCEL",
+        provider: "email_ics",
+        idempotencyKey,
+      }),
+    ).rejects.toThrow(
+      "idempotency key is already associated with a different calendar lifecycle request",
+    );
+    expect(queued).toHaveLength(1);
+  });
+
   it("terminalizes a stale queued attempt without calling the provider", async () => {
     const { testEnv, queued, sessionId } = await scheduledSpeakerEnvironment();
     const service = new CalendarService(testEnv);
@@ -976,7 +1458,7 @@ describe("calendar lifecycle", () => {
         return Response.json({ id: "must-not-send-stale" });
       },
     );
-    await processCalendarSync(queued[0], testEnv, { resend: provider });
+    await processCalendarSync(queued[0], testEnv, { email: provider });
     expect(providerCalls).toBe(0);
 
     const stale = await env.DB.prepare(
@@ -1039,7 +1521,7 @@ describe("calendar lifecycle", () => {
         return Response.json({ id: "must-not-send-mismatch" });
       },
     );
-    await processCalendarSync(changedMessage, testEnv, { resend: provider });
+    await processCalendarSync(changedMessage, testEnv, { email: provider });
     expect(providerCalls).toBe(0);
     const state = await env.DB.prepare(
       `
@@ -1061,6 +1543,8 @@ describe("calendar lifecycle", () => {
       operationStatus: "failed",
       itemStatus: "failed",
     });
+    await processCalendarSync(queued[0], testEnv, { email: provider });
+    expect(providerCalls).toBe(0);
   });
 
   it("serializes a direct-provider create before allowing the replacement update", async () => {
@@ -1071,9 +1555,9 @@ describe("calendar lifecycle", () => {
       `
       INSERT INTO calendar_connections (
         id, organisation_id, event_id, person_id, provider, account_reference,
-        encrypted_credentials, scopes_json, status, created_at, updated_at
+        encrypted_credentials, scopes_json, status, expires_at, created_at, updated_at
       ) VALUES (?, ?, ?, 'person-demo-speaker', 'google', ?, 'injected-test-provider', '[]',
-                'connected', unixepoch(), unixepoch())
+                'connected', unixepoch() + 3600, unixepoch(), unixepoch())
     `,
     )
       .bind(
@@ -1179,9 +1663,9 @@ describe("calendar lifecycle", () => {
       `
       INSERT INTO calendar_connections (
         id, organisation_id, event_id, person_id, provider, account_reference,
-        encrypted_credentials, scopes_json, status, created_at, updated_at
+        encrypted_credentials, scopes_json, status, expires_at, created_at, updated_at
       ) VALUES (?, ?, ?, 'person-demo-speaker', 'google', ?, 'injected-test-provider', '[]',
-                'connected', unixepoch(), unixepoch())
+                'connected', unixepoch() + 3600, unixepoch(), unixepoch())
     `,
     )
       .bind(
@@ -1251,6 +1735,73 @@ describe("calendar lifecycle", () => {
     ).resolves.toEqual({
       status: "sent",
       providerEventId: "google-recreated-event-2",
+    });
+  });
+
+  it("clears the old direct-provider identity when a cancelled invitation switches to email", async () => {
+    const { testEnv, queued, sessionId } = await scheduledSpeakerEnvironment();
+    const service = new CalendarService(testEnv);
+    const connectionId = `calendar-email-switch-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO calendar_connections (
+         id, organisation_id, event_id, person_id, provider, account_reference,
+         encrypted_credentials, scopes_json, status, expires_at, created_at, updated_at
+       ) VALUES (?, ?, ?, 'person-demo-speaker', 'google', ?, 'injected-test-provider',
+                 '[]', 'connected', unixepoch() + 3600, unixepoch(), unixepoch())`,
+    )
+      .bind(
+        connectionId,
+        viewer.organisationId,
+        viewer.eventId,
+        `email-switch-${crypto.randomUUID()}`,
+      )
+      .run();
+    const provider: DirectCalendarProvider = {
+      name: "google",
+      async apply(input) {
+        return {
+          providerEventId:
+            input.externalEventId ?? "google-event-before-email-switch",
+        };
+      },
+    };
+    const queueDirect = async (method: "REQUEST" | "CANCEL") => {
+      const result = await service.queueLifecycle(viewer, {
+        sessionId,
+        personId: "person-demo-speaker",
+        method,
+        provider: "google",
+        connectionId,
+        idempotencyKey: `calendar-email-switch-${method}-${crypto.randomUUID()}`,
+      });
+      await processCalendarSync(queued.at(-1), testEnv, {
+        directCalendar: provider,
+      });
+      return result;
+    };
+    const initial = await queueDirect("REQUEST");
+    await queueDirect("CANCEL");
+
+    await service.queueLifecycle(viewer, {
+      sessionId,
+      personId: "person-demo-speaker",
+      method: "REQUEST",
+      provider: "email_ics",
+      idempotencyKey: `calendar-email-switch-request-${crypto.randomUUID()}`,
+    });
+
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT provider_event_id AS providerEventId, connection_id AS connectionId,
+                sequence_number AS sequenceNumber
+           FROM calendar_invitations WHERE id = ?`,
+      )
+        .bind(initial.invitationId)
+        .first(),
+    ).resolves.toEqual({
+      providerEventId: null,
+      connectionId: null,
+      sequenceNumber: 2,
     });
   });
 
@@ -1524,5 +2075,42 @@ describe("calendar lifecycle", () => {
     expect(recoveringCreate.transactionId).not.toBe(firstCreate.transactionId);
     expect(reconciliation).toMatchObject({ subject: "Updated session" });
     expect(reconciliation).not.toHaveProperty("transactionId");
+  });
+
+  it("reads attendee responses from Google and Microsoft without inventing acceptance", async () => {
+    const google = new GoogleCalendarProvider(
+      "token",
+      "primary",
+      async () =>
+        Response.json({
+          attendees: [
+            {
+              email: "speaker@example.com",
+              responseStatus: "tentative",
+            },
+          ],
+        }),
+      "https://google.test",
+    );
+    await expect(
+      google.attendance("google-event", "speaker@example.com"),
+    ).resolves.toBe("tentative");
+
+    const microsoft = new MicrosoftCalendarProvider(
+      "token",
+      async () =>
+        Response.json({
+          attendees: [
+            {
+              emailAddress: { address: "speaker@example.com" },
+              status: { response: "notResponded" },
+            },
+          ],
+        }),
+      "https://microsoft.test/events",
+    );
+    await expect(
+      microsoft.attendance("microsoft-event", "speaker@example.com"),
+    ).resolves.toBe("needs_action");
   });
 });

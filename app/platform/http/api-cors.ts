@@ -74,7 +74,7 @@ export function apiPreflightResponse(
     status: 204,
     headers: {
       "access-control-allow-origin": origin,
-      "access-control-allow-methods": "GET,POST,OPTIONS",
+      "access-control-allow-methods": "GET,POST,PATCH,OPTIONS",
       "access-control-allow-headers":
         "authorization,content-type,idempotency-key,x-correlation-id",
       "access-control-max-age": "600",

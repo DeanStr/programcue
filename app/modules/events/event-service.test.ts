@@ -2,11 +2,17 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  acceptEventInvitation,
+  requireEventRole,
+  type Viewer,
+} from "~/platform/auth/authorize.server";
+import { DEMO_IDENTITIES } from "~/platform/demo/demo-identities";
 import {
   D1EventRepository,
   EventPublishedScheduleConflictError,
   EventPublishedProgrammeSlugError,
+  EventResourceConfigurationError,
   EventRevisionConflictError,
   EventRoomOwnershipError,
   EventSlugConflictError,
@@ -51,7 +57,10 @@ function inputFrom(event: Awaited<ReturnType<EventService["getSetup"]>>) {
     submissionAccessMode: event.submissionAccessMode,
     allowAnonymousDrafts: event.allowAnonymousDrafts,
     duplicatePersonWarnings: event.duplicatePersonWarnings,
+    filePolicy: event.filePolicy,
     rooms: event.rooms,
+    tracks: event.tracks,
+    sessionFormats: event.sessionFormats,
   };
 }
 
@@ -83,12 +92,17 @@ describe("Event Setup D1 service", () => {
     await service.saveSetup(viewer, {
       ...inputFrom(original),
       venue: "Beanfield Centre",
+      filePolicy: {
+        ...original.filePolicy,
+        videoMaximumBytes: 512 * 1_048_576,
+      },
       rooms: [
         ...original.rooms,
         {
           id: "room-test-suite",
           name: "Test Suite",
           capacity: 42,
+          resources: [],
           position: 5,
         },
       ],
@@ -97,6 +111,7 @@ describe("Event Setup D1 service", () => {
     const saved = await service.getSetup(viewer);
     expect(saved.venue).toBe("Beanfield Centre");
     expect(saved.revision).toBe(original.revision + 1);
+    expect(saved.filePolicy.videoMaximumBytes).toBe(512 * 1_048_576);
     expect(saved.rooms.at(-1)).toMatchObject({
       id: "room-test-suite",
       name: "Test Suite",
@@ -121,6 +136,137 @@ describe("Event Setup D1 service", () => {
     );
   });
 
+  it("persists tracks, format defaults and room resource inventories", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const service = new EventService(testEnv);
+    const original = await service.getSetup(viewer);
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const configuredRoom = original.rooms[0]!;
+
+    await service.saveSetup(viewer, {
+      ...inputFrom(original),
+      rooms: original.rooms.map((room) =>
+        room.id === configuredRoom.id
+          ? { ...room, resources: ["livestream crew", "captioning"] }
+          : room,
+      ),
+      tracks: [
+        ...original.tracks,
+        {
+          id: `track-test-${suffix}`,
+          name: "Test Track",
+          slug: `test-track-${suffix}`,
+          colourToken: "#5e6ad2",
+          position: original.tracks.length,
+          exclusive: true,
+          isPublic: true,
+        },
+      ],
+      sessionFormats: [
+        ...original.sessionFormats,
+        {
+          key: `roundtable-${suffix}`,
+          label: "Roundtable",
+          defaultDurationMinutes: 75,
+          position: original.sessionFormats.length,
+        },
+      ],
+    });
+
+    const saved = await service.getSetup(viewer);
+    expect(saved.rooms).toContainEqual(
+      expect.objectContaining({
+        id: configuredRoom.id,
+        resources: ["livestream crew", "captioning"],
+      }),
+    );
+    expect(saved.tracks).toContainEqual(
+      expect.objectContaining({
+        id: `track-test-${suffix}`,
+        exclusive: true,
+      }),
+    );
+    expect(saved.sessionFormats).toContainEqual({
+      key: `roundtable-${suffix}`,
+      label: "Roundtable",
+      defaultDurationMinutes: 75,
+      position: original.sessionFormats.length,
+    });
+  });
+
+  it("rejects removing a required resource from its scheduled room", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const service = new EventService(testEnv);
+    const original = await service.getSetup(viewer);
+    const room = original.rooms[0]!;
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const sessionId = `resource-session-${suffix}`;
+    const versionId = `resource-version-${suffix}`;
+    const entryId = `resource-entry-${suffix}`;
+
+    await service.saveSetup(viewer, {
+      ...inputFrom(original),
+      rooms: original.rooms.map((candidate) =>
+        candidate.id === room.id
+          ? { ...candidate, resources: ["captioning"] }
+          : candidate,
+      ),
+    });
+    const configured = await service.getSetup(viewer);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO sessions (
+          id, event_id, title, slug, format, duration_minutes,
+          required_resources_json, status, visibility, revision,
+          created_at, updated_at
+        ) VALUES (?, ?, 'Resource session', ?, 'presentation', 30,
+                  '["captioning"]', 'scheduled', 'private', 1,
+                  unixepoch(), unixepoch())`,
+      ).bind(sessionId, viewer.eventId, `resource-session-${suffix}`),
+      testEnv.DB.prepare(
+        `INSERT INTO schedule_versions (
+          id, event_id, version_number, name, status, revision,
+          created_by_person_id, created_at
+        ) VALUES (?, ?, 999, 'Resource draft', 'draft', 1, ?, unixepoch())`,
+      ).bind(versionId, viewer.eventId, viewer.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO schedule_entries (
+          id, event_id, schedule_version_id, session_id, room_id,
+          starts_at, ends_at, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 2000000000, 2000001800, 1,
+                  unixepoch(), unixepoch())`,
+      ).bind(entryId, viewer.eventId, versionId, sessionId, room.id),
+    ]);
+
+    await expect(
+      service.saveSetup(viewer, {
+        ...inputFrom(configured),
+        rooms: configured.rooms.map((candidate) =>
+          candidate.id === room.id
+            ? { ...candidate, resources: [] }
+            : candidate,
+        ),
+      }),
+    ).rejects.toBeInstanceOf(EventResourceConfigurationError);
+    await expect(service.getSetup(viewer)).resolves.toMatchObject({
+      revision: configured.revision,
+      rooms: expect.arrayContaining([
+        expect.objectContaining({ id: room.id, resources: ["captioning"] }),
+      ]),
+    });
+    await testEnv.DB.batch([
+      testEnv.DB.prepare("DELETE FROM schedule_entries WHERE id = ?").bind(
+        entryId,
+      ),
+      testEnv.DB.prepare("DELETE FROM schedule_versions WHERE id = ?").bind(
+        versionId,
+      ),
+      testEnv.DB.prepare("DELETE FROM sessions WHERE id = ?").bind(sessionId),
+    ]);
+  });
+
   it("rejects stale revisions without adding rooms or audit records", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
@@ -140,6 +286,7 @@ describe("Event Setup D1 service", () => {
             id: "room-from-stale-write",
             name: "Stale",
             capacity: 10,
+            resources: [],
             position: 99,
           },
         ],
@@ -170,8 +317,10 @@ describe("Event Setup D1 service", () => {
       ).bind(otherOrganisationId, `other-org-${crypto.randomUUID()}`),
       env.DB.prepare(
         `INSERT INTO events (
-          id, organisation_id, name, slug, timezone, starts_at, ends_at
-        ) VALUES (?, ?, 'Other event', ?, 'UTC', unixepoch(), unixepoch() + 86400)`,
+          id, organisation_id, name, slug, timezone, starts_at, ends_at,
+          file_policy_json
+        ) VALUES (?, ?, 'Other event', ?, 'UTC', unixepoch(), unixepoch() + 86400,
+                  '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')`,
       ).bind(
         otherEventId,
         otherOrganisationId,
@@ -193,7 +342,13 @@ describe("Event Setup D1 service", () => {
         name: "Must remain unchanged",
         rooms: [
           ...current.rooms,
-          { id: foreignRoomId, name: "Hijacked", capacity: 99, position: 99 },
+          {
+            id: foreignRoomId,
+            name: "Hijacked",
+            capacity: 99,
+            resources: [],
+            position: 99,
+          },
         ],
       }),
     ).rejects.toBeInstanceOf(EventRoomOwnershipError);
@@ -348,7 +503,13 @@ describe("Event Setup D1 service", () => {
       ...inputFrom(current),
       rooms: [
         ...current.rooms,
-        { id: roomId, name: "Historic room", capacity: 40, position: 99 },
+        {
+          id: roomId,
+          name: "Historic room",
+          capacity: 40,
+          resources: [],
+          position: 99,
+        },
       ],
     });
     const withRoom = await service.getSetup(viewer);
@@ -478,9 +639,10 @@ describe("Event Setup D1 service", () => {
     const current = await service.getSetup(viewer);
     await env.DB.prepare(
       `
-      INSERT INTO events (id, organisation_id, name, slug, timezone, starts_at, ends_at)
+      INSERT INTO events (id, organisation_id, name, slug, timezone, starts_at, ends_at, file_policy_json)
       VALUES ('event-with-reserved-slug', ?, 'Reserved slug event', 'reserved-event-slug',
-              'UTC', 1, 2)
+              'UTC', 1, 2,
+              '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')
     `,
     )
       .bind(viewer.organisationId)
@@ -590,6 +752,7 @@ describe("Event Setup D1 service", () => {
     const result = await new EventService(testEnv).inviteAdministrator(viewer, {
       name: "Invited Admin",
       email: "invited-admin@example.com",
+      scope: "event",
     });
     expect(result.delivery).toBe("demo_not_sent");
     const membership = await env.DB.prepare(
@@ -612,17 +775,145 @@ describe("Event Setup D1 service", () => {
     );
   });
 
-  it("hides revoked administrators and labels expired invitations", async () => {
+  it("lets an owner invite, accept, use and revoke an organisation administrator role with audit evidence", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const owner: Viewer = {
+      ...viewer,
+      ...DEMO_IDENTITIES.owner,
+      role: "owner",
+    };
+    const service = new EventService(testEnv);
+    const invitation = await service.inviteAdministrator(owner, {
+      name: DEMO_IDENTITIES.evaluator.name,
+      email: DEMO_IDENTITIES.evaluator.email,
+      scope: "organisation",
+    });
+    const pending = await env.DB.prepare(
+      `
+      SELECT event_id AS eventId, accepted_at AS acceptedAt
+        FROM memberships
+       WHERE id = ?
+    `,
+    )
+      .bind(invitation.membershipId)
+      .first<{ eventId: string | null; acceptedAt: number | null }>();
+    expect(pending).toEqual({ eventId: null, acceptedAt: null });
+
+    const accepted = await acceptEventInvitation(
+      new Request("https://programcue.test/events/select", {
+        method: "POST",
+        headers: {
+          cookie: "program_cue_demo_role=evaluator",
+          origin: "https://programcue.test",
+        },
+      }),
+      testEnv,
+      viewer.eventId,
+      ["administrator"],
+    );
+    expect(accepted).toMatchObject({
+      personId: DEMO_IDENTITIES.evaluator.personId,
+      role: "administrator",
+      eventId: viewer.eventId,
+    });
+    await expect(service.getSetup(accepted)).resolves.toMatchObject({
+      id: viewer.eventId,
+    });
+    const setup = await service.getSetup(owner);
+    expect(setup.administrators).toContainEqual(
+      expect.objectContaining({
+        id: invitation.membershipId,
+        email: DEMO_IDENTITIES.evaluator.email,
+        scope: "organisation",
+        status: "Active",
+      }),
+    );
+
+    await service.revokeAdministrator(owner, {
+      membershipId: invitation.membershipId,
+    });
+    await expect(
+      requireEventRole(
+        new Request("https://programcue.test/admin/event", {
+          headers: { cookie: "program_cue_demo_role=evaluator" },
+        }),
+        testEnv,
+        viewer.eventId,
+        ["administrator"],
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    const audits = await env.DB.prepare(
+      `
+      SELECT action, metadata_json AS metadataJson
+        FROM audit_events
+       WHERE entity_id = ?
+         AND action IN (
+           'membership.administrator.invited',
+           'membership.accepted',
+           'membership.administrator.revoked'
+         )
+       ORDER BY rowid
+    `,
+    )
+      .bind(invitation.membershipId)
+      .all<{ action: string; metadataJson: string }>();
+    expect(audits.results.map((audit) => audit.action)).toEqual([
+      "membership.administrator.invited",
+      "membership.accepted",
+      "membership.administrator.revoked",
+    ]);
+    expect(JSON.parse(audits.results[0]!.metadataJson).scope).toBe(
+      "organisation",
+    );
+    expect(JSON.parse(audits.results[1]!.metadataJson)).toEqual({
+      role: "administrator",
+    });
+    expect(JSON.parse(audits.results[2]!.metadataJson).scope).toBe(
+      "organisation",
+    );
+  });
+
+  it("rejects organisation-wide invitation and revocation attempts by an event administrator", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const service = new EventService(testEnv);
+    await expect(
+      service.inviteAdministrator(viewer, {
+        name: "Forbidden Organisation Admin",
+        email: "forbidden-org-admin@example.com",
+        scope: "organisation",
+      }),
+    ).rejects.toThrow(
+      "Only an organisation owner can invite an organisation administrator.",
+    );
+    await expect(
+      service.revokeAdministrator(viewer, {
+        membershipId: "membership-demo-admin",
+      }),
+    ).rejects.toThrow(
+      "Only an organisation owner can revoke an administrator.",
+    );
+  });
+
+  it("hides revoked administrators and labels unusable invitations as expired", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
     const service = new EventService(testEnv);
     const expired = await service.inviteAdministrator(viewer, {
       name: "Expired Admin",
       email: "expired-admin@example.com",
+      scope: "event",
     });
     const revoked = await service.inviteAdministrator(viewer, {
       name: "Revoked Admin",
       email: "revoked-admin@example.com",
+      scope: "event",
+    });
+    const missingExpiry = await service.inviteAdministrator(viewer, {
+      name: "Missing Expiry Admin",
+      email: "missing-expiry-admin@example.com",
+      scope: "event",
     });
     await env.DB.batch([
       env.DB.prepare(
@@ -631,6 +922,9 @@ describe("Event Setup D1 service", () => {
       env.DB.prepare(
         "UPDATE memberships SET revoked_at = unixepoch() WHERE id = ?",
       ).bind(revoked.membershipId),
+      env.DB.prepare(
+        "UPDATE memberships SET invitation_expires_at = NULL WHERE id = ?",
+      ).bind(missingExpiry.membershipId),
     ]);
 
     const setup = await service.getSetup(viewer);
@@ -645,6 +939,12 @@ describe("Event Setup D1 service", () => {
         (administrator) => administrator.email === "revoked-admin@example.com",
       ),
     ).toBe(false);
+    expect(setup.administrators).toContainEqual(
+      expect.objectContaining({
+        email: "missing-expiry-admin@example.com",
+        status: "Expired",
+      }),
+    );
   });
 
   it("fails validation before touching D1", async () => {

@@ -1,4 +1,4 @@
-import { data, useActionData, useNavigation } from "react-router";
+import { data, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/speaker-dashboard";
@@ -10,7 +10,12 @@ import {
 } from "~/components/speaker-dashboard-panels";
 import { SpeakerShell } from "~/components/speaker-shell";
 import { FilePolicyError } from "~/modules/files/file-policy";
-import { FileService } from "~/modules/files/file-service.server";
+import {
+  FileAccessError,
+  FileErasureConfirmationError,
+  FileErasureIncompleteError,
+  FileService,
+} from "~/modules/files/file-service.server";
 import {
   ensureDemoSpeakerData,
   requireSpeakerViewer,
@@ -23,6 +28,7 @@ import {
   TaskService,
   TaskStateError,
 } from "~/modules/tasks/task-service.server";
+import { resolveCurrentEventId } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
@@ -53,10 +59,9 @@ async function participant(
   context: Route.LoaderArgs["context"],
 ) {
   const { env } = getCloudflareContext(context);
-  if (!env.DEFAULT_EVENT_ID)
-    throw new Response("DEFAULT_EVENT_ID is not configured", { status: 503 });
   await ensureDemoSpeakerData(env);
-  const viewer = await requireSpeakerViewer(request, env, env.DEFAULT_EVENT_ID);
+  const eventId = await resolveCurrentEventId(request, env, ["speaker"]);
+  const viewer = await requireSpeakerViewer(request, env, eventId);
   return { env, viewer };
 }
 
@@ -66,7 +71,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     new SpeakerService(env).getPortal(viewer),
     new TaskService(env).listParticipantTasks(viewer),
   ]);
-  return { portal, tasks, viewer };
+  return { portal, tasks, viewer, intentId: crypto.randomUUID() };
 }
 
 function errorMessage(error: unknown) {
@@ -74,6 +79,8 @@ function errorMessage(error: unknown) {
     return error.issues[0]?.message ?? "Review the highlighted information.";
   if (
     error instanceof FilePolicyError ||
+    error instanceof FileAccessError ||
+    error instanceof FileErasureConfirmationError ||
     error instanceof TaskStateError ||
     error instanceof SpeakerProfileConflictError
   )
@@ -87,7 +94,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const intent = String(form.get("intent") ?? "");
   try {
     if (intent === "save-profile") {
-      await new SpeakerService(env).updateProfile(viewer, {
+      const result = await new SpeakerService(env).updateProfile(viewer, {
         revision: form.get("revision"),
         name: form.get("name"),
         biography: form.get("biography"),
@@ -101,12 +108,19 @@ export async function action({ request, context }: Route.ActionArgs) {
         entityId: viewer.personId,
         changeType: "updated",
       });
-      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning)
+        return data(
+          { ok: false, committed: true, message: warning },
+          { status: 207 },
+        );
       return data({ ok: true, message: "Profile saved to D1." });
     }
     if (intent === "complete-task") {
       const taskId = String(form.get("taskId") ?? "");
-      await new TaskService(env).completeParticipant(viewer, {
+      const result = await new TaskService(env).completeParticipant(viewer, {
         taskId,
         revision: form.get("revision"),
         confirmed: form.get("confirmed") ?? "false",
@@ -118,82 +132,90 @@ export async function action({ request, context }: Route.ActionArgs) {
         entityId: taskId,
         changeType: "progress",
       });
-      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
-      return data({ ok: true, message: "Task updated." });
+      const undo = result.undoToken
+        ? {
+            undoToken: result.undoToken,
+            undoTaskId: taskId,
+            undoExpiresAt: result.undoExpiresAt,
+          }
+        : {};
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning)
+        return data(
+          { ok: false, committed: true, message: warning, ...undo },
+          { status: 207 },
+        );
+      return data({
+        ok: true,
+        message: result.undoToken
+          ? "Task completed. You can undo this for five minutes."
+          : "Task updated.",
+        ...undo,
+      });
+    }
+    if (intent === "undo-task-completion") {
+      const result = await new TaskService(env).undoCompletion(
+        viewer,
+        form.get("undoToken"),
+      );
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "task_instance",
+        entityId: result.taskId,
+        changeType: "progress",
+      });
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning)
+        return data(
+          { ok: false, committed: true, message: warning },
+          { status: 207 },
+        );
+      return data({ ok: true, message: "Task completion undone." });
     }
     if (intent === "comment") {
       const taskId = String(form.get("taskId") ?? "");
-      await new TaskService(env).addComment(
+      const result = await new TaskService(env).addComment(
         viewer,
         taskId,
         String(form.get("body") ?? ""),
+        "participant",
+        String(form.get("intentId") ?? ""),
       );
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "task_instance",
         entityId: taskId,
         changeType: "updated",
       });
-      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning)
+        return data(
+          { ok: false, committed: true, message: warning },
+          { status: 207 },
+        );
       return data({ ok: true, message: "Comment added." });
     }
-    if (intent === "upload-task") {
-      const taskId = String(form.get("taskId") ?? "");
-      const file = form.get("file");
-      if (!(file instanceof File))
-        throw new FilePolicyError("Choose a file to upload.");
-      const taskService = new TaskService(env);
-      await taskService.assertFileEvidenceUploadAllowed(viewer, taskId);
-      const fileService = new FileService(env);
-      const upload = await fileService.uploadParticipantFile(
-        viewer,
-        { targetType: "task", targetId: taskId, assetKind: "task_evidence" },
-        file,
-      );
-      try {
-        await taskService.submitFileEvidence(viewer, taskId, upload.assetId);
-      } catch (submissionError) {
-        try {
-          await fileService.discardUnattachedTaskUpload(viewer, upload);
-        } catch (cleanupError) {
-          throw new AggregateError(
-            [submissionError, cleanupError],
-            "Task evidence submission failed and the uploaded file could not be discarded.",
-          );
-        }
-        throw submissionError;
-      }
-      const realtimeFailure = await recordRouteChange(env, viewer, {
-        entityType: "task_instance",
-        entityId: taskId,
-        changeType: "progress",
+    if (intent === "delete-file") {
+      const result = await new FileService(env).eraseAsset(viewer, {
+        assetId: String(form.get("assetId") ?? ""),
+        confirmed: form.get("confirm") === "erase-all-versions",
+        reason: "speaker_requested_file_deletion",
       });
-      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
-      return data({
-        ok: true,
-        message:
-          "File stored privately in R2 and submitted for scanning. It remains quarantined until a scanner reports it clean.",
-      });
-    }
-    if (intent === "upload-file") {
-      const file = form.get("file");
-      if (!(file instanceof File))
-        throw new FilePolicyError("Choose a file to upload.");
-      const kind = String(form.get("assetKind") ?? "");
-      const upload = await new FileService(env).uploadParticipantFile(
-        viewer,
-        { targetType: "person", targetId: viewer.personId, assetKind: kind },
-        file,
-      );
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "file_asset",
-        entityId: upload.assetId,
-        changeType: "updated",
+        entityId: result.affected.id,
+        changeType: "deleted",
       });
       if (realtimeFailure) return data(realtimeFailure, { status: 207 });
       return data({
         ok: true,
-        message:
-          "File stored privately in R2. Signature validation passed; malware scanning is still pending, so the file remains quarantined.",
+        message: result.duplicate
+          ? "This file was already erased."
+          : `${result.erasedVersions} stored file version${result.erasedVersions === 1 ? " was" : "s were"} permanently erased.`,
       });
     }
     return data(
@@ -201,16 +223,33 @@ export async function action({ request, context }: Route.ActionArgs) {
       { status: 400 },
     );
   } catch (error) {
+    if (error instanceof FileErasureIncompleteError) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          subsystem: "speaker-file-erasure",
+          event: "erasure-incomplete",
+          errorName: error.name,
+          message: "The private file erasure did not complete.",
+        }),
+      );
+      return data(
+        { ok: false, committed: true, message: error.message },
+        { status: 503 },
+      );
+    }
     const message = errorMessage(error);
     if (message) {
       return data(
         { ok: false, message },
         {
           status:
-            error instanceof SpeakerProfileConflictError ||
-            error instanceof TaskStateError
-              ? 409
-              : 422,
+            error instanceof FileAccessError
+              ? 403
+              : error instanceof SpeakerProfileConflictError ||
+                  error instanceof TaskStateError
+                ? 409
+                : 422,
         },
       );
     }
@@ -238,7 +277,11 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
   const busy = navigation.state !== "idle";
   return (
     <SpeakerShell
-      event={{ name: portal.event.name, ...eventLabel }}
+      event={{
+        name: portal.event.name,
+        brandAccent: portal.event.brandAccent,
+        ...eventLabel,
+      }}
       viewer={viewer}
     >
       <SpeakerDashboardOverview
@@ -247,12 +290,35 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
         progress={progress}
         actionNotice={actionData}
       />
+      <section
+        className="card pad mb"
+        aria-labelledby="speaker-calendar-heading"
+      >
+        <div className="card-title">
+          <div>
+            <h2 id="speaker-calendar-heading">Calendar connection</h2>
+            <p className="subtle">
+              Connect your own calendar account for direct session updates. ICS
+              invitations remain available without a connection.
+            </p>
+          </div>
+        </div>
+        <div className="page-actions">
+          <Link className="btn small" to="/oauth/calendar/google">
+            Connect Google Calendar
+          </Link>
+          <Link className="btn small" to="/oauth/calendar/microsoft">
+            Connect Microsoft 365
+          </Link>
+        </div>
+      </section>
       <SpeakerSessionsPanel portal={portal} />
       <SpeakerTasksPanel
         portal={portal}
         tasks={tasks}
         finished={finished}
         busy={busy}
+        intentId={loaderData.intentId}
       />
       <SpeakerFilesAndProfilePanels portal={portal} busy={busy} />
     </SpeakerShell>

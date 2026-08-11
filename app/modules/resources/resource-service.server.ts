@@ -5,6 +5,7 @@ export {
   materializePublishedResourceAcknowledgementsForClaimedSpeaker,
   materializePublishedResourceAcknowledgementsForSession,
   ResourceInvariantError,
+  ResourceAudienceError,
   ResourceRevisionConflictError,
   ResourceSlugConflictError,
   ResourceTaskDependencyError,

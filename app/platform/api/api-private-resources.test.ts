@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import {
   ScheduleIdempotencyConflictError,
   ScheduleRevisionConflictError,
@@ -28,6 +29,51 @@ beforeEach(async () => {
 });
 
 describe("typed task API service", () => {
+  it("checks repository authority for reads and projects task creation", async () => {
+    const reads: string[] = [];
+    const commands: Array<{ operation: string; eventId: string }> = [];
+    const airtable = {
+      assertReadable: async (scope: { eventId: string }) => {
+        reads.push(scope.eventId);
+        return null;
+      },
+      executeIdempotent: async <T>(
+        scope: { eventId: string },
+        command: { operation: string },
+        execute: () => Promise<T>,
+      ) => {
+        commands.push({ operation: command.operation, eventId: scope.eventId });
+        return execute();
+      },
+    } as unknown as AirtableProviderBoundary;
+    const service = new ApiTaskService(
+      env as unknown as CloudflareEnvironment,
+      { airtable },
+    );
+
+    await service.list(principal, { limit: 1 });
+    await service.get(principal, "task-speaker-profile");
+    expect(reads).toEqual([eventId, eventId]);
+
+    await service.create(
+      principal,
+      {
+        title: "Authority-aware API task",
+        description: null,
+        targetType: "event",
+        targetId: eventId,
+        ownerPersonId: null,
+        taskType: "checklist",
+        impact: "medium",
+        dueAt: null,
+        dependencyIds: [],
+      },
+      "corr-task-authority",
+      `task-authority-${crypto.randomUUID()}`,
+    );
+    expect(commands).toEqual([{ operation: "task.api.create", eventId }]);
+  });
+
   it("persists the rich task model, dependencies, API audit actor and change cursor", async () => {
     const service = new ApiTaskService(env as unknown as CloudflareEnvironment);
     const dueAt = new Date(
@@ -227,10 +273,12 @@ describe("typed task API service", () => {
     await env.DB.prepare(
       `
       INSERT INTO events (
-        id, organisation_id, name, slug, timezone, starts_at, ends_at
+        id, organisation_id, name, slug, timezone, starts_at, ends_at,
+        file_policy_json
       ) VALUES (?, ?, 'API pagination event', ?, 'UTC',
                 unixepoch('2027-05-20T00:00:00Z'),
-                unixepoch('2027-05-21T23:59:59Z'))
+                unixepoch('2027-05-21T23:59:59Z'),
+                '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')
     `,
     )
       .bind(
@@ -291,10 +339,12 @@ describe("typed task API service", () => {
     await env.DB.prepare(
       `
       INSERT INTO events (
-        id, organisation_id, name, slug, timezone, starts_at, ends_at
+        id, organisation_id, name, slug, timezone, starts_at, ends_at,
+        file_policy_json
       ) VALUES (?, ?, 'Large API task event', ?, 'UTC',
                 unixepoch('2027-05-20T00:00:00Z'),
-                unixepoch('2027-05-21T23:59:59Z'))
+                unixepoch('2027-05-21T23:59:59Z'),
+                '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')
     `,
     )
       .bind(
@@ -513,9 +563,14 @@ describe("schedule publication API actor", () => {
       `,
       ).bind(eventId),
     ]);
-    const service = new ScheduleService(
-      env as unknown as CloudflareEnvironment,
-    );
+    const queued: unknown[] = [];
+    const scheduleEnv = {
+      ...(env as unknown as CloudflareEnvironment),
+      OPERATIONS_QUEUE: {
+        send: async (message: unknown) => queued.push(message),
+      },
+    } as unknown as CloudflareEnvironment;
+    const service = new ScheduleService(scheduleEnv);
     const personViewer = {
       personId: "person-demo-admin",
       name: "Admin",
@@ -565,6 +620,7 @@ describe("schedule publication API actor", () => {
       { personId: null, actorId },
       command,
     );
+    expect(queued).toHaveLength(1);
     await expect(
       service.publish(
         principal,

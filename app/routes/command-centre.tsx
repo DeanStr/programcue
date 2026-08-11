@@ -1,14 +1,21 @@
 import { AlertTriangle, CheckCircle2, Clock3, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useRevalidator } from "react-router";
+import { Link, useRevalidator } from "react-router";
 
 import type { Route } from "./+types/command-centre";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EventDateTime } from "~/components/ui/event-date-time";
 import { PageHeader } from "~/components/ui/page-header";
 import { EmptyState } from "~/components/ui/states";
 import { StatusBadge } from "~/components/ui/status-badge";
+import {
+  ReadinessSummaryAction,
+  ReminderDraftAction,
+} from "~/modules/ai/contextual-ai-actions";
+import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { ReadinessService } from "~/modules/readiness/readiness-service.server";
-import { requireEventRole } from "~/platform/auth/authorize.server";
+import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
   subscribeToEventChanges,
@@ -21,24 +28,16 @@ export const meta: Route.MetaFunction = () => [
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
-  if (!env.DEFAULT_EVENT_ID)
-    throw new Response("DEFAULT_EVENT_ID is not configured", { status: 503 });
-  const viewer = await requireEventRole(request, env, env.DEFAULT_EVENT_ID, [
+  const viewer = await requireCurrentEventRole(request, env, [
     "owner",
     "administrator",
   ]);
   await ensureDemoEvaluationData(env);
-  return new ReadinessService(env).getCommandCentre(viewer);
-}
-
-function operationTone(
-  status: string,
-): "success" | "danger" | "info" | "warning" {
-  if (status === "completed") return "success";
-  if (["failed", "queue_failed", "partially_failed"].includes(status))
-    return "danger";
-  if (["queued", "received"].includes(status)) return "warning";
-  return "info";
+  const [snapshot, reminderOptions] = await Promise.all([
+    new ReadinessService(env).getCommandCentre(viewer),
+    new AiAssistantService(env).reminderDeliveryOptions(viewer),
+  ]);
+  return { ...snapshot, reminderOptions };
 }
 
 function AutoRefresh({ eventId, cursor }: { eventId: string; cursor: number }) {
@@ -53,7 +52,9 @@ function AutoRefresh({ eventId, cursor }: { eventId: string; cursor: number }) {
       initialCursor: cursor,
       onInvalidate: () => revalidator.revalidate(),
       onError: (error) =>
-        console.warn("Command Centre realtime transport error.", error),
+        console.warn("Command Centre realtime transport error.", {
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        }),
       onStatusChange: setTransport,
     });
   }, [cursor, eventId, revalidator]);
@@ -91,6 +92,9 @@ function AutoRefresh({ eventId, cursor }: { eventId: string; cursor: number }) {
 
 export default function CommandCentre({ loaderData }: Route.ComponentProps) {
   const featured = loaderData.blockers.slice(0, 4);
+  const hasOverdueTasks = loaderData.blockers.some(
+    (blocker) => blocker.key === "overdue_tasks",
+  );
   const readinessLabel =
     loaderData.readiness.status === "ready"
       ? "Ready"
@@ -109,9 +113,17 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
               eventId={loaderData.eventId}
               cursor={loaderData.cursor}
             />
-            <a className="btn" href="/admin/event">
+            {hasOverdueTasks ? (
+              <Link
+                className="btn primary"
+                to="/admin/communications?audience=overdue_speakers&category=task_reminder"
+              >
+                Prepare overdue reminder
+              </Link>
+            ) : null}
+            <Link className="btn" to="/admin/event">
               Event settings
-            </a>
+            </Link>
           </>
         }
       />
@@ -153,10 +165,10 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
         </section>
 
         {featured.map((blocker) => (
-          <a
+          <Link
             key={blocker.key}
             className={`card metric alert-${blocker.severity === "danger" ? "red" : "amber"} command-metric-link`}
-            href={blocker.href}
+            to={blocker.href}
           >
             <div className="label">
               <AlertTriangle aria-hidden size={14} /> {blocker.label}
@@ -170,7 +182,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
               {blocker.count}
             </div>
             <div className="helper">{blocker.detail}</div>
-          </a>
+          </Link>
         ))}
 
         {!featured.length ? (
@@ -195,9 +207,9 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
             <span className="help right">Equal weighting</span>
           </div>
           {loaderData.workflows.map((workflow) => (
-            <a
+            <Link
               className="progress-row command-progress-link"
-              href={workflow.href}
+              to={workflow.href}
               key={workflow.key}
               aria-label={`${workflow.label}: ${workflow.score}% ready`}
             >
@@ -209,7 +221,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                 <span style={{ width: `${workflow.score}%` }} />
               </div>
               <b>{workflow.score}%</b>
-            </a>
+            </Link>
           ))}
         </section>
 
@@ -225,9 +237,9 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
           {loaderData.blockers.length ? (
             <div className="command-action-list">
               {loaderData.blockers.map((blocker) => (
-                <a
+                <Link
                   className="suggestion mb"
-                  href={blocker.href}
+                  to={blocker.href}
                   key={blocker.key}
                 >
                   <AlertTriangle aria-hidden size={17} />
@@ -240,7 +252,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                   <span className="chev" aria-hidden>
                     ›
                   </span>
-                </a>
+                </Link>
               ))}
             </div>
           ) : (
@@ -254,12 +266,28 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
 
         <section className="card pad">
           <div className="card-title">
+            <h2>AI readiness advisor</h2>
+            <span className="status info">Advisory</span>
+          </div>
+          <ReadinessSummaryAction />
+        </section>
+
+        <section className="card pad">
+          <div className="card-title">
+            <h2>Targeted reminder assistant</h2>
+            <span className="status warning">Preview first</span>
+          </div>
+          <ReminderDraftAction options={loaderData.reminderOptions} />
+        </section>
+
+        <section className="card pad">
+          <div className="card-title">
             <h2>Delivery health</h2>
           </div>
           {loaderData.deliveryHealth.length ? (
             loaderData.deliveryHealth.map((channel) => (
-              <a
-                href="/admin/communications"
+              <Link
+                to="/admin/communications"
                 key={channel.channel}
                 className="command-health-row"
               >
@@ -274,7 +302,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                 <small className="subtle">
                   {channel.successful} / {channel.total}
                 </small>
-              </a>
+              </Link>
             ))
           ) : (
             <EmptyState
@@ -289,16 +317,19 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
         <section className="card pad">
           <div className="card-title">
             <h2>Upcoming published sessions</h2>
-            <a className="btn small right" href="/admin/schedule">
+            <span className="help right">
+              Times in {loaderData.eventTimezone}
+            </span>
+            <Link className="btn small" to="/admin/schedule">
               Open schedule
-            </a>
+            </Link>
           </div>
           {loaderData.upcoming.length ? (
             <div className="agenda-list">
               {loaderData.upcoming.map((session) => (
-                <a
+                <Link
                   className="agenda-item command-agenda-link"
-                  href={`/admin/schedule?session=${encodeURIComponent(session.id)}`}
+                  to={`/admin/schedule?session=${encodeURIComponent(session.id)}`}
                   key={session.id}
                 >
                   <div className="date-chip">
@@ -315,19 +346,25 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                       }).format(new Date(session.startsAt * 1_000))}
                     </strong>
                   </div>
-                  <strong>
-                    {new Intl.DateTimeFormat("en", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                      timeZone: loaderData.eventTimezone,
-                    }).format(new Date(session.startsAt * 1_000))}
-                  </strong>
+                  <EventDateTime
+                    epochSeconds={session.startsAt}
+                    timeZone={loaderData.eventTimezone}
+                    focusable={false}
+                  >
+                    <strong>
+                      {new Intl.DateTimeFormat("en", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        timeZone: loaderData.eventTimezone,
+                      }).format(new Date(session.startsAt * 1_000))}
+                    </strong>
+                  </EventDateTime>
                   <div>
                     <strong>{session.title}</strong>
                     <small className="subtle">{session.room}</small>
                   </div>
-                  <span className="status success">Published</span>
-                </a>
+                  <DomainStatusBadge domain="session" status="published" />
+                </Link>
               ))}
             </div>
           ) : (
@@ -342,9 +379,9 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
         <section className="card pad">
           <div className="card-title">
             <h2>Background operations</h2>
-            <a className="btn small right" href="/admin/operations">
+            <Link className="btn small right" to="/admin/operations">
               View all
-            </a>
+            </Link>
           </div>
           {loaderData.operations.length ? (
             <div className="table-wrap">
@@ -360,16 +397,17 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                   {loaderData.operations.map((operation) => (
                     <tr key={operation.id}>
                       <td>
-                        <a
-                          href={`/admin/operations?operation=${encodeURIComponent(operation.id)}`}
+                        <Link
+                          to={`/admin/operations?operation=${encodeURIComponent(operation.id)}`}
                         >
                           {operation.type.replaceAll("_", " ")}
-                        </a>
+                        </Link>
                       </td>
                       <td>
-                        <StatusBadge tone={operationTone(operation.status)}>
-                          {operation.status.replaceAll("_", " ")}
-                        </StatusBadge>
+                        <DomainStatusBadge
+                          domain="operation"
+                          status={operation.status}
+                        />
                       </td>
                       <td>
                         {operation.total > 0 ? (

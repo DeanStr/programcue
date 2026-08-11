@@ -6,6 +6,10 @@ import {
 import { renderProgramCueEmail } from "./email-templates/render-email.server";
 import { renderMergeTemplate } from "./merge-template";
 import {
+  emailProviderConfigurationIssue,
+  requireEmailProviderConfiguration,
+} from "./email-provider.server";
+import {
   CommunicationNotFoundError,
   CommunicationStateError,
   mergeValues,
@@ -22,6 +26,10 @@ export class CommunicationTemplateService {
 
   async listCentre(viewer: Viewer, options: { filter?: "failed" } = {}) {
     const statusFilter = options.filter === "failed" ? "failed" : "";
+    const providerIssue = emailProviderConfigurationIssue(this.env);
+    const providerName = providerIssue
+      ? null
+      : requireEmailProviderConfiguration(this.env).provider;
     const [templateResult, communicationResult, sender] = await Promise.all([
       this.env.DB.prepare(
         `
@@ -42,6 +50,7 @@ export class CommunicationTemplateService {
         `
         SELECT c.id, c.status, c.channel, c.kind, c.recipient_count AS recipientCount,
                c.created_at AS createdAt, c.sent_at AS sentAt, c.operation_id AS operationId,
+               c.scheduled_at AS scheduledAt,
                COUNT(CASE WHEN d.status IN ('failed','bounced','suppressed') THEN 1 END) AS failedCount,
                COUNT(CASE WHEN d.status IN ('sent','delivered','opened','clicked') THEN 1 END) AS sentCount
           FROM communications c
@@ -64,10 +73,11 @@ export class CommunicationTemplateService {
           createdAt: number;
           sentAt: number | null;
           operationId: string | null;
+          scheduledAt: number | null;
           failedCount: number;
           sentCount: number;
         }>(),
-      this.getVerifiedSender(viewer),
+      this.getVerifiedSender(viewer, providerName),
     ]);
     return {
       templates: templateResult.results.map((row) => ({
@@ -78,16 +88,56 @@ export class CommunicationTemplateService {
       })) as CommunicationTemplateVersion[],
       communications: communicationResult.results,
       provider: {
-        configured: Boolean(this.env.RESEND_API_KEY?.trim() && sender),
+        name: providerName,
+        configured: Boolean(!providerIssue && sender),
         sender: sender ? `${sender.fromName} <${sender.fromEmail}>` : null,
         queueConfigured: Boolean(this.env.OPERATIONS_QUEUE),
       },
     };
   }
 
-  async saveTemplate(viewer: Viewer, input: SaveTemplateInput) {
+  async saveTemplate(
+    viewer: Viewer,
+    input: SaveTemplateInput,
+    operation?: {
+      operationId: string;
+      templateId: string;
+      versionId: string;
+      auditId: string;
+    },
+  ) {
     const parsed = saveTemplateSchema.parse(input);
-    const templateId = parsed.templateId ?? crypto.randomUUID();
+    const recover = operation
+      ? () =>
+          this.env.DB.prepare(
+            `SELECT template.id AS templateId, version.id AS versionId,
+                    version.version_number AS versionNumber
+               FROM communication_templates template
+               JOIN events event
+                 ON event.id = template.event_id AND event.organisation_id = ?
+               JOIN communication_template_versions version
+                 ON version.template_id = template.id
+                AND version.event_id = template.event_id
+              WHERE template.id = ? AND template.event_id = ?
+                AND template.last_operation_id = ? AND version.id = ?`,
+          )
+            .bind(
+              viewer.organisationId,
+              operation.templateId,
+              viewer.eventId,
+              operation.operationId,
+              operation.versionId,
+            )
+            .first<{
+              templateId: string;
+              versionId: string;
+              versionNumber: number;
+            }>()
+      : null;
+    const replay = await recover?.();
+    if (replay) return replay;
+    const templateId =
+      parsed.templateId ?? operation?.templateId ?? crypto.randomUUID();
     if (parsed.templateId) {
       const existing = await this.env.DB.prepare(
         `
@@ -101,7 +151,8 @@ export class CommunicationTemplateService {
       if (!existing) throw new CommunicationNotFoundError();
     }
     const event = await this.getEvent(viewer);
-    const versionId = crypto.randomUUID();
+    const versionId = operation?.versionId ?? crypto.randomUUID();
+    const saveOperationId = operation?.operationId ?? crypto.randomUUID();
     const values = mergeValues(event);
     const subject = renderMergeTemplate(parsed.subject, values);
     const body = renderMergeTemplate(parsed.content.body, values);
@@ -110,29 +161,34 @@ export class CommunicationTemplateService {
       heading: subject,
       body,
       eventName: event.eventName,
+      accent: event.brandAccent,
       physicalAddress: parsed.content.physicalAddress,
       buttonText: parsed.content.buttonText,
       buttonUrl: parsed.content.buttonUrl,
     });
-    const results = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `
+    let results: D1Result<unknown>[];
+    try {
+      results = await this.env.DB.batch([
+        this.env.DB.prepare(
+          `
         INSERT INTO communication_templates (
-          id, event_id, name, category, status, created_by_person_id, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'draft', ?, unixepoch(), unixepoch())
+          id, event_id, name, category, status, last_operation_id,
+          created_by_person_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'draft', ?, ?, unixepoch(), unixepoch())
         ON CONFLICT(id) DO UPDATE SET name = excluded.name, category = excluded.category,
-          updated_at = unixepoch()
+          last_operation_id = excluded.last_operation_id, updated_at = unixepoch()
         WHERE communication_templates.event_id = excluded.event_id
       `,
-      ).bind(
-        templateId,
-        viewer.eventId,
-        parsed.name,
-        parsed.category,
-        viewer.personId,
-      ),
-      this.env.DB.prepare(
-        `
+        ).bind(
+          templateId,
+          viewer.eventId,
+          parsed.name,
+          parsed.category,
+          saveOperationId,
+          viewer.personId,
+        ),
+        this.env.DB.prepare(
+          `
         INSERT INTO communication_template_versions (
           id, event_id, template_id, version_number, name, category, channel, subject_template,
           content_json, rendered_preview_html, status, created_by_person_id, created_at
@@ -150,20 +206,20 @@ export class CommunicationTemplateService {
              AND template.status <> 'archived'
         RETURNING version_number AS versionNumber
       `,
-      ).bind(
-        versionId,
-        parsed.name,
-        parsed.category,
-        parsed.subject,
-        JSON.stringify(parsed.content),
-        preview.html,
-        viewer.personId,
-        viewer.organisationId,
-        templateId,
-        viewer.eventId,
-      ),
-      this.env.DB.prepare(
-        `
+        ).bind(
+          versionId,
+          parsed.name,
+          parsed.category,
+          parsed.subject,
+          JSON.stringify(parsed.content),
+          preview.html,
+          viewer.personId,
+          viewer.organisationId,
+          templateId,
+          viewer.eventId,
+        ),
+        this.env.DB.prepare(
+          `
         INSERT INTO audit_events (
           id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
         ) SELECT ?, ?, version.event_id, ?, 'communication.template.version.created',
@@ -177,15 +233,20 @@ export class CommunicationTemplateService {
             FROM communication_template_versions version
            WHERE version.id = ? AND version.event_id = ? AND version.template_id = ?
       `,
-      ).bind(
-        crypto.randomUUID(),
-        viewer.organisationId,
-        viewer.personId,
-        versionId,
-        viewer.eventId,
-        templateId,
-      ),
-    ]);
+        ).bind(
+          operation?.auditId ?? crypto.randomUUID(),
+          viewer.organisationId,
+          viewer.personId,
+          versionId,
+          viewer.eventId,
+          templateId,
+        ),
+      ]);
+    } catch (error) {
+      const recovered = await recover?.();
+      if (recovered) return recovered;
+      throw error;
+    }
     const allocated = results[1]?.results?.[0] as
       { versionNumber?: number } | undefined;
     const versionNumber = Number(allocated?.versionNumber);
@@ -193,10 +254,13 @@ export class CommunicationTemplateService {
       (results[1].meta.changes ?? 0) !== 1 ||
       !Number.isSafeInteger(versionNumber) ||
       versionNumber < 1
-    )
+    ) {
+      const recovered = await recover?.();
+      if (recovered) return recovered;
       throw new CommunicationNotFoundError(
         "The authorised event no longer exists.",
       );
+    }
     return { templateId, versionId, versionNumber };
   }
 
@@ -334,7 +398,8 @@ export class CommunicationTemplateService {
   private async getEvent(viewer: Viewer) {
     const event = await this.env.DB.prepare(
       `
-      SELECT e.name AS eventName, e.starts_at AS startsAt, e.ends_at AS endsAt
+      SELECT e.name AS eventName, e.brand_accent AS brandAccent,
+             e.starts_at AS startsAt, e.ends_at AS endsAt
         FROM events e WHERE e.id = ? AND e.organisation_id = ?
     `,
     )
@@ -347,18 +412,22 @@ export class CommunicationTemplateService {
     return event;
   }
 
-  private async getVerifiedSender(viewer: Viewer) {
+  private async getVerifiedSender(
+    viewer: Viewer,
+    provider: "resend" | "mailpit" | null,
+  ) {
+    if (!provider) return null;
     return this.env.DB.prepare(
       `
       SELECT sp.id, sp.from_name AS fromName, sp.from_email AS fromEmail,
              sp.reply_to_email AS replyToEmail
         FROM sender_profiles sp
         JOIN events e ON e.id = sp.event_id AND e.organisation_id = ?
-       WHERE sp.event_id = ? AND sp.status = 'verified' AND sp.provider = 'resend'
+       WHERE sp.event_id = ? AND sp.status = 'verified' AND sp.provider = ?
        ORDER BY sp.updated_at DESC LIMIT 1
     `,
     )
-      .bind(viewer.organisationId, viewer.eventId)
+      .bind(viewer.organisationId, viewer.eventId, provider)
       .first<SenderRow>();
   }
 }

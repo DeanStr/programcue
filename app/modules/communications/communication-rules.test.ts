@@ -1,21 +1,65 @@
 import { describe, expect, it } from "vitest";
 
-import { calculateRecipientCount, communicationDraftSchema } from "./communication-rules";
+import {
+  previewCommunicationSchema,
+  saveCommunicationTriggerSchema,
+} from "./communication-schema";
+import {
+  calculateRecipientCount,
+  communicationDraftSchema,
+} from "./communication-rules";
 import { formatEventDateMarkers } from "./merge-template";
 
 describe("communication and readiness rules", () => {
   it("calculates deliverable recipients", () => {
-    expect(calculateRecipientCount({ selected: 100, suppressed: 7, invalid: 3 })).toBe(90);
+    expect(
+      calculateRecipientCount({ selected: 100, suppressed: 7, invalid: 3 }),
+    ).toBe(90);
   });
 
   it("validates the content required by each selected channel", () => {
-    expect(() => communicationDraftSchema.parse({
-      name: "Reminder",
-      channels: ["email"],
-      subject: "",
-      emailBody: "Hello",
-      physicalAddress: "",
-    })).toThrow(/subject/);
+    expect(() =>
+      communicationDraftSchema.parse({
+        name: "Reminder",
+        channels: ["email"],
+        subject: "",
+        emailBody: "Hello",
+        physicalAddress: "",
+      }),
+    ).toThrow(/subject/);
+  });
+
+  it("requires explicit reminder policy and activation input", () => {
+    const trigger = {
+      templateId: "00000000-0000-4000-8000-000000000001",
+      triggerType: "task_due",
+      audienceType: "due_speakers",
+      sendHourUtc: 9,
+    };
+    expect(saveCommunicationTriggerSchema.safeParse(trigger).success).toBe(
+      false,
+    );
+    expect(
+      saveCommunicationTriggerSchema.safeParse({
+        ...trigger,
+        kind: "transactional",
+        enabled: "false",
+      }).success,
+    ).toBe(false);
+    expect(
+      saveCommunicationTriggerSchema.parse({
+        ...trigger,
+        kind: "optional",
+        enabled: false,
+      }),
+    ).toMatchObject({ kind: "optional", enabled: false });
+    expect(
+      previewCommunicationSchema.safeParse({
+        templateVersionId: "00000000-0000-4000-8000-000000000002",
+        audienceType: "manual",
+        manualRecipients: "recipient@example.com",
+      }).success,
+    ).toBe(false);
   });
 
   it("renders event date markers without duplicating a single calendar day", () => {

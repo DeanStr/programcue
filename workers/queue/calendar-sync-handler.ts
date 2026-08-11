@@ -7,12 +7,13 @@ import {
   GoogleCalendarProvider,
   MicrosoftCalendarProvider,
 } from "../../app/modules/calendars/calendar-providers.server";
+import { CalendarOAuthService } from "../../app/modules/calendars/calendar-oauth.server";
 import {
   generateInvitationIcs,
   hashCalendarLifecyclePayload,
 } from "../../app/modules/calendars/ics.server";
 import { renderProgramCueEmail } from "../../app/modules/communications/email-templates/render-email.server";
-import { ResendEmailProvider } from "../../app/modules/communications/resend.server";
+import { createEmailProvider } from "../../app/modules/communications/email-provider.server";
 import {
   assertOperationClaim,
   errorDetails,
@@ -28,6 +29,8 @@ import type { QueueProviderDependencies } from "./handler-types";
 
 type CalendarAttemptRow = {
   id: string;
+  sessionId: string;
+  personId: string;
   sequenceNumber: number;
   method: "REQUEST" | "CANCEL";
   status: "queued" | "running" | "succeeded" | "failed" | "superseded" | null;
@@ -44,6 +47,7 @@ type CalendarAttemptRow = {
   connectionProvider: "google" | "microsoft" | null;
   connectionStatus: string | null;
   connectionExpiresAt: number | null;
+  connectionPersonId: string | null;
 };
 
 async function loadCalendarAttempt(
@@ -52,12 +56,14 @@ async function loadCalendarAttempt(
 ) {
   return env.DB.prepare(
     `
-    SELECT ci.id, ci.sequence_number AS sequenceNumber, ci.method,
+    SELECT ci.id, ci.session_id AS sessionId, ci.person_id AS personId,
+           ci.sequence_number AS sequenceNumber, ci.method,
            ci.current_attempt_id AS currentAttemptId, ci.last_payload_hash AS lastPayloadHash,
            ci.provider_event_id AS providerEventId, ci.delivery_id AS deliveryId,
            d.communication_id AS communicationId, ci.connection_id AS connectionId,
            cc.encrypted_credentials AS encryptedCredentials, cc.provider AS connectionProvider,
            cc.status AS connectionStatus, cc.expires_at AS connectionExpiresAt,
+           cc.person_id AS connectionPersonId,
            csa.status, csa.sequence_number AS attemptSequence,
            csa.method AS attemptMethod, csa.provider AS attemptProvider
       FROM calendar_invitations ci
@@ -65,11 +71,23 @@ async function loadCalendarAttempt(
         ON csa.id = ? AND csa.invitation_id = ci.id
       LEFT JOIN communication_deliveries d
         ON d.id = ci.delivery_id AND d.event_id = ci.event_id
-      LEFT JOIN calendar_connections cc ON cc.id = ci.connection_id
+      LEFT JOIN calendar_connections cc
+        ON cc.id = ci.connection_id
+       AND cc.organisation_id = ?
+       AND cc.person_id = ?
+       AND cc.provider = ?
+       AND (cc.event_id IS NULL OR cc.event_id = ci.event_id)
      WHERE ci.id = ? AND ci.event_id = ?
   `,
   )
-    .bind(message.attemptId, message.invitationId, message.eventId)
+    .bind(
+      message.attemptId,
+      message.organisationId,
+      message.personId,
+      message.provider,
+      message.invitationId,
+      message.eventId,
+    )
     .first<CalendarAttemptRow>();
 }
 
@@ -80,6 +98,9 @@ function isExactCalendarAttempt(
 ) {
   return (
     row?.currentAttemptId === message.attemptId &&
+    row.sessionId === message.sessionId &&
+    row.personId === message.personId &&
+    row.connectionId === message.connectionId &&
     row.sequenceNumber === message.payload.sequence &&
     row.method === message.payload.method &&
     row.lastPayloadHash === payloadHash &&
@@ -362,8 +383,8 @@ async function deliverCalendarProvider(input: {
   claimToken: string;
   dependencies: QueueProviderDependencies;
 }): Promise<string | null> {
-  const { env, message, invitation, payloadHash, claimToken, dependencies } =
-    input;
+  const { env, message, payloadHash, claimToken, dependencies } = input;
+  let { invitation } = input;
   let providerEventId: string;
   if (message.provider === "email_ics") {
     if (!invitation.deliveryId)
@@ -371,9 +392,10 @@ async function deliverCalendarProvider(input: {
     const delivery = await env.DB.prepare(
       `
       SELECT d.id, d.recipient_address AS address, d.idempotency_key AS idempotencyKey,
-             d.status, d.provider_message_id AS providerMessageId,
+             d.status, d.provider AS provider,
+             d.provider_message_id AS providerMessageId,
              c.id AS communicationId, sp.from_name AS fromName, sp.from_email AS fromEmail,
-             sp.reply_to_email AS replyToEmail
+             sp.reply_to_email AS replyToEmail, sp.provider AS senderProvider
         FROM communication_deliveries d
         JOIN communications c ON c.id = d.communication_id AND c.event_id = d.event_id
         JOIN sender_profiles sp ON sp.id = c.sender_profile_id AND sp.event_id = c.event_id
@@ -387,7 +409,9 @@ async function deliverCalendarProvider(input: {
         address: string;
         idempotencyKey: string;
         status: string;
+        provider: string | null;
         providerMessageId: string | null;
+        senderProvider: string;
         communicationId: string;
         fromName: string;
         fromEmail: string;
@@ -398,6 +422,14 @@ async function deliverCalendarProvider(input: {
     if (delivery.status === "sent" && delivery.providerMessageId) {
       providerEventId = delivery.providerMessageId;
     } else {
+      const emailProvider = dependencies.email ?? createEmailProvider(env);
+      if (
+        delivery.provider !== emailProvider.name ||
+        delivery.senderProvider !== emailProvider.name
+      )
+        throw new Error(
+          "The calendar email delivery provider does not match its durable intent.",
+        );
       const methodLabel =
         message.payload.method === "CANCEL"
           ? "Cancelled"
@@ -411,6 +443,7 @@ async function deliverCalendarProvider(input: {
             ? "This session has been cancelled. The attached calendar update removes it from your calendar."
             : `Your session is scheduled at ${message.payload.location}. The invitation is attached for Gmail, Outlook and other iCalendar-compatible calendars.`,
         eventName: message.payload.organizerName,
+        accent: message.payload.brandAccent,
         physicalAddress:
           "This operational calendar message was sent by the event organiser.",
       });
@@ -455,9 +488,7 @@ async function deliverCalendarProvider(input: {
         .run();
       if ((deliveryClaim.meta.changes ?? 0) !== 1)
         throw new Error("Calendar email delivery could not be claimed.");
-      const result = await (
-        dependencies.resend ?? new ResendEmailProvider(env.RESEND_API_KEY)
-      ).send({
+      const result = await emailProvider.send({
         from: `${delivery.fromName} <${delivery.fromEmail}>`,
         replyTo: delivery.replyToEmail,
         to: delivery.address,
@@ -477,7 +508,7 @@ async function deliverCalendarProvider(input: {
       const emailCompletionResults = await env.DB.batch([
         env.DB.prepare(
           `UPDATE communication_deliveries
-          SET status = 'sent', provider = 'resend', provider_message_id = ?,
+          SET status = 'sent', provider_message_id = ?,
               failure_code = NULL, failure_message = NULL, updated_at = unixepoch()
           WHERE id = ? AND event_id = ?
             AND EXISTS (
@@ -518,11 +549,47 @@ async function deliverCalendarProvider(input: {
     }
   } else {
     if (
+      invitation.connectionId &&
+      invitation.connectionPersonId &&
+      (invitation.connectionStatus === "needs_attention" ||
+        (invitation.connectionExpiresAt !== null &&
+          invitation.connectionExpiresAt <=
+            Math.floor(Date.now() / 1_000) + 300))
+    ) {
+      await renewOperationClaim(
+        env,
+        { organisationId: message.organisationId, eventId: message.eventId },
+        message.operationId,
+        claimToken,
+      );
+      await new CalendarOAuthService(env).refreshConnection(
+        {
+          organisationId: message.organisationId,
+          eventId: message.eventId,
+          personId: invitation.connectionPersonId,
+        },
+        invitation.connectionId,
+      );
+      await renewOperationClaim(
+        env,
+        { organisationId: message.organisationId, eventId: message.eventId },
+        message.operationId,
+        claimToken,
+      );
+      const refreshed = await loadCalendarAttempt(env, message);
+      if (!refreshed)
+        throw new Error(
+          "The calendar attempt disappeared while its access token was refreshed.",
+        );
+      invitation = refreshed;
+    }
+    if (
       invitation.connectionProvider !== message.provider ||
       !invitation.encryptedCredentials ||
       invitation.connectionStatus !== "connected" ||
-      (invitation.connectionExpiresAt !== null &&
-        invitation.connectionExpiresAt <= Math.floor(Date.now() / 1_000))
+      !invitation.connectionPersonId ||
+      invitation.connectionExpiresAt === null ||
+      invitation.connectionExpiresAt <= Math.floor(Date.now() / 1_000)
     ) {
       throw new Error(
         `The ${message.provider} calendar connection is missing or no longer active.`,
@@ -534,6 +601,13 @@ async function deliverCalendarProvider(input: {
         invitation.encryptedCredentials,
         env.CALENDAR_CREDENTIALS_KEY,
       );
+      if (
+        credentials.accessTokenExpiresAt !== invitation.connectionExpiresAt ||
+        credentials.accessTokenExpiresAt <= Math.floor(Date.now() / 1_000)
+      )
+        throw new Error(
+          "Connected calendar credential expiry does not match its durable connection state.",
+        );
       provider =
         message.provider === "google"
           ? new GoogleCalendarProvider(
@@ -646,6 +720,7 @@ export async function processCalendarSync(
     });
     return;
   }
+  if (["failed", "partially_failed"].includes(operation.status)) return;
   const payloadHash = await hashCalendarLifecyclePayload(
     message.provider,
     message.payload,
@@ -694,7 +769,7 @@ export async function processCalendarSync(
            SELECT 1 FROM operation_jobs o
            WHERE o.id = ? AND o.event_id = ?
              AND (
-               o.status IN ('queued','received','retrying','queue_failed','failed','partially_failed')
+               o.status IN ('queued','received','retrying','queue_failed')
                OR (o.status = 'running' AND COALESCE(o.claim_expires_at, 0) <= unixepoch())
              )
         )`,
@@ -720,7 +795,7 @@ export async function processCalendarSync(
           claim_token = ?, claim_expires_at = unixepoch() + ?, updated_at = unixepoch()
       WHERE id = ? AND event_id = ?
         AND (
-          status IN ('queued','received','retrying','queue_failed','failed','partially_failed')
+          status IN ('queued','received','retrying','queue_failed')
           OR (status = 'running' AND COALESCE(claim_expires_at, 0) <= unixepoch())
         )
         AND EXISTS (SELECT 1 FROM calendar_sync_attempts WHERE id = ? AND status = 'running')`,
@@ -762,7 +837,9 @@ export async function processCalendarSync(
     );
     if (
       currentOperation?.status === "completed" ||
-      currentOperation?.status === "cancelled"
+      currentOperation?.status === "cancelled" ||
+      currentOperation?.status === "failed" ||
+      currentOperation?.status === "partially_failed"
     )
       return;
     if (
@@ -906,6 +983,33 @@ export async function processCalendarSync(
         message.payload.method,
         payloadHash,
         claimToken,
+      ),
+      env.DB.prepare(
+        `UPDATE calendar_connections
+            SET last_synced_at = unixepoch(), updated_at = unixepoch()
+          WHERE id = ? AND organisation_id = ? AND status = 'connected'
+            AND ? <> 'email_ics'
+            AND EXISTS (
+              SELECT 1 FROM calendar_invitations invitation
+              JOIN operation_jobs claimed_operation
+                ON claimed_operation.id = ? AND claimed_operation.event_id = invitation.event_id
+               AND claimed_operation.status = 'running' AND claimed_operation.claim_token = ?
+             WHERE invitation.id = ? AND invitation.event_id = ?
+               AND invitation.current_attempt_id = ? AND invitation.sequence_number = ?
+               AND invitation.method = ? AND invitation.last_payload_hash = ?
+            )`,
+      ).bind(
+        message.connectionId,
+        message.organisationId,
+        message.provider,
+        message.operationId,
+        claimToken,
+        message.invitationId,
+        message.eventId,
+        message.attemptId,
+        message.payload.sequence,
+        message.payload.method,
+        payloadHash,
       ),
       env.DB.prepare(
         `UPDATE operation_items

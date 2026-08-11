@@ -3,8 +3,21 @@ import { expect, test } from "@playwright/test";
 import { resetDemoSubmissions } from "./support/reset-demo-submissions";
 
 test.describe.serial("submissions vertical slice", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().addCookies([
+      {
+        name: "program_cue_event",
+        value: "evt-foe-2025",
+        domain: "127.0.0.1",
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+  });
+
   test.beforeAll(async ({ request }) => {
-    await resetDemoSubmissions(request);
+    await resetDemoSubmissions(request, { verifiedLocalSender: true });
   });
 
   test.afterAll(async ({ request }) => {
@@ -24,15 +37,20 @@ test.describe.serial("submissions vertical slice", () => {
       .fill(
         "Bring a practical idea, evidence from real delivery, and a clear attendee takeaway.",
       );
-    await page.getByRole("button", { name: /URL$/ }).click();
+    await page
+      .locator(".field-library")
+      .getByRole("button", { name: /^＋\s*URL$/u })
+      .click();
     await page.getByLabel("Stable field ID").fill(`takeaway_url_${unique}`);
     await page
       .getByLabel("Label", { exact: true })
       .fill(`Attendee takeaway link ${unique}`);
     await page.getByRole("button", { name: "Save draft" }).click();
-    await expect(page.getByRole("status")).toContainText(
-      "Draft form saved to D1",
-    );
+    await expect(
+      page.locator(".validation-item.ok[role='status']").filter({
+        hasText: "Draft form saved to D1",
+      }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Publish version" }),
     ).toBeEnabled();
@@ -46,10 +64,50 @@ test.describe.serial("submissions vertical slice", () => {
       page.getByText("will immediately replace the current public application"),
     ).toBeVisible();
     await page.getByRole("button", { name: "Confirm publication" }).click();
-    await expect(page.getByRole("status")).toContainText(
-      "Published a new immutable form version",
-    );
+    await expect(
+      page.locator(".validation-item.ok[role='status']").filter({
+        hasText: "Published a new immutable form version",
+      }),
+    ).toBeVisible();
     await expect(page.getByText("published").first()).toBeVisible();
+  });
+
+  test("visual form authoring maps through the Program Cue adapter before saving", async ({
+    page,
+  }) => {
+    const visualLabel = `Session title visual ${Date.now()}`;
+    await page.goto("/admin/submissions/form");
+
+    const editor = page.getByLabel("Visual call-for-speakers form editor");
+    await expect(editor).toBeVisible();
+    await expect(editor.getByTitle("Powered by bpmn.io")).toBeVisible();
+    await editor
+      .locator('.fjs-element[data-id="ProgramCue_Field_title"]')
+      .click();
+    await editor.getByText("General", { exact: true }).click();
+    await expect(editor.getByLabel("Field label")).toBeVisible();
+    await editor.getByLabel("Field label").fill(visualLabel);
+
+    await expect(
+      page.getByText(visualLabel, { exact: true }).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Save draft" }),
+    ).toBeEnabled();
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(
+      page.locator(".validation-item.ok[role='status']").filter({
+        hasText: "Draft form saved to D1",
+      }),
+    ).toBeVisible();
+
+    await page.reload();
+    await expect(
+      page.getByLabel("Visual call-for-speakers form editor"),
+    ).toBeVisible();
+    await expect(
+      page.getByText(visualLabel, { exact: true }).first(),
+    ).toBeVisible();
   });
 
   test("applicant verifies email, saves a multi-speaker draft, submits it and appears in the admin queue", async ({
@@ -99,25 +157,35 @@ test.describe.serial("submissions vertical slice", () => {
     await expect(coSpeakerEmail).toBeFocused();
 
     await page.getByRole("button", { name: "Save draft" }).click();
-    await expect(page.getByRole("status")).toContainText(
-      "This draft is stored in D1.",
-    );
+    await expect(
+      page.locator(".validation-item.ok[role='status']").filter({
+        hasText: "This draft is stored in D1.",
+      }),
+    ).toBeVisible();
     await page.getByText("I have reviewed this application").click();
     await page.getByRole("button", { name: "Submit application" }).click();
-    await expect(page.getByRole("status")).toContainText(
-      "This application is submitted and stored in D1.",
-    );
+    await expect(
+      page.locator(".validation-item.ok[role='status']").filter({
+        hasText: "This application is submitted and stored in D1.",
+      }),
+    ).toBeVisible();
     await expect(
       page.getByText("This immutable application was received"),
     ).toBeVisible();
 
     await page.goto("/admin/submissions");
-    await page.getByLabel("Search").fill(title);
-    await page.getByRole("button", { name: "Apply filters" }).click();
+    const filters = page.getByRole("search");
+    await filters.getByLabel("Search", { exact: true }).fill(title);
+    await filters.getByRole("button", { name: "Apply filters" }).click();
     await expect(page.getByRole("link", { name: title })).toBeVisible();
     await page.getByRole("link", { name: title }).click();
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
-    await expect(page.getByText("Programme committee")).toBeVisible();
+    const routing = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Routing", exact: true }),
+    });
+    await expect(
+      routing.locator("p").filter({ hasText: "Assigned team" }),
+    ).toContainText("Unassigned");
     await expect(page.getByText("Casey Collaborator")).toBeVisible();
   });
 
@@ -126,20 +194,31 @@ test.describe.serial("submissions vertical slice", () => {
   }) => {
     const unique = Date.now();
     await page.goto("/admin/submissions");
-    await page.getByText("Create a guaranteed direct session").click();
-    await page.getByLabel("Session title").fill(`Sponsor briefing ${unique}`);
-    await page
+    const directSession = page.locator("details").filter({
+      has: page.getByText("Create a guaranteed direct session", {
+        exact: true,
+      }),
+    });
+    await directSession
+      .getByText("Create a guaranteed direct session", { exact: true })
+      .click();
+    await directSession
+      .getByLabel("Session title")
+      .fill(`Sponsor briefing ${unique}`);
+    await directSession
       .getByLabel("Description")
       .fill("A confirmed sponsor programme contribution.");
-    await page.getByLabel("Speaker name").fill("Morgan Sponsor");
-    await page
-      .getByLabel("Speaker email")
+    await directSession.getByLabel("Speaker 1 name").fill("Morgan Sponsor");
+    await directSession
+      .getByLabel("Email", { exact: true })
       .fill(`sponsor-${unique}@example.com`);
-    await page
+    await directSession
       .getByRole("button", { name: "Create unscheduled session" })
       .click();
-    await expect(page.getByRole("status")).toContainText(
-      "Direct session created",
-    );
+    await expect(
+      page.locator(".validation-item.ok[role='status']").filter({
+        hasText: "Direct session created in the unscheduled programme.",
+      }),
+    ).toBeVisible();
   });
 });

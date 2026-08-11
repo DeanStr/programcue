@@ -1,0 +1,304 @@
+import {
+  data,
+  type ActionFunctionArgs,
+  type LoaderFunctionArgs,
+} from "react-router";
+
+import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import {
+  DEMO_EVENT_ID,
+  DEMO_IDENTITIES,
+  DEMO_ORGANISATION_ID,
+} from "~/platform/demo/demo-identities";
+import { ensureDemoProgramme } from "~/platform/demo/seed.server";
+import { getCloudflareContext } from "~/platform/cloudflare-context";
+
+const CONFIRMATION = "seed-golden-path-browser-fixture";
+const ACCELEVENTS_CONNECTION_ID = "demo-accelevents-no-write-connection";
+const ACCELEVENTS_OPERATION_ID = "demo-accelevents-failed-operation";
+const ACCELEVENTS_RUN_ID = "demo-accelevents-failed-run";
+const ACCELEVENTS_RUN_ITEM_ID = "demo-accelevents-failed-run-item";
+const ACCELEVENTS_OPERATION_ITEM_ID = "demo-accelevents-failed-operation-item";
+
+function requireDemo(env: CloudflareEnvironment) {
+  if (
+    String(env.APP_ENV) !== "demo" ||
+    String(env.DEMO_MODE) !== "true" ||
+    env.DEFAULT_EVENT_ID !== DEMO_EVENT_ID
+  ) {
+    throw new Response("Not found", { status: 404 });
+  }
+}
+
+function methodNotAllowed() {
+  return data(
+    { ok: false, error: "The golden-path demo fixture requires POST." },
+    {
+      status: 405,
+      headers: { allow: "POST", "cache-control": "private, no-store" },
+    },
+  );
+}
+
+export function loader({ context }: LoaderFunctionArgs) {
+  const { env } = getCloudflareContext(context);
+  requireDemo(env);
+  return methodNotAllowed();
+}
+
+async function seedTaskEvidence(env: CloudflareEnvironment) {
+  if (!env.FILES) {
+    throw new Error("Required private R2 binding FILES is unavailable.");
+  }
+  await ensureDemoSpeakerData(env);
+  const suffix = crypto.randomUUID();
+  const assetId = `demo-task-evidence-${suffix}`;
+  const versionId = `demo-task-evidence-version-${suffix}`;
+  const taskId = "task-demo-slides";
+  const objectKey = `private/events/${DEMO_EVENT_ID}/task/${taskId}/${assetId}/${versionId}`;
+  const bytes = new TextEncoder().encode(
+    "%PDF-1.4\nProgram Cue deterministic local task evidence.\n%%EOF\n",
+  );
+  const stored = await env.FILES.put(objectKey, bytes, {
+    httpMetadata: { contentType: "application/pdf" },
+    customMetadata: {
+      eventId: DEMO_EVENT_ID,
+      assetId,
+      versionId,
+      fixture: "golden-path-local-r2",
+    },
+  });
+  let results: D1Result[];
+  try {
+    results = await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO file_assets (
+         id, event_id, owner_person_id, target_type, target_id, asset_kind,
+         status, created_at, updated_at
+       ) SELECT ?, ?, ?, 'task', task.id, 'task_evidence',
+                'active', unixepoch(), unixepoch()
+           FROM task_instances task
+          WHERE task.id = ? AND task.event_id = ?
+            AND task.owner_person_id = ? AND task.task_type = 'file_upload'`,
+      ).bind(
+        assetId,
+        DEMO_EVENT_ID,
+        DEMO_IDENTITIES.speaker.personId,
+        taskId,
+        DEMO_EVENT_ID,
+        DEMO_IDENTITIES.speaker.personId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO file_versions (
+         id, event_id, asset_id, version_number, object_key,
+         original_filename, declared_content_type, detected_content_type,
+         size_bytes, object_etag, upload_status, signature_status, scan_status,
+         created_by_person_id, created_at, uploaded_at
+       ) SELECT ?, ?, asset.id, 1, ?, 'golden-path-evidence.pdf',
+                'application/pdf', 'application/pdf', ?, ?, 'uploaded',
+                'valid', 'pending', ?, unixepoch(), unixepoch()
+           FROM file_assets asset
+          WHERE asset.id = ? AND asset.event_id = ?`,
+      ).bind(
+        versionId,
+        DEMO_EVENT_ID,
+        objectKey,
+        bytes.byteLength,
+        stored.etag,
+        DEMO_IDENTITIES.speaker.personId,
+        assetId,
+        DEMO_EVENT_ID,
+      ),
+      env.DB.prepare(
+        `UPDATE file_assets SET current_version_id = ?, updated_at = unixepoch()
+        WHERE id = ? AND event_id = ?
+          AND EXISTS (
+            SELECT 1 FROM file_versions
+             WHERE id = ? AND event_id = ? AND asset_id = ?
+          )`,
+      ).bind(
+        versionId,
+        assetId,
+        DEMO_EVENT_ID,
+        versionId,
+        DEMO_EVENT_ID,
+        assetId,
+      ),
+    ]);
+  } catch (error) {
+    await env.FILES.delete(objectKey);
+    throw error;
+  }
+  if (
+    (results[0]?.meta.changes ?? 0) !== 1 ||
+    (results[1]?.meta.changes ?? 0) !== 1 ||
+    (results[2]?.meta.changes ?? 0) !== 1
+  ) {
+    await env.FILES.delete(objectKey);
+    throw new Error(
+      "The local R2 task-evidence fixture could not be recorded.",
+    );
+  }
+  return {
+    assetId,
+    versionId,
+    taskId,
+    filename: "golden-path-evidence.pdf",
+    sizeBytes: bytes.byteLength,
+    localObjectStored: true,
+    providerBoundary: "local-r2-binding",
+    providerCalled: true,
+  };
+}
+
+async function seedAcceleventsNoWriteFixture(env: CloudflareEnvironment) {
+  await ensureDemoProgramme(env);
+  const message = {
+    type: "integration.accelevents.export",
+    operationId: ACCELEVENTS_OPERATION_ID,
+    runId: ACCELEVENTS_RUN_ID,
+    connectionId: ACCELEVENTS_CONNECTION_ID,
+    connectionRevision: 1,
+    organisationId: DEMO_ORGANISATION_ID,
+    eventId: DEMO_EVENT_ID,
+  };
+  const diff = {
+    label: "AI in Event Operations",
+    payload: {
+      title: "AI in Event Operations",
+      description: "A deterministic no-write retry fixture.",
+      startTime: "2025/05/20 10:00",
+      endTime: "2025/05/20 11:00",
+      format: "BREAKOUT_SESSION",
+      status: "VISIBLE",
+      sessionVisibilityType: "PUBLIC",
+      sessionTypeFormat: "IN_PERSON",
+      location: "Room 301A",
+    },
+    sourceHash: "0".repeat(64),
+    previousExternalId: null,
+    changes: [
+      { field: "title", before: null, after: "AI in Event Operations" },
+    ],
+    providerSupport: "supported",
+    providerMessage:
+      "This demo-only no-write fixture intentionally returns an explicit provider-unavailable failure.",
+  };
+  await env.DB.batch([
+    env.DB.prepare(
+      "DELETE FROM operation_jobs WHERE id = ? AND event_id = ?",
+    ).bind(ACCELEVENTS_OPERATION_ID, DEMO_EVENT_ID),
+    env.DB.prepare(
+      "DELETE FROM integration_connections WHERE id = ? AND event_id = ?",
+    ).bind(ACCELEVENTS_CONNECTION_ID, DEMO_EVENT_ID),
+    env.DB.prepare(
+      `INSERT INTO integration_connections (
+         id, organisation_id, event_id, provider, status, direction,
+         conflict_policy, encrypted_credentials, configuration_json,
+         revision, created_at, updated_at
+       ) VALUES (?, ?, ?, 'accelevents', 'connected', 'outbound',
+                 'program_cue_wins', NULL, ?, 1, unixepoch(), unixepoch())`,
+    ).bind(
+      ACCELEVENTS_CONNECTION_ID,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      JSON.stringify({
+        eventUrl: "demo-no-write-fixture",
+        externalEventId: 1,
+        sessionTypeFormat: "IN_PERSON",
+        demoNoWriteFixture: true,
+      }),
+    ),
+    env.DB.prepare(
+      `INSERT INTO operation_jobs (
+         id, organisation_id, event_id, requested_by_person_id, type,
+         idempotency_key, correlation_id, status, payload_json, result_json,
+         progress_total, progress_completed, progress_failed, attempt_count,
+         last_error, cancellable, completed_at, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, 'integration.accelevents.export',
+                 'demo-accelevents-failed-retry', ?, 'failed', ?, NULL,
+                 1, 0, 1, 1, ?, 0, unixepoch(), unixepoch(), unixepoch())`,
+    ).bind(
+      ACCELEVENTS_OPERATION_ID,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.administrator.personId,
+      "demo-accelevents-failed-correlation",
+      JSON.stringify(message),
+      "Demo no-write fixture: no Accelevents request was made.",
+    ),
+    env.DB.prepare(
+      `INSERT INTO integration_runs (
+         id, connection_id, operation_id, idempotency_key, status, direction,
+         dry_run, summary_json, started_at, completed_at, created_at
+       ) VALUES (?, ?, ?, 'demo-accelevents-failed-retry', 'failed',
+                 'outbound', 0, ?, unixepoch(), unixepoch(), unixepoch())`,
+    ).bind(
+      ACCELEVENTS_RUN_ID,
+      ACCELEVENTS_CONNECTION_ID,
+      ACCELEVENTS_OPERATION_ID,
+      JSON.stringify({ total: 1, create: 1, update: 0, noop: 0, blocked: 0 }),
+    ),
+    env.DB.prepare(
+      `INSERT INTO integration_run_items (
+         id, run_id, entity_type, entity_id, external_id, action, status,
+         diff_json, attempt_count, error_code, error_message, updated_at
+       ) VALUES (?, ?, 'session', 'demo-session-2', NULL, 'create', 'failed',
+                 ?, 1, 'DEMO_NO_WRITE', ?, unixepoch())`,
+    ).bind(
+      ACCELEVENTS_RUN_ITEM_ID,
+      ACCELEVENTS_RUN_ID,
+      JSON.stringify(diff),
+      "Demo no-write fixture: no Accelevents request was made.",
+    ),
+    env.DB.prepare(
+      `INSERT INTO operation_items (
+         id, operation_id, item_key, entity_type, entity_id, status,
+         attempt_count, result_json, error_code, error_message,
+         completed_at, updated_at
+       ) VALUES (?, ?, 'session:demo-session-2', 'session', 'demo-session-2',
+                 'failed', 1, ?, 'DEMO_NO_WRITE', ?, unixepoch(), unixepoch())`,
+    ).bind(
+      ACCELEVENTS_OPERATION_ITEM_ID,
+      ACCELEVENTS_OPERATION_ID,
+      JSON.stringify(diff),
+      "Demo no-write fixture: no Accelevents request was made.",
+    ),
+  ]);
+  return {
+    connectionId: ACCELEVENTS_CONNECTION_ID,
+    operationId: ACCELEVENTS_OPERATION_ID,
+    itemId: ACCELEVENTS_OPERATION_ITEM_ID,
+    providerBoundary: "accelevents",
+    providerCalled: false,
+  };
+}
+
+export async function action({ request, context }: ActionFunctionArgs) {
+  const { env } = getCloudflareContext(context);
+  requireDemo(env);
+  if (request.method !== "POST") return methodNotAllowed();
+  const form = await request.formData();
+  if (form.get("confirm") !== CONFIRMATION) {
+    throw new Response("Explicit demo fixture confirmation is required", {
+      status: 400,
+    });
+  }
+  const intent = form.get("intent");
+  const result =
+    intent === "seed_task_evidence"
+      ? await seedTaskEvidence(env)
+      : intent === "seed_accelevents_no_write"
+        ? await seedAcceleventsNoWriteFixture(env)
+        : null;
+  if (!result)
+    throw new Response("Unsupported demo fixture action", { status: 400 });
+  return data(
+    {
+      ok: true,
+      demonstrationOnly: true,
+      ...result,
+    },
+    { headers: { "cache-control": "private, no-store" } },
+  );
+}

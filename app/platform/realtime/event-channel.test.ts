@@ -30,13 +30,16 @@ function fakeState(deliveries: string[], initialValues: ReadonlyArray<readonly [
   return { state, values };
 }
 
-function fakeEnvironment(cursor = 0) {
+function fakeEnvironment(cursor = 0, priorCursor = cursor) {
   return {
     DB: {
-      prepare() {
+      prepare(sql: string) {
         return {
           bind() {
-            return { first: async () => ({ cursor }) };
+            return {
+              first: async () =>
+                sql.includes("priorCursor") ? { priorCursor } : { cursor },
+            };
           },
         };
       },
@@ -101,6 +104,45 @@ describe("event channel isolation", () => {
     const duplicate = await publish();
     expect(await duplicate.json()).toMatchObject({ accepted: false, cursor: 3 });
     expect(deliveries).toHaveLength(1);
+  });
+
+  it("uses a polling watermark when a newer signal arrives before an earlier event change", async () => {
+    const deliveries: string[] = [];
+    const { state, values } = fakeState(deliveries, [["latestCursor", 40]]);
+    const channel = new EventChannel(state, fakeEnvironment(0, 41));
+    const summary: EventChangeSummary = {
+      type: "event-change",
+      eventId: "event-1",
+      cursor: 42,
+      entityType: "session",
+      entityId: "session-42",
+      changeType: "updated",
+      correlationId: null,
+      committedAt: 1_800_000_000,
+    };
+
+    const published = await channel.fetch(
+      request("/publish", "org-1", "event-1", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(summary),
+      }),
+    );
+
+    expect(await published.json()).toMatchObject({
+      accepted: true,
+      cursor: 42,
+      pollingRequired: true,
+    });
+    expect(values.get("latestCursor")).toBe(42);
+    expect(deliveries.map((value) => JSON.parse(value))).toEqual([
+      {
+        type: "ready",
+        eventId: "event-1",
+        cursor: 42,
+        maxPollingIntervalMs: 30_000,
+      },
+    ]);
   });
 
   it("reconciles a stale persisted cursor to authoritative D1 before accepting a client", async () => {

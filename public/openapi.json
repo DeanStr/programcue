@@ -3,7 +3,7 @@
   "info": {
     "title": "Program Cue API",
     "version": "0.4.0",
-    "description": "Public programme feeds, scoped integration APIs and authenticated event invalidations for Program Cue."
+    "description": "Public programme feeds, participant self-service, scoped integration APIs and authenticated event invalidations for Program Cue."
   },
   "servers": [
     {
@@ -47,11 +47,42 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/EventSlug"
+          },
+          {
+            "$ref": "#/components/parameters/PublicQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PublicTrack"
+          },
+          {
+            "$ref": "#/components/parameters/PublicRoom"
+          },
+          {
+            "$ref": "#/components/parameters/PublicSpeakerId"
+          },
+          {
+            "$ref": "#/components/parameters/PublicFrom"
+          },
+          {
+            "$ref": "#/components/parameters/PublicTo"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "description": "Download a static snapshot instead of the normal API response.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "html"
+              ]
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Published event, schedule version and public sessions",
+            "description": "Published event, schedule version and public sessions, or a static downloadable snapshot when `format` is supplied",
             "headers": {
               "Access-Control-Allow-Origin": {
                 "schema": {
@@ -64,11 +95,237 @@
                 "schema": {
                   "$ref": "#/components/schemas/PublicProgrammeResponse"
                 }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "description": "Self-contained static programme document returned for `format=html`."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/public/events/{slug}": {
+      "get": {
+        "operationId": "getPublicEvent",
+        "summary": "Retrieve published event metadata",
+        "description": "Returns an event only when it has a current published schedule. The cacheable success body deliberately contains no request-specific correlation value.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventSlug"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Published event metadata and publication freshness",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicEventResponse"
+                }
               }
             }
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/public/events/{slug}/sessions": {
+      "get": {
+        "operationId": "listPublicSessions",
+        "summary": "List published public sessions",
+        "description": "Filters the current published collection and returns an opaque cursor bound to its content revision, resource and exact filters. A cursor from changed content or a different query fails with `PUBLICATION_CHANGED` instead of mixing result sets.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventSlug"
+          },
+          {
+            "$ref": "#/components/parameters/Limit100"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/PublicQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PublicTrack"
+          },
+          {
+            "$ref": "#/components/parameters/PublicRoom"
+          },
+          {
+            "$ref": "#/components/parameters/PublicSpeakerId"
+          },
+          {
+            "$ref": "#/components/parameters/PublicFrom"
+          },
+          {
+            "$ref": "#/components/parameters/PublicTo"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Published session page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSessionPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Cursor belongs to a replaced publication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/public/events/{slug}/speakers": {
+      "get": {
+        "operationId": "listPublicSpeakers",
+        "summary": "List speakers with published public profiles",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventSlug"
+          },
+          {
+            "$ref": "#/components/parameters/Limit100"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/PublicQuery"
+          },
+          {
+            "in": "query",
+            "name": "sessionId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Published speaker page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSpeakerPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Cursor belongs to a replaced publication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/public/events/{slug}/schedule": {
+      "get": {
+        "operationId": "listPublicSchedule",
+        "summary": "List current published schedule entries",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventSlug"
+          },
+          {
+            "$ref": "#/components/parameters/Limit100"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/PublicQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PublicTrack"
+          },
+          {
+            "$ref": "#/components/parameters/PublicRoom"
+          },
+          {
+            "$ref": "#/components/parameters/PublicSpeakerId"
+          },
+          {
+            "$ref": "#/components/parameters/PublicFrom"
+          },
+          {
+            "$ref": "#/components/parameters/PublicTo"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Published schedule entry page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSchedulePage"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Cursor belongs to a replaced publication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }
@@ -102,6 +359,1657 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}": {
+      "get": {
+        "operationId": "getEvent",
+        "summary": "Retrieve an authorised event",
+        "description": "Requires an event-authorised API key with the `events:read` scope.",
+        "x-required-api-key-scope": "events:read",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant-isolated event record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateEventResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/participant/{resource}": {
+      "get": {
+        "operationId": "getParticipantResource",
+        "summary": "Read the authenticated participant's event records",
+        "description": "Requires an authenticated browser session with an accepted speaker or submitter membership in the exact URL event. Profile, applications, sessions, private file metadata and tasks are restricted to the signed-in person; no current-event cookie or default event is used. Collection resources use opaque keyset cursors and a maximum page size of 100.",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/ParticipantResource"
+          },
+          {
+            "$ref": "#/components/parameters/Limit100"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "description": "Optional submission status filter; rejected for other resources.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "submitted",
+                "assigned",
+                "in_review",
+                "decision_ready",
+                "accepted",
+                "waitlisted",
+                "rejected",
+                "withdrawn"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The participant profile or a cursor-paginated own-record collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipantResourceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/SessionUnauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/SessionForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateParticipantProfile",
+        "summary": "Update the authenticated participant's profile",
+        "description": "Supported only when `resource=profile`. Requires an exact same-origin browser request, optimistic profile revision and an Idempotency-Key. The participant identity, event boundary and audit actor come from the authenticated session and cannot be supplied in the body.",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/ParticipantResource"
+          },
+          {
+            "$ref": "#/components/parameters/ParticipantIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/ExactOrigin"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParticipantProfilePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated or an exact retry replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipantProfileCommandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/SessionUnauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/SessionForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/participant/submissions/{submissionId}/{command}": {
+      "post": {
+        "operationId": "runParticipantSubmissionCommand",
+        "summary": "Submit or withdraw an owned application",
+        "description": "Requires an exact same-origin authenticated browser request, explicit confirmation and an Idempotency-Key. The command resolves the form and verified primary submitter from the owned URL-event submission, then uses the same revision, validation, audit, notification and workflow service as the browser application flow. Co-speakers may read a claimed submission but cannot submit or withdraw it.",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "in": "path",
+            "name": "submissionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ParticipantSubmissionCommand"
+          },
+          {
+            "$ref": "#/components/parameters/ParticipantIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/ExactOrigin"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ParticipantSubmitCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ParticipantWithdrawCommand"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Command committed or an exact retry replayed; durably recorded downstream delivery degradation is reported in warnings, while an unrecorded effect remains recoverable through exact retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipantSubmissionCommandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/SessionUnauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/SessionForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/participant/tasks/{taskId}/complete": {
+      "post": {
+        "operationId": "completeParticipantTask",
+        "summary": "Complete an owned participant task",
+        "description": "Requires an exact same-origin authenticated browser request from the task owner or a participant related to the task target. The optimistic task revision, evidence requirements and dependencies are revalidated by the task service. Exact retries return the durable canonical task state; an in-progress command fails explicitly instead of being run twice.",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ParticipantIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/ExactOrigin"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParticipantTaskCompletionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Task completed or an exact retry replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipantTaskCompletionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/SessionUnauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/SessionForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/administration/{family}/{itemId}/{command}": {
+      "post": {
+        "operationId": "runAdministrationCommand",
+        "summary": "Run a versioned administration command",
+        "description": "Requires an exact same-origin owner or administrator browser session; committee chairs may additionally draft or release decisions. Supported family/command pairs are forms save|publish, people invite, memberships revoke, sessions edit|archive|restore, decisions draft|release, task-templates save, task-assignments assign, resources save|publish, integration-connections connect|disconnect, integration-mappings save|delete, and webhook-endpoints save|status|test|rotate-secret. Use itemId=new only for create commands. Consequential commands claim a durable actor-scoped intent before mutation or provider work; exact retries replay their stored canonical result and unresolved processing claims fail explicitly. Webhook-secret commands replay only while that secret remains current; retrying a superseded secret returns a conflict instead of disclosing rotated credentials.",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "in": "path",
+            "name": "family",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AdministrationFamily"
+            }
+          },
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          {
+            "in": "path",
+            "name": "command",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AdministrationCommand"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/ExactOrigin"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AdministrationFormSaveRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationFormPublishRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationPersonInvitationRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationMembershipRevocationRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationSessionEditRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationSessionLifecycleRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationDecisionRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationTaskTemplateRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationTaskAssignmentRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationResourceSaveRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationResourcePublishRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationIntegrationConnectionRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationIntegrationDisconnectRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationIntegrationMappingRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationIntegrationMappingDeleteRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationWebhookEndpointRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationWebhookStatusRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationWebhookTestRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdministrationWebhookRotateSecretRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Command committed or its durable canonical result replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdministrationCommandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/SessionUnauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/SessionForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "description": "A required provider, credential, queue or runtime binding is unavailable; no provider success is fabricated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/sessions/direct": {
+      "post": {
+        "operationId": "createDirectSession",
+        "summary": "Create an unscheduled session directly",
+        "description": "Requires an event-authorised API key with `sessions:write` and an Idempotency-Key. The configured event format and optional default duration are revalidated, people are matched by normalised email, resource acknowledgements are materialised, and the API-key actor is audited without synthesising a human person.",
+        "x-required-api-key-scope": "sessions:write",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectSessionCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Direct session created or an exact retry replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectSessionCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/{resource}": {
+      "get": {
+        "operationId": "listAdministrationResource",
+        "summary": "List an authorised administration resource",
+        "description": "Lists submissions, forms, people, speakers, sessions, schedule versions, decisions, communications or resources. Each value requires its matching least-privilege `*:read` scope. Unknown and repeated query parameters are rejected; supported filters depend on the selected resource.",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/AdminResource"
+          },
+          {
+            "$ref": "#/components/parameters/Limit100"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "formId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "submission",
+                "direct_session"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "profileStatus",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "published",
+                "archived"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "description": "Event membership role filter; supported only for people.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "owner",
+                "administrator",
+                "committee_chair",
+                "evaluator",
+                "submitter",
+                "speaker"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "visibility",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "public",
+                "private",
+                "hidden"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "trackId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "accepted",
+                "rejected",
+                "waitlisted"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "submissionId",
+            "description": "Submission filter for moderation records.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "targetType",
+            "description": "Assignment, review or conflict target kind.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "submission",
+                "session"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "targetId",
+            "description": "Assignment, review or conflict target identifier.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "email",
+                "sms",
+                "push",
+                "calendar"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cursor-paginated administration collection with RFC 3339 timestamps",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdministrationCollectionPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/{resource}/{itemId}": {
+      "get": {
+        "operationId": "getAdministrationItem",
+        "summary": "Retrieve one authorised administration record and bounded related records",
+        "description": "Supports submissions, forms, people, speakers, sessions, schedule versions, decisions, communications and resources. The API key must carry the selected resource's least-privilege read scope; the item and every related row are constrained to the URL event and key organisation.",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/AdminResource"
+          },
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant-isolated administration item and its resource-specific related records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdministrationItemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/evaluation/{resource}": {
+      "get": {
+        "operationId": "listEvaluationResource",
+        "summary": "List event evaluation state",
+        "description": "Requires the `evaluation:read` scope. Returns plans, teams, rounds with rubric criteria, assignments, reviews, conflicts or moderation records.",
+        "x-required-api-key-scope": "evaluation:read",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/EvaluationResource"
+          },
+          {
+            "$ref": "#/components/parameters/Limit100"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "planId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "roundId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "submissionId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "evaluatorPersonId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "teamId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cursor-paginated private evaluation collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationCollectionPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/evaluation/me/{command}": {
+      "post": {
+        "operationId": "runEvaluationPersonCommand",
+        "summary": "Save assigned review work or run an authorised evaluation decision command",
+        "description": "Authenticates the real person from the browser session in the exact URL event; reviewer and moderator identity is never accepted from the request and is never synthesised for an API key. The evaluation service enforces assignment, role, revision, state and finality boundaries. Review submission and reopening also persist idempotently keyed webhook events.",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/EvaluationPersonCommand"
+          },
+          {
+            "$ref": "#/components/parameters/ExactOrigin"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationPersonCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evaluation command committed under the authenticated human actor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationPersonCommandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/SessionUnauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/SessionForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/evaluation/plans": {
+      "post": {
+        "operationId": "saveEvaluationPlan",
+        "summary": "Create or replace an unassigned evaluation plan",
+        "description": "Requires `evaluation:write` and an Idempotency-Key. The revision guard, plan, rounds, criteria, API actor audit and exact-replay idempotency result commit together.",
+        "x-required-api-key-scope": "evaluation:write",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationPlanCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plan committed or an exact retry replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationPlanCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/evaluation/rounds": {
+      "post": {
+        "operationId": "addEvaluationRound",
+        "summary": "Add the next evaluation round by cloning a current rubric",
+        "description": "Requires `evaluation:write` and an Idempotency-Key. Plan revision and source-round membership are revalidated at commit.",
+        "x-required-api-key-scope": "evaluation:write",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationNextRoundCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Round committed or an exact retry replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationRoundCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/evaluation/assignments": {
+      "post": {
+        "operationId": "assignEvaluationWork",
+        "summary": "Assign submissions or sessions to evaluators or a team",
+        "description": "Requires `evaluation:write` and an Idempotency-Key. Every target, evaluator and team membership is revalidated in the authorised event. Direct-session assignments freeze the source details at commit.",
+        "x-required-api-key-scope": "evaluation:write",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationAssignmentCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Assignments committed or an exact retry replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationAssignmentCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/evaluation/rounds/advance": {
+      "post": {
+        "operationId": "advanceEvaluationRound",
+        "summary": "Close a completed round and advance selected submissions",
+        "description": "Requires `evaluation:write`, explicit confirmation and an Idempotency-Key. Completion, revisions, selected submissions and next-round evaluators are revalidated atomically.",
+        "x-required-api-key-scope": "evaluation:write",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationAdvanceCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Round advancement committed or an exact retry replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationAdvanceCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/integrations/{resource}": {
+      "get": {
+        "operationId": "listIntegrationResource",
+        "summary": "List integration connections, mappings, runs or run items",
+        "description": "Requires the `integrations:read` scope. Encrypted credentials are never returned.",
+        "x-required-api-key-scope": "integrations:read",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/IntegrationResource"
+          },
+          {
+            "$ref": "#/components/parameters/Limit100"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "in": "query",
+            "name": "provider",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "connectionId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "entityType",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          {
+            "in": "query",
+            "name": "runId",
+            "description": "Required when resource is `run-items`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "dryRun",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cursor-paginated integration collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationCollectionPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/integrations/accelevents/exports": {
+      "post": {
+        "operationId": "startAcceleventsExport",
+        "summary": "Preview or start an Accelevents export",
+        "description": "Requires `integrations:write` and an Idempotency-Key. First record a no-write dry run and use its `previewFingerprint` to confirm a live run; live runs also require the operations Queue. Exact retries replay the request-bound run and a changed request is rejected.",
+        "x-required-api-key-scope": "integrations:write",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceleventsExportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An exact idempotent retry replayed its durable run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationRunCommandResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Dry run or no-op run completed durably",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationRunCommandResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Live provider work persisted and queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationRunCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Idempotency key reuse or integration state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "description": "Queue dispatch failed after the durable operation was recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/communications/{command}": {
+      "post": {
+        "operationId": "runCommunicationCommand",
+        "summary": "Preview, send, schedule or test an event communication",
+        "description": "Requires an exact same-origin owner or administrator browser session in the URL event. Preview is read-only. Send, schedule and test require an Idempotency-Key matching body.idempotencyKey; the communication and operation records commit before queue dispatch and exact retries replay the durable result.",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/CommunicationCommand"
+          },
+          {
+            "$ref": "#/components/parameters/ExactOrigin"
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Required for send, schedule and test; omitted for preview.",
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunicationCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preview result or durable communication command result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunicationCommandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/SessionUnauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/SessionForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "description": "The durable communication committed but queue dispatch failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/operations/{operationId}/{command}": {
+      "post": {
+        "operationId": "runOperationCommand",
+        "summary": "Retry or cancel a durable event operation",
+        "description": "Requires an exact same-origin owner or administrator browser session in the URL event and explicit confirmation. The operation service atomically claims retry/cancel state and requeues supported integration, calendar and other durable operation types without fabricating provider success.",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "$ref": "#/components/parameters/OperationCommand"
+          },
+          {
+            "$ref": "#/components/parameters/ExactOrigin"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operation state changed and any supported retry was queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationCommandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/SessionUnauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/SessionForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "description": "Retry state committed but the required queue was unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -123,6 +2031,9 @@
           },
           {
             "$ref": "#/components/parameters/Limit200"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
           }
         ],
         "responses": {
@@ -135,6 +2046,7 @@
                   "additionalProperties": false,
                   "required": [
                     "operations",
+                    "nextCursor",
                     "correlationId"
                   ],
                   "properties": {
@@ -143,6 +2055,12 @@
                       "items": {
                         "$ref": "#/components/schemas/Operation"
                       }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "correlationId": {
                       "type": "string"
@@ -278,6 +2196,8 @@
                     "task",
                     "changeCursor",
                     "realtimeWarning",
+                    "webhookDeliveries",
+                    "webhookWarning",
                     "correlationId"
                   ],
                   "properties": {
@@ -289,6 +2209,18 @@
                       "minimum": 1
                     },
                     "realtimeWarning": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "webhookDeliveries": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WebhookDeliverySummary"
+                      }
+                    },
+                    "webhookWarning": {
                       "type": [
                         "string",
                         "null"
@@ -329,6 +2261,58 @@
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/tasks/{taskId}": {
+      "get": {
+        "operationId": "getTask",
+        "summary": "Retrieve one readiness task",
+        "description": "Requires an event-authorised API key with the `tasks:read` scope; the task must belong to the URL event and API-key organisation.",
+        "x-required-api-key-scope": "tasks:read",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant-isolated readiness task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskItemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -420,6 +2404,138 @@
         }
       }
     },
+    "/api/webhooks/file-scanner": {
+      "post": {
+        "operationId": "reconcileFileScannerResult",
+        "summary": "Reconcile a signed malware-scanner result",
+        "description": "Authenticates the unmodified request body with the configured HMAC secret, bounded callback identifier and five-minute timestamp window before parsing strict JSON. Clean bytes are released only when the quarantined R2 object still matches the committed upload; callback identifiers and scan state make exact retries idempotent.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Program-Cue-Scanner-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^[a-zA-Z0-9._:-]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Program-Cue-Scanner-Timestamp",
+            "required": true,
+            "description": "Unix epoch seconds within five minutes of the receiver clock.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{10}$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Program-Cue-Scanner-Signature",
+            "required": true,
+            "description": "Base64 HMAC-SHA256 over `callbackId.timestamp.rawBody`, prefixed with `v1,`.",
+            "schema": {
+              "type": "string",
+              "pattern": "^v1,.+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileScannerCallbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scan state committed or an exact callback retry acknowledged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileScannerCallbackResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authenticated body is invalid JSON or contains an unsupported scanner result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Scanner callback identifier, timestamp or HMAC signature is missing, stale or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "File version does not exist in the supplied event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "File state changed or conflicts with an earlier scan result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Scanner callback body exceeds 128 KB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Authenticated callback Content-Type is not application/json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "FILE_SCANNER_WEBHOOK_SECRET is unavailable or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/webhooks/resend": {
       "post": {
         "operationId": "reconcileResendDelivery",
@@ -466,8 +2582,18 @@
           "413": {
             "$ref": "#/components/responses/WebhookPayloadTooLarge"
           },
+          "415": {
+            "description": "Authenticated webhook Content-Type is not application/json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookError"
+                }
+              }
+            }
+          },
           "503": {
-            "description": "The signed provider event arrived before its local delivery was available; retry it",
+            "description": "Resend webhook configuration is unavailable, or the signed provider event arrived before its local delivery was available; retry it",
             "headers": {
               "Retry-After": {
                 "schema": {
@@ -609,6 +2735,135 @@
           "minLength": 1
         }
       },
+      "AdminResource": {
+        "in": "path",
+        "name": "resource",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "submissions",
+            "forms",
+            "people",
+            "speakers",
+            "sessions",
+            "schedule-versions",
+            "decisions",
+            "communications",
+            "resources"
+          ]
+        }
+      },
+      "ParticipantResource": {
+        "in": "path",
+        "name": "resource",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "profile",
+            "submissions",
+            "sessions",
+            "files",
+            "tasks"
+          ]
+        }
+      },
+      "ParticipantSubmissionCommand": {
+        "in": "path",
+        "name": "command",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "submit",
+            "withdraw"
+          ]
+        }
+      },
+      "EvaluationResource": {
+        "in": "path",
+        "name": "resource",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "plans",
+            "teams",
+            "rounds",
+            "assignments",
+            "reviews",
+            "conflicts",
+            "moderations"
+          ]
+        }
+      },
+      "EvaluationPersonCommand": {
+        "in": "path",
+        "name": "command",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "review",
+            "conflict",
+            "moderation",
+            "reopen"
+          ]
+        }
+      },
+      "CommunicationCommand": {
+        "in": "path",
+        "name": "command",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "send",
+            "schedule",
+            "test"
+          ]
+        }
+      },
+      "OperationCommand": {
+        "in": "path",
+        "name": "command",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "retry",
+            "retry-item",
+            "cancel"
+          ]
+        }
+      },
+      "IntegrationResource": {
+        "in": "path",
+        "name": "resource",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "connections",
+            "mappings",
+            "runs",
+            "run-items"
+          ]
+        }
+      },
+      "Limit100": {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
       "Limit200": {
         "in": "query",
         "name": "limit",
@@ -618,6 +2873,77 @@
           "minimum": 1,
           "maximum": 200,
           "default": 100
+        }
+      },
+      "Cursor": {
+        "in": "query",
+        "name": "cursor",
+        "required": false,
+        "description": "Opaque continuation cursor returned by the previous page",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "PublicQuery": {
+        "in": "query",
+        "name": "q",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      },
+      "PublicTrack": {
+        "in": "query",
+        "name": "track",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        }
+      },
+      "PublicRoom": {
+        "in": "query",
+        "name": "room",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        }
+      },
+      "PublicSpeakerId": {
+        "in": "query",
+        "name": "speakerId",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "PublicFrom": {
+        "in": "query",
+        "name": "from",
+        "required": false,
+        "description": "Inclusive RFC 3339 session start boundary",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "PublicTo": {
+        "in": "query",
+        "name": "to",
+        "required": false,
+        "description": "Exclusive RFC 3339 session start boundary",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
         }
       },
       "TaskCursor": {
@@ -635,12 +2961,34 @@
         "in": "header",
         "name": "Idempotency-Key",
         "required": true,
-        "description": "Stable retry key scoped to the authorised API key, event and operation. Committed results are retained for 30 days; an elapsed key may be reused as a new command.",
+        "description": "Stable retry key scoped to the authorised actor, event and operation. Exact retries replay the durable result and reuse with a different request is rejected; retention follows the owning command's durable history policy.",
         "schema": {
           "type": "string",
           "minLength": 8,
           "maxLength": 128,
           "pattern": "^[A-Za-z0-9._:-]+$"
+        }
+      },
+      "ParticipantIdempotencyKey": {
+        "in": "header",
+        "name": "Idempotency-Key",
+        "required": true,
+        "description": "Stable retry key scoped to the authenticated person, URL event and concrete participant command. Exact retries replay the stored response; reuse with a different request is rejected.",
+        "schema": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        }
+      },
+      "ExactOrigin": {
+        "in": "header",
+        "name": "Origin",
+        "required": true,
+        "description": "Must exactly equal the API request origin for cookie-authenticated mutations.",
+        "schema": {
+          "type": "string",
+          "format": "uri"
         }
       },
       "SvixId": {
@@ -679,6 +3027,7 @@
           "ok",
           "service",
           "environment",
+          "sourceRevision",
           "correlationId"
         ],
         "properties": {
@@ -693,6 +3042,11 @@
           "environment": {
             "type": "string"
           },
+          "sourceRevision": {
+            "type": "string",
+            "description": "Non-secret deployed source revision used to correlate runtime behavior with a build.",
+            "example": "3f6a2c1"
+          },
           "correlationId": {
             "type": "string"
           }
@@ -701,12 +3055,131 @@
       "PublicProgrammeResponse": {
         "$ref": "#/components/schemas/PublicProgramme"
       },
+      "PublicationSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "versionNumber"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "versionNumber": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "PublicEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "timezone",
+          "startDate",
+          "endDate",
+          "venue",
+          "city",
+          "description",
+          "brandAccent"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone identifier"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "venue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "brandAccent": {
+            "type": "string"
+          }
+        }
+      },
+      "PublicEventResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event",
+          "publication",
+          "freshness"
+        ],
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/PublicEvent"
+          },
+          "publication": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "versionNumber",
+              "publishedAt"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "versionNumber": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "publishedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/ProgrammeFreshness"
+          }
+        }
+      },
       "PublicProgramme": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "event",
           "version",
-          "sessions"
+          "sessions",
+          "speakers",
+          "freshness"
         ],
         "properties": {
           "event": {
@@ -787,8 +3260,8 @@
                 "minimum": 1
               },
               "publishedAt": {
-                "type": "integer",
-                "description": "Unix epoch seconds"
+                "type": "string",
+                "format": "date-time"
               }
             }
           },
@@ -797,6 +3270,15 @@
             "items": {
               "$ref": "#/components/schemas/PublicSession"
             }
+          },
+          "speakers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicSpeaker"
+            }
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/ProgrammeFreshness"
           }
         }
       },
@@ -835,12 +3317,12 @@
             "type": "string"
           },
           "startsAt": {
-            "type": "integer",
-            "description": "Unix epoch seconds"
+            "type": "string",
+            "format": "date-time"
           },
           "endsAt": {
-            "type": "integer",
-            "description": "Unix epoch seconds"
+            "type": "string",
+            "format": "date-time"
           },
           "room": {
             "type": "string"
@@ -874,6 +3356,2474 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "PublicSpeaker": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "displayName",
+          "imageUrl",
+          "biography",
+          "pronunciation",
+          "organisationName",
+          "jobTitle",
+          "sessionIds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "biography": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pronunciation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "organisationName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobTitle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sessionIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ProgrammeFreshness": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "fetchedAt",
+          "cacheExpiresAt",
+          "cached"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "d1",
+              "airtable"
+            ]
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cacheExpiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "cached": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PublicSessionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessions",
+          "nextCursor",
+          "publication",
+          "freshness"
+        ],
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicSession"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publication": {
+            "$ref": "#/components/schemas/PublicationSummary"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/ProgrammeFreshness"
+          }
+        }
+      },
+      "PublicSpeakerPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "speakers",
+          "nextCursor",
+          "publication",
+          "freshness"
+        ],
+        "properties": {
+          "speakers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicSpeaker"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publication": {
+            "$ref": "#/components/schemas/PublicationSummary"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/ProgrammeFreshness"
+          }
+        }
+      },
+      "PublicSchedulePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "entries",
+          "nextCursor",
+          "publication",
+          "timezone",
+          "freshness"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicSession"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publication": {
+            "$ref": "#/components/schemas/PublicationSummary"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone identifier"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/ProgrammeFreshness"
+          }
+        }
+      },
+      "PrivateEventResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event",
+          "correlationId"
+        ],
+        "properties": {
+          "event": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "id",
+              "name",
+              "slug",
+              "timezone",
+              "startsAt",
+              "endsAt",
+              "revision"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "slug": {
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "startsAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "endsAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiRecord": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "ParticipantProfile": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "email",
+          "name",
+          "biography",
+          "pronunciation",
+          "organisationName",
+          "jobTitle",
+          "profileStatus",
+          "revision",
+          "emailVerified",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "biography": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pronunciation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "organisationName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobTitle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "profileStatus": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ParticipantProfileResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "profile",
+          "correlationId"
+        ],
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ParticipantProfile"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "ParticipantCollectionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nextCursor",
+          "correlationId"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "submissions"
+            ]
+          },
+          {
+            "required": [
+              "sessions"
+            ]
+          },
+          {
+            "required": [
+              "files"
+            ]
+          },
+          {
+            "required": [
+              "tasks"
+            ]
+          }
+        ],
+        "properties": {
+          "submissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "ParticipantResourceResponse": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ParticipantProfileResponse"
+          },
+          {
+            "$ref": "#/components/schemas/ParticipantCollectionPage"
+          }
+        ]
+      },
+      "ParticipantProfilePatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "name",
+          "biography"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "biography": {
+            "type": "string",
+            "minLength": 40,
+            "maxLength": 2000
+          }
+        }
+      },
+      "ParticipantProfileCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "profile",
+          "replayed",
+          "correlationId"
+        ],
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ParticipantProfile"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "ParticipantSpeakerInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "email"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "biography": {
+            "type": "string",
+            "maxLength": 5000,
+            "default": ""
+          }
+        }
+      },
+      "ParticipantUploadReference": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assetId",
+          "versionId"
+        ],
+        "properties": {
+          "assetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 180
+          },
+          "versionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 180
+          }
+        }
+      },
+      "ParticipantSubmitCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "confirmed",
+          "revision",
+          "answers",
+          "speakers"
+        ],
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "answers": {
+            "type": "object",
+            "maxProperties": 50,
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{1,39}$"
+            },
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 5000
+                },
+                {
+                  "type": "array",
+                  "maxItems": 30,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                }
+              ]
+            }
+          },
+          "speakers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/ParticipantSpeakerInput"
+            }
+          },
+          "uploads": {
+            "type": "object",
+            "maxProperties": 1,
+            "default": {},
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{1,39}$"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ParticipantUploadReference"
+            }
+          }
+        }
+      },
+      "ParticipantWithdrawCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "confirmed",
+          "revision"
+        ],
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "WebhookDeliverySummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "endpointId",
+          "deliveryId",
+          "operationId",
+          "status"
+        ],
+        "properties": {
+          "endpointId": {
+            "type": "string"
+          },
+          "deliveryId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "queue_failed"
+            ]
+          },
+          "duplicate": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ParticipantSubmissionCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "submission",
+          "notifications",
+          "webhookDeliveries",
+          "changeCursor",
+          "warnings",
+          "replayed",
+          "correlationId"
+        ],
+        "properties": {
+          "submission": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "submitted",
+                  "assigned",
+                  "accepted",
+                  "withdrawn"
+                ]
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "directSessionId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "notifications": {
+            "type": "array",
+            "maxItems": 21,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "operationId",
+                "type",
+                "idempotencyKey",
+                "status",
+                "communicationId"
+              ],
+              "properties": {
+                "operationId": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "confirmation",
+                    "co_speaker_invitation"
+                  ]
+                },
+                "idempotencyKey": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "queued",
+                    "queue_failed"
+                  ]
+                },
+                "communicationId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "webhookDeliveries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDeliverySummary"
+            }
+          },
+          "changeCursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "ParticipantTaskCompletionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "result",
+          "correlationId"
+        ],
+        "properties": {
+          "result": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "taskId",
+              "status",
+              "revision",
+              "replayed"
+            ],
+            "properties": {
+              "taskId": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "submitted",
+                  "completed"
+                ]
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            }
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "AdministrationCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "result",
+          "correlationId"
+        ],
+        "properties": {
+          "result": {
+            "type": "object",
+            "description": "Canonical command-family result. Secret-bearing webhook creation and rotation results expose the generated secret only while it remains the endpoint's current credential; superseded secret responses cannot be replayed.",
+            "additionalProperties": true
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "DirectSessionCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "format",
+          "speakers"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 180
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 3000,
+            "default": ""
+          },
+          "format": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 480
+          },
+          "speakers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/ParticipantSpeakerInput"
+            }
+          }
+        }
+      },
+      "DirectSessionCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "session",
+          "replayed",
+          "changeCursor",
+          "realtimeWarning",
+          "webhookDeliveries",
+          "webhookWarning",
+          "correlationId"
+        ],
+        "properties": {
+          "session": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "const": "unscheduled"
+              }
+            }
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "changeCursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "realtimeWarning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "webhookDeliveries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDeliverySummary"
+            }
+          },
+          "webhookWarning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "AdministrationCollectionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nextCursor",
+          "correlationId"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "submissions"
+            ]
+          },
+          {
+            "required": [
+              "forms"
+            ]
+          },
+          {
+            "required": [
+              "people"
+            ]
+          },
+          {
+            "required": [
+              "speakers"
+            ]
+          },
+          {
+            "required": [
+              "sessions"
+            ]
+          },
+          {
+            "required": [
+              "scheduleVersions"
+            ]
+          },
+          {
+            "required": [
+              "decisions"
+            ]
+          },
+          {
+            "required": [
+              "communications"
+            ]
+          },
+          {
+            "required": [
+              "resources"
+            ]
+          }
+        ],
+        "properties": {
+          "submissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "forms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "speakers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "scheduleVersions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "communications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "resources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "AdministrationItemResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item",
+          "related",
+          "relatedHasMore",
+          "correlationId"
+        ],
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/ApiRecord"
+          },
+          "related": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "relatedHasMore": {
+            "type": "boolean",
+            "description": "True when the item has more than the bounded 200 related records."
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "EvaluationCollectionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nextCursor",
+          "correlationId"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "plans"
+            ]
+          },
+          {
+            "required": [
+              "teams"
+            ]
+          },
+          {
+            "required": [
+              "rounds"
+            ]
+          },
+          {
+            "required": [
+              "assignments"
+            ]
+          },
+          {
+            "required": [
+              "reviews"
+            ]
+          },
+          {
+            "required": [
+              "conflicts"
+            ]
+          },
+          {
+            "required": [
+              "moderations"
+            ]
+          }
+        ],
+        "properties": {
+          "plans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "rounds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "assignments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "reviews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "moderations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "EvaluationPersonCommandRequest": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/EvaluationReviewCommand"
+          },
+          {
+            "$ref": "#/components/schemas/EvaluationConflictCommand"
+          },
+          {
+            "$ref": "#/components/schemas/EvaluationModerationCommand"
+          },
+          {
+            "$ref": "#/components/schemas/EvaluationReopenCommand"
+          }
+        ]
+      },
+      "EvaluationReviewCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assignmentId",
+          "revision",
+          "scores",
+          "recommendation",
+          "confidence",
+          "submitterFeedback",
+          "privateNotes",
+          "intent"
+        ],
+        "properties": {
+          "assignmentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "scores": {
+            "type": "object",
+            "maxProperties": 50,
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8000
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          },
+          "recommendation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "accept",
+              "minor_changes",
+              "conditional_accept",
+              "waitlist",
+              "reject",
+              null
+            ]
+          },
+          "confidence": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 5
+          },
+          "submitterFeedback": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "privateNotes": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "save",
+              "submit"
+            ]
+          }
+        },
+        "description": "recommendation and confidence must be non-null when intent is submit."
+      },
+      "EvaluationConflictCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assignmentId",
+          "reason"
+        ],
+        "properties": {
+          "assignmentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 2000
+          }
+        }
+      },
+      "EvaluationModerationCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "roundId",
+          "submissionId",
+          "expectedModerationId",
+          "recommendation",
+          "moderatedScore",
+          "notes",
+          "status",
+          "confirmed"
+        ],
+        "properties": {
+          "roundId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "submissionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "expectedModerationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "recommendation": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "waitlist",
+              "reject",
+              "advance"
+            ]
+          },
+          "moderatedScore": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 5
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "confirmed"
+            ]
+          },
+          "confirmed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "EvaluationReopenCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assignmentId",
+          "reason",
+          "confirmed"
+        ],
+        "properties": {
+          "assignmentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 2000
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "EvaluationPersonCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "changeCursor",
+          "realtimeWarning",
+          "correlationId"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "reviewId",
+              "revision",
+              "weightedScore",
+              "nextAssignmentId",
+              "webhookDeliveries",
+              "webhookWarning"
+            ]
+          },
+          {
+            "required": [
+              "assignmentId",
+              "status"
+            ]
+          },
+          {
+            "required": [
+              "moderationId",
+              "status"
+            ]
+          },
+          {
+            "required": [
+              "reviewId",
+              "revision",
+              "webhookDeliveries",
+              "webhookWarning"
+            ]
+          }
+        ],
+        "properties": {
+          "reviewId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "weightedScore": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "nextAssignmentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "assignmentId": {
+            "type": "string"
+          },
+          "moderationId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "recused",
+              "draft",
+              "confirmed"
+            ]
+          },
+          "changeCursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "realtimeWarning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "webhookDeliveries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDeliverySummary"
+            }
+          },
+          "webhookWarning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "IntegrationCollectionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nextCursor",
+          "correlationId"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "connections"
+            ]
+          },
+          {
+            "required": [
+              "mappings"
+            ]
+          },
+          {
+            "required": [
+              "runs"
+            ]
+          },
+          {
+            "required": [
+              "runItems"
+            ]
+          }
+        ],
+        "properties": {
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "mappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "runItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiRecord"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "CommunicationCommandRequest": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/CommunicationPreviewRequest"
+          },
+          {
+            "$ref": "#/components/schemas/CommunicationSendRequest"
+          },
+          {
+            "$ref": "#/components/schemas/CommunicationScheduleRequest"
+          },
+          {
+            "$ref": "#/components/schemas/CommunicationTestRequest"
+          }
+        ]
+      },
+      "CommunicationPreviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "templateVersionId",
+          "audienceType",
+          "kind"
+        ],
+        "properties": {
+          "templateVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "audienceType": {
+            "type": "string",
+            "enum": [
+              "submitted_applicants",
+              "decision_recipients",
+              "accepted_speakers",
+              "incomplete_speakers",
+              "due_speakers",
+              "overdue_speakers",
+              "event_administrators",
+              "manual"
+            ]
+          },
+          "manualRecipients": {
+            "type": "string",
+            "maxLength": 20000,
+            "default": ""
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "transactional",
+              "optional"
+            ]
+          }
+        }
+      },
+      "CommunicationSendRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "templateVersionId",
+          "audienceType",
+          "idempotencyKey",
+          "recipientFingerprint",
+          "deliverableFingerprint",
+          "suppressedCount",
+          "kind"
+        ],
+        "properties": {
+          "templateVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "audienceType": {
+            "type": "string",
+            "enum": [
+              "submitted_applicants",
+              "decision_recipients",
+              "accepted_speakers",
+              "incomplete_speakers",
+              "due_speakers",
+              "overdue_speakers",
+              "event_administrators",
+              "manual"
+            ]
+          },
+          "manualRecipients": {
+            "type": "string",
+            "maxLength": 20000,
+            "default": ""
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "transactional",
+              "optional"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "recipientFingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "deliverableFingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "suppressedCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CommunicationScheduleRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "templateVersionId",
+          "audienceType",
+          "idempotencyKey",
+          "recipientFingerprint",
+          "deliverableFingerprint",
+          "suppressedCount",
+          "scheduledAt",
+          "kind"
+        ],
+        "properties": {
+          "templateVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "audienceType": {
+            "type": "string",
+            "enum": [
+              "submitted_applicants",
+              "decision_recipients",
+              "accepted_speakers",
+              "incomplete_speakers",
+              "due_speakers",
+              "overdue_speakers",
+              "event_administrators",
+              "manual"
+            ]
+          },
+          "manualRecipients": {
+            "type": "string",
+            "maxLength": 20000,
+            "default": ""
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "transactional",
+              "optional"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "recipientFingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "deliverableFingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "suppressedCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "scheduledAt": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Unix timestamp at least 60 seconds in the future."
+          }
+        }
+      },
+      "CommunicationTestRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "templateVersionId",
+          "recipient",
+          "idempotencyKey"
+        ],
+        "properties": {
+          "templateVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "recipient": {
+            "type": "string",
+            "format": "email"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          }
+        }
+      },
+      "CommunicationCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "result",
+          "correlationId"
+        ],
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CommunicationPreview"
+              },
+              {
+                "$ref": "#/components/schemas/CommunicationCommandResult"
+              }
+            ]
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "CommunicationPreview": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "template",
+          "recipients",
+          "confirmation",
+          "rendered",
+          "provider"
+        ],
+        "properties": {
+          "template": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "recipients": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "selected",
+              "deliverable",
+              "invalid",
+              "suppressed"
+            ],
+            "properties": {
+              "selected": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 5000
+              },
+              "deliverable": {
+                "type": "array",
+                "maxItems": 5000,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "invalid": {
+                "type": "array",
+                "maxItems": 5000,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "suppressed": {
+                "type": "array",
+                "maxItems": 5000,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "confirmation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "recipientFingerprint",
+              "deliverableFingerprint",
+              "suppressedCount"
+            ],
+            "properties": {
+              "recipientFingerprint": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "deliverableFingerprint": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "suppressedCount": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "rendered": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "subject",
+              "html",
+              "text"
+            ],
+            "properties": {
+              "subject": {
+                "type": "string"
+              },
+              "html": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          },
+          "provider": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "configured",
+              "sender",
+              "queueConfigured"
+            ],
+            "properties": {
+              "configured": {
+                "type": "boolean"
+              },
+              "sender": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "queueConfigured": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "CommunicationCommandResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "communicationId",
+          "operationId",
+          "status",
+          "operationStatus",
+          "duplicate"
+        ],
+        "properties": {
+          "communicationId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "queued"
+            ]
+          },
+          "operationStatus": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "queued",
+              null
+            ]
+          },
+          "duplicate": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OperationCommandRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "confirmed"
+            ],
+            "properties": {
+              "confirmed": {
+                "type": "boolean",
+                "const": true
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "confirmed",
+              "itemId"
+            ],
+            "properties": {
+              "confirmed": {
+                "type": "boolean",
+                "const": true
+              },
+              "itemId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            }
+          }
+        ]
+      },
+      "OperationCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId",
+          "status",
+          "correlationId"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "cancelled"
+            ]
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "EvaluationCriterionInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "inputType",
+          "weightPercent",
+          "required",
+          "position"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "default": ""
+          },
+          "inputType": {
+            "type": "string",
+            "enum": [
+              "scale_5",
+              "scale_10",
+              "yes_no",
+              "free_text"
+            ]
+          },
+          "weightPercent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "EvaluationRoundInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "anonymous",
+          "criteria"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "dueAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "anonymous": {
+            "type": "boolean"
+          },
+          "criteria": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/EvaluationCriterionInput"
+            }
+          }
+        }
+      },
+      "EvaluationPlanCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "name",
+          "status",
+          "decisionRole",
+          "rounds"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "closed"
+            ]
+          },
+          "decisionRole": {
+            "type": "string",
+            "enum": [
+              "administrator",
+              "committee_chair"
+            ]
+          },
+          "rounds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "$ref": "#/components/schemas/EvaluationRoundInput"
+            }
+          }
+        }
+      },
+      "EvaluationNextRoundCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "planId",
+          "planRevision",
+          "name",
+          "cloneRoundId"
+        ],
+        "properties": {
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "planRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "dueAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "default": null
+          },
+          "cloneRoundId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      },
+      "EvaluationAssignmentCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "roundId",
+          "targetType",
+          "targetIds"
+        ],
+        "properties": {
+          "roundId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "targetType": {
+            "type": "string",
+            "enum": [
+              "submission",
+              "session"
+            ]
+          },
+          "targetIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1000,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "evaluatorPersonIds": {
+            "type": "array",
+            "maxItems": 100,
+            "uniqueItems": true,
+            "default": [],
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "teamId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200,
+            "default": null
+          }
+        },
+        "description": "Supply either at least one evaluatorPersonId or one teamId, never both."
+      },
+      "EvaluationAdvanceCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fromRoundId",
+          "fromRoundRevision",
+          "toRoundId",
+          "toRoundRevision",
+          "submissionIds",
+          "confirmed"
+        ],
+        "properties": {
+          "fromRoundId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "fromRoundRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "toRoundId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "toRoundRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "submissionIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1000,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "evaluatorPersonIds": {
+            "type": "array",
+            "maxItems": 100,
+            "uniqueItems": true,
+            "default": [],
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "teamId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200,
+            "default": null
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "EvaluationPlanCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "planId",
+          "correlationId"
+        ],
+        "properties": {
+          "planId": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "EvaluationRoundCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "roundId",
+          "correlationId"
+        ],
+        "properties": {
+          "roundId": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "EvaluationAssignmentCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "createdAssignmentCount",
+          "requestedAssignmentCount",
+          "undoOperationId",
+          "undoExpiresAt",
+          "correlationId"
+        ],
+        "properties": {
+          "createdAssignmentCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "requestedAssignmentCount": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "undoOperationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "undoExpiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "EvaluationAdvanceCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "advancedSubmissionCount",
+          "assignmentCount",
+          "webhookDeliveries",
+          "webhookWarning",
+          "correlationId"
+        ],
+        "properties": {
+          "advancedSubmissionCount": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "assignmentCount": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "webhookDeliveries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDeliverySummary"
+            }
+          },
+          "webhookWarning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "AcceleventsExportRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connectionId",
+          "dryRun"
+        ],
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "previewFingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "Required when `dryRun` is false; use the fingerprint returned by the approved dry run."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "dryRun": {
+                  "const": false
+                }
+              },
+              "required": [
+                "dryRun"
+              ]
+            },
+            "then": {
+              "required": [
+                "previewFingerprint"
+              ]
+            }
+          }
+        ]
+      },
+      "IntegrationRunCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runId",
+          "operationId",
+          "queued",
+          "replayed",
+          "previewFingerprint",
+          "correlationId"
+        ],
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "previewFingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "Exact mapping and connection fingerprint recorded for this run."
+          },
+          "correlationId": {
+            "type": "string"
           }
         }
       },
@@ -937,16 +5887,19 @@
             ]
           },
           "createdAt": {
-            "type": "integer"
+            "type": "string",
+            "format": "date-time"
           },
           "updatedAt": {
-            "type": "integer"
+            "type": "string",
+            "format": "date-time"
           },
           "completedAt": {
             "type": [
-              "integer",
+              "string",
               "null"
-            ]
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -1021,6 +5974,22 @@
               "minLength": 1,
               "maxLength": 200
             }
+          }
+        }
+      },
+      "TaskItemResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "task",
+          "correlationId"
+        ],
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/Task"
+          },
+          "correlationId": {
+            "type": "string"
           }
         }
       },
@@ -1326,6 +6295,36 @@
           }
         }
       },
+      "FileScannerCallbackResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "applied",
+          "duplicate",
+          "status"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "applied": {
+            "type": "boolean"
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "clean",
+              "infected",
+              "failed"
+            ]
+          }
+        }
+      },
       "WebhookError": {
         "type": "object",
         "additionalProperties": false,
@@ -1424,6 +6423,1234 @@
           }
         }
       },
+      "AdministrationCommand": {
+        "type": "string",
+        "enum": [
+          "save",
+          "publish",
+          "invite",
+          "revoke",
+          "edit",
+          "archive",
+          "restore",
+          "draft",
+          "release",
+          "assign",
+          "connect",
+          "disconnect",
+          "delete",
+          "status",
+          "test",
+          "rotate-secret"
+        ]
+      },
+      "AdministrationDecisionRequest": {
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "rejected",
+              "waitlisted"
+            ]
+          },
+          "rationale": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "confirmedWithoutReview": {
+            "default": false,
+            "type": "boolean"
+          },
+          "sessionDurationMinutes": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 5,
+                "maximum": 1440
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "submissionId",
+          "decision",
+          "rationale",
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationFamily": {
+        "type": "string",
+        "enum": [
+          "forms",
+          "people",
+          "memberships",
+          "sessions",
+          "decisions",
+          "task-templates",
+          "task-assignments",
+          "resources",
+          "integration-connections",
+          "integration-mappings",
+          "webhook-endpoints"
+        ]
+      },
+      "AdministrationFormPublishRequest": {
+        "type": "object",
+        "properties": {
+          "formRevision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "draftRevision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "formRevision",
+          "draftRevision"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationFormSaveRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "draftRevision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 160
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "submission",
+              "direct_session"
+            ]
+          },
+          "publicSlug": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "closeDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "submissionLimit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "minSpeakers": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "maxSpeakers": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accessMode": {
+            "type": "string",
+            "enum": [
+              "email_verified",
+              "account_required",
+              "password_protected"
+            ]
+          },
+          "accessPassword": {
+            "default": "",
+            "type": "string",
+            "maxLength": 100
+          },
+          "schema": {
+            "type": "object",
+            "properties": {
+              "introduction": {
+                "default": "",
+                "type": "string",
+                "maxLength": 2000
+              },
+              "fields": {
+                "minItems": 1,
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{1,39}$"
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "short_text",
+                        "long_text",
+                        "select",
+                        "multi_select",
+                        "url",
+                        "video"
+                      ]
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "help": {
+                      "default": "",
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "options": {
+                      "default": [],
+                      "maxItems": 30,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      }
+                    },
+                    "reviewVisibility": {
+                      "type": "string",
+                      "enum": [
+                        "reviewers",
+                        "administrators_only"
+                      ]
+                    },
+                    "condition": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "fieldId": {
+                              "type": "string"
+                            },
+                            "equals": {
+                              "type": "string",
+                              "maxLength": 120
+                            }
+                          },
+                          "required": [
+                            "fieldId",
+                            "equals"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "type",
+                    "required",
+                    "reviewVisibility"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "additionalProperties": false
+          },
+          "routing": {
+            "type": "object",
+            "properties": {
+              "categories": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                }
+              },
+              "teamNames": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                }
+              },
+              "directSessionDurationMinutes": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 480
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "passwordHash": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "categories"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "publicSlug",
+          "closeDate",
+          "minSpeakers",
+          "accessMode",
+          "schema",
+          "routing"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationIntegrationConnectionRequest": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "eventUrl": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "externalEventId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sessionTypeFormat": {
+            "type": "string",
+            "enum": [
+              "VIRTUAL",
+              "IN_PERSON",
+              "HYBRID"
+            ]
+          },
+          "provider": {
+            "type": "string",
+            "const": "accelevents"
+          }
+        },
+        "required": [
+          "apiKey",
+          "eventUrl",
+          "externalEventId",
+          "sessionTypeFormat",
+          "provider"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationIntegrationDisconnectRequest": {
+        "type": "object",
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationIntegrationMappingDeleteRequest": {
+        "type": "object",
+        "properties": {
+          "entityType": {
+            "type": "string",
+            "enum": [
+              "speaker",
+              "track",
+              "session",
+              "session_speaker"
+            ]
+          },
+          "entityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "entityType",
+          "entityId",
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationIntegrationMappingRequest": {
+        "type": "object",
+        "properties": {
+          "entityType": {
+            "type": "string",
+            "enum": [
+              "speaker",
+              "track",
+              "session",
+              "session_speaker"
+            ]
+          },
+          "entityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "externalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "sourceHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "metadata": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "entityType",
+          "entityId",
+          "externalId",
+          "sourceHash"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationMembershipRevocationRequest": {
+        "type": "object",
+        "properties": {
+          "membershipId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "membershipId",
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationPersonInvitationRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "event",
+              "organisation"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "scope"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationResourcePublishRequest": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationResourceSaveRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 180
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "audienceScope": {
+            "type": "string",
+            "enum": [
+              "all_speakers",
+              "accepted_speakers",
+              "custom"
+            ]
+          },
+          "audiencePersonIds": {
+            "default": [],
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "acknowledgementRequired": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "true"
+              },
+              {
+                "type": "string",
+                "const": "false"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "document": {},
+          "embedUrls": {
+            "default": [],
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1000,
+              "format": "uri"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "slug",
+          "category",
+          "audienceScope",
+          "acknowledgementRequired",
+          "document"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationSessionEditRequest": {
+        "type": "object",
+        "properties": {
+          "scheduleVersionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scheduleRevision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sessionRevision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 12000
+          },
+          "format": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 480
+          },
+          "trackId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "private",
+              "hidden"
+            ]
+          },
+          "requiredResources": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[a-z0-9]+(?:[ -][a-z0-9]+)*$"
+            }
+          }
+        },
+        "required": [
+          "scheduleVersionId",
+          "scheduleRevision",
+          "sessionId",
+          "sessionRevision",
+          "idempotencyKey",
+          "title",
+          "description",
+          "format",
+          "durationMinutes",
+          "visibility",
+          "requiredResources"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationSessionLifecycleRequest": {
+        "type": "object",
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationTaskAssignmentRequest": {
+        "type": "object",
+        "properties": {
+          "templateId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "targetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "templateId",
+          "targetId"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationTaskTemplateRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 160
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "targetType": {
+            "type": "string",
+            "enum": [
+              "speaker",
+              "session",
+              "event"
+            ]
+          },
+          "taskType": {
+            "type": "string",
+            "enum": [
+              "checklist",
+              "acknowledgement",
+              "short_form",
+              "file_upload",
+              "link_visit",
+              "administrator_only"
+            ]
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "evidenceMode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "checkbox",
+              "file",
+              "text",
+              "link",
+              "admin_approval"
+            ]
+          },
+          "dueAnchor": {
+            "type": "string",
+            "enum": [
+              "none",
+              "acceptance",
+              "session_start",
+              "fixed"
+            ]
+          },
+          "dueOffsetDays": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -365,
+                "maximum": 365
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fixedDueDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "autoAssignOnAcceptance": {
+            "type": "boolean"
+          },
+          "dependencyIds": {
+            "default": [],
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "targetType",
+          "taskType",
+          "impact",
+          "evidenceMode",
+          "dueAnchor",
+          "dueOffsetDays",
+          "fixedDueDate",
+          "autoAssignOnAcceptance"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationWebhookEndpointRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2000,
+            "format": "uri"
+          },
+          "eventTypes": {
+            "minItems": 1,
+            "maxItems": 15,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "submission.created",
+                "submission.submitted",
+                "submission.withdrawn",
+                "review.submitted",
+                "review.reopened",
+                "round.advanced",
+                "decision.recorded",
+                "decision.released",
+                "speaker.updated",
+                "task.created",
+                "task.updated",
+                "session.created",
+                "session.updated",
+                "schedule.published",
+                "communication.completed"
+              ]
+            }
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "eventTypes"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationWebhookRotateSecretRequest": {
+        "type": "object",
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationWebhookStatusRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "AdministrationWebhookTestRequest": {
+        "type": "object",
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "FileScannerCallbackRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "eventId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "versionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "assetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "object": {
+                "type": "object",
+                "properties": {
+                  "etag": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "sizeBytes": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1073741824
+                  }
+                },
+                "required": [
+                  "etag",
+                  "sizeBytes"
+                ],
+                "additionalProperties": false
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^[a-zA-Z0-9._-]+$"
+              },
+              "result": {},
+              "verdict": {
+                "type": "string",
+                "const": "clean"
+              }
+            },
+            "required": [
+              "jobId",
+              "eventId",
+              "versionId",
+              "assetId",
+              "object",
+              "provider",
+              "verdict"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "eventId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "versionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "assetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "object": {
+                "type": "object",
+                "properties": {
+                  "etag": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "sizeBytes": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1073741824
+                  }
+                },
+                "required": [
+                  "etag",
+                  "sizeBytes"
+                ],
+                "additionalProperties": false
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^[a-zA-Z0-9._-]+$"
+              },
+              "result": {},
+              "verdict": {
+                "type": "string",
+                "const": "infected"
+              }
+            },
+            "required": [
+              "jobId",
+              "eventId",
+              "versionId",
+              "assetId",
+              "object",
+              "provider",
+              "verdict"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "eventId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "versionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "assetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "object": {
+                "type": "object",
+                "properties": {
+                  "etag": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "sizeBytes": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1073741824
+                  }
+                },
+                "required": [
+                  "etag",
+                  "sizeBytes"
+                ],
+                "additionalProperties": false
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^[a-zA-Z0-9._-]+$"
+              },
+              "result": {},
+              "verdict": {
+                "type": "string",
+                "const": "error"
+              },
+              "error": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "jobId",
+              "eventId",
+              "versionId",
+              "assetId",
+              "object",
+              "provider",
+              "verdict",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "OutboundWebhookEventType": {
+        "type": "string",
+        "enum": [
+          "submission.created",
+          "submission.submitted",
+          "submission.withdrawn",
+          "review.submitted",
+          "review.reopened",
+          "round.advanced",
+          "decision.recorded",
+          "decision.released",
+          "speaker.updated",
+          "task.created",
+          "task.updated",
+          "session.created",
+          "session.updated",
+          "schedule.published",
+          "communication.completed"
+        ]
+      },
+      "ParticipantTaskCompletionRequest": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "confirmed": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "true"
+              },
+              {
+                "type": "string",
+                "const": "on"
+              },
+              {
+                "type": "string",
+                "const": "false"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 1000,
+            "format": "uri"
+          }
+        },
+        "required": [
+          "taskId",
+          "revision"
+        ],
+        "additionalProperties": false
+      },
       "Error": {
         "type": "object",
         "additionalProperties": false,
@@ -1456,7 +7683,7 @@
     },
     "responses": {
       "BadRequest": {
-        "description": "Request body is not valid JSON",
+        "description": "Request body is not valid JSON or an explicitly enumerated request value is unsupported",
         "content": {
           "application/json": {
             "schema": {
@@ -1487,6 +7714,36 @@
       },
       "Forbidden": {
         "description": "API key is invalid, expired, revoked, outside the event or lacks the required scope",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "SessionUnauthorised": {
+        "description": "An authenticated browser session is required",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "SessionForbidden": {
+        "description": "The authenticated person is outside the URL event or lacks the required event role",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Revision, idempotency key or current workflow state conflicts with the command",
         "content": {
           "application/json": {
             "schema": {

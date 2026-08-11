@@ -28,6 +28,7 @@ export type TemplateVersionRow = {
 
 export type EventMergeRow = {
   eventName: string;
+  brandAccent: string;
   startsAt: number;
   endsAt: number;
 };
@@ -79,9 +80,14 @@ export type CommunicationPreview = {
     suppressedCount: number;
   };
   rendered: { subject: string; html: string; text: string };
+  mergeSnapshot: {
+    event: EventMergeRow;
+    sourceValues: Record<string, MergeValues>;
+  };
   provider: {
     configured: boolean;
     sender: string | null;
+    senderProfile: SenderRow | null;
     queueConfigured: boolean;
   };
 };
@@ -177,7 +183,11 @@ const sourceVariableRequirements: Record<
     categories: new Set(["decision"]),
   },
   "task.title": {
-    audiences: new Set(["incomplete_speakers"]),
+    audiences: new Set([
+      "incomplete_speakers",
+      "due_speakers",
+      "overdue_speakers",
+    ]),
     categories: new Set(["task_reminder"]),
   },
 };
@@ -300,6 +310,7 @@ export async function communicationDeliveryIdempotencyKey(
 
 export async function recipientFingerprint(
   recipients: RecipientPreview["deliverable"],
+  authority?: unknown,
 ) {
   const identities = recipients
     .map((recipient) =>
@@ -314,7 +325,12 @@ export async function recipientFingerprint(
   const digest = new Uint8Array(
     await crypto.subtle.digest(
       "SHA-256",
-      new TextEncoder().encode(JSON.stringify(identities)),
+      new TextEncoder().encode(
+        JSON.stringify({
+          recipients: identities,
+          ...(authority === undefined ? {} : { authority }),
+        }),
+      ),
     ),
   );
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(
@@ -323,7 +339,10 @@ export async function recipientFingerprint(
 }
 
 export async function communicationRequestHash(
-  input: ConfirmCommunicationInput,
+  input: ConfirmCommunicationInput & {
+    scheduledAt?: number | null;
+    mode?: "send" | "test";
+  },
 ) {
   const identity = JSON.stringify({
     schemaVersion: 1,
@@ -333,6 +352,8 @@ export async function communicationRequestHash(
     recipientFingerprint: input.recipientFingerprint,
     deliverableFingerprint: input.deliverableFingerprint,
     suppressedCount: input.suppressedCount,
+    scheduledAt: input.scheduledAt ?? null,
+    mode: input.mode ?? "send",
   });
   const digest = new Uint8Array(
     await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity)),
@@ -358,6 +379,19 @@ export function communicationReplay(
     throw new CommunicationStateError(
       "This idempotency key is already associated with a different communication request.",
     );
+  }
+  if (
+    existing.status === "scheduled" &&
+    !existing.operationId &&
+    !existing.operationStatus
+  ) {
+    return {
+      communicationId: existing.id,
+      operationId: null,
+      status: existing.status,
+      operationStatus: null,
+      duplicate: true as const,
+    };
   }
   if (!existing.operationId || !existing.operationStatus) {
     throw new Error(

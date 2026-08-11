@@ -93,7 +93,6 @@ export function scheduleCalendarFanoutSnapshotStatements(
                  (SELECT cc.provider FROM calendar_connections cc
                    WHERE cc.organisation_id = ? AND cc.person_id = ss.person_id
                      AND cc.status = 'connected' AND (cc.event_id IS NULL OR cc.event_id = ?)
-                     AND (cc.expires_at IS NULL OR cc.expires_at > unixepoch())
                    ORDER BY CASE cc.provider WHEN 'google' THEN 0 ELSE 1 END,
                             cc.updated_at DESC LIMIT 1),
                  'email_ics'
@@ -103,7 +102,6 @@ export function scheduleCalendarFanoutSnapshotStatements(
                  (SELECT cc.id FROM calendar_connections cc
                    WHERE cc.organisation_id = ? AND cc.person_id = ss.person_id
                      AND cc.status = 'connected' AND (cc.event_id IS NULL OR cc.event_id = ?)
-                     AND (cc.expires_at IS NULL OR cc.expires_at > unixepoch())
                    ORDER BY CASE cc.provider WHEN 'google' THEN 0 ELSE 1 END,
                             cc.updated_at DESC LIMIT 1)
                ) AS connection_id

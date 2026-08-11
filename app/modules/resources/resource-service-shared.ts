@@ -1,31 +1,57 @@
 import { z } from "zod";
 
-export const resourceInputSchema = z.object({
-  id: z.string().optional(),
-  revision: z.coerce.number().int().positive().optional(),
-  title: z.string().trim().min(3).max(180),
-  slug: z
-    .string()
-    .trim()
-    .regex(
-      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-      "Use a lowercase URL slug with hyphens.",
-    )
-    .max(100),
-  category: z.string().trim().max(100),
-  audienceScope: z.enum(["all_speakers", "accepted_speakers", "custom"]),
-  acknowledgementRequired: z
-    .union([z.literal("true"), z.literal("false"), z.boolean()])
-    .transform((value) => value === true || value === "true"),
-  document: z.unknown(),
-  embedUrls: z.array(z.string().trim().url().max(1_000)).max(8).default([]),
-});
+export const resourceInputSchema = z
+  .object({
+    id: z.string().optional(),
+    revision: z.coerce.number().int().positive().optional(),
+    title: z.string().trim().min(3).max(180),
+    slug: z
+      .string()
+      .trim()
+      .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+        "Use a lowercase URL slug with hyphens.",
+      )
+      .max(100),
+    category: z.string().trim().max(100),
+    audienceScope: z.enum(["all_speakers", "accepted_speakers", "custom"]),
+    audiencePersonIds: z.array(z.string().trim().min(1)).max(1_000).default([]),
+    acknowledgementRequired: z
+      .union([z.literal("true"), z.literal("false"), z.boolean()])
+      .transform((value) => value === true || value === "true"),
+    document: z.unknown(),
+    embedUrls: z.array(z.string().trim().url().max(1_000)).max(8).default([]),
+  })
+  .superRefine((value, context) => {
+    const uniqueAudience = new Set(value.audiencePersonIds);
+    if (uniqueAudience.size !== value.audiencePersonIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["audiencePersonIds"],
+        message: "Select each custom-audience speaker only once.",
+      });
+    }
+    if (value.audienceScope === "custom" && uniqueAudience.size === 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["audiencePersonIds"],
+        message: "Select at least one speaker for a custom audience.",
+      });
+    }
+    if (value.audienceScope !== "custom" && uniqueAudience.size > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["audiencePersonIds"],
+        message: "Custom speakers can be selected only for a custom audience.",
+      });
+    }
+  });
 
 export class ResourceRevisionConflictError extends Error {
-  constructor() {
-    super(
-      "This resource changed after the page loaded. Refresh before saving again.",
-    );
+  constructor(
+    message = "This resource changed after the page loaded. Refresh before saving again.",
+  ) {
+    super(message);
     this.name = "ResourceRevisionConflictError";
   }
 }
@@ -43,6 +69,15 @@ export class ResourceTaskDependencyError extends Error {
       "This version cannot be published because a submitted or completed task depends on an acknowledgement that would be reset. Reopen the dependent task first.",
     );
     this.name = "ResourceTaskDependencyError";
+  }
+}
+
+export class ResourceAudienceError extends Error {
+  constructor() {
+    super(
+      "Every custom-audience person must still be a speaker in this event. Review the selected speakers.",
+    );
+    this.name = "ResourceAudienceError";
   }
 }
 

@@ -77,6 +77,20 @@ function toSummary(row: ChangeRow): EventChangeSummary {
 export class EventRealtimeService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
+  async getLatestCursor(scope: EventScope) {
+    const event = await this.env.DB.prepare(
+      `SELECT COALESCE(MAX(change.sequence), 0) AS cursor
+         FROM events event
+         LEFT JOIN event_changes change ON change.event_id = event.id
+        WHERE event.id = ? AND event.organisation_id = ?
+        GROUP BY event.id`,
+    )
+      .bind(scope.eventId, scope.organisationId)
+      .first<{ cursor: number }>();
+    if (!event) throw new EventChangeNotFoundError();
+    return safeCursor(Number(event.cursor));
+  }
+
   /**
    * Records durable intent first, then emits an invalidation. A channel failure is
    * surfaced to the caller; D1 polling can still observe the committed row.

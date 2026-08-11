@@ -1,16 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, MapPin } from "lucide-react";
-import { data, useFetcher, useLocation } from "react-router";
+import { data, Link, useFetcher, useLocation } from "react-router";
 
 import type { Route } from "./+types/public-programme";
 import { formatProgrammeEventDay } from "~/modules/programme/programme-presentation";
+import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import {
   PublishedProgrammeItineraryExpiredError,
+  PublishedProgrammeItineraryNotFoundError,
   PublishedProgrammeSessionNotFoundError,
   PublicProgrammeService,
   readCookie,
 } from "~/modules/programme/public-programme-service.server";
+import { createAuth } from "~/platform/auth/auth.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import {
+  publishedProgrammeCacheHeaders,
+  publishedProgrammeNotModified,
+} from "~/platform/api/api-public-programme.server";
 
 const ITINERARY_COOKIE = "program_cue_itinerary";
 
@@ -41,6 +48,14 @@ export function headers({
   return responseHeaders;
 }
 
+async function optionalPersonId(request: Request, env: CloudflareEnvironment) {
+  if (String(env.DEMO_MODE) === "true") return null;
+  const session = await createAuth(env).api.getSession({
+    headers: request.headers,
+  });
+  return session?.user.id ?? null;
+}
+
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   const slug = params.slug ?? env.PUBLIC_EVENT_SLUG;
@@ -51,16 +66,105 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!programme)
     throw new Response("Published event programme not found", { status: 404 });
   const embedded = new URL(request.url).pathname.startsWith("/embed/");
-  const itinerary = embedded
-    ? []
-    : await service.itinerary(programme, readCookie(request, ITINERARY_COOKIE));
+  const url = new URL(request.url);
+  const embedDay = embedded
+    ? url.searchParams.get("day")?.trim() || null
+    : null;
+  const embedTrack = embedded
+    ? url.searchParams.get("track")?.trim() || null
+    : null;
+  const embedQuery = embedded
+    ? url.searchParams.get("query")?.trim() || ""
+    : "";
+  const embedAccent = embedded
+    ? url.searchParams.get("accent")?.trim() || null
+    : null;
+  if (
+    embedDay &&
+    (!/^\d{4}-\d{2}-\d{2}$/u.test(embedDay) ||
+      !programme.sessions.some(
+        (session) =>
+          eventLocalCalendarDate(session.startsAt, programme.event.timezone) ===
+          embedDay,
+      ))
+  ) {
+    throw new Response("Embed day must identify a published programme day", {
+      status: 400,
+    });
+  }
+  if (
+    embedTrack &&
+    (embedTrack.length > 100 ||
+      !programme.sessions.some((session) => session.track === embedTrack))
+  ) {
+    throw new Response("Embed track must identify a published track", {
+      status: 400,
+    });
+  }
+  if (embedQuery.length > 100) {
+    throw new Response("Embed query must contain at most 100 characters", {
+      status: 400,
+    });
+  }
+  if (embedAccent && !/^#[0-9a-f]{6}$/iu.test(embedAccent)) {
+    throw new Response("Embed accent must be a six-digit hexadecimal colour", {
+      status: 400,
+    });
+  }
+  const embeddedCacheHeaders = embedded
+    ? await publishedProgrammeCacheHeaders(request, programme)
+    : null;
+  if (
+    embeddedCacheHeaders &&
+    publishedProgrammeNotModified(request, embeddedCacheHeaders.etag)
+  ) {
+    return new Response(null, {
+      status: 304,
+      headers: embeddedCacheHeaders,
+    });
+  }
+  const shared = url.searchParams.has("share");
+  const shareToken = url.searchParams.get("share") ?? "";
+  const personId =
+    embedded || shared ? null : await optionalPersonId(request, env);
+  const visitorToken = readCookie(request, ITINERARY_COOKIE);
+  const identity = { personId, visitorToken };
+  let itinerary: string[];
+  try {
+    itinerary = embedded
+      ? []
+      : shared
+        ? await service.sharedItinerary(programme, shareToken)
+        : await service.itinerary(programme, identity);
+  } catch (error) {
+    if (error instanceof PublishedProgrammeItineraryNotFoundError) {
+      throw new Response(error.message, { status: 404 });
+    }
+    throw error;
+  }
   return data(
-    { programme, itinerary, embedded },
+    {
+      programme,
+      itinerary,
+      embedded,
+      embedOptions: {
+        day: embedDay,
+        track: embedTrack,
+        query: embedQuery,
+        accent: embedAccent,
+      },
+      signedIn: personId !== null,
+      itinerarySynced:
+        !embedded && !shared
+          ? await service.itineraryIsSynced(programme, identity)
+          : false,
+      shared,
+    },
     {
       headers: {
-        "cache-control": embedded
-          ? "public, max-age=60, stale-while-revalidate=300"
-          : "private, no-store",
+        ...(embedded
+          ? embeddedCacheHeaders!
+          : { "cache-control": "private, no-store" }),
       },
     },
   );
@@ -76,13 +180,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       { status: 405, headers: { allow: "GET" } },
     );
   }
+  if (new URL(request.url).searchParams.has("share")) {
+    return data(
+      { ok: false, error: "Shared itineraries are read-only." },
+      { status: 405, headers: { allow: "GET" } },
+    );
+  }
   const { env } = getCloudflareContext(context);
   const slug = params.slug ?? env.PUBLIC_EVENT_SLUG;
   if (!slug)
     throw new Response("PUBLIC_EVENT_SLUG is not configured", { status: 503 });
   const values = await request.formData();
   const intent = values.get("intent");
-  if (intent !== "add" && intent !== "remove")
+  if (intent !== "add" && intent !== "remove" && intent !== "share")
     throw new Response("Unsupported itinerary action", { status: 400 });
   const sessionId = String(values.get("sessionId") ?? "");
   const service = new PublicProgrammeService(env);
@@ -90,12 +200,30 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (!programme)
     throw new Response("Published event programme not found", { status: 404 });
   try {
+    const personId = await optionalPersonId(request, env);
+    const visitorToken = readCookie(request, ITINERARY_COOKIE);
+    if (intent === "share") {
+      if (personId && visitorToken) {
+        await service.syncItinerary(programme, { personId, visitorToken });
+      }
+      const shareToken = await service.shareItinerary(programme, {
+        personId,
+        visitorToken,
+      });
+      const shareUrl = new URL(
+        `/public/programme/${programme.event.slug}`,
+        request.url,
+      );
+      shareUrl.searchParams.set("share", shareToken);
+      return data({ ok: true, shareUrl: shareUrl.toString() });
+    }
     const itinerary = await service.updateItinerary(
       programme,
-      readCookie(request, ITINERARY_COOKIE),
+      { personId, visitorToken },
       sessionId,
       intent,
     );
+    if (!itinerary.token) return data({ ok: true });
     return data(
       { ok: true },
       {
@@ -113,6 +241,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       return data({ ok: false, error: error.message }, { status: 410 });
     }
     if (error instanceof PublishedProgrammeSessionNotFoundError) {
+      return data({ ok: false, error: error.message }, { status: 404 });
+    }
+    if (error instanceof PublishedProgrammeItineraryNotFoundError) {
       return data({ ok: false, error: error.message }, { status: 404 });
     }
     if (error instanceof Response) throw error;
@@ -141,9 +272,17 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
   const { programme } = loaderData;
   const location = useLocation();
   const embedded = loaderData.embedded;
+  const shared = loaderData.shared;
+  const embedOptions = loaderData.embedOptions;
   const fetcher = useFetcher<typeof action>();
+  const shareUrl =
+    fetcher.data &&
+    "shareUrl" in fetcher.data &&
+    typeof fetcher.data.shareUrl === "string"
+      ? fetcher.data.shareUrl
+      : null;
   const saved = loaderData.itinerary;
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(embedOptions.query);
   const days = useMemo(
     () => [
       ...new Set(
@@ -154,20 +293,66 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
     ],
     [programme],
   );
-  const [day, setDay] = useState("All days");
+  const initialEmbedDay = embedOptions.day
+    ? programme.sessions.find(
+        (session) =>
+          eventLocalCalendarDate(session.startsAt, programme.event.timezone) ===
+          embedOptions.day,
+      )
+    : null;
+  const [day, setDay] = useState(
+    initialEmbedDay
+      ? formatDay(initialEmbedDay.startsAt, programme.event.timezone)
+      : "All days",
+  );
   const [selectedId, setSelectedId] = useState(programme.sessions[0]?.id ?? "");
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState(
+    programme.sessions[0]?.speakerIds[0] ?? programme.speakers[0]?.id ?? "",
+  );
   useEffect(() => {
-    if (!location.hash.startsWith("#session-")) return;
-    const slug = location.hash.slice("#session-".length);
-    const linked = programme.sessions.find((session) => session.slug === slug);
-    if (linked) setSelectedId(linked.id);
-  }, [location.hash, programme.sessions]);
+    if (!embedded) return;
+    const publishHeight = () => {
+      window.parent.postMessage(
+        {
+          type: "programcue:resize",
+          eventSlug: programme.event.slug,
+          height: Math.ceil(document.documentElement.scrollHeight),
+        },
+        "*",
+      );
+    };
+    publishHeight();
+    const observer = new ResizeObserver(publishHeight);
+    observer.observe(document.body);
+    window.addEventListener("load", publishHeight);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("load", publishHeight);
+    };
+  }, [embedded, programme.event.slug]);
+  useEffect(() => {
+    if (location.hash.startsWith("#session-")) {
+      const slug = location.hash.slice("#session-".length);
+      const linked = programme.sessions.find(
+        (session) => session.slug === slug,
+      );
+      if (linked) setSelectedId(linked.id);
+    } else if (location.hash.startsWith("#speaker-")) {
+      const personId = location.hash.slice("#speaker-".length);
+      const linked = programme.speakers.find(
+        (speaker) => speaker.id === personId,
+      );
+      if (linked) setSelectedSpeakerId(linked.id);
+    }
+  }, [location.hash, programme.sessions, programme.speakers]);
   const visible = useMemo(
     () =>
       programme.sessions.filter((session) => {
         const matchesDay =
           day === "All days" ||
           formatDay(session.startsAt, programme.event.timezone) === day;
+        const matchesTrack =
+          !embedOptions.track || session.track === embedOptions.track;
         const haystack = [
           session.title,
           session.speakerNames.join(" "),
@@ -177,13 +362,36 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
         ]
           .join(" ")
           .toLowerCase();
-        return matchesDay && haystack.includes(query.trim().toLowerCase());
+        return (
+          matchesDay &&
+          matchesTrack &&
+          haystack.includes(query.trim().toLowerCase())
+        );
       }),
-    [day, programme, query],
+    [day, embedOptions.track, programme, query],
   );
   const selected =
-    programme.sessions.find((session) => session.id === selectedId) ??
-    programme.sessions[0] ??
+    visible.find((session) => session.id === selectedId) ?? visible[0] ?? null;
+  const visibleSessionIds = new Set(visible.map((session) => session.id));
+  const visibleSpeakerIds = new Set(
+    visible.flatMap((session) => session.speakerIds),
+  );
+  const visibleSpeakers = programme.speakers.filter(
+    (speaker) =>
+      (!embedded || visibleSpeakerIds.has(speaker.id)) &&
+      [
+        speaker.displayName,
+        speaker.jobTitle,
+        speaker.organisationName,
+        speaker.biography,
+      ]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(query.trim().toLocaleLowerCase()),
+  );
+  const selectedSpeaker =
+    visibleSpeakers.find((speaker) => speaker.id === selectedSpeakerId) ??
+    visibleSpeakers[0] ??
     null;
   const savedSessions = programme.sessions.filter((session) =>
     saved.includes(session.id),
@@ -199,6 +407,7 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
   );
 
   function toggle(sessionId: string) {
+    if (shared) return;
     void fetcher.submit(
       { intent: saved.includes(sessionId) ? "remove" : "add", sessionId },
       { method: "post" },
@@ -206,24 +415,42 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <div className={`public-shell${embedded ? " embedded" : ""}`}>
+    <div
+      className={`public-shell event-branded${embedded ? " embedded" : ""}`}
+      style={
+        {
+          "--event-accent": embedOptions.accent ?? programme.event.brandAccent,
+        } as React.CSSProperties
+      }
+    >
       {!embedded ? (
         <header className="public-top">
-          <a
+          <Link
             className="brand"
-            href={`/public/programme/${programme.event.slug}`}
+            to={`/public/programme/${programme.event.slug}`}
             style={{ color: "var(--ink)", padding: 0 }}
           >
             <span className="brand-mark">P</span>
             <span>Program Cue</span>
-          </a>
+          </Link>
           <nav className="public-nav" aria-label="Programme">
             <a className="active" href="#programme" aria-current="page">
               Programme
             </a>
+            <a href="#speakers">Speakers</a>
           </nav>
+          <details className="public-mobile-nav">
+            <summary className="btn small">Browse</summary>
+            <nav aria-label="Programme sections">
+              <a href="#programme" aria-current="page">
+                Programme
+              </a>
+              <a href="#speakers">Speakers</a>
+            </nav>
+          </details>
           <a className="btn" href="#itinerary">
-            ♡ My itinerary <span className="status info">{saved.length}</span>
+            ♡ {shared ? "Shared itinerary" : "My itinerary"}{" "}
+            <span className="status info">{saved.length}</span>
           </a>
         </header>
       ) : null}
@@ -231,7 +458,11 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
         className="hero"
         style={
           {
-            "--event-accent": programme.event.brandAccent,
+            "--event-accent":
+              embedOptions.accent ?? programme.event.brandAccent,
+            background: embedOptions.accent
+              ? `linear-gradient(135deg, #0f172a, ${embedOptions.accent})`
+              : undefined,
           } as React.CSSProperties
         }
       >
@@ -269,7 +500,17 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
               <span>{String(fetcher.data.error)}</span>
             </div>
           ) : null}
+          {shareUrl ? (
+            <div className="validation-item ok mb" role="status">
+              <strong>Share link ready</strong>
+              <a href={shareUrl}>{shareUrl}</a>
+              <span>The link is read-only. Creating another rotates it.</span>
+            </div>
+          ) : null}
           <div className="public-filters">
+            {embedOptions.track ? (
+              <span className="status info">Track · {embedOptions.track}</span>
+            ) : null}
             <input
               className="field"
               value={query}
@@ -309,7 +550,11 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                   className={`programme-row${session.id === selectedId ? " active" : ""}`}
                   key={session.id}
                   aria-pressed={session.id === selectedId}
-                  onClick={() => setSelectedId(session.id)}
+                  onClick={() => {
+                    setSelectedId(session.id);
+                    if (session.speakerIds[0])
+                      setSelectedSpeakerId(session.speakerIds[0]);
+                  }}
                   style={{
                     width: "100%",
                     textAlign: "left",
@@ -346,7 +591,7 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                   <div>
                     {!embedded && saved.includes(session.id) ? (
                       <span className="status success">Saved ✓</span>
-                    ) : !embedded ? (
+                    ) : !embedded && !shared ? (
                       <span className="pill">＋</span>
                     ) : null}
                   </div>
@@ -359,6 +604,113 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
               </section>
             )}
           </div>
+          <section
+            id="speakers"
+            className="mt"
+            aria-labelledby="speakers-title"
+          >
+            <div className="card-title">
+              <div>
+                <span className="pc-page-eyebrow">Meet the programme</span>
+                <h2 id="speakers-title">Speakers</h2>
+              </div>
+              <span className="status info">{visibleSpeakers.length}</span>
+            </div>
+            {visibleSpeakers.length ? (
+              <div className="grid grid-3">
+                {visibleSpeakers.map((speaker) => (
+                  <article
+                    id={`speaker-${speaker.id}`}
+                    className="card pad"
+                    key={speaker.id}
+                  >
+                    <div className="row-main mb">
+                      {speaker.imageUrl ? (
+                        <img
+                          className="avatar"
+                          src={speaker.imageUrl}
+                          alt=""
+                          width={48}
+                          height={48}
+                        />
+                      ) : (
+                        <span className="avatar" aria-hidden="true">
+                          {speaker.displayName
+                            .split(" ")
+                            .map((part) => part[0])
+                            .join("")
+                            .slice(0, 2)}
+                        </span>
+                      )}
+                      <div>
+                        <h3>{speaker.displayName}</h3>
+                        <p className="help">
+                          {[speaker.jobTitle, speaker.organisationName]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      </div>
+                    </div>
+                    <p>{speaker.biography || "Biography coming soon."}</p>
+                    <a
+                      className="btn small"
+                      href={`#speaker-${speaker.id}`}
+                      onClick={() => setSelectedSpeakerId(speaker.id)}
+                    >
+                      View profile and sessions
+                    </a>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="empty">
+                <p>No speakers match this search.</p>
+              </div>
+            )}
+            {selectedSpeaker ? (
+              <article className="card pad mt" aria-live="polite">
+                <div className="card-title">
+                  <div>
+                    <span className="pill">Speaker profile</span>
+                    <h2>{selectedSpeaker.displayName}</h2>
+                  </div>
+                  <a
+                    className="btn small"
+                    href={`#speaker-${selectedSpeaker.id}`}
+                  >
+                    Share profile link
+                  </a>
+                </div>
+                {selectedSpeaker.pronunciation ? (
+                  <p className="help">
+                    Pronunciation · {selectedSpeaker.pronunciation}
+                  </p>
+                ) : null}
+                <p>{selectedSpeaker.biography || "Biography coming soon."}</p>
+                <h3>Sessions</h3>
+                <div className="stack">
+                  {programme.sessions
+                    .filter(
+                      (session) =>
+                        selectedSpeaker.sessionIds.includes(session.id) &&
+                        (!embedded || visibleSessionIds.has(session.id)),
+                    )
+                    .map((session) => (
+                      <a
+                        href={`#session-${session.slug}`}
+                        key={session.id}
+                        onClick={() => setSelectedId(session.id)}
+                      >
+                        {formatDay(session.startsAt, programme.event.timezone)}{" "}
+                        ·{" "}
+                        {formatTime(session.startsAt, programme.event.timezone)}{" "}
+                        · {session.title}
+                      </a>
+                    ))}
+                </div>
+              </article>
+            ) : null}
+          </section>
         </div>
         <aside id="itinerary">
           {!embedded ? (
@@ -367,7 +719,7 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
               aria-busy={fetcher.state !== "idle" || undefined}
             >
               <div className="card-title">
-                <h2>My itinerary</h2>
+                <h2>{shared ? "Shared itinerary" : "My itinerary"}</h2>
                 <span className="status info right">{saved.length}</span>
               </div>
               {itineraryConflicts.length ? (
@@ -377,23 +729,43 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                 </div>
               ) : null}
               {savedSessions.length ? (
-                savedSessions.map((session) => (
-                  <button
-                    type="button"
-                    className="itinerary-item"
-                    style={{ width: "100%", textAlign: "left" }}
-                    key={session.id}
-                    aria-pressed={session.id === selectedId}
-                    onClick={() => setSelectedId(session.id)}
-                  >
-                    <strong>
-                      {formatDay(session.startsAt, programme.event.timezone)} ·{" "}
-                      {formatTime(session.startsAt, programme.event.timezone)}
-                    </strong>
-                    <p>{session.title}</p>
-                    <small>{session.room}</small>
-                  </button>
-                ))
+                <>
+                  {savedSessions.map((session) => (
+                    <button
+                      type="button"
+                      className="itinerary-item"
+                      style={{ width: "100%", textAlign: "left" }}
+                      key={session.id}
+                      aria-pressed={session.id === selectedId}
+                      onClick={() => setSelectedId(session.id)}
+                    >
+                      <strong>
+                        {formatDay(session.startsAt, programme.event.timezone)}{" "}
+                        ·{" "}
+                        {formatTime(session.startsAt, programme.event.timezone)}
+                      </strong>
+                      <p>{session.title}</p>
+                      <small>{session.room}</small>
+                    </button>
+                  ))}
+                  {!shared ? (
+                    <fetcher.Form method="post" className="mt">
+                      <input type="hidden" name="intent" value="share" />
+                      <button
+                        className="btn"
+                        type="submit"
+                        disabled={fetcher.state !== "idle"}
+                      >
+                        Create read-only share link
+                      </button>
+                    </fetcher.Form>
+                  ) : null}
+                  {loaderData.itinerarySynced && !shared ? (
+                    <p className="help">
+                      Synced to your signed-in account across devices.
+                    </p>
+                  ) : null}
+                </>
               ) : (
                 <p className="subtle">No saved sessions yet.</p>
               )}
@@ -420,7 +792,7 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
                   <small>{selected.track}</small>
                 </div>
               </div>
-              {!embedded ? (
+              {!embedded && !shared ? (
                 <button
                   type="button"
                   className={`btn${saved.includes(selected.id) ? "" : " primary"}`}
@@ -436,6 +808,25 @@ export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
               ) : null}
               <h3>About this session</h3>
               <p>{selected.description}</p>
+              <Link
+                className="btn small"
+                to={`/public/programme/${programme.event.slug}#session-${selected.slug}`}
+              >
+                Shareable session link
+              </Link>
+              {selected.speakerIds.length ? (
+                <div className="stack mt">
+                  {selected.speakerIds.map((speakerId, index) => (
+                    <a
+                      key={speakerId}
+                      href={`#speaker-${speakerId}`}
+                      onClick={() => setSelectedSpeakerId(speakerId)}
+                    >
+                      View {selected.speakerNames[index]}’s profile
+                    </a>
+                  ))}
+                </div>
+              ) : null}
               <div className="divider" />
               <h3>Details</h3>
               <p>

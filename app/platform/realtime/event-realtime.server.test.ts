@@ -77,13 +77,7 @@ describe("event realtime service", () => {
 
   it("provides bounded, event-isolated D1 cursor pages", async () => {
     const service = new EventRealtimeService(environmentWithChannel([]));
-    const before = await env.DB.prepare(
-      `
-      SELECT COALESCE(MAX(sequence), 0) AS cursor FROM event_changes WHERE event_id = ?
-    `,
-    )
-      .bind(viewer.eventId)
-      .first<{ cursor: number }>();
+    const before = await service.getLatestCursor(viewer);
     await service.recordChange(viewer, {
       entityType: "task",
       entityId: "task-1",
@@ -97,7 +91,7 @@ describe("event realtime service", () => {
 
     const first = await service.getChangesSince(
       viewer,
-      Number(before?.cursor ?? 0),
+      before,
       1,
     );
     expect(first.changes).toHaveLength(1);
@@ -110,6 +104,9 @@ describe("event realtime service", () => {
 
     await expect(
       service.getChangesSince({ ...viewer, organisationId: "another-org" }, 0),
+    ).rejects.toBeInstanceOf(EventChangeNotFoundError);
+    await expect(
+      service.getLatestCursor({ ...viewer, organisationId: "another-org" }),
     ).rejects.toBeInstanceOf(EventChangeNotFoundError);
   });
 
@@ -228,5 +225,8 @@ describe("event realtime service", () => {
       changeCursor: expect.any(Number),
       realtimeWarning: expect.stringContaining("mutation committed"),
     });
+    expect(recorded.realtimeWarning).not.toContain(
+      "EVENT_CHANNEL Durable Object binding",
+    );
   });
 });

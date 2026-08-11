@@ -266,6 +266,88 @@ export class RecipientQuery {
           RecipientQuery.maximumBatchSize + 1,
         ],
       },
+      due_speakers: {
+        sql: `
+          SELECT personId, address, name, sourceId
+            FROM (
+              SELECT p.id AS personId, p.email AS address,
+                     p.display_name AS name, t.id AS sourceId,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY p.id ORDER BY t.due_at, t.id
+                     ) AS recipientRank
+                FROM task_instances t
+                JOIN people p ON p.id = t.target_id
+                JOIN events e ON e.id = t.event_id AND e.organisation_id = ?
+               WHERE t.event_id = ? AND t.target_type = 'speaker'
+                 AND t.status NOT IN ('submitted','completed','waived','overdue')
+                 AND t.due_at >= unixepoch()
+                 AND t.due_at < unixepoch() + 86400
+            ) recipients
+           WHERE recipientRank = 1
+           ORDER BY sourceId
+           LIMIT ?
+        `,
+        bindings: [
+          viewer.organisationId,
+          viewer.eventId,
+          RecipientQuery.maximumBatchSize + 1,
+        ],
+      },
+      overdue_speakers: {
+        sql: `
+          SELECT personId, address, name, sourceId
+            FROM (
+              SELECT p.id AS personId, p.email AS address,
+                     p.display_name AS name, t.id AS sourceId,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY p.id ORDER BY t.due_at, t.id
+                     ) AS recipientRank
+                FROM task_instances t
+                JOIN people p ON p.id = t.target_id
+                JOIN events e ON e.id = t.event_id AND e.organisation_id = ?
+               WHERE t.event_id = ? AND t.target_type = 'speaker'
+                 AND t.status NOT IN ('submitted','completed','waived')
+                 AND t.due_at < unixepoch()
+            ) recipients
+           WHERE recipientRank = 1
+           ORDER BY sourceId
+           LIMIT ?
+        `,
+        bindings: [
+          viewer.organisationId,
+          viewer.eventId,
+          RecipientQuery.maximumBatchSize + 1,
+        ],
+      },
+      event_administrators: {
+        sql: `
+          SELECT personId, address, name, NULL AS sourceId
+            FROM (
+              SELECT p.id AS personId, p.email AS address, p.display_name AS name,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY lower(p.email)
+                       ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END, m.id
+                     ) AS recipientRank
+                FROM memberships m
+                JOIN people p ON p.id = m.person_id
+                JOIN events e ON e.organisation_id = m.organisation_id
+               WHERE e.id = ? AND e.organisation_id = ?
+                 AND (
+                   m.event_id = e.id
+                   OR (m.event_id IS NULL AND m.role IN ('owner','administrator'))
+                 )
+                 AND m.role IN ('owner','administrator')
+                 AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL
+            ) recipients
+           WHERE recipientRank = 1
+           LIMIT ?
+        `,
+        bindings: [
+          viewer.eventId,
+          viewer.organisationId,
+          RecipientQuery.maximumBatchSize + 1,
+        ],
+      },
     };
     const query = queries[audienceType];
     const result = await this.env.DB.prepare(query.sql)

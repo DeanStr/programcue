@@ -21,6 +21,21 @@ export class EvaluationValidationError extends Error {
   }
 }
 
+export class EvaluationInvitationDeliveryError extends Error {
+  readonly committed = true;
+
+  constructor(
+    readonly membershipId: string,
+    roleLabel: string,
+    cause: unknown,
+  ) {
+    super(
+      `The ${roleLabel} invitation was saved, but its sign-in email could not be delivered: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+    this.name = "EvaluationInvitationDeliveryError";
+  }
+}
+
 export class EvaluationDecisionFinalError extends Error {
   constructor() {
     super(
@@ -33,7 +48,7 @@ export class EvaluationDecisionFinalError extends Error {
 export class EvaluationDecisionAuthorityError extends Error {
   constructor() {
     super(
-      "Only an administrator can release decisions unless the evaluation plan explicitly grants that authority to committee chairs.",
+      "Only an owner or administrator can release decisions unless the evaluation plan explicitly grants that authority to committee chairs.",
     );
     this.name = "EvaluationDecisionAuthorityError";
   }

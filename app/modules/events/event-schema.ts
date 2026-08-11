@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  eventFilePolicySchema,
+  type EventFilePolicy,
+} from "~/modules/files/file-policy";
+
 export function isSupportedIanaTimezone(value: string) {
   try {
     new Intl.DateTimeFormat("en", { timeZone: value }).format(0);
@@ -19,6 +24,51 @@ export const timezoneSchema = z
     "Choose a valid IANA timezone such as America/Toronto or UTC.",
   );
 
+const configurationKeySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .regex(
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+    "Use lowercase letters, numbers and hyphens.",
+  );
+
+export const eventResourceSchema = z
+  .string()
+  .trim()
+  .min(1, "Resource names cannot be empty.")
+  .max(80)
+  .regex(
+    /^[a-z0-9]+(?:[ -][a-z0-9]+)*$/i,
+    "Use letters, numbers, spaces and hyphens for resources.",
+  )
+  .transform((value) => value.toLowerCase());
+
+export const sessionFormatInputSchema = z.object({
+  key: configurationKeySchema,
+  label: z.string().trim().min(1, "Every format needs a label.").max(80),
+  defaultDurationMinutes: z.coerce.number().int().min(5).max(480),
+  position: z.coerce.number().int().min(0),
+});
+
+export const trackInputSchema = z.object({
+  id: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .regex(/^[a-z0-9][a-z0-9-]*$/),
+  name: z.string().trim().min(1, "Every track needs a name.").max(120),
+  slug: configurationKeySchema,
+  colourToken: z
+    .union([z.string().regex(/^#[0-9a-fA-F]{6}$/), z.literal("")])
+    .transform((value) => (value ? value.toLowerCase() : null)),
+  position: z.coerce.number().int().min(0),
+  exclusive: z.boolean(),
+  isPublic: z.boolean(),
+});
+
 export const roomInputSchema = z.object({
   id: z
     .string()
@@ -32,6 +82,7 @@ export const roomInputSchema = z.object({
     .int()
     .min(1, "Every room needs a positive capacity.")
     .max(100_000),
+  resources: z.array(eventResourceSchema).max(50),
   position: z.coerce.number().int().min(0),
 });
 
@@ -57,10 +108,7 @@ export const eventSetupInputSchema = z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, "Choose a valid brand colour."),
     description: z.string().trim().max(2_000),
-    repositoryProvider: z.literal(
-      "d1",
-      "Airtable cannot be selected until its repository adapter is implemented.",
-    ),
+    repositoryProvider: z.enum(["d1", "airtable"]),
     retentionMonths: z.coerce
       .number()
       .pipe(z.union([z.literal(12), z.literal(24), z.literal(36)])),
@@ -71,7 +119,10 @@ export const eventSetupInputSchema = z
     ]),
     allowAnonymousDrafts: z.boolean(),
     duplicatePersonWarnings: z.boolean(),
+    filePolicy: eventFilePolicySchema,
     rooms: z.array(roomInputSchema).max(100),
+    tracks: z.array(trackInputSchema).max(100),
+    sessionFormats: z.array(sessionFormatInputSchema).min(1).max(50),
   })
   .superRefine((value, context) => {
     if (value.endDate < value.startDate) {
@@ -89,6 +140,37 @@ export const eventSetupInputSchema = z
         message: "Room identifiers must be unique.",
       });
     }
+    for (const [index, room] of value.rooms.entries()) {
+      if (new Set(room.resources).size !== room.resources.length) {
+        context.addIssue({
+          code: "custom",
+          path: ["rooms", index, "resources"],
+          message: "A room cannot list the same resource more than once.",
+        });
+      }
+    }
+    const trackIds = new Set(value.tracks.map((track) => track.id));
+    const trackSlugs = new Set(value.tracks.map((track) => track.slug));
+    if (
+      trackIds.size !== value.tracks.length ||
+      trackSlugs.size !== value.tracks.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["tracks"],
+        message: "Track identifiers and slugs must be unique.",
+      });
+    }
+    const formatKeys = new Set(
+      value.sessionFormats.map((format) => format.key),
+    );
+    if (formatKeys.size !== value.sessionFormats.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["sessionFormats"],
+        message: "Session format keys must be unique.",
+      });
+    }
   });
 
 export const administratorInvitationSchema = z.object({
@@ -96,9 +178,15 @@ export const administratorInvitationSchema = z.object({
   email: z
     .email("Enter a valid administrator email address.")
     .transform((value) => value.toLowerCase()),
+  scope: z.enum(["event", "organisation"]),
+});
+
+export const administratorRevocationSchema = z.object({
+  membershipId: z.string().trim().min(1).max(128),
 });
 
 export type EventSetupInput = z.infer<typeof eventSetupInputSchema>;
+export type { EventFilePolicy };
 export type AdministratorInvitationInput = z.infer<
   typeof administratorInvitationSchema
 >;

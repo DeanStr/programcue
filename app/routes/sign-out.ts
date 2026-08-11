@@ -2,6 +2,7 @@ import { redirect } from "react-router";
 
 import type { Route } from "./+types/sign-out";
 import { signOutSession } from "~/platform/auth/auth.server";
+import { clearCurrentEventCookie } from "~/platform/auth/current-event.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
@@ -19,5 +20,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const result = await signOutSession(env, request);
   if (!result.ok) return result;
   const destination = `/sign-in?${new URLSearchParams({ returnTo })}`;
-  return redirect(destination, { status: 303, headers: result.headers });
+  const headers = new Headers(result.headers);
+  headers.append("set-cookie", clearCurrentEventCookie(env));
+  return redirect(destination, { status: 303, headers });
 }

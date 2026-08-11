@@ -1,27 +1,147 @@
 import type { Route } from "./+types/api-public-programme";
-import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
-import { apiSuccess, correlationId } from "~/platform/api/api.server";
+import {
+  PublicProgrammeService,
+  type PublishedProgramme,
+} from "~/modules/programme/public-programme-service.server";
+import {
+  publishedProgrammeCacheHeaders,
+  publishedProgrammeNotModified,
+  publicProgrammeQuerySchema,
+  publicProgrammeResponse,
+  requirePublishedProgramme,
+} from "~/platform/api/api-public-programme.server";
+import { parseStrictQuery } from "~/platform/api/api-pagination.server";
+import {
+  ApiError,
+  apiFailure,
+  apiSuccess,
+  correlationId,
+} from "~/platform/api/api.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => {
+    const escaped: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return escaped[character]!;
+  });
+}
+
+export function staticProgrammeHtml(programme: PublishedProgramme) {
+  const dateTime = new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: programme.event.timezone,
+  });
+  const sessions = programme.sessions
+    .map(
+      (session) => `<article id="session-${escapeHtml(session.slug)}">
+  <p><strong>${escapeHtml(dateTime.format(new Date(session.startsAt * 1_000)))}</strong> · ${escapeHtml(session.room)}</p>
+  <h2>${escapeHtml(session.title)}</h2>
+  <p>${escapeHtml(session.speakerNames.join(", ") || "Speaker to be announced")}</p>
+  <p>${escapeHtml(session.description)}</p>
+</article>`,
+    )
+    .join("\n");
+  const speakers = programme.speakers
+    .map(
+      (speaker) => `<article id="speaker-${escapeHtml(speaker.id)}">
+  <h2>${escapeHtml(speaker.displayName)}</h2>
+  <p>${escapeHtml([speaker.jobTitle, speaker.organisationName].filter(Boolean).join(" · "))}</p>
+  <p>${escapeHtml(speaker.biography ?? "Biography coming soon.")}</p>
+</article>`,
+    )
+    .join("\n");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${escapeHtml(programme.event.name)} programme</title>
+  <style>body{font:16px/1.5 system-ui,sans-serif;max-width:72rem;margin:auto;padding:2rem;color:#0f172a}header{border-bottom:3px solid #4f46e5;margin-bottom:2rem}article{padding:1rem 0;border-bottom:1px solid #e2e8f0}h1,h2{line-height:1.2}small{color:#64748b}@media(max-width:40rem){body{padding:1rem}}</style>
+</head>
+<body>
+  <header><h1>${escapeHtml(programme.event.name)}</h1><p>${escapeHtml(programme.event.startDate)}–${escapeHtml(programme.event.endDate)} · ${escapeHtml(programme.event.timezone)}</p></header>
+  <main><section aria-labelledby="sessions"><h2 id="sessions">Sessions</h2>${sessions}</section><section aria-labelledby="speakers"><h2 id="speakers">Speakers</h2>${speakers}</section></main>
+  <footer><small>Published version ${programme.version.versionNumber} · exported by Program Cue</small></footer>
+</body>
+</html>`;
+}
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
-  const programme = await new PublicProgrammeService(env).getPublished(
-    params.slug ?? "",
-  );
-  if (!programme)
-    return apiSuccess(
-      {
-        error: {
-          code: "EVENT_NOT_FOUND",
-          message: "Published event programme not found",
-        },
-        correlationId: correlationId(request),
-      },
-      404,
-      { "access-control-allow-origin": "*" },
+  const requestCorrelationId = correlationId(request);
+  try {
+    const rawFormat = new URL(request.url).searchParams.get("format");
+    if (rawFormat !== null && rawFormat !== "json" && rawFormat !== "html") {
+      throw new ApiError(
+        400,
+        "INVALID_EXPORT_FORMAT",
+        "Programme export format must be json or html",
+      );
+    }
+    const input = parseStrictQuery(
+      request,
+      publicProgrammeQuerySchema,
+      "The programme filters are invalid",
     );
-  return apiSuccess(programme, 200, {
-    "cache-control": "public, max-age=60, stale-while-revalidate=300",
-    "access-control-allow-origin": "*",
-  });
+    const programme = requirePublishedProgramme(
+      await new PublicProgrammeService(env).getPublished(params.slug ?? ""),
+    );
+    const cacheHeaders = {
+      ...(await publishedProgrammeCacheHeaders(request, programme)),
+      "access-control-allow-origin": "*",
+    };
+    if (publishedProgrammeNotModified(request, cacheHeaders.etag)) {
+      return new Response(null, { status: 304, headers: cacheHeaders });
+    }
+    const response = publicProgrammeResponse(programme, input);
+    if (input.format === "json") {
+      return new Response(`${JSON.stringify(response, null, 2)}\n`, {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "content-disposition": `attachment; filename="${programme.event.slug}-programme.json"`,
+          ...cacheHeaders,
+        },
+      });
+    }
+    if (input.format === "html") {
+      const sessionIds = new Set(
+        response.sessions.map((session) => session.id),
+      );
+      return new Response(
+        staticProgrammeHtml({
+          ...programme,
+          sessions: programme.sessions.filter((session) =>
+            sessionIds.has(session.id),
+          ),
+          speakers: response.speakers,
+        }),
+        {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "content-disposition": `attachment; filename="${programme.event.slug}-programme.html"`,
+            ...cacheHeaders,
+          },
+        },
+      );
+    }
+    return apiSuccess(response, 200, {
+      ...cacheHeaders,
+    });
+  } catch (error) {
+    const response = apiFailure(
+      error,
+      request,
+      env.APP_ENV ?? "unknown",
+      requestCorrelationId,
+    );
+    response.headers.set("access-control-allow-origin", "*");
+    return response;
+  }
 }

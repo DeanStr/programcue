@@ -75,5 +75,6 @@ export function hashCalendarLifecyclePayload(
     attendeeEmail: payload.attendeeEmail,
     organizerName: payload.organizerName,
     organizerEmail: payload.organizerEmail,
+    brandAccent: payload.brandAccent,
   }));
 }

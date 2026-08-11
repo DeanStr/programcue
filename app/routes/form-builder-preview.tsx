@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useForm,
+  useWatch,
+  type FieldErrors,
+  type Resolver,
+} from "react-hook-form";
 import {
   data,
   Form,
@@ -6,11 +12,19 @@ import {
   redirect,
   useActionData,
   useNavigation,
+  useSubmit,
 } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/form-builder-preview";
 import { Dialog } from "~/components/dialog";
+import {
+  DraftRecoveryFeedback,
+  DraftRecoveryStatus,
+} from "~/components/draft-recovery-feedback";
+import FormJsVisualEditor, {
+  type FormJsEditorStatus,
+} from "~/components/form-js-visual-editor";
 import {
   ApplicantPreviewPanel,
   FieldLibraryPanel,
@@ -24,12 +38,18 @@ import {
   SubmissionRevisionConflictError,
   SubmissionStateError,
 } from "~/modules/submissions/submission-repository.server";
-import type {
-  FormField,
-  SaveFormInput,
+import {
+  saveFormSchema,
+  type SubmissionFormSchema,
+  type FormField,
+  type SaveFormInput,
 } from "~/modules/submissions/submission-schema";
-import { requireEventRole } from "~/platform/auth/authorize.server";
+import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import {
+  clearDraftRecoveryScope,
+  useDraftRecovery,
+} from "~/platform/drafts/draft-recovery";
 
 export const meta: Route.MetaFunction = () => [
   { title: "Form Builder · Program Cue" },
@@ -39,6 +59,22 @@ type ActionResult = {
   ok: boolean;
   message: string;
   errors?: Record<string, string[]>;
+  conflict?: boolean;
+};
+
+const formBuilderResolver: Resolver<SaveFormInput> = async (values) => {
+  const parsed = saveFormSchema.safeParse(values);
+  if (parsed.success) return { values: parsed.data, errors: {} };
+
+  const errors: FieldErrors<SaveFormInput> = {};
+  for (const issue of parsed.error.issues) {
+    const field = issue.path[0];
+    if (typeof field !== "string" || field in errors) continue;
+    Object.assign(errors, {
+      [field]: { type: "zod", message: issue.message },
+    });
+  }
+  return { values: {}, errors };
 };
 
 async function viewerFor(
@@ -46,11 +82,9 @@ async function viewerFor(
   context: Route.LoaderArgs["context"],
 ) {
   const { env } = getCloudflareContext(context);
-  if (!env.DEFAULT_EVENT_ID)
-    throw new Response("DEFAULT_EVENT_ID is not configured", { status: 503 });
   return {
     env,
-    viewer: await requireEventRole(request, env, env.DEFAULT_EVENT_ID, [
+    viewer: await requireCurrentEventRole(request, env, [
       "owner",
       "administrator",
     ]),
@@ -62,15 +96,48 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const service = new SubmissionService(env);
   const url = new URL(request.url);
   const requestedFormId = url.searchParams.get("form");
-  const workspace = await service.getAdminWorkspace(
-    viewer,
-    requestedFormId ?? undefined,
-  );
+  const creating = url.searchParams.get("new") === "1";
+  const [workspace, forms, routingTeams] = await Promise.all([
+    creating
+      ? Promise.resolve(null)
+      : service.getAdminWorkspace(viewer, requestedFormId ?? undefined),
+    service.listAdminForms(viewer),
+    service.listRoutingTeams(viewer),
+  ]);
   if (requestedFormId !== null && !workspace) {
     throw new Response("Form not found", { status: 404 });
   }
+  const browserWorkspace = workspace
+    ? {
+        ...workspace,
+        draftVersion: {
+          ...workspace.draftVersion,
+          routing: {
+            ...workspace.draftVersion.routing,
+            passwordHash: null,
+          },
+        },
+        publishedVersion: workspace.publishedVersion
+          ? {
+              ...workspace.publishedVersion,
+              routing: {
+                ...workspace.publishedVersion.routing,
+                passwordHash: null,
+              },
+            }
+          : null,
+      }
+    : null;
   return {
-    workspace,
+    workspace: browserWorkspace,
+    forms,
+    routingTeams,
+    passwordConfigured: Boolean(workspace?.draftVersion.routing.passwordHash),
+    recoveryScope: {
+      eventId: viewer.eventId,
+      personId: viewer.personId,
+    },
+    createdFromLocalDraft: url.searchParams.get("created") === "1",
     input: workspace
       ? SubmissionService.workspaceToInput(workspace)
       : await service.getDefaultFormInput(viewer),
@@ -138,7 +205,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     });
     if (!id)
       return redirect(
-        `/admin/submissions/form?form=${encodeURIComponent(savedId)}`,
+        `/admin/submissions/form?form=${encodeURIComponent(savedId)}&created=1`,
       );
     return data<ActionResult>({ ok: true, message: "Draft form saved to D1." });
   } catch (error) {
@@ -164,7 +231,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       error instanceof SubmissionStateError
     ) {
       return data<ActionResult>(
-        { ok: false, message: error.message },
+        { ok: false, message: error.message, conflict: true },
         { status: 409 },
       );
     }
@@ -174,14 +241,60 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function FormBuilder({ loaderData }: Route.ComponentProps) {
+  const formRef = useRef<HTMLFormElement>(null);
   const actionData = useActionData<typeof action>() as ActionResult | undefined;
   const navigation = useNavigation();
-  const [input, setInput] = useState<SaveFormInput>(loaderData.input);
+  const submit = useSubmit();
+  const {
+    control,
+    getValues,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { isDirty: dirty },
+  } = useForm<SaveFormInput>({
+    defaultValues: loaderData.input,
+    resolver: formBuilderResolver,
+    mode: "onChange",
+  });
+  const input = useWatch({
+    control,
+    defaultValue: loaderData.input,
+  }) as SaveFormInput;
   const [selectedId, setSelectedId] = useState(
-    input.schema.fields[0]?.id ?? "",
+    loaderData.input.schema.fields[0]?.id ?? "",
   );
-  const [dirty, setDirty] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [clientValidationMessage, setClientValidationMessage] = useState<
+    string | null
+  >(null);
+  const [editorStatus, setEditorStatus] = useState<FormJsEditorStatus>({
+    state: "loading",
+    message: "Loading the visual form editor…",
+  });
+  const recoveryPayload = useMemo(() => {
+    const { accessPassword: _sensitivePassword, ...recoverable } = input;
+    return recoverable;
+  }, [input]);
+  const restoreDraft = useCallback(
+    (recoverable: typeof recoveryPayload) => {
+      const restored = { ...recoverable, accessPassword: "" } as SaveFormInput;
+      reset(restored, { keepDefaultValues: true });
+      setSelectedId(restored.schema.fields[0]?.id ?? "");
+    },
+    [reset],
+  );
+  const recovery = useDraftRecovery({
+    scope: {
+      ...loaderData.recoveryScope,
+      recordType: "submission_form",
+      recordId: input.id ?? "new",
+    },
+    serverRevision: `${input.revision ?? 0}:${input.draftRevision ?? 0}`,
+    payload: recoveryPayload,
+    dirty,
+    onRestore: restoreDraft,
+  });
   const selected =
     input.schema.fields.find((field) => field.id === selectedId) ??
     input.schema.fields[0];
@@ -190,16 +303,26 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
   );
 
   useEffect(() => {
-    setInput(loaderData.input);
+    reset(loaderData.input);
     setSelectedId(loaderData.input.schema.fields[0]?.id ?? "");
-    setDirty(false);
-  }, [loaderData.input]);
+    setClientValidationMessage(null);
+  }, [loaderData.input, reset]);
   useEffect(() => {
     if (actionData?.ok) {
-      setDirty(false);
+      reset(getValues());
       setPublishOpen(false);
+      setClientValidationMessage(null);
+      void recovery.markServerSaved();
     }
-  }, [actionData]);
+  }, [actionData, getValues, recovery.markServerSaved, reset]);
+  useEffect(() => {
+    if (!loaderData.createdFromLocalDraft) return;
+    void clearDraftRecoveryScope({
+      ...loaderData.recoveryScope,
+      recordType: "submission_form",
+      recordId: "new",
+    });
+  }, [loaderData.createdFromLocalDraft, loaderData.recoveryScope]);
 
   const publicUrl = useMemo(
     () => `/apply/${input.publicSlug}`,
@@ -207,11 +330,81 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
   );
   const eventTimezone = loaderData.workspace?.eventTimezone ?? "UTC";
   const pendingIntent = navigation.formData?.get("_intent");
+  const editorReady = editorStatus.state === "ready";
 
   function change(next: SaveFormInput) {
-    setInput(next);
-    setDirty(true);
+    const options = { shouldDirty: true, shouldValidate: false } as const;
+    if (next.id !== input.id) setValue("id", next.id, options);
+    if (next.revision !== input.revision)
+      setValue("revision", next.revision, options);
+    if (next.draftRevision !== input.draftRevision)
+      setValue("draftRevision", next.draftRevision, options);
+    if (next.name !== input.name) setValue("name", next.name, options);
+    if (next.kind !== input.kind) setValue("kind", next.kind, options);
+    if (next.publicSlug !== input.publicSlug)
+      setValue("publicSlug", next.publicSlug, options);
+    if (next.closeDate !== input.closeDate)
+      setValue("closeDate", next.closeDate, options);
+    if (next.submissionLimit !== input.submissionLimit)
+      setValue("submissionLimit", next.submissionLimit, options);
+    if (next.minSpeakers !== input.minSpeakers)
+      setValue("minSpeakers", next.minSpeakers, options);
+    if (next.maxSpeakers !== input.maxSpeakers)
+      setValue("maxSpeakers", next.maxSpeakers, options);
+    if (next.accessMode !== input.accessMode)
+      setValue("accessMode", next.accessMode, options);
+    if (next.accessPassword !== input.accessPassword)
+      setValue("accessPassword", next.accessPassword, options);
+    if (next.schema !== input.schema) setValue("schema", next.schema, options);
+    if (next.routing !== input.routing)
+      setValue("routing", next.routing, options);
+    setClientValidationMessage(null);
   }
+
+  function changeVisualSchema(schema: SubmissionFormSchema) {
+    change({ ...input, schema });
+    if (!schema.fields.some((field) => field.id === selectedId)) {
+      setSelectedId(schema.fields[0]?.id ?? "");
+    }
+  }
+
+  const submitBuilder = handleSubmit(
+    (_values, event) => {
+      if (!editorReady) {
+        setClientValidationMessage(
+          "The visual editor must be ready and valid before this draft can be saved or published.",
+        );
+        return;
+      }
+      const form = formRef.current;
+      if (!form) {
+        setClientValidationMessage(
+          "The form submission target is unavailable.",
+        );
+        return;
+      }
+      const formData = new FormData(form);
+      const submitter = (event?.nativeEvent as SubmitEvent | undefined)
+        ?.submitter;
+      if (
+        submitter instanceof HTMLButtonElement &&
+        submitter.name &&
+        submitter.value
+      ) {
+        formData.set(submitter.name, submitter.value);
+      }
+      submit(formData, { method: "post" });
+    },
+    () => {
+      const parsed = saveFormSchema.safeParse(input);
+      setClientValidationMessage(
+        parsed.success
+          ? "Review the form settings before continuing."
+          : (parsed.error.issues[0]?.message ??
+              "Review the form settings before continuing."),
+      );
+    },
+  );
 
   function patchField(patch: Partial<FormField>) {
     if (!selected) return;
@@ -239,7 +432,12 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <Form id="form-builder" method="post" onChange={() => setDirty(true)}>
+    <Form
+      ref={formRef}
+      id="form-builder"
+      method="post"
+      onSubmit={submitBuilder}
+    >
       <input type="hidden" name="id" value={input.id ?? ""} />
       <input type="hidden" name="revision" value={input.revision ?? ""} />
       <input
@@ -260,6 +458,27 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           <p>Design, test and publish immutable application versions.</p>
         </div>
         <div className="page-actions">
+          <label className="label" style={{ minWidth: 220 }}>
+            Form
+            <select
+              className="select"
+              value={input.id ?? "new"}
+              onChange={(event) => {
+                window.location.assign(
+                  event.target.value === "new"
+                    ? "/admin/submissions/form?new=1"
+                    : `/admin/submissions/form?form=${encodeURIComponent(event.target.value)}`,
+                );
+              }}
+            >
+              <option value="new">New form…</option>
+              {loaderData.forms.map((form) => (
+                <option key={form.id} value={form.id}>
+                  {form.name} · {form.kind.replace("_", " ")}
+                </option>
+              ))}
+            </select>
+          </label>
           {dirty ? (
             <span className="status warning">Unsaved changes</span>
           ) : input.id ? (
@@ -267,14 +486,16 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           ) : (
             <span className="status warning">Not saved</span>
           )}
+          <DraftRecoveryStatus state={recovery.state} />
           {loaderData.workspace?.publishedVersion ? (
             <Link
               className="btn"
               to={publicUrl}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
             >
               Open public form
+              <span className="sr-only"> (opens in a new tab)</span>
             </Link>
           ) : null}
           <button
@@ -282,7 +503,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             type="submit"
             name="_intent"
             value="save"
-            disabled={navigation.state !== "idle"}
+            disabled={navigation.state !== "idle" || !editorReady}
           >
             {pendingIntent === "save" ? "Saving…" : "Save draft"}
           </button>
@@ -290,7 +511,9 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             className="btn primary"
             type="button"
             onClick={() => setPublishOpen(true)}
-            disabled={!input.id || dirty || navigation.state !== "idle"}
+            disabled={
+              !input.id || dirty || navigation.state !== "idle" || !editorReady
+            }
           >
             {pendingIntent === "publish" ? "Publishing…" : "Publish version"}
           </button>
@@ -316,7 +539,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
                 form="form-builder"
                 name="_intent"
                 value="publish"
-                disabled={navigation.state !== "idle"}
+                disabled={navigation.state !== "idle" || !editorReady}
               >
                 {pendingIntent === "publish"
                   ? "Publishing…"
@@ -350,6 +573,15 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
         </Dialog>
       ) : null}
 
+      <DraftRecoveryFeedback recovery={recovery} />
+
+      {clientValidationMessage ? (
+        <div className="validation-item error card pad mb" role="alert">
+          <strong>Form not ready</strong>
+          <span>{clientValidationMessage}</span>
+        </div>
+      ) : null}
+
       {actionData ? (
         <div
           className={`validation-item ${actionData.ok ? "ok" : "error"} card pad mb`}
@@ -357,6 +589,52 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
         >
           <strong>{actionData.ok ? "✓" : "△"}</strong>
           <span>{actionData.message}</span>
+        </div>
+      ) : null}
+      {actionData?.conflict ? (
+        <div className="validation-item error card pad mb" role="alert">
+          <strong>Draft conflict</strong>
+          <span>
+            Your in-memory and browser recovery edits are intact. Export a copy
+            before explicitly loading the newer server revision.
+          </span>
+          <span className="row-actions right">
+            <button
+              className="btn small"
+              type="button"
+              onClick={() => {
+                const blob = new Blob(
+                  [JSON.stringify(recoveryPayload, null, 2)],
+                  {
+                    type: "application/json",
+                  },
+                );
+                const href = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = href;
+                link.download = `${input.publicSlug || "form"}-recovery.json`;
+                link.click();
+                URL.revokeObjectURL(href);
+              }}
+            >
+              Export local edits
+            </button>
+            <button
+              className="btn small"
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Discard the current editor contents and load the latest server version?",
+                  )
+                ) {
+                  void recovery.clear().then(() => window.location.reload());
+                }
+              }}
+            >
+              Load server version
+            </button>
+          </span>
         </div>
       ) : null}
       {!input.id ? (
@@ -421,9 +699,57 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
         </label>
       </div>
 
+      <section className="card pad mb form-js-editor-card">
+        <div className="card-title">
+          <div>
+            <h2>Visual form editor</h2>
+            <p className="help">
+              Drag and edit supported fields here. Program Cue maps this canvas
+              to its normalized, versioned schema; D1 remains authoritative.
+            </p>
+          </div>
+          <span className="pill right">Powered by bpmn.io</span>
+        </div>
+        {editorStatus.state === "error" ? (
+          <div className="validation-item error mb" role="alert">
+            <strong>Visual adapter blocked</strong>
+            <span>{editorStatus.message}</span>
+          </div>
+        ) : (
+          <p className="help" aria-live="polite">
+            {editorStatus.message}
+          </p>
+        )}
+        <p className="help">
+          Supported visual fields are short text, long text, static single or
+          multiple choice, conference URL and conference video. Conditions must
+          use the Program Cue equality form shown in Field settings. Unsupported
+          FEEL, dynamic options and multi-column layouts block saving instead of
+          being discarded.
+        </p>
+        <p
+          className="help form-js-scroll-hint"
+          id="visual-form-editor-scroll-help"
+        >
+          On a narrow screen, swipe horizontally within the editor to reach the
+          form canvas and field settings.
+        </p>
+        <FormJsVisualEditor
+          schema={input.schema}
+          onChange={changeVisualSchema}
+          onStatus={setEditorStatus}
+          ariaDescribedBy="visual-form-editor-scroll-help"
+        />
+        <noscript>
+          The visual form editor requires JavaScript. Saving is unavailable
+          until the adapter can validate the visual schema.
+        </noscript>
+      </section>
+
       <div className="builder-layout">
         <FieldLibraryPanel
           input={input}
+          passwordConfigured={loaderData.passwordConfigured}
           change={change}
           onSelect={setSelectedId}
         />
@@ -444,6 +770,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           patchField={patchField}
           moveField={moveField}
           setSelectedId={setSelectedId}
+          routingTeams={loaderData.routingTeams}
         />
         <ApplicantPreviewPanel
           input={input}

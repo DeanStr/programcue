@@ -1,7 +1,12 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
+import { Link } from "react-router";
 
 import type { ActionResponse } from "~/routes/event-setup";
 import type { EventSetup } from "~/modules/events/event-repository.server";
+import {
+  CANONICAL_EVENT_FILE_POLICY,
+  maximumMegabytes,
+} from "~/modules/files/file-policy";
 
 const timezoneNames = (() => {
   const supportedValuesOf = (
@@ -189,6 +194,23 @@ export function EventRoomsPanel({
   actionData?: ActionResponse;
   onAdd: () => void;
 }) {
+  const [resourceDrafts, setResourceDrafts] = useState<
+    Record<string, string>
+  >({});
+
+  function addResource(roomId: string) {
+    const resource = (resourceDrafts[roomId] ?? "").trim().toLowerCase();
+    if (!resource) return;
+    setRooms((current) =>
+      current.map((room) =>
+        room.id === roomId && !room.resources.includes(resource)
+          ? { ...room, resources: [...room.resources, resource] }
+          : room,
+      ),
+    );
+    setResourceDrafts((current) => ({ ...current, [roomId]: "" }));
+  }
+
   return (
     <section className="card pad">
       <div className="card-title">
@@ -199,53 +221,119 @@ export function EventRoomsPanel({
       </div>
       {rooms.length ? (
         rooms.map((room) => (
-          <div className="form-row mb" key={room.id}>
-            <input
-              className="field"
-              value={room.name}
-              aria-label="Room name"
-              onChange={(changeEvent) =>
-                setRooms((current) =>
-                  current.map((item) =>
-                    item.id === room.id
-                      ? { ...item, name: changeEvent.target.value }
-                      : item,
-                  ),
-                )
-              }
-            />
-            <div style={{ display: "flex", gap: 6 }}>
+          <div className="card pad mb" key={room.id}>
+            <div className="form-row">
               <input
                 className="field"
-                type="number"
-                min={1}
-                value={room.capacity}
-                aria-label="Room capacity"
+                value={room.name}
+                aria-label="Room name"
                 onChange={(changeEvent) =>
                   setRooms((current) =>
                     current.map((item) =>
                       item.id === room.id
-                        ? {
-                            ...item,
-                            capacity: Number(changeEvent.target.value),
-                          }
+                        ? { ...item, name: changeEvent.target.value }
                         : item,
                     ),
                   )
                 }
               />
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label={`Remove ${room.name}`}
-                onClick={() =>
-                  setRooms((current) =>
-                    current.filter((item) => item.id !== room.id),
-                  )
-                }
-              >
-                ×
-              </button>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  className="field"
+                  type="number"
+                  min={1}
+                  value={room.capacity}
+                  aria-label="Room capacity"
+                  onChange={(changeEvent) =>
+                    setRooms((current) =>
+                      current.map((item) =>
+                        item.id === room.id
+                          ? {
+                              ...item,
+                              capacity: Number(changeEvent.target.value),
+                            }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={`Remove ${room.name}`}
+                  onClick={() =>
+                    setRooms((current) =>
+                      current.filter((item) => item.id !== room.id),
+                    )
+                  }
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="mt">
+              <strong>Available resources</strong>
+              <p className="help">
+                A session can only be placed here when every required resource
+                is in this inventory.
+              </p>
+              <div className="row-main" style={{ flexWrap: "wrap" }}>
+                {room.resources.map((resource) => (
+                  <button
+                    key={resource}
+                    type="button"
+                    className="tag"
+                    aria-label={`Remove ${resource} from ${room.name}`}
+                    onClick={() =>
+                      setRooms((current) =>
+                        current.map((candidate) =>
+                          candidate.id === room.id
+                            ? {
+                                ...candidate,
+                                resources: candidate.resources.filter(
+                                  (item) => item !== resource,
+                                ),
+                              }
+                            : candidate,
+                        ),
+                      )
+                    }
+                  >
+                    {resource} ×
+                  </button>
+                ))}
+                {!room.resources.length ? (
+                  <span className="subtle">No resources</span>
+                ) : null}
+              </div>
+              <div className="row-main mt">
+                <input
+                  className="field"
+                  value={resourceDrafts[room.id] ?? ""}
+                  maxLength={80}
+                  placeholder="livestream crew"
+                  aria-label={`New resource for ${room.name}`}
+                  onChange={(changeEvent) =>
+                    setResourceDrafts((current) => ({
+                      ...current,
+                      [room.id]: changeEvent.target.value,
+                    }))
+                  }
+                  onKeyDown={(keyboardEvent) => {
+                    if (keyboardEvent.key !== "Enter") return;
+                    keyboardEvent.preventDefault();
+                    addResource(room.id);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={!(resourceDrafts[room.id] ?? "").trim()}
+                  onClick={() => addResource(room.id)}
+                >
+                  Add resource
+                </button>
+              </div>
             </div>
           </div>
         ))
@@ -257,12 +345,96 @@ export function EventRoomsPanel({
   );
 }
 
+export function EventFilePolicyPanel({
+  event,
+  actionData,
+}: {
+  event: EventSetup;
+  actionData?: ActionResponse;
+}) {
+  const fields = [
+    {
+      name: "headshotMaximumMegabytes",
+      label: "Headshots",
+      value: event.filePolicy.headshotMaximumBytes,
+      maximum: CANONICAL_EVENT_FILE_POLICY.headshotMaximumBytes,
+      types: "JPG, PNG or WebP",
+    },
+    {
+      name: "slidesMaximumMegabytes",
+      label: "Presentation slides",
+      value: event.filePolicy.slidesMaximumBytes,
+      maximum: CANONICAL_EVENT_FILE_POLICY.slidesMaximumBytes,
+      types: "PDF, PPT or PPTX",
+    },
+    {
+      name: "supportingDocumentMaximumMegabytes",
+      label: "Supporting documents",
+      value: event.filePolicy.supportingDocumentMaximumBytes,
+      maximum: CANONICAL_EVENT_FILE_POLICY.supportingDocumentMaximumBytes,
+      types: "PDF, DOC/DOCX, XLS/XLSX or ZIP",
+    },
+    {
+      name: "videoMaximumMegabytes",
+      label: "Application video",
+      value: event.filePolicy.videoMaximumBytes,
+      maximum: CANONICAL_EVENT_FILE_POLICY.videoMaximumBytes,
+      types: "MP4 or WebM",
+    },
+  ] as const;
+  return (
+    <section className="card pad">
+      <div className="card-title">
+        <h2>Private file limits</h2>
+      </div>
+      <p className="help">
+        Limits are event-specific and may be reduced from Program Cue's secure
+        canonical maxima. Allowed file types and scan/quarantine requirements
+        cannot be relaxed here.
+      </p>
+      <div className="form-row mt">
+        {fields.map((field) => (
+          <label className="label" key={field.name}>
+            {field.label} (MiB)
+            <input
+              className="field"
+              name={field.name}
+              type="number"
+              min={1}
+              max={maximumMegabytes(field.maximum)}
+              step={1}
+              defaultValue={maximumMegabytes(field.value)}
+              required
+            />
+            <span className="help">{field.types}</span>
+          </label>
+        ))}
+      </div>
+      <FieldError actionData={actionData} name="filePolicy" />
+    </section>
+  );
+}
+
 export function EventAccessPanels({
   event,
   onInvite,
+  onRevoke,
+  onConfigureAirtable,
+  onMigrateRepository,
+  canManageFileRetention,
+  canManageAdministrators,
 }: {
   event: EventSetup;
   onInvite: () => void;
+  onRevoke: (
+    membershipId: string,
+    name: string,
+    scope: "event" | "organisation",
+  ) => void;
+  onConfigureAirtable: () => void;
+  onMigrateRepository: () => void;
+  canManageFileRetention: boolean;
+  canManageAdministrators: boolean;
 }) {
   return (
     <>
@@ -281,10 +453,10 @@ export function EventAccessPanels({
             </p>
           </div>
           <div className="card pad">
-            <strong>Event administrators</strong>
+            <strong>Administrators</strong>
             <p className="subtle">
-              Manage forms, submissions, decisions, schedule, communications and
-              integrations.
+              Event administrators manage this event. Organisation administrators
+              manage every event in this organisation.
             </p>
             {event.administrators.map((administrator) => (
               <div className="row-main mt" key={administrator.id}>
@@ -292,11 +464,29 @@ export function EventAccessPanels({
                 <span>
                   <strong>{administrator.name}</strong>
                   <small>
-                    {administrator.email} · {administrator.status}
+                    {administrator.email} · {administrator.scope === "organisation" ? "Organisation" : "Event"} · {administrator.status}
                   </small>
                 </span>
+                {canManageAdministrators ? (
+                  <button
+                    type="button"
+                    className="btn small danger right"
+                    onClick={() =>
+                      onRevoke(
+                        administrator.id,
+                        administrator.name,
+                        administrator.scope,
+                      )
+                    }
+                  >
+                    Revoke
+                  </button>
+                ) : null}
               </div>
             ))}
+            {!event.administrators.length ? (
+              <p className="help mt">No additional administrators are assigned.</p>
+            ) : null}
           </div>
           <div className="card pad">
             <strong>Evaluators</strong>
@@ -346,23 +536,69 @@ export function EventAccessPanels({
       <section className="card pad">
         <div className="card-title">
           <h2>Provider and retention</h2>
-        </div>
-        <label className="label">
-          Event repository
-          <select
-            className="select"
-            name="repositoryProvider"
-            defaultValue={event.repositoryProvider}
+          <span
+            className={`status ${event.repositoryProvider === "airtable" ? "success" : "info"}`}
           >
-            <option value="d1">D1 native (recommended)</option>
-            <option value="airtable" disabled>
-              Airtable adapter (not implemented)
-            </option>
-          </select>
-          <span className="help">
-            Provider changes require a validated migration after data exists.
+            {event.repositoryProvider === "airtable"
+              ? "Airtable event data"
+              : "D1 native"}
           </span>
-        </label>
+        </div>
+        <input
+          type="hidden"
+          name="repositoryProvider"
+          value={event.repositoryProvider}
+        />
+        <p className="help">
+          {event.repositoryProvider === "airtable"
+            ? "Airtable is authoritative for managed event configuration, rooms and resources, tracks and formats, forms and submissions, evaluation workflow, accepted/direct sessions, schedules, onboarding tasks and the versioned published programme. D1 retains tenancy, identity, secrets, audit, outbox and operation control plus an exact synchronized projection. Files, communications, calendars and resource pages remain explicitly D1-backed."
+            : "D1 is authoritative. Airtable can become authoritative for the complete managed event-data scope only through a validated, confirmed migration. Files, communications, calendars and resource pages remain D1-backed."}
+        </p>
+        <div className="stack-list mt">
+          <div className="validation-item">
+            <div>
+              <strong>Event-data freshness</strong>
+              <div className="help">
+                {event.repositoryFreshness.source === "airtable"
+                  ? `${event.repositoryFreshness.cached ? "Cached" : "Fetched"} from Airtable at ${new Date(event.repositoryFreshness.fetchedAt * 1_000).toLocaleString()}`
+                  : "Current D1 transaction state"}
+              </div>
+            </div>
+          </div>
+          <div className="validation-item">
+            <div>
+              <strong>Airtable connection</strong>
+              <div className="help">
+                {event.repositoryConnection
+                  ? `${event.repositoryConnection.baseId} · ${event.repositoryConnection.tableName} · ${event.repositoryConnection.status.replaceAll("_", " ")}`
+                  : "Not configured"}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn small"
+              onClick={onConfigureAirtable}
+            >
+              {event.repositoryConnection ? "Revalidate" : "Configure"}
+            </button>
+          </div>
+        </div>
+        {event.repositoryConnection?.status === "connected" ? (
+          <button
+            type="button"
+            className="btn mt"
+            onClick={onMigrateRepository}
+          >
+            Preview migration to{" "}
+            {event.repositoryProvider === "d1" ? "Airtable" : "D1"}
+          </button>
+        ) : null}
+        {event.repositoryLockedAt ? (
+          <p className="help mt">
+            Provider choice is locked. Every later change requires a fresh
+            reconciliation preview and explicit confirmation.
+          </p>
+        ) : null}
         <label className="label mt">
           Retention after event
           <select
@@ -375,6 +611,13 @@ export function EventAccessPanels({
             <option value="36">36 months</option>
           </select>
         </label>
+        {canManageFileRetention ? (
+          <div className="mt">
+            <Link className="btn small" to="/admin/files/retention">
+              Manage legal hold, erasure and anonymisation
+            </Link>
+          </div>
+        ) : null}
       </section>
     </>
   );

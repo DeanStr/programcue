@@ -1,21 +1,132 @@
 import { z } from "zod";
+import { eventResourceSchema } from "~/modules/events/event-schema";
 
-export const schedulePlacementSchema = z.object({
-  scheduleVersionId: z.string().trim().min(1),
-  scheduleRevision: z.coerce.number().int().positive(),
-  sessionId: z.string().trim().min(1),
-  roomId: z.string().trim().min(1),
-  startsAt: z.coerce.number().int().positive(),
-  endsAt: z.coerce.number().int().positive(),
-}).refine((value) => value.endsAt > value.startsAt, {
-  path: ["endsAt"],
-  message: "The session must end after it starts.",
-});
+const editorIdempotencyKeySchema = z.string().uuid();
+
+const nullableIdentifierSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+  z.string().trim().min(1).max(128).nullable(),
+);
+
+export const schedulePlacementSchema = z
+  .object({
+    scheduleVersionId: z.string().trim().min(1),
+    scheduleRevision: z.coerce.number().int().positive(),
+    sessionId: z.string().trim().min(1),
+    roomId: z.string().trim().min(1),
+    startsAt: z.coerce.number().int().positive(),
+    endsAt: z.coerce.number().int().positive(),
+  })
+  .refine((value) => value.endsAt > value.startsAt, {
+    path: ["endsAt"],
+    message: "The session must end after it starts.",
+  });
 
 export const schedulePublishSchema = z.object({
   scheduleVersionId: z.string().trim().min(1),
   scheduleRevision: z.coerce.number().int().positive(),
 });
 
+export const scheduleMutationSchema = z.object({
+  scheduleVersionId: z.string().trim().min(1),
+  scheduleRevision: z.coerce.number().int().positive(),
+  entryId: z.string().trim().min(1),
+});
+
+export const scheduleUndoSchema = z.object({
+  scheduleVersionId: z.string().trim().min(1),
+  scheduleRevision: z.coerce.number().int().positive(),
+  undoToken: z.string().uuid(),
+});
+
+export const scheduleBreakSchema = z
+  .object({
+    title: z.string().trim().min(1).max(160),
+    durationMinutes: z.coerce.number().int().min(5).max(480),
+    requiredResources: z.array(eventResourceSchema).max(50),
+  })
+  .superRefine((value, context) => {
+    if (
+      new Set(value.requiredResources).size !== value.requiredResources.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["requiredResources"],
+        message: "Choose each required resource once.",
+      });
+    }
+  });
+
+const conflictAction = z.enum(["allow", "warn", "block"]);
+
+export const schedulePolicySchema = z.object({
+  revision: z.coerce.number().int().positive(),
+  roomAction: conflictAction,
+  speakerAction: conflictAction,
+  resourceAction: conflictAction,
+  trackAction: conflictAction,
+  boundaryAction: conflictAction,
+  capacityAction: conflictAction,
+  minimumTurnaroundMinutes: z.coerce.number().int().min(0).max(240),
+});
+
+export const scheduleSessionResourcesSchema = z
+  .object({
+    scheduleVersionId: z.string().trim().min(1),
+    scheduleRevision: z.coerce.number().int().positive(),
+    sessionId: z.string().trim().min(1),
+    sessionRevision: z.coerce.number().int().positive(),
+    requiredResources: z.array(eventResourceSchema).max(50),
+  })
+  .superRefine((value, context) => {
+    if (
+      new Set(value.requiredResources).size !== value.requiredResources.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["requiredResources"],
+        message: "Choose each required resource once.",
+      });
+    }
+  });
+
+export const scheduleSessionContentSchema = z
+  .object({
+    scheduleVersionId: z.string().trim().min(1),
+    scheduleRevision: z.coerce.number().int().positive(),
+    sessionId: z.string().trim().min(1),
+    sessionRevision: z.coerce.number().int().positive(),
+    idempotencyKey: editorIdempotencyKeySchema,
+    title: z.string().trim().min(1).max(240),
+    description: z.string().max(12_000),
+    format: z.string().trim().min(1).max(80),
+    durationMinutes: z.coerce.number().int().min(5).max(480),
+    trackId: nullableIdentifierSchema,
+    visibility: z.enum(["public", "private", "hidden"]),
+    requiredResources: z.array(eventResourceSchema).max(50),
+  })
+  .superRefine((value, context) => {
+    if (
+      new Set(value.requiredResources).size !== value.requiredResources.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["requiredResources"],
+        message: "Choose each required resource once.",
+      });
+    }
+  });
+
+export const scheduleNotesSchema = z.object({
+  scheduleVersionId: z.string().trim().min(1),
+  scheduleRevision: z.coerce.number().int().positive(),
+  idempotencyKey: editorIdempotencyKeySchema,
+  notes: z.string().max(12_000),
+});
+
 export type SchedulePlacementInput = z.infer<typeof schedulePlacementSchema>;
 export type SchedulePublishInput = z.infer<typeof schedulePublishSchema>;
+export type ScheduleSessionContentInput = z.infer<
+  typeof scheduleSessionContentSchema
+>;
+export type ScheduleNotesInput = z.infer<typeof scheduleNotesSchema>;

@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -50,6 +51,31 @@ export const people = sqliteTable(
   (table) => [uniqueIndex("people_email_unique").on(table.email)],
 );
 
+export const organisationAiSettings = sqliteTable(
+  "organisation_ai_settings",
+  {
+    organisationId: text("organisation_id")
+      .primaryKey()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    provider: text("provider")
+      .notNull()
+      .$type<"workers_ai" | "openai" | "anthropic">(),
+    model: text("model").notNull(),
+    revision: integer("revision").notNull().default(1),
+    lastUpdatedByPersonId: text("last_updated_by_person_id").references(
+      () => people.id,
+    ),
+    lastOperationId: text("last_operation_id"),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("organisation_ai_settings_operation_unique").on(
+      table.lastOperationId,
+    ),
+  ],
+);
+
 export const events = sqliteTable(
   "events",
   {
@@ -66,6 +92,11 @@ export const events = sqliteTable(
     city: text("city"),
     description: text("description"),
     brandAccent: text("brand_accent").notNull().default("#4f46e5"),
+    sessionFormatsJson: text("session_formats_json")
+      .notNull()
+      .default(
+        '[{"key":"keynote","label":"Keynote","defaultDurationMinutes":60,"position":0},{"key":"presentation","label":"Presentation","defaultDurationMinutes":45,"position":1},{"key":"panel","label":"Panel","defaultDurationMinutes":60,"position":2},{"key":"workshop","label":"Workshop","defaultDurationMinutes":90,"position":3},{"key":"breakout","label":"Breakout","defaultDurationMinutes":45,"position":4},{"key":"break","label":"Break","defaultDurationMinutes":30,"position":5},{"key":"other","label":"Other","defaultDurationMinutes":30,"position":6}]',
+      ),
     repositoryProvider: text("repository_provider")
       .notNull()
       .default("d1")
@@ -75,6 +106,10 @@ export const events = sqliteTable(
       .notNull()
       .default(24)
       .$type<12 | 24 | 36>(),
+    fileRetentionHoldAt: integer("file_retention_hold_at"),
+    participantRetentionCompletedAt: integer(
+      "participant_retention_completed_at",
+    ),
     submissionAccessMode: text("submission_access_mode")
       .notNull()
       .default("email_verified")
@@ -87,6 +122,7 @@ export const events = sqliteTable(
     })
       .notNull()
       .default(true),
+    filePolicyJson: text("file_policy_json").notNull(),
     revision: integer("revision").notNull().default(1),
     lastOperationId: text("last_operation_id"),
     lastUpdatedByPersonId: text("last_updated_by_person_id").references(
@@ -129,6 +165,7 @@ export const memberships = sqliteTable(
     invitationExpiresAt: integer("invitation_expires_at"),
     acceptedAt: integer("accepted_at"),
     revokedAt: integer("revoked_at"),
+    lastOperationId: text("last_operation_id"),
     createdAt: integer("created_at").notNull().default(epochNow),
   },
   (table) => [
@@ -137,6 +174,13 @@ export const memberships = sqliteTable(
       table.eventId,
       table.acceptedAt,
       table.revokedAt,
+    ),
+    index("idx_memberships_event_role_status").on(
+      table.eventId,
+      table.role,
+      table.acceptedAt,
+      table.revokedAt,
+      table.personId,
     ),
     uniqueIndex("ux_memberships_org_role")
       .on(table.organisationId, table.personId, table.role)
@@ -235,13 +279,14 @@ export const submissions = sqliteTable(
     eventId: text("event_id")
       .notNull()
       .references(() => events.id, { onDelete: "cascade" }),
-    formVersionId: text("form_version_id").references(() => formVersions.id),
+    formVersionId: text("form_version_id"),
     submitterPersonId: text("submitter_person_id").references(() => people.id),
     submitterEmail: text("submitter_email"),
     publicReference: text("public_reference").notNull(),
     title: text("title").notNull().default(""),
     category: text("category"),
     format: text("format"),
+    routedTeamId: text("routed_team_id"),
     status: text("status")
       .notNull()
       .default("draft")
@@ -278,10 +323,24 @@ export const submissions = sqliteTable(
       table.eventId,
       table.publicReference,
     ),
+    foreignKey({
+      columns: [table.formVersionId, table.eventId],
+      foreignColumns: [formVersions.id, formVersions.eventId],
+    }),
+    foreignKey({
+      columns: [table.routedTeamId, table.eventId],
+      foreignColumns: [evaluationTeams.id, evaluationTeams.eventId],
+    }),
     index("idx_submissions_event_status").on(
       table.eventId,
       table.status,
       table.updatedAt,
+    ),
+    index("idx_submissions_event_category_status").on(
+      table.eventId,
+      table.category,
+      table.status,
+      desc(table.updatedAt),
     ),
     index("idx_submissions_submitter").on(
       table.eventId,
@@ -292,6 +351,11 @@ export const submissions = sqliteTable(
       table.eventId,
       table.submitterEmail,
       table.updatedAt,
+    ),
+    index("idx_submissions_routed_team").on(
+      table.eventId,
+      table.routedTeamId,
+      table.status,
     ),
   ],
 );
@@ -523,6 +587,7 @@ export const evaluationRounds = sqliteTable(
     closesAt: integer("closes_at"),
     advancementRuleJson: text("advancement_rule_json").notNull().default("{}"),
     revision: integer("revision").notNull().default(1),
+    lastOperationId: text("last_operation_id"),
     createdAt: integer("created_at").notNull().default(epochNow),
     updatedAt: integer("updated_at").notNull().default(epochNow),
   },
@@ -577,9 +642,8 @@ export const evaluatorConflicts = sqliteTable(
     roundId: text("round_id")
       .notNull()
       .references(() => evaluationRounds.id, { onDelete: "cascade" }),
-    submissionId: text("submission_id")
-      .notNull()
-      .references(() => submissions.id, { onDelete: "cascade" }),
+    submissionId: text("submission_id"),
+    sessionId: text("session_id"),
     evaluatorPersonId: text("evaluator_person_id")
       .notNull()
       .references(() => people.id),
@@ -596,11 +660,24 @@ export const evaluatorConflicts = sqliteTable(
     resolvedAt: integer("resolved_at"),
   },
   (table) => [
-    uniqueIndex("evaluator_conflicts_assignment_unique").on(
-      table.roundId,
-      table.submissionId,
-      table.evaluatorPersonId,
+    check(
+      "evaluator_conflicts_exact_target_check",
+      sql`(${table.submissionId} IS NOT NULL) <> (${table.sessionId} IS NOT NULL)`,
     ),
+    foreignKey({
+      columns: [table.submissionId, table.eventId],
+      foreignColumns: [submissions.id, submissions.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.sessionId, table.eventId],
+      foreignColumns: [sessions.id, sessions.eventId],
+    }).onDelete("cascade"),
+    uniqueIndex("ux_evaluator_conflicts_submission")
+      .on(table.roundId, table.submissionId, table.evaluatorPersonId)
+      .where(sql`${table.submissionId} IS NOT NULL`),
+    uniqueIndex("ux_evaluator_conflicts_session")
+      .on(table.roundId, table.sessionId, table.evaluatorPersonId)
+      .where(sql`${table.sessionId} IS NOT NULL`),
     index("idx_evaluator_conflicts_open").on(
       table.eventId,
       table.evaluatorPersonId,
@@ -619,9 +696,9 @@ export const evaluatorAssignments = sqliteTable(
     roundId: text("round_id")
       .notNull()
       .references(() => evaluationRounds.id, { onDelete: "cascade" }),
-    submissionId: text("submission_id")
-      .notNull()
-      .references(() => submissions.id, { onDelete: "cascade" }),
+    submissionId: text("submission_id"),
+    sessionId: text("session_id"),
+    sessionSnapshotJson: text("session_snapshot_json"),
     evaluatorPersonId: text("evaluator_person_id")
       .notNull()
       .references(() => people.id),
@@ -645,11 +722,28 @@ export const evaluatorAssignments = sqliteTable(
     submittedAt: integer("submitted_at"),
   },
   (table) => [
-    uniqueIndex("evaluator_assignments_unique").on(
-      table.roundId,
-      table.submissionId,
-      table.evaluatorPersonId,
+    check(
+      "evaluator_assignments_exact_target_check",
+      sql`(
+        (${table.submissionId} IS NOT NULL AND ${table.sessionId} IS NULL AND ${table.sessionSnapshotJson} IS NULL)
+        OR
+        (${table.submissionId} IS NULL AND ${table.sessionId} IS NOT NULL AND ${table.sessionSnapshotJson} IS NOT NULL AND json_valid(${table.sessionSnapshotJson}))
+      )`,
     ),
+    foreignKey({
+      columns: [table.submissionId, table.eventId],
+      foreignColumns: [submissions.id, submissions.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.sessionId, table.eventId],
+      foreignColumns: [sessions.id, sessions.eventId],
+    }).onDelete("cascade"),
+    uniqueIndex("ux_evaluator_assignments_submission")
+      .on(table.roundId, table.submissionId, table.evaluatorPersonId)
+      .where(sql`${table.submissionId} IS NOT NULL`),
+    uniqueIndex("ux_evaluator_assignments_session")
+      .on(table.roundId, table.sessionId, table.evaluatorPersonId)
+      .where(sql`${table.sessionId} IS NOT NULL`),
     index("idx_assignments_evaluator_status").on(
       table.eventId,
       table.evaluatorPersonId,
@@ -659,6 +753,11 @@ export const evaluatorAssignments = sqliteTable(
     index("idx_assignments_submission").on(
       table.eventId,
       table.submissionId,
+      table.roundId,
+    ),
+    index("idx_assignments_session").on(
+      table.eventId,
+      table.sessionId,
       table.roundId,
     ),
   ],
@@ -904,17 +1003,7 @@ export const sessions = sqliteTable(
     title: text("title").notNull(),
     slug: text("slug").notNull(),
     description: text("description"),
-    format: text("format")
-      .notNull()
-      .$type<
-        | "keynote"
-        | "presentation"
-        | "panel"
-        | "workshop"
-        | "breakout"
-        | "break"
-        | "other"
-      >(),
+    format: text("format").notNull(),
     durationMinutes: integer("duration_minutes").notNull(),
     expectedAttendance: integer("expected_attendance"),
     requiredResourcesJson: text("required_resources_json")
@@ -976,6 +1065,88 @@ export const sessionSpeakers = sqliteTable(
   ],
 );
 
+export const tags = sqliteTable(
+  "tags",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    colourToken: text("colour_token"),
+    createdByPersonId: text("created_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("ux_tags_event_name").on(
+      table.eventId,
+      sql`lower(${table.name})`,
+    ),
+  ],
+);
+
+export const sessionTags = sqliteTable(
+  "session_tags",
+  {
+    eventId: text("event_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    tagId: text("tag_id").notNull(),
+    createdByPersonId: text("created_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    createdAt: integer("created_at").notNull().default(epochNow),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sessionId, table.tagId] }),
+    foreignKey({
+      columns: [table.sessionId, table.eventId],
+      foreignColumns: [sessions.id, sessions.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.tagId, table.eventId],
+      foreignColumns: [tags.id, tags.eventId],
+    }).onDelete("cascade"),
+    index("idx_session_tags_tag").on(
+      table.eventId,
+      table.tagId,
+      table.sessionId,
+    ),
+  ],
+);
+
+export const sessionArchives = sqliteTable(
+  "session_archives",
+  {
+    sessionId: text("session_id").primaryKey(),
+    eventId: text("event_id").notNull(),
+    previousStatus: text("previous_status")
+      .notNull()
+      .$type<"unscheduled" | "cancelled">(),
+    archivedByPersonId: text("archived_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    archiveOperationId: text("archive_operation_id").notNull(),
+    archivedAt: integer("archived_at").notNull().default(epochNow),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.sessionId, table.eventId],
+      foreignColumns: [sessions.id, sessions.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.archiveOperationId, table.eventId],
+      foreignColumns: [operationJobs.id, operationJobs.eventId],
+    }),
+    index("idx_session_archives_event").on(
+      table.eventId,
+      desc(table.archivedAt),
+    ),
+  ],
+);
+
 export const scheduleVersions = sqliteTable(
   "schedule_versions",
   {
@@ -985,6 +1156,7 @@ export const scheduleVersions = sqliteTable(
       .references(() => events.id, { onDelete: "cascade" }),
     versionNumber: integer("version_number").notNull(),
     name: text("name"),
+    notes: text("notes").notNull().default(""),
     status: text("status")
       .notNull()
       .default("draft")
@@ -1003,6 +1175,53 @@ export const scheduleVersions = sqliteTable(
     uniqueIndex("ux_schedule_versions_one_published")
       .on(table.eventId)
       .where(sql`${table.status} = 'published'`),
+    uniqueIndex("ux_schedule_versions_one_draft")
+      .on(table.eventId)
+      .where(sql`${table.status} = 'draft'`),
+  ],
+);
+
+export const scheduleSessionContents = sqliteTable(
+  "schedule_session_contents",
+  {
+    scheduleVersionId: text("schedule_version_id").notNull(),
+    eventId: text("event_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    title: text("title").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    trackId: text("track_id"),
+    format: text("format").notNull(),
+    durationMinutes: integer("duration_minutes").notNull(),
+    requiredResourcesJson: text("required_resources_json")
+      .notNull()
+      .default("[]"),
+    visibility: text("visibility")
+      .notNull()
+      .$type<"public" | "private" | "hidden">(),
+    lastOperationId: text("last_operation_id"),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    primaryKey({ columns: [table.scheduleVersionId, table.sessionId] }),
+    foreignKey({
+      columns: [table.scheduleVersionId, table.eventId],
+      foreignColumns: [scheduleVersions.id, scheduleVersions.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.sessionId, table.eventId],
+      foreignColumns: [sessions.id, sessions.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.trackId, table.eventId],
+      foreignColumns: [tracks.id, tracks.eventId],
+    }),
+    index("idx_schedule_session_contents_event").on(
+      table.eventId,
+      table.sessionId,
+      table.scheduleVersionId,
+    ),
   ],
 );
 
@@ -1065,6 +1284,8 @@ export const scheduleConflicts = sqliteTable(
         | "event_boundary"
         | "capacity"
         | "required_resource"
+        | "resource_configuration"
+        | "room_resource"
         | "turnaround"
       >(),
     severity: text("severity").notNull().$type<"warning" | "blocking">(),
@@ -1137,48 +1358,70 @@ export const publicItineraryItems = sqliteTable(
   (table) => [primaryKey({ columns: [table.itineraryId, table.sessionId] })],
 );
 
-export const taskTemplates = sqliteTable("task_templates", {
-  id: text("id").primaryKey(),
-  eventId: text("event_id").references(() => events.id, {
-    onDelete: "cascade",
-  }),
-  name: text("name").notNull(),
-  description: text("description"),
-  targetType: text("target_type")
-    .notNull()
-    .$type<"speaker" | "session" | "event">(),
-  taskType: text("task_type")
-    .notNull()
-    .default("checklist")
-    .$type<
-      | "checklist"
-      | "acknowledgement"
-      | "short_form"
-      | "file_upload"
-      | "link_visit"
-      | "administrator_only"
-    >(),
-  impact: text("impact")
-    .notNull()
-    .$type<"critical" | "high" | "medium" | "low">(),
-  evidenceMode: text("evidence_mode")
-    .notNull()
-    .default("none")
-    .$type<"none" | "checkbox" | "file" | "text" | "link" | "admin_approval">(),
-  dueAnchor: text("due_anchor")
-    .notNull()
-    .default("none")
-    .$type<"none" | "acceptance" | "session_start" | "fixed">(),
-  dueOffsetMinutes: integer("due_offset_minutes"),
-  fixedDueAt: integer("fixed_due_at"),
-  configurationJson: text("configuration_json").notNull().default("{}"),
-  status: text("status")
-    .notNull()
-    .default("active")
-    .$type<"active" | "archived">(),
-  createdAt: integer("created_at").notNull().default(epochNow),
-  updatedAt: integer("updated_at").notNull().default(epochNow),
-});
+export const taskTemplates = sqliteTable(
+  "task_templates",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id").references(() => events.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name").notNull(),
+    description: text("description"),
+    targetType: text("target_type")
+      .notNull()
+      .$type<"speaker" | "session" | "event">(),
+    taskType: text("task_type")
+      .notNull()
+      .default("checklist")
+      .$type<
+        | "checklist"
+        | "acknowledgement"
+        | "short_form"
+        | "file_upload"
+        | "link_visit"
+        | "administrator_only"
+      >(),
+    impact: text("impact")
+      .notNull()
+      .$type<"critical" | "high" | "medium" | "low">(),
+    evidenceMode: text("evidence_mode")
+      .notNull()
+      .default("none")
+      .$type<
+        "none" | "checkbox" | "file" | "text" | "link" | "admin_approval"
+      >(),
+    dueAnchor: text("due_anchor")
+      .notNull()
+      .default("none")
+      .$type<"none" | "acceptance" | "session_start" | "fixed">(),
+    dueOffsetMinutes: integer("due_offset_minutes"),
+    fixedDueAt: integer("fixed_due_at"),
+    autoAssignOnAcceptance: integer("auto_assign_on_acceptance", {
+      mode: "boolean",
+    }).notNull(),
+    configurationJson: text("configuration_json").notNull().default("{}"),
+    status: text("status")
+      .notNull()
+      .default("active")
+      .$type<"active" | "archived">(),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    check(
+      "task_templates_fixed_due_check",
+      sql`${table.dueAnchor} <> 'fixed' OR ${table.fixedDueAt} IS NOT NULL`,
+    ),
+    check(
+      "task_templates_relative_due_check",
+      sql`${table.dueAnchor} NOT IN ('acceptance','session_start') OR ${table.dueOffsetMinutes} IS NOT NULL`,
+    ),
+    check(
+      "task_templates_auto_assign_check",
+      sql`${table.autoAssignOnAcceptance} = 0 OR ${table.dueAnchor} <> 'session_start'`,
+    ),
+  ],
+);
 
 export const taskTemplateDependencies = sqliteTable(
   "task_template_dependencies",
@@ -1268,6 +1511,11 @@ export const taskInstances = sqliteTable(
       table.targetId,
       table.status,
     ),
+    index("idx_tasks_owner_status").on(
+      table.eventId,
+      table.ownerPersonId,
+      table.status,
+    ),
     uniqueIndex("ux_task_instances_template_target")
       .on(table.eventId, table.templateId, table.targetType, table.targetId)
       .where(sql`${table.templateId} IS NOT NULL`),
@@ -1355,6 +1603,11 @@ export const fileAssets = sqliteTable(
       table.targetId,
       table.status,
     ),
+    index("idx_files_owner_status").on(
+      table.eventId,
+      table.ownerPersonId,
+      table.status,
+    ),
     uniqueIndex("ux_file_assets_logical_active")
       .on(
         table.eventId,
@@ -1376,12 +1629,8 @@ export const fileVersions = sqliteTable(
   "file_versions",
   {
     id: text("id").primaryKey(),
-    eventId: text("event_id")
-      .notNull()
-      .references(() => events.id, { onDelete: "cascade" }),
-    assetId: text("asset_id")
-      .notNull()
-      .references(() => fileAssets.id, { onDelete: "cascade" }),
+    eventId: text("event_id").notNull(),
+    assetId: text("asset_id").notNull(),
     versionNumber: integer("version_number").notNull(),
     objectKey: text("object_key").notNull(),
     multipartUploadId: text("multipart_upload_id"),
@@ -1415,9 +1664,18 @@ export const fileVersions = sqliteTable(
     deletedAt: integer("deleted_at"),
   },
   (table) => [
+    foreignKey({
+      columns: [table.assetId, table.eventId],
+      foreignColumns: [fileAssets.id, fileAssets.eventId],
+    }).onDelete("cascade"),
     uniqueIndex("file_versions_asset_version_unique").on(
       table.assetId,
       table.versionNumber,
+    ),
+    uniqueIndex("file_versions_id_event_asset_unique").on(
+      table.id,
+      table.eventId,
+      table.assetId,
     ),
     uniqueIndex("file_versions_object_key_unique").on(table.objectKey),
     index("idx_file_versions_release").on(
@@ -1426,6 +1684,55 @@ export const fileVersions = sqliteTable(
       table.releasedAt,
       table.versionNumber,
     ),
+  ],
+);
+
+export const fileMultipartUploads = sqliteTable(
+  "file_multipart_uploads",
+  {
+    versionId: text("version_id").primaryKey(),
+    eventId: text("event_id").notNull(),
+    assetId: text("asset_id").notNull(),
+    uploadId: text("upload_id"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    status: text("status")
+      .notNull()
+      .default("requested")
+      .$type<
+        | "requested"
+        | "initiated"
+        | "completing"
+        | "completed"
+        | "aborted"
+        | "failed"
+      >(),
+    partSizeBytes: integer("part_size_bytes").notNull(),
+    manifestJson: text("manifest_json"),
+    manifestHash: text("manifest_hash"),
+    expiresAt: integer("expires_at").notNull(),
+    lastError: text("last_error"),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.versionId, table.eventId, table.assetId],
+      foreignColumns: [
+        fileVersions.id,
+        fileVersions.eventId,
+        fileVersions.assetId,
+      ],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.assetId, table.eventId],
+      foreignColumns: [fileAssets.id, fileAssets.eventId],
+    }).onDelete("cascade"),
+    uniqueIndex("ux_file_multipart_upload_id").on(table.uploadId),
+    uniqueIndex("ux_file_multipart_idempotency").on(
+      table.eventId,
+      table.idempotencyKey,
+    ),
+    index("idx_file_multipart_status_expiry").on(table.status, table.expiresAt),
   ],
 );
 
@@ -1635,7 +1942,7 @@ export const senderProfiles = sqliteTable(
     fromName: text("from_name").notNull(),
     fromEmail: text("from_email").notNull(),
     replyToEmail: text("reply_to_email"),
-    provider: text("provider").notNull().default("resend").$type<"resend">(),
+    provider: text("provider").notNull().$type<"resend" | "mailpit">(),
     providerSenderId: text("provider_sender_id"),
     status: text("status")
       .notNull()
@@ -1945,15 +2252,13 @@ export const calendarConnections = sqliteTable(
     organisationId: text("organisation_id")
       .notNull()
       .references(() => organisations.id, { onDelete: "cascade" }),
-    eventId: text("event_id").references(() => events.id, {
-      onDelete: "cascade",
-    }),
+    eventId: text("event_id"),
     personId: text("person_id")
       .notNull()
       .references(() => people.id, { onDelete: "cascade" }),
     provider: text("provider").notNull().$type<"google" | "microsoft">(),
     accountReference: text("account_reference").notNull(),
-    encryptedCredentials: text("encrypted_credentials").notNull(),
+    encryptedCredentials: text("encrypted_credentials"),
     scopesJson: text("scopes_json").notNull(),
     status: text("status")
       .notNull()
@@ -1965,6 +2270,14 @@ export const calendarConnections = sqliteTable(
     updatedAt: integer("updated_at").notNull().default(epochNow),
   },
   (table) => [
+    check(
+      "calendar_connections_connected_credentials_check",
+      sql`${table.status} <> 'connected' OR (${table.encryptedCredentials} IS NOT NULL AND ${table.expiresAt} IS NOT NULL)`,
+    ),
+    foreignKey({
+      columns: [table.eventId, table.organisationId],
+      foreignColumns: [events.id, events.organisationId],
+    }).onDelete("cascade"),
     uniqueIndex("calendar_connections_account_unique").on(
       table.personId,
       table.provider,
@@ -2059,27 +2372,39 @@ export const calendarSyncAttempts = sqliteTable(
   ],
 );
 
-export const integrationConnections = sqliteTable("integration_connections", {
-  id: text("id").primaryKey(),
-  organisationId: text("organisation_id")
-    .notNull()
-    .references(() => organisations.id, { onDelete: "cascade" }),
-  eventId: text("event_id").references(() => events.id, {
-    onDelete: "cascade",
-  }),
-  provider: text("provider").notNull(),
-  status: text("status")
-    .notNull()
-    .$type<"connected" | "needs_attention" | "failed" | "disconnected">(),
-  direction: text("direction")
-    .notNull()
-    .$type<"outbound" | "inbound" | "bidirectional">(),
-  conflictPolicy: text("conflict_policy"),
-  encryptedCredentials: text("encrypted_credentials"),
-  configurationJson: text("configuration_json").notNull().default("{}"),
-  createdAt: integer("created_at").notNull().default(epochNow),
-  updatedAt: integer("updated_at").notNull().default(epochNow),
-});
+export const integrationConnections = sqliteTable(
+  "integration_connections",
+  {
+    id: text("id").primaryKey(),
+    organisationId: text("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    eventId: text("event_id"),
+    provider: text("provider").notNull(),
+    status: text("status")
+      .notNull()
+      .$type<"connected" | "needs_attention" | "failed" | "disconnected">(),
+    direction: text("direction")
+      .notNull()
+      .$type<"outbound" | "inbound" | "bidirectional">(),
+    conflictPolicy: text("conflict_policy"),
+    encryptedCredentials: text("encrypted_credentials"),
+    configurationJson: text("configuration_json").notNull().default("{}"),
+    revision: integer("revision").notNull().default(1),
+    lastOperationId: text("last_operation_id"),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.eventId, table.organisationId],
+      foreignColumns: [events.id, events.organisationId],
+    }).onDelete("cascade"),
+    uniqueIndex("ux_integration_connections_event_provider")
+      .on(table.eventId, table.provider)
+      .where(sql`${table.eventId} IS NOT NULL`),
+  ],
+);
 
 export const integrationRuns = sqliteTable(
   "integration_runs",
@@ -2153,6 +2478,37 @@ export const integrationRunItems = sqliteTable(
   ],
 );
 
+export const integrationEntityMappings = sqliteTable(
+  "integration_entity_mappings",
+  {
+    id: text("id").primaryKey(),
+    connectionId: text("connection_id")
+      .notNull()
+      .references(() => integrationConnections.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    externalId: text("external_id").notNull(),
+    sourceHash: text("source_hash").notNull(),
+    metadataJson: text("metadata_json").notNull().default("{}"),
+    lastOperationId: text("last_operation_id"),
+    lastSyncedAt: integer("last_synced_at").notNull().default(epochNow),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("integration_mappings_entity_unique").on(
+      table.connectionId,
+      table.entityType,
+      table.entityId,
+    ),
+    uniqueIndex("integration_mappings_external_unique").on(
+      table.connectionId,
+      table.entityType,
+      table.externalId,
+    ),
+  ],
+);
+
 export const operationJobs = sqliteTable(
   "operation_jobs",
   {
@@ -2194,6 +2550,7 @@ export const operationJobs = sqliteTable(
       .default(false),
     claimToken: text("claim_token"),
     claimExpiresAt: integer("claim_expires_at"),
+    dispatchedAt: integer("dispatched_at"),
     startedAt: integer("started_at"),
     completedAt: integer("completed_at"),
     createdAt: integer("created_at").notNull().default(epochNow),
@@ -2205,9 +2562,16 @@ export const operationJobs = sqliteTable(
       table.idempotencyKey,
     ),
     uniqueIndex("operation_jobs_correlation_unique").on(table.correlationId),
+    uniqueIndex("operation_jobs_id_event_unique").on(table.id, table.eventId),
     index("idx_operation_jobs_event_status").on(
       table.eventId,
       table.status,
+      table.createdAt,
+    ),
+    index("idx_operation_jobs_undispatched").on(
+      table.type,
+      table.status,
+      table.dispatchedAt,
       table.createdAt,
     ),
   ],
@@ -2354,6 +2718,20 @@ export const idempotencyRecords = sqliteTable(
   ],
 );
 
+export const abuseRateLimits = sqliteTable(
+  "abuse_rate_limits",
+  {
+    scopeKey: text("scope_key").primaryKey(),
+    windowStartedAt: integer("window_started_at").notNull(),
+    requestCount: integer("request_count").notNull().default(0),
+    blockedUntil: integer("blocked_until"),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    index("idx_abuse_rate_limits_blocked_until").on(table.blockedUntil),
+  ],
+);
+
 export const webhookEndpoints = sqliteTable("webhook_endpoints", {
   id: text("id").primaryKey(),
   organisationId: text("organisation_id")
@@ -2371,6 +2749,7 @@ export const webhookEndpoints = sqliteTable("webhook_endpoints", {
     .default("active")
     .$type<"active" | "disabled" | "failing">(),
   failureCount: integer("failure_count").notNull().default(0),
+  lastOperationId: text("last_operation_id"),
   createdByPersonId: text("created_by_person_id").references(() => people.id),
   createdAt: integer("created_at").notNull().default(epochNow),
   updatedAt: integer("updated_at").notNull().default(epochNow),
@@ -2388,6 +2767,7 @@ export const webhookDeliveries = sqliteTable(
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id"),
     idempotencyKey: text("idempotency_key").notNull(),
+    requestHash: text("request_hash").notNull(),
     payloadJson: text("payload_json").notNull(),
     status: text("status")
       .notNull()
@@ -2485,6 +2865,51 @@ export const auditEvents = sqliteTable(
   },
   (table) => [
     index("idx_audit_event_created").on(table.eventId, table.createdAt),
+  ],
+);
+
+export const assistantProposalExecutions = sqliteTable(
+  "assistant_proposal_executions",
+  {
+    proposalId: text("proposal_id").primaryKey(),
+    organisationId: text("organisation_id").notNull(),
+    eventId: text("event_id").notNull(),
+    actorPersonId: text("actor_person_id")
+      .notNull()
+      .references(() => people.id),
+    toolName: text("tool_name").notNull(),
+    status: text("status").notNull().$type<"processing" | "completed">(),
+    claimToken: text("claim_token"),
+    claimExpiresAt: integer("claim_expires_at"),
+    resultJson: text("result_json"),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+    completedAt: integer("completed_at"),
+  },
+  (table) => [
+    check(
+      "assistant_proposal_executions_state_check",
+      sql`(
+        (${table.status} = 'processing' AND ${table.claimToken} IS NOT NULL
+          AND ${table.claimExpiresAt} IS NOT NULL AND ${table.resultJson} IS NULL
+          AND ${table.completedAt} IS NULL)
+        OR
+        (${table.status} = 'completed' AND ${table.claimToken} IS NULL
+          AND ${table.claimExpiresAt} IS NULL AND ${table.resultJson} IS NOT NULL
+          AND ${table.completedAt} IS NOT NULL)
+      )`,
+    ),
+    foreignKey({
+      columns: [table.eventId, table.organisationId],
+      foreignColumns: [events.id, events.organisationId],
+    }).onDelete("cascade"),
+    uniqueIndex("assistant_proposal_executions_claim_token_unique").on(
+      table.claimToken,
+    ),
+    index("assistant_proposal_executions_claim_idx").on(
+      table.status,
+      table.claimExpiresAt,
+    ),
   ],
 );
 

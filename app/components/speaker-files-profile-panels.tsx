@@ -2,15 +2,15 @@ import {
   Download,
   FileCheck2,
   LockKeyhole,
-  UploadCloud,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import { Form } from "react-router";
 
-import {
-  speakerStatusClass,
-  type SpeakerPortal,
-} from "~/components/speaker-dashboard-panel-shared";
+import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
+import type { SpeakerPortal } from "~/components/speaker-dashboard-panel-shared";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { maximumMegabytes } from "~/modules/files/file-policy";
 
 export function SpeakerFilesAndProfilePanels({
   portal,
@@ -33,34 +33,38 @@ export function SpeakerFilesAndProfilePanels({
           Every upload is signature-checked and quarantined. Downloads appear
           only after an external malware scanner reports a clean result.
         </p>
-        <Form
-          method="post"
-          encType="multipart/form-data"
-          className="stack speaker-upload-form"
-        >
-          <input type="hidden" name="intent" value="upload-file" />
-          <label className="label">
-            File purpose
-            <select className="select" name="assetKind" defaultValue="headshot">
-              <option value="headshot">
-                Headshot (JPG, PNG, WebP · 10 MB)
-              </option>
-              <option value="slides">
-                Presentation slides (PDF, PPT, PPTX · 90 MB)
-              </option>
-              <option value="supporting_document">
-                Supporting document (90 MB)
-              </option>
-            </select>
-          </label>
-          <label className="label">
-            Choose file
-            <input className="field" name="file" type="file" required />
-          </label>
-          <button className="btn primary" disabled={busy}>
-            <UploadCloud aria-hidden size={15} /> Upload privately
-          </button>
-        </Form>
+        <DirectMultipartUpload
+          target={{ targetType: "person", targetId: portal.profile.id }}
+          kinds={[
+            {
+              value: "headshot",
+              label: `Headshot (JPG, PNG, WebP · ${maximumMegabytes(portal.event.filePolicy.headshotMaximumBytes)} MB)`,
+              accept: "image/jpeg,image/png,image/webp",
+              maximumBytes: portal.event.filePolicy.headshotMaximumBytes,
+            },
+            {
+              value: "slides",
+              label: `Presentation slides (PDF, PPT, PPTX · ${maximumMegabytes(portal.event.filePolicy.slidesMaximumBytes)} MB)`,
+              accept:
+                "application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation",
+              maximumBytes: portal.event.filePolicy.slidesMaximumBytes,
+            },
+            {
+              value: "supporting_document",
+              label: `Supporting document (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB)`,
+              accept:
+                ".pdf,.doc,.docx,.xls,.xlsx,.zip,application/pdf,application/zip",
+              maximumBytes:
+                portal.event.filePolicy.supportingDocumentMaximumBytes,
+            },
+            {
+              value: "video",
+              label: `Video (MP4, WebM · ${maximumMegabytes(portal.event.filePolicy.videoMaximumBytes)} MB)`,
+              accept: "video/mp4,video/webm",
+              maximumBytes: portal.event.filePolicy.videoMaximumBytes,
+            },
+          ]}
+        />
         <div className="stack mt">
           {portal.files.map((file) => (
             <div className="file-version-row" key={file.id}>
@@ -73,13 +77,10 @@ export function SpeakerFilesAndProfilePanels({
                   {file.filename} · version {file.versionNumber ?? "—"}
                 </small>
               </span>
-              <span
-                className={`status ${speakerStatusClass(file.scanStatus ?? file.status)}`}
-              >
-                {file.scanStatus === "pending"
-                  ? "Quarantined"
-                  : (file.scanStatus ?? file.status)}
-              </span>
+              <DomainStatusBadge
+                domain="file"
+                status={file.scanStatus ?? file.status}
+              />
               {file.currentVersionId && file.downloadReleasedAt ? (
                 <a
                   className="icon-btn"
@@ -95,6 +96,34 @@ export function SpeakerFilesAndProfilePanels({
                   className="subtle"
                 />
               )}
+              <Form
+                method="post"
+                onSubmit={(event) => {
+                  if (
+                    !window.confirm(
+                      `Permanently erase ${file.filename} and all ${file.versions.length} stored version${file.versions.length === 1 ? "" : "s"}? This cannot be undone.`,
+                    )
+                  ) {
+                    event.preventDefault();
+                  }
+                }}
+              >
+                <input type="hidden" name="intent" value="delete-file" />
+                <input type="hidden" name="assetId" value={file.id} />
+                <input
+                  type="hidden"
+                  name="confirm"
+                  value="erase-all-versions"
+                />
+                <button
+                  className="icon-btn danger"
+                  type="submit"
+                  disabled={busy}
+                  aria-label={`Permanently delete ${file.filename} and all versions`}
+                >
+                  <Trash2 aria-hidden size={15} />
+                </button>
+              </Form>
               {file.versions.length > 1 ? (
                 <details className="file-history">
                   <summary>{file.versions.length} versions</summary>

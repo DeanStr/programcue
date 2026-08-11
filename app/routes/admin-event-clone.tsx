@@ -1,0 +1,248 @@
+import { Copy, ShieldCheck } from "lucide-react";
+import { data, Form, Link, useActionData, useNavigation } from "react-router";
+import { ZodError } from "zod";
+
+import type { Route } from "./+types/admin-event-clone";
+import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
+import { getCloudflareContext } from "~/platform/cloudflare-context";
+import {
+  EventCloneService,
+  EventCloneSlugConflictError,
+} from "~/platform/operations/event-clone-service.server";
+
+async function administrator(
+  request: Request,
+  context: Route.LoaderArgs["context"],
+) {
+  const { env } = getCloudflareContext(context);
+  const viewer = await requireCurrentEventRole(request, env, [
+    "owner",
+    "administrator",
+  ]);
+  return { env, viewer };
+}
+
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const { env, viewer } = await administrator(request, context);
+  return new EventCloneService(env).prepare(viewer);
+}
+
+export async function action({ request, context }: Route.ActionArgs) {
+  if (request.method !== "POST") {
+    throw new Response("Method not allowed", {
+      status: 405,
+      headers: { allow: "POST" },
+    });
+  }
+  const { env, viewer } = await administrator(request, context);
+  const form = await request.formData();
+  if (form.get("intent") !== "clone") {
+    return data(
+      {
+        ok: false as const,
+        message: "Unsupported event clone action.",
+        result: null,
+      },
+      { status: 400 },
+    );
+  }
+  try {
+    const result = await new EventCloneService(env).clone(viewer, {
+      name: form.get("name"),
+      slug: form.get("slug"),
+      timezone: form.get("timezone"),
+      startDate: form.get("startDate"),
+      endDate: form.get("endDate"),
+    });
+    return data({
+      ok: true as const,
+      message:
+        "Event created from the current event configuration. Operational records, provider credentials, sender identities and publication state were not copied.",
+      result,
+    });
+  } catch (error) {
+    if (error instanceof EventCloneSlugConflictError) {
+      return data(
+        { ok: false as const, message: error.message, result: null },
+        { status: 409 },
+      );
+    }
+    if (error instanceof ZodError) {
+      return data(
+        {
+          ok: false as const,
+          message: error.issues[0]?.message ?? "Review the clone settings.",
+          result: null,
+        },
+        { status: 422 },
+      );
+    }
+    throw error;
+  }
+}
+
+export const meta = () => [{ title: "Clone event · Program Cue" }];
+
+export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  return (
+    <>
+      <div className="page-head pc-page-header">
+        <div>
+          <span className="pc-page-eyebrow">Reusable event template</span>
+          <h1>Clone {loaderData.source.name}</h1>
+          <p>
+            Create a clean event with the current branding, rooms, tracks,
+            policies and reusable form, evaluation, task and email templates.
+          </p>
+        </div>
+        <Link className="btn" to="/admin/event">
+          Back to Event Setup
+        </Link>
+      </div>
+      {actionData ? (
+        <div
+          className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
+          role={actionData.ok ? "status" : "alert"}
+        >
+          <Copy aria-hidden size={18} />
+          <div className="pc-status-notice-copy">
+            <strong>
+              {actionData.ok ? "Clone complete" : "Clone blocked"}
+            </strong>
+            <div>{actionData.message}</div>
+            {actionData.result ? (
+              <>
+                <p>
+                  <code>{actionData.result.eventId}</code> ·{" "}
+                  <Link
+                    to={`/admin/operations?operation=${encodeURIComponent(actionData.result.operationId)}`}
+                  >
+                    view clone audit
+                  </Link>
+                </p>
+                <Form method="post" action="/events/select">
+                  <input
+                    type="hidden"
+                    name="eventId"
+                    value={actionData.result.eventId}
+                  />
+                  <input type="hidden" name="returnTo" value="/admin/event" />
+                  <button className="btn small" type="submit">
+                    Open cloned event
+                  </button>
+                </Form>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      <div className="grid grid-2">
+        <section className="card pad">
+          <div className="card-title">
+            <h2>New event identity</h2>
+            <Copy aria-hidden size={19} />
+          </div>
+          <Form
+            method="post"
+            className="stack"
+            onSubmit={(event) => {
+              if (
+                !window.confirm(
+                  "Create this clean event from the current configuration and templates?",
+                )
+              )
+                event.preventDefault();
+            }}
+          >
+            <input type="hidden" name="intent" value="clone" />
+            <label className="label">
+              Event name
+              <input
+                className="field"
+                name="name"
+                defaultValue={loaderData.defaults.name}
+                required
+                maxLength={160}
+              />
+            </label>
+            <label className="label">
+              Public slug
+              <input
+                className="field"
+                name="slug"
+                defaultValue={loaderData.defaults.slug}
+                required
+                pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                maxLength={120}
+              />
+            </label>
+            <label className="label">
+              IANA timezone
+              <input
+                className="field"
+                name="timezone"
+                defaultValue={loaderData.defaults.timezone}
+                required
+              />
+            </label>
+            <div className="grid grid-2">
+              <label className="label">
+                Start date
+                <input
+                  className="field"
+                  type="date"
+                  name="startDate"
+                  defaultValue={loaderData.defaults.startDate}
+                  required
+                />
+              </label>
+              <label className="label">
+                End date
+                <input
+                  className="field"
+                  type="date"
+                  name="endDate"
+                  defaultValue={loaderData.defaults.endDate}
+                  required
+                />
+              </label>
+            </div>
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={navigation.state !== "idle"}
+            >
+              <Copy aria-hidden size={14} /> Create clean clone
+            </button>
+          </Form>
+        </section>
+        <section className="card pad">
+          <div className="card-title">
+            <h2>Copy boundary</h2>
+            <ShieldCheck aria-hidden size={19} />
+          </div>
+          <h3>Copied as editable templates</h3>
+          <p>
+            Branding and access defaults, schedule conflict policy, rooms,
+            tracks, form versions, evaluation rounds and criteria, task
+            templates and dependencies, email templates and disabled triggers.
+          </p>
+          <h3>Intentionally excluded</h3>
+          <p>
+            People and memberships other than the creator, submissions, reviews
+            and decisions, sessions and schedules, task instances, files,
+            messages, calendar invitations, API keys, provider credentials,
+            webhooks and publication state.
+          </p>
+          <p className="help">
+            Fixed deadlines, form close dates and evaluation round windows are
+            cleared so historical dates cannot silently carry into the new
+            event.
+          </p>
+        </section>
+      </div>
+    </>
+  );
+}

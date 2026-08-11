@@ -29,5 +29,15 @@ export default defineConfig({
   projects: [
     { name: "desktop-chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 1000 } } },
     { name: "mobile-chromium", use: { ...devices["Pixel 7"] }, testMatch: /visual\.spec\.ts/ },
+    {
+      name: "firefox-smoke",
+      use: { ...devices["Desktop Firefox"] },
+      testMatch: /cross-browser-smoke\.spec\.ts/,
+    },
+    {
+      name: "webkit-smoke",
+      use: { ...devices["Desktop Safari"] },
+      testMatch: /cross-browser-smoke\.spec\.ts/,
+    },
   ],
 });

@@ -5,11 +5,28 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 const encoder = new TextEncoder();
 
 export const API_KEY_SCOPES = [
+  "events:read",
+  "submissions:read",
+  "forms:read",
+  "people:read",
+  "speakers:read",
+  "sessions:read",
+  "sessions:write",
+  "schedule:read",
+  "evaluation:read",
+  "evaluation:write",
+  "decisions:read",
+  "communications:read",
+  "resources:read",
+  "integrations:read",
+  "integrations:write",
   "operations:read",
   "tasks:read",
   "tasks:write",
   "schedule:publish",
 ] as const;
+
+export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 
 const createApiKeySchema = z.object({
   name: z.string().trim().min(2).max(80),

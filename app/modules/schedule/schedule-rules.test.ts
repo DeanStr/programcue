@@ -10,8 +10,11 @@ import { eventLocalTimeEpoch } from "./schedule-time";
 const policies = {
   room: "block",
   speaker: "block",
+  resource: "block",
   track: "warn",
+  boundary: "block",
   capacity: "warn",
+  minimumTurnaroundMinutes: 0,
 } as const;
 
 describe("authoritative schedule rules", () => {
@@ -19,7 +22,7 @@ describe("authoritative schedule rules", () => {
     expect(intervalsOverlap(100, 200, 200, 300)).toBe(false);
   });
 
-  it("finds room, speaker, track and capacity conflicts", () => {
+  it("finds room, speaker, resource, track and capacity conflicts", () => {
     const conflicts = detectScheduleConflicts({
       candidate: {
         sessionId: "new",
@@ -29,6 +32,7 @@ describe("authoritative schedule rules", () => {
         trackId: "track-a",
         trackExclusive: true,
         speakerIds: ["speaker-a"],
+        requiredResources: ["av-kit"],
         expectedAttendance: 120,
       },
       existing: [
@@ -41,11 +45,12 @@ describe("authoritative schedule rules", () => {
           trackId: "track-a",
           trackExclusive: true,
           speakerIds: ["speaker-a"],
+          requiredResources: ["av-kit"],
           expectedAttendance: 40,
           title: "Existing session",
         },
       ],
-      rooms: [{ id: "main", capacity: 100 }],
+      rooms: [{ id: "main", capacity: 100, resources: ["av-kit"] }],
       eventStartsAt: 0,
       eventEndsAt: 86_399,
       eventTimezone: "UTC",
@@ -55,9 +60,10 @@ describe("authoritative schedule rules", () => {
       "capacity",
       "room",
       "speaker",
+      "required_resource",
       "track",
     ]);
-    expect(() => assertPublishable(conflicts)).toThrow(/2 blocking/);
+    expect(() => assertPublishable(conflicts)).toThrow(/3 blocking/);
   });
 
   it("always blocks an entry outside event bounds", () => {
@@ -70,18 +76,22 @@ describe("authoritative schedule rules", () => {
         trackId: null,
         trackExclusive: false,
         speakerIds: [],
+        requiredResources: [],
         expectedAttendance: null,
       },
       existing: [],
-      rooms: [{ id: "main", capacity: 100 }],
+      rooms: [{ id: "main", capacity: 100, resources: [] }],
       eventStartsAt: 0,
       eventEndsAt: 86_399,
       eventTimezone: "UTC",
       policies: {
         room: "ignore",
         speaker: "ignore",
+        resource: "ignore",
         track: "ignore",
+        boundary: "block",
         capacity: "ignore",
+        minimumTurnaroundMinutes: 0,
       },
     });
     expect(conflicts).toMatchObject([
@@ -102,18 +112,22 @@ describe("authoritative schedule rules", () => {
           trackId: null,
           trackExclusive: false,
           speakerIds: [],
+          requiredResources: [],
           expectedAttendance: null,
         },
         existing: [],
-        rooms: [{ id: "main", capacity: 100 }],
+        rooms: [{ id: "main", capacity: 100, resources: [] }],
         eventStartsAt: firstDayMarker,
         eventEndsAt: lastDayMarker,
         eventTimezone: timezone,
         policies: {
           room: "ignore",
           speaker: "ignore",
+          resource: "ignore",
           track: "ignore",
+          boundary: "block",
           capacity: "ignore",
+          minimumTurnaroundMinutes: 0,
         },
       });
 
@@ -150,6 +164,7 @@ describe("authoritative schedule rules", () => {
         trackId: "track-a",
         trackExclusive: false,
         speakerIds: [],
+        requiredResources: [],
         expectedAttendance: null,
       },
       existing: [
@@ -162,13 +177,14 @@ describe("authoritative schedule rules", () => {
           trackId: "track-a",
           trackExclusive: false,
           speakerIds: [],
+          requiredResources: [],
           expectedAttendance: null,
           title: "Existing session",
         },
       ],
       rooms: [
-        { id: "main", capacity: 100 },
-        { id: "second", capacity: 100 },
+        { id: "main", capacity: 100, resources: [] },
+        { id: "second", capacity: 100, resources: [] },
       ],
       eventStartsAt: 0,
       eventEndsAt: 86_399,
@@ -178,6 +194,102 @@ describe("authoritative schedule rules", () => {
 
     expect(conflicts).not.toContainEqual(
       expect.objectContaining({ type: "track" }),
+    );
+  });
+
+  it("enforces configured speaker turnaround without treating touching slots as overlaps", () => {
+    const conflicts = detectScheduleConflicts({
+      candidate: {
+        sessionId: "new",
+        roomId: "second",
+        startsAt: 215,
+        endsAt: 300,
+        trackId: null,
+        trackExclusive: false,
+        speakerIds: ["speaker-a"],
+        requiredResources: [],
+        expectedAttendance: null,
+      },
+      existing: [
+        {
+          entryId: "entry-existing",
+          sessionId: "existing",
+          roomId: "main",
+          startsAt: 100,
+          endsAt: 200,
+          trackId: null,
+          trackExclusive: false,
+          speakerIds: ["speaker-a"],
+          requiredResources: [],
+          expectedAttendance: null,
+          title: "Existing session",
+        },
+      ],
+      rooms: [
+        { id: "main", capacity: 100, resources: [] },
+        { id: "second", capacity: 100, resources: [] },
+      ],
+      eventStartsAt: 0,
+      eventEndsAt: 86_399,
+      eventTimezone: "UTC",
+      policies: { ...policies, minimumTurnaroundMinutes: 1 },
+    });
+
+    expect(conflicts).toEqual([
+      expect.objectContaining({ type: "turnaround", severity: "blocking" }),
+    ]);
+  });
+
+  it("blocks unconfigured resources and resources unavailable in the selected room", () => {
+    const base = {
+      candidate: {
+        sessionId: "new",
+        roomId: "second",
+        startsAt: 100,
+        endsAt: 200,
+        trackId: null,
+        trackExclusive: false,
+        speakerIds: [] as string[],
+        expectedAttendance: null,
+      },
+      existing: [],
+      rooms: [
+        { id: "main", capacity: 100, resources: ["livestream crew"] },
+        { id: "second", capacity: 100, resources: [] },
+      ],
+      eventStartsAt: 0,
+      eventEndsAt: 86_399,
+      eventTimezone: "UTC",
+      policies: { ...policies, resource: "ignore" as const },
+    };
+
+    expect(
+      detectScheduleConflicts({
+        ...base,
+        candidate: {
+          ...base.candidate,
+          requiredResources: ["unconfigured kit"],
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        type: "resource_configuration",
+        severity: "blocking",
+      }),
+    );
+    expect(
+      detectScheduleConflicts({
+        ...base,
+        candidate: {
+          ...base.candidate,
+          requiredResources: ["livestream crew"],
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        type: "room_resource",
+        severity: "blocking",
+      }),
     );
   });
 });

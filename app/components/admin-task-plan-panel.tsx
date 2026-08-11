@@ -1,4 +1,5 @@
 import { GitBranch, Plus } from "lucide-react";
+import { useState } from "react";
 import { Form } from "react-router";
 
 import type { AdminTasksData } from "~/routes/admin-tasks";
@@ -11,9 +12,32 @@ export function AdminTaskPlanPanel({
   busy: boolean;
 }) {
   const assignableTemplates = data.templates.filter(
-    (template) =>
-      template.targetType === "speaker" && template.status === "active",
+    (template) => template.status === "active",
   );
+  const [selectedTemplateId, setSelectedTemplateId] = useState(
+    assignableTemplates[0]?.id ?? "",
+  );
+  const [targetType, setTargetType] = useState<"speaker" | "session" | "event">(
+    "speaker",
+  );
+  const [dueAnchor, setDueAnchor] = useState("none");
+  const [autoAssignOnAcceptance, setAutoAssignOnAcceptance] = useState(false);
+  const selectedTemplate =
+    assignableTemplates.find(
+      (template) => template.id === selectedTemplateId,
+    ) ?? assignableTemplates[0];
+  const assignmentTargets =
+    selectedTemplate?.targetType === "session"
+      ? data.sessions
+      : selectedTemplate?.targetType === "event"
+        ? [data.eventTarget]
+        : data.speakers;
+  const selectedTargetLabel =
+    selectedTemplate?.targetType === "session"
+      ? "Session"
+      : selectedTemplate?.targetType === "event"
+        ? "Event"
+        : "Speaker";
   return (
     <aside className="tasks-side stack">
       <section className="card pad">
@@ -25,20 +49,29 @@ export function AdminTaskPlanPanel({
           <input type="hidden" name="intent" value="assign" />
           <label className="label">
             Template
-            <select className="select" name="templateId" required>
+            <select
+              className="select"
+              name="templateId"
+              required
+              value={selectedTemplate?.id ?? ""}
+              onChange={(event) => setSelectedTemplateId(event.target.value)}
+            >
               {assignableTemplates.map((template) => (
                 <option value={template.id} key={template.id}>
-                  {template.name}
+                  {template.name} · {template.targetType}
+                  {template.autoAssignOnAcceptance
+                    ? " · automatic on acceptance"
+                    : ""}
                 </option>
               ))}
             </select>
           </label>
           <label className="label">
-            Speaker
-            <select className="select" name="personId" required>
-              {data.speakers.map((speaker) => (
-                <option value={speaker.id} key={speaker.id}>
-                  {speaker.name}
+            {selectedTargetLabel}
+            <select className="select" name="targetId" required>
+              {assignmentTargets.map((target) => (
+                <option value={target.id} key={target.id}>
+                  {target.name}
                 </option>
               ))}
             </select>
@@ -46,7 +79,7 @@ export function AdminTaskPlanPanel({
           <button
             className="btn primary"
             disabled={
-              !assignableTemplates.length || !data.speakers.length || busy
+              !assignableTemplates.length || !assignmentTargets.length || busy
             }
           >
             <Plus aria-hidden size={15} /> Assign with prerequisites
@@ -59,6 +92,7 @@ export function AdminTaskPlanPanel({
         </summary>
         <Form method="post" className="stack mt">
           <input type="hidden" name="intent" value="create-template" />
+          <input type="hidden" name="intentId" value={data.intentId} />
           <label className="label">
             Name
             <input className="field" name="name" required />
@@ -70,8 +104,20 @@ export function AdminTaskPlanPanel({
           <div className="form-row">
             <label className="label">
               Scope
-              <input type="hidden" name="targetType" value="speaker" />
-              <input className="field" value="Speaker" readOnly />
+              <select
+                className="select"
+                name="targetType"
+                value={targetType}
+                onChange={(event) =>
+                  setTargetType(
+                    event.target.value as "speaker" | "session" | "event",
+                  )
+                }
+              >
+                <option value="speaker">Speaker</option>
+                <option value="session">Session</option>
+                <option value="event">Event</option>
+              </select>
             </label>
             <label className="label">
               Type
@@ -117,7 +163,17 @@ export function AdminTaskPlanPanel({
           </div>
           <label className="label">
             Due date anchor
-            <select className="select" name="dueAnchor" defaultValue="none">
+            <select
+              className="select"
+              name="dueAnchor"
+              value={dueAnchor}
+              onChange={(event) => {
+                setDueAnchor(event.target.value);
+                if (event.target.value === "session_start") {
+                  setAutoAssignOnAcceptance(false);
+                }
+              }}
+            >
               <option value="none">None</option>
               <option value="acceptance">Acceptance date</option>
               <option value="session_start">Session start</option>
@@ -142,12 +198,33 @@ export function AdminTaskPlanPanel({
               </span>
             </label>
           </div>
+          <label className="speaker-confirm">
+            <input
+              type="checkbox"
+              name="autoAssignOnAcceptance"
+              value="true"
+              checked={autoAssignOnAcceptance}
+              disabled={dueAnchor === "session_start"}
+              onChange={(event) =>
+                setAutoAssignOnAcceptance(event.target.checked)
+              }
+            />{" "}
+            Add this task automatically when a submission is accepted
+          </label>
+          <span className="help">
+            Prerequisites are included automatically. Session-start deadlines
+            require a scheduled session and cannot be created at acceptance.
+          </span>
           {data.templates.length ? (
             <fieldset>
               <legend className="label">Prerequisites</legend>
               <div className="task-dependency-list">
                 {data.templates
-                  .filter((template) => template.status === "active")
+                  .filter(
+                    (template) =>
+                      template.status === "active" &&
+                      template.targetType === targetType,
+                  )
                   .map((template) => (
                     <label className="speaker-confirm" key={template.id}>
                       <input

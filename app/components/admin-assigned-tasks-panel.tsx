@@ -1,14 +1,10 @@
 import { ListChecks } from "lucide-react";
+import { useEffect } from "react";
 import { Form } from "react-router";
 
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EventDateTime } from "~/components/ui/event-date-time";
 import type { AdminTasksData } from "~/routes/admin-tasks";
-
-function taskStatusClass(status: string) {
-  if (["completed", "waived"].includes(status)) return "success";
-  if (status === "overdue") return "danger";
-  if (["blocked", "submitted"].includes(status)) return "warning";
-  return "info";
-}
 
 function dateLabel(epoch: number | null, timezone: string) {
   return epoch
@@ -28,6 +24,12 @@ export function AdminAssignedTasksPanel({
   data: AdminTasksData;
   busy: boolean;
 }) {
+  useEffect(() => {
+    if (!data.focusedTaskId) return;
+    const target = document.getElementById(`admin-task-${data.focusedTaskId}`);
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "center" });
+  }, [data.focusedTaskId]);
   return (
     <section className="card pad">
       <div className="card-title">
@@ -50,7 +52,11 @@ export function AdminAssignedTasksPanel({
           </thead>
           <tbody>
             {data.tasks.map((task) => (
-              <tr key={task.id}>
+              <tr
+                id={`admin-task-${task.id}`}
+                key={task.id}
+                tabIndex={task.id === data.focusedTaskId ? -1 : undefined}
+              >
                 <td className="pc-record-primary-cell" data-label="Requirement">
                   <div className="pc-record-stack">
                     <strong>{task.title}</strong>
@@ -65,13 +71,20 @@ export function AdminAssignedTasksPanel({
                   <span className={`impact ${task.impact}`}>{task.impact}</span>
                 </td>
                 <td data-label={`Due (${data.eventTimezone})`}>
-                  {dateLabel(task.dueAt, data.eventTimezone)}
+                  {task.dueAt ? (
+                    <EventDateTime
+                      epochSeconds={task.dueAt}
+                      timeZone={data.eventTimezone}
+                    >
+                      {dateLabel(task.dueAt, data.eventTimezone)}
+                    </EventDateTime>
+                  ) : (
+                    "No due date"
+                  )}
                 </td>
                 <td data-label="Status / evidence">
                   <div className="pc-record-stack">
-                    <span className={`status ${taskStatusClass(task.status)}`}>
-                      {task.status.replaceAll("_", " ")}
-                    </span>
+                    <DomainStatusBadge domain="task" status={task.status} />
                     {task.evidence[0] ? (
                       <div className="pc-record-stack task-evidence-review">
                         <small className="subtle">
@@ -108,9 +121,13 @@ export function AdminAssignedTasksPanel({
                             <a
                               href={task.evidence[0].details.url}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                             >
                               {task.evidence[0].details.url}
+                              <span className="sr-only">
+                                {" "}
+                                (opens in a new tab)
+                              </span>
                             </a>
                           </p>
                         ) : null}
@@ -192,7 +209,7 @@ export function AdminAssignedTasksPanel({
                     ) : null}
                     {!["completed", "waived"].includes(task.status) ? (
                       <details>
-                        <summary className="btn small">Waive…</summary>
+                        <summary className="btn small">Waive task</summary>
                         <label className="label">
                           Reason
                           <input
@@ -214,9 +231,14 @@ export function AdminAssignedTasksPanel({
                     ) : null}
                   </Form>
                   <details className="mt">
-                    <summary className="btn small">Comment…</summary>
+                    <summary className="btn small">Add comment</summary>
                     <Form method="post" className="stack mt">
                       <input type="hidden" name="intent" value="comment" />
+                      <input
+                        type="hidden"
+                        name="intentId"
+                        value={`${data.intentId}:${task.id}`}
+                      />
                       <input type="hidden" name="taskId" value={task.id} />
                       <label className="label">
                         Message

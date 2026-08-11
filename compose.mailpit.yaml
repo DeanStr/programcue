@@ -1,0 +1,17 @@
+services:
+  mailpit:
+    image: axllent/mailpit:v1.30.7
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+    volumes:
+      - program-cue-mailpit:/data
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: "5000"
+      MP_MAX_AGE: 14d
+      MP_IGNORE_DUPLICATE_IDS: "true"
+      MP_SEND_API_AUTH_ACCEPT_ANY: "true"
+
+volumes:
+  program-cue-mailpit:

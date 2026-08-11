@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 import { templateContentSchema } from "../../app/modules/communications/communication-schema";
+import { requireEmailProviderConfiguration } from "../../app/modules/communications/email-provider.server";
+import { communicationDeliveryIdempotencyKey } from "../../app/modules/communications/communication-service-shared";
 import { processCommunicationSend } from "./communication-send";
 import type { QueueProviderDependencies } from "./handler-types";
 import { markTriggerFailure } from "./notification-failure";
@@ -22,7 +24,8 @@ export async function processDecisionNotification(
   const message = decisionNotificationMessageSchema.parse(input);
   const operation = await env.DB.prepare(
     `
-    SELECT o.id, o.status, o.requested_by_person_id AS requestedByPersonId
+    SELECT o.id, o.status, o.requested_by_person_id AS requestedByPersonId,
+           o.payload_json AS payloadJson
       FROM operation_jobs o
       JOIN events e ON e.id = o.event_id AND e.organisation_id = ?
      WHERE o.id = ? AND o.event_id = ? AND o.type = 'decision.notification'
@@ -33,6 +36,7 @@ export async function processDecisionNotification(
       id: string;
       status: string;
       requestedByPersonId: string | null;
+      payloadJson: string;
     }>();
   if (!operation)
     throw new Error(
@@ -40,13 +44,59 @@ export async function processDecisionNotification(
     );
   if (operation.status === "completed" || operation.status === "cancelled")
     return;
+  let savedMessage: ReturnType<typeof decisionNotificationMessageSchema.parse>;
+  try {
+    savedMessage = decisionNotificationMessageSchema.parse(
+      JSON.parse(operation.payloadJson),
+    );
+  } catch {
+    throw new Error("The durable decision notification payload is invalid.");
+  }
+  if (JSON.stringify(savedMessage) !== JSON.stringify(message)) {
+    throw new Error(
+      "The decision notification Queue message does not match its durable operation payload.",
+    );
+  }
+  if (["failed", "partially_failed"].includes(operation.status)) {
+    const terminal = await env.DB.prepare(
+      `SELECT communication.id,
+              EXISTS (
+                SELECT 1 FROM audit_events failed_audit
+                 WHERE failed_audit.event_id = communication.event_id
+                   AND failed_audit.action = 'decision.notification.failed'
+                   AND failed_audit.entity_type = 'communication'
+                   AND failed_audit.entity_id = communication.id
+              ) AS configurationFailed
+         FROM communications communication
+        WHERE communication.event_id = ? AND communication.operation_id = ?
+          AND communication.idempotency_key = ?
+        LIMIT 1`,
+    )
+      .bind(message.eventId, message.operationId, message.idempotencyKey)
+      .first<{ id: string; configurationFailed: number }>();
+    if (!terminal || terminal.configurationFailed === 1) return;
+    await processCommunicationSend(
+      {
+        type: "communication.send",
+        operationId: message.operationId,
+        communicationId: terminal.id,
+        eventId: message.eventId,
+        organisationId: message.organisationId,
+        idempotencyKey: message.idempotencyKey,
+      },
+      env,
+      dependencies,
+    );
+    return;
+  }
 
   const decision = await env.DB.prepare(
     `
     SELECT sd.id AS decisionId, sd.decision, s.id AS submissionId, s.title AS submissionTitle,
            s.submitter_person_id AS personId, COALESCE(p.email, s.submitter_email) AS address,
            COALESCE(p.display_name, s.submitter_email) AS recipientName,
-           e.name AS eventName, e.starts_at AS startsAt, e.ends_at AS endsAt
+           e.name AS eventName, e.brand_accent AS brandAccent,
+           e.starts_at AS startsAt, e.ends_at AS endsAt
       FROM submission_decisions sd
       JOIN submissions s ON s.id = sd.submission_id AND s.event_id = sd.event_id
       JOIN events e ON e.id = sd.event_id AND e.organisation_id = ?
@@ -64,6 +114,7 @@ export async function processDecisionNotification(
       address: string | null;
       recipientName: string | null;
       eventName: string;
+      brandAccent: string;
       startsAt: number;
       endsAt: number;
     }>();
@@ -74,6 +125,18 @@ export async function processDecisionNotification(
       "The published decision no longer exists in the authorised event.",
     );
     return;
+  }
+  let emailProvider: ReturnType<
+    typeof requireEmailProviderConfiguration
+  > | null = null;
+  let emailProviderError: string | null = null;
+  try {
+    emailProvider = requireEmailProviderConfiguration(env);
+  } catch (error) {
+    emailProviderError =
+      error instanceof Error
+        ? error.message
+        : "Email provider configuration is invalid.";
   }
   const [template, sender] = await Promise.all([
     env.DB.prepare(
@@ -95,11 +158,14 @@ export async function processDecisionNotification(
     env.DB.prepare(
       `
       SELECT id, from_name AS fromName, from_email AS fromEmail
-        FROM sender_profiles WHERE event_id = ? AND provider = 'resend' AND status = 'verified'
+        FROM sender_profiles WHERE event_id = ? AND provider = ? AND status = 'verified'
        ORDER BY updated_at DESC LIMIT 1
     `,
     )
-      .bind(message.eventId)
+      .bind(
+        message.eventId,
+        emailProvider?.provider ?? "email-provider-unavailable",
+      )
       .first<{ id: string; fromName: string; fromEmail: string }>(),
   ]);
 
@@ -127,12 +193,11 @@ export async function processDecisionNotification(
         "The published decision email template contains invalid content.";
     }
   }
+  if (!configurationError && emailProviderError)
+    configurationError = emailProviderError;
   if (!configurationError && !sender)
     configurationError =
-      "A verified Resend sender profile is required for decision notifications.";
-  if (!configurationError && !env.RESEND_API_KEY?.trim())
-    configurationError =
-      "RESEND_API_KEY is required for decision notifications.";
+      "A verified sender profile is required for decision notifications.";
 
   const existing = await env.DB.prepare(
     "SELECT id FROM communications WHERE event_id = ? AND idempotency_key = ?",
@@ -144,7 +209,10 @@ export async function processDecisionNotification(
   const communicationId =
     existing?.id ?? `decision-communication:${message.operationId}`;
   const deliveryId = `decision-delivery:${message.operationId}`;
-  const deliveryKey = `${message.idempotencyKey}:${decision.address ?? "unavailable"}`;
+  const deliveryKey = await communicationDeliveryIdempotencyKey(
+    message.idempotencyKey,
+    decision.address ?? "unavailable",
+  );
   const contentSnapshot =
     content && template
       ? {
@@ -154,6 +222,7 @@ export async function processDecisionNotification(
           content,
           event: {
             eventName: decision.eventName,
+            brandAccent: decision.brandAccent,
             startsAt: decision.startsAt,
             endsAt: decision.endsAt,
           },
@@ -222,7 +291,7 @@ export async function processDecisionNotification(
           id, event_id, communication_id, person_id, recipient_address, recipient_name,
           source_id, source_values_json, channel, provider, idempotency_key, status,
           failure_code, failure_message, created_at, updated_at
-        ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'email', 'resend', ?, ?, ?, ?, unixepoch(), unixepoch()
+        ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'email', ?, ?, ?, ?, ?, unixepoch(), unixepoch()
             FROM operation_jobs trigger_operation
            WHERE trigger_operation.id = ? AND trigger_operation.event_id = ?
              AND trigger_operation.organisation_id = ?
@@ -259,6 +328,7 @@ export async function processDecisionNotification(
           "submission.title": decision.submissionTitle,
           "decision.outcome": decision.decision,
         }),
+        emailProvider?.provider ?? null,
         deliveryKey,
         configurationError ? "failed" : "queued",
         configurationError ? "CONFIGURATION_ERROR" : null,

@@ -14,6 +14,9 @@ export const audienceTypeSchema = z.enum([
   "decision_recipients",
   "accepted_speakers",
   "incomplete_speakers",
+  "due_speakers",
+  "overdue_speakers",
+  "event_administrators",
   "manual",
 ]);
 
@@ -55,7 +58,7 @@ export const previewCommunicationSchema = z.object({
   templateVersionId: z.uuid(),
   audienceType: audienceTypeSchema,
   manualRecipients: z.string().max(20_000).default(""),
-  kind: z.enum(["transactional", "optional"]).default("transactional"),
+  kind: z.enum(["transactional", "optional"]),
 });
 
 export const confirmCommunicationSchema = previewCommunicationSchema.extend({
@@ -64,6 +67,43 @@ export const confirmCommunicationSchema = previewCommunicationSchema.extend({
   deliverableFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
   suppressedCount: z.coerce.number().int().nonnegative(),
 });
+
+export const scheduleCommunicationSchema = confirmCommunicationSchema.extend({
+  scheduledAt: z.coerce.number().int().positive(),
+});
+
+export const testCommunicationSchema = z.object({
+  templateVersionId: z.uuid(),
+  recipient: z.email(),
+  idempotencyKey: z.string().trim().min(8).max(128),
+});
+
+export const saveCommunicationTriggerSchema = z.object({
+  id: z.uuid().optional(),
+  templateId: z.uuid(),
+  triggerType: z.enum(["task_due", "task_overdue"]),
+  audienceType: z.enum([
+    "due_speakers",
+    "overdue_speakers",
+    "event_administrators",
+  ]),
+  kind: z.enum(["transactional", "optional"]),
+  sendHourUtc: z.coerce.number().int().min(0).max(23),
+  enabled: z.boolean(),
+});
+
+export const communicationTriggerConfigurationSchema = z
+  .object({
+    audienceType: z.enum([
+      "due_speakers",
+      "overdue_speakers",
+      "event_administrators",
+    ]),
+    kind: z.enum(["transactional", "optional"]),
+    sendHourUtc: z.number().int().min(0).max(23),
+    lastRunBucket: z.string().optional(),
+  })
+  .strict();
 
 export const resendWebhookEventSchema = z
   .object({
@@ -86,4 +126,11 @@ export type PreviewCommunicationInput = z.infer<
 >;
 export type ConfirmCommunicationInput = z.infer<
   typeof confirmCommunicationSchema
+>;
+export type ScheduleCommunicationInput = z.infer<
+  typeof scheduleCommunicationSchema
+>;
+export type TestCommunicationInput = z.infer<typeof testCommunicationSchema>;
+export type SaveCommunicationTriggerInput = z.input<
+  typeof saveCommunicationTriggerSchema
 >;

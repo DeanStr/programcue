@@ -4,8 +4,13 @@ import {
   type FormRouting,
   type SaveFormInput,
   type SubmissionFormSchema,
+  type UploadReference,
 } from "./submission-schema";
 import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
+import {
+  parseEventFilePolicy,
+  type EventFilePolicy,
+} from "~/modules/files/file-policy";
 
 export type FormSummary = {
   id: string;
@@ -15,6 +20,7 @@ export type FormSummary = {
   eventSlug: string;
   eventTimezone: string;
   brandAccent: string;
+  filePolicy: EventFilePolicy;
   name: string;
   kind: "submission" | "direct_session";
   status: "draft" | "published" | "closed" | "archived";
@@ -25,6 +31,7 @@ export type FormSummary = {
   maxSpeakers: number | null;
   accessMode: "email_verified" | "account_required" | "password_protected";
   accessPasswordHash: string | null;
+  allowAnonymousDrafts: boolean;
   submittedCount: number;
 };
 
@@ -56,11 +63,28 @@ export type FormWorkspace = FormSummary & {
   >;
 };
 
-export type Applicant = {
-  personId: string;
-  email: string;
-  name: string;
-};
+export type Applicant =
+  | {
+      personId: string;
+      email: string;
+      name: string;
+      verified: true;
+      anonymousDraftId: null;
+      biography: string;
+      profileRevision: number;
+      /** A co-speaker claim session may edit its speaker profile but cannot manage applications. */
+      claimOnly?: boolean;
+    }
+  | {
+      personId: null;
+      email: "";
+      name: "";
+      verified: false;
+      anonymousDraftId: string;
+      biography: "";
+      profileRevision: 0;
+      claimOnly?: boolean;
+    };
 
 export type ApplicantDraft = {
   id: string;
@@ -73,10 +97,12 @@ export type ApplicantDraft = {
   formVersionId: string;
   versionNumber: number;
   submittedAt: number | null;
+  uploads: Record<string, UploadReference>;
   speakers: Array<{
     personId: string | null;
     name: string;
     email: string;
+    biography: string;
     position: number;
     isPrimary: boolean;
     invitationStatus: string;
@@ -105,6 +131,7 @@ export type AdminSubmission = {
   submittedAt: number | null;
   updatedAt: number;
   routedTo: string;
+  routedTeamId: string | null;
 };
 
 export function parseJson<T>(
@@ -159,6 +186,7 @@ export type FormRow = {
   eventSlug: string;
   eventTimezone: string;
   brandAccent: string;
+  filePolicyJson: string;
   name: string;
   kind: FormSummary["kind"];
   status: FormSummary["status"];
@@ -169,6 +197,7 @@ export type FormRow = {
   maxSpeakers: number | null;
   accessMode: FormSummary["accessMode"];
   accessPasswordHash: string | null;
+  allowAnonymousDrafts: number;
   submittedCount: number;
 };
 
@@ -192,6 +221,7 @@ export function mapForm(row: FormRow): FormSummary {
     eventSlug: row.eventSlug,
     eventTimezone: row.eventTimezone,
     brandAccent: row.brandAccent,
+    filePolicy: parseEventFilePolicy(row.filePolicyJson),
     name: row.name,
     kind: row.kind,
     status: row.status,
@@ -202,6 +232,7 @@ export function mapForm(row: FormRow): FormSummary {
     maxSpeakers: row.maxSpeakers,
     accessMode: row.accessMode,
     accessPasswordHash: row.accessPasswordHash,
+    allowAnonymousDrafts: Boolean(row.allowAnonymousDrafts),
     submittedCount: Number(row.submittedCount),
   };
 }

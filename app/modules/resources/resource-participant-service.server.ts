@@ -1,4 +1,8 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  AirtableProviderBoundary,
+  airtableCommandKey,
+} from "~/modules/airtable/airtable-provider-boundary.server";
 import { ResourceServiceBase } from "./resource-service-base.server";
 import {
   participantAudienceSql,
@@ -6,7 +10,19 @@ import {
 } from "./resource-service-shared";
 
 export class ResourceParticipantService extends ResourceServiceBase {
+  private readonly airtable: AirtableProviderBoundary;
+
+  constructor(
+    env: CloudflareEnvironment,
+    dependencies: { airtable?: AirtableProviderBoundary } = {},
+  ) {
+    super(env);
+    this.airtable =
+      dependencies.airtable ?? new AirtableProviderBoundary(this.env);
+  }
+
   async getParticipantWorkspace(viewer: Viewer, selectedSlug?: string | null) {
+    await this.airtable.assertReadable(viewer);
     const pages = await this.env.DB.prepare(
       `
       SELECT rp.id, rv.title, rv.slug, rv.category, rv.acknowledgement_required AS acknowledgementRequired,
@@ -85,6 +101,24 @@ export class ResourceParticipantService extends ResourceServiceBase {
     versionId: string,
     userAgent: string | null,
   ) {
+    const operation = "resource.acknowledge";
+    const idempotencyKey = await airtableCommandKey(operation, viewer, {
+      pageId,
+      versionId,
+    });
+    return this.airtable.executeIdempotent(
+      viewer,
+      { idempotencyKey, operation },
+      () => this.acknowledgeD1(viewer, pageId, versionId, userAgent),
+    );
+  }
+
+  private async acknowledgeD1(
+    viewer: Viewer,
+    pageId: string,
+    versionId: string,
+    userAgent: string | null,
+  ) {
     const available = await this.env.DB.prepare(
       `
       SELECT rp.id, rv.acknowledgement_required AS required
@@ -104,7 +138,9 @@ export class ResourceParticipantService extends ResourceServiceBase {
       .first<{ id: string; required: number }>();
     if (!available) throw new Response("Resource not found.", { status: 404 });
     if (!available.required)
-      throw new Error("This resource does not require acknowledgement.");
+      throw new ResourceRevisionConflictError(
+        "This published resource does not require acknowledgement.",
+      );
     const existing = await this.env.DB.prepare(
       `SELECT 1 FROM resource_acknowledgements WHERE resource_page_version_id = ? AND person_id = ?`,
     )

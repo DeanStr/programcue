@@ -6,6 +6,7 @@ export const fieldTypeSchema = z.enum([
   "select",
   "multi_select",
   "url",
+  "video",
 ]);
 
 export const formFieldSchema = z
@@ -36,6 +37,13 @@ export const formFieldSchema = z
         code: "custom",
         path: ["options"],
         message: "Choice fields need at least one option",
+      });
+    }
+    if (new Set(field.options).size !== field.options.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "Choice options must be unique",
       });
     }
   });
@@ -71,6 +79,28 @@ export const formSchemaSchema = z
           path: ["fields", index, "condition"],
           message: "Conditional fields must depend on an earlier field",
         });
+      } else {
+        const dependency = schema.fields[dependencyIndex];
+        if (
+          dependency &&
+          dependency.type !== "select" &&
+          dependency.type !== "multi_select"
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["fields", index, "condition"],
+            message: "Conditional fields must depend on a choice field",
+          });
+        } else if (
+          dependency &&
+          !dependency.options.includes(field.condition.equals)
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["fields", index, "condition"],
+            message: "Conditional values must match an available choice",
+          });
+        }
       }
     });
 
@@ -83,12 +113,32 @@ export const formSchemaSchema = z
         });
       }
     }
+
+    if (schema.fields.filter((field) => field.type === "video").length > 1) {
+      context.addIssue({
+        code: "custom",
+        path: ["fields"],
+        message: "A form can contain at most one native video upload field",
+      });
+    }
   });
 
 export type SubmissionFormSchema = z.infer<typeof formSchemaSchema>;
 
 export const routingSchema = z.object({
-  categories: z.record(z.string(), z.string().trim().max(120)).default({}),
+  categories: z
+    .record(z.string(), z.string().trim().min(1).max(100))
+    .default({}),
+  teamNames: z
+    .record(z.string(), z.string().trim().min(1).max(120))
+    .default({}),
+  directSessionDurationMinutes: z
+    .number()
+    .int()
+    .min(5)
+    .max(480)
+    .nullable()
+    .default(null),
   passwordHash: z.string().nullable().default(null),
 });
 
@@ -161,7 +211,7 @@ export const saveFormSchema = z
     if (
       input.accessMode === "password_protected" &&
       !input.accessPassword &&
-      !input.routing.passwordHash
+      !input.id
     ) {
       context.addIssue({
         code: "custom",
@@ -176,6 +226,69 @@ export const saveFormSchema = z
         message: "Form passwords must contain at least 8 characters",
       });
     }
+    const categoryField = input.schema.fields.find(
+      (field) => field.id === "category",
+    );
+    const titleField = input.schema.fields.find(
+      (field) => field.id === "title",
+    );
+    if (
+      titleField?.type !== "short_text" ||
+      !titleField.required ||
+      titleField.condition !== null
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["schema", "fields"],
+        message:
+          "The session title must be an always-visible required short-text field",
+      });
+    }
+    if (categoryField?.type !== "select") {
+      context.addIssue({
+        code: "custom",
+        path: ["schema", "fields"],
+        message: "The category field must be a single-choice field",
+      });
+    } else {
+      if (
+        Object.keys(input.routing.categories).length > 0 &&
+        (!categoryField.required || categoryField.condition !== null)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["schema", "fields"],
+          message: "A routed category must be an always-visible required field",
+        });
+      }
+      for (const category of Object.keys(input.routing.categories)) {
+        if (!categoryField.options.includes(category)) {
+          context.addIssue({
+            code: "custom",
+            path: ["routing", "categories", category],
+            message: "Category routes must match a current category option",
+          });
+        }
+      }
+    }
+    if (input.kind === "direct_session") {
+      const formatField = input.schema.fields.find(
+        (field) => field.id === "format",
+      );
+      if (
+        formatField?.type !== "select" ||
+        !formatField.required ||
+        formatField.condition !== null ||
+        formatField.options.length === 0
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["schema", "fields"],
+          message:
+            "Direct-session formats must be an always-visible required select with at least one option",
+        });
+      }
+    }
   });
 
 export type SaveFormInput = z.infer<typeof saveFormSchema>;
@@ -183,7 +296,15 @@ export type SaveFormInput = z.infer<typeof saveFormSchema>;
 export const speakerInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().toLowerCase().email().max(254),
+  biography: z.string().trim().max(5_000).optional(),
 });
+
+export const uploadReferenceSchema = z.object({
+  assetId: z.string().min(1).max(180),
+  versionId: z.string().min(1).max(180),
+});
+
+export type UploadReference = z.infer<typeof uploadReferenceSchema>;
 
 export const draftPayloadSchema = z.object({
   submissionId: z.string().min(1).max(100),
@@ -201,13 +322,22 @@ export const draftPayloadSchema = z.object({
       if (new Set(emails).size !== emails.length) {
         context.addIssue({
           code: "custom",
+          path: ["speakers"],
           message: "Each speaker must use a different email address",
         });
       }
     }),
+  uploads: z
+    .record(z.string().regex(/^[a-z][a-z0-9_]{1,39}$/), uploadReferenceSchema)
+    .default({}),
 });
 
-export type DraftPayload = z.infer<typeof draftPayloadSchema>;
+export type DraftPayload = Omit<
+  z.infer<typeof draftPayloadSchema>,
+  "uploads"
+> & {
+  uploads?: Record<string, UploadReference>;
+};
 
 export const submittedSnapshotSchema = z.object({
   formVersionId: z.string().min(1).max(100),
@@ -215,6 +345,7 @@ export const submittedSnapshotSchema = z.object({
   schema: formSchemaSchema,
   answers: draftPayloadSchema.shape.answers,
   speakers: draftPayloadSchema.shape.speakers,
+  uploads: draftPayloadSchema.shape.uploads,
 });
 
 export type SubmittedSnapshot = z.infer<typeof submittedSnapshotSchema>;
@@ -224,6 +355,7 @@ export type FieldErrors = Record<string, string[]>;
 export function validateAnswerShapes(
   schema: SubmissionFormSchema,
   answers: Record<string, string | string[]>,
+  uploads: Record<string, UploadReference> = {},
 ) {
   const errors: FieldErrors = {};
   for (const field of schema.fields) {
@@ -243,6 +375,12 @@ export function validateAnswerShapes(
       errors[field.id] = ["Session title must contain at most 180 characters"];
     }
   }
+  for (const fieldId of Object.keys(uploads)) {
+    const field = schema.fields.find((candidate) => candidate.id === fieldId);
+    if (field?.type !== "video") {
+      errors[fieldId] = ["This field does not accept a native video upload"];
+    }
+  }
   return errors;
 }
 
@@ -250,12 +388,19 @@ export function visibleFields(
   schema: SubmissionFormSchema,
   answers: Record<string, string | string[]>,
 ) {
+  const visibleIds = new Set<string>();
   return schema.fields.filter((field) => {
-    if (!field.condition) return true;
+    if (!field.condition) {
+      visibleIds.add(field.id);
+      return true;
+    }
+    if (!visibleIds.has(field.condition.fieldId)) return false;
     const dependency = answers[field.condition.fieldId];
-    return Array.isArray(dependency)
+    const visible = Array.isArray(dependency)
       ? dependency.includes(field.condition.equals)
       : dependency === field.condition.equals;
+    if (visible) visibleIds.add(field.id);
+    return visible;
   });
 }
 
@@ -274,8 +419,12 @@ export function reviewerVisibleAnswers(
   schema: SubmissionFormSchema,
   answers: Record<string, string | string[]>,
 ) {
+  const visible = new Set(
+    visibleFields(schema, answers).map((field) => field.id),
+  );
   return Object.fromEntries(
     schema.fields
+      .filter((field) => visible.has(field.id))
       .filter((field) => field.reviewVisibility === "reviewers")
       .filter((field) => Object.hasOwn(answers, field.id))
       .map((field) => [field.id, answers[field.id]]),
@@ -288,6 +437,7 @@ export function validateFinalAnswers(
   speakers: Array<{ name: string; email: string }>,
   minSpeakers: number,
   maxSpeakers: number | null,
+  uploads: Record<string, UploadReference> = {},
 ) {
   const errors: FieldErrors = {};
   for (const field of visibleFields(schema, answers)) {
@@ -295,7 +445,7 @@ export function validateFinalAnswers(
     const missing = Array.isArray(answer)
       ? answer.length === 0
       : !String(answer ?? "").trim();
-    if (field.required && missing)
+    if (field.required && missing && !uploads[field.id])
       errors[field.id] = [`${field.label} is required`];
     if (
       !missing &&
@@ -306,11 +456,12 @@ export function validateFinalAnswers(
         errors[field.id] = [`${field.label} contains an invalid choice`];
       }
     }
-    if (!missing && field.type === "url") {
+    if (!missing && (field.type === "url" || field.type === "video")) {
       try {
-        new URL(String(answer));
+        const url = new URL(String(answer));
+        if (url.protocol !== "https:") throw new Error("unsupported protocol");
       } catch {
-        errors[field.id] = [`${field.label} must be a valid URL`];
+        errors[field.id] = [`${field.label} must be a valid HTTPS URL`];
       }
     }
   }
@@ -384,9 +535,9 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
     {
       id: "video",
       label: "Optional pitch video",
-      type: "url",
+      type: "video",
       required: false,
-      help: "Link to a private or unlisted video.",
+      help: "Upload an MP4/WebM file or link to a private or unlisted HTTPS video.",
       options: [],
       reviewVisibility: "reviewers",
       condition: null,

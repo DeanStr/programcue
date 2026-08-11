@@ -14,7 +14,16 @@ const ROUND_ID = "demo-evaluation-round";
 const formSchema = {
   introduction: "These archived proposals provide stable, realistic evaluation examples in demo mode.",
   fields: [
-    { id: "title", type: "short_text", label: "Session title", required: true, help: "", options: [], condition: null },
+    {
+      id: "title",
+      type: "short_text",
+      label: "Session title",
+      required: true,
+      help: "",
+      options: [],
+      reviewVisibility: "reviewers",
+      condition: null,
+    },
     {
       id: "category",
       type: "select",
@@ -22,6 +31,7 @@ const formSchema = {
       required: true,
       help: "",
       options: ["Event Operations", "Experience Design"],
+      reviewVisibility: "reviewers",
       condition: null,
     },
     {
@@ -31,11 +41,39 @@ const formSchema = {
       required: true,
       help: "",
       options: ["Workshop", "Presentation"],
+      reviewVisibility: "reviewers",
       condition: null,
     },
-    { id: "session_overview", type: "long_text", label: "Session overview", required: true, help: "", options: [], condition: null },
-    { id: "audience_takeaway", type: "long_text", label: "Audience takeaway", required: true, help: "", options: [], condition: null },
-    { id: "delivery_approach", type: "long_text", label: "Delivery approach", required: true, help: "", options: [], condition: null },
+    {
+      id: "session_overview",
+      type: "long_text",
+      label: "Session overview",
+      required: true,
+      help: "",
+      options: [],
+      reviewVisibility: "reviewers",
+      condition: null,
+    },
+    {
+      id: "audience_takeaway",
+      type: "long_text",
+      label: "Audience takeaway",
+      required: true,
+      help: "",
+      options: [],
+      reviewVisibility: "reviewers",
+      condition: null,
+    },
+    {
+      id: "delivery_approach",
+      type: "long_text",
+      label: "Delivery approach",
+      required: true,
+      help: "",
+      options: [],
+      reviewVisibility: "reviewers",
+      condition: null,
+    },
   ],
 } satisfies SubmissionFormSchema;
 

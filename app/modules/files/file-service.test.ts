@@ -7,13 +7,17 @@ import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { loader as speakerFileDownload } from "~/routes/speaker-file-download";
 import { loader as speakerResourceDownload } from "~/routes/speaker-resource-download";
+import { FilePolicyError } from "./file-policy";
 import {
-  FilePolicyError,
-  validateFileDeclaration,
-  WORKER_PROXY_UPLOAD_LIMIT_BYTES,
-} from "./file-policy";
+  acceptTestFileScanDispatch,
+  completeTestDirectUpload,
+} from "./direct-upload.test-helper";
 import {
   FileAccessError,
+  FileDiscardIncompleteError,
+  FileErasureConfirmationError,
+  FileErasureIncompleteError,
+  FileRetentionStateError,
   FileScanPendingError,
   FileService,
 } from "./file-service.server";
@@ -134,23 +138,6 @@ function compoundOfficeFile(streamName: string) {
 }
 
 describe("private R2 file lifecycle", () => {
-  it("keeps declared uploads below the Worker request-body ceiling", () => {
-    const declaredFile = (size: number) =>
-      ({ name: "slides.pdf", type: "application/pdf", size }) as File;
-    expect(() =>
-      validateFileDeclaration(
-        "slides",
-        declaredFile(WORKER_PROXY_UPLOAD_LIMIT_BYTES),
-      ),
-    ).not.toThrow();
-    expect(() =>
-      validateFileDeclaration(
-        "slides",
-        declaredFile(WORKER_PROXY_UPLOAD_LIMIT_BYTES + 1),
-      ),
-    ).toThrow("90 MB limit");
-  });
-
   it("stores a signature-valid upload in quarantine and releases only after a clean scan", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
@@ -164,7 +151,8 @@ describe("private R2 file lifecycle", () => {
       "headshot.png",
       { type: "image/png" },
     );
-    const uploaded = await service.uploadParticipantFile(
+    const uploaded = await completeTestDirectUpload(
+      testEnv,
       speaker,
       {
         targetType: "person",
@@ -194,10 +182,16 @@ describe("private R2 file lifecycle", () => {
     ).rejects.toBeInstanceOf(FileScanPendingError);
 
     await service.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        testEnv,
+        speaker.eventId,
+        uploaded.versionId,
+      )),
       eventId: speaker.eventId,
       versionId: uploaded.versionId,
       provider: "test-scanner",
-      clean: true,
+      callbackId: `callback-${uploaded.versionId}`,
+      status: "clean",
       result: { verdict: "clean" },
     });
     const response = await service.participantDownload(
@@ -221,6 +215,156 @@ describe("private R2 file lifecycle", () => {
     ).rejects.toBeInstanceOf(FileScanPendingError);
   });
 
+  it("refuses private downloads when R2 bytes no longer match the scanned object ETag", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new FileService(testEnv);
+    const release = async (
+      actor: Viewer,
+      target: Parameters<typeof completeTestDirectUpload>[2],
+      file: File,
+    ) => {
+      const upload = await completeTestDirectUpload(
+        testEnv,
+        actor,
+        target,
+        file,
+      );
+      await service.recordScanResult({
+        ...(await acceptTestFileScanDispatch(
+          testEnv,
+          actor.eventId,
+          upload.versionId,
+        )),
+        eventId: actor.eventId,
+        versionId: upload.versionId,
+        provider: "test-scanner",
+        callbackId: `callback-${upload.versionId}`,
+        status: "clean",
+        result: { verdict: "clean" },
+      });
+      const stored = await testEnv.DB.prepare(
+        "SELECT object_key AS objectKey FROM file_versions WHERE id = ? AND event_id = ?",
+      )
+        .bind(upload.versionId, actor.eventId)
+        .first<{ objectKey: string }>();
+      expect(stored).not.toBeNull();
+      return { ...upload, objectKey: stored!.objectKey };
+    };
+    const overwrite = (objectKey: string, marker: string) =>
+      testEnv.FILES.put(objectKey, `%PDF-1.7 unscanned overwrite ${marker}`);
+
+    const profile = await release(
+      speaker,
+      {
+        targetType: "person",
+        targetId: speaker.personId,
+        assetKind: "headshot",
+      },
+      new File(
+        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 91])],
+        "verified-profile.png",
+        { type: "image/png" },
+      ),
+    );
+    expect(
+      (await service.participantDownload(speaker, profile.assetId)).status,
+    ).toBe(200);
+    await overwrite(profile.objectKey, "profile");
+    await expect(
+      service.participantDownload(speaker, profile.assetId),
+    ).rejects.toThrow(/no longer matches its scanned version/u);
+
+    const evidence = await release(
+      speaker,
+      {
+        targetType: "task",
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence",
+      },
+      new File(["%PDF-1.7 verified task evidence"], "verified-evidence.pdf", {
+        type: "application/pdf",
+      }),
+    );
+    const evidenceId = crypto.randomUUID();
+    await testEnv.DB.prepare(
+      `INSERT INTO task_evidence (
+         id, event_id, task_id, submitted_by_person_id, file_asset_id,
+         evidence_json, status, created_at
+       ) VALUES (?, ?, 'task-demo-slides', ?, ?, ?, 'submitted', unixepoch())`,
+    )
+      .bind(
+        evidenceId,
+        speaker.eventId,
+        speaker.personId,
+        evidence.assetId,
+        JSON.stringify({ fileVersionId: evidence.versionId }),
+      )
+      .run();
+    expect(
+      (
+        await service.administratorTaskEvidenceDownload(
+          admin,
+          evidence.assetId,
+          evidence.versionId,
+        )
+      ).status,
+    ).toBe(200);
+    await overwrite(evidence.objectKey, "task evidence");
+    await expect(
+      service.administratorTaskEvidenceDownload(
+        admin,
+        evidence.assetId,
+        evidence.versionId,
+      ),
+    ).rejects.toThrow(/no longer matches its scanned version/u);
+
+    const resource = await release(
+      admin,
+      {
+        targetType: "resource",
+        targetId: "resource-speaker-handbook",
+        assetKind: "resource_attachment",
+      },
+      new File(["%PDF-1.7 verified resource"], "verified-resource.pdf", {
+        type: "application/pdf",
+      }),
+    );
+    await testEnv.DB.prepare(
+      `INSERT INTO resource_attachments (
+         resource_page_version_id, event_id, file_asset_id, position, label
+       ) VALUES ('resource-version-handbook-1', ?, ?, 0, 'Verified resource')`,
+    )
+      .bind(speaker.eventId, resource.assetId)
+      .run();
+    expect(
+      (await service.participantResourceDownload(speaker, resource.assetId))
+        .status,
+    ).toBe(200);
+    await overwrite(resource.objectKey, "resource");
+    await expect(
+      service.participantResourceDownload(speaker, resource.assetId),
+    ).rejects.toThrow(/no longer matches its scanned version/u);
+
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "DELETE FROM task_evidence WHERE id = ? AND event_id = ?",
+      ).bind(evidenceId, speaker.eventId),
+      testEnv.DB.prepare(
+        `DELETE FROM resource_attachments
+          WHERE resource_page_version_id = 'resource-version-handbook-1'
+            AND event_id = ? AND file_asset_id = ?`,
+      ).bind(speaker.eventId, resource.assetId),
+      testEnv.DB.prepare(
+        "DELETE FROM file_assets WHERE id = ? AND event_id = ?",
+      ).bind(evidence.assetId, speaker.eventId),
+      testEnv.DB.prepare(
+        "DELETE FROM file_assets WHERE id = ? AND event_id = ?",
+      ).bind(resource.assetId, speaker.eventId),
+    ]);
+    await testEnv.FILES.delete([evidence.objectKey, resource.objectKey]);
+  });
+
   it("returns explicit HTTP states for unavailable speaker downloads", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
@@ -233,7 +377,8 @@ describe("private R2 file lifecycle", () => {
     )
       .bind(speaker.eventId, speaker.personId, speaker.personId)
       .run();
-    const uploaded = await new FileService(testEnv).uploadParticipantFile(
+    const uploaded = await completeTestDirectUpload(
+      testEnv,
       speaker,
       {
         targetType: "person",
@@ -251,6 +396,7 @@ describe("private R2 file lifecycle", () => {
       speakerFileDownload({
         request: new Request(
           `http://localhost/speaker/files/${uploaded.assetId}`,
+          { headers: { cookie: "program_cue_demo_role=speaker" } },
         ),
         params: { assetId: uploaded.assetId },
         context: routeContext(),
@@ -260,6 +406,7 @@ describe("private R2 file lifecycle", () => {
       speakerResourceDownload({
         request: new Request(
           "http://localhost/speaker/resources/missing/download",
+          { headers: { cookie: "program_cue_demo_role=speaker" } },
         ),
         params: { assetId: `missing-${crypto.randomUUID()}` },
         context: routeContext(),
@@ -274,7 +421,8 @@ describe("private R2 file lifecycle", () => {
       type: "application/pdf",
     });
     await expect(
-      new FileService(testEnv).uploadParticipantFile(
+      completeTestDirectUpload(
+        testEnv,
         speaker,
         {
           targetType: "person",
@@ -297,128 +445,9 @@ describe("private R2 file lifecycle", () => {
       uploadStatus: "failed",
       signatureStatus: "invalid",
       scanStatus: "failed",
-      scanError: "Signature validation failed before quarantine.",
+      scanError: "Completed object failed signature validation.",
     });
     expect(await env.FILES.head(failed!.objectKey)).toBeNull();
-  });
-
-  it("removes a stored R2 object when the metadata commit fails", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    let batchCalls = 0;
-    const failingDb = new Proxy(testEnv.DB, {
-      get(target, property) {
-        if (property === "batch") {
-          return async (statements: D1PreparedStatement[]) => {
-            batchCalls += 1;
-            if (batchCalls === 2) throw new Error("injected metadata failure");
-            return target.batch(statements);
-          };
-        }
-        const value = Reflect.get(target, property);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-    const failingEnv = new Proxy(testEnv, {
-      get(target, property) {
-        return property === "DB" ? failingDb : Reflect.get(target, property);
-      },
-    });
-    const file = new File(
-      [
-        new Uint8Array([
-          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-        ]),
-      ],
-      "metadata-failure.png",
-      { type: "image/png" },
-    );
-
-    await expect(
-      new FileService(failingEnv).uploadParticipantFile(
-        speaker,
-        {
-          targetType: "person",
-          targetId: speaker.personId,
-          assetKind: "headshot",
-        },
-        file,
-      ),
-    ).rejects.toThrow("File metadata commit failed");
-
-    const failed = await testEnv.DB.prepare(
-      `SELECT upload_status AS uploadStatus, scan_error AS scanError, object_key AS objectKey
-         FROM file_versions WHERE original_filename = ?`,
-    )
-      .bind(file.name)
-      .first<{
-        uploadStatus: string;
-        scanError: string | null;
-        objectKey: string;
-      }>();
-    expect(failed).toMatchObject({
-      uploadStatus: "failed",
-      scanError: "Quarantined R2 object removed after metadata commit failure.",
-    });
-    expect(await testEnv.FILES.head(failed!.objectKey)).toBeNull();
-  });
-
-  it("discards an unlinked task upload after evidence submission loses its race", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    const taskId = `cleanup-task-${crypto.randomUUID()}`;
-    await testEnv.DB.prepare(
-      `INSERT INTO task_instances (
-        id, event_id, target_type, target_id, owner_person_id, title,
-        task_type, impact, status, readiness_state, readiness_percent
-      ) VALUES (?, ?, 'speaker', ?, ?, 'Cleanup race task',
-                'file_upload', 'high', 'not_started', 'on_track', 0)`,
-    )
-      .bind(taskId, speaker.eventId, speaker.personId, speaker.personId)
-      .run();
-    const service = new FileService(testEnv);
-    const upload = await service.uploadParticipantFile(
-      speaker,
-      {
-        targetType: "task",
-        targetId: taskId,
-        assetKind: "task_evidence",
-      },
-      new File(
-        [
-          new Uint8Array([
-            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-          ]),
-        ],
-        "orphaned-task-evidence.png",
-        { type: "image/png" },
-      ),
-    );
-    const stored = await testEnv.DB.prepare(
-      "SELECT object_key AS objectKey FROM file_versions WHERE id = ?",
-    )
-      .bind(upload.versionId)
-      .first<{ objectKey: string }>();
-    expect(await testEnv.FILES.head(stored!.objectKey)).not.toBeNull();
-
-    await service.discardUnattachedTaskUpload(speaker, upload);
-
-    expect(await testEnv.FILES.head(stored!.objectKey)).toBeNull();
-    expect(
-      await testEnv.DB.prepare(
-        `SELECT fa.status AS assetStatus, fv.upload_status AS uploadStatus,
-                fv.scan_status AS scanStatus, fv.deleted_at IS NOT NULL AS deleted
-           FROM file_assets fa JOIN file_versions fv ON fv.asset_id = fa.id
-          WHERE fa.id = ? AND fv.id = ?`,
-      )
-        .bind(upload.assetId, upload.versionId)
-        .first(),
-    ).toEqual({
-      assetStatus: "deleted",
-      uploadStatus: "failed",
-      scanStatus: "failed",
-      deleted: 1,
-    });
   });
 
   it("identifies Office uploads from container metadata instead of the filename", async () => {
@@ -430,7 +459,8 @@ describe("private R2 file lifecycle", () => {
       targetId: speaker.personId,
       assetKind: "slides" as const,
     };
-    const valid = await service.uploadParticipantFile(
+    const valid = await completeTestDirectUpload(
+      testEnv,
       speaker,
       target,
       new File(
@@ -454,7 +484,8 @@ describe("private R2 file lifecycle", () => {
     ).toEqual({ detected: pptx });
 
     await expect(
-      service.uploadParticipantFile(
+      completeTestDirectUpload(
+        testEnv,
         speaker,
         target,
         new File([emptyZip(["payload.txt"])], "renamed-archive.pptx", {
@@ -463,7 +494,8 @@ describe("private R2 file lifecycle", () => {
       ),
     ).rejects.toBeInstanceOf(FilePolicyError);
     await expect(
-      service.uploadParticipantFile(
+      completeTestDirectUpload(
+        testEnv,
         speaker,
         target,
         new File(
@@ -480,7 +512,8 @@ describe("private R2 file lifecycle", () => {
       ),
     ).rejects.toBeInstanceOf(FilePolicyError);
     await expect(
-      service.uploadParticipantFile(
+      completeTestDirectUpload(
+        testEnv,
         speaker,
         target,
         new File(
@@ -490,7 +523,8 @@ describe("private R2 file lifecycle", () => {
         ),
       ),
     ).rejects.toBeInstanceOf(FilePolicyError);
-    const legacy = await service.uploadParticipantFile(
+    const legacy = await completeTestDirectUpload(
+      testEnv,
       speaker,
       target,
       new File(
@@ -513,7 +547,8 @@ describe("private R2 file lifecycle", () => {
     await ensureDemoSpeakerData(testEnv);
     const service = new FileService(testEnv);
     const upload = (name: string, marker: number) =>
-      service.uploadParticipantFile(
+      completeTestDirectUpload(
+        testEnv,
         speaker,
         {
           targetType: "person",
@@ -544,17 +579,29 @@ describe("private R2 file lifecycle", () => {
     expect(newer.versionNumber).toBeGreaterThan(older.versionNumber);
 
     await service.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        testEnv,
+        speaker.eventId,
+        newer.versionId,
+      )),
       eventId: speaker.eventId,
       versionId: newer.versionId,
       provider: "test-scanner",
-      clean: true,
+      callbackId: `callback-${newer.versionId}`,
+      status: "clean",
       result: { verdict: "clean", callback: "first" },
     });
     await service.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        testEnv,
+        speaker.eventId,
+        older.versionId,
+      )),
       eventId: speaker.eventId,
       versionId: older.versionId,
       provider: "test-scanner",
-      clean: true,
+      callbackId: `callback-${older.versionId}`,
+      status: "clean",
       result: { verdict: "clean", callback: "late" },
     });
 
@@ -591,7 +638,8 @@ describe("private R2 file lifecycle", () => {
       .first<{ versionNumber: number }>();
     const uploads = await Promise.all(
       [1, 2, 3, 4].map((marker) =>
-        service.uploadParticipantFile(
+        completeTestDirectUpload(
+          testEnv,
           speaker,
           {
             targetType: "person",
@@ -643,7 +691,8 @@ describe("private R2 file lifecycle", () => {
     await ensureDemoSpeakerData(testEnv);
     const service = new FileService(testEnv);
     const upload = (name: string) =>
-      service.uploadAdminFile(
+      completeTestDirectUpload(
+        testEnv,
         admin,
         {
           targetType: "resource",
@@ -671,6 +720,84 @@ describe("private R2 file lifecycle", () => {
     expect(assets?.count).toBe(2);
   });
 
+  it("retries private-object cleanup after an unattached upload was durably revoked", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const upload = await completeTestDirectUpload(
+      testEnv,
+      admin,
+      {
+        targetType: "resource",
+        targetId: "resource-speaker-handbook",
+        assetKind: "resource_attachment",
+      },
+      new File(["%PDF-1.7 unattached cleanup"], "unattached-cleanup.pdf", {
+        type: "application/pdf",
+      }),
+    );
+    const stored = await testEnv.DB.prepare(
+      "SELECT object_key AS objectKey FROM file_versions WHERE id = ?",
+    )
+      .bind(upload.versionId)
+      .first<{ objectKey: string }>();
+    const failingBucket = new Proxy(testEnv.FILES, {
+      get(target, property) {
+        if (property === "delete") {
+          return async () => {
+            throw new Error("injected unattached R2 delete failure");
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const failingEnvironment = new Proxy(testEnv, {
+      get(target, property) {
+        return property === "FILES"
+          ? failingBucket
+          : Reflect.get(target, property);
+      },
+    });
+
+    await expect(
+      new FileService(failingEnvironment).discardUnattachedResourceUpload(
+        admin,
+        upload,
+      ),
+    ).rejects.toMatchObject({
+      name: FileDiscardIncompleteError.name,
+      committed: true,
+      operationId: `file-upload-discard:${upload.versionId}`,
+    });
+    expect(await testEnv.FILES.head(stored!.objectKey)).not.toBeNull();
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT asset.status, version.deleted_at AS deletedAt,
+                (SELECT COUNT(*) FROM audit_events
+                  WHERE id = ?) AS discardAudits
+           FROM file_assets asset
+           JOIN file_versions version
+             ON version.asset_id = asset.id AND version.event_id = asset.event_id
+          WHERE asset.id = ? AND version.id = ?`,
+      )
+        .bind(
+          `file-upload-discarded:${upload.versionId}`,
+          upload.assetId,
+          upload.versionId,
+        )
+        .first(),
+    ).toEqual({
+      status: "deleted",
+      deletedAt: expect.any(Number),
+      discardAudits: 1,
+    });
+
+    await expect(
+      new FileService(testEnv).discardUnattachedResourceUpload(admin, upload),
+    ).resolves.toBeUndefined();
+    expect(await testEnv.FILES.head(stored!.objectKey)).toBeNull();
+  });
+
   it("rejects a task upload before storage when the task is final", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
@@ -693,7 +820,8 @@ describe("private R2 file lifecycle", () => {
       .first<{ count: number }>();
 
     await expect(
-      new FileService(testEnv).uploadParticipantFile(
+      completeTestDirectUpload(
+        testEnv,
         speaker,
         {
           targetType: "task",
@@ -717,5 +845,315 @@ describe("private R2 file lifecycle", () => {
       .bind(speaker.eventId)
       .first<{ count: number }>();
     expect(after?.count).toBe(before?.count);
+  });
+
+  it("revokes and erases every private version before allowing a new logical file generation", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new FileService(testEnv);
+    const target = {
+      targetType: "session" as const,
+      targetId: "session-demo-speaker",
+      assetKind: "headshot" as const,
+    };
+    const first = await completeTestDirectUpload(
+      testEnv,
+      speaker,
+      target,
+      new File(
+        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 41])],
+        "erase-first.png",
+        { type: "image/png" },
+      ),
+    );
+    const second = await completeTestDirectUpload(
+      testEnv,
+      speaker,
+      target,
+      new File(
+        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 42])],
+        "erase-second.png",
+        { type: "image/png" },
+      ),
+    );
+    const stored = await testEnv.DB.prepare(
+      "SELECT object_key AS objectKey FROM file_versions WHERE asset_id = ? ORDER BY version_number",
+    )
+      .bind(first.assetId)
+      .all<{ objectKey: string }>();
+
+    await expect(
+      service.eraseAsset(speaker, {
+        assetId: first.assetId,
+        confirmed: false,
+      }),
+    ).rejects.toBeInstanceOf(FileErasureConfirmationError);
+    const erased = await service.eraseAsset(speaker, {
+      assetId: first.assetId,
+      confirmed: true,
+    });
+    expect(erased).toMatchObject({
+      duplicate: false,
+      erasedVersions: 2,
+      affected: { latestFilename: "erase-second.png", versionCount: 2 },
+    });
+    for (const version of stored.results) {
+      expect(await testEnv.FILES.head(version.objectKey)).toBeNull();
+    }
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT fa.status, fa.current_version_id AS currentVersionId,
+                SUM(fv.deleted_at IS NOT NULL) AS deletedVersions,
+                SUM(fv.released_at IS NOT NULL) AS releasedVersions
+           FROM file_assets fa JOIN file_versions fv ON fv.asset_id = fa.id
+          WHERE fa.id = ? GROUP BY fa.id`,
+      )
+        .bind(first.assetId)
+        .first(),
+    ).toEqual({
+      status: "deleted",
+      currentVersionId: null,
+      deletedVersions: 2,
+      releasedVersions: 0,
+    });
+    await expect(
+      service.eraseAsset(speaker, {
+        assetId: first.assetId,
+        confirmed: true,
+      }),
+    ).resolves.toMatchObject({ duplicate: true });
+
+    const replacement = await completeTestDirectUpload(
+      testEnv,
+      speaker,
+      target,
+      new File(
+        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 43])],
+        "after-erasure.png",
+        { type: "image/png" },
+      ),
+    );
+    expect(replacement.assetId).not.toBe(first.assetId);
+    expect(replacement.versionNumber).toBe(1);
+    expect(await testEnv.FILES.head(stored.results[0]!.objectKey)).toBeNull();
+    expect(second.assetId).toBe(first.assetId);
+  });
+
+  it("keeps a durable tombstone and supports an idempotent retry when R2 erasure fails", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new FileService(testEnv);
+    const upload = await completeTestDirectUpload(
+      testEnv,
+      admin,
+      {
+        targetType: "resource",
+        targetId: "resource-speaker-handbook",
+        assetKind: "resource_attachment",
+      },
+      new File(["%PDF-1.7 erasure retry"], "erasure-retry.pdf", {
+        type: "application/pdf",
+      }),
+    );
+    const stored = await testEnv.DB.prepare(
+      "SELECT object_key AS objectKey FROM file_versions WHERE id = ?",
+    )
+      .bind(upload.versionId)
+      .first<{ objectKey: string }>();
+    const failingBucket = new Proxy(testEnv.FILES, {
+      get(target, property) {
+        if (property === "delete") {
+          return async () => {
+            throw new Error("injected R2 delete failure");
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const failingEnvironment = new Proxy(testEnv, {
+      get(target, property) {
+        return property === "FILES"
+          ? failingBucket
+          : Reflect.get(target, property);
+      },
+    });
+
+    await expect(
+      new FileService(failingEnvironment).eraseAsset(admin, {
+        assetId: upload.assetId,
+        confirmed: true,
+      }),
+    ).rejects.toBeInstanceOf(FileErasureIncompleteError);
+    expect(
+      await testEnv.DB.prepare(
+        "SELECT status, current_version_id AS currentVersionId FROM file_assets WHERE id = ?",
+      )
+        .bind(upload.assetId)
+        .first(),
+    ).toEqual({ status: "rejected", currentVersionId: null });
+    expect(await testEnv.FILES.head(stored!.objectKey)).not.toBeNull();
+
+    await expect(
+      service.eraseAsset(admin, {
+        assetId: upload.assetId,
+        confirmed: true,
+      }),
+    ).resolves.toMatchObject({ duplicate: false, erasedVersions: 1 });
+    expect(await testEnv.FILES.head(stored!.objectKey)).toBeNull();
+  });
+
+  it("enforces owner-controlled holds and event retention before bounded erasure", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const eventId = `retention-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO events (
+         id, organisation_id, name, slug, timezone, starts_at, ends_at,
+         retention_months, file_policy_json
+       ) VALUES (?, ?, 'Expired retention event', ?, 'UTC',
+                 unixepoch('2020-01-01T00:00:00Z'),
+                 unixepoch('2020-01-02T00:00:00Z'), 12,
+                 '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')`,
+    )
+      .bind(
+        eventId,
+        speaker.organisationId,
+        `expired-retention-${crypto.randomUUID()}`,
+      )
+      .run();
+    const eventSpeaker = { ...speaker, eventId };
+    const owner = { ...admin, role: "owner" as const, eventId };
+    const service = new FileService(testEnv);
+    const upload = await completeTestDirectUpload(
+      testEnv,
+      eventSpeaker,
+      {
+        targetType: "person",
+        targetId: speaker.personId,
+        assetKind: "headshot",
+      },
+      new File(
+        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 50])],
+        "expired-file.png",
+        { type: "image/png" },
+      ),
+    );
+    await expect(service.getFileRetentionState(admin)).rejects.toBeInstanceOf(
+      FileAccessError,
+    );
+    await service.setFileRetentionHold(owner, {
+      hold: true,
+      confirmed: true,
+      reason: "Pending a legal discovery request",
+    });
+    await expect(
+      service.eraseExpiredEventFiles(owner, { confirmed: true }),
+    ).rejects.toBeInstanceOf(FileRetentionStateError);
+    await service.setFileRetentionHold(owner, {
+      hold: false,
+      confirmed: true,
+      reason: "Legal discovery request resolved",
+    });
+
+    await expect(
+      service.eraseExpiredEventFiles(owner, { confirmed: true, limit: 50 }),
+    ).resolves.toEqual({
+      erasedAssets: 1,
+      erasedVersions: 1,
+      remainingAssets: 0,
+    });
+    expect(
+      await testEnv.DB.prepare("SELECT status FROM file_assets WHERE id = ?")
+        .bind(upload.assetId)
+        .first(),
+    ).toEqual({ status: "deleted" });
+  });
+
+  it("stops retention erasure when a hold is placed at the durable intent boundary", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const eventId = `retention-hold-race-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO events (
+         id, organisation_id, name, slug, timezone, starts_at, ends_at,
+         retention_months, file_policy_json
+       ) VALUES (?, ?, 'Retention hold race', ?, 'UTC',
+                 unixepoch('2020-01-01T00:00:00Z'),
+                 unixepoch('2020-01-02T00:00:00Z'), 12,
+                 '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')`,
+    )
+      .bind(
+        eventId,
+        speaker.organisationId,
+        `retention-hold-race-${crypto.randomUUID()}`,
+      )
+      .run();
+    const eventSpeaker = { ...speaker, eventId };
+    const owner = { ...admin, role: "owner" as const, eventId };
+    const upload = await completeTestDirectUpload(
+      testEnv,
+      eventSpeaker,
+      {
+        targetType: "person",
+        targetId: speaker.personId,
+        assetKind: "headshot",
+      },
+      new File(
+        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 51])],
+        "held-before-intent.png",
+        { type: "image/png" },
+      ),
+    );
+    const stored = await testEnv.DB.prepare(
+      "SELECT object_key AS objectKey FROM file_versions WHERE id = ?",
+    )
+      .bind(upload.versionId)
+      .first<{ objectKey: string }>();
+    let injectHold = true;
+    const racingDb = new Proxy(testEnv.DB, {
+      get(target, property) {
+        if (property === "batch") {
+          return async (statements: D1PreparedStatement[]) => {
+            if (injectHold) {
+              injectHold = false;
+              await target
+                .prepare(
+                  "UPDATE events SET file_retention_hold_at = unixepoch() WHERE id = ?",
+                )
+                .bind(eventId)
+                .run();
+            }
+            return target.batch(statements);
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const racingEnvironment = new Proxy(testEnv, {
+      get(target, property) {
+        return property === "DB" ? racingDb : Reflect.get(target, property);
+      },
+    });
+
+    await expect(
+      new FileService(racingEnvironment).eraseExpiredEventFiles(owner, {
+        confirmed: true,
+      }),
+    ).rejects.toThrow(
+      "File retention was placed on hold before the erasure intent committed.",
+    );
+    expect(await testEnv.FILES.head(stored!.objectKey)).not.toBeNull();
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT asset.status,
+                (SELECT COUNT(*) FROM audit_events audit
+                  WHERE audit.id = 'file-erasure:' || asset.id) AS erasureRequests
+           FROM file_assets asset WHERE asset.id = ?`,
+      )
+        .bind(upload.assetId)
+        .first(),
+    ).toEqual({ status: "pending", erasureRequests: 0 });
   });
 });

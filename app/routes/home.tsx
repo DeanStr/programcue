@@ -1,7 +1,9 @@
 import { redirect } from "react-router";
 
 import type { Route } from "./+types/home";
-import { requireEventRole, type ViewerRole } from "~/platform/auth/authorize.server";
+import { SubmissionService } from "~/modules/submissions/submission-service.server";
+import type { ViewerRole } from "~/platform/auth/authorize.server";
+import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
 const landingPage: Partial<Record<ViewerRole, string>> = {
@@ -14,11 +16,7 @@ const landingPage: Partial<Record<ViewerRole, string>> = {
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
-  if (!env.DEFAULT_EVENT_ID) {
-    throw new Response("DEFAULT_EVENT_ID is not configured", { status: 503 });
-  }
-
-  const viewer = await requireEventRole(request, env, env.DEFAULT_EVENT_ID, [
+  const viewer = await requireCurrentEventRole(request, env, [
     "owner",
     "administrator",
     "committee_chair",
@@ -29,15 +27,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const destination = landingPage[viewer.role];
   if (destination) return redirect(destination);
 
-  const form = await env.DB.prepare(`
-    SELECT public_slug AS publicSlug
-      FROM form_definitions
-     WHERE event_id = ? AND status = 'published'
-     ORDER BY updated_at DESC
-     LIMIT 1
-  `).bind(viewer.eventId).first<{ publicSlug: string }>();
-  if (!form) throw new Response("No application form is currently published", { status: 404 });
-  return redirect(`/apply/${encodeURIComponent(form.publicSlug)}`);
+  const publicSlug = await new SubmissionService(
+    env,
+  ).getLatestPublishedFormSlug(viewer);
+  if (!publicSlug)
+    throw new Response("No application form is currently published", {
+      status: 404,
+    });
+  return redirect(`/apply/${encodeURIComponent(publicSlug)}`);
 }
 
 export default function Home() {

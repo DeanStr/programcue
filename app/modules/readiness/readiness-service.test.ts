@@ -1,7 +1,8 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { ReadinessService } from "./readiness-service.server";
 
@@ -20,6 +21,22 @@ beforeEach(async () => {
 });
 
 describe("D1-backed command centre", () => {
+  it("fails closed before calculating readiness from an unreadable Airtable projection", async () => {
+    const unavailable = new Error("Airtable projection is unavailable.");
+    const assertReadable = vi.fn(async () => {
+      throw unavailable;
+    });
+    const service = new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+      {
+        airtable: { assertReadable } as unknown as AirtableProviderBoundary,
+      },
+    );
+
+    await expect(service.getCommandCentre(viewer)).rejects.toBe(unavailable);
+    expect(assertReadable).toHaveBeenCalledWith(viewer);
+  });
+
   it("derives workflow scores and exact blockers from event records", async () => {
     await env.DB.batch([
       env.DB.prepare(

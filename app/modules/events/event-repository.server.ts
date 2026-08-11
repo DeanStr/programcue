@@ -1,7 +1,13 @@
 import { and, asc, eq } from "drizzle-orm";
 
 import { createDatabase } from "~/platform/database/db.server";
-import { events, rooms } from "~/platform/database/schema";
+import { events, rooms, tracks } from "~/platform/database/schema";
+import {
+  parseEventFilePolicy,
+  type EventFilePolicy,
+} from "~/modules/files/file-policy";
+import { parseSessionFormatsConfiguration } from "./event-configuration";
+import { eventResourceSchema } from "./event-schema";
 import type {
   AdministratorInvitationInput,
   EventSetupInput,
@@ -11,6 +17,7 @@ export type EventAdministrator = {
   id: string;
   name: string;
   email: string;
+  scope: "event" | "organisation";
   status: "Active" | "Invited" | "Expired";
 };
 
@@ -28,19 +35,50 @@ export type EventSetup = {
   brandAccent: string;
   description: string;
   repositoryProvider: "d1" | "airtable";
+  repositoryLockedAt: number | null;
+  repositoryConnection: {
+    id: string;
+    status: string;
+    baseId: string;
+    tableId: string;
+    tableName: string;
+    hasCredentials: boolean;
+    updatedAt: number;
+    authoritativeEntities: readonly [
+      "rooms",
+      "event_configuration",
+      "forms",
+      "submissions",
+      "evaluations",
+      "sessions",
+      "tasks",
+      "published_programme",
+    ];
+  } | null;
+  repositoryFreshness: {
+    source: "d1" | "airtable";
+    scope: "rooms" | "event_data";
+    fetchedAt: number;
+    cacheExpiresAt: number | null;
+    cached: boolean;
+  };
   retentionMonths: 12 | 24 | 36;
   submissionAccessMode:
     "email_verified" | "account_required" | "password_protected";
   allowAnonymousDrafts: boolean;
   duplicatePersonWarnings: boolean;
+  filePolicy: EventFilePolicy;
   programmePublished: boolean;
   revision: number;
+  sessionFormats: EventSetupInput["sessionFormats"];
   rooms: Array<{
     id: string;
     name: string;
     capacity: number;
+    resources: string[];
     position: number;
   }>;
+  tracks: EventSetupInput["tracks"];
   administrators: EventAdministrator[];
 };
 
@@ -74,6 +112,45 @@ export class EventRoomOwnershipError extends Error {
   }
 }
 
+export class EventTrackInUseError extends Error {
+  constructor() {
+    super("Reassign sessions before removing a track.");
+    this.name = "EventTrackInUseError";
+  }
+}
+
+export class EventTrackOwnershipError extends Error {
+  constructor() {
+    super(
+      "A track identifier belongs to another event. Refresh before saving.",
+    );
+    this.name = "EventTrackOwnershipError";
+  }
+}
+
+export class EventSessionFormatInUseError extends Error {
+  constructor() {
+    super("Reassign sessions before removing one of their configured formats.");
+    this.name = "EventSessionFormatInUseError";
+  }
+}
+
+export class EventResourceConfigurationError extends Error {
+  constructor() {
+    super(
+      "Every required session resource must remain configured in its assigned room and in at least one active room.",
+    );
+    this.name = "EventResourceConfigurationError";
+  }
+}
+
+export class EventConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EventConfigurationError";
+  }
+}
+
 export class EventPublishedScheduleConflictError extends Error {
   constructor() {
     super(
@@ -93,9 +170,20 @@ export class EventPublishedProgrammeSlugError extends Error {
 }
 
 export class EventAdministratorAlreadyActiveError extends Error {
-  constructor() {
-    super("That person is already an active event administrator.");
+  constructor(scope: "event" | "organisation") {
+    super(
+      scope === "organisation"
+        ? "That person already administers this organisation."
+        : "That person already administers this event through an event or organisation role.",
+    );
     this.name = "EventAdministratorAlreadyActiveError";
+  }
+}
+
+export class EventAdministratorNotFoundError extends Error {
+  constructor() {
+    super("The administrator membership is no longer active in this scope.");
+    this.name = "EventAdministratorNotFoundError";
   }
 }
 
@@ -112,7 +200,20 @@ export interface EventRepository {
     eventId: string,
     actorPersonId: string,
     input: AdministratorInvitationInput,
+    command?: {
+      operationId: string;
+      personId: string;
+      membershipId: string;
+      auditId: string;
+    },
   ): Promise<{ membershipId: string }>;
+  revokeAdministrator(
+    organisationId: string,
+    eventId: string,
+    actorPersonId: string,
+    membershipId: string,
+    command?: { operationId: string; auditId: string },
+  ): Promise<{ membershipId: string; scope: "event" | "organisation" }>;
 }
 
 function dateFromEpoch(epoch: number) {
@@ -125,6 +226,48 @@ function startOfDayEpoch(date: string) {
 
 function endOfDayEpoch(date: string) {
   return Math.floor(Date.parse(`${date}T23:59:59Z`) / 1_000);
+}
+
+function parseResources(value: string, roomId: string) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new EventConfigurationError(
+      `Room ${roomId} has invalid resource inventory JSON.`,
+    );
+  }
+  const result = eventResourceSchema.array().max(50).safeParse(parsed);
+  if (!result.success || new Set(result.data).size !== result.data.length) {
+    throw new EventConfigurationError(
+      `Room ${roomId} has invalid or duplicate resource inventory entries.`,
+    );
+  }
+  return result.data;
+}
+
+function parseSessionFormats(value: string) {
+  try {
+    return parseSessionFormatsConfiguration(value);
+  } catch (error) {
+    throw new EventConfigurationError(
+      error instanceof Error
+        ? error.message
+        : "The event has invalid session-format configuration.",
+    );
+  }
+}
+
+function parseFilePolicy(value: string) {
+  try {
+    return parseEventFilePolicy(value);
+  } catch (error) {
+    throw new EventConfigurationError(
+      error instanceof Error
+        ? error.message
+        : "The event has invalid file-policy configuration.",
+    );
+  }
 }
 
 export class D1EventRepository implements EventRepository {
@@ -144,38 +287,59 @@ export class D1EventRepository implements EventRepository {
       .limit(1);
     if (!event) return null;
 
-    const [roomRows, organisation, administrators] = await Promise.all([
-      db
-        .select({
-          id: rooms.id,
-          name: rooms.name,
-          capacity: rooms.capacity,
-          position: rooms.position,
-        })
-        .from(rooms)
-        .where(and(eq(rooms.eventId, eventId), eq(rooms.status, "active")))
-        .orderBy(asc(rooms.position), asc(rooms.name)),
-      this.env.DB.prepare("SELECT name FROM organisations WHERE id = ?")
-        .bind(organisationId)
-        .first<{ name: string }>(),
-      this.env.DB.prepare(
-        `
-        SELECT p.id, p.display_name AS name, p.email,
+    const [roomRows, trackRows, organisation, administrators] =
+      await Promise.all([
+        db
+          .select({
+            id: rooms.id,
+            name: rooms.name,
+            capacity: rooms.capacity,
+            resourcesJson: rooms.resourcesJson,
+            position: rooms.position,
+          })
+          .from(rooms)
+          .where(and(eq(rooms.eventId, eventId), eq(rooms.status, "active")))
+          .orderBy(asc(rooms.position), asc(rooms.name)),
+        db
+          .select({
+            id: tracks.id,
+            name: tracks.name,
+            slug: tracks.slug,
+            colourToken: tracks.colourToken,
+            position: tracks.position,
+            exclusive: tracks.exclusive,
+            isPublic: tracks.isPublic,
+          })
+          .from(tracks)
+          .where(eq(tracks.eventId, eventId))
+          .orderBy(asc(tracks.position), asc(tracks.name)),
+        this.env.DB.prepare("SELECT name FROM organisations WHERE id = ?")
+          .bind(organisationId)
+          .first<{ name: string }>(),
+        this.env.DB.prepare(
+          `
+        SELECT m.id, p.display_name AS name, p.email,
+               CASE WHEN m.event_id IS NULL THEN 'organisation' ELSE 'event' END AS scope,
                CASE
                  WHEN m.accepted_at IS NOT NULL THEN 'Active'
-                 WHEN m.invitation_expires_at <= unixepoch() THEN 'Expired'
+                 WHEN m.invited_at IS NULL
+                   OR m.invitation_expires_at IS NULL
+                   OR m.invitation_expires_at <= unixepoch() THEN 'Expired'
                  ELSE 'Invited'
                END AS status
           FROM memberships m
           JOIN people p ON p.id = m.person_id
-         WHERE m.organisation_id = ? AND m.event_id = ? AND m.role = 'administrator'
+         WHERE m.organisation_id = ?
+           AND (m.event_id = ? OR m.event_id IS NULL)
+           AND m.role = 'administrator'
            AND m.revoked_at IS NULL
-         ORDER BY m.accepted_at IS NULL, p.display_name
+         ORDER BY m.event_id IS NOT NULL, m.accepted_at IS NULL,
+                  p.display_name COLLATE NOCASE, m.id
       `,
-      )
-        .bind(organisationId, eventId)
-        .all<EventAdministrator>(),
-    ]);
+        )
+          .bind(organisationId, eventId)
+          .all<EventAdministrator>(),
+      ]);
     if (!organisation) {
       throw new Error(
         `Event ${eventId} references missing organisation ${organisationId}.`,
@@ -197,42 +361,212 @@ export class D1EventRepository implements EventRepository {
       description: event.description ?? "",
       repositoryProvider:
         event.repositoryProvider as EventSetup["repositoryProvider"],
+      repositoryLockedAt: event.repositoryLockedAt,
+      repositoryConnection: null,
+      repositoryFreshness: {
+        source: "d1",
+        scope: "rooms",
+        fetchedAt: event.updatedAt,
+        cacheExpiresAt: null,
+        cached: false,
+      },
       retentionMonths: event.retentionMonths as EventSetup["retentionMonths"],
       submissionAccessMode:
         event.submissionAccessMode as EventSetup["submissionAccessMode"],
       allowAnonymousDrafts: event.allowAnonymousDrafts,
       duplicatePersonWarnings: event.duplicatePersonWarnings,
+      filePolicy: parseFilePolicy(event.filePolicyJson),
       programmePublished: event.programmePublishedAt !== null,
       revision: event.revision,
-      rooms: roomRows,
+      sessionFormats: parseSessionFormats(event.sessionFormatsJson),
+      rooms: roomRows.map(({ resourcesJson, ...room }) => ({
+        ...room,
+        resources: parseResources(resourcesJson, room.id),
+      })),
+      tracks: trackRows.map((track) => ({
+        ...track,
+        colourToken: track.colourToken ?? "",
+      })),
       administrators: administrators.results,
     };
   }
 
-  async saveSetup(
+  async validateSetup(
     organisationId: string,
     eventId: string,
-    actorPersonId: string,
     input: EventSetupInput,
-  ): Promise<void> {
+  ) {
+    const current = await this.env.DB.prepare(
+      `SELECT revision, slug, repository_provider AS repositoryProvider,
+              programme_published_at AS programmePublishedAt,
+              timezone, starts_at AS startsAt, ends_at AS endsAt,
+              EXISTS (
+                SELECT 1 FROM schedule_versions
+                 WHERE event_id = events.id AND status = 'published'
+              ) AS hasPublishedSchedule
+         FROM events
+        WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(eventId, organisationId)
+      .first<{
+        revision: number;
+        slug: string;
+        repositoryProvider: "d1" | "airtable";
+        programmePublishedAt: number | null;
+        timezone: string;
+        startsAt: number;
+        endsAt: number;
+        hasPublishedSchedule: number;
+      }>();
+    if (!current || current.revision !== input.revision)
+      throw new EventRevisionConflictError();
+
+    if (current.slug !== input.publicSlug) {
+      const conflictingSlug = await this.env.DB.prepare(
+        "SELECT 1 FROM events WHERE slug = ? AND id <> ? LIMIT 1",
+      )
+        .bind(input.publicSlug, eventId)
+        .first();
+      if (conflictingSlug) throw new EventSlugConflictError();
+      if (current.programmePublishedAt !== null)
+        throw new EventPublishedProgrammeSlugError();
+    }
+    if (
+      current.hasPublishedSchedule &&
+      (current.timezone !== input.timezone ||
+        current.startsAt !== startOfDayEpoch(input.startDate) ||
+        current.endsAt !== endOfDayEpoch(input.endDate))
+    ) {
+      throw new EventPublishedScheduleConflictError();
+    }
+
+    const roomIdsJson = JSON.stringify(input.rooms.map((room) => room.id));
+    const trackIdsJson = JSON.stringify(input.tracks.map((track) => track.id));
+    if (input.rooms.length) {
+      const foreignRoom = await this.env.DB.prepare(
+        `SELECT 1 FROM rooms
+          WHERE id IN (SELECT value FROM json_each(?))
+            AND event_id <> ? LIMIT 1`,
+      )
+        .bind(roomIdsJson, eventId)
+        .first();
+      if (foreignRoom) throw new EventRoomOwnershipError();
+    }
+    if (input.tracks.length) {
+      const foreignTrack = await this.env.DB.prepare(
+        `SELECT 1 FROM tracks
+          WHERE id IN (SELECT value FROM json_each(?))
+            AND event_id <> ? LIMIT 1`,
+      )
+        .bind(trackIdsJson, eventId)
+        .first();
+      if (foreignTrack) throw new EventTrackOwnershipError();
+    }
+    const activeRoomReference = await this.env.DB.prepare(
+      `SELECT 1
+         FROM rooms removed
+         JOIN schedule_entries entry
+           ON entry.event_id = removed.event_id AND entry.room_id = removed.id
+         JOIN schedule_versions version
+           ON version.event_id = entry.event_id
+          AND version.id = entry.schedule_version_id
+        WHERE removed.event_id = ? AND removed.status = 'active'
+          AND removed.id NOT IN (SELECT value FROM json_each(?))
+          AND version.status IN ('draft','publishing','published')
+        LIMIT 1`,
+    )
+      .bind(eventId, roomIdsJson)
+      .first();
+    if (activeRoomReference) throw new EventRoomInUseError();
+    const removedTrackReference = await this.env.DB.prepare(
+      `SELECT 1
+         FROM tracks removed
+         JOIN sessions session
+           ON session.event_id = removed.event_id AND session.track_id = removed.id
+        WHERE removed.event_id = ?
+          AND removed.id NOT IN (SELECT value FROM json_each(?))
+        LIMIT 1`,
+    )
+      .bind(eventId, trackIdsJson)
+      .first();
+    if (removedTrackReference) throw new EventTrackInUseError();
+
+    const sessionRows = await this.env.DB.prepare(
+      `SELECT id, format, required_resources_json AS requiredResourcesJson
+         FROM sessions WHERE event_id = ?`,
+    )
+      .bind(eventId)
+      .all<{
+        id: string;
+        format: string;
+        requiredResourcesJson: string;
+      }>();
+    const configuredFormats = new Set(
+      input.sessionFormats.map((format) => format.key),
+    );
+    if (
+      sessionRows.results.some(
+        (session) => !configuredFormats.has(session.format),
+      )
+    ) {
+      throw new EventSessionFormatInUseError();
+    }
+    const resourceInventory = new Set(
+      input.rooms.flatMap((room) => room.resources),
+    );
+    const requiredResources = new Map(
+      sessionRows.results.map((session) => [
+        session.id,
+        parseResources(session.requiredResourcesJson, `session ${session.id}`),
+      ]),
+    );
+    if (
+      [...requiredResources.values()].some((resources) =>
+        resources.some((resource) => !resourceInventory.has(resource)),
+      )
+    ) {
+      throw new EventResourceConfigurationError();
+    }
+    const requestedRoomResources = new Map(
+      input.rooms.map((room) => [room.id, new Set(room.resources)]),
+    );
+    const scheduledSessions = await this.env.DB.prepare(
+      `SELECT entry.session_id AS sessionId, entry.room_id AS roomId
+         FROM schedule_entries entry
+         JOIN schedule_versions version
+           ON version.id = entry.schedule_version_id
+          AND version.event_id = entry.event_id
+        WHERE entry.event_id = ?
+          AND version.status IN ('draft','publishing','published')`,
+    )
+      .bind(eventId)
+      .all<{ sessionId: string; roomId: string }>();
+    if (
+      scheduledSessions.results.some((entry) => {
+        const roomResources = requestedRoomResources.get(entry.roomId);
+        return (requiredResources.get(entry.sessionId) ?? []).some(
+          (resource) => !roomResources?.has(resource),
+        );
+      })
+    ) {
+      throw new EventResourceConfigurationError();
+    }
     const capacityRequirements = await this.env.DB.prepare(
-      `
-      SELECT entry.room_id AS roomId,
-             MAX(session.expected_attendance) AS requiredCapacity
-        FROM events event
-        JOIN schedule_versions version
-          ON version.event_id = event.id AND version.status = 'published'
-        JOIN schedule_entries entry
-          ON entry.event_id = version.event_id
-         AND entry.schedule_version_id = version.id
-        JOIN sessions session
-          ON session.event_id = entry.event_id AND session.id = entry.session_id
-        JOIN schedule_policies policy
-          ON policy.event_id = event.id AND policy.capacity_action = 'block'
-       WHERE event.id = ? AND event.organisation_id = ? AND event.revision = ?
-         AND session.expected_attendance IS NOT NULL
-       GROUP BY entry.room_id
-    `,
+      `SELECT entry.room_id AS roomId,
+              MAX(session.expected_attendance) AS requiredCapacity
+         FROM events event
+         JOIN schedule_versions version
+           ON version.event_id = event.id AND version.status = 'published'
+         JOIN schedule_entries entry
+           ON entry.event_id = version.event_id
+          AND entry.schedule_version_id = version.id
+         JOIN sessions session
+           ON session.event_id = entry.event_id AND session.id = entry.session_id
+         JOIN schedule_policies policy
+           ON policy.event_id = event.id AND policy.capacity_action = 'block'
+        WHERE event.id = ? AND event.organisation_id = ? AND event.revision = ?
+          AND session.expected_attendance IS NOT NULL
+        GROUP BY entry.room_id`,
     )
       .bind(eventId, organisationId, input.revision)
       .all<{ roomId: string; requiredCapacity: number }>();
@@ -249,11 +583,30 @@ export class D1EventRepository implements EventRepository {
     ) {
       throw new EventPublishedScheduleConflictError();
     }
+    return current;
+  }
+
+  async saveSetup(
+    organisationId: string,
+    eventId: string,
+    actorPersonId: string,
+    input: EventSetupInput,
+  ): Promise<void> {
+    await this.validateSetup(organisationId, eventId, input);
 
     const operationId = crypto.randomUUID();
     const auditId = crypto.randomUUID();
     const roomIds = input.rooms.map((room) => room.id);
     const roomIdsJson = JSON.stringify(roomIds);
+    const trackIds = input.tracks.map((track) => track.id);
+    const trackIdsJson = JSON.stringify(trackIds);
+    const sessionFormatsJson = JSON.stringify(input.sessionFormats);
+    const filePolicyJson = JSON.stringify(input.filePolicy);
+    const resourceInventory = [
+      ...new Set(input.rooms.flatMap((room) => room.resources)),
+    ];
+    const resourceInventoryJson = JSON.stringify(resourceInventory);
+    const roomConfigurationJson = JSON.stringify(input.rooms);
     const keepClause = "id NOT IN (SELECT value FROM json_each(?))";
     const removedRoomClause =
       "removed.id NOT IN (SELECT value FROM json_each(?))";
@@ -263,8 +616,10 @@ export class D1EventRepository implements EventRepository {
         `
         UPDATE events
            SET name = ?, slug = ?, timezone = ?, starts_at = ?, ends_at = ?, venue_name = ?, city = ?,
-               description = ?, brand_accent = ?, repository_provider = ?, retention_months = ?,
+               description = ?, brand_accent = ?, session_formats_json = ?,
+               repository_provider = ?, retention_months = ?,
                submission_access_mode = ?, allow_anonymous_drafts = ?, duplicate_person_warnings = ?,
+               file_policy_json = ?,
                revision = revision + 1, last_operation_id = ?, last_updated_by_person_id = ?, updated_at = unixepoch()
          WHERE id = ? AND organisation_id = ? AND revision = ?
            AND (programme_published_at IS NULL OR slug = ?)
@@ -292,6 +647,56 @@ export class D1EventRepository implements EventRepository {
               WHERE requested.id IN (SELECT value FROM json_each(?))
                 AND requested.event_id <> events.id
            )
+           AND NOT EXISTS (
+             SELECT 1 FROM tracks requested
+              WHERE requested.id IN (SELECT value FROM json_each(?))
+                AND requested.event_id <> events.id
+           )
+           AND NOT EXISTS (
+             SELECT 1
+               FROM tracks removed
+               JOIN sessions session
+                 ON session.event_id = removed.event_id
+                AND session.track_id = removed.id
+              WHERE removed.event_id = events.id
+                AND removed.id NOT IN (SELECT value FROM json_each(?))
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM sessions configured
+              WHERE configured.event_id = events.id
+                AND configured.format NOT IN (
+                  SELECT json_extract(value, '$.key') FROM json_each(?)
+                )
+           )
+           AND NOT EXISTS (
+             SELECT 1
+               FROM sessions configured,
+                    json_each(configured.required_resources_json) required
+              WHERE configured.event_id = events.id
+                AND required.value NOT IN (SELECT value FROM json_each(?))
+           )
+           AND NOT EXISTS (
+             SELECT 1
+               FROM schedule_entries entry
+               JOIN schedule_versions version
+                 ON version.id = entry.schedule_version_id
+                AND version.event_id = entry.event_id
+               JOIN sessions configured
+                 ON configured.id = entry.session_id
+                AND configured.event_id = entry.event_id
+               JOIN json_each(configured.required_resources_json) required
+              WHERE entry.event_id = events.id
+                AND version.status IN ('draft','publishing','published')
+                AND NOT EXISTS (
+                  SELECT 1
+                    FROM json_each(?) requested_room
+                    JOIN json_each(
+                      json_extract(requested_room.value, '$.resources')
+                    ) requested_resource
+                   WHERE json_extract(requested_room.value, '$.id') = entry.room_id
+                     AND requested_resource.value = required.value
+                )
+           )
       `,
       ).bind(
         input.name,
@@ -303,11 +708,13 @@ export class D1EventRepository implements EventRepository {
         input.city || null,
         input.description || null,
         input.brandAccent.toLowerCase(),
+        sessionFormatsJson,
         input.repositoryProvider,
         input.retentionMonths,
         input.submissionAccessMode,
         input.allowAnonymousDrafts ? 1 : 0,
         input.duplicatePersonWarnings ? 1 : 0,
+        filePolicyJson,
         operationId,
         actorPersonId,
         eventId,
@@ -319,18 +726,26 @@ export class D1EventRepository implements EventRepository {
         endOfDayEpoch(input.endDate),
         roomIdsJson,
         roomIdsJson,
+        trackIdsJson,
+        trackIdsJson,
+        sessionFormatsJson,
+        resourceInventoryJson,
+        roomConfigurationJson,
       ),
       ...input.rooms.map((room) =>
         this.env.DB.prepare(
           `
-        INSERT INTO rooms (id, event_id, name, capacity, position)
-        SELECT ?, ?, ?, ?, ?
+        INSERT INTO rooms (
+          id, event_id, name, capacity, resources_json, position
+        )
+        SELECT ?, ?, ?, ?, ?, ?
          WHERE EXISTS (
            SELECT 1 FROM events WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
          )
         ON CONFLICT(id) DO UPDATE SET
           name = excluded.name,
           capacity = excluded.capacity,
+          resources_json = excluded.resources_json,
           position = excluded.position,
           status = 'active'
         WHERE rooms.event_id = excluded.event_id
@@ -340,6 +755,7 @@ export class D1EventRepository implements EventRepository {
           eventId,
           room.name,
           room.capacity,
+          JSON.stringify(room.resources),
           room.position,
           eventId,
           organisationId,
@@ -357,6 +773,49 @@ export class D1EventRepository implements EventRepository {
            )
       `,
       ).bind(eventId, roomIdsJson, eventId, organisationId, operationId),
+      ...input.tracks.map((track) =>
+        this.env.DB.prepare(
+          `
+        INSERT INTO tracks (
+          id, event_id, name, slug, colour_token, position, exclusive, is_public
+        )
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (
+           SELECT 1 FROM events
+            WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
+         )
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          slug = excluded.slug,
+          colour_token = excluded.colour_token,
+          position = excluded.position,
+          exclusive = excluded.exclusive,
+          is_public = excluded.is_public
+        WHERE tracks.event_id = excluded.event_id
+      `,
+        ).bind(
+          track.id,
+          eventId,
+          track.name,
+          track.slug,
+          track.colourToken,
+          track.position,
+          track.exclusive ? 1 : 0,
+          track.isPublic ? 1 : 0,
+          eventId,
+          organisationId,
+          operationId,
+        ),
+      ),
+      this.env.DB.prepare(
+        `DELETE FROM tracks
+          WHERE event_id = ?
+            AND id NOT IN (SELECT value FROM json_each(?))
+            AND EXISTS (
+              SELECT 1 FROM events
+               WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
+            )`,
+      ).bind(eventId, trackIdsJson, eventId, organisationId, operationId),
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
@@ -376,6 +835,10 @@ export class D1EventRepository implements EventRepository {
         JSON.stringify({
           revision: input.revision + 1,
           roomCount: input.rooms.length,
+          trackCount: input.tracks.length,
+          sessionFormatCount: input.sessionFormats.length,
+          resourceCount: resourceInventory.length,
+          filePolicy: input.filePolicy,
         }),
         eventId,
         organisationId,
@@ -460,6 +923,7 @@ export class D1EventRepository implements EventRepository {
             .bind(eventId, roomIdsJson)
             .first();
           if (activeRoomReference) throw new EventRoomInUseError();
+          await this.validateSetup(organisationId, eventId, input);
         }
         throw new EventRevisionConflictError();
       }
@@ -469,10 +933,23 @@ export class D1EventRepository implements EventRepository {
           "Every requested room must be persisted with the event update.",
         );
       }
+      const trackResults = results.slice(
+        2 + input.rooms.length,
+        2 + input.rooms.length + input.tracks.length,
+      );
+      if (trackResults.some((result) => (result.meta.changes ?? 0) !== 1)) {
+        throw new Error(
+          "Every requested track must be persisted with the event update.",
+        );
+      }
     } catch (error) {
       if (
         error instanceof EventRevisionConflictError ||
-        error instanceof EventRoomOwnershipError
+        error instanceof EventRoomOwnershipError ||
+        error instanceof EventTrackOwnershipError ||
+        error instanceof EventTrackInUseError ||
+        error instanceof EventSessionFormatInUseError ||
+        error instanceof EventResourceConfigurationError
       )
         throw error;
       if (
@@ -481,8 +958,6 @@ export class D1EventRepository implements EventRepository {
       ) {
         throw new EventSlugConflictError();
       }
-      if (error instanceof Error && /foreign key/i.test(error.message))
-        throw new EventRoomInUseError();
       throw error;
     }
   }
@@ -492,8 +967,37 @@ export class D1EventRepository implements EventRepository {
     eventId: string,
     actorPersonId: string,
     input: AdministratorInvitationInput,
+    command?: {
+      operationId: string;
+      personId: string;
+      membershipId: string;
+      auditId: string;
+    },
   ): Promise<{ membershipId: string }> {
-    const personId = crypto.randomUUID();
+    if (command) {
+      const recovered = await this.env.DB.prepare(
+        `SELECT membership.id
+           FROM memberships membership
+           JOIN people person ON person.id = membership.person_id
+          WHERE membership.organisation_id = ?
+            AND membership.role = 'administrator'
+            AND membership.last_operation_id = ?
+            AND person.email = ? COLLATE NOCASE
+            AND ((? = 'event' AND membership.event_id = ?)
+              OR (? = 'organisation' AND membership.event_id IS NULL))`,
+      )
+        .bind(
+          organisationId,
+          command.operationId,
+          input.email,
+          input.scope,
+          eventId,
+          input.scope,
+        )
+        .first<{ id: string }>();
+      if (recovered) return { membershipId: recovered.id };
+    }
+    const personId = command?.personId ?? crypto.randomUUID();
     await this.env.DB.prepare(
       `
         INSERT INTO people (
@@ -520,64 +1024,191 @@ export class D1EventRepository implements EventRepository {
         "The administrator could not be added to the authorised event.",
       );
 
-    const existing = await this.env.DB.prepare(
-      `
-      SELECT id, accepted_at AS acceptedAt, revoked_at AS revokedAt
+    const activeAccessPredicate =
+      input.scope === "organisation"
+        ? "membership.event_id IS NULL AND membership.role IN ('owner', 'administrator')"
+        : "((membership.event_id IS NULL AND membership.role IN ('owner', 'administrator')) OR (membership.event_id = ? AND membership.role = 'administrator'))";
+    const active = await this.env.DB.prepare(`
+      SELECT membership.id
+        FROM memberships membership
+       WHERE membership.organisation_id = ?
+         AND membership.person_id = ?
+         AND membership.accepted_at IS NOT NULL
+         AND membership.revoked_at IS NULL
+         AND (${activeAccessPredicate})
+       LIMIT 1
+    `)
+      .bind(
+        organisationId,
+        person.id,
+        ...(input.scope === "event" ? [eventId] : []),
+      )
+      .first<{ id: string }>();
+    if (active) throw new EventAdministratorAlreadyActiveError(input.scope);
+
+    const targetPredicate =
+      input.scope === "organisation" ? "event_id IS NULL" : "event_id = ?";
+    const existing = await this.env.DB.prepare(`
+      SELECT id
         FROM memberships
-       WHERE organisation_id = ? AND event_id = ? AND person_id = ? AND role = 'administrator'
-    `,
-    )
-      .bind(organisationId, eventId, person.id)
+       WHERE organisation_id = ? AND person_id = ? AND role = 'administrator'
+         AND ${targetPredicate}
+    `)
+      .bind(
+        organisationId,
+        person.id,
+        ...(input.scope === "event" ? [eventId] : []),
+      )
       .first<{
         id: string;
-        acceptedAt: number | null;
-        revokedAt: number | null;
       }>();
-    if (existing?.acceptedAt && !existing.revokedAt)
-      throw new EventAdministratorAlreadyActiveError();
 
-    const membershipId = existing?.id ?? crypto.randomUUID();
-    if (existing) {
-      await this.env.DB.prepare(
-        `
+    const membershipId =
+      existing?.id ?? command?.membershipId ?? crypto.randomUUID();
+    const membershipStatement = existing
+      ? this.env.DB.prepare(`
         UPDATE memberships
            SET invited_at = unixepoch(), invitation_expires_at = unixepoch() + 604800,
-               accepted_at = NULL, revoked_at = NULL
-         WHERE id = ? AND organisation_id = ? AND event_id = ?
-      `,
+               accepted_at = NULL, revoked_at = NULL, last_operation_id = ?
+         WHERE id = ? AND organisation_id = ? AND role = 'administrator'
+           AND ${targetPredicate}
+      `).bind(
+        command?.operationId ?? null,
+        membershipId,
+        organisationId,
+        ...(input.scope === "event" ? [eventId] : []),
       )
-        .bind(membershipId, organisationId, eventId)
-        .run();
-    } else {
-      await this.env.DB.prepare(
-        `
+      : this.env.DB.prepare(`
         INSERT INTO memberships (
           id, organisation_id, event_id, person_id, role, invited_at,
-          invitation_expires_at, accepted_at, created_at
+          invitation_expires_at, accepted_at, last_operation_id, created_at
         )
-        VALUES (?, ?, ?, ?, 'administrator', unixepoch(), unixepoch() + 604800, NULL, unixepoch())
-      `,
-      )
-        .bind(membershipId, organisationId, eventId, person.id)
-        .run();
-    }
-
-    await this.env.DB.prepare(
-      `
-        INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-        ) VALUES (?, ?, ?, ?, 'membership.administrator.invited', 'membership', ?, ?, unixepoch())
-      `,
-    )
-      .bind(
-        crypto.randomUUID(),
+        VALUES (?, ?, ?, ?, 'administrator', unixepoch(), unixepoch() + 604800, NULL, ?, unixepoch())
+      `).bind(
+        membershipId,
+        organisationId,
+        input.scope === "event" ? eventId : null,
+        person.id,
+        command?.operationId ?? null,
+      );
+    const results = await this.env.DB.batch([
+      membershipStatement,
+      this.env.DB.prepare(`
+        INSERT OR IGNORE INTO audit_events (
+          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at
+        )
+        SELECT ?, ?, ?, ?, 'membership.administrator.invited',
+               'membership', ?, ?, ?, unixepoch()
+         WHERE changes() = 1
+      `).bind(
+        command?.auditId ?? crypto.randomUUID(),
         organisationId,
         eventId,
         actorPersonId,
         membershipId,
-        JSON.stringify({ email: input.email }),
-      )
-      .run();
+        command?.operationId ?? null,
+        JSON.stringify({
+          email: input.email,
+          scope: input.scope,
+          targetEventId: input.scope === "event" ? eventId : null,
+        }),
+      ),
+    ]);
+    if (
+      (results[0].meta.changes ?? 0) !== 1 ||
+      (results[1].meta.changes ?? 0) !== 1
+    )
+      throw new Error(
+        "The administrator invitation was not persisted atomically.",
+      );
     return { membershipId };
+  }
+
+  async revokeAdministrator(
+    organisationId: string,
+    eventId: string,
+    actorPersonId: string,
+    membershipId: string,
+    command?: { operationId: string; auditId: string },
+  ): Promise<{ membershipId: string; scope: "event" | "organisation" }> {
+    const membership = await this.env.DB.prepare(`
+      SELECT membership.id, person.email,
+             CASE WHEN membership.event_id IS NULL
+                  THEN 'organisation' ELSE 'event' END AS scope
+        FROM memberships membership
+        JOIN people person ON person.id = membership.person_id
+       WHERE membership.id = ? AND membership.organisation_id = ?
+         AND membership.role = 'administrator'
+         AND membership.revoked_at IS NULL
+         AND (membership.event_id = ? OR membership.event_id IS NULL)
+    `)
+      .bind(membershipId, organisationId, eventId)
+      .first<{
+        id: string;
+        email: string;
+        scope: "event" | "organisation";
+      }>();
+    if (!membership) {
+      if (command) {
+        const recovered = await this.env.DB.prepare(
+          `SELECT CASE WHEN event_id IS NULL THEN 'organisation' ELSE 'event' END AS scope
+             FROM memberships
+            WHERE id = ? AND organisation_id = ? AND role = 'administrator'
+              AND revoked_at IS NOT NULL AND last_operation_id = ?
+              AND (event_id = ? OR event_id IS NULL)`,
+        )
+          .bind(
+            membershipId,
+            organisationId,
+            command.operationId,
+            eventId,
+          )
+          .first<{ scope: "event" | "organisation" }>();
+        if (recovered) return { membershipId, scope: recovered.scope };
+      }
+      throw new EventAdministratorNotFoundError();
+    }
+
+    const results = await this.env.DB.batch([
+      this.env.DB.prepare(`
+        UPDATE memberships
+           SET revoked_at = unixepoch(), invitation_expires_at = NULL,
+               last_operation_id = ?
+         WHERE id = ? AND organisation_id = ? AND role = 'administrator'
+           AND revoked_at IS NULL
+           AND (event_id = ? OR event_id IS NULL)
+      `).bind(
+        command?.operationId ?? null,
+        membershipId,
+        organisationId,
+        eventId,
+      ),
+      this.env.DB.prepare(`
+        INSERT OR IGNORE INTO audit_events (
+          id, organisation_id, event_id, actor_person_id, action,
+          entity_type, entity_id, correlation_id, metadata_json, created_at
+        )
+        SELECT ?, ?, ?, ?, 'membership.administrator.revoked',
+               'membership', ?, ?, ?, unixepoch()
+         WHERE changes() = 1
+      `).bind(
+        command?.auditId ?? crypto.randomUUID(),
+        organisationId,
+        eventId,
+        actorPersonId,
+        membershipId,
+        command?.operationId ?? null,
+        JSON.stringify({
+          email: membership.email,
+          scope: membership.scope,
+        }),
+      ),
+    ]);
+    if (
+      (results[0].meta.changes ?? 0) !== 1 ||
+      (results[1].meta.changes ?? 0) !== 1
+    )
+      throw new EventAdministratorNotFoundError();
+    return { membershipId, scope: membership.scope };
   }
 }

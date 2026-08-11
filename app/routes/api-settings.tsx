@@ -4,10 +4,12 @@ import {
   Copy,
   KeyRound,
   ShieldCheck,
+  Send,
   Trash2,
+  Webhook,
 } from "lucide-react";
 import { useState } from "react";
-import { data, Form, useActionData, useNavigation } from "react-router";
+import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/api-settings";
@@ -17,8 +19,14 @@ import {
   ApiKeyNameConflictError,
   ApiKeyService,
 } from "~/platform/api/api-key-service.server";
-import { requireEventRole } from "~/platform/auth/authorize.server";
+import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import { outboundWebhookEventTypes } from "~/platform/operations/webhook-schema";
+import {
+  WebhookEndpointNotFoundError,
+  WebhookQueueUnavailableError,
+  WebhookService,
+} from "~/platform/operations/webhook-service.server";
 
 export const meta = () => [{ title: "API & Settings · Program Cue" }];
 
@@ -27,9 +35,7 @@ async function administrator(
   context: Route.LoaderArgs["context"],
 ) {
   const { env } = getCloudflareContext(context);
-  if (!env.DEFAULT_EVENT_ID)
-    throw new Response("DEFAULT_EVENT_ID is not configured", { status: 503 });
-  const viewer = await requireEventRole(request, env, env.DEFAULT_EVENT_ID, [
+  const viewer = await requireCurrentEventRole(request, env, [
     "owner",
     "administrator",
   ]);
@@ -40,6 +46,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await administrator(request, context);
   return {
     keys: await new ApiKeyService(env).list(viewer),
+    webhooks: await new WebhookService(env).list(viewer),
+    webhookEventTypes: outboundWebhookEventTypes,
     scopes: API_KEY_SCOPES,
     generatedAt: Math.floor(Date.now() / 1_000),
   };
@@ -49,6 +57,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const { env, viewer } = await administrator(request, context);
   const form = await request.formData();
   const service = new ApiKeyService(env);
+  const webhookService = new WebhookService(env);
   try {
     if (form.get("intent") === "create") {
       const created = await service.create(viewer, {
@@ -61,6 +70,8 @@ export async function action({ request, context }: Route.ActionArgs) {
         ok: true as const,
         message: "API key created. Copy it now; it will not be shown again.",
         token: created.token,
+        webhookSecret: null,
+        operationId: null,
       });
     }
     if (form.get("intent") === "revoke") {
@@ -69,6 +80,56 @@ export async function action({ request, context }: Route.ActionArgs) {
         ok: true as const,
         message: "API key revoked.",
         token: null,
+        webhookSecret: null,
+        operationId: null,
+      });
+    }
+    if (form.get("intent") === "create-webhook") {
+      const created = await webhookService.create(viewer, {
+        name: form.get("name"),
+        url: form.get("url"),
+        eventTypes: form.getAll("eventTypes"),
+      });
+      return data({
+        ok: true as const,
+        message:
+          "Webhook endpoint created. Copy its signing secret now; it will not be shown again.",
+        token: null,
+        webhookSecret: created.secret,
+        operationId: null,
+      });
+    }
+    if (
+      form.get("intent") === "enable-webhook" ||
+      form.get("intent") === "disable-webhook"
+    ) {
+      const status =
+        form.get("intent") === "enable-webhook" ? "active" : "disabled";
+      await webhookService.setStatus(
+        viewer,
+        String(form.get("endpointId") ?? ""),
+        status,
+      );
+      return data({
+        ok: true as const,
+        message: `Webhook endpoint ${status === "active" ? "enabled" : "disabled"}.`,
+        token: null,
+        webhookSecret: null,
+        operationId: null,
+      });
+    }
+    if (form.get("intent") === "test-webhook") {
+      const queued = await webhookService.queueTest(
+        viewer,
+        String(form.get("endpointId") ?? ""),
+      );
+      return data({
+        ok: true as const,
+        message:
+          "Signed webhook test queued. Follow its result in the Operation Centre.",
+        token: null,
+        webhookSecret: null,
+        operationId: queued.operationId,
       });
     }
     return data(
@@ -76,14 +137,46 @@ export async function action({ request, context }: Route.ActionArgs) {
         ok: false as const,
         message: "Unsupported settings action.",
         token: null,
+        webhookSecret: null,
+        operationId: null,
       },
       { status: 400 },
     );
   } catch (error) {
     if (error instanceof ApiKeyNameConflictError) {
       return data(
-        { ok: false as const, message: error.message, token: null },
+        {
+          ok: false as const,
+          message: error.message,
+          token: null,
+          webhookSecret: null,
+          operationId: null,
+        },
         { status: 409 },
+      );
+    }
+    if (error instanceof WebhookQueueUnavailableError) {
+      return data(
+        {
+          ok: false as const,
+          message: error.message,
+          token: null,
+          webhookSecret: null,
+          operationId: error.operationId,
+        },
+        { status: 503 },
+      );
+    }
+    if (error instanceof WebhookEndpointNotFoundError) {
+      return data(
+        {
+          ok: false as const,
+          message: error.message,
+          token: null,
+          webhookSecret: null,
+          operationId: null,
+        },
+        { status: 404 },
       );
     }
     if (error instanceof ZodError) {
@@ -92,6 +185,8 @@ export async function action({ request, context }: Route.ActionArgs) {
           ok: false as const,
           message: error.issues[0]?.message ?? "Review the API key details.",
           token: null,
+          webhookSecret: null,
+          operationId: null,
         },
         { status: 422 },
       );
@@ -113,6 +208,9 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
+  const [webhookCopyState, setWebhookCopyState] = useState<
+    "idle" | "copied" | "failed"
+  >("idle");
   async function copyToken() {
     if (!actionData?.token) return;
     try {
@@ -120,6 +218,15 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
       setCopyState("copied");
     } catch {
       setCopyState("failed");
+    }
+  }
+  async function copyWebhookSecret() {
+    if (!actionData?.webhookSecret) return;
+    try {
+      await navigator.clipboard.writeText(actionData.webhookSecret);
+      setWebhookCopyState("copied");
+    } catch {
+      setWebhookCopyState("failed");
     }
   }
   const activeKeyCount = loaderData.keys.filter(
@@ -137,9 +244,9 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="page-actions">
-          <a className="btn" href="/api/docs">
+          <Link className="btn" to="/api/docs">
             API reference
-          </a>
+          </Link>
           <span className="status info">
             <ShieldCheck aria-hidden size={14} /> Scoped credentials
           </span>
@@ -177,6 +284,36 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                   </span>
                 ) : null}
               </>
+            ) : null}
+            {actionData.webhookSecret ? (
+              <>
+                <div className="api-secret">
+                  <code>{actionData.webhookSecret}</code>
+                  <button
+                    className="btn small"
+                    type="button"
+                    onClick={() => void copyWebhookSecret()}
+                  >
+                    <Copy aria-hidden size={13} />{" "}
+                    {webhookCopyState === "copied" ? "Copied" : "Copy"}
+                  </button>
+                </div>
+                {webhookCopyState === "failed" ? (
+                  <span className="field-error" role="alert">
+                    Clipboard access failed. Select and copy the secret
+                    manually.
+                  </span>
+                ) : null}
+              </>
+            ) : null}
+            {actionData.operationId ? (
+              <p>
+                <Link
+                  to={`/admin/operations?operation=${encodeURIComponent(actionData.operationId)}`}
+                >
+                  Open operation {actionData.operationId}
+                </Link>
+              </p>
             ) : null}
           </div>
         </div>
@@ -331,6 +468,223 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
           )}
         </section>
       </div>
+      <div className="grid grid-2 mt">
+        <section className="card pad">
+          <div className="card-title">
+            <h2>Create an outbound webhook</h2>
+            <Webhook aria-hidden size={19} />
+          </div>
+          <p className="subtle">
+            Program Cue signs each HTTPS request with a per-endpoint HMAC
+            secret. Provider work is never simulated.
+          </p>
+          <Form method="post" className="stack">
+            <input type="hidden" name="intent" value="create-webhook" />
+            <label className="label">
+              Endpoint name
+              <input
+                className="field"
+                name="name"
+                placeholder="Data warehouse"
+                required
+                minLength={2}
+                maxLength={80}
+              />
+            </label>
+            <label className="label">
+              HTTPS URL
+              <input
+                className="field"
+                name="url"
+                type="url"
+                placeholder="https://hooks.example.com/program-cue"
+                required
+              />
+            </label>
+            <fieldset>
+              <legend className="label">Event types</legend>
+              <div className="api-scope-list">
+                {loaderData.webhookEventTypes.map((eventType) => (
+                  <label className="speaker-confirm" key={eventType}>
+                    <input
+                      type="checkbox"
+                      name="eventTypes"
+                      value={eventType}
+                    />{" "}
+                    <code>{eventType}</code>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={navigation.state !== "idle"}
+            >
+              <Webhook aria-hidden size={14} /> Create endpoint
+            </button>
+          </Form>
+        </section>
+        <section className="card pad">
+          <div className="card-title">
+            <h2>Webhook delivery contract</h2>
+            <ShieldCheck aria-hidden size={19} />
+          </div>
+          <p>
+            Requests include a stable delivery id, event type, Unix timestamp
+            and <code>v1</code> HMAC-SHA256 signature over{" "}
+            <code>timestamp.payload</code>.
+          </p>
+          <ul>
+            <li>Reject timestamps outside your replay window.</li>
+            <li>Deduplicate with the delivery id.</li>
+            <li>Return any 2xx response only after accepting the event.</li>
+            <li>Redirects are not followed.</li>
+          </ul>
+          <p className="help">
+            Signing secrets are encrypted at rest and shown only once.
+          </p>
+        </section>
+      </div>
+      <section className="card pad mt">
+        <div className="card-title">
+          <h2>Outbound webhook endpoints</h2>
+          <span className="status info">
+            {loaderData.webhooks.length} configured
+          </span>
+        </div>
+        {loaderData.webhooks.length ? (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>Events</th>
+                  <th>Status</th>
+                  <th>Latest delivery</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loaderData.webhooks.map((endpoint) => (
+                  <tr key={endpoint.id}>
+                    <td>
+                      <strong>{endpoint.name}</strong>
+                      <small className="subtle" style={{ display: "block" }}>
+                        {endpoint.url}
+                      </small>
+                    </td>
+                    <td>{endpoint.eventTypes.length} selected</td>
+                    <td>
+                      <span
+                        className={`status ${endpoint.status === "active" ? "success" : endpoint.status === "failing" ? "danger" : "warning"}`}
+                      >
+                        {endpoint.status}
+                      </span>
+                      {endpoint.failureCount ? (
+                        <small className="subtle" style={{ display: "block" }}>
+                          {endpoint.failureCount} consecutive failures
+                        </small>
+                      ) : null}
+                    </td>
+                    <td>
+                      {endpoint.latestDelivery ? (
+                        <>
+                          {endpoint.latestDelivery.operationId ? (
+                            <Link
+                              to={`/admin/operations?operation=${encodeURIComponent(endpoint.latestDelivery.operationId)}`}
+                            >
+                              {endpoint.latestDelivery.status}
+                            </Link>
+                          ) : (
+                            endpoint.latestDelivery.status
+                          )}
+                          <small
+                            className="subtle"
+                            style={{ display: "block" }}
+                          >
+                            {endpoint.latestDelivery.attemptCount} attempt
+                            {endpoint.latestDelivery.attemptCount === 1
+                              ? ""
+                              : "s"}
+                          </small>
+                        </>
+                      ) : (
+                        "Never"
+                      )}
+                    </td>
+                    <td>
+                      <div className="page-actions">
+                        {endpoint.status !== "disabled" ? (
+                          <Form
+                            method="post"
+                            onSubmit={(event) => {
+                              if (
+                                !window.confirm(
+                                  `Send a signed test event to ${endpoint.url}?`,
+                                )
+                              )
+                                event.preventDefault();
+                            }}
+                          >
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="test-webhook"
+                            />
+                            <input
+                              type="hidden"
+                              name="endpointId"
+                              value={endpoint.id}
+                            />
+                            <button
+                              className="btn small"
+                              type="submit"
+                              disabled={navigation.state !== "idle"}
+                            >
+                              <Send aria-hidden size={13} /> Test
+                            </button>
+                          </Form>
+                        ) : null}
+                        <Form method="post">
+                          <input
+                            type="hidden"
+                            name="intent"
+                            value={
+                              endpoint.status === "disabled"
+                                ? "enable-webhook"
+                                : "disable-webhook"
+                            }
+                          />
+                          <input
+                            type="hidden"
+                            name="endpointId"
+                            value={endpoint.id}
+                          />
+                          <button
+                            className={`btn small${endpoint.status === "disabled" ? "" : " danger"}`}
+                            type="submit"
+                            disabled={navigation.state !== "idle"}
+                          >
+                            {endpoint.status === "disabled"
+                              ? "Enable"
+                              : "Disable"}
+                          </button>
+                        </Form>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty">
+            <h3>No outbound webhooks</h3>
+            <p>Create an endpoint to deliver signed event notifications.</p>
+          </div>
+        )}
+      </section>
     </>
   );
 }

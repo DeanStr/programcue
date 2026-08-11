@@ -13,16 +13,91 @@ export const assetKindSchema = z.enum([
 export type AssetKind = z.infer<typeof assetKindSchema>;
 
 type FilePolicy = {
-  maximumBytes: number;
   extensions: ReadonlySet<string>;
   contentTypes: ReadonlySet<string>;
 };
 
-const MiB = 1_048_576;
-// Cloudflare's request ceiling includes multipart framing. Keep enough room for
-// form fields, boundaries, headers and filenames so a declared-valid file is
-// not rejected by the edge before application validation runs.
-export const WORKER_PROXY_UPLOAD_LIMIT_BYTES = 90 * MiB;
+export const FILE_SIZE_MIB = 1_048_576;
+export const CANONICAL_EVENT_FILE_POLICY = {
+  headshotMaximumBytes: 10 * FILE_SIZE_MIB,
+  slidesMaximumBytes: 100 * FILE_SIZE_MIB,
+  supportingDocumentMaximumBytes: 100 * FILE_SIZE_MIB,
+  videoMaximumBytes: 1_024 * FILE_SIZE_MIB,
+} as const;
+
+const boundedMaximumBytes = (maximum: number) =>
+  z.number().int().min(FILE_SIZE_MIB).max(maximum).multipleOf(FILE_SIZE_MIB);
+
+export const eventFilePolicySchema = z
+  .object({
+    headshotMaximumBytes: boundedMaximumBytes(
+      CANONICAL_EVENT_FILE_POLICY.headshotMaximumBytes,
+    ),
+    slidesMaximumBytes: boundedMaximumBytes(
+      CANONICAL_EVENT_FILE_POLICY.slidesMaximumBytes,
+    ),
+    supportingDocumentMaximumBytes: boundedMaximumBytes(
+      CANONICAL_EVENT_FILE_POLICY.supportingDocumentMaximumBytes,
+    ),
+    videoMaximumBytes: boundedMaximumBytes(
+      CANONICAL_EVENT_FILE_POLICY.videoMaximumBytes,
+    ),
+  })
+  .strict();
+
+export type EventFilePolicy = z.infer<typeof eventFilePolicySchema>;
+
+export const CANONICAL_EVENT_FILE_POLICY_JSON = JSON.stringify(
+  CANONICAL_EVENT_FILE_POLICY,
+);
+
+export function parseEventFilePolicy(value: string): EventFilePolicy {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    throw new FilePolicyError("The event file policy contains invalid JSON.", {
+      cause: error,
+    });
+  }
+  const result = eventFilePolicySchema.safeParse(parsed);
+  if (!result.success)
+    throw new FilePolicyError(
+      "The event file policy is missing or exceeds the supported upload limits.",
+      { cause: result.error },
+    );
+  return result.data;
+}
+
+export function maximumBytesForAssetKind(
+  kind: AssetKind,
+  policy: EventFilePolicy,
+) {
+  switch (kind) {
+    case "headshot":
+      return policy.headshotMaximumBytes;
+    case "slides":
+      return policy.slidesMaximumBytes;
+    case "video":
+      return policy.videoMaximumBytes;
+    case "supporting_document":
+    case "resource_attachment":
+    case "task_evidence":
+    case "other":
+      return policy.supportingDocumentMaximumBytes;
+  }
+}
+
+export function maximumMegabytes(bytes: number) {
+  if (!Number.isSafeInteger(bytes) || bytes < FILE_SIZE_MIB)
+    throw new FilePolicyError(
+      "The event file policy contains an invalid limit.",
+    );
+  return bytes / FILE_SIZE_MIB;
+}
+
+const MiB = FILE_SIZE_MIB;
+export const DIRECT_MULTIPART_PART_SIZE_BYTES = 10 * MiB;
 const pdf = "application/pdf";
 const ppt = "application/vnd.ms-powerpoint";
 const pptx =
@@ -36,22 +111,18 @@ const xlsx =
 
 const policies: Record<AssetKind, FilePolicy> = {
   headshot: {
-    maximumBytes: 10 * MiB,
     extensions: new Set(["jpg", "jpeg", "png", "webp"]),
     contentTypes: new Set(["image/jpeg", "image/png", "image/webp"]),
   },
   slides: {
-    maximumBytes: WORKER_PROXY_UPLOAD_LIMIT_BYTES,
     extensions: new Set(["pdf", "ppt", "pptx"]),
     contentTypes: new Set([pdf, ppt, pptx]),
   },
   video: {
-    maximumBytes: 1_024 * MiB,
     extensions: new Set(["mp4", "webm"]),
     contentTypes: new Set(["video/mp4", "video/webm"]),
   },
   supporting_document: {
-    maximumBytes: WORKER_PROXY_UPLOAD_LIMIT_BYTES,
     extensions: new Set(["pdf", "doc", "docx", "xls", "xlsx", "zip"]),
     contentTypes: new Set([
       pdf,
@@ -64,7 +135,6 @@ const policies: Record<AssetKind, FilePolicy> = {
     ]),
   },
   resource_attachment: {
-    maximumBytes: WORKER_PROXY_UPLOAD_LIMIT_BYTES,
     extensions: new Set(["pdf", "doc", "docx", "xls", "xlsx", "zip"]),
     contentTypes: new Set([
       pdf,
@@ -77,7 +147,6 @@ const policies: Record<AssetKind, FilePolicy> = {
     ]),
   },
   task_evidence: {
-    maximumBytes: WORKER_PROXY_UPLOAD_LIMIT_BYTES,
     extensions: new Set([
       "pdf",
       "doc",
@@ -104,7 +173,6 @@ const policies: Record<AssetKind, FilePolicy> = {
     ]),
   },
   other: {
-    maximumBytes: WORKER_PROXY_UPLOAD_LIMIT_BYTES,
     extensions: new Set([
       "pdf",
       "doc",
@@ -133,17 +201,23 @@ const policies: Record<AssetKind, FilePolicy> = {
 };
 
 export class FilePolicyError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = "FilePolicyError";
   }
 }
+
+type FileDeclaration = Pick<File, "name" | "size" | "type">;
 
 function extension(filename: string) {
   return filename.toLowerCase().split(".").at(-1) ?? "";
 }
 
-export function validateFileDeclaration(kind: AssetKind, file: File) {
+function validateDeclaredFile(
+  kind: AssetKind,
+  file: FileDeclaration,
+  eventPolicy: EventFilePolicy,
+) {
   const policy = policies[kind];
   if (!file.name || file.size <= 0)
     throw new FilePolicyError("Choose a non-empty file.");
@@ -155,15 +229,32 @@ export function validateFileDeclaration(kind: AssetKind, file: File) {
     throw new FilePolicyError(
       `The declared file type ${file.type || "unknown"} is not allowed.`,
     );
-  if (file.size > policy.maximumBytes)
+  const maximumBytes = maximumBytesForAssetKind(kind, eventPolicy);
+  if (file.size > maximumBytes)
     throw new FilePolicyError(
-      `The file exceeds the ${Math.round(policy.maximumBytes / MiB)} MB limit.`,
+      `The file exceeds the ${maximumMegabytes(maximumBytes)} MB event limit.`,
     );
-  if (file.size > WORKER_PROXY_UPLOAD_LIMIT_BYTES) {
-    throw new FilePolicyError(
-      "Files over 90 MB require the direct multipart upload provider, which is not configured.",
-    );
-  }
+}
+
+export function validateDirectFileDeclaration(
+  kind: AssetKind,
+  file: FileDeclaration,
+  eventPolicy: EventFilePolicy,
+) {
+  validateDeclaredFile(kind, file, eventPolicy);
+}
+
+export type FileInspectionSource = FileDeclaration & {
+  readRange(start: number, end: number): Promise<ArrayBuffer>;
+};
+
+function browserFileInspectionSource(file: File): FileInspectionSource {
+  return {
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    readRange: (start, end) => file.slice(start, end).arrayBuffer(),
+  };
 }
 
 function startsWith(bytes: Uint8Array, prefix: number[]) {
@@ -179,10 +270,10 @@ function uint32(view: DataView, offset: number) {
   return view.getUint32(offset, true);
 }
 
-async function zipEntryNames(file: File) {
+async function zipEntryNames(file: FileInspectionSource) {
   const tailSize = Math.min(file.size, 65_557);
   const tail = new Uint8Array(
-    await file.slice(file.size - tailSize).arrayBuffer(),
+    await file.readRange(file.size - tailSize, file.size),
   );
   const tailView = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
   let endOffset = -1;
@@ -210,7 +301,7 @@ async function zipEntryNames(file: File) {
   )
     return null;
   const central = new Uint8Array(
-    await file.slice(centralOffset, centralOffset + centralSize).arrayBuffer(),
+    await file.readRange(centralOffset, centralOffset + centralSize),
   );
   const view = new DataView(
     central.buffer,
@@ -249,8 +340,8 @@ function openXmlContentType(names: Set<string>) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-async function compoundFileStreamNames(file: File) {
-  const header = new Uint8Array(await file.slice(0, 512).arrayBuffer());
+async function compoundFileStreamNames(file: FileInspectionSource) {
+  const header = new Uint8Array(await file.readRange(0, 512));
   if (
     header.byteLength !== 512 ||
     !startsWith(header, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])
@@ -275,7 +366,7 @@ async function compoundFileStreamNames(file: File) {
     if (!validSector(sectorId)) return null;
     const start = (sectorId + 1) * sectorSize;
     const bytes = new Uint8Array(
-      await file.slice(start, start + sectorSize).arrayBuffer(),
+      await file.readRange(start, start + sectorSize),
     );
     return bytes.byteLength === sectorSize ? bytes : null;
   };
@@ -365,8 +456,10 @@ function legacyOfficeContentType(names: Set<string>) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-export async function detectContentType(file: File): Promise<string | null> {
-  const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+export async function detectInspectionContentType(
+  file: FileInspectionSource,
+): Promise<string | null> {
+  const bytes = new Uint8Array(await file.readRange(0, 16));
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
     return "image/png";
@@ -394,9 +487,13 @@ export async function detectContentType(file: File): Promise<string | null> {
   return null;
 }
 
+export async function detectContentType(file: File): Promise<string | null> {
+  return detectInspectionContentType(browserFileInspectionSource(file));
+}
+
 export function validateFileSignature(
   kind: AssetKind,
-  file: File,
+  file: FileDeclaration,
   detected: string | null,
 ) {
   if (!detected)

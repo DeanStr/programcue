@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { ApiError, apiRequestHash, type ApiPrincipal } from "./api.server";
 
 const taskTypes = [
@@ -102,6 +104,19 @@ export type ApiTaskPage = {
 export type ApiTaskMutation = {
   task: ApiTask;
   changeSequence: number;
+  webhookDeliveries: Array<{
+    endpointId: string;
+    deliveryId: string;
+    operationId: string;
+    status:
+      | "queued"
+      | "queue_failed"
+      | "completed"
+      | "partially_failed"
+      | "failed"
+      | "cancelled";
+    duplicate: boolean;
+  }>;
 };
 
 type TaskCreationCommand = {
@@ -109,6 +124,10 @@ type TaskCreationCommand = {
   status: string;
   responseJson: string | null;
   entityId: string | null;
+};
+
+type RecoveredTaskCreation = Omit<ApiTaskMutation, "webhookDeliveries"> & {
+  correlationId: string;
 };
 
 type EventPrincipal = ApiPrincipal & { eventId: string };
@@ -175,7 +194,15 @@ function toApiTask(row: ApiTaskRow, dependencyIds: string[]): ApiTask {
 }
 
 export class ApiTaskService {
-  constructor(private readonly env: CloudflareEnvironment) {}
+  private readonly airtable: AirtableProviderBoundary;
+
+  constructor(
+    private readonly env: CloudflareEnvironment,
+    dependencies: { airtable?: AirtableProviderBoundary } = {},
+  ) {
+    this.airtable =
+      dependencies.airtable ?? new AirtableProviderBoundary(this.env);
+  }
 
   private async taskCreationCommand(
     principal: EventPrincipal,
@@ -204,7 +231,7 @@ export class ApiTaskService {
     principal: EventPrincipal,
     idempotencyKey: string,
     requestHash: string,
-  ): Promise<ApiTaskMutation | null> {
+  ): Promise<RecoveredTaskCreation | null> {
     const command = await this.taskCreationCommand(principal, idempotencyKey);
     if (!command) return null;
     if (command.requestHash !== requestHash) {
@@ -222,7 +249,10 @@ export class ApiTaskService {
       );
     }
     const response = z
-      .object({ changeSequence: z.number().int().positive() })
+      .object({
+        changeSequence: z.number().int().positive(),
+        correlationId: z.string().min(1).max(200),
+      })
       .safeParse(
         command.responseJson ? JSON.parse(command.responseJson) : null,
       );
@@ -231,19 +261,51 @@ export class ApiTaskService {
         "The completed task idempotency record is missing its durable result.",
       );
     }
-    const task = await this.get(principal, command.entityId);
+    const task = await this.getD1(principal, command.entityId);
     if (!task) {
       throw new Error(
         "The task recorded by the completed idempotency request no longer exists.",
       );
     }
-    return { task, changeSequence: response.data.changeSequence };
+    return {
+      task,
+      changeSequence: response.data.changeSequence,
+      correlationId: response.data.correlationId,
+    };
+  }
+
+  private taskCreatedWebhook(
+    principal: EventPrincipal,
+    task: Pick<ApiTask, "id" | "title" | "targetType" | "targetId">,
+    correlationId: string,
+  ) {
+    return {
+      actor: {
+        organisationId: principal.organisationId,
+        eventId: principal.eventId,
+        personId: null,
+        actorId: apiActorId(principal.keyId),
+      },
+      event: {
+        eventType: "task.created" as const,
+        entityType: "task",
+        entityId: task.id,
+        idempotencyKey: `task.created:${task.id}:1`,
+        correlationId,
+        data: {
+          title: task.title,
+          targetType: task.targetType,
+          targetId: task.targetId,
+        },
+      },
+    };
   }
 
   async list(
     principal: EventPrincipal,
     input: { limit: number; cursor?: string },
   ): Promise<ApiTaskPage> {
+    await this.airtable.assertReadable(principal);
     const { limit } = input;
     if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
       throw new ApiError(
@@ -348,7 +410,12 @@ export class ApiTaskService {
     };
   }
 
-  private async get(
+  async get(principal: EventPrincipal, id: string): Promise<ApiTask | null> {
+    await this.airtable.assertReadable(principal);
+    return this.getD1(principal, id);
+  }
+
+  private async getD1(
     principal: EventPrincipal,
     id: string,
   ): Promise<ApiTask | null> {
@@ -397,16 +464,76 @@ export class ApiTaskService {
   ): Promise<ApiTaskMutation> {
     const input = apiTaskCreateSchema.parse(rawInput);
     const requestHash = await apiRequestHash(input);
+    return this.airtable.executeIdempotent(
+      {
+        organisationId: principal.organisationId,
+        eventId: principal.eventId,
+        personId: null,
+      },
+      {
+        idempotencyKey: `airtable:${principal.eventId}:task.api.create:api-key:${principal.keyId}:${idempotencyKey}`,
+        operation: "task.api.create",
+        requestHash,
+      },
+      () =>
+        this.createD1(
+          principal,
+          input,
+          correlationId,
+          idempotencyKey,
+          requestHash,
+        ),
+    );
+  }
+
+  private async createD1(
+    principal: EventPrincipal,
+    input: ApiTaskCreateInput,
+    correlationId: string,
+    idempotencyKey: string,
+    requestHash: string,
+  ): Promise<ApiTaskMutation> {
     const replay = await this.replayTaskCreation(
       principal,
       idempotencyKey,
       requestHash,
     );
-    if (replay) return replay;
+    if (replay) {
+      const webhook = this.taskCreatedWebhook(
+        principal,
+        replay.task,
+        replay.correlationId,
+      );
+      return {
+        task: replay.task,
+        changeSequence: replay.changeSequence,
+        webhookDeliveries: await new WebhookService(this.env).queueEvent(
+          webhook.actor,
+          webhook.event,
+        ),
+      };
+    }
     await this.assertReferences(principal, input);
     const id = crypto.randomUUID();
     const commandId = crypto.randomUUID();
     const actorId = apiActorId(principal.keyId);
+    const auditEventId = crypto.randomUUID();
+    const webhookService = new WebhookService(this.env);
+    const taskWebhook = this.taskCreatedWebhook(
+      principal,
+      {
+        id,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        title: input.title,
+      },
+      correlationId,
+    );
+    const preparedWebhook = await webhookService.prepareEventForAudit(
+      taskWebhook.actor,
+      taskWebhook.event,
+      auditEventId,
+    );
     const now = Math.floor(Date.now() / 1_000);
     const dependencyStateSql = input.dependencyIds.length
       ? `EXISTS (
@@ -542,7 +669,7 @@ export class ApiTaskService {
            )
       `,
       ).bind(
-        crypto.randomUUID(),
+        auditEventId,
         principal.organisationId,
         principal.eventId,
         actorId,
@@ -602,7 +729,8 @@ export class ApiTaskService {
                       AND entity_id = ? AND change_type = 'created'
                       AND correlation_id = ?
                     ORDER BY sequence DESC LIMIT 1
-                 )
+                 ),
+                 'correlationId', ?
                ),
                entity_type = 'task_instance', entity_id = ?,
                completed_at = unixepoch()
@@ -618,6 +746,7 @@ export class ApiTaskService {
         principal.eventId,
         id,
         correlationId,
+        correlationId,
         id,
         commandId,
         principal.organisationId,
@@ -627,6 +756,7 @@ export class ApiTaskService {
         requestHash,
       ),
     ];
+    statements.push(...preparedWebhook.statements);
     await this.env.DB.batch(statements);
     const committed = await this.replayTaskCreation(
       principal,
@@ -636,7 +766,13 @@ export class ApiTaskService {
     if (!committed) {
       throw new Error("Task creation did not commit an idempotency result.");
     }
-    return committed;
+    const webhookDeliveries =
+      await webhookService.dispatchPreparedEvent(preparedWebhook);
+    return {
+      task: committed.task,
+      changeSequence: committed.changeSequence,
+      webhookDeliveries,
+    };
   }
 
   private async assertReferences(

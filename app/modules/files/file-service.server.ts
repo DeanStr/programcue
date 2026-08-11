@@ -1,25 +1,18 @@
 import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
-import {
-  assetKindSchema,
-  detectContentType,
-  safeDownloadName,
-  validateFileDeclaration,
-  validateFileSignature,
-  type AssetKind,
-} from "./file-policy";
+import { assetKindSchema, safeDownloadName } from "./file-policy";
 
-const uploadTargetSchema = z.object({
-  targetType: z.enum(["person", "session", "task", "resource"]),
+export const uploadTargetSchema = z.object({
+  targetType: z.enum(["person", "submission", "session", "task", "resource"]),
   targetId: z.string().min(1).max(160),
   assetKind: assetKindSchema,
 });
 
-type UploadTarget = z.infer<typeof uploadTargetSchema>;
+export type UploadTarget = z.infer<typeof uploadTargetSchema>;
 
-async function stableLogicalAssetId(
-  viewer: Pick<Viewer, "eventId" | "personId">,
+export async function stableLogicalAssetId(
+  viewer: { eventId: string; personId: string | null },
   target: UploadTarget,
 ) {
   const digest = await crypto.subtle.digest(
@@ -56,6 +49,119 @@ export class FileScanPendingError extends Error {
   }
 }
 
+export class FileVersionNotFoundError extends Error {
+  constructor() {
+    super("File version not found.");
+    this.name = "FileVersionNotFoundError";
+  }
+}
+
+export class FileScanStateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FileScanStateError";
+  }
+}
+
+export class FileScanConflictError extends Error {
+  constructor() {
+    super("This file version already has a different final scanner result.");
+    this.name = "FileScanConflictError";
+  }
+}
+
+export class FileErasureConfirmationError extends Error {
+  constructor() {
+    super("Confirm permanent deletion of every stored version of this file.");
+    this.name = "FileErasureConfirmationError";
+  }
+}
+
+export class FileErasureIncompleteError extends Error {
+  constructor(
+    public readonly operationId: string,
+    options?: ErrorOptions,
+  ) {
+    super(
+      "File access was revoked, but private-object erasure did not complete. Retry the same deletion.",
+      options,
+    );
+    this.name = "FileErasureIncompleteError";
+  }
+}
+
+export class FileDiscardIncompleteError extends Error {
+  readonly committed = true;
+
+  constructor(
+    readonly operationId: string,
+    options?: ErrorOptions,
+  ) {
+    super(
+      "The unattached upload was revoked, but private-object cleanup did not complete. Retry attachment completion to finish cleanup.",
+      options,
+    );
+    this.name = "FileDiscardIncompleteError";
+  }
+}
+
+const R2_NO_SUCH_MULTIPART_UPLOAD_CODE = 10024;
+
+export function isMissingR2MultipartUpload(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === R2_NO_SUCH_MULTIPART_UPLOAD_CODE
+  );
+}
+
+export class FileRetentionStateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FileRetentionStateError";
+  }
+}
+
+const scanResultSchema = z
+  .object({
+    jobId: z.string().min(1).max(200),
+    eventId: z.string().min(1).max(160),
+    versionId: z.string().min(1).max(160),
+    assetId: z.string().min(1).max(160),
+    objectEtag: z.string().min(1).max(200),
+    sizeBytes: z.number().int().positive().max(1_073_741_824),
+    provider: z
+      .string()
+      .min(1)
+      .max(80)
+      .regex(/^[a-zA-Z0-9._-]+$/),
+    callbackId: z
+      .string()
+      .min(1)
+      .max(160)
+      .regex(/^[a-zA-Z0-9._:-]+$/),
+    status: z.enum(["clean", "infected", "failed"]),
+    result: z.unknown(),
+    error: z.string().trim().min(1).max(500).optional(),
+  })
+  .superRefine((input, context) => {
+    if (input.status === "failed" && !input.error) {
+      context.addIssue({
+        code: "custom",
+        path: ["error"],
+        message: "A failed scan requires an error description.",
+      });
+    }
+    if (input.status !== "failed" && input.error) {
+      context.addIssue({
+        code: "custom",
+        path: ["error"],
+        message: "Only a failed scan may include an error description.",
+      });
+    }
+  });
+
 export type StoredUpload = {
   assetId: string;
   versionId: string;
@@ -72,7 +178,36 @@ export class FileService {
     return this.env.FILES;
   }
 
-  private async assertParticipantTarget(viewer: Viewer, target: UploadTarget) {
+  private async releasedDownload(version: {
+    objectKey: string;
+    objectEtag: string | null;
+    filename: string;
+    contentType: string | null;
+  }) {
+    if (!version.objectEtag) {
+      throw new Error(
+        "The released private file is missing its scanned R2 object ETag.",
+      );
+    }
+    const object = await this.requireBucket().get(version.objectKey);
+    if (!object || object.httpEtag !== version.objectEtag) {
+      throw new Error(
+        "The released private R2 object is missing or no longer matches its scanned version.",
+      );
+    }
+    return new Response(object.body, {
+      headers: {
+        "content-type": version.contentType ?? "application/octet-stream",
+        "content-disposition": `attachment; filename="${safeDownloadName(version.filename)}"`,
+        "content-length": String(object.size),
+        etag: version.objectEtag,
+        "cache-control": "private, no-store",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  }
+
+  async assertParticipantTarget(viewer: Viewer, target: UploadTarget) {
     if (target.targetType === "person") {
       if (target.targetId !== viewer.personId)
         throw new FileAccessError("You can upload only to your own profile.");
@@ -92,10 +227,39 @@ export class FileService {
         );
       return;
     }
-    if (target.targetType === "task") {
+    if (target.targetType === "submission") {
       const owned = await this.env.DB.prepare(
         `
-        SELECT ti.status FROM task_instances ti
+        SELECT 1 FROM submissions
+         WHERE id = ? AND event_id = ? AND submitter_person_id = ?
+           AND status = 'draft'
+      `,
+      )
+        .bind(target.targetId, viewer.eventId, viewer.personId)
+        .first();
+      if (!owned)
+        throw new FileAccessError(
+          "The draft submission does not belong to this applicant.",
+        );
+      return;
+    }
+    if (target.targetType === "task") {
+      if (target.assetKind !== "task_evidence")
+        throw new FileAccessError(
+          "Task uploads must be declared as task evidence.",
+        );
+      const owned = await this.env.DB.prepare(
+        `
+        SELECT ti.status, ti.task_type AS taskType,
+               NOT EXISTS (
+                 SELECT 1
+                   FROM task_instance_dependencies dependency
+                   JOIN task_instances prerequisite
+                     ON prerequisite.id = dependency.depends_on_task_id
+                  WHERE dependency.task_id = ti.id
+                    AND prerequisite.status NOT IN ('completed','waived')
+               ) AS dependenciesComplete
+          FROM task_instances ti
          WHERE ti.id = ? AND ti.event_id = ?
            AND (
              ti.owner_person_id = ?
@@ -114,19 +278,31 @@ export class FileService {
           viewer.personId,
           viewer.personId,
         )
-        .first<{ status: string }>();
+        .first<{
+          status: string;
+          taskType: string;
+          dependenciesComplete: number;
+        }>();
       if (!owned)
         throw new FileAccessError("The task does not belong to this speaker.");
-      if (["completed", "waived"].includes(owned.status))
+      if (owned.taskType !== "file_upload")
+        throw new FileAccessError("This task does not accept file evidence.");
+      if (["completed", "waived", "submitted"].includes(owned.status))
         throw new FileAccessError(
-          "Files cannot be uploaded to a completed or waived task.",
+          owned.status === "submitted"
+            ? "This file task is already awaiting administrator review."
+            : "Files cannot be uploaded to a completed or waived task.",
+        );
+      if (!owned.dependenciesComplete)
+        throw new FileAccessError(
+          "Complete the prerequisite tasks before uploading evidence.",
         );
       return;
     }
     throw new FileAccessError("Speakers cannot upload resource attachments.");
   }
 
-  private async assertAdminTarget(viewer: Viewer, target: UploadTarget) {
+  async assertAdminTarget(viewer: Viewer, target: UploadTarget) {
     if (
       !(["owner", "administrator"] as const).includes(
         viewer.role as "owner" | "administrator",
@@ -137,17 +313,20 @@ export class FileService {
     const table =
       target.targetType === "resource"
         ? "resource_pages"
-        : target.targetType === "session"
-          ? "sessions"
-          : target.targetType === "task"
-            ? "task_instances"
-            : "people";
+        : target.targetType === "submission"
+          ? "submissions"
+          : target.targetType === "session"
+            ? "sessions"
+            : target.targetType === "task"
+              ? "task_instances"
+              : "people";
     if (table === "people")
       throw new FileAccessError(
         "Administrator person uploads require an explicit speaker workflow.",
       );
     const eventColumn =
       table === "resource_pages" ||
+      table === "submissions" ||
       table === "sessions" ||
       table === "task_instances"
         ? "event_id"
@@ -162,241 +341,18 @@ export class FileService {
       throw new FileAccessError("Upload target not found in this event.");
   }
 
-  private async store(
-    viewer: Viewer,
-    target: UploadTarget,
-    file: File,
-  ): Promise<StoredUpload> {
-    validateFileDeclaration(target.assetKind, file);
-    const bucket = this.requireBucket();
-    const existing = ["task", "resource"].includes(target.targetType)
-      ? null
-      : await this.env.DB.prepare(
-          `
-          SELECT id FROM file_assets
-           WHERE event_id = ? AND owner_person_id IS ? AND target_type = ? AND target_id = ? AND asset_kind = ? AND status <> 'deleted'
-           ORDER BY created_at DESC LIMIT 1
-        `,
-        )
-          .bind(
-            viewer.eventId,
-            viewer.personId,
-            target.targetType,
-            target.targetId,
-            target.assetKind,
-          )
-          .first<{ id: string }>();
-    const assetId =
-      existing?.id ??
-      (["task", "resource"].includes(target.targetType)
-        ? crypto.randomUUID()
-        : await stableLogicalAssetId(viewer, target));
-    const versionId = crypto.randomUUID();
-    const objectKey = `private/events/${viewer.eventId}/${target.targetType}/${target.targetId}/${assetId}/${versionId}`;
-
-    const allocation = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `
-        INSERT OR IGNORE INTO file_assets (
-          id, event_id, owner_person_id, target_type, target_id, asset_kind, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'pending', unixepoch(), unixepoch())
-      `,
-      ).bind(
-        assetId,
-        viewer.eventId,
-        target.targetType === "resource" ? null : viewer.personId,
-        target.targetType,
-        target.targetId,
-        target.assetKind,
-      ),
-      this.env.DB.prepare(
-        `
-        INSERT INTO file_versions (
-          id, event_id, asset_id, version_number, object_key, original_filename,
-          declared_content_type, size_bytes, upload_status, signature_status, scan_status,
-          created_by_person_id, created_at
-        )
-        SELECT ?, ?, ?, COALESCE(MAX(version_number), 0) + 1, ?, ?, ?, ?,
-               'requested', 'pending', 'pending', ?, unixepoch()
-          FROM file_versions
-         WHERE asset_id = ?
-        RETURNING version_number AS versionNumber
-      `,
-      ).bind(
-        versionId,
-        viewer.eventId,
-        assetId,
-        objectKey,
-        file.name,
-        file.type.toLowerCase(),
-        file.size,
-        viewer.personId,
-        assetId,
-      ),
-      this.env.DB.prepare(
-        `
-        INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-        )
-        SELECT ?, ?, ?, ?, 'file.upload.requested', 'file_version', ?, ?, unixepoch()
-         WHERE EXISTS (
-           SELECT 1 FROM file_versions
-            WHERE id = ? AND event_id = ? AND asset_id = ?
-         )
-      `,
-      ).bind(
-        crypto.randomUUID(),
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        versionId,
-        JSON.stringify({
-          assetId,
-          assetKind: target.assetKind,
-          sizeBytes: file.size,
-        }),
-        versionId,
-        viewer.eventId,
-        assetId,
-      ),
-    ]);
-    const allocatedVersion = allocation[1]?.results?.[0] as
-      { versionNumber?: number } | undefined;
-    const versionNumber = Number(allocatedVersion?.versionNumber);
-    if (!Number.isSafeInteger(versionNumber) || versionNumber < 1) {
-      throw new Error("The file version could not be allocated atomically.");
-    }
-
-    let detected: string | null = null;
-    try {
-      detected = await detectContentType(file);
-      validateFileSignature(target.assetKind, file, detected);
-    } catch (error) {
-      await this.env.DB.batch([
-        this.env.DB.prepare(
-          `
-          UPDATE file_versions
-             SET upload_status = 'failed', signature_status = 'invalid', scan_status = 'failed',
-                 scan_error = 'Signature validation failed before quarantine.', detected_content_type = ?
-           WHERE id = ? AND event_id = ?
-        `,
-        ).bind(detected, versionId, viewer.eventId),
-        this.env.DB.prepare(
-          "UPDATE file_assets SET status = CASE WHEN current_version_id IS NULL THEN 'rejected' ELSE status END, updated_at = unixepoch() WHERE id = ? AND event_id = ?",
-        ).bind(assetId, viewer.eventId),
-      ]);
-      throw error;
-    }
-
-    let object: R2Object;
-    try {
-      object = await bucket.put(objectKey, file.stream(), {
-        httpMetadata: { contentType: detected ?? file.type },
-        customMetadata: {
-          eventId: viewer.eventId,
-          assetId,
-          versionId,
-          quarantine: "pending-scan",
-        },
-      });
-    } catch (error) {
-      await this.env.DB.prepare(
-        `UPDATE file_versions
-            SET upload_status = 'failed', signature_status = 'valid', scan_status = 'failed',
-                scan_error = 'Private R2 upload failed before quarantine.'
-          WHERE id = ? AND event_id = ?`,
-      )
-        .bind(versionId, viewer.eventId)
-        .run();
-      throw new Error(
-        `Private R2 upload failed: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error },
-      );
-    }
-
-    try {
-      const [recorded] = await this.env.DB.batch([
-        this.env.DB.prepare(
-          `
-          UPDATE file_versions
-             SET upload_status = 'uploaded', signature_status = 'valid', detected_content_type = ?,
-                 object_etag = ?, uploaded_at = unixepoch()
-           WHERE id = ? AND event_id = ? AND upload_status = 'requested'
-        `,
-        ).bind(detected, object.httpEtag, versionId, viewer.eventId),
-        this.env.DB.prepare(
-          "UPDATE file_assets SET updated_at = unixepoch() WHERE id = ? AND event_id = ?",
-        ).bind(assetId, viewer.eventId),
-        this.env.DB.prepare(
-          `
-          INSERT INTO audit_events (
-            id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-          ) VALUES (?, ?, ?, ?, 'file.upload.quarantined', 'file_version', ?, ?, unixepoch())
-        `,
-        ).bind(
-          crypto.randomUUID(),
-          viewer.organisationId,
-          viewer.eventId,
-          viewer.personId,
-          versionId,
-          JSON.stringify({ assetId, scanStatus: "pending" }),
-        ),
-      ]);
-      if ((recorded.meta.changes ?? 0) !== 1) {
-        throw new Error(
-          "The quarantined file metadata changed before it was recorded.",
-        );
-      }
-    } catch (error) {
-      const failures: unknown[] = [error];
-      try {
-        await bucket.delete(objectKey);
-      } catch (cleanupError) {
-        failures.push(cleanupError);
-      }
-      try {
-        await this.env.DB.prepare(
-          `UPDATE file_versions
-              SET upload_status = 'failed', signature_status = 'valid', scan_status = 'failed',
-                  scan_error = 'Quarantined R2 object removed after metadata commit failure.'
-            WHERE id = ? AND event_id = ?`,
-        )
-          .bind(versionId, viewer.eventId)
-          .run();
-      } catch (stateError) {
-        failures.push(stateError);
-      }
-      if (failures.length > 1) {
-        throw new AggregateError(
-          failures,
-          "File metadata commit failed and upload cleanup did not complete.",
-        );
-      }
-      throw new Error(
-        `File metadata commit failed after the stored R2 object was removed: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error },
-      );
-    }
-    return { assetId, versionId, versionNumber, scanStatus: "pending" };
-  }
-
-  async uploadParticipantFile(viewer: Viewer, rawTarget: unknown, file: File) {
-    const target = uploadTargetSchema.parse(rawTarget);
-    await this.assertParticipantTarget(viewer, target);
-    return this.store(viewer, target, file);
-  }
-
-  async uploadAdminFile(viewer: Viewer, rawTarget: unknown, file: File) {
-    const target = uploadTargetSchema.parse(rawTarget);
-    await this.assertAdminTarget(viewer, target);
-    return this.store(viewer, target, file);
-  }
-
   private async discardUnattachedUpload(
     viewer: Viewer,
     upload: Pick<StoredUpload, "assetId" | "versionId">,
     targetType: "resource" | "task",
+    targetId?: string,
   ) {
+    const cleanupOperationId = `file-upload-discard:${upload.versionId}`;
+    const cleanupAuditId = `file-upload-discarded:${upload.versionId}`;
+    const cleanupError =
+      targetType === "resource"
+        ? "Resource draft changed before attachment."
+        : "Task changed before evidence submission.";
     const row = await this.env.DB.prepare(
       `
       SELECT fv.object_key AS objectKey
@@ -404,7 +360,12 @@ export class FileService {
         JOIN file_versions fv
           ON fv.id = ? AND fv.asset_id = fa.id AND fv.event_id = fa.event_id
        WHERE fa.id = ? AND fa.event_id = ? AND fa.target_type = ?
+         AND (? IS NULL OR fa.target_id = ?)
          AND fv.created_by_person_id = ?
+         AND NOT EXISTS (
+           SELECT 1 FROM audit_events erasure
+            WHERE erasure.id = 'file-erasure:' || fa.id
+         )
     `,
     )
       .bind(
@@ -412,6 +373,8 @@ export class FileService {
         upload.assetId,
         viewer.eventId,
         targetType,
+        targetId ?? null,
+        targetId ?? null,
         viewer.personId,
       )
       .first<{ objectKey: string }>();
@@ -420,7 +383,6 @@ export class FileService {
         `The unlinked ${targetType} upload could not be identified for cleanup.`,
       );
 
-    const cleanupOperationId = crypto.randomUUID();
     const [assetDeleted] = await this.env.DB.batch([
       this.env.DB.prepare(
         `
@@ -468,9 +430,7 @@ export class FileService {
            )
       `,
       ).bind(
-        targetType === "resource"
-          ? "Resource draft changed before attachment."
-          : "Task changed before evidence submission.",
+        cleanupError,
         upload.versionId,
         viewer.eventId,
         upload.assetId,
@@ -479,18 +439,29 @@ export class FileService {
       ),
       this.env.DB.prepare(
         `
-        INSERT INTO audit_events (
+        INSERT OR IGNORE INTO audit_events (
           id, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, correlation_id, metadata_json, created_at
         )
         SELECT ?, ?, ?, ?, 'file.upload.discarded', 'file_version', ?, ?, ?, unixepoch()
          WHERE EXISTS (
-           SELECT 1 FROM file_assets
-            WHERE id = ? AND event_id = ? AND status = 'deleted'
+           SELECT 1
+             FROM file_assets asset
+             JOIN file_versions version
+               ON version.id = ? AND version.asset_id = asset.id
+              AND version.event_id = asset.event_id
+            WHERE asset.id = ? AND asset.event_id = ?
+              AND asset.status = 'deleted'
+              AND version.deleted_at IS NOT NULL
+              AND version.scan_error = ?
+              AND NOT EXISTS (
+                SELECT 1 FROM audit_events erasure
+                 WHERE erasure.id = 'file-erasure:' || asset.id
+              )
          )
       `,
       ).bind(
-        crypto.randomUUID(),
+        cleanupAuditId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
@@ -503,16 +474,40 @@ export class FileService {
               ? "resource_draft_changed"
               : "task_submission_changed",
         }),
+        upload.versionId,
         upload.assetId,
         viewer.eventId,
+        cleanupError,
       ),
     ]);
     if ((assetDeleted.meta.changes ?? 0) !== 1) {
-      throw new FileAccessError(
-        `The ${targetType} upload was linked or changed before cleanup.`,
-      );
+      const retryable = await this.env.DB.prepare(
+        `SELECT 1 FROM audit_events
+          WHERE id = ? AND organisation_id = ? AND event_id = ?
+            AND action = 'file.upload.discarded'
+            AND entity_type = 'file_version' AND entity_id = ?
+            AND correlation_id = ?`,
+      )
+        .bind(
+          cleanupAuditId,
+          viewer.organisationId,
+          viewer.eventId,
+          upload.versionId,
+          cleanupOperationId,
+        )
+        .first();
+      if (!retryable)
+        throw new FileAccessError(
+          `The ${targetType} upload was linked or changed before cleanup.`,
+        );
     }
-    await this.requireBucket().delete(row.objectKey);
+    try {
+      await this.requireBucket().delete(row.objectKey);
+    } catch (error) {
+      throw new FileDiscardIncompleteError(cleanupOperationId, {
+        cause: error,
+      });
+    }
   }
 
   async discardUnattachedResourceUpload(
@@ -525,62 +520,271 @@ export class FileService {
   async discardUnattachedTaskUpload(
     viewer: Viewer,
     upload: Pick<StoredUpload, "assetId" | "versionId">,
+    taskId: string,
   ) {
-    return this.discardUnattachedUpload(viewer, upload, "task");
+    return this.discardUnattachedUpload(viewer, upload, "task", taskId);
   }
 
-  async recordScanResult(input: {
-    eventId: string;
-    versionId: string;
-    provider: string;
-    clean: boolean;
-    result: unknown;
-  }) {
-    const row = await this.env.DB.prepare(
-      `
+  async recordScanResult(rawInput: z.input<typeof scanResultSchema>) {
+    const input = scanResultSchema.parse(rawInput);
+    const scanResultJson = JSON.stringify({
+      callbackId: input.callbackId,
+      result: input.result,
+    });
+    if (!scanResultJson) {
+      throw new FileScanStateError(
+        "The scanner result could not be represented as JSON.",
+      );
+    }
+
+    type ScanRow = {
+      id: string;
+      assetId: string;
+      assetStatus: string;
+      uploadStatus: string;
+      signatureStatus: string;
+      scanStatus: string;
+      scanProvider: string | null;
+      scanResultJson: string | null;
+      objectKey: string;
+      objectEtag: string | null;
+      sizeBytes: number;
+      deletedAt: number | null;
+    };
+    const load = () =>
+      this.env.DB.prepare(
+        `
       SELECT fv.id, fv.asset_id AS assetId, fv.upload_status AS uploadStatus,
-             fv.signature_status AS signatureStatus
+             fv.signature_status AS signatureStatus,
+             fv.scan_status AS scanStatus, fv.scan_provider AS scanProvider,
+             fv.scan_result_json AS scanResultJson,
+             fv.object_key AS objectKey, fv.object_etag AS objectEtag,
+             fv.size_bytes AS sizeBytes,
+             fv.deleted_at AS deletedAt, fa.status AS assetStatus
         FROM file_versions fv JOIN file_assets fa ON fa.id = fv.asset_id AND fa.event_id = fv.event_id
        WHERE fv.id = ? AND fv.event_id = ?
     `,
+      )
+        .bind(input.versionId, input.eventId)
+        .first<ScanRow>();
+    const classifyReplay = (candidate: ScanRow) => {
+      if (candidate.scanStatus === "pending") {
+        throw new FileScanStateError(
+          "The file changed or was deleted before the scan result was committed.",
+        );
+      }
+      if (
+        candidate.scanStatus === input.status &&
+        candidate.scanProvider === input.provider &&
+        candidate.scanResultJson === scanResultJson
+      ) {
+        return {
+          applied: false,
+          duplicate: true,
+          status: input.status,
+        } as const;
+      }
+      throw new FileScanConflictError();
+    };
+
+    const row = await load();
+    if (!row) throw new FileVersionNotFoundError();
+    if (
+      input.jobId !== `file-scan-dispatch:${row.id}` ||
+      input.assetId !== row.assetId ||
+      input.objectEtag !== row.objectEtag ||
+      input.sizeBytes !== row.sizeBytes
+    ) {
+      throw new FileScanStateError(
+        "The scanner callback does not match the dispatched file object.",
+      );
+    }
+    const dispatch = await this.env.DB.prepare(
+      `SELECT status, claim_token AS claimToken,
+              json_extract(result_json, '$.accepted') AS accepted,
+              json_extract(result_json, '$.dispatchStarted') AS dispatchStarted
+         FROM operation_jobs
+        WHERE id = ? AND event_id = ? AND type = 'file.scan.dispatch'
+          AND json_extract(payload_json, '$.operationId') = ?
+          AND json_extract(payload_json, '$.eventId') = ?
+          AND json_extract(payload_json, '$.versionId') = ?
+          AND json_extract(payload_json, '$.assetId') = ?
+          AND json_extract(payload_json, '$.objectEtag') = ?
+          AND json_extract(payload_json, '$.sizeBytes') = ?`,
     )
-      .bind(input.versionId, input.eventId)
+      .bind(
+        input.jobId,
+        input.eventId,
+        input.jobId,
+        input.eventId,
+        input.versionId,
+        input.assetId,
+        input.objectEtag,
+        input.sizeBytes,
+      )
       .first<{
-        id: string;
-        assetId: string;
-        uploadStatus: string;
-        signatureStatus: string;
+        status: string;
+        claimToken: string | null;
+        accepted: number | null;
+        dispatchStarted: number | null;
       }>();
-    if (!row) throw new Error("File version not found.");
-    if (row.uploadStatus !== "uploaded" || row.signatureStatus !== "valid")
-      throw new Error(
+    if (!dispatch) {
+      throw new FileScanStateError(
+        "The scanner callback does not match a durable dispatch.",
+      );
+    }
+    if (row.scanStatus !== "pending") {
+      if (dispatch.status !== "completed") {
+        throw new FileScanStateError(
+          "The completed scan is not linked to a completed dispatch.",
+        );
+      }
+      return classifyReplay(row);
+    }
+    if (
+      dispatch.status !== "running" ||
+      !(
+        (dispatch.claimToken === null && dispatch.accepted === 1) ||
+        dispatch.dispatchStarted === 1
+      )
+    ) {
+      throw new FileScanStateError(
+        "The scanner verdict arrived before the durable dispatch was accepted.",
+      );
+    }
+    if (
+      row.uploadStatus !== "uploaded" ||
+      row.signatureStatus !== "valid" ||
+      row.deletedAt !== null ||
+      row.assetStatus === "deleted"
+    ) {
+      throw new FileScanStateError(
         "Only a completely uploaded, signature-valid version can be scanned.",
       );
-    const nowClean = input.clean ? "clean" : "infected";
-    const scanOperationId = crypto.randomUUID();
-    await this.env.DB.batch([
+    }
+    const object = await this.requireBucket().head(row.objectKey);
+    if (
+      !object ||
+      !row.objectEtag ||
+      object.httpEtag !== row.objectEtag ||
+      object.size !== row.sizeBytes
+    ) {
+      throw new FileScanStateError(
+        "The quarantined R2 object is missing or no longer matches the dispatched version.",
+      );
+    }
+
+    const scanOperationId = `file-scan:${row.id}`;
+    const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `
-        UPDATE file_versions SET scan_status = ?, scan_provider = ?, scan_result_json = ?, scanned_at = unixepoch(),
-          released_at = CASE WHEN ? = 'clean' THEN unixepoch() ELSE NULL END
-         WHERE id = ? AND event_id = ? AND scan_status = 'pending'
+        UPDATE file_versions
+           SET scan_status = ?, scan_provider = ?, scan_result_json = ?,
+               scan_error = ?, scanned_at = unixepoch(),
+               released_at = CASE WHEN ? = 'clean' THEN unixepoch() ELSE NULL END
+         WHERE id = ? AND event_id = ? AND asset_id = ?
+           AND object_etag = ? AND size_bytes = ? AND scan_status = 'pending'
+           AND upload_status = 'uploaded' AND signature_status = 'valid'
+           AND deleted_at IS NULL
+           AND EXISTS (
+             SELECT 1 FROM operation_jobs operation
+              WHERE operation.id = ? AND operation.event_id = file_versions.event_id
+                AND operation.type = 'file.scan.dispatch'
+                AND operation.status = 'running'
+                AND (
+                  (
+                    operation.claim_token IS NULL
+                    AND json_extract(operation.result_json, '$.accepted') = 1
+                  )
+                  OR json_extract(operation.result_json, '$.dispatchStarted') = 1
+                )
+                AND json_extract(operation.payload_json, '$.operationId') = ?
+                AND json_extract(operation.payload_json, '$.eventId') = file_versions.event_id
+                AND json_extract(operation.payload_json, '$.versionId') = file_versions.id
+                AND json_extract(operation.payload_json, '$.assetId') = file_versions.asset_id
+                AND json_extract(operation.payload_json, '$.objectEtag') = file_versions.object_etag
+                AND json_extract(operation.payload_json, '$.sizeBytes') = file_versions.size_bytes
+           )
+           AND EXISTS (
+             SELECT 1 FROM file_assets asset
+              WHERE asset.id = file_versions.asset_id
+                AND asset.event_id = file_versions.event_id
+                AND asset.status <> 'deleted'
+                AND NOT EXISTS (
+                  SELECT 1 FROM audit_events audit
+                   WHERE audit.id = 'file-erasure:' || asset.id
+                )
+           )
       `,
       ).bind(
-        nowClean,
+        input.status,
         input.provider,
-        JSON.stringify(input.result),
-        nowClean,
+        scanResultJson,
+        input.error ?? null,
+        input.status,
         row.id,
         input.eventId,
+        row.assetId,
+        input.objectEtag,
+        input.sizeBytes,
+        input.jobId,
+        input.jobId,
+      ),
+      this.env.DB.prepare(
+        `
+        UPDATE operation_jobs
+           SET status = 'completed', progress_completed = 1,
+               progress_failed = 0,
+               result_json = json_object(
+                 'accepted', true,
+                 'callbackReceived', true,
+                 'scanStatus', ?
+               ),
+               last_error = NULL, claim_token = NULL,
+               claim_expires_at = NULL, completed_at = unixepoch(),
+               updated_at = unixepoch()
+         WHERE id = ? AND event_id = ? AND type = 'file.scan.dispatch'
+           AND status = 'running'
+           AND (
+             (claim_token IS NULL AND json_extract(result_json, '$.accepted') = 1)
+             OR json_extract(result_json, '$.dispatchStarted') = 1
+           )
+           AND json_extract(payload_json, '$.operationId') = ?
+           AND json_extract(payload_json, '$.versionId') = ?
+           AND json_extract(payload_json, '$.assetId') = ?
+           AND json_extract(payload_json, '$.objectEtag') = ?
+           AND json_extract(payload_json, '$.sizeBytes') = ?
+           AND EXISTS (
+             SELECT 1 FROM file_versions version
+              WHERE version.id = ? AND version.event_id = operation_jobs.event_id
+                AND version.asset_id = ? AND version.scan_status = ?
+                AND version.scan_provider = ? AND version.scan_result_json = ?
+           )
+      `,
+      ).bind(
+        input.status,
+        input.jobId,
+        input.eventId,
+        input.jobId,
+        row.id,
+        row.assetId,
+        input.objectEtag,
+        input.sizeBytes,
+        row.id,
+        row.assetId,
+        input.status,
+        input.provider,
+        scanResultJson,
       ),
       this.env.DB.prepare(
         `
         UPDATE task_instances AS task
            SET status = 'in_progress', readiness_state = 'at_risk', readiness_percent = 40,
-               evidence_json = json_set(task.evidence_json, '$.scanStatus', 'infected'),
+               evidence_json = json_set(task.evidence_json, '$.scanStatus', ?),
                submitted_at = NULL, completed_at = NULL, completed_by_person_id = NULL,
                revision = revision + 1, last_operation_id = ?, updated_at = unixepoch()
-         WHERE task.event_id = ? AND task.status = 'submitted' AND ? = 'infected'
+         WHERE task.event_id = ? AND task.status = 'submitted'
+           AND ? IN ('infected', 'failed')
            AND EXISTS (
              SELECT 1
                FROM task_evidence evidence
@@ -592,45 +796,66 @@ export class FileService {
               WHERE evidence.task_id = task.id AND evidence.event_id = task.event_id
                 AND evidence.status = 'submitted' AND asset.id = ?
                 AND asset.target_type = 'task' AND asset.target_id = task.id
-                AND version.id = ? AND version.scan_status = 'infected'
+                AND version.id = ? AND version.scan_status = ?
+                AND version.scan_provider = ? AND version.scan_result_json = ?
            )
       `,
-      ).bind(scanOperationId, input.eventId, nowClean, row.assetId, row.id),
+      ).bind(
+        input.status,
+        scanOperationId,
+        input.eventId,
+        input.status,
+        row.assetId,
+        row.id,
+        input.status,
+        input.provider,
+        scanResultJson,
+      ),
       this.env.DB.prepare(
         `
         UPDATE task_evidence AS evidence
            SET status = 'rejected', reviewed_at = unixepoch()
          WHERE evidence.event_id = ? AND evidence.status = 'submitted'
-           AND evidence.file_asset_id = ? AND ? = 'infected'
+           AND evidence.file_asset_id = ? AND ? IN ('infected', 'failed')
            AND json_extract(evidence.evidence_json, '$.fileVersionId') = ?
            AND EXISTS (
              SELECT 1 FROM file_versions version
               WHERE version.id = ? AND version.event_id = evidence.event_id
                 AND version.asset_id = evidence.file_asset_id
-                AND version.scan_status = 'infected'
+                AND version.scan_status = ?
+                AND version.scan_provider = ? AND version.scan_result_json = ?
            )
       `,
-      ).bind(input.eventId, row.assetId, nowClean, row.id, row.id),
+      ).bind(
+        input.eventId,
+        row.assetId,
+        input.status,
+        row.id,
+        row.id,
+        input.status,
+        input.provider,
+        scanResultJson,
+      ),
       this.env.DB.prepare(
         `
-        INSERT INTO audit_events (
+        INSERT OR IGNORE INTO audit_events (
           id, organisation_id, event_id, actor_id, action,
           entity_type, entity_id, correlation_id, metadata_json, created_at
         )
-        SELECT ?, event.organisation_id, task.event_id, ?, 'task.file.rejected',
+        SELECT ? || ':' || task.id, event.organisation_id, task.event_id, ?, 'task.file.rejected',
                'task_instance', task.id, ?, ?, unixepoch()
           FROM task_instances task
           JOIN events event ON event.id = task.event_id
          WHERE task.event_id = ? AND task.last_operation_id = ?
       `,
       ).bind(
-        crypto.randomUUID(),
+        scanOperationId,
         `scanner:${input.provider}`,
         scanOperationId,
         JSON.stringify({
           assetId: row.assetId,
           versionId: row.id,
-          verdict: "infected",
+          verdict: input.status,
         }),
         input.eventId,
         scanOperationId,
@@ -653,7 +878,7 @@ export class FileService {
       ).bind(
         row.assetId,
         input.eventId,
-        nowClean,
+        input.status,
         row.id,
         input.eventId,
         row.assetId,
@@ -682,23 +907,560 @@ export class FileService {
            )
       `,
       ).bind(
-        nowClean,
+        input.status,
         row.id,
-        nowClean,
+        input.status,
         row.assetId,
         input.eventId,
         row.id,
-        nowClean,
-        nowClean,
+        input.status,
+        input.status,
+      ),
+      this.env.DB.prepare(
+        `
+        INSERT OR IGNORE INTO audit_events (
+          id, organisation_id, event_id, actor_id, action,
+          entity_type, entity_id, correlation_id, metadata_json, created_at
+        )
+        SELECT ?, event.organisation_id, asset.event_id, ?, ?,
+               'file_version', version.id, ?, ?, unixepoch()
+          FROM file_versions version
+          JOIN file_assets asset
+            ON asset.id = version.asset_id AND asset.event_id = version.event_id
+          JOIN events event ON event.id = asset.event_id
+         WHERE version.id = ? AND version.event_id = ?
+           AND version.scan_status = ? AND version.scan_provider = ?
+           AND version.scan_result_json = ?
+      `,
+      ).bind(
+        scanOperationId,
+        `scanner:${input.provider}`,
+        `file.scan.${input.status}`,
+        scanOperationId,
+        JSON.stringify({
+          assetId: row.assetId,
+          callbackId: input.callbackId,
+          verdict: input.status,
+        }),
+        row.id,
+        input.eventId,
+        input.status,
+        input.provider,
+        scanResultJson,
       ),
     ]);
+    if (
+      (results[0]?.meta.changes ?? 0) === 1 &&
+      (results[1]?.meta.changes ?? 0) === 1
+    ) {
+      return {
+        applied: true,
+        duplicate: false,
+        status: input.status,
+      } as const;
+    }
+    if ((results[0]?.meta.changes ?? 0) === 1) {
+      throw new FileScanStateError(
+        "The scan result changed the file without completing its durable dispatch.",
+      );
+    }
+    const current = await load();
+    if (!current) throw new FileVersionNotFoundError();
+    return classifyReplay(current);
+  }
+
+  private async fileErasurePreview(viewer: Viewer, assetId: string) {
+    const preview = await this.env.DB.prepare(
+      `
+      SELECT asset.id, asset.target_type AS targetType,
+             asset.target_id AS targetId, asset.asset_kind AS assetKind,
+             asset.owner_person_id AS ownerPersonId, asset.status,
+             (
+               SELECT version.original_filename FROM file_versions version
+                WHERE version.asset_id = asset.id AND version.event_id = asset.event_id
+                ORDER BY version.version_number DESC LIMIT 1
+             ) AS latestFilename,
+             (
+               SELECT COUNT(*) FROM file_versions version
+                WHERE version.asset_id = asset.id AND version.event_id = asset.event_id
+             ) AS versionCount,
+             (
+               SELECT COUNT(*) FROM resource_attachments attachment
+                WHERE attachment.file_asset_id = asset.id
+                  AND attachment.event_id = asset.event_id
+             ) AS resourceAttachmentCount,
+             (
+               SELECT COUNT(*) FROM task_evidence evidence
+                WHERE evidence.file_asset_id = asset.id
+                  AND evidence.event_id = asset.event_id
+             ) AS taskEvidenceCount,
+             EXISTS (
+               SELECT 1 FROM audit_events audit
+                WHERE audit.id = 'file-erasure-complete:' || asset.id
+             ) AS erasureComplete
+        FROM file_assets asset
+        JOIN events event
+          ON event.id = asset.event_id AND event.organisation_id = ?
+       WHERE asset.id = ? AND asset.event_id = ?
+    `,
+    )
+      .bind(viewer.organisationId, assetId, viewer.eventId)
+      .first<{
+        id: string;
+        targetType: string;
+        targetId: string;
+        assetKind: string;
+        ownerPersonId: string | null;
+        status: string;
+        latestFilename: string | null;
+        versionCount: number;
+        resourceAttachmentCount: number;
+        taskEvidenceCount: number;
+        erasureComplete: number;
+      }>();
+    if (!preview) {
+      throw new FileAccessError(
+        "The file is unavailable or outside this event.",
+      );
+    }
+    const administrator = ["owner", "administrator"].includes(viewer.role);
+    const participantOwned =
+      preview.ownerPersonId === viewer.personId &&
+      ["person", "session", "submission"].includes(preview.targetType);
+    if (!administrator && !participantOwned) {
+      throw new FileAccessError(
+        "You do not have permission to erase this file.",
+      );
+    }
+    return {
+      ...preview,
+      versionCount: Number(preview.versionCount),
+      resourceAttachmentCount: Number(preview.resourceAttachmentCount),
+      taskEvidenceCount: Number(preview.taskEvidenceCount),
+      erasureComplete: Boolean(preview.erasureComplete),
+    };
+  }
+
+  async previewAssetErasure(viewer: Viewer, assetId: string) {
+    return this.fileErasurePreview(viewer, assetId);
+  }
+
+  async eraseAsset(
+    viewer: Viewer,
+    input: {
+      assetId: string;
+      confirmed: boolean;
+      reason?: string;
+      enforceEventRetentionBoundary?: boolean;
+    },
+  ) {
+    if (!input.confirmed) throw new FileErasureConfirmationError();
+    const preview = await this.fileErasurePreview(viewer, input.assetId);
+    const operationId = `file-erasure:${preview.id}`;
+    if (preview.erasureComplete) {
+      return {
+        operationId,
+        duplicate: true,
+        erasedVersions: preview.versionCount,
+        affected: preview,
+      };
+    }
+    const metadata = JSON.stringify({
+      reason: input.reason?.trim().slice(0, 240) || "explicit_file_deletion",
+      versionCount: preview.versionCount,
+      resourceAttachmentCount: preview.resourceAttachmentCount,
+      taskEvidenceCount: preview.taskEvidenceCount,
+    });
+    const retentionGuard = input.enforceEventRetentionBoundary
+      ? `AND EXISTS (
+           SELECT 1 FROM events retention_event
+            WHERE retention_event.id = ?
+              AND retention_event.organisation_id = ?
+              AND retention_event.file_retention_hold_at IS NULL
+              AND unixepoch(datetime(
+                    retention_event.ends_at,
+                    'unixepoch',
+                    '+' || retention_event.retention_months || ' months'
+                  )) <= unixepoch()
+         )`
+      : "";
+    const retentionBindings = input.enforceEventRetentionBoundary
+      ? [viewer.eventId, viewer.organisationId]
+      : [];
+    const [assetRevoked] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `UPDATE file_assets
+            SET status = 'rejected', current_version_id = NULL,
+                updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?
+            ${retentionGuard}`,
+      ).bind(preview.id, viewer.eventId, ...retentionBindings),
+      this.env.DB.prepare(
+        `UPDATE file_versions
+            SET released_at = NULL,
+                upload_status = CASE
+                  WHEN upload_status IN ('requested','uploading','failed')
+                    THEN 'aborted'
+                  ELSE upload_status
+                END,
+                scan_status = CASE
+                  WHEN upload_status IN ('requested','uploading','failed')
+                    THEN 'failed'
+                  ELSE scan_status
+                END,
+                scan_error = CASE
+                  WHEN upload_status IN ('requested','uploading','failed')
+                    THEN 'File erased before multipart completion.'
+                  ELSE scan_error
+                END
+          WHERE asset_id = ? AND event_id = ?
+            ${retentionGuard}`,
+      ).bind(preview.id, viewer.eventId, ...retentionBindings),
+      this.env.DB.prepare(
+        `UPDATE file_multipart_uploads
+            SET status = 'aborted',
+                last_error = 'File erased before multipart completion.',
+                updated_at = unixepoch()
+          WHERE asset_id = ? AND event_id = ?
+            AND status IN ('requested','initiated','completing','failed')
+            ${retentionGuard}`,
+      ).bind(preview.id, viewer.eventId, ...retentionBindings),
+      this.env.DB.prepare(
+        `UPDATE task_instances AS task
+            SET status = 'in_progress', readiness_state = 'at_risk',
+                readiness_percent = 40, submitted_at = NULL,
+                completed_at = NULL, completed_by_person_id = NULL,
+                revision = revision + 1, last_operation_id = ?,
+                updated_at = unixepoch()
+          WHERE task.event_id = ?
+            AND task.status IN ('submitted', 'completed')
+            AND EXISTS (
+              SELECT 1 FROM task_evidence evidence
+               WHERE evidence.event_id = task.event_id
+                 AND evidence.task_id = task.id
+                 AND evidence.file_asset_id = ?
+                 AND evidence.status IN ('submitted', 'approved')
+            )
+            ${retentionGuard}`,
+      ).bind(operationId, viewer.eventId, preview.id, ...retentionBindings),
+      this.env.DB.prepare(
+        `UPDATE task_evidence
+            SET status = 'rejected', reviewed_at = unixepoch(),
+                reviewed_by_person_id = ?
+          WHERE event_id = ? AND file_asset_id = ?
+            AND status IN ('submitted', 'approved')
+            ${retentionGuard}`,
+      ).bind(viewer.personId, viewer.eventId, preview.id, ...retentionBindings),
+      this.env.DB.prepare(
+        `INSERT OR IGNORE INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, correlation_id, metadata_json, created_at
+         )
+         SELECT ?, ?, ?, ?, 'file.erasure.requested',
+                'file_asset', ?, ?, ?, unixepoch()
+          WHERE 1 = 1
+            ${retentionGuard}`,
+      ).bind(
+        operationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        preview.id,
+        operationId,
+        metadata,
+        ...retentionBindings,
+      ),
+    ]);
+    if (
+      input.enforceEventRetentionBoundary &&
+      (assetRevoked.meta.changes ?? 0) !== 1
+    ) {
+      const current = await this.getFileRetentionState(viewer);
+      if (current.holdAt !== null) {
+        throw new FileRetentionStateError(
+          "File retention was placed on hold before the erasure intent committed.",
+        );
+      }
+      if (!current.eligible) {
+        throw new FileRetentionStateError(
+          "The event no longer satisfies its configured file-retention date.",
+        );
+      }
+      throw new FileRetentionStateError(
+        "File retention changed concurrently before the erasure intent committed.",
+      );
+    }
+
+    const versions = await this.env.DB.prepare(
+      `SELECT version.object_key AS objectKey,
+              upload.upload_id AS uploadId,
+              upload.status AS multipartStatus
+         FROM file_versions version
+         LEFT JOIN file_multipart_uploads upload
+           ON upload.version_id = version.id
+          AND upload.event_id = version.event_id
+        WHERE version.asset_id = ? AND version.event_id = ?
+        ORDER BY version.version_number`,
+    )
+      .bind(preview.id, viewer.eventId)
+      .all<{
+        objectKey: string;
+        uploadId: string | null;
+        multipartStatus: string | null;
+      }>();
+    try {
+      const providerAbortFailures: unknown[] = [];
+      for (const version of versions.results) {
+        if (!version.uploadId || version.multipartStatus !== "aborted")
+          continue;
+        try {
+          await this.requireBucket()
+            .resumeMultipartUpload(version.objectKey, version.uploadId)
+            .abort();
+        } catch (error) {
+          // R2 may have committed an earlier abort whose response was lost.
+          // The exact missing-upload code proves the desired terminal state;
+          // every other provider failure remains retryable and fail-closed.
+          if (!isMissingR2MultipartUpload(error)) {
+            providerAbortFailures.push(error);
+          }
+        }
+      }
+      for (let offset = 0; offset < versions.results.length; offset += 1_000) {
+        await this.requireBucket().delete(
+          versions.results
+            .slice(offset, offset + 1_000)
+            .map((version) => version.objectKey),
+        );
+      }
+      if (providerAbortFailures.length > 0)
+        throw new AggregateError(
+          providerAbortFailures,
+          "One or more incomplete R2 multipart uploads could not be aborted.",
+        );
+      await this.env.DB.batch([
+        this.env.DB.prepare(
+          `UPDATE file_versions
+              SET deleted_at = COALESCE(deleted_at, unixepoch()),
+                  released_at = NULL
+            WHERE asset_id = ? AND event_id = ?`,
+        ).bind(preview.id, viewer.eventId),
+        this.env.DB.prepare(
+          `UPDATE file_assets
+              SET status = 'deleted', current_version_id = NULL,
+                  updated_at = unixepoch()
+            WHERE id = ? AND event_id = ?`,
+        ).bind(preview.id, viewer.eventId),
+        this.env.DB.prepare(
+          `INSERT OR IGNORE INTO audit_events (
+             id, organisation_id, event_id, actor_person_id, action,
+             entity_type, entity_id, correlation_id, metadata_json, created_at
+           ) VALUES (?, ?, ?, ?, 'file.erasure.completed',
+                     'file_asset', ?, ?, ?, unixepoch())`,
+        ).bind(
+          `file-erasure-complete:${preview.id}`,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          preview.id,
+          operationId,
+          JSON.stringify({ erasedVersions: versions.results.length }),
+        ),
+      ]);
+    } catch (error) {
+      throw new FileErasureIncompleteError(operationId, { cause: error });
+    }
+    return {
+      operationId,
+      duplicate: false,
+      erasedVersions: versions.results.length,
+      affected: preview,
+    };
+  }
+
+  private requireRetentionOwner(viewer: Viewer) {
+    if (viewer.role !== "owner") {
+      throw new FileAccessError(
+        "Organisation owner access is required for file retention controls.",
+      );
+    }
+  }
+
+  async getFileRetentionState(viewer: Viewer) {
+    this.requireRetentionOwner(viewer);
+    const state = await this.env.DB.prepare(
+      `
+      SELECT event.name, event.ends_at AS endsAt,
+             event.retention_months AS retentionMonths,
+             event.file_retention_hold_at AS holdAt,
+             unixepoch(
+               datetime(
+                 event.ends_at,
+                 'unixepoch',
+                 '+' || event.retention_months || ' months'
+               )
+             ) AS eligibleAt,
+             (
+               SELECT COUNT(*) FROM file_assets asset
+                WHERE asset.event_id = event.id
+                  AND NOT EXISTS (
+                    SELECT 1 FROM audit_events audit
+                     WHERE audit.id = 'file-erasure-complete:' || asset.id
+                  )
+             ) AS pendingAssetCount,
+             (
+               SELECT COUNT(*) FROM file_versions version
+                WHERE version.event_id = event.id
+                  AND NOT EXISTS (
+                    SELECT 1 FROM audit_events audit
+                     WHERE audit.id = 'file-erasure-complete:' || version.asset_id
+                  )
+             ) AS pendingVersionCount
+        FROM events event
+       WHERE event.id = ? AND event.organisation_id = ?
+    `,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .first<{
+        name: string;
+        endsAt: number;
+        retentionMonths: number;
+        holdAt: number | null;
+        eligibleAt: number;
+        pendingAssetCount: number;
+        pendingVersionCount: number;
+      }>();
+    if (!state) {
+      throw new FileAccessError("The retention event is unavailable.");
+    }
+    const now = Math.floor(Date.now() / 1_000);
+    return {
+      ...state,
+      pendingAssetCount: Number(state.pendingAssetCount),
+      pendingVersionCount: Number(state.pendingVersionCount),
+      eligible: state.eligibleAt <= now,
+    };
+  }
+
+  async setFileRetentionHold(
+    viewer: Viewer,
+    input: { hold: boolean; confirmed: boolean; reason: string },
+  ) {
+    this.requireRetentionOwner(viewer);
+    if (!input.confirmed) {
+      throw new FileRetentionStateError(
+        "Confirm the event-wide file-retention hold change.",
+      );
+    }
+    const reason = input.reason.trim();
+    if (reason.length < 3 || reason.length > 500) {
+      throw new FileRetentionStateError(
+        "Give a retention-hold reason between 3 and 500 characters.",
+      );
+    }
+    const [updated] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `UPDATE events
+            SET file_retention_hold_at = CASE WHEN ? = 1 THEN unixepoch() ELSE NULL END,
+                updated_at = unixepoch()
+          WHERE id = ? AND organisation_id = ?
+            AND ((? = 1 AND file_retention_hold_at IS NULL)
+              OR (? = 0 AND file_retention_hold_at IS NOT NULL))`,
+      ).bind(
+        input.hold ? 1 : 0,
+        viewer.eventId,
+        viewer.organisationId,
+        input.hold ? 1 : 0,
+        input.hold ? 1 : 0,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, ?, ?, ?, ?, 'event', ?, ?, unixepoch()
+          WHERE changes() = 1`,
+      ).bind(
+        crypto.randomUUID(),
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        input.hold
+          ? "event.file_retention_hold.placed"
+          : "event.file_retention_hold.released",
+        viewer.eventId,
+        JSON.stringify({ reason }),
+      ),
+    ]);
+    if ((updated.meta.changes ?? 0) !== 1) {
+      throw new FileRetentionStateError(
+        input.hold
+          ? "File retention is already on hold."
+          : "File retention is not currently on hold.",
+      );
+    }
+    return this.getFileRetentionState(viewer);
+  }
+
+  async eraseExpiredEventFiles(
+    viewer: Viewer,
+    input: { confirmed: boolean; limit?: number },
+  ) {
+    this.requireRetentionOwner(viewer);
+    if (!input.confirmed) throw new FileErasureConfirmationError();
+    const state = await this.getFileRetentionState(viewer);
+    if (state.holdAt !== null) {
+      throw new FileRetentionStateError(
+        "Release the event's file-retention hold before erasure.",
+      );
+    }
+    if (!state.eligible) {
+      throw new FileRetentionStateError(
+        "This event has not reached its configured file-retention date.",
+      );
+    }
+    const limit = z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .parse(input.limit ?? 50);
+    const candidates = await this.env.DB.prepare(
+      `SELECT asset.id FROM file_assets asset
+        WHERE asset.event_id = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM audit_events audit
+             WHERE audit.id = 'file-erasure-complete:' || asset.id
+          )
+        ORDER BY asset.created_at, asset.id
+        LIMIT ?`,
+    )
+      .bind(viewer.eventId, limit)
+      .all<{ id: string }>();
+    let erasedVersions = 0;
+    for (const candidate of candidates.results) {
+      const result = await this.eraseAsset(viewer, {
+        assetId: candidate.id,
+        confirmed: true,
+        reason: "event_retention_period_elapsed",
+        enforceEventRetentionBoundary: true,
+      });
+      erasedVersions += result.erasedVersions;
+    }
+    const remaining = await this.getFileRetentionState(viewer);
+    return {
+      erasedAssets: candidates.results.length,
+      erasedVersions,
+      remainingAssets: remaining.pendingAssetCount,
+    };
   }
 
   async participantDownload(viewer: Viewer, assetId: string) {
     const version = await this.env.DB.prepare(
       `
       SELECT fv.object_key AS objectKey, fv.original_filename AS filename,
-             fv.detected_content_type AS contentType
+             fv.detected_content_type AS contentType,
+             fv.object_etag AS objectEtag
         FROM file_assets fa
         JOIN file_versions fv ON fv.id = fa.current_version_id AND fv.event_id = fa.event_id
        WHERE fa.id = ? AND fa.event_id = ? AND fa.owner_person_id = ? AND fa.status = 'active'
@@ -709,20 +1471,12 @@ export class FileService {
       .bind(assetId, viewer.eventId, viewer.personId)
       .first<{
         objectKey: string;
+        objectEtag: string | null;
         filename: string;
         contentType: string | null;
       }>();
     if (!version) throw new FileScanPendingError();
-    const object = await this.requireBucket().get(version.objectKey);
-    if (!object) throw new Error("The released R2 object is missing.");
-    return new Response(object.body, {
-      headers: {
-        "content-type": version.contentType ?? "application/octet-stream",
-        "content-disposition": `attachment; filename="${safeDownloadName(version.filename)}"`,
-        "cache-control": "private, no-store",
-        "x-content-type-options": "nosniff",
-      },
-    });
+    return this.releasedDownload(version);
   }
 
   async administratorTaskEvidenceDownload(
@@ -740,6 +1494,7 @@ export class FileService {
     const version = await this.env.DB.prepare(
       `
       SELECT version.object_key AS objectKey,
+             version.object_etag AS objectEtag,
              version.original_filename AS filename,
              version.detected_content_type AS contentType
         FROM file_assets asset
@@ -766,6 +1521,7 @@ export class FileService {
       .bind(viewer.organisationId, versionId, assetId, viewer.eventId)
       .first<{
         objectKey: string;
+        objectEtag: string | null;
         filename: string;
         contentType: string | null;
       }>();
@@ -773,23 +1529,15 @@ export class FileService {
       throw new FileAccessError(
         "The task evidence is unavailable, quarantined or outside this event.",
       );
-    const object = await this.requireBucket().get(version.objectKey);
-    if (!object) throw new Error("The released R2 object is missing.");
-    return new Response(object.body, {
-      headers: {
-        "content-type": version.contentType ?? "application/octet-stream",
-        "content-disposition": `attachment; filename="${safeDownloadName(version.filename)}"`,
-        "cache-control": "private, no-store",
-        "x-content-type-options": "nosniff",
-      },
-    });
+    return this.releasedDownload(version);
   }
 
   async participantResourceDownload(viewer: Viewer, assetId: string) {
     const version = await this.env.DB.prepare(
       `
       SELECT fv.object_key AS objectKey, fv.original_filename AS filename,
-             fv.detected_content_type AS contentType
+             fv.detected_content_type AS contentType,
+             fv.object_etag AS objectEtag
         FROM resource_attachments ra
         JOIN resource_page_versions rv ON rv.id = ra.resource_page_version_id AND rv.event_id = ra.event_id AND rv.status = 'published'
         JOIN resource_pages rp ON rp.id = rv.resource_page_id AND rp.event_id = rv.event_id AND rp.status = 'published'
@@ -828,6 +1576,7 @@ export class FileService {
       )
       .first<{
         objectKey: string;
+        objectEtag: string | null;
         filename: string;
         contentType: string | null;
       }>();
@@ -835,15 +1584,6 @@ export class FileService {
       throw new FileAccessError(
         "The resource attachment is unavailable or outside your audience.",
       );
-    const object = await this.requireBucket().get(version.objectKey);
-    if (!object) throw new Error("The released R2 object is missing.");
-    return new Response(object.body, {
-      headers: {
-        "content-type": version.contentType ?? "application/octet-stream",
-        "content-disposition": `attachment; filename="${safeDownloadName(version.filename)}"`,
-        "cache-control": "private, no-store",
-        "x-content-type-options": "nosniff",
-      },
-    });
+    return this.releasedDownload(version);
   }
 }

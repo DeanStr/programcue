@@ -1,7 +1,16 @@
 import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  AirtableProviderBoundary,
+  airtableCommandKey,
+  airtableIntentCommand,
+} from "~/modules/airtable/airtable-provider-boundary.server";
 import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
+import {
+  WebhookQueueConfigurationError,
+  WebhookService,
+} from "~/platform/operations/webhook-service.server";
 import {
   participantEvidenceSchema,
   taskEvidenceUrlSchema,
@@ -13,6 +22,27 @@ export class TaskStateError extends Error {
     super(message);
     this.name = "TaskStateError";
   }
+}
+
+export class TaskEvidenceAttachmentConflictError extends TaskStateError {
+  constructor(message: string) {
+    super(message);
+    this.name = "TaskEvidenceAttachmentConflictError";
+  }
+}
+
+export function taskTemplateIdForIntent(eventId: string, intentId: string) {
+  const normalizedEventId = eventId.trim();
+  const normalizedIntentId = intentId.trim();
+  if (
+    !normalizedEventId ||
+    !normalizedIntentId ||
+    normalizedIntentId.length > 200
+  )
+    throw new TaskStateError(
+      "A bounded task-template creation intent is required.",
+    );
+  return `task-template:${normalizedEventId.length}:${normalizedEventId}:${normalizedIntentId}`;
 }
 
 type TemplateRow = {
@@ -33,6 +63,7 @@ type TemplateRow = {
   dueAnchor: "none" | "acceptance" | "session_start" | "fixed";
   dueOffsetMinutes: number | null;
   fixedDueAt: number | null;
+  autoAssignOnAcceptance: number | boolean;
   configurationJson: string;
   status: string;
 };
@@ -62,18 +93,107 @@ type TaskRow = {
   dueAt: number | null;
   evidenceJson: string | null;
   waiverJson: string | null;
+  submittedAt: number | null;
   completedAt: number | null;
+  completedByPersonId: string | null;
+  lastOperationId: string | null;
 };
+
+const completionUndoResultSchema = z.object({
+  version: z.literal(1),
+  taskId: z.string().min(1),
+  completionRevision: z.number().int().positive(),
+  evidenceId: z.string().min(1).nullable(),
+  dependentRevisions: z.array(
+    z.object({
+      taskId: z.string().min(1),
+      revision: z.number().int().positive(),
+    }),
+  ),
+  undoTokenHash: z.string().regex(/^[a-f0-9]{64}$/),
+  undoExpiresAt: z.number().int().positive(),
+  undoneAt: z.number().int().positive().nullable(),
+  undoOperationId: z.string().min(1).nullable(),
+  before: z.object({
+    status: z.enum(["not_started", "in_progress", "blocked", "overdue"]),
+    readinessState: z.enum(["on_track", "at_risk", "overdue", "blocked"]),
+    readinessPercent: z.number().int().min(0).max(100),
+    evidenceJson: z.string().nullable(),
+    waiverJson: z.string().nullable(),
+    submittedAt: z.number().int().nullable(),
+    completedAt: z.number().int().nullable(),
+    completedByPersonId: z.string().nullable(),
+  }),
+});
+
+export type TaskCompletionMutationResult = {
+  taskId: string;
+  undoToken: string | null;
+  undoExpiresAt: number | null;
+  webhookWarning: string | null;
+};
+
+function randomUndoSecret() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
+}
+
+async function hashUndoSecret(value: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function equalHash(left: string, right: string) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
+}
+
+function parseJson(value: string, context: string) {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch (error) {
+    throw new Error(`${context} contains invalid JSON.`, { cause: error });
+  }
+}
 
 const taskEvidenceDetailsSchema = z
   .object({
     confirmed: z.boolean().optional(),
     text: z.string().optional(),
     url: taskEvidenceUrlSchema.optional(),
+    fileAssetId: z.string().optional(),
     fileVersionId: z.string().optional(),
     scanStatus: z.string().optional(),
   })
   .passthrough();
+
+const completedFileEvidenceAttachmentSchema = z.object({
+  taskId: z.string().min(1).max(160),
+  assetId: z.string().min(1).max(160),
+  versionId: z.string().min(1).max(160),
+});
+
+type CompletedFileEvidenceAsset = {
+  id: string;
+  versionId: string;
+  uploadStatus: string;
+  signatureStatus: string;
+  scanStatus: string;
+  evidenceId: string | null;
+  evidenceStatus: string | null;
+};
 
 function parseTaskEvidenceDetails(taskId: string, value: string) {
   try {
@@ -102,14 +222,98 @@ function statusProgress(status: TaskRow["status"]) {
 }
 
 export class TaskService {
-  constructor(private readonly env: CloudflareEnvironment) {}
+  private readonly airtable;
+
+  constructor(
+    private readonly env: CloudflareEnvironment,
+    dependencies: { airtable?: AirtableProviderBoundary } = {},
+  ) {
+    this.airtable =
+      dependencies.airtable ?? new AirtableProviderBoundary(this.env);
+  }
+
+  private async projectCommand<T>(
+    viewer: Viewer,
+    operation: string,
+    input: unknown,
+    execute: () => Promise<T>,
+    options: { replay?: "store" | "reject" } = {},
+  ) {
+    const idempotencyKey = await airtableCommandKey(operation, viewer, input);
+    return this.airtable.executeIdempotent(
+      viewer,
+      { idempotencyKey, operation },
+      execute,
+      options,
+    );
+  }
+
+  private async projectIntentCommand<T>(
+    viewer: Viewer,
+    operation: string,
+    intentId: string,
+    input: unknown,
+    execute: () => Promise<T>,
+  ) {
+    return this.airtable.executeIdempotent(
+      viewer,
+      await airtableIntentCommand(operation, viewer, intentId, input),
+      execute,
+    );
+  }
+
+  private async queueTaskWebhook(
+    viewer: Viewer,
+    input: {
+      eventType: "task.created" | "task.updated";
+      taskId: string;
+      operationId: string;
+      data: Record<string, unknown>;
+    },
+  ) {
+    try {
+      const deliveries = await new WebhookService(this.env).queueEvent(viewer, {
+        eventType: input.eventType,
+        entityType: "task",
+        entityId: input.taskId,
+        idempotencyKey: `${input.eventType}:${input.taskId}:${input.operationId}`,
+        correlationId: input.operationId,
+        data: input.data,
+      });
+      return deliveries.some((delivery) => delivery.status === "queue_failed")
+        ? "The task change was saved, but one or more outbound webhooks need a queue retry."
+        : null;
+    } catch (error) {
+      if (error instanceof WebhookQueueConfigurationError) throw error;
+      console.error("Failed to record task webhook event", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+      return "The task change was saved, but its outbound webhook event could not be recorded.";
+    }
+  }
+
+  private requireTaskWebhookReadiness(
+    viewer: Viewer,
+    eventType: "task.created" | "task.updated",
+  ) {
+    return new WebhookService(this.env).assertEventDeliveryReady(
+      viewer,
+      eventType,
+    );
+  }
 
   private async assertEvent(viewer: Viewer) {
     const row = await this.env.DB.prepare(
-      "SELECT timezone FROM events WHERE id = ? AND organisation_id = ?",
+      `SELECT id, name, timezone, starts_at AS startsAt
+         FROM events WHERE id = ? AND organisation_id = ?`,
     )
       .bind(viewer.eventId, viewer.organisationId)
-      .first<{ timezone: string }>();
+      .first<{
+        id: string;
+        name: string;
+        timezone: string;
+        startsAt: number;
+      }>();
     if (!row) throw new Response("Event not found.", { status: 404 });
     return row;
   }
@@ -153,47 +357,132 @@ export class TaskService {
     ]);
   }
 
-  async createTemplate(viewer: Viewer, rawInput: unknown) {
+  async createTemplate(
+    viewer: Viewer,
+    rawInput: unknown,
+    intentId: string = crypto.randomUUID(),
+  ) {
+    return this.projectIntentCommand(
+      viewer,
+      "task.template.create",
+      intentId,
+      rawInput,
+      () => this.createTemplateD1(viewer, rawInput, intentId),
+    );
+  }
+
+  private async createTemplateD1(
+    viewer: Viewer,
+    rawInput: unknown,
+    intentId: string,
+  ) {
     const event = await this.assertEvent(viewer);
     const input = taskTemplateInputSchema.parse(rawInput);
-    if (input.dependencyIds.length) {
-      const placeholders = input.dependencyIds.map(() => "?").join(",");
+    const dependencyIds = [...new Set(input.dependencyIds)].sort();
+    if (dependencyIds.length) {
       const dependencies = await this.env.DB.prepare(
         `
-        SELECT COUNT(*) AS count FROM task_templates
-         WHERE event_id = ? AND status = 'active' AND id IN (${placeholders})
+        SELECT id, target_type AS targetType FROM task_templates
+         WHERE event_id = ? AND status = 'active'
+           AND id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
       `,
       )
-        .bind(viewer.eventId, ...input.dependencyIds)
-        .first<{ count: number }>();
-      if (dependencies?.count !== new Set(input.dependencyIds).size)
+        .bind(viewer.eventId, JSON.stringify(dependencyIds))
+        .all<{ id: string; targetType: TemplateRow["targetType"] }>();
+      if (dependencies.results.length !== dependencyIds.length)
         throw new TaskStateError(
           "One or more prerequisite templates are unavailable in this event.",
         );
+      if (
+        dependencies.results.some(
+          (dependency) => dependency.targetType !== input.targetType,
+        )
+      ) {
+        throw new TaskStateError(
+          "Prerequisite templates must use the same task scope.",
+        );
+      }
     }
-    const id = crypto.randomUUID();
+    const id = taskTemplateIdForIntent(viewer.eventId, intentId);
+    const expected = {
+      name: input.name,
+      description: input.description || null,
+      targetType: input.targetType,
+      taskType: input.taskType,
+      impact: input.impact,
+      evidenceMode: input.evidenceMode,
+      dueAnchor: input.dueAnchor,
+      dueOffsetMinutes:
+        input.dueOffsetDays === null ? null : input.dueOffsetDays * 1_440,
+      fixedDueAt: fixedDateEndEpoch(input.fixedDueDate, event.timezone),
+      autoAssignOnAcceptance: input.autoAssignOnAcceptance ? 1 : 0,
+    };
+    const recovered = await this.env.DB.prepare(
+      `SELECT id, name, description, target_type AS targetType,
+              task_type AS taskType, impact, evidence_mode AS evidenceMode,
+              due_anchor AS dueAnchor, due_offset_minutes AS dueOffsetMinutes,
+              fixed_due_at AS fixedDueAt,
+              auto_assign_on_acceptance AS autoAssignOnAcceptance
+         FROM task_templates WHERE id = ? AND event_id = ?`,
+    )
+      .bind(id, viewer.eventId)
+      .first<{
+        id: string;
+        name: string;
+        description: string | null;
+        targetType: string;
+        taskType: string;
+        impact: string;
+        evidenceMode: string;
+        dueAnchor: string;
+        dueOffsetMinutes: number | null;
+        fixedDueAt: number | null;
+        autoAssignOnAcceptance: number;
+      }>();
+    if (recovered) {
+      const recoveredDependencies = await this.env.DB.prepare(
+        `SELECT depends_on_template_id AS dependencyId
+           FROM task_template_dependencies
+          WHERE template_id = ? ORDER BY depends_on_template_id`,
+      )
+        .bind(id)
+        .all<{ dependencyId: string }>();
+      const { id: _id, ...recoveredConfiguration } = recovered;
+      if (
+        JSON.stringify(recoveredConfiguration) !== JSON.stringify(expected) ||
+        JSON.stringify(
+          recoveredDependencies.results.map((row) => row.dependencyId),
+        ) !== JSON.stringify(dependencyIds)
+      )
+        throw new TaskStateError(
+          "This task-template creation intent was already used with different configuration.",
+        );
+      return recovered.id;
+    }
     await this.env.DB.batch([
       this.env.DB.prepare(
         `
         INSERT INTO task_templates (
           id, event_id, name, description, target_type, task_type, impact, evidence_mode,
-          due_anchor, due_offset_minutes, fixed_due_at, configuration_json, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', unixepoch(), unixepoch())
+          due_anchor, due_offset_minutes, fixed_due_at, auto_assign_on_acceptance,
+          configuration_json, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', unixepoch(), unixepoch())
       `,
       ).bind(
         id,
         viewer.eventId,
-        input.name,
-        input.description || null,
-        input.targetType,
-        input.taskType,
-        input.impact,
-        input.evidenceMode,
-        input.dueAnchor,
-        input.dueOffsetDays === null ? null : input.dueOffsetDays * 1_440,
-        fixedDateEndEpoch(input.fixedDueDate, event.timezone),
+        expected.name,
+        expected.description,
+        expected.targetType,
+        expected.taskType,
+        expected.impact,
+        expected.evidenceMode,
+        expected.dueAnchor,
+        expected.dueOffsetMinutes,
+        expected.fixedDueAt,
+        expected.autoAssignOnAcceptance,
       ),
-      ...[...new Set(input.dependencyIds)].map((dependencyId) =>
+      ...dependencyIds.map((dependencyId) =>
         this.env.DB.prepare(
           `
         INSERT INTO task_template_dependencies (template_id, depends_on_template_id, created_at) VALUES (?, ?, unixepoch())
@@ -202,18 +491,20 @@ export class TaskService {
       ),
       this.env.DB.prepare(
         `
-        INSERT INTO audit_events (
+        INSERT OR IGNORE INTO audit_events (
           id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
         ) VALUES (?, ?, ?, ?, 'task_template.created', 'task_template', ?, ?, unixepoch())
       `,
       ).bind(
-        crypto.randomUUID(),
+        `audit:${id}`,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
         id,
         JSON.stringify({
           taskType: input.taskType,
+          targetType: input.targetType,
+          autoAssignOnAcceptance: input.autoAssignOnAcceptance,
           dependencies: input.dependencyIds,
         }),
       ),
@@ -226,7 +517,8 @@ export class TaskService {
       `
       SELECT id, name, description, target_type AS targetType, task_type AS taskType, impact,
              evidence_mode AS evidenceMode, due_anchor AS dueAnchor, due_offset_minutes AS dueOffsetMinutes,
-             fixed_due_at AS fixedDueAt, configuration_json AS configurationJson, status
+             fixed_due_at AS fixedDueAt, auto_assign_on_acceptance AS autoAssignOnAcceptance,
+             configuration_json AS configurationJson, status
         FROM task_templates WHERE id = ? AND event_id = ?
     `,
     )
@@ -237,35 +529,62 @@ export class TaskService {
   private async dueAtFor(
     template: TemplateRow,
     eventId: string,
-    personId: string,
+    targetId: string,
   ) {
     let anchor: number | null = null;
     if (template.dueAnchor === "fixed") anchor = template.fixedDueAt;
     if (template.dueAnchor === "acceptance") {
+      const acceptanceQueries = {
+        speaker: `
+          SELECT MIN(sd.published_at) AS anchor
+            FROM session_speakers ss
+            JOIN sessions s ON s.id = ss.session_id AND s.event_id = ss.event_id
+            JOIN submission_decisions sd
+              ON sd.submission_id = s.source_submission_id AND sd.event_id = s.event_id
+           WHERE ss.event_id = ? AND ss.person_id = ?
+             AND sd.status = 'published' AND sd.decision = 'accepted'`,
+        session: `
+          SELECT MIN(sd.published_at) AS anchor
+            FROM sessions s
+            JOIN submission_decisions sd
+              ON sd.submission_id = s.source_submission_id AND sd.event_id = s.event_id
+           WHERE s.event_id = ? AND s.id = ?
+             AND sd.status = 'published' AND sd.decision = 'accepted'`,
+        event: `
+          SELECT MIN(sd.published_at) AS anchor
+            FROM submission_decisions sd
+           WHERE sd.event_id = ? AND ? = sd.event_id
+             AND sd.status = 'published' AND sd.decision = 'accepted'`,
+      } satisfies Record<TemplateRow["targetType"], string>;
       const row = await this.env.DB.prepare(
-        `
-        SELECT MIN(sd.published_at) AS anchor
-          FROM session_speakers ss
-          JOIN sessions s ON s.id = ss.session_id AND s.event_id = ss.event_id
-          JOIN submission_decisions sd ON sd.submission_id = s.source_submission_id AND sd.event_id = s.event_id
-         WHERE ss.event_id = ? AND ss.person_id = ? AND sd.status = 'published' AND sd.decision = 'accepted'
-      `,
+        acceptanceQueries[template.targetType],
       )
-        .bind(eventId, personId)
+        .bind(eventId, targetId)
         .first<{ anchor: number | null }>();
       anchor = row?.anchor ?? null;
     }
     if (template.dueAnchor === "session_start") {
+      const sessionStartQueries = {
+        speaker: `
+          SELECT MIN(se.starts_at) AS anchor
+            FROM session_speakers ss
+            JOIN schedule_versions sv
+              ON sv.event_id = ss.event_id AND sv.status = 'published'
+            JOIN schedule_entries se
+              ON se.schedule_version_id = sv.id AND se.session_id = ss.session_id
+           WHERE ss.event_id = ? AND ss.person_id = ?`,
+        session: `
+          SELECT MIN(se.starts_at) AS anchor
+            FROM schedule_versions sv
+            JOIN schedule_entries se ON se.schedule_version_id = sv.id
+           WHERE sv.event_id = ? AND se.session_id = ? AND sv.status = 'published'`,
+        event: `
+          SELECT starts_at AS anchor FROM events WHERE id = ? AND id = ?`,
+      } satisfies Record<TemplateRow["targetType"], string>;
       const row = await this.env.DB.prepare(
-        `
-        SELECT MIN(se.starts_at) AS anchor
-          FROM session_speakers ss
-          JOIN schedule_versions sv ON sv.event_id = ss.event_id AND sv.status = 'published'
-          JOIN schedule_entries se ON se.schedule_version_id = sv.id AND se.session_id = ss.session_id
-         WHERE ss.event_id = ? AND ss.person_id = ?
-      `,
+        sessionStartQueries[template.targetType],
       )
-        .bind(eventId, personId)
+        .bind(eventId, targetId)
         .first<{ anchor: number | null }>();
       anchor = row?.anchor ?? null;
     }
@@ -274,50 +593,143 @@ export class TaskService {
       : anchor + (template.dueOffsetMinutes ?? 0) * 60;
   }
 
-  private async assertSpeakerTarget(eventId: string, personId: string) {
-    const speaker = await this.env.DB.prepare(
-      `
-      SELECT 1 FROM memberships
-       WHERE event_id = ? AND person_id = ? AND role = 'speaker' AND accepted_at IS NOT NULL AND revoked_at IS NULL
-      UNION SELECT 1 FROM session_speakers WHERE event_id = ? AND person_id = ? LIMIT 1
-    `,
-    )
-      .bind(eventId, personId, eventId, personId)
-      .first();
-    if (!speaker)
+  private async assertTaskTarget(
+    eventId: string,
+    targetType: TemplateRow["targetType"],
+    targetId: string,
+  ) {
+    if (targetType === "event") {
+      if (targetId !== eventId)
+        throw new TaskStateError("The selected event target is unavailable.");
+      return;
+    }
+    const target =
+      targetType === "speaker"
+        ? await this.env.DB.prepare(
+            `
+            SELECT 1 FROM memberships
+             WHERE event_id = ? AND person_id = ? AND role = 'speaker'
+               AND accepted_at IS NOT NULL AND revoked_at IS NULL
+            UNION
+            SELECT 1 FROM session_speakers
+             WHERE event_id = ? AND person_id = ? LIMIT 1
+          `,
+          )
+            .bind(eventId, targetId, eventId, targetId)
+            .first()
+        : await this.env.DB.prepare(
+            `SELECT 1 FROM sessions
+              WHERE event_id = ? AND id = ? AND status NOT IN ('cancelled','archived')`,
+          )
+            .bind(eventId, targetId)
+            .first();
+    if (!target) {
       throw new TaskStateError(
-        "The selected person is not a speaker in this event.",
+        targetType === "speaker"
+          ? "The selected person is not a speaker in this event."
+          : "The selected session is unavailable in this event.",
       );
+    }
+  }
+
+  private async recordAssignmentAudit(
+    viewer: Viewer,
+    template: TemplateRow,
+    targetId: string,
+    taskId: string,
+    operationId: string,
+  ) {
+    await this.env.DB.prepare(
+      `INSERT OR IGNORE INTO audit_events (
+         id, organisation_id, event_id, actor_person_id, action,
+         entity_type, entity_id, correlation_id, metadata_json, created_at
+       ) VALUES (?, ?, ?, ?, 'task.assigned', 'task_instance', ?, ?, ?, unixepoch())`,
+    )
+      .bind(
+        `audit:task-assigned:${operationId}`,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        taskId,
+        operationId,
+        JSON.stringify({
+          templateId: template.id,
+          targetType: template.targetType,
+          targetId,
+        }),
+      )
+      .run();
   }
 
   private async materializeTemplate(
     viewer: Viewer,
     templateId: string,
-    personId: string,
+    targetId: string,
     visiting = new Set<string>(),
+    webhookWarnings: string[] = [],
+    expectedTargetType?: TemplateRow["targetType"],
+    assignmentIntentId?: string,
   ): Promise<string> {
-    const existing = await this.env.DB.prepare(
-      `
-      SELECT id FROM task_instances WHERE event_id = ? AND template_id = ? AND target_type = 'speaker' AND target_id = ? LIMIT 1
-    `,
-    )
-      .bind(viewer.eventId, templateId, personId)
-      .first<{ id: string }>();
-    if (existing) return existing.id;
     if (visiting.has(templateId))
       throw new TaskStateError("Task template dependencies contain a cycle.");
-    visiting.add(templateId);
     const template = await this.getTemplate(viewer.eventId, templateId);
     if (!template || template.status !== "active")
       throw new TaskStateError("Task template not found or archived.");
-    if (template.targetType !== "speaker")
+    if (expectedTargetType && template.targetType !== expectedTargetType) {
       throw new TaskStateError(
-        "This assignment workflow currently accepts speaker-scoped templates only.",
+        "Prerequisite templates must use the same task scope.",
       );
-    const dueAt = await this.dueAtFor(template, viewer.eventId, personId);
+    }
+    const existing = await this.env.DB.prepare(
+      `
+      SELECT id, title, status, last_operation_id AS lastOperationId
+        FROM task_instances
+       WHERE event_id = ? AND template_id = ? AND target_type = ? AND target_id = ?
+       LIMIT 1
+    `,
+    )
+      .bind(viewer.eventId, templateId, template.targetType, targetId)
+      .first<{
+        id: string;
+        title: string;
+        status: string;
+        lastOperationId: string | null;
+      }>();
+    if (existing) {
+      const operationId = assignmentIntentId
+        ? expectedTargetType === undefined
+          ? assignmentIntentId
+          : `${assignmentIntentId}:${template.id}`
+        : (existing.lastOperationId ?? `existing:${existing.id}`);
+      if (assignmentIntentId) {
+        await this.recordAssignmentAudit(
+          viewer,
+          template,
+          targetId,
+          existing.id,
+          operationId,
+        );
+      }
+      const warning = await this.queueTaskWebhook(viewer, {
+        eventType: "task.created",
+        taskId: existing.id,
+        operationId,
+        data: {
+          title: existing.title,
+          status: existing.status,
+          targetType: template.targetType,
+          targetId,
+          templateId,
+        },
+      });
+      if (warning) webhookWarnings.push(warning);
+      return existing.id;
+    }
+    visiting.add(templateId);
+    const dueAt = await this.dueAtFor(template, viewer.eventId, targetId);
     if (template.dueAnchor !== "none" && dueAt === null) {
       throw new TaskStateError(
-        `The ${template.dueAnchor.replace("_", " ")} due anchor cannot be resolved for this speaker.`,
+        `The ${template.dueAnchor.replace("_", " ")} due anchor cannot be resolved for this ${template.targetType}.`,
       );
     }
     const dependencyRows = await this.env.DB.prepare(
@@ -333,15 +745,45 @@ export class TaskService {
         await this.materializeTemplate(
           viewer,
           dependency.id,
-          personId,
+          targetId,
           visiting,
+          webhookWarnings,
+          template.targetType,
+          assignmentIntentId,
         ),
       );
     }
     visiting.delete(templateId);
-    const id = crypto.randomUUID();
-    const operationId = crypto.randomUUID();
+    const operationId = assignmentIntentId
+      ? expectedTargetType === undefined
+        ? assignmentIntentId
+        : `${assignmentIntentId}:${template.id}`
+      : crypto.randomUUID();
+    const id = assignmentIntentId ? `task:${operationId}` : crypto.randomUUID();
     const blocked = dependencyTaskIds.length > 0;
+    const auditEventId = assignmentIntentId
+      ? `audit:task-assigned:${operationId}`
+      : crypto.randomUUID();
+    const preparedWebhook = await new WebhookService(
+      this.env,
+    ).prepareEventForAudit(
+      viewer,
+      {
+        eventType: "task.created",
+        entityType: "task",
+        entityId: id,
+        idempotencyKey: `task.created:${id}:${operationId}`,
+        correlationId: operationId,
+        data: {
+          title: template.name,
+          status: blocked ? "blocked" : "not_started",
+          targetType: template.targetType,
+          targetId,
+          templateId: template.id,
+        },
+      },
+      auditEventId,
+    );
     const [inserted] = await this.env.DB.batch([
       this.env.DB.prepare(
         `
@@ -349,14 +791,15 @@ export class TaskService {
           id, event_id, template_id, target_type, target_id, owner_person_id, title, description,
           task_type, impact, status, readiness_state, readiness_percent, revision, last_operation_id,
           due_at, created_at, updated_at
-        ) VALUES (?, ?, ?, 'speaker', ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, unixepoch(), unixepoch())
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, unixepoch(), unixepoch())
       `,
       ).bind(
         id,
         viewer.eventId,
         template.id,
-        personId,
-        personId,
+        template.targetType,
+        targetId,
+        template.targetType === "speaker" ? targetId : null,
         template.name,
         template.description,
         template.taskType,
@@ -380,51 +823,150 @@ export class TaskService {
       ),
       this.env.DB.prepare(
         `
-        INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+        INSERT OR IGNORE INTO audit_events (
+          id, organisation_id, event_id, actor_person_id, action, entity_type,
+          entity_id, correlation_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, 'task.assigned', 'task_instance', ?, ?, unixepoch()
+        SELECT ?, ?, ?, ?, 'task.assigned', 'task_instance', ?, ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM task_instances
             WHERE id = ? AND event_id = ? AND last_operation_id = ?
          )
       `,
       ).bind(
-        crypto.randomUUID(),
+        auditEventId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
         id,
-        JSON.stringify({ templateId, personId }),
+        operationId,
+        JSON.stringify({
+          templateId,
+          targetType: template.targetType,
+          targetId,
+        }),
         id,
         viewer.eventId,
         operationId,
       ),
+      ...preparedWebhook.statements,
     ]);
-    if ((inserted.meta.changes ?? 0) === 1) return id;
+    if ((inserted.meta.changes ?? 0) === 1) {
+      const warning = await this.queueTaskWebhook(viewer, {
+        eventType: "task.created",
+        taskId: id,
+        operationId,
+        data: {
+          title: template.name,
+          status: blocked ? "blocked" : "not_started",
+          targetType: template.targetType,
+          targetId,
+          templateId: template.id,
+        },
+      });
+      if (warning) webhookWarnings.push(warning);
+      return id;
+    }
     const winner = await this.env.DB.prepare(
       `
-      SELECT id FROM task_instances
-       WHERE event_id = ? AND template_id = ? AND target_type = 'speaker' AND target_id = ?
+      SELECT id, title, status, last_operation_id AS lastOperationId FROM task_instances
+       WHERE event_id = ? AND template_id = ? AND target_type = ? AND target_id = ?
        LIMIT 1
     `,
     )
-      .bind(viewer.eventId, templateId, personId)
-      .first<{ id: string }>();
-    if (winner) return winner.id;
+      .bind(viewer.eventId, templateId, template.targetType, targetId)
+      .first<{
+        id: string;
+        title: string;
+        status: string;
+        lastOperationId: string | null;
+      }>();
+    if (winner) {
+      if (assignmentIntentId) {
+        await this.recordAssignmentAudit(
+          viewer,
+          template,
+          targetId,
+          winner.id,
+          operationId,
+        );
+      }
+      const warning = await this.queueTaskWebhook(viewer, {
+        eventType: "task.created",
+        taskId: winner.id,
+        operationId: winner.lastOperationId ?? `existing:${winner.id}`,
+        data: {
+          title: winner.title,
+          status: winner.status,
+          targetType: template.targetType,
+          targetId,
+          templateId,
+        },
+      });
+      if (warning) webhookWarnings.push(warning);
+      return winner.id;
+    }
     throw new TaskStateError(
       "The task assignment changed before it could be created.",
     );
   }
 
-  async assignTemplate(viewer: Viewer, templateId: string, personId: string) {
+  async assignTemplate(
+    viewer: Viewer,
+    templateId: string,
+    targetId: string,
+    intentId?: string,
+  ) {
+    const execute = () =>
+      this.assignTemplateD1(viewer, templateId, targetId, intentId);
+    return intentId
+      ? this.projectIntentCommand(
+          viewer,
+          "task.template.assign",
+          intentId,
+          { templateId, targetId },
+          execute,
+        )
+      : this.projectCommand(
+          viewer,
+          "task.template.assign",
+          { templateId, targetId },
+          execute,
+        );
+  }
+
+  private async assignTemplateD1(
+    viewer: Viewer,
+    templateId: string,
+    targetId: string,
+    intentId?: string,
+  ) {
     await this.assertEvent(viewer);
-    await this.assertSpeakerTarget(viewer.eventId, personId);
-    return this.materializeTemplate(
-      viewer,
-      z.string().min(1).parse(templateId),
-      z.string().min(1).parse(personId),
+    const parsedTemplateId = z.string().min(1).parse(templateId);
+    const parsedTargetId = z.string().min(1).parse(targetId);
+    const template = await this.getTemplate(viewer.eventId, parsedTemplateId);
+    if (!template || template.status !== "active")
+      throw new TaskStateError("Task template not found or archived.");
+    await this.assertTaskTarget(
+      viewer.eventId,
+      template.targetType,
+      parsedTargetId,
     );
+    await this.requireTaskWebhookReadiness(viewer, "task.created");
+    const webhookWarnings: string[] = [];
+    const taskId = await this.materializeTemplate(
+      viewer,
+      parsedTemplateId,
+      parsedTargetId,
+      new Set(),
+      webhookWarnings,
+      undefined,
+      intentId,
+    );
+    return {
+      taskId,
+      webhookWarning: [...new Set(webhookWarnings)].join(" ") || null,
+    };
   }
 
   private taskAccessClause() {
@@ -439,14 +981,27 @@ export class TaskService {
   }
 
   async listParticipantTasks(viewer: Viewer) {
-    await this.refreshStates(viewer.eventId);
+    await this.projectCommand(
+      viewer,
+      "task.state.refresh.participant",
+      { requestedAt: Date.now() },
+      () => this.refreshStates(viewer.eventId),
+    );
+    await this.airtable.assertReadable(viewer);
+    return this.listParticipantTasksD1(viewer);
+  }
+
+  private async listParticipantTasksD1(viewer: Viewer) {
     const tasks = await this.env.DB.prepare(
       `
       SELECT ti.id, ti.template_id AS templateId, ti.target_type AS targetType, ti.target_id AS targetId,
              ti.owner_person_id AS ownerPersonId, p.display_name AS ownerName, ti.title, ti.description,
              ti.task_type AS taskType, ti.impact, ti.status, ti.readiness_state AS readinessState,
              ti.readiness_percent AS readinessPercent, ti.revision, ti.due_at AS dueAt,
-             ti.evidence_json AS evidenceJson, ti.waiver_json AS waiverJson, ti.completed_at AS completedAt
+             ti.evidence_json AS evidenceJson, ti.waiver_json AS waiverJson,
+             ti.submitted_at AS submittedAt, ti.completed_at AS completedAt,
+             ti.completed_by_person_id AS completedByPersonId,
+             ti.last_operation_id AS lastOperationId
         FROM task_instances ti LEFT JOIN people p ON p.id = ti.owner_person_id
        WHERE ti.event_id = ? AND ${this.taskAccessClause()}
        ORDER BY CASE ti.status WHEN 'overdue' THEN 0 WHEN 'blocked' THEN 1 WHEN 'not_started' THEN 2 WHEN 'in_progress' THEN 3 WHEN 'submitted' THEN 4 ELSE 5 END,
@@ -511,7 +1066,10 @@ export class TaskService {
              ti.owner_person_id AS ownerPersonId, p.display_name AS ownerName, ti.title, ti.description,
              ti.task_type AS taskType, ti.impact, ti.status, ti.readiness_state AS readinessState,
              ti.readiness_percent AS readinessPercent, ti.revision, ti.due_at AS dueAt,
-             ti.evidence_json AS evidenceJson, ti.waiver_json AS waiverJson, ti.completed_at AS completedAt,
+             ti.evidence_json AS evidenceJson, ti.waiver_json AS waiverJson,
+             ti.submitted_at AS submittedAt, ti.completed_at AS completedAt,
+             ti.completed_by_person_id AS completedByPersonId,
+             ti.last_operation_id AS lastOperationId,
              tt.evidence_mode AS evidenceMode
         FROM task_instances ti
         LEFT JOIN people p ON p.id = ti.owner_person_id
@@ -542,7 +1100,23 @@ export class TaskService {
     return (incomplete?.count ?? 0) === 0;
   }
 
+  private async dependentRevisionSnapshot(taskId: string) {
+    const dependents = await this.env.DB.prepare(
+      `
+      SELECT dependent.id AS taskId, dependent.revision
+        FROM task_instance_dependencies dependency
+        JOIN task_instances dependent ON dependent.id = dependency.task_id
+       WHERE dependency.depends_on_task_id = ?
+       ORDER BY dependent.id
+    `,
+    )
+      .bind(taskId)
+      .all<{ taskId: string; revision: number }>();
+    return dependents.results;
+  }
+
   async assertFileEvidenceUploadAllowed(viewer: Viewer, taskId: string) {
+    await this.airtable.assertReadable(viewer);
     const task = await this.participantTask(viewer, taskId);
     if (!task || task.taskType !== "file_upload")
       throw new TaskStateError(
@@ -559,7 +1133,25 @@ export class TaskService {
     return task;
   }
 
-  async completeParticipant(viewer: Viewer, rawInput: unknown) {
+  async completeParticipant(
+    viewer: Viewer,
+    rawInput: unknown,
+    operationId?: string,
+  ) {
+    return this.projectCommand(
+      viewer,
+      "task.participant.complete",
+      rawInput,
+      () => this.completeParticipantD1(viewer, rawInput, operationId),
+      { replay: "reject" },
+    );
+  }
+
+  private async completeParticipantD1(
+    viewer: Viewer,
+    rawInput: unknown,
+    suppliedOperationId?: string,
+  ) {
     const input = participantEvidenceSchema.parse(rawInput);
     const task = await this.participantTask(viewer, input.taskId);
     if (!task)
@@ -597,12 +1189,58 @@ export class TaskService {
       if (!input.url) throw new TaskStateError("Enter the link you visited.");
       evidence.url = input.url;
     }
+    await this.requireTaskWebhookReadiness(viewer, "task.updated");
     const nextStatus =
       task.evidenceMode === "admin_approval" ? "submitted" : "completed";
     const progress = statusProgress(nextStatus);
-    const evidenceId = crypto.randomUUID();
-    const operationId = crypto.randomUUID();
-    const [updated] = await this.env.DB.batch([
+    const operationId = suppliedOperationId ?? crypto.randomUUID();
+    const evidenceId = suppliedOperationId
+      ? `task-evidence:${suppliedOperationId}`
+      : crypto.randomUUID();
+    const undoSecret = randomUndoSecret();
+    const undoTokenHash = await hashUndoSecret(undoSecret);
+    const undoExpiresAt = Math.floor(Date.now() / 1_000) + 300;
+    const dependentRevisions =
+      nextStatus === "completed"
+        ? await this.dependentRevisionSnapshot(task.id)
+        : [];
+    const auditEventId = crypto.randomUUID();
+    const preparedWebhook = await new WebhookService(
+      this.env,
+    ).prepareEventForAudit(
+      viewer,
+      {
+        eventType: "task.updated",
+        entityType: "task",
+        entityId: task.id,
+        idempotencyKey: `task.updated:${task.id}:${operationId}`,
+        correlationId: operationId,
+        data: { status: nextStatus, action: "participant_completion" },
+      },
+      auditEventId,
+    );
+    const undoResult = JSON.stringify({
+      version: 1,
+      taskId: task.id,
+      completionRevision: task.revision + 1,
+      evidenceId,
+      dependentRevisions,
+      undoTokenHash,
+      undoExpiresAt,
+      undoneAt: null,
+      undoOperationId: null,
+      before: {
+        status: task.status,
+        readinessState: task.readinessState,
+        readinessPercent: task.readinessPercent,
+        evidenceJson: task.evidenceJson,
+        waiverJson: task.waiverJson,
+        submittedAt: task.submittedAt,
+        completedAt: task.completedAt,
+        completedByPersonId: task.completedByPersonId,
+      },
+    });
+    const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `
         UPDATE task_instances SET status = ?, readiness_state = ?, readiness_percent = ?, evidence_json = ?,
@@ -660,7 +1298,7 @@ export class TaskService {
         )
       `,
       ).bind(
-        crypto.randomUUID(),
+        auditEventId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
@@ -672,41 +1310,480 @@ export class TaskService {
         task.revision + 1,
         operationId,
       ),
+      this.env.DB.prepare(
+        `
+        INSERT INTO operation_jobs (
+          id, organisation_id, event_id, requested_by_person_id, type,
+          idempotency_key, correlation_id, status, payload_json, result_json,
+          progress_total, progress_completed, progress_failed, cancellable,
+          started_at, completed_at, created_at, updated_at
+        )
+        SELECT ?, ?, ?, ?, 'task.completion', ?, ?, 'completed', ?, ?,
+               1, 1, 0, 0, unixepoch(), unixepoch(), unixepoch(), unixepoch()
+          FROM task_instances task
+         WHERE ? = 'completed' AND task.id = ? AND task.event_id = ?
+           AND task.revision = ? AND task.last_operation_id = ?
+           AND EXISTS (
+             SELECT 1 FROM events event
+              WHERE event.id = task.event_id AND event.organisation_id = ?
+           )
+           AND EXISTS (
+             SELECT 1 FROM task_evidence evidence
+              WHERE evidence.id = ? AND evidence.task_id = task.id
+                AND evidence.event_id = task.event_id AND evidence.status = 'approved'
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM task_evidence other
+              WHERE other.task_id = task.id AND other.id <> ?
+           )
+           AND NOT EXISTS (
+             SELECT 1
+               FROM task_instance_dependencies dependency
+               JOIN task_instances dependent ON dependent.id = dependency.task_id
+              WHERE dependency.depends_on_task_id = task.id
+                AND (
+                  dependent.status NOT IN ('not_started','blocked','overdue')
+                  OR EXISTS (
+                    SELECT 1 FROM task_evidence downstream
+                     WHERE downstream.task_id = dependent.id
+                  )
+                )
+           )
+           AND (
+             SELECT COUNT(*) FROM task_instance_dependencies dependency
+              WHERE dependency.depends_on_task_id = task.id
+           ) = json_array_length(?)
+           AND NOT EXISTS (
+             SELECT 1
+               FROM task_instance_dependencies dependency
+               JOIN task_instances dependent ON dependent.id = dependency.task_id
+              WHERE dependency.depends_on_task_id = task.id
+                AND NOT EXISTS (
+                  SELECT 1 FROM json_each(?) expected
+                   WHERE json_extract(expected.value, '$.taskId') = dependent.id
+                     AND json_extract(expected.value, '$.revision') = dependent.revision
+                )
+           )
+      `,
+      ).bind(
+        operationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        `task-completion:${operationId}`,
+        operationId,
+        JSON.stringify({ taskId: task.id, intent: "complete" }),
+        undoResult,
+        nextStatus,
+        task.id,
+        viewer.eventId,
+        task.revision + 1,
+        operationId,
+        viewer.organisationId,
+        evidenceId,
+        evidenceId,
+        JSON.stringify(dependentRevisions),
+        JSON.stringify(dependentRevisions),
+      ),
+      ...preparedWebhook.statements,
     ]);
+    const updated = results[0];
     if ((updated.meta.changes ?? 0) !== 1)
       throw new TaskStateError(
         "This task changed. Refresh before completing it.",
       );
     await this.refreshStates(viewer.eventId);
+    const undoOffered = (results[3]?.meta.changes ?? 0) === 1;
+    const webhookWarning = await this.queueTaskWebhook(viewer, {
+      eventType: "task.updated",
+      taskId: task.id,
+      operationId,
+      data: { status: nextStatus, action: "participant_completion" },
+    });
+    return {
+      taskId: task.id,
+      undoToken: undoOffered ? `${operationId}.${undoSecret}` : null,
+      undoExpiresAt: undoOffered ? undoExpiresAt : null,
+      webhookWarning,
+    } satisfies TaskCompletionMutationResult;
   }
 
-  async submitFileEvidence(viewer: Viewer, taskId: string, assetId: string) {
-    const task = await this.assertFileEvidenceUploadAllowed(viewer, taskId);
-    const asset = await this.env.DB.prepare(
+  async undoCompletion(viewer: Viewer, rawToken: unknown) {
+    return this.projectCommand(viewer, "task.completion.undo", rawToken, () =>
+      this.undoCompletionD1(viewer, rawToken),
+    );
+  }
+
+  private async undoCompletionD1(viewer: Viewer, rawToken: unknown) {
+    const token = z.string().trim().min(1).max(500).parse(rawToken);
+    const separator = token.indexOf(".");
+    if (separator < 1 || token.indexOf(".", separator + 1) !== -1) {
+      throw new TaskStateError("This task-completion undo link is invalid.");
+    }
+    const operationId = z.string().uuid().parse(token.slice(0, separator));
+    const secret = z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{43}$/)
+      .parse(token.slice(separator + 1));
+    const operation = await this.env.DB.prepare(
       `
-      SELECT fa.id, fv.id AS versionId, fv.upload_status AS uploadStatus, fv.signature_status AS signatureStatus,
-             fv.scan_status AS scanStatus
-        FROM file_assets fa JOIN file_versions fv ON fv.asset_id = fa.id
-       WHERE fa.id = ? AND fa.event_id = ? AND fa.owner_person_id = ? AND fa.target_type = 'task' AND fa.target_id = ?
-       ORDER BY fv.version_number DESC LIMIT 1
+      SELECT result_json AS resultJson
+        FROM operation_jobs
+       WHERE id = ? AND organisation_id = ? AND event_id = ?
+         AND requested_by_person_id = ? AND type = 'task.completion'
+         AND status = 'completed'
+       LIMIT 1
     `,
     )
-      .bind(assetId, viewer.eventId, viewer.personId, task.id)
-      .first<{
-        id: string;
-        versionId: string;
-        uploadStatus: string;
-        signatureStatus: string;
-        scanStatus: string;
-      }>();
+      .bind(operationId, viewer.organisationId, viewer.eventId, viewer.personId)
+      .first<{ resultJson: string }>();
+    if (!operation) {
+      throw new TaskStateError("This task-completion undo link is invalid.");
+    }
+    const result = completionUndoResultSchema.parse(
+      parseJson(operation.resultJson, `Task completion ${operationId}`),
+    );
+    if (
+      result.undoneAt !== null ||
+      result.undoOperationId !== null ||
+      !equalHash(result.undoTokenHash, await hashUndoSecret(secret))
+    ) {
+      throw new TaskStateError(
+        result.undoneAt !== null
+          ? "This task completion was already undone."
+          : "This task-completion undo link is invalid.",
+      );
+    }
+    if (result.undoExpiresAt < Math.floor(Date.now() / 1_000)) {
+      throw new TaskStateError("The five-minute undo window has expired.");
+    }
+    await this.requireTaskWebhookReadiness(viewer, "task.updated");
+
+    const undoOperationId = crypto.randomUUID();
+    const auditEventId = crypto.randomUUID();
+    const preparedWebhook = await new WebhookService(
+      this.env,
+    ).prepareEventForAudit(
+      viewer,
+      {
+        eventType: "task.updated",
+        entityType: "task",
+        entityId: result.taskId,
+        idempotencyKey: `task.updated:${result.taskId}:${undoOperationId}`,
+        correlationId: undoOperationId,
+        data: { action: "completion_undone", status: result.before.status },
+      },
+      auditEventId,
+    );
+    const evidenceGuard = result.evidenceId
+      ? `
+           AND EXISTS (
+             SELECT 1 FROM task_evidence evidence
+              WHERE evidence.id = ? AND evidence.task_id = task_instances.id
+                AND evidence.event_id = task_instances.event_id
+                AND evidence.status = 'approved'
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM task_evidence other
+              WHERE other.task_id = task_instances.id AND other.id <> ?
+           )`
+      : `
+           AND NOT EXISTS (
+             SELECT 1 FROM task_evidence evidence
+              WHERE evidence.task_id = task_instances.id
+           )`;
+    const evidenceBindings = result.evidenceId
+      ? [result.evidenceId, result.evidenceId]
+      : [];
+    const statements = [
+      this.env.DB.prepare(
+        `
+        UPDATE task_instances
+           SET status = ?, readiness_state = ?, readiness_percent = ?,
+               evidence_json = ?, waiver_json = ?, submitted_at = ?,
+               completed_at = ?, completed_by_person_id = ?,
+               revision = revision + 1, last_operation_id = ?, updated_at = unixepoch()
+         WHERE id = ? AND event_id = ? AND status = 'completed'
+           AND revision = ? AND last_operation_id = ?
+           ${evidenceGuard}
+           AND NOT EXISTS (
+             SELECT 1
+               FROM task_instance_dependencies dependency
+               JOIN task_instances dependent ON dependent.id = dependency.task_id
+              WHERE dependency.depends_on_task_id = task_instances.id
+                AND (
+                  dependent.status NOT IN ('not_started','blocked','overdue')
+                  OR EXISTS (
+                    SELECT 1 FROM task_evidence downstream
+                     WHERE downstream.task_id = dependent.id
+                  )
+                )
+           )
+           AND (
+             SELECT COUNT(*) FROM task_instance_dependencies dependency
+              WHERE dependency.depends_on_task_id = task_instances.id
+           ) = json_array_length(?)
+           AND NOT EXISTS (
+             SELECT 1
+               FROM task_instance_dependencies dependency
+               JOIN task_instances dependent ON dependent.id = dependency.task_id
+              WHERE dependency.depends_on_task_id = task_instances.id
+                AND NOT EXISTS (
+                  SELECT 1 FROM json_each(?) expected
+                   WHERE json_extract(expected.value, '$.taskId') = dependent.id
+                     AND json_extract(expected.value, '$.revision') = dependent.revision
+                )
+           )
+           AND EXISTS (
+             SELECT 1 FROM operation_jobs completion
+              WHERE completion.id = ? AND completion.organisation_id = ?
+                AND completion.event_id = ? AND completion.requested_by_person_id = ?
+                AND completion.type = 'task.completion' AND completion.status = 'completed'
+                AND json_extract(completion.result_json, '$.undoneAt') IS NULL
+                AND json_extract(completion.result_json, '$.undoExpiresAt') >= unixepoch()
+           )
+      `,
+      ).bind(
+        result.before.status,
+        result.before.readinessState,
+        result.before.readinessPercent,
+        result.before.evidenceJson,
+        result.before.waiverJson,
+        result.before.submittedAt,
+        result.before.completedAt,
+        result.before.completedByPersonId,
+        undoOperationId,
+        result.taskId,
+        viewer.eventId,
+        result.completionRevision,
+        operationId,
+        ...evidenceBindings,
+        JSON.stringify(result.dependentRevisions),
+        JSON.stringify(result.dependentRevisions),
+        operationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+      ),
+      ...(result.evidenceId
+        ? [
+            this.env.DB.prepare(
+              `
+              UPDATE task_evidence SET status = 'superseded'
+               WHERE id = ? AND task_id = ? AND event_id = ? AND status = 'approved'
+                 AND EXISTS (
+                   SELECT 1 FROM task_instances task
+                    WHERE task.id = task_evidence.task_id
+                      AND task.event_id = task_evidence.event_id
+                      AND task.last_operation_id = ?
+                 )
+            `,
+            ).bind(
+              result.evidenceId,
+              result.taskId,
+              viewer.eventId,
+              undoOperationId,
+            ),
+          ]
+        : []),
+      this.env.DB.prepare(
+        `
+        UPDATE operation_jobs
+           SET result_json = json_set(
+                 result_json,
+                 '$.undoneAt', unixepoch(),
+                 '$.undoOperationId', ?
+               ), updated_at = unixepoch()
+         WHERE id = ? AND organisation_id = ? AND event_id = ?
+           AND requested_by_person_id = ? AND type = 'task.completion'
+           AND status = 'completed'
+           AND json_extract(result_json, '$.undoneAt') IS NULL
+           AND json_extract(result_json, '$.undoExpiresAt') >= unixepoch()
+           AND EXISTS (
+             SELECT 1 FROM task_instances task
+              WHERE task.id = ? AND task.event_id = ?
+                AND task.last_operation_id = ?
+           )
+      `,
+      ).bind(
+        undoOperationId,
+        operationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        result.taskId,
+        viewer.eventId,
+        undoOperationId,
+      ),
+      this.env.DB.prepare(
+        `
+        INSERT INTO audit_events (
+          id, organisation_id, event_id, actor_person_id, action,
+          entity_type, entity_id, correlation_id, metadata_json, created_at
+        )
+        SELECT ?, ?, ?, ?, 'task.completion_undone', 'task_instance', ?, ?, ?, unixepoch()
+         WHERE EXISTS (
+           SELECT 1 FROM task_instances task
+            WHERE task.id = ? AND task.event_id = ?
+              AND task.last_operation_id = ?
+         )
+      `,
+      ).bind(
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        result.taskId,
+        undoOperationId,
+        JSON.stringify({ completionOperationId: operationId }),
+        result.taskId,
+        viewer.eventId,
+        undoOperationId,
+      ),
+      ...preparedWebhook.statements,
+    ];
+    const [updated] = await this.env.DB.batch(statements);
+    if ((updated.meta.changes ?? 0) !== 1) {
+      throw new TaskStateError(
+        "This completion can no longer be undone because the task, its evidence or dependent work changed.",
+      );
+    }
+    await this.refreshStates(viewer.eventId);
+    const webhookWarning = await this.queueTaskWebhook(viewer, {
+      eventType: "task.updated",
+      taskId: result.taskId,
+      operationId: undoOperationId,
+      data: { action: "completion_undone", status: result.before.status },
+    });
+    return { taskId: result.taskId, webhookWarning };
+  }
+
+  private async completedFileEvidenceAsset(
+    viewer: Viewer,
+    input: z.infer<typeof completedFileEvidenceAttachmentSchema>,
+  ) {
+    return this.env.DB.prepare(
+      `
+      SELECT fa.id, fv.id AS versionId, fv.upload_status AS uploadStatus, fv.signature_status AS signatureStatus,
+             fv.scan_status AS scanStatus, evidence.id AS evidenceId,
+             evidence.status AS evidenceStatus
+        FROM file_assets fa
+        JOIN file_versions fv
+          ON fv.id = ? AND fv.asset_id = fa.id AND fv.event_id = fa.event_id
+        LEFT JOIN task_evidence evidence
+          ON evidence.event_id = fa.event_id
+         AND evidence.task_id = fa.target_id
+         AND evidence.file_asset_id = fa.id
+         AND evidence.submitted_by_person_id = ?
+         AND json_extract(evidence.evidence_json, '$.fileVersionId') = fv.id
+       WHERE fa.id = ? AND fa.event_id = ? AND fa.owner_person_id = ?
+         AND fa.target_type = 'task' AND fa.target_id = ?
+         AND fa.asset_kind = 'task_evidence' AND fa.status <> 'deleted'
+         AND fv.created_by_person_id = ? AND fv.deleted_at IS NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM audit_events audit
+            WHERE audit.id = 'file-erasure:' || fa.id
+         )
+       ORDER BY evidence.created_at DESC LIMIT 1
+    `,
+    )
+      .bind(
+        input.versionId,
+        viewer.personId,
+        input.assetId,
+        viewer.eventId,
+        viewer.personId,
+        input.taskId,
+        viewer.personId,
+      )
+      .first<CompletedFileEvidenceAsset>();
+  }
+
+  private exactFileEvidenceAlreadyAttached(
+    task: TaskRow,
+    asset: CompletedFileEvidenceAsset | null,
+    input: z.infer<typeof completedFileEvidenceAttachmentSchema>,
+  ) {
+    if (
+      !asset ||
+      !["submitted", "completed"].includes(task.status) ||
+      !["submitted", "approved"].includes(asset.evidenceStatus ?? "") ||
+      asset.uploadStatus !== "uploaded" ||
+      asset.signatureStatus !== "valid" ||
+      !["pending", "clean"].includes(asset.scanStatus) ||
+      !task.evidenceJson
+    )
+      return false;
+    const evidence = parseTaskEvidenceDetails(task.id, task.evidenceJson);
+    return (
+      evidence.fileAssetId === input.assetId &&
+      evidence.fileVersionId === input.versionId
+    );
+  }
+
+  async attachCompletedFileEvidence(viewer: Viewer, rawInput: unknown) {
+    return this.projectCommand(viewer, "task.evidence.attach", rawInput, () =>
+      this.attachCompletedFileEvidenceD1(viewer, rawInput),
+    );
+  }
+
+  private async attachCompletedFileEvidenceD1(
+    viewer: Viewer,
+    rawInput: unknown,
+  ) {
+    const input = completedFileEvidenceAttachmentSchema.parse(rawInput);
+    const ownedTask = await this.participantTask(viewer, input.taskId);
+    if (!ownedTask || ownedTask.taskType !== "file_upload")
+      throw new TaskStateError(
+        "File task not found or not owned by this speaker.",
+      );
+    let asset = await this.completedFileEvidenceAsset(viewer, input);
+    await this.requireTaskWebhookReadiness(viewer, "task.updated");
+    if (this.exactFileEvidenceAlreadyAttached(ownedTask, asset, input)) {
+      const webhookWarning = await this.queueTaskWebhook(viewer, {
+        eventType: "task.updated",
+        taskId: input.taskId,
+        operationId:
+          ownedTask.lastOperationId ?? `evidence:${asset!.evidenceId}`,
+        data: { action: "file_evidence_attached", status: ownedTask.status },
+      });
+      return { ...input, duplicate: true, webhookWarning };
+    }
     if (
       !asset ||
       asset.uploadStatus !== "uploaded" ||
-      asset.signatureStatus !== "valid"
+      asset.signatureStatus !== "valid" ||
+      !["pending", "clean"].includes(asset.scanStatus)
     )
-      throw new TaskStateError("The file upload did not complete safely.");
+      throw new TaskStateError(
+        "The exact file version did not complete safely or is no longer attachable.",
+      );
+    let task: TaskRow;
+    try {
+      task = await this.assertFileEvidenceUploadAllowed(viewer, input.taskId);
+    } catch (error) {
+      if (error instanceof TaskStateError) {
+        throw new TaskEvidenceAttachmentConflictError(error.message);
+      }
+      throw error;
+    }
     const evidenceId = crypto.randomUUID();
     const operationId = crypto.randomUUID();
+    const auditEventId = crypto.randomUUID();
+    const preparedWebhook = await new WebhookService(
+      this.env,
+    ).prepareEventForAudit(
+      viewer,
+      {
+        eventType: "task.updated",
+        entityType: "task",
+        entityId: input.taskId,
+        idempotencyKey: `task.updated:${input.taskId}:${operationId}`,
+        correlationId: operationId,
+        data: { action: "file_evidence_attached", status: "submitted" },
+      },
+      auditEventId,
+    );
     const taskEvidenceJson = JSON.stringify({
       fileAssetId: asset.id,
       fileVersionId: asset.versionId,
@@ -729,6 +1806,23 @@ export class TaskService {
               WHERE dep.task_id = task_instances.id
                 AND prerequisite.status NOT IN ('completed','waived')
            )
+           AND EXISTS (
+             SELECT 1
+               FROM file_assets fa
+               JOIN file_versions fv
+                 ON fv.id = ? AND fv.asset_id = fa.id AND fv.event_id = fa.event_id
+              WHERE fa.id = ? AND fa.event_id = task_instances.event_id
+                AND fa.owner_person_id = ? AND fa.target_type = 'task'
+                AND fa.target_id = task_instances.id
+                AND fa.asset_kind = 'task_evidence' AND fa.status <> 'deleted'
+                AND fv.created_by_person_id = ? AND fv.upload_status = 'uploaded'
+                AND fv.signature_status = 'valid' AND fv.scan_status IN ('pending','clean')
+                AND fv.deleted_at IS NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM audit_events audit
+                   WHERE audit.id = 'file-erasure:' || fa.id
+                )
+           )
       `,
       ).bind(
         taskEvidenceJson,
@@ -736,6 +1830,10 @@ export class TaskService {
         task.id,
         viewer.eventId,
         task.revision,
+        input.versionId,
+        input.assetId,
+        viewer.personId,
+        viewer.personId,
       ),
       this.env.DB.prepare(
         `
@@ -778,21 +1876,53 @@ export class TaskService {
            )
       `,
       ).bind(
-        crypto.randomUUID(),
+        auditEventId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
         task.id,
-        JSON.stringify({ evidenceId, assetId, scanStatus: asset.scanStatus }),
+        JSON.stringify({
+          evidenceId,
+          assetId: input.assetId,
+          versionId: input.versionId,
+          scanStatus: asset.scanStatus,
+        }),
         evidenceId,
         viewer.eventId,
         task.id,
       ),
+      ...preparedWebhook.statements,
     ]);
-    if ((updated.meta.changes ?? 0) !== 1)
-      throw new TaskStateError(
+    if ((updated.meta.changes ?? 0) !== 1) {
+      const currentTask = await this.participantTask(viewer, input.taskId);
+      asset = await this.completedFileEvidenceAsset(viewer, input);
+      if (
+        currentTask &&
+        this.exactFileEvidenceAlreadyAttached(currentTask, asset, input)
+      ) {
+        const webhookWarning = await this.queueTaskWebhook(viewer, {
+          eventType: "task.updated",
+          taskId: input.taskId,
+          operationId:
+            currentTask.lastOperationId ?? `evidence:${asset!.evidenceId}`,
+          data: {
+            action: "file_evidence_attached",
+            status: currentTask.status,
+          },
+        });
+        return { ...input, duplicate: true, webhookWarning };
+      }
+      throw new TaskEvidenceAttachmentConflictError(
         "This task changed. Refresh before submitting file evidence.",
       );
+    }
+    const webhookWarning = await this.queueTaskWebhook(viewer, {
+      eventType: "task.updated",
+      taskId: input.taskId,
+      operationId,
+      data: { action: "file_evidence_attached", status: "submitted" },
+    });
+    return { ...input, duplicate: false, webhookWarning };
   }
 
   async addComment(
@@ -800,6 +1930,22 @@ export class TaskService {
     taskId: string,
     body: string,
     visibility: "participant" | "administrator" = "participant",
+    intentId: string = crypto.randomUUID(),
+  ) {
+    return this.projectIntentCommand(
+      viewer,
+      "task.comment.add",
+      intentId,
+      { taskId, body, visibility },
+      () => this.addCommentD1(viewer, taskId, body, visibility),
+    );
+  }
+
+  private async addCommentD1(
+    viewer: Viewer,
+    taskId: string,
+    body: string,
+    visibility: "participant" | "administrator",
   ) {
     const clean = z.string().trim().min(1).max(2_000).parse(body);
     if (viewer.role === "speaker") {
@@ -818,73 +1964,151 @@ export class TaskService {
         .first();
       if (!task) throw new TaskStateError("Task not found.");
     }
-    await this.env.DB.prepare(
-      `
-      INSERT INTO task_comments (id, event_id, task_id, author_person_id, body, visibility, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, unixepoch())
-    `,
-    )
-      .bind(
-        crypto.randomUUID(),
+    await this.requireTaskWebhookReadiness(viewer, "task.updated");
+    const commentId = crypto.randomUUID();
+    const operationId = `comment:${commentId}`;
+    const auditEventId = crypto.randomUUID();
+    const preparedWebhook = await new WebhookService(
+      this.env,
+    ).prepareEventForAudit(
+      viewer,
+      {
+        eventType: "task.updated",
+        entityType: "task",
+        entityId: taskId,
+        idempotencyKey: `task.updated:${taskId}:${operationId}`,
+        correlationId: operationId,
+        data: { action: "comment_added", visibility },
+      },
+      auditEventId,
+    );
+    await this.env.DB.batch([
+      this.env.DB.prepare(
+        `
+        INSERT INTO task_comments (id, event_id, task_id, author_person_id, body, visibility, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+      `,
+      ).bind(
+        commentId,
         viewer.eventId,
         taskId,
         viewer.personId,
         clean,
         visibility,
-      )
-      .run();
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, correlation_id, metadata_json, created_at
+         ) SELECT ?, ?, ?, ?, 'task.comment.added', 'task_instance', ?, ?, ?, unixepoch()
+            WHERE EXISTS (
+              SELECT 1 FROM task_comments
+               WHERE id = ? AND event_id = ? AND task_id = ?
+            )`,
+      ).bind(
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        taskId,
+        operationId,
+        JSON.stringify({ commentId, visibility }),
+        commentId,
+        viewer.eventId,
+        taskId,
+      ),
+      ...preparedWebhook.statements,
+    ]);
+    const webhookWarning = await this.queueTaskWebhook(viewer, {
+      eventType: "task.updated",
+      taskId,
+      operationId,
+      data: { action: "comment_added", visibility },
+    });
+    return { taskId, webhookWarning };
   }
 
   async getAdminWorkspace(viewer: Viewer) {
+    await this.projectCommand(
+      viewer,
+      "task.state.refresh.administration",
+      { requestedAt: Date.now() },
+      () => this.refreshStates(viewer.eventId),
+    );
+    await this.airtable.assertReadable(viewer);
+    return this.getAdminWorkspaceD1(viewer);
+  }
+
+  private async getAdminWorkspaceD1(viewer: Viewer) {
     const event = await this.assertEvent(viewer);
-    await this.refreshStates(viewer.eventId);
-    const [templates, tasks, speakers, dependencyRows, evidence, comments] =
-      await Promise.all([
-        this.env.DB.prepare(
-          `
+    const [
+      templates,
+      tasks,
+      speakers,
+      sessions,
+      dependencyRows,
+      evidence,
+      comments,
+    ] = await Promise.all([
+      this.env.DB.prepare(
+        `
         SELECT id, name, description, target_type AS targetType, task_type AS taskType, impact,
                evidence_mode AS evidenceMode, due_anchor AS dueAnchor, due_offset_minutes AS dueOffsetMinutes,
-               fixed_due_at AS fixedDueAt, configuration_json AS configurationJson, status
+               fixed_due_at AS fixedDueAt, auto_assign_on_acceptance AS autoAssignOnAcceptance,
+               configuration_json AS configurationJson, status
           FROM task_templates WHERE event_id = ? ORDER BY status, name
       `,
-        )
-          .bind(viewer.eventId)
-          .all<TemplateRow>(),
-        this.env.DB.prepare(
-          `
+      )
+        .bind(viewer.eventId)
+        .all<TemplateRow>(),
+      this.env.DB.prepare(
+        `
         SELECT ti.id, ti.template_id AS templateId, ti.target_type AS targetType, ti.target_id AS targetId,
                ti.owner_person_id AS ownerPersonId, p.display_name AS ownerName, ti.title, ti.description,
                ti.task_type AS taskType, ti.impact, ti.status, ti.readiness_state AS readinessState,
                ti.readiness_percent AS readinessPercent, ti.revision, ti.due_at AS dueAt,
-               ti.evidence_json AS evidenceJson, ti.waiver_json AS waiverJson, ti.completed_at AS completedAt
+               ti.evidence_json AS evidenceJson, ti.waiver_json AS waiverJson,
+               ti.submitted_at AS submittedAt, ti.completed_at AS completedAt,
+               ti.completed_by_person_id AS completedByPersonId,
+               ti.last_operation_id AS lastOperationId
           FROM task_instances ti LEFT JOIN people p ON p.id = ti.owner_person_id
          WHERE ti.event_id = ? ORDER BY ti.status, ti.due_at IS NULL, ti.due_at, ti.title
       `,
-        )
-          .bind(viewer.eventId)
-          .all<TaskRow>(),
-        this.env.DB.prepare(
-          `
+      )
+        .bind(viewer.eventId)
+        .all<TaskRow>(),
+      this.env.DB.prepare(
+        `
         SELECT DISTINCT p.id, p.display_name AS name, p.email
           FROM people p
           LEFT JOIN memberships m ON m.person_id = p.id AND m.event_id = ? AND m.role = 'speaker' AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL
           LEFT JOIN session_speakers ss ON ss.person_id = p.id AND ss.event_id = ?
          WHERE m.id IS NOT NULL OR ss.person_id IS NOT NULL ORDER BY p.display_name
       `,
-        )
-          .bind(viewer.eventId, viewer.eventId)
-          .all<{ id: string; name: string; email: string }>(),
-        this.env.DB.prepare(
-          `
+      )
+        .bind(viewer.eventId, viewer.eventId)
+        .all<{ id: string; name: string; email: string }>(),
+      this.env.DB.prepare(
+        `
+        SELECT id, title AS name, status
+          FROM sessions
+         WHERE event_id = ? AND status NOT IN ('cancelled','archived')
+         ORDER BY title, id
+      `,
+      )
+        .bind(viewer.eventId)
+        .all<{ id: string; name: string; status: string }>(),
+      this.env.DB.prepare(
+        `
         SELECT template_id AS templateId, depends_on_template_id AS dependsOnTemplateId
           FROM task_template_dependencies
          WHERE template_id IN (SELECT id FROM task_templates WHERE event_id = ?)
       `,
-        )
-          .bind(viewer.eventId)
-          .all<{ templateId: string; dependsOnTemplateId: string }>(),
-        this.env.DB.prepare(
-          `
+      )
+        .bind(viewer.eventId)
+        .all<{ templateId: string; dependsOnTemplateId: string }>(),
+      this.env.DB.prepare(
+        `
         SELECT te.id, te.task_id AS taskId, te.file_asset_id AS fileAssetId, te.evidence_json AS evidenceJson,
                te.status, te.created_at AS createdAt, p.display_name AS submittedBy,
                CASE WHEN te.file_asset_id IS NOT NULL AND EXISTS (
@@ -901,20 +2125,20 @@ export class TaskService {
           FROM task_evidence te JOIN people p ON p.id = te.submitted_by_person_id
          WHERE te.event_id = ? ORDER BY te.created_at DESC
       `,
-        )
-          .bind(viewer.eventId)
-          .all<{
-            id: string;
-            taskId: string;
-            fileAssetId: string | null;
-            evidenceJson: string;
-            status: string;
-            createdAt: number;
-            submittedBy: string;
-            downloadAvailable: number;
-          }>(),
-        this.env.DB.prepare(
-          `
+      )
+        .bind(viewer.eventId)
+        .all<{
+          id: string;
+          taskId: string;
+          fileAssetId: string | null;
+          evidenceJson: string;
+          status: string;
+          createdAt: number;
+          submittedBy: string;
+          downloadAvailable: number;
+        }>(),
+      this.env.DB.prepare(
+        `
         SELECT tc.id, tc.task_id AS taskId, tc.body, tc.visibility,
                tc.created_at AS createdAt, p.display_name AS authorName
           FROM task_comments tc
@@ -922,19 +2146,20 @@ export class TaskService {
          WHERE tc.event_id = ?
          ORDER BY tc.created_at, tc.id
       `,
-        )
-          .bind(viewer.eventId)
-          .all<{
-            id: string;
-            taskId: string;
-            body: string;
-            visibility: "participant" | "administrator";
-            createdAt: number;
-            authorName: string;
-          }>(),
-      ]);
+      )
+        .bind(viewer.eventId)
+        .all<{
+          id: string;
+          taskId: string;
+          body: string;
+          visibility: "participant" | "administrator";
+          createdAt: number;
+          authorName: string;
+        }>(),
+    ]);
     return {
       eventTimezone: event.timezone,
+      eventTarget: { id: event.id, name: event.name },
       templates: templates.results.map((template) => ({
         ...template,
         dependencies: dependencyRows.results
@@ -953,10 +2178,21 @@ export class TaskService {
         comments: comments.results.filter((item) => item.taskId === task.id),
       })),
       speakers: speakers.results,
+      sessions: sessions.results,
     };
   }
 
   async administerTask(viewer: Viewer, rawInput: unknown) {
+    return this.projectCommand(
+      viewer,
+      "task.administer",
+      rawInput,
+      () => this.administerTaskD1(viewer, rawInput),
+      { replay: "reject" },
+    );
+  }
+
+  private async administerTaskD1(viewer: Viewer, rawInput: unknown) {
     await this.assertEvent(viewer);
     const input = z
       .object({
@@ -968,16 +2204,19 @@ export class TaskService {
       .parse(rawInput);
     const task = await this.env.DB.prepare(
       `
-      SELECT id, status, task_type AS taskType, revision FROM task_instances WHERE id = ? AND event_id = ?
+      SELECT id, template_id AS templateId, target_type AS targetType, target_id AS targetId,
+             owner_person_id AS ownerPersonId, NULL AS ownerName, title, description,
+             task_type AS taskType, impact, status, readiness_state AS readinessState,
+             readiness_percent AS readinessPercent, revision, due_at AS dueAt,
+             evidence_json AS evidenceJson, waiver_json AS waiverJson,
+             submitted_at AS submittedAt, completed_at AS completedAt,
+             completed_by_person_id AS completedByPersonId,
+             last_operation_id AS lastOperationId
+        FROM task_instances WHERE id = ? AND event_id = ?
     `,
     )
       .bind(input.taskId, viewer.eventId)
-      .first<{
-        id: string;
-        status: TaskRow["status"];
-        taskType: string;
-        revision: number;
-      }>();
+      .first<TaskRow>();
     if (!task) throw new TaskStateError("Task not found.");
     if (task.revision !== input.revision)
       throw new TaskStateError(
@@ -1030,6 +2269,7 @@ export class TaskService {
         "Complete the prerequisite tasks first, or explicitly waive this requirement with a reason.",
       );
     }
+    await this.requireTaskWebhookReadiness(viewer, "task.updated");
     const nextStatus: TaskRow["status"] =
       input.intent === "waive"
         ? "waived"
@@ -1038,7 +2278,50 @@ export class TaskService {
           : "completed";
     const progress = statusProgress(nextStatus);
     const operationId = crypto.randomUUID();
-    const [updated] = await this.env.DB.batch([
+    const auditEventId = crypto.randomUUID();
+    const preparedWebhook = await new WebhookService(
+      this.env,
+    ).prepareEventForAudit(
+      viewer,
+      {
+        eventType: "task.updated",
+        entityType: "task",
+        entityId: task.id,
+        idempotencyKey: `task.updated:${task.id}:${operationId}`,
+        correlationId: operationId,
+        data: { action: input.intent, status: nextStatus },
+      },
+      auditEventId,
+    );
+    const undoSecret = randomUndoSecret();
+    const undoTokenHash = await hashUndoSecret(undoSecret);
+    const undoExpiresAt = Math.floor(Date.now() / 1_000) + 300;
+    const dependentRevisions =
+      input.intent === "complete"
+        ? await this.dependentRevisionSnapshot(task.id)
+        : [];
+    const undoResult = JSON.stringify({
+      version: 1,
+      taskId: task.id,
+      completionRevision: task.revision + 1,
+      evidenceId: null,
+      dependentRevisions,
+      undoTokenHash,
+      undoExpiresAt,
+      undoneAt: null,
+      undoOperationId: null,
+      before: {
+        status: task.status,
+        readinessState: task.readinessState,
+        readinessPercent: task.readinessPercent,
+        evidenceJson: task.evidenceJson,
+        waiverJson: task.waiverJson,
+        submittedAt: task.submittedAt,
+        completedAt: task.completedAt,
+        completedByPersonId: task.completedByPersonId,
+      },
+    });
+    const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `
         UPDATE task_instances SET status = ?, readiness_state = ?, readiness_percent = ?,
@@ -1111,7 +2394,7 @@ export class TaskService {
          )
       `,
       ).bind(
-        crypto.randomUUID(),
+        auditEventId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
@@ -1124,11 +2407,94 @@ export class TaskService {
         task.revision + 1,
         operationId,
       ),
+      this.env.DB.prepare(
+        `
+        INSERT INTO operation_jobs (
+          id, organisation_id, event_id, requested_by_person_id, type,
+          idempotency_key, correlation_id, status, payload_json, result_json,
+          progress_total, progress_completed, progress_failed, cancellable,
+          started_at, completed_at, created_at, updated_at
+        )
+        SELECT ?, ?, ?, ?, 'task.completion', ?, ?, 'completed', ?, ?,
+               1, 1, 0, 0, unixepoch(), unixepoch(), unixepoch(), unixepoch()
+          FROM task_instances task
+         WHERE ? = 'complete' AND task.id = ? AND task.event_id = ?
+           AND task.status = 'completed' AND task.revision = ?
+           AND task.last_operation_id = ?
+           AND EXISTS (
+             SELECT 1 FROM events event
+              WHERE event.id = task.event_id AND event.organisation_id = ?
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM task_evidence evidence WHERE evidence.task_id = task.id
+           )
+           AND NOT EXISTS (
+             SELECT 1
+               FROM task_instance_dependencies dependency
+               JOIN task_instances dependent ON dependent.id = dependency.task_id
+              WHERE dependency.depends_on_task_id = task.id
+                AND (
+                  dependent.status NOT IN ('not_started','blocked','overdue')
+                  OR EXISTS (
+                    SELECT 1 FROM task_evidence downstream
+                     WHERE downstream.task_id = dependent.id
+                  )
+                )
+           )
+           AND (
+             SELECT COUNT(*) FROM task_instance_dependencies dependency
+              WHERE dependency.depends_on_task_id = task.id
+           ) = json_array_length(?)
+           AND NOT EXISTS (
+             SELECT 1
+               FROM task_instance_dependencies dependency
+               JOIN task_instances dependent ON dependent.id = dependency.task_id
+              WHERE dependency.depends_on_task_id = task.id
+                AND NOT EXISTS (
+                  SELECT 1 FROM json_each(?) expected
+                   WHERE json_extract(expected.value, '$.taskId') = dependent.id
+                     AND json_extract(expected.value, '$.revision') = dependent.revision
+                )
+           )
+      `,
+      ).bind(
+        operationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        `task-completion:${operationId}`,
+        operationId,
+        JSON.stringify({ taskId: task.id, intent: "complete" }),
+        undoResult,
+        input.intent,
+        task.id,
+        viewer.eventId,
+        task.revision + 1,
+        operationId,
+        viewer.organisationId,
+        JSON.stringify(dependentRevisions),
+        JSON.stringify(dependentRevisions),
+      ),
+      ...preparedWebhook.statements,
     ]);
+    const updated = results[0];
     if ((updated.meta.changes ?? 0) !== 1)
       throw new TaskStateError(
         "The task changed. Refresh before applying the action.",
       );
     await this.refreshStates(viewer.eventId);
+    const undoOffered = (results[3]?.meta.changes ?? 0) === 1;
+    const webhookWarning = await this.queueTaskWebhook(viewer, {
+      eventType: "task.updated",
+      taskId: task.id,
+      operationId,
+      data: { action: input.intent, status: nextStatus },
+    });
+    return {
+      taskId: task.id,
+      undoToken: undoOffered ? `${operationId}.${undoSecret}` : null,
+      undoExpiresAt: undoOffered ? undoExpiresAt : null,
+      webhookWarning,
+    } satisfies TaskCompletionMutationResult;
   }
 }

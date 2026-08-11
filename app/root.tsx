@@ -1,5 +1,6 @@
 import {
   isRouteErrorResponse,
+  Link,
   Links,
   Meta,
   Outlet,
@@ -7,8 +8,10 @@ import {
   ScrollRestoration,
 } from "react-router";
 import { useEffect } from "react";
+import { Toaster } from "sonner";
 
 import type { Route } from "./+types/root";
+import { installDraftRecoverySignOutCleanup } from "~/platform/drafts/draft-recovery";
 import "./tailwind.css";
 
 export const links: Route.LinksFunction = () => [
@@ -23,7 +26,8 @@ export const meta: Route.MetaFunction = () => [
   { title: "Program Cue" },
   {
     name: "description",
-    content: "Conference programme operations, submissions, reviews, speaker readiness, communications and scheduling.",
+    content:
+      "Conference programme operations, submissions, reviews, speaker readiness, communications and scheduling.",
   },
   { name: "theme-color", content: "#0b1428" },
 ];
@@ -38,7 +42,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <a className="skip-link" href="#main">Skip to main content</a>
+        <a className="skip-link" href="#main">
+          Skip to main content
+        </a>
         {children}
         <ScrollRestoration />
         <Scripts />
@@ -50,29 +56,60 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   useEffect(() => {
     document.body.dataset.hydrated = "true";
-    return () => { delete document.body.dataset.hydrated; };
+    const removeDraftCleanup = installDraftRecoverySignOutCleanup();
+    return () => {
+      delete document.body.dataset.hydrated;
+      removeDraftCleanup();
+    };
   }, []);
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <Toaster
+        closeButton
+        containerAriaLabel="Action status notifications"
+        position="bottom-right"
+        richColors
+        toastOptions={{ closeButtonAriaLabel: "Dismiss notification" }}
+        visibleToasts={3}
+      />
+    </>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let title = "Something went wrong";
   let message = "The request could not be completed.";
+  let returnHref = "/admin/event";
+  let returnLabel = "Return to Event Setup";
 
   if (isRouteErrorResponse(error)) {
-    title = error.status === 404 ? "Page not found" : `${error.status} ${error.statusText}`;
-    if (error.status < 500 && typeof error.data === "string") message = error.data;
+    title =
+      error.status === 404
+        ? "Page not found"
+        : `${error.status} ${error.statusText}`;
+    if (error.status < 500 && typeof error.data === "string")
+      message = error.data;
+    if ([400, 403, 428].includes(error.status)) {
+      returnHref = "/events/select";
+      returnLabel = "Choose an event";
+    }
   } else if (error instanceof Error && import.meta.env.DEV) {
     message = error.message;
   }
 
   return (
     <main className="design-board" id="main">
-      <section className="card pad" style={{ maxWidth: 680, margin: "8vh auto" }}>
+      <section
+        className="card pad"
+        style={{ maxWidth: 680, margin: "8vh auto" }}
+      >
         <span className="brand-mark">P</span>
         <h1>{title}</h1>
         <p className="subtle">{message}</p>
-        <a className="btn primary" href="/admin/event">Return to Event Setup</a>
+        <Link className="btn primary" to={returnHref}>
+          {returnLabel}
+        </Link>
       </section>
     </main>
   );

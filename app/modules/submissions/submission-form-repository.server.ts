@@ -24,8 +24,9 @@ export class SubmissionFormRepository {
     const form = await this.env.DB.prepare(
       `
       SELECT f.id, f.revision, f.event_id AS eventId, e.name AS eventName, e.slug AS eventSlug,
-             e.timezone AS eventTimezone,
-             e.brand_accent AS brandAccent, f.name, f.kind, f.status,
+             e.timezone AS eventTimezone, e.allow_anonymous_drafts AS allowAnonymousDrafts,
+             e.brand_accent AS brandAccent, e.file_policy_json AS filePolicyJson,
+             f.name, f.kind, f.status,
              f.public_slug AS publicSlug, f.closes_at AS closesAt,
              f.submission_limit AS submissionLimit, f.min_speakers AS minSpeakers,
              f.max_speakers AS maxSpeakers, f.access_mode AS accessMode,
@@ -92,10 +93,41 @@ export class SubmissionFormRepository {
     eventId: string,
     actorPersonId: string,
     input: SaveFormInput,
+    operation?: {
+      operationId: string;
+      formId: string;
+      versionId: string;
+      auditId: string;
+    },
   ) {
-    const formId = crypto.randomUUID();
-    const versionId = crypto.randomUUID();
-    const auditId = crypto.randomUUID();
+    if (operation) {
+      const recovered = await this.env.DB.prepare(
+        `SELECT form.id
+           FROM form_definitions form
+           JOIN events event
+             ON event.id = form.event_id AND event.organisation_id = ?
+          WHERE form.event_id = ? AND form.last_operation_id = ?
+            AND form.id = ?
+            AND EXISTS (
+              SELECT 1 FROM form_versions version
+               WHERE version.id = ? AND version.form_id = form.id
+                 AND version.event_id = form.event_id
+            )`,
+      )
+        .bind(
+          organisationId,
+          eventId,
+          operation.operationId,
+          operation.formId,
+          operation.versionId,
+        )
+        .first<{ id: string }>();
+      if (recovered) return recovered.id;
+    }
+    const formId = operation?.formId ?? crypto.randomUUID();
+    const versionId = operation?.versionId ?? crypto.randomUUID();
+    const auditId = operation?.auditId ?? crypto.randomUUID();
+    const operationId = operation?.operationId ?? crypto.randomUUID();
     const eventExists = await this.env.DB.prepare(
       "SELECT id, timezone FROM events WHERE id = ? AND organisation_id = ?",
     )
@@ -109,9 +141,9 @@ export class SubmissionFormRepository {
         INSERT INTO form_definitions (
           id, event_id, name, kind, status, public_slug, closes_at, submission_limit,
           min_speakers, max_speakers, access_mode, access_password_hash, created_by_person_id,
-          created_at, updated_at
+          last_operation_id, created_at, updated_at
         )
-        SELECT ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch()
+        SELECT ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch()
          WHERE NOT EXISTS (
            SELECT 1 FROM form_definitions WHERE public_slug = ?
          )
@@ -130,11 +162,12 @@ export class SubmissionFormRepository {
         input.accessMode,
         input.routing.passwordHash,
         actorPersonId,
+        operationId,
         input.publicSlug,
       ),
       this.env.DB.prepare(
         `
-        INSERT INTO form_versions (
+        INSERT OR IGNORE INTO form_versions (
           id, event_id, form_id, version_number, schema_json, routing_json, settings_snapshot_json,
           status, created_by_person_id, created_at, updated_at
         )
@@ -158,7 +191,7 @@ export class SubmissionFormRepository {
       ),
       this.env.DB.prepare(
         `
-        INSERT INTO audit_events (
+        INSERT OR IGNORE INTO audit_events (
           id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
         )
         SELECT ?, ?, ?, ?, 'form.created', 'form_definition', ?, ?, unixepoch()
@@ -183,6 +216,30 @@ export class SubmissionFormRepository {
       (created.meta.changes ?? 0) !== 1 ||
       (versionCreated.meta.changes ?? 0) !== 1
     ) {
+      if (operation) {
+        const recovered = await this.env.DB.prepare(
+          `SELECT form.id
+             FROM form_definitions form
+             JOIN events event
+               ON event.id = form.event_id AND event.organisation_id = ?
+            WHERE form.event_id = ? AND form.last_operation_id = ?
+              AND form.id = ?
+              AND EXISTS (
+                SELECT 1 FROM form_versions version
+                 WHERE version.id = ? AND version.form_id = form.id
+                   AND version.event_id = form.event_id
+              )`,
+        )
+          .bind(
+            organisationId,
+            eventId,
+            operation.operationId,
+            operation.formId,
+            operation.versionId,
+          )
+          .first<{ id: string }>();
+        if (recovered) return recovered.id;
+      }
       throw new SubmissionStateError(
         "That public form URL is already in use. Choose a different slug.",
       );
@@ -196,15 +253,40 @@ export class SubmissionFormRepository {
     actorPersonId: string,
     formId: string,
     input: SaveFormInput,
+    operation?: { operationId: string; auditId: string },
   ) {
+    if (operation) {
+      const recovered = await this.env.DB.prepare(
+        `SELECT form.id
+           FROM form_definitions form
+           JOIN events event
+             ON event.id = form.event_id AND event.organisation_id = ?
+           JOIN form_versions version
+             ON version.form_id = form.id AND version.event_id = form.event_id
+            AND version.status = 'draft'
+          WHERE form.id = ? AND form.event_id = ?
+            AND form.last_operation_id = ?
+            AND form.revision = ? AND version.revision = ?`,
+      )
+        .bind(
+          organisationId,
+          formId,
+          eventId,
+          operation.operationId,
+          input.revision! + 1,
+          input.draftRevision! + 1,
+        )
+        .first();
+      if (recovered) return;
+    }
     const workspace = await this.getAdminWorkspace(
       organisationId,
       eventId,
       formId,
     );
     if (!workspace) throw new Response("Form not found", { status: 404 });
-    const auditId = crypto.randomUUID();
-    const saveId = crypto.randomUUID();
+    const auditId = operation?.auditId ?? crypto.randomUUID();
+    const saveId = operation?.operationId ?? crypto.randomUUID();
     const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `
@@ -254,7 +336,7 @@ export class SubmissionFormRepository {
       ),
       this.env.DB.prepare(
         `
-        INSERT INTO audit_events (
+        INSERT OR IGNORE INTO audit_events (
           id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
         ) SELECT ?, ?, ?, ?, 'form.draft.saved', 'form_version', ?, ?, unixepoch()
            WHERE EXISTS (
@@ -284,6 +366,30 @@ export class SubmissionFormRepository {
       (results[0].meta.changes ?? 0) !== 1 ||
       (results[1].meta.changes ?? 0) !== 1
     ) {
+      if (operation) {
+        const recovered = await this.env.DB.prepare(
+          `SELECT 1
+             FROM form_definitions form
+             JOIN events event
+               ON event.id = form.event_id AND event.organisation_id = ?
+             JOIN form_versions version
+               ON version.form_id = form.id AND version.event_id = form.event_id
+              AND version.status = 'draft'
+            WHERE form.id = ? AND form.event_id = ?
+              AND form.last_operation_id = ?
+              AND form.revision = ? AND version.revision = ?`,
+        )
+          .bind(
+            organisationId,
+            formId,
+            eventId,
+            operation.operationId,
+            input.revision! + 1,
+            input.draftRevision! + 1,
+          )
+          .first();
+        if (recovered) return;
+      }
       throw new SubmissionRevisionConflictError();
     }
   }
@@ -295,7 +401,38 @@ export class SubmissionFormRepository {
     formId: string,
     formRevision: number,
     draftRevision: number,
+    operation?: {
+      operationId: string;
+      nextVersionId: string;
+      auditId: string;
+    },
+    expectedSessionFormatsJson: string | null = null,
   ) {
+    if (operation) {
+      const recovered = await this.env.DB.prepare(
+        `SELECT form.id
+           FROM form_definitions form
+           JOIN events event
+             ON event.id = form.event_id AND event.organisation_id = ?
+          WHERE form.id = ? AND form.event_id = ?
+            AND form.status = 'published' AND form.last_operation_id = ?
+            AND EXISTS (
+              SELECT 1 FROM form_versions next_draft
+               WHERE next_draft.id = ? AND next_draft.form_id = form.id
+                 AND next_draft.event_id = form.event_id
+                 AND next_draft.status = 'draft'
+            )`,
+      )
+        .bind(
+          organisationId,
+          formId,
+          eventId,
+          operation.operationId,
+          operation.nextVersionId,
+        )
+        .first();
+      if (recovered) return;
+    }
     const workspace = await this.getAdminWorkspace(
       organisationId,
       eventId,
@@ -308,10 +445,32 @@ export class SubmissionFormRepository {
     ) {
       throw new SubmissionRevisionConflictError();
     }
-    const nextVersionId = crypto.randomUUID();
-    const auditId = crypto.randomUUID();
-    const publicationId = crypto.randomUUID();
+    const nextVersionId = operation?.nextVersionId ?? crypto.randomUUID();
+    const auditId = operation?.auditId ?? crypto.randomUUID();
+    const publicationId = operation?.operationId ?? crypto.randomUUID();
     const version = workspace.draftVersion;
+    const routedTeamIds = [
+      ...new Set(Object.values(version.routing.categories)),
+    ];
+    const routedTeamBindings = routedTeamIds.flatMap((teamId) => {
+      const teamName = version.routing.teamNames[teamId];
+      if (!teamName) {
+        throw new SubmissionStateError(
+          "A category route is missing its saved evaluation-team identity. Save the form again before publishing.",
+        );
+      }
+      return [teamId, teamName];
+    });
+    const routedTeamPredicates = routedTeamIds
+      .map(
+        () => `AND EXISTS (
+          SELECT 1 FROM evaluation_teams routed_team
+           WHERE routed_team.id = ? AND routed_team.name = ?
+             AND routed_team.event_id = form_definitions.event_id
+             AND routed_team.status = 'active'
+        )`,
+      )
+      .join("\n");
     const slugOwner = await this.env.DB.prepare(
       `
       SELECT id FROM form_definitions
@@ -343,6 +502,15 @@ export class SubmissionFormRepository {
              SELECT 1 FROM form_definitions slug_owner
               WHERE slug_owner.public_slug = ? AND slug_owner.id <> ?
            )
+           AND (
+             ? IS NULL OR EXISTS (
+               SELECT 1 FROM events configured_event
+                WHERE configured_event.id = form_definitions.event_id
+                  AND configured_event.organisation_id = ?
+                  AND configured_event.session_formats_json = ?
+             )
+           )
+           ${routedTeamPredicates}
       `,
       ).bind(
         workspace.name,
@@ -363,6 +531,10 @@ export class SubmissionFormRepository {
         draftRevision,
         workspace.publicSlug,
         formId,
+        expectedSessionFormatsJson,
+        organisationId,
+        expectedSessionFormatsJson,
+        ...routedTeamBindings,
       ),
       this.env.DB.prepare(
         `
@@ -403,7 +575,7 @@ export class SubmissionFormRepository {
       ),
       this.env.DB.prepare(
         `
-        INSERT INTO form_versions (
+        INSERT OR IGNORE INTO form_versions (
           id, event_id, form_id, version_number, schema_json, routing_json, settings_snapshot_json,
           status, created_by_person_id, created_at, updated_at
         ) SELECT ?, ?, ?, ?, ?, ?, ?, 'draft', ?, unixepoch(), unixepoch()
@@ -431,7 +603,7 @@ export class SubmissionFormRepository {
       ),
       this.env.DB.prepare(
         `
-        INSERT INTO audit_events (
+        INSERT OR IGNORE INTO audit_events (
           id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
         ) SELECT ?, ?, ?, ?, 'form.published', 'form_version', ?, ?, unixepoch()
            WHERE EXISTS (
@@ -462,6 +634,31 @@ export class SubmissionFormRepository {
       (results[0].meta.changes ?? 0) !== 1 ||
       (results[2].meta.changes ?? 0) !== 1
     ) {
+      if (operation) {
+        const recovered = await this.env.DB.prepare(
+          `SELECT form.id
+             FROM form_definitions form
+             JOIN events event
+               ON event.id = form.event_id AND event.organisation_id = ?
+            WHERE form.id = ? AND form.event_id = ?
+              AND form.status = 'published' AND form.last_operation_id = ?
+              AND EXISTS (
+                SELECT 1 FROM form_versions next_draft
+                 WHERE next_draft.id = ? AND next_draft.form_id = form.id
+                   AND next_draft.event_id = form.event_id
+                   AND next_draft.status = 'draft'
+              )`,
+        )
+          .bind(
+            organisationId,
+            formId,
+            eventId,
+            operation.operationId,
+            operation.nextVersionId,
+          )
+          .first();
+        if (recovered) return;
+      }
       const conflictingSlug = await this.env.DB.prepare(
         `
         SELECT id FROM form_definitions
@@ -476,6 +673,23 @@ export class SubmissionFormRepository {
           "That public form URL is already in use. Choose a different slug.",
         );
       }
+      if (expectedSessionFormatsJson !== null) {
+        const currentFormatConfiguration = await this.env.DB.prepare(
+          `SELECT session_formats_json AS sessionFormatsJson
+             FROM events WHERE id = ? AND organisation_id = ?`,
+        )
+          .bind(eventId, organisationId)
+          .first<{ sessionFormatsJson: string }>();
+        if (
+          !currentFormatConfiguration ||
+          currentFormatConfiguration.sessionFormatsJson !==
+            expectedSessionFormatsJson
+        ) {
+          throw new SubmissionStateError(
+            "The event session-format configuration changed before publication. Refresh the form before publishing it.",
+          );
+        }
+      }
       throw new SubmissionRevisionConflictError();
     }
   }
@@ -486,8 +700,9 @@ export class SubmissionFormRepository {
     const form = await this.env.DB.prepare(
       `
       SELECT f.id, f.revision, f.event_id AS eventId, e.name AS eventName, e.slug AS eventSlug,
-             e.timezone AS eventTimezone,
-             e.brand_accent AS brandAccent, f.name, f.kind, f.status,
+             e.timezone AS eventTimezone, e.allow_anonymous_drafts AS allowAnonymousDrafts,
+             e.brand_accent AS brandAccent, e.file_policy_json AS filePolicyJson,
+             f.name, f.kind, f.status,
              f.public_slug AS publicSlug, f.closes_at AS closesAt,
              f.submission_limit AS submissionLimit, f.min_speakers AS minSpeakers,
              f.max_speakers AS maxSpeakers, f.access_mode AS accessMode,

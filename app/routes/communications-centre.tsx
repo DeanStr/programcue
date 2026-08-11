@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   data,
   Link,
@@ -12,12 +12,25 @@ import type { Route } from "./+types/communications-centre";
 import {
   AudienceComposer,
   CalendarLifecycleTable,
+  CalendarAdministration,
   CommunicationPreviewConfirmation,
+  CommunicationAutomation,
+  DeliveryConfiguration,
   RecentCommunications,
   TemplateEditor,
   TemplateVersionList,
+  type TemplateDraftFields,
 } from "~/components/communications-centre-panels";
+import { DraftRecoveryFeedback } from "~/components/draft-recovery-feedback";
 import { CalendarService } from "~/modules/calendars/calendar-service.server";
+import {
+  CalendarQueueUnavailableError,
+  CalendarStateError,
+} from "~/modules/calendars/calendar-errors";
+import {
+  CalendarProviderConfigurationError,
+  CalendarProviderRequestError,
+} from "~/modules/calendars/calendar-providers.server";
 import {
   CommunicationNotFoundError,
   CommunicationQueueUnavailableError,
@@ -26,11 +39,29 @@ import {
   communicationErrorMessage,
   type CommunicationPreview,
 } from "~/modules/communications/communication-service.server";
-import type { CommunicationCategory } from "~/modules/communications/communication-schema";
+import {
+  audienceTypeSchema,
+  communicationCategorySchema,
+  type AudienceType,
+  type CommunicationCategory,
+} from "~/modules/communications/communication-schema";
+import {
+  assertCommunicationScheduleStillMatchesPreview,
+  communicationScheduledEpoch,
+} from "~/modules/communications/communication-time";
 import { UnknownMergeVariableError } from "~/modules/communications/merge-template";
 import { RecipientLimitError } from "~/modules/communications/recipient-query.server";
-import { requireEventRole } from "~/platform/auth/authorize.server";
+import { EventService } from "~/modules/events/event-service.server";
+import {
+  ResendDomainConfigurationError,
+  ResendDomainRequestError,
+} from "~/modules/communications/resend-domain.server";
+import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import {
+  clearDraftRecoveryScope,
+  useDraftRecovery,
+} from "~/platform/drafts/draft-recovery";
 
 export const meta = () => [{ title: "Communications Centre · Program Cue" }];
 
@@ -39,6 +70,7 @@ type PreviewFields = {
   audienceType: string;
   manualRecipients: string;
   kind: string;
+  scheduledAt: string;
 };
 export type ActionResult = {
   ok: boolean;
@@ -48,6 +80,8 @@ export type ActionResult = {
   fields?: PreviewFields;
   idempotencyKey?: string;
   operationId?: string;
+  senderRecords?: string;
+  scheduledAt?: number;
 };
 
 export type CommunicationsCentreLoaderData = Route.ComponentProps["loaderData"];
@@ -57,12 +91,7 @@ async function viewerFor(
   context: Route.LoaderArgs["context"],
 ) {
   const { env } = getCloudflareContext(context);
-  if (!env.DEFAULT_EVENT_ID)
-    throw new Response("DEFAULT_EVENT_ID is not configured", { status: 503 });
-  return requireEventRole(request, env, env.DEFAULT_EVENT_ID, [
-    "owner",
-    "administrator",
-  ]);
+  return requireCurrentEventRole(request, env, ["owner", "administrator"]);
 }
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
@@ -70,22 +99,59 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const search = new URL(request.url).searchParams;
   const activeFilter =
     search.get("filter") === "failed" ? ("failed" as const) : null;
-  const [centre, invitations] = await Promise.all([
-    new CommunicationService(env).listCentre(viewer, {
+  const requestedAudience = search.get("audience");
+  const audiencePreset = requestedAudience
+    ? audienceTypeSchema.safeParse(requestedAudience)
+    : null;
+  if (audiencePreset && !audiencePreset.success)
+    throw new Response("Communication audience preset is invalid", {
+      status: 400,
+    });
+  const requestedCategory = search.get("category");
+  const categoryPreset = requestedCategory
+    ? communicationCategorySchema.safeParse(requestedCategory)
+    : null;
+  if (categoryPreset && !categoryPreset.success)
+    throw new Response("Communication category preset is invalid", {
+      status: 400,
+    });
+  const communicationService = new CommunicationService(env);
+  const calendarService = new CalendarService(env);
+  const [
+    centre,
+    invitations,
+    senders,
+    triggers,
+    connections,
+    calendarTargets,
+    event,
+  ] = await Promise.all([
+    communicationService.listCentre(viewer, {
       filter: activeFilter ?? undefined,
     }),
-    new CalendarService(env).list(viewer),
+    calendarService.list(viewer),
+    communicationService.listSenderProfiles(viewer),
+    communicationService.listTriggers(viewer),
+    calendarService.listConnections(viewer),
+    calendarService.listTargets(viewer),
+    new EventService(env).getSetup(viewer),
   ]);
   const requestedTemplate = search.get("template");
   const selected =
     requestedTemplate !== null
       ? (centre.templates.find((version) => version.id === requestedTemplate) ??
         null)
-      : (centre.templates.find(
-          (version) => version.versionStatus === "published",
-        ) ??
-        centre.templates[0] ??
-        null);
+      : categoryPreset?.success
+        ? (centre.templates.find(
+            (version) =>
+              version.versionStatus === "published" &&
+              version.category === categoryPreset.data,
+          ) ?? null)
+        : (centre.templates.find(
+            (version) => version.versionStatus === "published",
+          ) ??
+          centre.templates[0] ??
+          null);
   if (requestedTemplate !== null && !selected) {
     throw new Response("Communication template version not found", {
       status: 404,
@@ -100,11 +166,33 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     Number.isSafeInteger(savedVersionNumber) &&
     savedVersionNumber === selected.versionNumber &&
     selected.versionStatus === "draft";
+  const requestedRecoveryRecord = search.get("recovery");
+  const clearedRecoveryRecord =
+    persistedSave &&
+    requestedRecoveryRecord &&
+    (requestedRecoveryRecord === "new" ||
+      requestedRecoveryRecord === selected.templateId)
+      ? requestedRecoveryRecord
+      : null;
   return {
     ...centre,
     invitations,
+    senders,
+    triggers,
+    connections,
+    calendarTargets,
+    testSendKey: crypto.randomUUID(),
     selected,
+    recoveryScope: { eventId: viewer.eventId, personId: viewer.personId },
+    clearedRecoveryRecord,
     activeFilter,
+    audiencePreset: audiencePreset?.success
+      ? (audiencePreset.data satisfies AudienceType)
+      : null,
+    categoryPreset: categoryPreset?.success
+      ? (categoryPreset.data satisfies CommunicationCategory)
+      : null,
+    eventTimezone: event.timezone,
     notice: persistedSave
       ? `Draft version ${selected.versionNumber} is stored in D1.`
       : "",
@@ -118,6 +206,55 @@ export async function action({ request, context }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
   try {
+    if (intent === "save-sender") {
+      const saved = await service.saveSenderProfile(viewer, {
+        id: String(form.get("senderProfileId") ?? "") || undefined,
+        name: String(form.get("name") ?? ""),
+        fromName: String(form.get("fromName") ?? ""),
+        fromEmail: String(form.get("fromEmail") ?? ""),
+        replyToEmail: String(form.get("replyToEmail") ?? ""),
+      });
+      return data<ActionResult>({
+        ok: true,
+        intent,
+        message:
+          saved.provider === "mailpit"
+            ? `Sender profile ${saved.id} is verified for the explicitly selected local Mailpit capture service.`
+            : `Sender profile ${saved.id} is saved. Check its Resend domain before using it.`,
+      });
+    }
+    if (intent === "provision-sender") {
+      const result = await service.provisionSenderProfile(
+        viewer,
+        String(form.get("senderProfileId") ?? ""),
+      );
+      return data<ActionResult>({
+        ok: result.status === "verified",
+        intent,
+        message:
+          result.status === "verified"
+            ? result.provider === "mailpit"
+              ? "This sender is verified for the explicitly selected local Mailpit capture service."
+              : `${result.domain} is verified by Resend and can send production email.`
+            : `${result.domain} remains ${result.providerStatus}. Publish the provider DNS records, then check again.`,
+        senderRecords:
+          result.status === "verified"
+            ? undefined
+            : JSON.stringify(result.records, null, 2),
+      });
+    }
+    if (intent === "disable-sender" || intent === "enable-sender") {
+      const result = await service.setSenderProfileEnabled(
+        viewer,
+        String(form.get("senderProfileId") ?? ""),
+        intent === "enable-sender",
+      );
+      return data<ActionResult>({
+        ok: true,
+        intent,
+        message: `Sender profile is now ${result.status}.`,
+      });
+    }
     if (intent === "save-template") {
       const buttonText = String(form.get("buttonText") ?? "").trim();
       const buttonUrl = String(form.get("buttonUrl") ?? "").trim();
@@ -134,7 +271,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         },
       });
       return redirect(
-        `/admin/communications?template=${encodeURIComponent(result.versionId)}&saved=${result.versionNumber}`,
+        `/admin/communications?template=${encodeURIComponent(result.versionId)}&saved=${result.versionNumber}&recovery=${encodeURIComponent(String(form.get("templateId") ?? "") || "new")}`,
       );
     }
     if (intent === "publish-template") {
@@ -154,7 +291,40 @@ export async function action({ request, context }: Route.ActionArgs) {
         audienceType: String(form.get("audienceType") ?? ""),
         manualRecipients: String(form.get("manualRecipients") ?? ""),
         kind: String(form.get("kind") ?? ""),
+        scheduledAt: String(form.get("scheduledAt") ?? "").trim(),
       };
+      let scheduledAt: number | null = null;
+      let scheduledEventTimezone: string | null = null;
+      if (fields.scheduledAt) {
+        const event = await new EventService(env).getSetup(viewer);
+        scheduledEventTimezone = event.timezone;
+        try {
+          scheduledAt = communicationScheduledEpoch(
+            fields.scheduledAt,
+            event.timezone,
+          );
+        } catch (error) {
+          throw new CommunicationStateError(
+            error instanceof Error
+              ? error.message
+              : "Scheduled delivery time is invalid.",
+          );
+        }
+      }
+      if (intent === "confirm" && scheduledAt !== null) {
+        try {
+          assertCommunicationScheduleStillMatchesPreview(
+            form.get("previewedScheduledAt"),
+            scheduledAt,
+          );
+        } catch (error) {
+          throw new CommunicationStateError(
+            error instanceof Error
+              ? error.message
+              : "The scheduled delivery preview is invalid.",
+          );
+        }
+      }
       if (intent === "preview") {
         const preview = await service.preview(
           viewer,
@@ -166,10 +336,11 @@ export async function action({ request, context }: Route.ActionArgs) {
           message: `${new Intl.NumberFormat("en").format(preview.recipients.deliverable.length)} deliverable recipients. Nothing has been queued.`,
           preview,
           fields,
+          scheduledAt: scheduledAt ?? undefined,
           idempotencyKey: crypto.randomUUID(),
         });
       }
-      const result = await service.confirm(viewer, {
+      const confirmedInput = {
         ...fields,
         idempotencyKey: String(form.get("idempotencyKey") ?? ""),
         recipientFingerprint: String(form.get("recipientFingerprint") ?? ""),
@@ -180,7 +351,14 @@ export async function action({ request, context }: Route.ActionArgs) {
           typeof form.get("suppressedCount") === "string"
             ? Number(form.get("suppressedCount"))
             : Number.NaN,
-      } as Parameters<CommunicationService["confirm"]>[1]);
+      } as Parameters<CommunicationService["confirm"]>[1];
+      const result =
+        scheduledAt === null
+          ? await service.confirm(viewer, confirmedInput)
+          : await service.schedule(viewer, {
+              ...confirmedInput,
+              scheduledAt,
+            });
       if (
         result.duplicate &&
         ["failed", "partially_failed", "cancelled"].includes(result.status)
@@ -190,9 +368,14 @@ export async function action({ request, context }: Route.ActionArgs) {
             ok: false,
             intent,
             message: `This exact send was already recorded with status ${result.status.replaceAll("_", " ")}. Inspect the operation before retrying.`,
-            operationId: result.operationId,
+            operationId: result.operationId ?? undefined,
           },
           { status: 409 },
+        );
+      }
+      if (result.status === "scheduled" && !scheduledEventTimezone) {
+        throw new Error(
+          "A scheduled communication is missing its authoritative event timezone.",
         );
       }
       return data<ActionResult>({
@@ -200,8 +383,108 @@ export async function action({ request, context }: Route.ActionArgs) {
         intent,
         message: result.duplicate
           ? "This exact send was already recorded."
-          : "Delivery intent is durable and queued. Follow provider progress in the Operation Centre.",
+          : result.status === "scheduled"
+            ? `Delivery intent and recipients are durable. The scheduler will queue it at the confirmed ${scheduledEventTimezone} event time.`
+            : "Delivery intent is durable and queued. Follow provider progress in the Operation Centre.",
+        operationId: result.operationId ?? undefined,
+      });
+    }
+    if (intent === "test-send") {
+      const result = await service.testSend(viewer, {
+        templateVersionId: String(form.get("templateVersionId") ?? ""),
+        recipient: String(form.get("recipient") ?? ""),
+        idempotencyKey: String(form.get("idempotencyKey") ?? ""),
+      });
+      return data<ActionResult>({
+        ok: true,
+        intent,
+        message:
+          "The real test email is queued with representative merge data. Inspect provider progress in the Operation Centre.",
+        operationId: result.operationId ?? undefined,
+      });
+    }
+    if (intent === "save-trigger") {
+      await service.saveTrigger(viewer, {
+        id: String(form.get("triggerId") ?? "") || undefined,
+        templateId: String(form.get("templateId") ?? ""),
+        triggerType: String(form.get("triggerType") ?? "") as
+          "task_due" | "task_overdue",
+        audienceType: String(form.get("triggerAudience") ?? "") as
+          "due_speakers" | "overdue_speakers" | "event_administrators",
+        kind: String(form.get("kind") ?? "") as "transactional" | "optional",
+        sendHourUtc: Number(form.get("sendHourUtc")),
+        enabled: true,
+      });
+      return data<ActionResult>({
+        ok: true,
+        intent,
+        message: "Automatic reminder trigger is active.",
+      });
+    }
+    if (intent === "enable-trigger" || intent === "disable-trigger") {
+      await service.setTriggerEnabled(
+        viewer,
+        String(form.get("triggerId") ?? ""),
+        intent === "enable-trigger",
+      );
+      return data<ActionResult>({
+        ok: true,
+        intent,
+        message: `Automatic reminder trigger ${intent === "enable-trigger" ? "enabled" : "disabled"}.`,
+      });
+    }
+    const calendarService = new CalendarService(env);
+    if (intent === "calendar-lifecycle") {
+      const result = await calendarService.queueLifecycle(viewer, {
+        sessionId: String(form.get("sessionId") ?? ""),
+        personId: String(form.get("personId") ?? ""),
+        method: String(form.get("method") ?? "") as "REQUEST" | "CANCEL",
+        provider: String(form.get("provider") ?? "") as
+          "email_ics" | "google" | "microsoft",
+        ...(String(form.get("connectionId") ?? "")
+          ? { connectionId: String(form.get("connectionId")) }
+          : {}),
+        idempotencyKey: String(form.get("idempotencyKey") ?? ""),
+      });
+      return data<ActionResult>({
+        ok: true,
+        intent,
+        message: `${String(form.get("method")) === "CANCEL" ? "Cancellation" : "Calendar invitation"} is durable and queued.`,
         operationId: result.operationId,
+      });
+    }
+    if (intent === "refresh-calendar") {
+      await calendarService.refreshConnection(
+        viewer,
+        String(form.get("connectionId") ?? ""),
+      );
+      return data<ActionResult>({
+        ok: true,
+        intent,
+        message:
+          "Calendar access token refreshed and encrypted credentials rotated.",
+      });
+    }
+    if (intent === "disconnect-calendar") {
+      await calendarService.disconnect(
+        viewer,
+        String(form.get("connectionId") ?? ""),
+      );
+      return data<ActionResult>({
+        ok: true,
+        intent,
+        message: "Calendar account disconnected.",
+      });
+    }
+    if (intent === "reconcile-calendar-rsvp") {
+      const result = await calendarService.reconcileAttendance(
+        viewer,
+        String(form.get("invitationId") ?? ""),
+      );
+      return data<ActionResult>({
+        ok: true,
+        intent,
+        message: `Provider RSVP response is ${result.response.replaceAll("_", " ")}. Accepted invitations are marked confirmed; other responses remain visible in the audit trail without fabricating acceptance.`,
       });
     }
     if (intent === "cancel") {
@@ -227,7 +510,12 @@ export async function action({ request, context }: Route.ActionArgs) {
       error instanceof CommunicationNotFoundError ||
       error instanceof CommunicationStateError ||
       error instanceof RecipientLimitError ||
-      error instanceof UnknownMergeVariableError
+      error instanceof UnknownMergeVariableError ||
+      error instanceof CalendarStateError ||
+      error instanceof CalendarProviderConfigurationError ||
+      error instanceof CalendarProviderRequestError ||
+      error instanceof ResendDomainConfigurationError ||
+      error instanceof ResendDomainRequestError
     ) {
       return data<ActionResult>(
         { ok: false, intent, message: communicationErrorMessage(error) },
@@ -240,6 +528,17 @@ export async function action({ request, context }: Route.ActionArgs) {
           ok: false,
           intent,
           message: communicationErrorMessage(error),
+          operationId: error.operationId,
+        },
+        { status: 503 },
+      );
+    }
+    if (error instanceof CalendarQueueUnavailableError) {
+      return data<ActionResult>(
+        {
+          ok: false,
+          intent,
+          message: error.message,
           operationId: error.operationId,
         },
         { status: 503 },
@@ -259,7 +558,56 @@ export default function CommunicationsCentre({
   const working = navigation.state !== "idle";
   const pendingIntent = navigation.formData?.get("intent");
   const [templateDirty, setTemplateDirty] = useState(false);
-  useEffect(() => setTemplateDirty(false), [selected?.id]);
+  const templateFromServer = useMemo<TemplateDraftFields>(
+    () => ({
+      name: selected?.name ?? "",
+      category: selected?.category ?? "ad_hoc",
+      subject:
+        selected?.subject ??
+        "Hi {{recipient.firstName}} — an update from {{event.name}}",
+      body:
+        selected?.content.body ??
+        "Hi {{recipient.firstName}},\n\nHere is an update from {{event.name}}.",
+      physicalAddress:
+        selected?.content.physicalAddress ?? "Program Cue event operations",
+      buttonText: selected?.content.buttonText ?? "",
+      buttonUrl: selected?.content.buttonUrl ?? "",
+    }),
+    [selected?.id],
+  );
+  const [templateDraft, setTemplateDraft] = useState(templateFromServer);
+  const restoreTemplate = useCallback((draft: TemplateDraftFields) => {
+    setTemplateDraft(draft);
+    setTemplateDirty(true);
+  }, []);
+  const recovery = useDraftRecovery({
+    scope: {
+      ...loaderData.recoveryScope,
+      recordType: "communication_template",
+      recordId: selected?.templateId ?? "new",
+    },
+    serverRevision: `${selected?.id ?? "new"}:${selected?.versionNumber ?? 0}`,
+    payload: templateDraft,
+    dirty: templateDirty,
+    onRestore: restoreTemplate,
+  });
+  useEffect(() => {
+    setTemplateDraft(templateFromServer);
+    setTemplateDirty(false);
+  }, [selected?.id]);
+  useEffect(() => {
+    if (!loaderData.clearedRecoveryRecord) return;
+    void clearDraftRecoveryScope({
+      ...loaderData.recoveryScope,
+      recordType: "communication_template",
+      recordId: loaderData.clearedRecoveryRecord,
+    });
+  }, [loaderData.clearedRecoveryRecord, loaderData.recoveryScope]);
+  useEffect(() => {
+    if (actionData?.ok && actionData.intent === "publish-template") {
+      void recovery.markServerSaved();
+    }
+  }, [actionData?.intent, actionData?.ok, recovery.markServerSaved]);
   const publishedTemplates = useMemo(
     () =>
       loaderData.templates.filter(
@@ -315,13 +663,24 @@ export default function CommunicationsCentre({
           </span>
         </div>
       ) : null}
+      {loaderData.audiencePreset ? (
+        <div className="card pad mb validation-item warn" role="status">
+          <strong>Reminder preset</strong>
+          <span>
+            {loaderData.categoryPreset === "task_reminder"
+              ? "The task-reminder audience is preselected; use the matching published template."
+              : "An audience has been preselected."}{" "}
+            Review the exact recipients in preview before confirming delivery.
+          </span>
+        </div>
+      ) : null}
       {actionData ? (
         <div
           className={`card pad mb validation-item ${actionData.ok ? "ok" : "error"}`}
           role={actionData.ok ? "status" : "alert"}
         >
           <strong>{actionData.ok ? "✓" : "△"}</strong>
-          <span>
+          <div>
             {actionData.message}
             {actionData.operationId ? (
               <>
@@ -331,7 +690,10 @@ export default function CommunicationsCentre({
                 </Link>
               </>
             ) : null}
-          </span>
+            {actionData.senderRecords ? (
+              <pre className="code-block">{actionData.senderRecords}</pre>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -339,14 +701,18 @@ export default function CommunicationsCentre({
         <span>
           <strong>Sender</strong>
           <small>
-            {loaderData.provider.sender ?? "No verified Resend sender profile"}
+            {loaderData.provider.sender ?? "No verified sender profile"}
           </small>
         </span>
         <span>
-          <strong>Resend</strong>
+          <strong>
+            {loaderData.provider.name === "mailpit" ? "Mailpit" : "Resend"}
+          </strong>
           <small>
             {loaderData.provider.configured
-              ? "API key and verified sender present"
+              ? loaderData.provider.name === "mailpit"
+                ? "Local capture endpoint and verified sender present"
+                : "API key and verified sender present"
               : "Configuration required"}
           </small>
         </span>
@@ -364,25 +730,40 @@ export default function CommunicationsCentre({
         </span>
       </div>
 
+      <DeliveryConfiguration
+        loaderData={loaderData}
+        working={working}
+        pendingIntent={pendingIntent}
+      />
+
       <div className="comms-layout comms-production-layout">
         <TemplateVersionList loaderData={loaderData} selected={selected} />
         <main className="stack">
+          <DraftRecoveryFeedback recovery={recovery} className="" />
           <TemplateEditor
             selected={selected}
             working={working}
             pendingIntent={pendingIntent}
             templateDirty={templateDirty}
-            onDirty={() => setTemplateDirty(true)}
+            draft={templateDraft}
+            recoveryState={recovery.state}
+            onChange={(draft) => {
+              setTemplateDraft(draft);
+              setTemplateDirty(true);
+            }}
           />
           <AudienceComposer
             actionData={actionData}
             selected={selected}
             publishedTemplates={publishedTemplates}
+            audiencePreset={loaderData.audiencePreset}
+            eventTimezone={loaderData.eventTimezone}
             working={working}
             pendingIntent={pendingIntent}
           />
           <CommunicationPreviewConfirmation
             actionData={actionData}
+            eventTimezone={loaderData.eventTimezone}
             working={working}
             pendingIntent={pendingIntent}
           />
@@ -397,6 +778,16 @@ export default function CommunicationsCentre({
         />
         <CalendarLifecycleTable loaderData={loaderData} />
       </div>
+      <CommunicationAutomation
+        loaderData={loaderData}
+        working={working}
+        pendingIntent={pendingIntent}
+      />
+      <CalendarAdministration
+        loaderData={loaderData}
+        working={working}
+        pendingIntent={pendingIntent}
+      />
     </>
   );
 }

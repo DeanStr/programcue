@@ -3,6 +3,8 @@ import { ZodError } from "zod";
 import { CommunicationDeliveryService } from "./communication-delivery-service.server";
 import { CommunicationTemplateService } from "./communication-template-service.server";
 import { ResendReconciliationService } from "./resend-reconciliation-service.server";
+import { SenderProfileService } from "./sender-profile-service.server";
+import { CommunicationAutomationService } from "./communication-automation-service.server";
 
 export {
   CommunicationNotFoundError,
@@ -19,11 +21,15 @@ export class CommunicationService {
   private readonly templates: CommunicationTemplateService;
   private readonly delivery: CommunicationDeliveryService;
   private readonly reconciliation: ResendReconciliationService;
+  private readonly senders: SenderProfileService;
+  private readonly automation: CommunicationAutomationService;
 
   constructor(env: CloudflareEnvironment) {
     this.templates = new CommunicationTemplateService(env);
     this.delivery = new CommunicationDeliveryService(env);
     this.reconciliation = new ResendReconciliationService(env);
+    this.senders = new SenderProfileService(env);
+    this.automation = new CommunicationAutomationService(env);
   }
 
   listCentre(...args: Parameters<CommunicationTemplateService["listCentre"]>) {
@@ -50,6 +56,14 @@ export class CommunicationService {
     return this.delivery.confirm(...args);
   }
 
+  schedule(...args: Parameters<CommunicationDeliveryService["schedule"]>) {
+    return this.delivery.schedule(...args);
+  }
+
+  testSend(...args: Parameters<CommunicationDeliveryService["testSend"]>) {
+    return this.delivery.testSend(...args);
+  }
+
   cancel(...args: Parameters<CommunicationDeliveryService["cancel"]>) {
     return this.delivery.cancel(...args);
   }
@@ -58,6 +72,44 @@ export class CommunicationService {
     ...args: Parameters<ResendReconciliationService["reconcileResendEvent"]>
   ) {
     return this.reconciliation.reconcileResendEvent(...args);
+  }
+
+  listSenderProfiles(...args: Parameters<SenderProfileService["list"]>) {
+    return this.senders.list(...args);
+  }
+
+  saveSenderProfile(...args: Parameters<SenderProfileService["save"]>) {
+    return this.senders.save(...args);
+  }
+
+  provisionSenderProfile(
+    ...args: Parameters<SenderProfileService["provision"]>
+  ) {
+    return this.senders.provision(...args);
+  }
+
+  setSenderProfileEnabled(
+    ...args: Parameters<SenderProfileService["setEnabled"]>
+  ) {
+    return this.senders.setEnabled(...args);
+  }
+
+  listTriggers(
+    ...args: Parameters<CommunicationAutomationService["listTriggers"]>
+  ) {
+    return this.automation.listTriggers(...args);
+  }
+
+  saveTrigger(
+    ...args: Parameters<CommunicationAutomationService["saveTrigger"]>
+  ) {
+    return this.automation.saveTrigger(...args);
+  }
+
+  setTriggerEnabled(
+    ...args: Parameters<CommunicationAutomationService["setTriggerEnabled"]>
+  ) {
+    return this.automation.setTriggerEnabled(...args);
   }
 }
 export function communicationErrorMessage(error: unknown) {

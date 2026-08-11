@@ -1,6 +1,13 @@
 import { z } from "zod";
 
+import {
+  readBoundedResponseJson,
+  readBoundedResponseText,
+} from "~/platform/http/read-response";
 import type { CalendarMethod } from "./calendar-schema";
+
+const PROVIDER_REQUEST_TIMEOUT_MS = 20_000;
+const PROVIDER_RESPONSE_MAX_BYTES = 256 * 1_024;
 
 export type CalendarProviderEvent = {
   uid: string;
@@ -25,6 +32,9 @@ export interface DirectCalendarProvider {
   apply(input: CalendarProviderMutation): Promise<{ providerEventId: string }>;
 }
 
+export type CalendarAttendanceStatus =
+  "accepted" | "declined" | "tentative" | "needs_action" | "organizer";
+
 export class CalendarProviderConfigurationError extends Error {
   constructor(message: string) {
     super(message);
@@ -43,9 +53,17 @@ export class CalendarProviderRequestError extends Error {
   }
 }
 
+const providerEventIdSchema = z.string().min(1).max(512);
 const providerResponseSchema = z
-  .object({ id: z.string().min(1) })
+  .object({ id: providerEventIdSchema })
   .passthrough();
+
+function assertProviderEventId(value: string, provider: string) {
+  if (!providerEventIdSchema.safeParse(value).success)
+    throw new CalendarProviderConfigurationError(
+      `The saved ${provider} calendar event identifier is invalid.`,
+    );
+}
 
 async function stableProviderToken(value: string) {
   const digest = await crypto.subtle.digest(
@@ -63,6 +81,7 @@ async function parseProviderResponse(
   existingId?: string | null,
   absentIsSuccess = false,
 ) {
+  if (existingId) assertProviderEventId(existingId, provider);
   if (
     absentIsSuccess &&
     existingId &&
@@ -70,7 +89,10 @@ async function parseProviderResponse(
   )
     return { providerEventId: existingId };
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
+    const body = await readBoundedResponseText(
+      response,
+      PROVIDER_RESPONSE_MAX_BYTES,
+    ).catch(() => "");
     throw new CalendarProviderRequestError(
       provider,
       response.status,
@@ -80,7 +102,10 @@ async function parseProviderResponse(
   if (response.status === 204 && existingId)
     return { providerEventId: existingId };
   const parsed = providerResponseSchema.safeParse(
-    await response.json().catch(() => null),
+    await readBoundedResponseJson(
+      response,
+      PROVIDER_RESPONSE_MAX_BYTES,
+    ).catch(() => null),
   );
   if (!parsed.success)
     throw new CalendarProviderRequestError(
@@ -149,6 +174,8 @@ export class GoogleCalendarProvider implements DirectCalendarProvider {
       throw new CalendarProviderConfigurationError(
         "A Google Calendar OAuth access token is required.",
       );
+    if (input.externalEventId)
+      assertProviderEventId(input.externalEventId, this.name);
     const base = `${this.baseUrl}/calendars/${encodeURIComponent(this.calendarId)}/events`;
     if (input.method === "CANCEL") {
       if (!input.externalEventId)
@@ -162,6 +189,7 @@ export class GoogleCalendarProvider implements DirectCalendarProvider {
           {
             method: "DELETE",
             headers: { authorization: `Bearer ${this.accessToken}` },
+            signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
           },
         ),
         input.externalEventId,
@@ -201,6 +229,7 @@ export class GoogleCalendarProvider implements DirectCalendarProvider {
         authorization: `Bearer ${this.accessToken}`,
         "content-type": "application/json",
       },
+      signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
       body,
     });
     // A 409 proves the deterministic event already exists, but not that it has
@@ -216,6 +245,7 @@ export class GoogleCalendarProvider implements DirectCalendarProvider {
               authorization: `Bearer ${this.accessToken}`,
               "content-type": "application/json",
             },
+            signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
             body: JSON.stringify(event),
           },
         ),
@@ -223,6 +253,75 @@ export class GoogleCalendarProvider implements DirectCalendarProvider {
       );
     }
     return parseProviderResponse(this.name, response, input.externalEventId);
+  }
+
+  async attendance(externalEventId: string, attendeeEmail: string) {
+    if (!this.accessToken?.trim())
+      throw new CalendarProviderConfigurationError(
+        "A Google Calendar OAuth access token is required.",
+      );
+    assertProviderEventId(externalEventId, this.name);
+    const response = await this.fetcher(
+      `${this.baseUrl}/calendars/${encodeURIComponent(this.calendarId)}/events/${encodeURIComponent(externalEventId)}`,
+      {
+        headers: { authorization: `Bearer ${this.accessToken}` },
+        signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
+      },
+    );
+    if (!response.ok) {
+      const body = await readBoundedResponseText(
+        response,
+        PROVIDER_RESPONSE_MAX_BYTES,
+      ).catch(() => "");
+      throw new CalendarProviderRequestError(
+        this.name,
+        response.status,
+        `google calendar returned HTTP ${response.status}${body ? `: ${body.slice(0, 500)}` : "."}`,
+      );
+    }
+    const parsed = z
+      .object({
+        attendees: z
+          .array(
+            z.object({
+              email: z.email(),
+              responseStatus: z.enum([
+                "accepted",
+                "declined",
+                "tentative",
+                "needsAction",
+              ]),
+            }),
+          )
+          .default([]),
+      })
+      .safeParse(
+        await readBoundedResponseJson(
+          response,
+          PROVIDER_RESPONSE_MAX_BYTES,
+        ).catch(() => null),
+      );
+    if (!parsed.success)
+      throw new CalendarProviderRequestError(
+        this.name,
+        response.status,
+        "Google Calendar returned invalid attendee status.",
+      );
+    const attendee = parsed.data.attendees.find(
+      (candidate) =>
+        candidate.email.toLowerCase() === attendeeEmail.toLowerCase(),
+    );
+    if (!attendee)
+      throw new CalendarProviderRequestError(
+        this.name,
+        response.status,
+        "Google Calendar event no longer contains the expected attendee.",
+      );
+    return (
+      attendee.responseStatus === "needsAction"
+        ? "needs_action"
+        : attendee.responseStatus
+    ) satisfies CalendarAttendanceStatus;
   }
 }
 
@@ -240,6 +339,8 @@ export class MicrosoftCalendarProvider implements DirectCalendarProvider {
       throw new CalendarProviderConfigurationError(
         "A Microsoft 365 OAuth access token is required.",
       );
+    if (input.externalEventId)
+      assertProviderEventId(input.externalEventId, this.name);
     if (input.method === "CANCEL") {
       if (!input.externalEventId)
         throw new CalendarProviderConfigurationError(
@@ -252,6 +353,7 @@ export class MicrosoftCalendarProvider implements DirectCalendarProvider {
           {
             method: "DELETE",
             headers: { authorization: `Bearer ${this.accessToken}` },
+            signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
           },
         ),
         input.externalEventId,
@@ -291,6 +393,7 @@ export class MicrosoftCalendarProvider implements DirectCalendarProvider {
               authorization: `Bearer ${this.accessToken}`,
               "content-type": "application/json",
             },
+            signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
             body: JSON.stringify(event),
           },
         ),
@@ -308,6 +411,7 @@ export class MicrosoftCalendarProvider implements DirectCalendarProvider {
           authorization: `Bearer ${this.accessToken}`,
           "content-type": "application/json",
         },
+        signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
         body: JSON.stringify({
           ...event,
           transactionId: `programcue-${await stableProviderToken(`${input.uid}:${input.sequence}`)}`,
@@ -328,11 +432,89 @@ export class MicrosoftCalendarProvider implements DirectCalendarProvider {
             authorization: `Bearer ${this.accessToken}`,
             "content-type": "application/json",
           },
+          signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
           body: JSON.stringify(event),
         },
       ),
       created.providerEventId,
     );
+  }
+
+  async attendance(externalEventId: string, attendeeEmail: string) {
+    if (!this.accessToken?.trim())
+      throw new CalendarProviderConfigurationError(
+        "A Microsoft 365 OAuth access token is required.",
+      );
+    assertProviderEventId(externalEventId, this.name);
+    const response = await this.fetcher(
+      `${this.baseUrl}/${encodeURIComponent(externalEventId)}?$select=attendees`,
+      {
+        headers: { authorization: `Bearer ${this.accessToken}` },
+        signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
+      },
+    );
+    if (!response.ok) {
+      const body = await readBoundedResponseText(
+        response,
+        PROVIDER_RESPONSE_MAX_BYTES,
+      ).catch(() => "");
+      throw new CalendarProviderRequestError(
+        this.name,
+        response.status,
+        `microsoft calendar returned HTTP ${response.status}${body ? `: ${body.slice(0, 500)}` : "."}`,
+      );
+    }
+    const parsed = z
+      .object({
+        attendees: z
+          .array(
+            z.object({
+              emailAddress: z.object({ address: z.email() }),
+              status: z.object({
+                response: z.enum([
+                  "accepted",
+                  "declined",
+                  "tentativelyAccepted",
+                  "none",
+                  "notResponded",
+                  "organizer",
+                ]),
+              }),
+            }),
+          )
+          .default([]),
+      })
+      .safeParse(
+        await readBoundedResponseJson(
+          response,
+          PROVIDER_RESPONSE_MAX_BYTES,
+        ).catch(() => null),
+      );
+    if (!parsed.success)
+      throw new CalendarProviderRequestError(
+        this.name,
+        response.status,
+        "Microsoft 365 returned invalid attendee status.",
+      );
+    const attendee = parsed.data.attendees.find(
+      (candidate) =>
+        candidate.emailAddress.address.toLowerCase() ===
+        attendeeEmail.toLowerCase(),
+    );
+    if (!attendee)
+      throw new CalendarProviderRequestError(
+        this.name,
+        response.status,
+        "Microsoft 365 event no longer contains the expected attendee.",
+      );
+    const status = attendee.status.response;
+    return (
+      status === "tentativelyAccepted"
+        ? "tentative"
+        : status === "none" || status === "notResponded"
+          ? "needs_action"
+          : status
+    ) satisfies CalendarAttendanceStatus;
   }
 }
 
@@ -347,19 +529,62 @@ function base64Bytes(value: string) {
   }
 }
 
-export async function decryptCalendarCredentials(
-  encrypted: string,
-  base64Key: string | undefined,
-) {
+function bytesBase64(value: Uint8Array) {
+  let binary = "";
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+async function calendarCredentialKey(base64Key: string | undefined) {
   if (!base64Key?.trim())
     throw new CalendarProviderConfigurationError(
       "CALENDAR_CREDENTIALS_KEY is required for connected calendars.",
     );
-  const keyBytes = base64Bytes(base64Key);
+  const keyBytes = base64Bytes(base64Key.trim());
   if (keyBytes.byteLength !== 32)
     throw new CalendarProviderConfigurationError(
       "CALENDAR_CREDENTIALS_KEY must be a base64-encoded 32-byte key.",
     );
+  return crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, [
+    "encrypt",
+    "decrypt",
+  ]);
+}
+
+export const calendarCredentialsSchema = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1),
+  accessTokenExpiresAt: z.number().int().positive(),
+  tokenType: z.literal("Bearer"),
+  calendarId: z.string().min(1).optional(),
+});
+
+export type CalendarCredentials = z.infer<typeof calendarCredentialsSchema>;
+
+export async function encryptCalendarCredentials(
+  input: CalendarCredentials,
+  base64Key: string | undefined,
+) {
+  const credentials = calendarCredentialsSchema.parse(input);
+  const key = await calendarCredentialKey(base64Key);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(JSON.stringify(credentials)),
+  );
+  return JSON.stringify({
+    version: 1,
+    iv: bytesBase64(iv),
+    ciphertext: bytesBase64(new Uint8Array(ciphertext)),
+  });
+}
+
+export async function decryptCalendarCredentials(
+  encrypted: string,
+  base64Key: string | undefined,
+) {
+  const key = await calendarCredentialKey(base64Key);
   let envelope: unknown;
   try {
     envelope = JSON.parse(encrypted);
@@ -376,24 +601,14 @@ export async function decryptCalendarCredentials(
       "Connected calendar credentials use an unsupported encrypted envelope.",
     );
   try {
-    const key = await crypto.subtle.importKey(
-      "raw",
-      keyBytes,
-      "AES-GCM",
-      false,
-      ["decrypt"],
-    );
     const plaintext = await crypto.subtle.decrypt(
       { name: "AES-GCM", iv: base64Bytes(parsed.data.iv) },
       key,
       base64Bytes(parsed.data.ciphertext),
     );
-    return z
-      .object({
-        accessToken: z.string().min(1),
-        calendarId: z.string().optional(),
-      })
-      .parse(JSON.parse(new TextDecoder().decode(plaintext)));
+    return calendarCredentialsSchema.parse(
+      JSON.parse(new TextDecoder().decode(plaintext)),
+    );
   } catch (error) {
     if (error instanceof CalendarProviderConfigurationError) throw error;
     throw new CalendarProviderConfigurationError(

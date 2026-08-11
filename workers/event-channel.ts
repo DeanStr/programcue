@@ -93,22 +93,54 @@ export class EventChannel implements DurableObject {
       return new Response("Invalid event change summary.", { status: 422 });
     }
 
-    const latestCursor = await this.state.storage.get<number>(CURSOR_KEY) ?? 0;
-    if (summary.cursor <= latestCursor) {
-      return Response.json({ accepted: false, cursor: latestCursor });
-    }
-
-    await this.state.storage.put(CURSOR_KEY, summary.cursor);
-    const encoded = JSON.stringify(summary satisfies EventChangeSummary);
-    let delivered = 0;
-    for (const socket of this.state.getWebSockets("event-clients")) {
-      try {
-        socket.send(encoded);
-        delivered += 1;
-      } catch {
-        socket.close(1011, "Realtime delivery failed; reconnect or poll for changes.");
+    return this.state.blockConcurrencyWhile(async () => {
+      const latestCursor = await this.state.storage.get<number>(CURSOR_KEY) ?? 0;
+      if (summary.cursor <= latestCursor) {
+        return Response.json({ accepted: false, cursor: latestCursor });
       }
-    }
-    return Response.json({ accepted: true, cursor: summary.cursor, delivered });
+
+      // Signals can arrive out of order even though their D1 rows committed in
+      // sequence. If a newer notification skipped an event-owned row, send a
+      // ready watermark instead of advancing clients past the missing change.
+      const prior = await this.env.DB.prepare(
+        `SELECT COALESCE(MAX(sequence), 0) AS priorCursor
+           FROM event_changes
+          WHERE event_id = ? AND sequence < ?`,
+      )
+        .bind(identity.eventId, summary.cursor)
+        .first<{ priorCursor: number }>();
+      const priorCursor = Number(prior?.priorCursor ?? 0);
+      if (!Number.isSafeInteger(priorCursor) || priorCursor < 0) {
+        return new Response("The committed event cursor could not be verified.", {
+          status: 500,
+        });
+      }
+
+      await this.state.storage.put(CURSOR_KEY, summary.cursor);
+      const message = priorCursor > latestCursor
+        ? {
+            type: "ready" as const,
+            eventId: identity.eventId,
+            cursor: summary.cursor,
+            maxPollingIntervalMs: EVENT_CHANGE_MAX_POLL_INTERVAL_MS,
+          }
+        : summary satisfies EventChangeSummary;
+      const encoded = JSON.stringify(message);
+      let delivered = 0;
+      for (const socket of this.state.getWebSockets("event-clients")) {
+        try {
+          socket.send(encoded);
+          delivered += 1;
+        } catch {
+          socket.close(1011, "Realtime delivery failed; reconnect or poll for changes.");
+        }
+      }
+      return Response.json({
+        accepted: true,
+        cursor: summary.cursor,
+        delivered,
+        pollingRequired: priorCursor > latestCursor,
+      });
+    });
   }
 }

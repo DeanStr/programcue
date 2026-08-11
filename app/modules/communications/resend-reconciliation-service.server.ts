@@ -94,9 +94,7 @@ export class ResendReconciliationService {
             JOIN event_states event_state ON event_state.event_type = delivery_event.event_type
            WHERE delivery_event.delivery_id = ?
            ORDER BY event_state.precedence_rank DESC,
-                    CASE WHEN event_state.precedence_rank = 2 THEN delivery_event.occurred_at END DESC,
-                    CASE WHEN event_state.precedence_rank = 1 THEN event_state.status_rank END DESC,
-                    CASE WHEN event_state.precedence_rank = 2 THEN event_state.status_rank END DESC,
+                    event_state.status_rank DESC,
                     delivery_event.occurred_at DESC,
                     delivery_event.event_type DESC,
                     COALESCE(delivery_event.provider_event_id, '') DESC,
