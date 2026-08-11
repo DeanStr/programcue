@@ -17,14 +17,15 @@ const HELP = `Usage:
     --organisation-name "Organisation" \\
     --organisation-slug organisation \\
     --event-name "Event Name" \\
+    --event-slug event-name \\
     --timezone America/Toronto \\
     --start-date 2027-05-20 \\
     --end-date 2027-05-22 \\
     --yes
 
-This is a one-time production command. It requires an empty migrated D1 database
-and uses DEFAULT_EVENT_ID and PUBLIC_EVENT_SLUG from wrangler.jsonc. It creates
-the first Better Auth person, organisation-wide owner membership, and event.
+This is a one-time production command. It requires an empty migrated D1 database,
+generates a new event ID, and creates the first Better Auth person,
+organisation-wide owner membership, and event.
 `;
 
 function fail(message) {
@@ -169,6 +170,7 @@ async function main() {
       "organisation-name": { type: "string" },
       "organisation-slug": { type: "string" },
       "event-name": { type: "string" },
+      "event-slug": { type: "string" },
       timezone: { type: "string" },
       "start-date": { type: "string" },
       "end-date": { type: "string" },
@@ -198,6 +200,10 @@ async function main() {
     "Organisation slug",
   );
   const eventName = required(values, "event-name");
+  const eventSlug = validateSlug(required(values, "event-slug"), "Event slug");
+  if (eventSlug === "future-of-events-2025") {
+    fail("The production event slug must not reuse the canonical demo slug.");
+  }
   const timezone = required(values, "timezone");
   try {
     new Intl.DateTimeFormat("en", { timeZone: timezone }).format(0);
@@ -221,12 +227,7 @@ async function main() {
       "Production bootstrap requires APP_ENV=production and DEMO_MODE=false.",
     );
   }
-  const eventId = String(config.vars?.DEFAULT_EVENT_ID ?? "").trim();
-  if (!eventId) fail("DEFAULT_EVENT_ID must be configured before bootstrap.");
-  const eventSlug = validateSlug(
-    String(config.vars?.PUBLIC_EVENT_SLUG ?? "").trim(),
-    "PUBLIC_EVENT_SLUG",
-  );
+  const eventId = randomUUID();
   const database = config.d1_databases?.find(
     (binding) => binding.binding === "DB",
   );

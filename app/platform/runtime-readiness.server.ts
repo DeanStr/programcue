@@ -13,8 +13,6 @@ const requiredProductionBindings = [
 ] as const;
 
 const requiredProductionValues = [
-  "DEFAULT_EVENT_ID",
-  "PUBLIC_EVENT_SLUG",
   "BETTER_AUTH_URL",
   "AUTH_EMAIL_FROM",
   "EMAIL_PROVIDER",

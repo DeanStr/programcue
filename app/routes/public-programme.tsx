@@ -72,9 +72,8 @@ async function optionalPersonId(request: Request, env: CloudflareEnvironment) {
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
-  const slug = params.slug ?? env.PUBLIC_EVENT_SLUG;
-  if (!slug)
-    throw new Response("PUBLIC_EVENT_SLUG is not configured", { status: 503 });
+  const slug = params.slug;
+  if (!slug) throw new Response("Published event not found", { status: 404 });
   const service = new PublicProgrammeService(env);
   const programme = await service.getPublished(slug);
   if (!programme)
@@ -230,9 +229,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     );
   }
   const { env } = getCloudflareContext(context);
-  const slug = params.slug ?? env.PUBLIC_EVENT_SLUG;
-  if (!slug)
-    throw new Response("PUBLIC_EVENT_SLUG is not configured", { status: 503 });
+  const slug = params.slug;
+  if (!slug) throw new Response("Published event not found", { status: 404 });
   const values = await request.formData();
   const intent = values.get("intent");
   if (intent !== "add" && intent !== "remove" && intent !== "share")

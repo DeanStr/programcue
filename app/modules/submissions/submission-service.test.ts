@@ -76,6 +76,12 @@ async function publishedForm(overrides: Record<string, unknown> = {}) {
       ...((overrides.routing as Record<string, unknown> | undefined) ?? {}),
     },
   };
+  if (input.kind === "direct_session") {
+    const trackField = input.schema.fields.find(
+      (field) => field.id === "category",
+    );
+    if (trackField) trackField.type = "select";
+  }
   const id = await service.saveForm(viewer, input);
   const workspace = await service.getAdminWorkspace(viewer, id);
   await service.publishForm(
@@ -112,6 +118,11 @@ const validAnswers = {
   category: ["AI & Innovation"],
   format: "Presentation",
   video: "https://example.com/pitch",
+};
+
+const directSessionAnswers = {
+  ...validAnswers,
+  category: "AI & Innovation",
 };
 
 it("requires persisted event-track identity maps in form routing", () => {
@@ -748,7 +759,6 @@ describe("Submissions D1 vertical slice", () => {
               },
             ],
             routedTeamIds: [],
-            routingAssignment: null,
             upload: null,
           },
         );
@@ -1763,7 +1773,6 @@ describe("Submissions D1 vertical slice", () => {
             },
           ],
           routedTeamIds: [],
-          routingAssignment: null,
           upload: null,
         },
       );
@@ -2716,7 +2725,60 @@ describe("Submissions D1 vertical slice", () => {
   });
 
   describe("routing workflows", () => {
-    it("routes a category to its immutable active team ID and fails if the team is archived", async () => {
+    it("fails admin reads when a submission lacks its immutable routing snapshot", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const applicant = await verifiedApplicant(service, slug);
+      const submissionId = await service.createDraft(slug, applicant);
+      const draft = (
+        await service.repository.getApplicantDrafts(id, applicant)
+      ).find((candidate) => candidate.id === submissionId)!;
+      await service.submitDraft(slug, applicant, {
+        submissionId,
+        revision: draft.revision,
+        answers: validAnswers,
+        speakers: [{ name: applicant.name, email: applicant.email }],
+      });
+      const persisted = await testEnv.DB.prepare(
+        `SELECT form_version_id AS formVersionId,
+                submitted_snapshot_json AS snapshotJson
+           FROM submissions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(submissionId, viewer.eventId)
+        .first<{ formVersionId: string; snapshotJson: string }>();
+      expect(persisted).not.toBeNull();
+
+      try {
+        await testEnv.DB.prepare(
+          `UPDATE submissions
+              SET form_version_id = NULL, submitted_snapshot_json = '{}'
+            WHERE id = ? AND event_id = ?`,
+        )
+          .bind(submissionId, viewer.eventId)
+          .run();
+
+        await expect(
+          service.listAdminSubmissions(viewer, { status: "submitted" }),
+        ).rejects.toThrow(/missing its immutable routing snapshot/i);
+        await expect(
+          service.getAdminSubmission(viewer, submissionId),
+        ).rejects.toThrow(/missing its immutable routing snapshot/i);
+      } finally {
+        await testEnv.DB.prepare(
+          `UPDATE submissions
+              SET form_version_id = ?, submitted_snapshot_json = ?
+            WHERE id = ? AND event_id = ?`,
+        )
+          .bind(
+            persisted!.formVersionId,
+            persisted!.snapshotJson,
+            submissionId,
+            viewer.eventId,
+          )
+          .run();
+      }
+    });
+
+    it("persists routing without coupling submission to evaluator assignment readiness", async () => {
       await ensureDemoData(env as unknown as CloudflareEnvironment);
       const teamId = `team-route-${crypto.randomUUID()}`;
       const teamName = `AI review ${crypto.randomUUID().slice(0, 6)}`;
@@ -2769,26 +2831,22 @@ describe("Submissions D1 vertical slice", () => {
       });
       expect(
         await env.DB.prepare(
-          `SELECT routed_team_id AS routedTeamId, status
-           FROM submissions WHERE id = ?`,
+          `SELECT submission.status,
+                  (SELECT COUNT(*) FROM submission_routing_teams route
+                    WHERE route.submission_id = submission.id
+                      AND route.event_id = submission.event_id
+                      AND route.team_id = ?) AS routedTeamCount,
+                  (SELECT COUNT(*) FROM evaluator_assignments assignment
+                    WHERE assignment.submission_id = submission.id
+                      AND assignment.event_id = submission.event_id) AS assignmentCount
+             FROM submissions submission WHERE submission.id = ?`,
         )
-          .bind(firstId)
-          .first(),
-      ).toEqual({ routedTeamId: teamId, status: "assigned" });
-      expect(
-        await env.DB.prepare(
-          `SELECT round_id AS roundId, evaluator_person_id AS evaluatorPersonId,
-                team_id AS teamId, status
-           FROM evaluator_assignments
-          WHERE submission_id = ? AND event_id = ?`,
-        )
-          .bind(firstId, viewer.eventId)
+          .bind(teamId, firstId)
           .first(),
       ).toEqual({
-        roundId,
-        evaluatorPersonId: "person-demo-evaluator",
-        teamId,
-        status: "assigned",
+        status: "submitted",
+        routedTeamCount: 1,
+        assignmentCount: 0,
       });
 
       await env.DB.prepare(
@@ -2797,7 +2855,7 @@ describe("Submissions D1 vertical slice", () => {
         .bind(`${teamName} renamed`, teamId, viewer.eventId)
         .run();
       const routed = (
-        await service.listAdminSubmissions(viewer, { status: "assigned" })
+        await service.listAdminSubmissions(viewer, { status: "submitted" })
       ).find((submission) => submission.id === firstId);
       expect(routed?.routedTo).toBe(teamName);
       const assigned = (
@@ -2809,18 +2867,18 @@ describe("Submissions D1 vertical slice", () => {
       });
       await expect(
         env.DB.prepare(
-          `SELECT submission.status, assignment.status AS assignmentStatus
-           FROM submissions submission
-           JOIN evaluator_assignments assignment
-             ON assignment.submission_id = submission.id
-            AND assignment.event_id = submission.event_id
-          WHERE submission.id = ? AND submission.event_id = ?`,
+          `SELECT submission.status,
+                  (SELECT COUNT(*) FROM evaluator_assignments assignment
+                    WHERE assignment.submission_id = submission.id
+                      AND assignment.event_id = submission.event_id) AS assignmentCount
+             FROM submissions submission
+            WHERE submission.id = ? AND submission.event_id = ?`,
         )
           .bind(firstId, viewer.eventId)
           .first(),
       ).resolves.toEqual({
         status: "withdrawn",
-        assignmentStatus: "cancelled",
+        assignmentCount: 0,
       });
 
       const secondId = await service.createDraft(slug, applicant);
@@ -2839,12 +2897,12 @@ describe("Submissions D1 vertical slice", () => {
           answers: validAnswers,
           speakers: [{ name: applicant.name, email: applicant.email }],
         }),
-      ).rejects.toThrow(/no longer active/i);
+      ).resolves.toMatchObject({ submissionId: secondId });
       await expect(
         env.DB.prepare("SELECT status FROM submissions WHERE id = ?")
           .bind(secondId)
           .first(),
-      ).resolves.toEqual({ status: "draft" });
+      ).resolves.toEqual({ status: "submitted" });
       await env.DB.batch([
         env.DB.prepare(
           "UPDATE tracks SET name = 'AI & Innovation' WHERE id = 'demo-track-ai' AND event_id = ?",
@@ -2858,7 +2916,7 @@ describe("Submissions D1 vertical slice", () => {
       ]);
     });
 
-    it("routes a multi-track application to the union of track reviewers", async () => {
+    it("routes a multi-track application to the union of configured teams without assigning reviewers", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoData(testEnv);
       const token = crypto.randomUUID();
@@ -2962,7 +3020,7 @@ describe("Submissions D1 vertical slice", () => {
       ).resolves.toEqual({
         trackCount: 2,
         teamCount: 2,
-        reviewerCount: 2,
+        reviewerCount: 0,
         aiTrackSnapshot: "AI & Innovation",
       });
       await expect(
@@ -2979,8 +3037,8 @@ describe("Submissions D1 vertical slice", () => {
         .bind(submissionId, viewer.eventId)
         .run();
       await expect(
-        service.listAdminSubmissions(viewer, { status: "assigned" }),
-      ).rejects.toThrow(/incomplete persisted routing teams/i);
+        service.listAdminSubmissions(viewer, { status: "submitted" }),
+      ).resolves.toEqual(expect.any(Array));
       await testEnv.DB.batch([
         testEnv.DB.prepare(
           `INSERT INTO submission_routing_teams (submission_id, event_id, team_id)
@@ -3144,7 +3202,7 @@ describe("Submissions D1 vertical slice", () => {
           service.submitDraft(slug, applicant, {
             submissionId,
             revision: draft.revision,
-            answers: validAnswers,
+            answers: directSessionAnswers,
             speakers: [{ name: applicant.name, email: applicant.email }],
           }),
         ).rejects.toThrow(/Presentation.*not configured/i);
@@ -3189,7 +3247,7 @@ describe("Submissions D1 vertical slice", () => {
       const result = await service.submitDraft(slug, applicant, {
         submissionId,
         revision: draft.revision,
-        answers: validAnswers,
+        answers: directSessionAnswers,
         speakers: [
           {
             name: applicant.name,
@@ -3207,17 +3265,14 @@ describe("Submissions D1 vertical slice", () => {
       expect(result.invitations).toEqual({ queued: 1, queueFailed: 0 });
       expect(queued).toHaveLength(2);
       expect(
-        await env.DB.prepare(
-          `SELECT status, routed_team_id AS routedTeamId
-           FROM submissions WHERE id = ?`,
-        )
+        await env.DB.prepare(`SELECT status FROM submissions WHERE id = ?`)
           .bind(submissionId)
           .first(),
-      ).toEqual({ status: "accepted", routedTeamId: null });
+      ).toEqual({ status: "accepted" });
       expect(
         await env.DB.prepare(
           `SELECT source_submission_id AS sourceSubmissionId,
-                duration_minutes AS durationMinutes,
+                track_id AS trackId, duration_minutes AS durationMinutes,
                 (SELECT COUNT(*) FROM session_speakers relationship
                   WHERE relationship.session_id = session.id) AS speakerCount
            FROM sessions session WHERE id = ?`,
@@ -3226,6 +3281,7 @@ describe("Submissions D1 vertical slice", () => {
           .first(),
       ).toEqual({
         sourceSubmissionId: null,
+        trackId: "demo-track-ai",
         durationMinutes: 45,
         speakerCount: 2,
       });
@@ -3361,7 +3417,7 @@ describe("Submissions D1 vertical slice", () => {
   });
 
   describe("routing workflows", () => {
-    it("rejects multiple tracks before materialising a direct session", async () => {
+    it("rejects a multi-value track answer before materialising a direct session", async () => {
       const { service, id, slug } = await publishedForm({
         kind: "direct_session",
         routing: {
@@ -3387,7 +3443,7 @@ describe("Submissions D1 vertical slice", () => {
           },
           speakers: [{ name: applicant.name, email: applicant.email }],
         }),
-      ).rejects.toThrow(/exactly one track for a direct session/i);
+      ).rejects.toThrow(/tracks must contain a single value/i);
       await expect(
         env.DB.prepare(
           `SELECT status,
@@ -3455,7 +3511,6 @@ describe("Submissions D1 vertical slice", () => {
           {
             trackSelections: [],
             routedTeamIds: [],
-            routingAssignment: null,
             upload: null,
           },
         ),
@@ -3676,11 +3731,11 @@ describe("Submissions D1 vertical slice", () => {
         idempotencyKey: `manual-${crypto.randomUUID()}`,
         title: "Administrator entered proposal",
         description: "Received outside the public application form.",
-        trackId: "demo-track-ai",
-        format: "Presentation",
+        trackIds: ["demo-track-ai", "demo-track-operations"],
+        format: "presentation",
         submitterName: "Partner Coordinator",
         submitterEmail: `partner-${crypto.randomUUID()}@example.com`,
-        routedTeamId: teamId,
+        routedTeamIds: [teamId],
         speakers: [
           {
             name: "Guaranteed Speaker",
@@ -3691,8 +3746,13 @@ describe("Submissions D1 vertical slice", () => {
       });
       const row = await env.DB.prepare(
         `SELECT submission.status, submission.form_version_id AS formVersionId,
-              submission.routed_team_id AS routedTeamId,
               submission.submitted_snapshot_json AS snapshotJson,
+              (SELECT COUNT(*) FROM submission_routing_teams route
+                WHERE route.submission_id = submission.id
+                  AND route.event_id = submission.event_id) AS routedTeamCount,
+              (SELECT COUNT(*) FROM evaluator_assignments assignment
+                WHERE assignment.submission_id = submission.id
+                  AND assignment.event_id = submission.event_id) AS assignmentCount,
               audit.action
          FROM submissions submission
          JOIN audit_events audit
@@ -3704,14 +3764,16 @@ describe("Submissions D1 vertical slice", () => {
         .first<{
           status: string;
           formVersionId: string | null;
-          routedTeamId: string;
+          routedTeamCount: number;
+          assignmentCount: number;
           snapshotJson: string;
           action: string;
         }>();
       expect(row).toMatchObject({
-        status: "assigned",
+        status: "submitted",
         formVersionId: null,
-        routedTeamId: teamId,
+        routedTeamCount: 1,
+        assignmentCount: 0,
         action: "submission.manual.created",
       });
       expect(JSON.parse(row!.snapshotJson).speakers[0].biography).toBe(
@@ -3719,6 +3781,7 @@ describe("Submissions D1 vertical slice", () => {
       );
       expect(JSON.parse(row!.snapshotJson).answers.category).toEqual([
         "AI & Innovation",
+        "Event Operations",
       ]);
       expect(
         JSON.parse(row!.snapshotJson).schema.fields.map(
@@ -3727,42 +3790,35 @@ describe("Submissions D1 vertical slice", () => {
       ).toEqual(["title", "description", "category", "format"]);
       expect(
         (
-          await service.listAdminSubmissions(viewer, { status: "assigned" })
+          await service.listAdminSubmissions(viewer, { status: "submitted" })
         ).find((submission) => submission.id === submissionId)?.routedTo,
       ).toBe(teamName);
       await expect(
         service.getAdminSubmission(viewer, submissionId),
       ).resolves.toMatchObject({
         routedTo: teamName,
-        category: "AI & Innovation",
+        category: "AI & Innovation, Event Operations",
       });
-      await expect(
-        env.DB.prepare(
-          `SELECT track_id AS trackId, track_name_snapshot AS trackName, position
+      const selectedTracks = await env.DB.prepare(
+        `SELECT track_id AS trackId, track_name_snapshot AS trackName, position
            FROM submission_track_selections
-          WHERE submission_id = ? AND event_id = ?`,
-        )
-          .bind(submissionId, viewer.eventId)
-          .first(),
-      ).resolves.toEqual({
-        trackId: "demo-track-ai",
-        trackName: "AI & Innovation",
-        position: 0,
-      });
-      expect(
-        await env.DB.prepare(
-          `SELECT round_id AS roundId, team_id AS teamId,
-                evaluator_person_id AS evaluatorPersonId
-           FROM evaluator_assignments
-          WHERE submission_id = ? AND event_id = ?`,
-        )
-          .bind(submissionId, viewer.eventId)
-          .first(),
-      ).toEqual({
-        roundId,
-        teamId,
-        evaluatorPersonId: "person-demo-evaluator",
-      });
+          WHERE submission_id = ? AND event_id = ?
+          ORDER BY position`,
+      )
+        .bind(submissionId, viewer.eventId)
+        .all();
+      expect(selectedTracks.results).toEqual([
+        {
+          trackId: "demo-track-ai",
+          trackName: "AI & Innovation",
+          position: 0,
+        },
+        {
+          trackId: "demo-track-operations",
+          trackName: "Event Operations",
+          position: 1,
+        },
+      ]);
       await expect(
         service.createManualApplication(
           { ...viewer, organisationId: "org-not-authorised" },
@@ -3770,11 +3826,11 @@ describe("Submissions D1 vertical slice", () => {
             idempotencyKey: `manual-${crypto.randomUUID()}`,
             title: "Cross-tenant proposal",
             description: "Must not be created.",
-            trackId: "demo-track-ai",
-            format: "Presentation",
+            trackIds: ["demo-track-ai"],
+            format: "presentation",
             submitterName: "Wrong tenant",
             submitterEmail: "wrong-tenant@example.com",
-            routedTeamId: null,
+            routedTeamIds: [],
             speakers: [
               { name: "Wrong tenant", email: "wrong-tenant@example.com" },
             ],
@@ -3836,11 +3892,11 @@ describe("Submissions D1 vertical slice", () => {
           idempotencyKey: `manual-${crypto.randomUUID()}`,
           title: "Routing changed while saving",
           description: "This entry must leave no partial records.",
-          trackId: "demo-track-ai",
-          format: "Presentation",
+          trackIds: ["demo-track-ai"],
+          format: "presentation",
           submitterName: "Manual race submitter",
           submitterEmail,
-          routedTeamId: teamId,
+          routedTeamIds: [teamId],
           speakers: [
             {
               name: "Manual race speaker",
@@ -3849,7 +3905,7 @@ describe("Submissions D1 vertical slice", () => {
             },
           ],
         }),
-      ).rejects.toThrow(/routing configuration changed/i);
+      ).rejects.toThrow(/review teams.*changed/i);
       await expect(
         testEnv.DB.prepare(
           `SELECT
@@ -3884,6 +3940,7 @@ describe("Submissions D1 vertical slice", () => {
         title: "Idempotent guaranteed session",
         description: "Created once when an administrator retries.",
         format: "presentation" as const,
+        trackId: "demo-track-ai",
         durationMinutes: 30,
         speakers: [
           {
@@ -3919,11 +3976,11 @@ describe("Submissions D1 vertical slice", () => {
         idempotencyKey: `manual-idempotent-${token}`,
         title: "Idempotent manual application",
         description: "An immutable external intake record.",
-        trackId: "demo-track-ai",
-        format: "Presentation",
+        trackIds: ["demo-track-ai"],
+        format: "presentation",
         submitterName: "Manual Submitter",
         submitterEmail: `manual-submitter-${token}@example.com`,
-        routedTeamId: null,
+        routedTeamIds: [],
         speakers: [
           {
             name: "Manual Speaker",
@@ -3947,6 +4004,23 @@ describe("Submissions D1 vertical slice", () => {
           .bind(firstSubmissionId, viewer.eventId)
           .first(),
       ).resolves.toEqual({ count: 1 });
+
+      const invalidFormatKey = `manual-format-${token}`;
+      await expect(
+        service.createManualApplication(viewer, {
+          ...manualInput,
+          idempotencyKey: invalidFormatKey,
+          format: "not-configured",
+        }),
+      ).rejects.toThrow(/not-configured.*not configured/i);
+      await expect(
+        env.DB.prepare(
+          `SELECT COUNT(*) AS count FROM idempotency_records
+            WHERE event_id = ? AND idempotency_key = ?`,
+        )
+          .bind(viewer.eventId, invalidFormatKey)
+          .first(),
+      ).resolves.toEqual({ count: 0 });
     });
   });
 
@@ -3984,6 +4058,7 @@ describe("Submissions D1 vertical slice", () => {
         title: "Configured roundtable",
         description: "Uses the event-owned duration default.",
         format: "roundtable",
+        trackId: "demo-track-ai",
         speakers: [
           {
             name: "Configured Speaker",
@@ -4006,6 +4081,7 @@ describe("Submissions D1 vertical slice", () => {
           idempotencyKey: rejectedIdempotencyKey,
           title: "Unknown format session",
           format: "not-configured",
+          trackId: "demo-track-ai",
           speakers: [
             {
               name: "Unknown Format Speaker",
@@ -4049,6 +4125,7 @@ describe("Submissions D1 vertical slice", () => {
             idempotencyKey,
             title,
             format: "presentation",
+            trackId: "demo-track-ai",
             speakers: [
               {
                 name: "Stale Format Speaker",
@@ -4137,6 +4214,7 @@ describe("Submissions D1 vertical slice", () => {
         title: "Sponsor perspective",
         description: "Guaranteed programme contribution.",
         format: "presentation",
+        trackId: "demo-track-ai",
         durationMinutes: 30,
         speakers: [
           {

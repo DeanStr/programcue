@@ -51,6 +51,7 @@ export const directSessionSchema = z.object({
   idempotencyKey: adminIdempotencyKeySchema,
   title: z.string().trim().min(3).max(180),
   description: z.string().trim().max(3_000).default(""),
+  trackId: z.string().trim().min(1).max(100),
   format: sessionFormatInputSchema.shape.key,
   durationMinutes: z.preprocess(
     (value) =>
@@ -83,12 +84,12 @@ export const manualApplicationSchema = z.object({
   idempotencyKey: adminIdempotencyKeySchema,
   title: z.string().trim().min(3).max(180),
   description: z.string().trim().min(1).max(5_000),
-  trackId: z.string().trim().min(1).max(100),
-  format: z.string().trim().min(1).max(80),
+  trackIds: z.array(z.string().trim().min(1).max(100)).min(1).max(30),
+  format: sessionFormatInputSchema.shape.key,
   submitterName: z.string().trim().min(1).max(120),
   submitterEmail: z.string().trim().toLowerCase().email().max(254),
   speakers: directSessionSchema.shape.speakers,
-  routedTeamId: z.string().trim().min(1).max(100).nullable().default(null),
+  routedTeamIds: z.array(z.string().trim().min(1).max(100)).max(30).default([]),
 });
 
 export const withdrawSubmissionSchema = z.object({

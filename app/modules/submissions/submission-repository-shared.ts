@@ -131,7 +131,6 @@ export type AdminSubmission = {
   submittedAt: number | null;
   updatedAt: number;
   routedTo: string;
-  routedTeamId: string | null;
   routedTeamIds: string[];
 };
 

@@ -44,7 +44,10 @@ const SURFACES: readonly Surface[] = [
   { name: "programme-admin", path: "/admin/programme" },
   { name: "integrations", path: "/admin/integrations" },
   { name: "settings", path: "/admin/settings" },
-  { name: "public-programme", path: "/public/programme" },
+  {
+    name: "public-programme",
+    path: "/public/programme/future-of-events-2025",
+  },
   {
     name: "programme-embed",
     path: "/embed/future-of-events-2025",
@@ -406,6 +409,7 @@ test.describe.serial("responsive visual inventory", () => {
     await directSession
       .getByLabel("Session title")
       .fill("Visual duplicate identity guard");
+    await directSession.getByLabel("Track").selectOption({ index: 1 });
     await directSession.getByLabel("Speaker 1 name").fill("Priya Shah");
     await directSession.getByLabel("Email").fill("priya.speaker@example.com");
     await directSession

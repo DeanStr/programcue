@@ -168,6 +168,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         idempotencyKey: formData.get("idempotencyKey"),
         title: formData.get("title"),
         description: formData.get("description"),
+        trackId: formData.get("trackId"),
         format: formData.get("format"),
         durationMinutes: formData.get("durationMinutes"),
         speakers,
@@ -191,7 +192,10 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
     }
     if (intent === "create_manual_application") {
-      const routedTeamId = String(formData.get("routedTeamId") ?? "") || null;
+      const routedTeamIds = formData
+        .getAll("routedTeamIds")
+        .map(String)
+        .filter(Boolean);
       const speakers = speakersFrom(formData);
       const duplicateCheck = await new PersonDuplicateService(
         env,
@@ -224,11 +228,11 @@ export async function action({ request, context }: Route.ActionArgs) {
         idempotencyKey: formData.get("idempotencyKey"),
         title: formData.get("title"),
         description: formData.get("description"),
-        trackId: formData.get("trackId"),
+        trackIds: formData.getAll("trackIds").map(String),
         format: formData.get("format"),
         submitterName: formData.get("submitterName"),
         submitterEmail: formData.get("submitterEmail"),
-        routedTeamId,
+        routedTeamIds,
         speakers,
       });
       const warnings = await Promise.all([
@@ -239,7 +243,8 @@ export async function action({ request, context }: Route.ActionArgs) {
           idempotencyKey: `submission.created:${submissionId}`,
           data: {
             source: "administrator_manual_entry",
-            status: routedTeamId ? "assigned" : "submitted",
+            status: "submitted",
+            routedTeamIds,
           },
         }),
         queueAdminWebhook(env, viewer, {
@@ -249,7 +254,8 @@ export async function action({ request, context }: Route.ActionArgs) {
           idempotencyKey: `submission.submitted:${submissionId}`,
           data: {
             source: "administrator_manual_entry",
-            status: routedTeamId ? "assigned" : "submitted",
+            status: "submitted",
+            routedTeamIds,
           },
         }),
       ]);
@@ -660,48 +666,56 @@ function ManualEntryPanels({
               <input className="field" name="title" required />
             </label>
             <label className="label">
-              Track
+              Tracks
               <select
                 className="select"
-                name="trackId"
+                name="trackIds"
                 required
-                defaultValue=""
+                multiple
+                size={Math.min(Math.max(routingTracks.length, 2), 6)}
               >
-                <option value="" disabled>
-                  Choose a current event track
-                </option>
                 {routingTracks.map((track) => (
                   <option key={track.id} value={track.id}>
                     {track.name}
                   </option>
                 ))}
               </select>
+              <span className="help">
+                Select every review track that applies.
+              </span>
             </label>
             <label className="label">
               Format
               <select
                 className="select"
                 name="format"
-                defaultValue="Presentation"
+                defaultValue={sessionFormats[0]!.key}
               >
-                <option>Keynote</option>
-                <option>Presentation</option>
-                <option>Panel</option>
-                <option>Workshop</option>
-                <option>Breakout</option>
-                <option>Other</option>
+                {sessionFormats.map((format) => (
+                  <option key={format.key} value={format.key}>
+                    {format.label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="label">
-              Evaluation team
-              <select className="select" name="routedTeamId" defaultValue="">
-                <option value="">Unassigned</option>
+              Review teams (optional administrator override)
+              <select
+                className="select"
+                name="routedTeamIds"
+                multiple
+                size={Math.min(Math.max(routingTeams.length, 2), 6)}
+              >
                 {routingTeams.map((team) => (
                   <option key={team.id} value={team.id}>
                     {team.name}
                   </option>
                 ))}
               </select>
+              <span className="help">
+                Routing is recorded now; evaluator assignments are created
+                separately in Review administration.
+              </span>
             </label>
           </div>
           <label className="label">
@@ -766,6 +780,24 @@ function ManualEntryPanels({
             <label className="label">
               Session title
               <input className="field" name="title" required />
+            </label>
+            <label className="label">
+              Track
+              <select
+                className="select"
+                name="trackId"
+                required
+                defaultValue=""
+              >
+                <option value="" disabled>
+                  Choose a current event track
+                </option>
+                {routingTracks.map((track) => (
+                  <option key={track.id} value={track.id}>
+                    {track.name}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="label">
               Format
@@ -880,13 +912,7 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
           <div className="value">
             {
               new Set(
-                submissions.flatMap((submission) =>
-                  submission.routedTeamIds.length
-                    ? submission.routedTeamIds
-                    : submission.routedTeamId
-                      ? [submission.routedTeamId]
-                      : [],
-                ),
+                submissions.flatMap((submission) => submission.routedTeamIds),
               ).size
             }
           </div>

@@ -395,6 +395,7 @@ export class EvaluationDecisionService {
     let sessionDescription = "";
     let format = "";
     let sessionDurationMinutes = 0;
+    let sessionTrack: { id: string; name: string } | null = null;
     let acceptedEvent: {
       name: string;
       brandAccent: string;
@@ -403,6 +404,24 @@ export class EvaluationDecisionService {
       venueName: string | null;
       city: string | null;
     } | null = null;
+    if (parsed.decision === "accepted") {
+      sessionTrack = await this.env.DB.prepare(
+        `SELECT selection.track_id AS id, track.name
+           FROM submission_track_selections selection
+           JOIN tracks track
+             ON track.id = selection.track_id
+            AND track.event_id = selection.event_id
+          WHERE selection.submission_id = ? AND selection.event_id = ?
+            AND selection.track_id = ?`,
+      )
+        .bind(submission.id, viewer.eventId, parsed.sessionTrackId)
+        .first<{ id: string; name: string }>();
+      if (!sessionTrack) {
+        throw new EvaluationValidationError(
+          "Choose one of the tracks submitted with this proposal for the accepted session.",
+        );
+      }
+    }
     if (sessionId) {
       let rawSnapshot: unknown;
       try {
@@ -591,6 +610,7 @@ export class EvaluationDecisionService {
           decision: parsed.decision,
           released: parsed.release,
           sessionId,
+          sessionTrackId: sessionTrack?.id ?? null,
         },
       },
       auditEventId,
@@ -610,6 +630,7 @@ export class EvaluationDecisionService {
       slug,
       format,
       sessionDurationMinutes,
+      sessionTrack,
       notificationOperationId,
       notificationFeedback,
       roundId: completedRound?.roundId ?? null,
@@ -636,15 +657,27 @@ export class EvaluationDecisionService {
             "Claim every co-speaker before releasing an accepted decision. No speaker will be silently omitted from the session.",
           );
         }
+      }
+      if (parsed.decision === "accepted") {
         const submittedTrack = await this.env.DB.prepare(
-          `SELECT 1 FROM submission_track_selections
-            WHERE submission_id = ? AND event_id = ? LIMIT 1`,
+          `SELECT track.name
+             FROM submission_track_selections selection
+             JOIN tracks track
+               ON track.id = selection.track_id
+              AND track.event_id = selection.event_id
+            WHERE selection.submission_id = ? AND selection.event_id = ?
+              AND selection.track_id = ? LIMIT 1`,
         )
-          .bind(submission.id, viewer.eventId)
-          .first();
+          .bind(submission.id, viewer.eventId, parsed.sessionTrackId)
+          .first<{ name: string }>();
         if (!submittedTrack) {
           throw new EvaluationStateError(
-            "An accepted submission must retain at least one submitted event track. Repair the submission before releasing it.",
+            "The accepted session track is no longer one of the proposal's submitted tracks. Refresh before releasing it.",
+          );
+        }
+        if (submittedTrack.name !== sessionTrack?.name) {
+          throw new EvaluationStateError(
+            "The accepted programme track was renamed after the decision preview. Refresh and confirm the current track name before releasing it.",
           );
         }
       }

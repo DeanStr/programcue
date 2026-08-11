@@ -308,9 +308,9 @@ describe("complete evaluator demo reset", () => {
          )`,
       ).bind(DEMO_EVENT_ID),
       testEnvironment.DB.prepare(
-        `UPDATE submissions
-            SET routed_team_id = 'demo-reset-routed-team'
-          WHERE id = 'demo-evaluation-submission-calm' AND event_id = ?`,
+        `INSERT INTO submission_routing_teams (
+           submission_id, event_id, team_id
+         ) VALUES ('demo-evaluation-submission-calm', ?, 'demo-reset-routed-team')`,
       ).bind(DEMO_EVENT_ID),
     ]);
 
@@ -330,13 +330,13 @@ describe("complete evaluator demo reset", () => {
     ).resolves.toBeNull();
     await expect(
       testEnvironment.DB.prepare(
-        `SELECT routed_team_id AS routedTeamId
-           FROM submissions
-          WHERE id = 'demo-evaluation-submission-calm' AND event_id = ?`,
+        `SELECT COUNT(*) AS count FROM submission_routing_teams
+          WHERE submission_id = 'demo-evaluation-submission-calm'
+            AND event_id = ?`,
       )
         .bind(DEMO_EVENT_ID)
-        .first<{ routedTeamId: string | null }>(),
-    ).resolves.toEqual({ routedTeamId: null });
+        .first<{ count: number }>(),
+    ).resolves.toEqual({ count: 0 });
   });
 
   it("refuses non-terminal work before changing D1 or R2", async () => {

@@ -2000,10 +2000,11 @@ components:
     DirectSessionCommand:
       type: object
       additionalProperties: false
-      required: [title, format, speakers]
+      required: [title, trackId, format, speakers]
       properties:
         title: { type: string, minLength: 3, maxLength: 180 }
         description: { type: string, maxLength: 3000, default: "" }
+        trackId: { type: string, minLength: 1, maxLength: 100 }
         format:
           type: string
           minLength: 1
@@ -2974,6 +2975,14 @@ components:
         confirmedWithoutReview:
           default: false
           type: boolean
+        sessionTrackId:
+          default: null
+          description: Required for an accepted decision and must identify one of the proposal's submitted tracks.
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 100
+            - type: "null"
         sessionDurationMinutes:
           default: null
           anyOf:

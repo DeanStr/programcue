@@ -467,6 +467,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           values.get("includeReviewerFeedback") === "true",
         release: released,
         confirmedWithoutReview: values.get("confirmedWithoutReview") === "true",
+        sessionTrackId: values.get("sessionTrackId") || null,
         sessionDurationMinutes: values.get("sessionDurationMinutes") || null,
       });
       const realtimeFailure = await recordRouteChange(env, viewer, {

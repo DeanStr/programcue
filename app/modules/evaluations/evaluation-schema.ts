@@ -194,13 +194,23 @@ export const conflictDeclarationSchema = z.object({
     .max(2_000),
 });
 
-export const decisionSchema = z.object({
+export const decisionBaseSchema = z.object({
   submissionId: z.string().trim().min(1),
   decision: z.enum(["accepted", "rejected", "waitlisted"]),
   rationale: z.string().trim().max(4_000),
   includeReviewerFeedback: z.boolean().default(false),
   release: z.boolean().default(false),
   confirmedWithoutReview: z.boolean().default(false),
+  sessionTrackId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .nullable()
+    .default(null)
+    .describe(
+      "Required for an accepted decision and must identify one of the proposal's submitted tracks.",
+    ),
   sessionDurationMinutes: z.coerce
     .number()
     .int()
@@ -209,6 +219,23 @@ export const decisionSchema = z.object({
     .nullable()
     .default(null),
 });
+
+export function requireAcceptedSessionTrack(
+  decision: { decision: string; sessionTrackId: string | null },
+  context: z.RefinementCtx,
+) {
+  if (decision.decision === "accepted" && !decision.sessionTrackId) {
+    context.addIssue({
+      code: "custom",
+      path: ["sessionTrackId"],
+      message: "Choose the programme track for the accepted session.",
+    });
+  }
+}
+
+export const decisionSchema = decisionBaseSchema.superRefine(
+  requireAcceptedSessionTrack,
+);
 
 export const evaluationTeamSchema = z.object({
   teamId: z.string().trim().min(1).nullable().default(null),

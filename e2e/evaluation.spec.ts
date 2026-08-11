@@ -115,6 +115,9 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await page.getByRole("button", { name: "Decide" }).first().click();
   const decision = page.getByRole("dialog", { name: /Decision ·/ });
   await expect(decision).toContainText("Effect preview");
+  await expect(
+    decision.getByLabel("Acceptance programme track"),
+  ).not.toHaveValue("");
   await expect(decision).toContainText(
     "Release updates applicant-visible state",
   );

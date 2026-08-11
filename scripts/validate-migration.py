@@ -65,7 +65,7 @@ for table, expected in {
     "organisation_ai_settings": {"provider", "model", "revision", "last_updated_by_person_id", "last_operation_id"},
     "memberships": {"organisation_id", "event_id", "person_id", "role", "revoked_at"},
     "form_versions": {"event_id", "schema_json", "routing_json", "settings_snapshot_json", "revision"},
-    "submissions": {"submitted_snapshot_json", "revision", "last_operation_id", "routed_team_id"},
+    "submissions": {"submitted_snapshot_json", "revision", "last_operation_id"},
     "submission_track_selections": {"submission_id", "event_id", "track_id", "track_name_snapshot", "position"},
     "submission_routing_teams": {"submission_id", "event_id", "team_id"},
     "submission_decisions": {"notification_feedback_json", "effect_preview_json"},

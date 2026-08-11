@@ -2069,6 +2069,22 @@ function DecisionDialog() {
     selected,
     selectedHasCompletedReview,
   } = useEvaluationAdminModel();
+  const [decision, setDecision] = useState<
+    "accepted" | "waitlisted" | "rejected"
+  >("accepted");
+  const [sessionTrackId, setSessionTrackId] = useState("");
+  const defaultSessionTrackId =
+    selected?.tracks.length === 1 ? selected.tracks[0]!.id : "";
+  const selectedSessionTrack = selected?.tracks.find(
+    (track) => track.id === sessionTrackId,
+  );
+  const sessionTrackSelectionUnavailable = Boolean(
+    sessionTrackId && !selectedSessionTrack,
+  );
+  useEffect(() => {
+    setDecision("accepted");
+    setSessionTrackId(defaultSessionTrackId);
+  }, [defaultSessionTrackId, selected?.id]);
   return selected ? (
     <Dialog
       title={`Decision · ${selected.title}`}
@@ -2087,11 +2103,54 @@ function DecisionDialog() {
         <input type="hidden" name="submissionId" value={selected.id} />
         <label className="label">
           Decision
-          <select className="select" name="decision">
+          <select
+            className="select"
+            name="decision"
+            value={decision}
+            onChange={(event) =>
+              setDecision(
+                event.target.value as "accepted" | "waitlisted" | "rejected",
+              )
+            }
+          >
             <option value="accepted">Accept</option>
             <option value="waitlisted">Maybe</option>
             <option value="rejected">Reject</option>
           </select>
+        </label>
+        <label className="label">
+          Acceptance programme track
+          <select
+            className="select"
+            name="sessionTrackId"
+            value={sessionTrackSelectionUnavailable ? "" : sessionTrackId}
+            onChange={(event) => setSessionTrackId(event.target.value)}
+            required={decision === "accepted"}
+            disabled={decision !== "accepted"}
+            aria-invalid={sessionTrackSelectionUnavailable || undefined}
+            aria-describedby="acceptance-track-help"
+          >
+            <option value="">Choose the accepted session track</option>
+            {selected.tracks.map((track) => (
+              <option key={track.id} value={track.id}>
+                {track.name}
+                {track.name === track.submittedName
+                  ? ""
+                  : ` (submitted as ${track.submittedName})`}
+              </option>
+            ))}
+          </select>
+          <span
+            className={
+              sessionTrackSelectionUnavailable ? "field-error" : "help"
+            }
+            id="acceptance-track-help"
+            role={sessionTrackSelectionUnavailable ? "alert" : undefined}
+          >
+            {sessionTrackSelectionUnavailable
+              ? "The previously selected programme track is no longer available. Choose an available track again."
+              : "The accepted session uses this confirmed programme track. Only tracks submitted with the proposal are available."}
+          </span>
         </label>
         <label className="label">
           Rationale
@@ -2141,6 +2200,15 @@ function DecisionDialog() {
               Releasing an acceptance creates a linked unscheduled session,
               speaker relationships and the configured automatic onboarding task
               plan; saving a decision draft does not.
+            </li>
+            <li>
+              {decision === "accepted" && sessionTrackSelectionUnavailable
+                ? "The previously selected programme track is no longer available. Choose an available track again."
+                : decision === "accepted" && selectedSessionTrack
+                  ? `The accepted session will use ${selectedSessionTrack.name}.`
+                  : decision === "accepted"
+                    ? "Choose the programme track before saving or releasing this acceptance."
+                    : "This outcome does not create a programme session."}
             </li>
             <li>
               Release cancels every unfinished reviewer assignment for this

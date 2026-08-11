@@ -50,6 +50,7 @@ describe("manual person creation warnings", () => {
       title,
       description: "A direct session created after reviewing identity matches.",
       format: "presentation",
+      trackId: "demo-track-ai",
       durationMinutes: "45",
       speakers: JSON.stringify([
         {

@@ -33,6 +33,7 @@ export { ProgramCueEventAgent } from "../app/modules/ai/program-cue-agent.server
 
 declare global {
   interface CloudflareEnvironment extends Env {
+    DEFAULT_EVENT_ID?: string;
     EMAIL_PROVIDER?: "resend" | "mailpit";
     BETTER_AUTH_SECRET?: string;
     RESEND_API_KEY?: string;

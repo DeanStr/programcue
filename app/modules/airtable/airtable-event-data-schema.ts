@@ -179,7 +179,7 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
     entityType: "submission",
     query: `SELECT id, event_id, form_version_id, submitter_person_id,
                    submitter_email, public_reference, title, category, format,
-                   routed_team_id, status, answers_json,
+                   status, answers_json,
                    submitted_snapshot_json, revision, submitted_at,
                    withdrawn_at, created_at, updated_at
               FROM submissions WHERE event_id = ? ORDER BY id`,
@@ -193,7 +193,6 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
         title: text,
         category: nullableText,
         format: nullableText,
-        routed_team_id: nullableText,
         status: z.enum([
           "draft",
           "submitted",

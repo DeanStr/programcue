@@ -203,6 +203,7 @@ test.describe.serial("submissions vertical slice", () => {
     await directSession
       .getByLabel("Session title")
       .fill(`Sponsor briefing ${unique}`);
+    await directSession.getByLabel("Track").selectOption({ index: 1 });
     await directSession
       .getByLabel("Description")
       .fill("A confirmed sponsor programme contribution.");

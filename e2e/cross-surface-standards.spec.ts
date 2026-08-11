@@ -107,6 +107,7 @@ test.describe.serial("cross-surface interaction standards", () => {
       }),
     });
     await directSessionForm.getByLabel("Session title").fill(title);
+    await directSessionForm.getByLabel("Track").selectOption({ index: 1 });
     await directSessionForm.getByLabel("Speaker 1 name").fill("Priya Shah");
     await directSessionForm
       .getByLabel("Email")

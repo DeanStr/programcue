@@ -246,11 +246,16 @@ export const saveFormSchema = z
           "The session title must be an always-visible required short-text field",
       });
     }
-    if (categoryField?.type !== "multi_select") {
+    const expectedCategoryType =
+      input.kind === "direct_session" ? "select" : "multi_select";
+    if (categoryField?.type !== expectedCategoryType) {
       context.addIssue({
         code: "custom",
         path: ["schema", "fields"],
-        message: "The tracks field must allow one or more choices",
+        message:
+          input.kind === "direct_session"
+            ? "The direct-session track field must allow exactly one choice"
+            : "The application tracks field must allow one or more choices",
       });
     } else {
       if (categoryField.options.length === 0) {

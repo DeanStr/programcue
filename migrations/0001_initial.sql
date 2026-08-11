@@ -162,7 +162,6 @@ CREATE TABLE submissions (
   title TEXT NOT NULL DEFAULT '',
   category TEXT,
   format TEXT,
-  routed_team_id TEXT,
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','submitted','assigned','in_review','decision_ready','accepted','waitlisted','rejected','withdrawn')),
   answers_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(answers_json)),
   submitted_snapshot_json TEXT CHECK (submitted_snapshot_json IS NULL OR json_valid(submitted_snapshot_json)),
@@ -175,7 +174,6 @@ CREATE TABLE submissions (
   UNIQUE(event_id, public_reference),
   UNIQUE(id, event_id),
   FOREIGN KEY (form_version_id, event_id) REFERENCES form_versions(id, event_id),
-  FOREIGN KEY (routed_team_id, event_id) REFERENCES evaluation_teams(id, event_id),
   CHECK (
     (status = 'draft' AND submitted_at IS NULL AND submitted_snapshot_json IS NULL)
     OR
@@ -1470,7 +1468,6 @@ CREATE INDEX idx_submissions_event_status ON submissions(event_id, status, updat
 CREATE INDEX idx_submissions_event_category_status ON submissions(event_id, category, status, updated_at DESC);
 CREATE INDEX idx_submissions_submitter ON submissions(event_id, submitter_person_id, updated_at DESC);
 CREATE INDEX idx_submissions_email ON submissions(event_id, submitter_email, updated_at DESC);
-CREATE INDEX idx_submissions_routed_team ON submissions(event_id, routed_team_id, status);
 CREATE INDEX idx_submission_track_selections_event
   ON submission_track_selections(event_id, track_id, submission_id);
 CREATE INDEX idx_submission_routing_teams_event
@@ -1675,7 +1672,7 @@ BEGIN
 END;
 
 CREATE TRIGGER submissions_participant_retention_no_pii_update
-BEFORE UPDATE OF event_id, form_version_id, submitter_person_id, submitter_email, public_reference, title, category, format, routed_team_id, answers_json, submitted_snapshot_json ON submissions
+BEFORE UPDATE OF event_id, form_version_id, submitter_person_id, submitter_email, public_reference, title, category, format, answers_json, submitted_snapshot_json ON submissions
 WHEN EXISTS (
   SELECT 1 FROM participant_retention_locked_events locked
   WHERE locked.event_id IN (OLD.event_id, NEW.event_id)

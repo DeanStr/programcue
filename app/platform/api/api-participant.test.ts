@@ -1187,6 +1187,7 @@ describe("administration command and evaluation webhook parity", () => {
       description:
         "A bounded direct-session command created by an integration.",
       format: "presentation",
+      trackId: "demo-track-ai",
       speakers: [
         {
           name: "API Speaker",
