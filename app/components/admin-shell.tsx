@@ -1,4 +1,3 @@
-import { Command } from "cmdk";
 import { useHotkeys } from "react-hotkeys-hook";
 import {
   Bell,
@@ -6,9 +5,7 @@ import {
   CalendarCog,
   CalendarDays,
   Cable,
-  CheckCircle2,
   ChevronDown,
-  CircleHelp,
   ClipboardCopy,
   Files,
   Grid3X3,
@@ -18,17 +15,14 @@ import {
   Mail,
   PanelTop,
   Plus,
-  Save,
   Search,
   Settings,
   Sparkles,
-  Tags,
-  UserRound,
   UsersRound,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Form,
   Link,
   NavLink,
   useFetcher,
@@ -46,10 +40,13 @@ import type {
   SavedViewListItem,
 } from "~/platform/operations/saved-view-service.server";
 
-import { Dialog } from "./dialog";
+import { AdminAuxiliaryDialogs } from "./admin-shell-dialogs";
+import { AdminCommandDialog } from "./admin-shell-command-dialog";
 import { Button } from "./ui/button";
 
-const NAV_ITEMS = [
+export type AdminNavigationItem = readonly [string, LucideIcon, string];
+
+export const NAV_ITEMS = [
   ["command", LayoutDashboard, "Command Centre"],
   ["event", CalendarCog, "Event Setup"],
   ["submissions", Files, "Submissions"],
@@ -63,7 +60,16 @@ const NAV_ITEMS = [
   ["integrations", Cable, "Integrations"],
   ["settings", Settings, "Settings"],
   ["operations", Activity, "Operations"],
-] as const;
+] as const satisfies ReadonlyArray<AdminNavigationItem>;
+export type AdminShellDialog =
+  | "command"
+  | "event"
+  | "new"
+  | "notifications"
+  | "viewer"
+  | "views"
+  | "shortcuts"
+  | null;
 
 export type AdminShellEvent = {
   id: string;
@@ -127,29 +133,6 @@ function savedViewArea(pathname: string): SavedViewArea | null {
   return null;
 }
 
-function recordIcon(kind: CommandRecord["kind"]) {
-  switch (kind) {
-    case "speaker":
-      return UserRound;
-    case "submission":
-      return Files;
-    case "session":
-      return CalendarDays;
-    case "task":
-      return ListChecks;
-    case "room":
-      return Grid3X3;
-    case "track":
-      return Tags;
-    case "resource":
-      return BookOpen;
-    case "operation":
-      return Activity;
-  }
-  kind satisfies never;
-  throw new Error(`Unsupported command record kind: ${String(kind)}`);
-}
-
 const ADMIN_SECTION_LABELS: Record<string, string> = Object.fromEntries(
   NAV_ITEMS.map(([id, , label]) => [id, label]),
 );
@@ -206,8 +189,8 @@ export function adminPageBreadcrumbs(pathname: string) {
   ];
 }
 
-type AdminCommandSearchScope = "event" | "organisation";
-type AdminCommandSearchResult = {
+export type AdminCommandSearchScope = "event" | "organisation";
+export type AdminCommandSearchResult = {
   key: string;
   records: CommandRecord[];
 };
@@ -262,16 +245,7 @@ export function AdminShell({
   const navigate = useNavigate();
   const submit = useSubmit();
   const [collapsed, setCollapsed] = useState(false);
-  const [dialog, setDialog] = useState<
-    | "command"
-    | "event"
-    | "new"
-    | "notifications"
-    | "viewer"
-    | "views"
-    | "shortcuts"
-    | null
-  >(null);
+  const [dialog, setDialog] = useState<AdminShellDialog>(null);
   const [commandQuery, setCommandQuery] = useState("");
   const [commandScope, setCommandScope] =
     useState<AdminCommandSearchScope>("event");
@@ -560,687 +534,39 @@ export function AdminShell({
         {children}
       </main>
 
-      {dialog === "command" ? (
-        <Dialog title="Search or run a command" onClose={closeDialog}>
-          <Command label="Program Cue commands" shouldFilter={false}>
-            <label className="label">
-              Search Program Cue
-              <Command.Input
-                className="field"
-                autoFocus
-                style={{ width: "100%" }}
-                value={commandQuery}
-                onValueChange={setCommandQuery}
-                placeholder="Record, operation or command"
-              />
-            </label>
-            {commandPalette.organisationSearchAllowed ? (
-              <fieldset className="command-scope" aria-label="Search scope">
-                <button
-                  type="button"
-                  className={`btn small${commandScope === "event" ? " primary" : ""}`}
-                  aria-pressed={commandScope === "event"}
-                  onClick={() => setCommandScope("event")}
-                >
-                  Current event
-                </button>
-                <button
-                  type="button"
-                  className={`btn small${commandScope === "organisation" ? " primary" : ""}`}
-                  aria-pressed={commandScope === "organisation"}
-                  onClick={() => setCommandScope("organisation")}
-                >
-                  Organisation
-                </button>
-              </fieldset>
-            ) : null}
-            <Command.List className="command-results">
-              {commandQuery.trim().length >= 2 ? (
-                <Command.Group heading="Find records">
-                  {recordSearchPending ? (
-                    <div className="command-group-title" role="status">
-                      Searching authorised records…
-                    </div>
-                  ) : null}
-                  {!recordSearchPending &&
-                  currentRecordSearchResult?.length === 0 ? (
-                    <div className="command-group-title">
-                      No authorised records match.
-                    </div>
-                  ) : null}
-                  {currentRecordSearchResult?.map((record) => {
-                    const Icon = recordIcon(record.kind);
-                    return (
-                      <Command.Item
-                        key={`${record.eventId}:${record.kind}:${record.id}`}
-                        value={`${record.label} ${record.description} ${record.aliases.join(" ")}`}
-                        className="command-item"
-                        onSelect={() => selectRecord(record)}
-                      >
-                        <span>
-                          <Icon aria-hidden size={15} />{" "}
-                          <span>
-                            <strong>{record.label}</strong>
-                            <small className="subtle">
-                              {record.description}
-                              {commandScope === "organisation"
-                                ? ` · ${record.eventName}`
-                                : ""}
-                            </small>
-                          </span>
-                        </span>
-                        <span className="meta">{record.kind}</span>
-                      </Command.Item>
-                    );
-                  })}
-                </Command.Group>
-              ) : null}
-              {navigationItems.some(([, , label]) =>
-                staticMatch(`navigate ${label}`),
-              ) ? (
-                <Command.Group heading="Navigate">
-                  {navigationItems
-                    .filter(([, , label]) => staticMatch(`navigate ${label}`))
-                    .map(([id, Icon, label]) => (
-                      <Command.Item
-                        key={id}
-                        value={`navigate ${label}`}
-                        className={`command-item${location.pathname === `/admin/${id}` ? " selected" : ""}`}
-                        onSelect={() => selectCommand(`/admin/${id}`)}
-                      >
-                        <span>
-                          <Icon aria-hidden size={15} /> {label}
-                        </span>
-                        <span className="meta">Open</span>
-                      </Command.Item>
-                    ))}
-                </Command.Group>
-              ) : null}
-              {viewer.role !== "committee_chair" &&
-              [
-                [
-                  "Create direct session proposal application",
-                  Files,
-                  "Direct session",
-                  "/admin/submissions?create=direct-session",
-                ],
-                [
-                  "Create readiness task checklist",
-                  ListChecks,
-                  "Task",
-                  "/admin/tasks?create=task",
-                ],
-              ].some(([value]) => staticMatch(String(value))) ? (
-                <Command.Group heading="Create">
-                  {(
-                    [
-                      [
-                        "Create direct session proposal application",
-                        Files,
-                        "Direct session",
-                        "/admin/submissions?create=direct-session",
-                      ],
-                      [
-                        "Create readiness task checklist",
-                        ListChecks,
-                        "Task",
-                        "/admin/tasks?create=task",
-                      ],
-                    ] as const
-                  )
-                    .filter(([value]) => staticMatch(value))
-                    .map(([value, Icon, label, href]) => (
-                      <Command.Item
-                        key={value}
-                        value={value}
-                        className="command-item"
-                        onSelect={() => selectCommand(href)}
-                      >
-                        <span>
-                          <Icon aria-hidden size={15} /> {label}
-                        </span>
-                        <span className="meta">Configure</span>
-                      </Command.Item>
-                    ))}
-                </Command.Group>
-              ) : null}
-              {viewer.role !== "committee_chair" &&
-              [
-                "prepare targeted reminder follow up",
-                "bulk update tag archive restore sessions",
-                "export event csv data",
-                "import event csv data",
-                "save current view filter",
-              ].some(staticMatch) ? (
-                <Command.Group heading="Actions">
-                  {staticMatch("prepare targeted reminder follow up") ? (
-                    <Command.Item
-                      value="prepare targeted reminder follow up"
-                      className="command-item"
-                      onSelect={() =>
-                        selectCommand("/admin/communications?action=reminder")
-                      }
-                    >
-                      <span>
-                        <Mail aria-hidden size={15} /> Prepare targeted reminder
-                      </span>
-                      <span className="meta">Preview first</span>
-                    </Command.Item>
-                  ) : null}
-                  {staticMatch("bulk update tag archive restore sessions") ? (
-                    <Command.Item
-                      value="bulk update tag archive restore sessions"
-                      className="command-item"
-                      onSelect={() => selectCommand("/admin/sessions/bulk")}
-                    >
-                      <span>
-                        <Tags aria-hidden size={15} /> Bulk update sessions
-                      </span>
-                      <span className="meta">Preview first</span>
-                    </Command.Item>
-                  ) : null}
-                  {staticMatch("export event csv data") ? (
-                    <Command.Item
-                      value="export event csv data"
-                      className="command-item"
-                      onSelect={() =>
-                        selectCommand("/admin/operations?panel=exports")
-                      }
-                    >
-                      <span>
-                        <Activity aria-hidden size={15} /> Export event data
-                      </span>
-                      <span className="meta">Configure</span>
-                    </Command.Item>
-                  ) : null}
-                  {staticMatch("import event csv data") ? (
-                    <Command.Item
-                      value="import event csv data"
-                      className="command-item"
-                      onSelect={() =>
-                        selectCommand("/admin/operations?panel=imports")
-                      }
-                    >
-                      <span>
-                        <Activity aria-hidden size={15} /> Import CSV records
-                      </span>
-                      <span className="meta">Preview first</span>
-                    </Command.Item>
-                  ) : null}
-                  {viewArea && staticMatch("save current view filter") ? (
-                    <Command.Item
-                      value="save current view filter"
-                      className="command-item"
-                      onSelect={() => setDialog("views")}
-                    >
-                      <span>
-                        <Save aria-hidden size={15} /> Save current view
-                      </span>
-                      <span className="meta">Name view</span>
-                    </Command.Item>
-                  ) : null}
-                </Command.Group>
-              ) : null}
-              {commandPalette.savedViews.some((view) =>
-                staticMatch(`${view.name} ${view.area} saved view`),
-              ) ? (
-                <Command.Group heading="Saved views">
-                  {commandPalette.savedViews
-                    .filter((view) =>
-                      staticMatch(`${view.name} ${view.area} saved view`),
-                    )
-                    .map((view) => (
-                      <Command.Item
-                        key={view.id}
-                        value={`${view.name} ${view.area} saved view`}
-                        className="command-item"
-                        onSelect={() => selectCommand(view.href)}
-                      >
-                        <span>
-                          <Save aria-hidden size={15} />{" "}
-                          <span>
-                            <strong>{view.name}</strong>
-                            <small className="subtle">
-                              {view.area} ·{" "}
-                              {view.visibility === "event"
-                                ? `shared by ${view.ownerName}`
-                                : "private"}
-                            </small>
-                          </span>
-                        </span>
-                        <span className="meta">Open</span>
-                      </Command.Item>
-                    ))}
-                </Command.Group>
-              ) : null}
-              {!commandQuery.trim() && commandPalette.recentRecords.length ? (
-                <Command.Group heading="Recent">
-                  {commandPalette.recentRecords.map((record) => (
-                    <Command.Item
-                      key={record.id}
-                      value={`${record.label} ${record.description}`}
-                      className="command-item"
-                      onSelect={() => selectCommand(record.href)}
-                    >
-                      <span>
-                        <Activity aria-hidden size={15} />{" "}
-                        <span>
-                          <strong>{record.label}</strong>
-                          <small className="subtle">{record.description}</small>
-                        </span>
-                      </span>
-                      <span className="meta">Open</span>
-                    </Command.Item>
-                  ))}
-                </Command.Group>
-              ) : null}
-              {["help shortcuts keyboard", "help api documentation"].some(
-                staticMatch,
-              ) ? (
-                <Command.Group heading="Help">
-                  {staticMatch("help shortcuts keyboard") ? (
-                    <Command.Item
-                      value="help shortcuts keyboard"
-                      className="command-item"
-                      onSelect={() => setDialog("shortcuts")}
-                    >
-                      <span>
-                        <CircleHelp aria-hidden size={15} /> Keyboard shortcuts
-                      </span>
-                      <span className="meta">?</span>
-                    </Command.Item>
-                  ) : null}
-                  {staticMatch("help api documentation") ? (
-                    <Command.Item
-                      value="help api documentation"
-                      className="command-item"
-                      onSelect={() => {
-                        closeDialog();
-                        window.open(
-                          "/api/docs",
-                          "_blank",
-                          "noopener,noreferrer",
-                        );
-                      }}
-                    >
-                      <span>
-                        <BookOpen aria-hidden size={15} /> API reference
-                      </span>
-                      <span className="meta">New tab</span>
-                    </Command.Item>
-                  ) : null}
-                </Command.Group>
-              ) : null}
-              {canOpenAdminAssistant(viewer.role) &&
-              staticMatch("ask assistant event help ai") ? (
-                <Command.Group heading="Ask assistant">
-                  <Command.Item
-                    value="ask assistant event help ai"
-                    className="command-item"
-                    onSelect={() => selectCommand("/admin/assistant")}
-                  >
-                    <span>
-                      <Sparkles aria-hidden size={15} /> Ask about this event
-                    </span>
-                    <span className="meta">Open assistant</span>
-                  </Command.Item>
-                </Command.Group>
-              ) : null}
-            </Command.List>
-          </Command>
-        </Dialog>
-      ) : null}
+      <AdminCommandDialog
+        open={dialog === "command"}
+        closeDialog={closeDialog}
+        commandPalette={commandPalette}
+        commandQuery={commandQuery}
+        setCommandQuery={setCommandQuery}
+        commandScope={commandScope}
+        setCommandScope={setCommandScope}
+        recordSearchPending={recordSearchPending}
+        currentRecordSearchResult={currentRecordSearchResult}
+        navigationItems={navigationItems}
+        pathname={location.pathname}
+        staticMatch={staticMatch}
+        selectRecord={selectRecord}
+        selectCommand={selectCommand}
+        setDialog={setDialog}
+        viewArea={viewArea}
+        viewerRole={viewer.role}
+        assistantAvailable={canOpenAdminAssistant(viewer.role)}
+      />
 
-      {dialog === "views" && viewArea ? (
-        <Dialog
-          title="Saved views"
-          onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
-        >
-          <Form method="post" action="/admin/views" className="stack">
-            <input type="hidden" name="intent" value="create" />
-            <input type="hidden" name="area" value={viewArea} />
-            <input type="hidden" name="href" value={currentHref} />
-            <input type="hidden" name="returnTo" value={currentHref} />
-            <label className="label">
-              View name
-              <input
-                className="field"
-                name="name"
-                required
-                minLength={2}
-                maxLength={80}
-                autoFocus
-              />
-            </label>
-            <label className="label">
-              Visibility
-              <select
-                className="select"
-                name="visibility"
-                defaultValue="private"
-              >
-                <option value="private">Only me</option>
-                <option value="event">Event administrators</option>
-              </select>
-            </label>
-            <p className="help">
-              This saves the current filters and sorting encoded in the page
-              URL.
-            </p>
-            <button className="btn primary" type="submit">
-              <Save aria-hidden size={14} /> Save view
-            </button>
-          </Form>
-          {commandPalette.savedViews.filter((view) => view.area === viewArea)
-            .length ? (
-            <>
-              <div className="divider" />
-              <h3>{viewArea} views</h3>
-              <div className="stack">
-                {commandPalette.savedViews
-                  .filter((view) => view.area === viewArea)
-                  .map((view) => (
-                    <div className="card pad" key={view.id}>
-                      <strong>{view.name}</strong>
-                      <p className="subtle">
-                        {view.visibility === "event"
-                          ? `Shared by ${view.ownerName}`
-                          : "Private"}
-                      </p>
-                      <div className="page-actions">
-                        <button
-                          type="button"
-                          className="btn small"
-                          onClick={() => selectCommand(view.href)}
-                        >
-                          Open
-                        </button>
-                        {view.canDelete ? (
-                          <Form method="post" action="/admin/views">
-                            <input type="hidden" name="intent" value="delete" />
-                            <input
-                              type="hidden"
-                              name="viewId"
-                              value={view.id}
-                            />
-                            <input
-                              type="hidden"
-                              name="returnTo"
-                              value={currentHref}
-                            />
-                            <button className="btn small danger" type="submit">
-                              Delete
-                            </button>
-                          </Form>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </>
-          ) : null}
-        </Dialog>
-      ) : null}
-
-      {dialog === "shortcuts" ? (
-        <Dialog
-          title="Keyboard shortcuts"
-          onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
-        >
-          <dl className="shortcut-list">
-            <div>
-              <dt>
-                <kbd>⌘/Ctrl</kbd> + <kbd>K</kbd>
-              </dt>
-              <dd>Search records and run commands</dd>
-            </div>
-            <div>
-              <dt>
-                <kbd>?</kbd>
-              </dt>
-              <dd>Open this shortcut reference</dd>
-            </div>
-            <div>
-              <dt>
-                <kbd>Esc</kbd>
-              </dt>
-              <dd>Close the active dialog or command palette</dd>
-            </div>
-            <div>
-              <dt>
-                <kbd>Tab</kbd> / <kbd>↑</kbd> / <kbd>↓</kbd>
-              </dt>
-              <dd>Move through available commands</dd>
-            </div>
-            <div>
-              <dt>
-                <kbd>Enter</kbd>
-              </dt>
-              <dd>Open the highlighted command</dd>
-            </div>
-          </dl>
-        </Dialog>
-      ) : null}
-
-      {dialog === "event" ? (
-        <Dialog
-          title="Current event"
-          onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
-        >
-          <div className="stack">
-            {eventOptions.map((option) => (
-              <Form
-                method="post"
-                action="/events/select"
-                reloadDocument
-                className={`card pad event-switcher-option${
-                  option.eventId === event.id ? " is-current" : ""
-                }`}
-                key={option.eventId}
-              >
-                <input type="hidden" name="eventId" value={option.eventId} />
-                <input type="hidden" name="returnTo" value={currentHref} />
-                <div className="card-title">
-                  <div>
-                    <strong>{option.eventName}</strong>
-                    <p className="subtle">
-                      {option.organisationName} ·{" "}
-                      {option.invitationPending
-                        ? `${option.role.replaceAll("_", " ")} invitation pending`
-                        : option.role.replaceAll("_", " ")}
-                      {!option.invitationPending && option.pendingInvitationRole
-                        ? ` · ${option.pendingInvitationRole.replaceAll("_", " ")} invitation pending`
-                        : ""}
-                    </p>
-                  </div>
-                  {option.eventId === event.id ? (
-                    <span className="status success">Current</span>
-                  ) : null}
-                </div>
-                {option.eventId !== event.id || option.pendingInvitationRole ? (
-                  <button className="btn small" type="submit">
-                    {option.pendingInvitationRole
-                      ? `Accept ${option.pendingInvitationRole.replaceAll("_", " ")} invitation${option.eventId === event.id ? "" : " and switch event"}`
-                      : "Switch event"}
-                  </button>
-                ) : null}
-              </Form>
-            ))}
-          </div>
-          {viewer.role !== "committee_chair" ? (
-            <>
-              <div className="divider" />
-              <div className="grid grid-2">
-                <Link
-                  className="card pad"
-                  to="/admin/event"
-                  onClick={closeDialog}
-                >
-                  <strong>Event Setup</strong>
-                  <p className="subtle">
-                    Edit the current event configuration.
-                  </p>
-                </Link>
-                {viewer.canCreateEvents ? (
-                  <Link
-                    className="card pad"
-                    to="/admin/events/clone"
-                    onClick={closeDialog}
-                  >
-                    <strong>Clone event</strong>
-                    <p className="subtle">
-                      Create a clean event from these templates.
-                    </p>
-                  </Link>
-                ) : null}
-              </div>
-            </>
-          ) : null}
-        </Dialog>
-      ) : null}
-
-      {dialog === "new" ? (
-        <Dialog
-          title="Create"
-          onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
-        >
-          <div className="grid grid-2">
-            <Link
-              className="card pad"
-              to="/admin/submissions"
-              onClick={closeDialog}
-            >
-              <strong>Submission</strong>
-              <p className="subtle">Add a direct programme proposal.</p>
-            </Link>
-            <Link className="card pad" to="/admin/tasks" onClick={closeDialog}>
-              <strong>Task</strong>
-              <p className="subtle">Create readiness work.</p>
-            </Link>
-          </div>
-        </Dialog>
-      ) : null}
-
-      {dialog === "notifications" ? (
-        <Dialog
-          title="Notifications"
-          onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
-        >
-          {notifications.length ? (
-            <div className="stack">
-              {notifications.map((notification) => (
-                <Link
-                  className="card pad"
-                  to={notification.href}
-                  onClick={closeDialog}
-                  key={notification.label}
-                >
-                  <span className={`status ${notification.severity}`}>
-                    {notification.count}
-                  </span>
-                  <strong className="mt">{notification.label}</strong>
-                  <p className="subtle">Open the exact affected records.</p>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <div className="pc-empty-state">
-              <CheckCircle2 aria-hidden className="pc-state-icon" />
-              <h2>No operational alerts</h2>
-              <p>
-                There are no overdue tasks, blocking conflicts or failed
-                operations in the current event.
-              </p>
-            </div>
-          )}
-        </Dialog>
-      ) : null}
-
-      {dialog === "viewer" ? (
-        <Dialog
-          title={viewer.name}
-          onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
-        >
-          <p>{viewer.email}</p>
-          <span className="status info">
-            <UserRound aria-hidden size={13} /> {viewer.role}
-          </span>
-          {viewer.demo ? (
-            <>
-              <p className="help">
-                Demo identities are enabled only by the demo Worker
-                configuration.
-              </p>
-              <Link className="btn mt" to="/demo" onClick={closeDialog}>
-                Evaluator guide and reset
-              </Link>
-              <div className="divider" />
-              <h3>Switch demo surface</h3>
-              <div className="grid grid-2">
-                {(
-                  [
-                    "owner",
-                    "administrator",
-                    "evaluator",
-                    "submitter",
-                    "speaker",
-                  ] as const
-                ).map((role) => (
-                  <form method="post" action="/demo/role" key={role}>
-                    <input type="hidden" name="role" value={role} />
-                    <button
-                      className="btn"
-                      type="submit"
-                      style={{ width: "100%", textTransform: "capitalize" }}
-                    >
-                      {role}
-                    </button>
-                  </form>
-                ))}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="divider" />
-              <Form method="post" action="/sign-out">
-                <button className="btn" type="submit">
-                  Sign out
-                </button>
-              </Form>
-            </>
-          )}
-        </Dialog>
-      ) : null}
+      <AdminAuxiliaryDialogs
+        dialog={dialog}
+        viewArea={viewArea}
+        closeDialog={closeDialog}
+        currentHref={currentHref}
+        commandPalette={commandPalette}
+        selectCommand={selectCommand}
+        eventOptions={eventOptions}
+        event={event}
+        viewer={viewer}
+        notifications={notifications}
+      />
     </div>
   );
 }

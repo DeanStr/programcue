@@ -1,333 +1,51 @@
 import { z } from "zod";
 
-import { parseSessionFormatsConfiguration } from "~/modules/events/event-configuration";
-import {
-  roomInputSchema,
-  sessionFormatInputSchema,
-} from "~/modules/events/event-schema";
 import { parseCsv } from "./csv";
 import {
   dataImportMutationStatements,
   normalizeImportRow,
   roomScheduleErrors,
 } from "./data-import-resources.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
-  eventExportResources,
-  type EventExportResource,
-} from "~/platform/operations/data-export-service.server";
+  DataImportStateError,
+  importResourceSchema,
+  importSchemas,
+  issueMessages,
+  requestedPersonEmails,
+  requestedSpeakerTargetIds,
+  storedPreviewSchema,
+  type EventImportResource,
+  type ImportScalar,
+  type InvalidImportRow,
+  type NormalizedImportRow,
+} from "./data-import-validation.server";
+import { DataImportValidationContext } from "./data-import-validation-context.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   WebhookService,
   type PreparedWebhookEvent,
 } from "~/platform/operations/webhook-service.server";
 
-const importResources = eventExportResources.filter(
-  (resource): resource is Exclude<EventExportResource, "audit"> =>
-    resource !== "audit",
-);
-const importResourceSchema = z.enum(importResources);
-export type EventImportResource = z.infer<typeof importResourceSchema>;
+export {
+  DataImportStateError,
+  type EventImportResource,
+  type ImportScalar,
+  type NormalizedImportRow,
+  type ValidationContextRecord,
+} from "./data-import-validation.server";
 
 const IMPORT_BYTES_LIMIT = 512_000;
 // Leave headroom below Workers' 1,000 D1-query invocation limit for framework
 // and post-commit bookkeeping that is outside this service's estimate.
 const TASK_IMPORT_D1_QUERY_BUDGET = 800;
 const TASK_IMPORT_FIXED_QUERY_ALLOWANCE = 20;
-const rfc3339DateTime = z.iso.datetime({ offset: true });
-
-function requestedPersonEmails(
-  resource: EventImportResource,
-  rows: ReadonlyArray<Record<string, unknown>>,
-) {
-  const field =
-    resource === "people"
-      ? "email"
-      : resource === "submissions"
-        ? "submitterEmail"
-        : resource === "tasks"
-          ? "ownerEmail"
-          : null;
-  if (!field) return [];
-  return [
-    ...new Set(
-      rows
-        .map((row) =>
-          typeof row[field] === "string" ? row[field].trim().toLowerCase() : "",
-        )
-        .filter(Boolean),
-    ),
-  ];
-}
-
-function requestedSpeakerTargetIds(
-  resource: EventImportResource,
-  rows: ReadonlyArray<Record<string, unknown>>,
-) {
-  if (resource !== "tasks") return [];
-  return [
-    ...new Set(
-      rows
-        .filter((row) => row.targetType === "speaker")
-        .map((row) =>
-          typeof row.targetId === "string" ? row.targetId.trim() : "",
-        )
-        .filter(Boolean),
-    ),
-  ];
-}
-
-const blankToNull = z
-  .string()
-  .trim()
-  .transform((value) => value || null);
-const blankToInteger = z
-  .string()
-  .trim()
-  .transform((value, context) => {
-    if (!value) return null;
-    if (!/^-?\d+$/u.test(value)) {
-      context.addIssue({ code: "custom", message: "must be a whole number" });
-      return z.NEVER;
-    }
-    return Number(value);
-  });
-const blankToBoolean = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .transform((value, context) => {
-    if (["1", "true", "yes"].includes(value)) return true;
-    if (["0", "false", "no"].includes(value)) return false;
-    context.addIssue({
-      code: "custom",
-      message: "must be true/false, yes/no or 1/0",
-    });
-    return z.NEVER;
-  });
-const blankToEpoch = z
-  .string()
-  .trim()
-  .transform((value, context) => {
-    if (!value) return null;
-    const parsed = rfc3339DateTime.safeParse(value);
-    if (!parsed.success) {
-      context.addIssue({
-        code: "custom",
-        message: "must be an RFC 3339 date and time",
-      });
-      return z.NEVER;
-    }
-    return Math.floor(Date.parse(parsed.data) / 1_000);
-  });
-
-const importSchemas = {
-  people: z
-    .object({
-      email: z
-        .email()
-        .max(320)
-        .transform((value) => value.toLowerCase()),
-      name: z.string().trim().min(1).max(200),
-      organisation: blankToNull.optional().default(""),
-      jobTitle: blankToNull.optional().default(""),
-      profileStatus: z
-        .enum(["draft", "published", "archived"])
-        .optional()
-        .default("draft"),
-      role: z.enum([
-        "administrator",
-        "committee_chair",
-        "evaluator",
-        "submitter",
-        "speaker",
-      ]),
-    })
-    .strict(),
-  submissions: z
-    .object({
-      publicReference: z.string().trim().min(1).max(100),
-      title: z.string().trim().min(1).max(300),
-      category: blankToNull.optional().default(""),
-      format: blankToNull.optional().default(""),
-      status: z.literal("draft", {
-        error:
-          "must be draft; use the submission, evaluation and decision workflows for lifecycle changes",
-      }),
-      submitterEmail: blankToNull.optional().default(""),
-      submittedAt: blankToEpoch.optional().default(null),
-    })
-    .strict()
-    .superRefine((value, context) => {
-      if (value.submittedAt !== null) {
-        context.addIssue({
-          code: "custom",
-          path: ["submittedAt"],
-          message: "must be empty for a draft submission import",
-        });
-      }
-    }),
-  sessions: z
-    .object({
-      slug: z
-        .string()
-        .trim()
-        .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)
-        .max(120),
-      title: z.string().trim().min(1).max(300),
-      description: blankToNull.optional().default(""),
-      trackSlug: blankToNull.optional().default(""),
-      format: sessionFormatInputSchema.shape.key,
-      durationMinutes: z.coerce.number().int().min(1).max(1_440),
-      expectedAttendance: blankToInteger
-        .pipe(z.number().int().nonnegative().nullable())
-        .optional()
-        .default(null),
-      status: z.enum([
-        "unscheduled",
-        "scheduled",
-        "published",
-        "cancelled",
-        "archived",
-      ]),
-      visibility: z.enum(["public", "private", "hidden"]),
-    })
-    .strict()
-    .superRefine((value, context) => {
-      if (
-        value.status === "scheduled" ||
-        value.status === "published" ||
-        value.status === "archived"
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["status"],
-          message:
-            "must be unscheduled or cancelled; use the schedule workflow to schedule or publish sessions and the bulk workflow to archive them",
-        });
-      }
-    }),
-  rooms: z
-    .object({
-      name: roomInputSchema.shape.name,
-      building: blankToNull.optional().default(""),
-      level: blankToNull.optional().default(""),
-      capacity: roomInputSchema.shape.capacity,
-      position: z.coerce
-        .number()
-        .int()
-        .min(0)
-        .max(10_000)
-        .optional()
-        .default(0),
-      status: z.enum(["active", "retired"]).optional().default("active"),
-    })
-    .strict(),
-  tracks: z
-    .object({
-      slug: z
-        .string()
-        .trim()
-        .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)
-        .max(120),
-      name: z.string().trim().min(1).max(200),
-      colour: blankToNull.optional().default(""),
-      position: z.coerce
-        .number()
-        .int()
-        .min(0)
-        .max(10_000)
-        .optional()
-        .default(0),
-      exclusive: blankToBoolean.optional().default(false),
-      public: blankToBoolean.optional().default(true),
-    })
-    .strict(),
-  tasks: z
-    .object({
-      id: blankToNull.optional().default(""),
-      title: z.string().trim().min(1).max(200),
-      description: blankToNull.optional().default(""),
-      targetType: z.enum(["speaker", "session", "event"]),
-      targetId: z.string().trim().min(1).max(200),
-      ownerEmail: blankToNull.optional().default(""),
-      status: z.enum([
-        "not_started",
-        "in_progress",
-        "blocked",
-        "submitted",
-        "completed",
-        "waived",
-        "overdue",
-      ]),
-      statusReason: z.string().trim().max(1_000).optional().default(""),
-      impact: z.enum(["critical", "high", "medium", "low"]),
-      dueAt: blankToEpoch.optional().default(null),
-    })
-    .strict(),
-} as const;
-
-export type ImportScalar = string | number | boolean | null;
-export type ValidationContextRecord = {
-  id: string;
-  eventId?: string;
-  linked?: number;
-  status?: string;
-  revision?: number;
-  name?: string;
-  organisation?: string | null;
-  jobTitle?: string | null;
-  profileStatus?: string;
-  building?: string | null;
-  level?: string | null;
-  capacity?: number;
-  position?: number;
-  colour?: string | null;
-  exclusive?: number;
-  public?: number;
-  scheduleReferences?: number;
-  requiredCapacity?: number | null;
-  ambiguous?: boolean;
-  taskType?: string;
-  dependenciesBlocked?: number;
-  dependentAdvanced?: number;
-  safeSubmittedEvidence?: number;
-};
-export type NormalizedImportRow = {
-  rowNumber: number;
-  action: "create" | "update" | "link";
-  values: Record<string, ImportScalar>;
-};
-type InvalidImportRow = {
-  rowNumber: number;
-  errors: string[];
-  raw: Record<string, string>;
-};
-
-const storedPreviewSchema = z.object({
-  rowNumber: z.number().int().min(2),
-  action: z.enum(["create", "update", "link"]),
-  values: z.record(
-    z.string(),
-    z.union([z.string(), z.number(), z.boolean(), z.null()]),
-  ),
-});
-
-function issueMessages(error: z.ZodError) {
-  return error.issues.map((issue) => {
-    const field = issue.path.length ? `${issue.path.join(".")} ` : "";
-    return `${field}${issue.message}`;
-  });
-}
-
-export class DataImportStateError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DataImportStateError";
-  }
-}
 
 export class DataImportService {
-  constructor(private readonly env: CloudflareEnvironment) {}
+  private readonly validationContext: DataImportValidationContext;
+
+  constructor(private readonly env: CloudflareEnvironment) {
+    this.validationContext = new DataImportValidationContext(env);
+  }
 
   async preview(
     viewer: Viewer,
@@ -339,7 +57,7 @@ export class DataImportService {
       throw new Error("CSV import files cannot exceed 512 KB.");
     }
     const parsed = parseCsv(input.csv);
-    const context = await this.validationContext(viewer, resource, {
+    const context = await this.validationContext.load(viewer, resource, {
       requestedTaskIds:
         resource === "tasks"
           ? parsed.rows
@@ -965,267 +683,6 @@ export class DataImportService {
     );
   }
 
-  private async validationContext(
-    viewer: Viewer,
-    resource: EventImportResource,
-    options: {
-      requestedTaskIds?: readonly string[];
-      requestedPersonEmails?: readonly string[];
-      requestedSpeakerTargetIds?: readonly string[];
-    } = {},
-  ) {
-    const context: Record<string, Record<string, ValidationContextRecord>> = {};
-    if (
-      resource === "people" ||
-      resource === "submissions" ||
-      resource === "tasks"
-    ) {
-      const emails = [...new Set(options.requestedPersonEmails ?? [])].slice(
-        0,
-        200,
-      );
-      const people = emails.length
-        ? await this.env.DB.prepare(
-            `SELECT p.id, lower(p.email) AS key, p.profile_revision AS revision,
-                p.display_name AS name, p.organisation_name AS organisation,
-                p.job_title AS jobTitle, p.profile_status AS profileStatus,
-                EXISTS(
-                  SELECT 1 FROM memberships m
-                   WHERE m.person_id = p.id AND m.event_id = ?
-                     AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL
-                ) AS linked
-           FROM people p
-          WHERE p.email IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
-          )
-            .bind(viewer.eventId, JSON.stringify(emails))
-            .all<{
-              id: string;
-              key: string;
-              revision: number;
-              name: string;
-              organisation: string | null;
-              jobTitle: string | null;
-              profileStatus: string;
-              linked: number;
-            }>()
-        : { results: [] };
-      context.people = Object.fromEntries(
-        people.results.map((row) => [row.key, row]),
-      );
-      const memberships = emails.length
-        ? await this.env.DB.prepare(
-            `SELECT lower(person.email) || char(0) || membership.role AS key,
-                membership.id
-           FROM memberships membership
-           JOIN people person ON person.id = membership.person_id
-          WHERE membership.event_id = ? AND membership.revoked_at IS NULL
-            AND person.email IN (
-              SELECT CAST(value AS TEXT) FROM json_each(?)
-            )`,
-          )
-            .bind(viewer.eventId, JSON.stringify(emails))
-            .all<{ id: string; key: string }>()
-        : { results: [] };
-      context.memberships = Object.fromEntries(
-        memberships.results.map((row) => [row.key, row]),
-      );
-      if (resource === "tasks") {
-        const speakerTargetIds = [
-          ...new Set(options.requestedSpeakerTargetIds ?? []),
-        ].slice(0, 200);
-        const speakerTargets = speakerTargetIds.length
-          ? await this.env.DB.prepare(
-              `SELECT person.id
-                 FROM people person
-                WHERE person.id IN (
-                  SELECT CAST(value AS TEXT) FROM json_each(?)
-                )
-                  AND EXISTS (
-                    SELECT 1 FROM memberships membership
-                     WHERE membership.event_id = ?
-                       AND membership.person_id = person.id
-                       AND membership.accepted_at IS NOT NULL
-                       AND membership.revoked_at IS NULL
-                  )`,
-            )
-              .bind(JSON.stringify(speakerTargetIds), viewer.eventId)
-              .all<{ id: string }>()
-          : { results: [] };
-        context.speakerTargets = Object.fromEntries(
-          speakerTargets.results.map((row) => [row.id, row]),
-        );
-      }
-    }
-    if (resource === "submissions") {
-      const rows = await this.env.DB.prepare(
-        `SELECT id, public_reference AS key, revision, status
-           FROM submissions WHERE event_id = ?`,
-      )
-        .bind(viewer.eventId)
-        .all<{ id: string; key: string; revision: number }>();
-      context.submissions = Object.fromEntries(
-        rows.results.map((row) => [row.key, row]),
-      );
-    }
-    if (resource === "sessions" || resource === "tasks") {
-      const rows = await this.env.DB.prepare(
-        "SELECT id, slug AS key, status, revision FROM sessions WHERE event_id = ?",
-      )
-        .bind(viewer.eventId)
-        .all<{ id: string; key: string; status: string; revision: number }>();
-      context.sessions = Object.fromEntries(
-        rows.results.map((row) => [row.key, row]),
-      );
-      context.sessionIds = Object.fromEntries(
-        rows.results.map((row) => [row.id, row]),
-      );
-    }
-    if (resource === "sessions") {
-      const formats = await this.configuredSessionFormats(viewer);
-      context.sessionFormats = Object.fromEntries(
-        formats.map((format) => [format.key, { id: format.key }]),
-      );
-    }
-    if (resource === "sessions" || resource === "tracks") {
-      const rows = await this.env.DB.prepare(
-        `SELECT id, slug AS key, name, colour_token AS colour, position,
-                exclusive, is_public AS public
-           FROM tracks WHERE event_id = ?`,
-      )
-        .bind(viewer.eventId)
-        .all<{
-          id: string;
-          key: string;
-          name: string;
-          colour: string | null;
-          position: number;
-          exclusive: number;
-          public: number;
-        }>();
-      context.tracks = Object.fromEntries(
-        rows.results.map((row) => [row.key, row]),
-      );
-    }
-    if (resource === "rooms") {
-      const rows = await this.env.DB.prepare(
-        `SELECT room.id, lower(room.name) AS key, room.name, room.building,
-                room.level, room.capacity, room.position, room.status,
-                (SELECT COUNT(*)
-                   FROM schedule_entries entry
-                   JOIN schedule_versions version
-                     ON version.id = entry.schedule_version_id
-                    AND version.event_id = entry.event_id
-                  WHERE entry.event_id = room.event_id
-                    AND entry.room_id = room.id
-                    AND version.status IN ('draft','publishing','published')
-                ) AS scheduleReferences,
-                (SELECT MAX(session.expected_attendance)
-                   FROM schedule_entries entry
-                   JOIN schedule_versions version
-                     ON version.id = entry.schedule_version_id
-                    AND version.event_id = entry.event_id
-                    AND version.status = 'published'
-                   JOIN sessions session
-                     ON session.id = entry.session_id
-                    AND session.event_id = entry.event_id
-                   JOIN schedule_policies policy
-                     ON policy.event_id = entry.event_id
-                    AND policy.capacity_action = 'block'
-                  WHERE entry.event_id = room.event_id
-                    AND entry.room_id = room.id
-                    AND session.expected_attendance IS NOT NULL
-                ) AS requiredCapacity
-           FROM rooms room WHERE room.event_id = ?
-           ORDER BY room.id`,
-      )
-        .bind(viewer.eventId)
-        .all<{
-          id: string;
-          key: string;
-          name: string;
-          building: string | null;
-          level: string | null;
-          capacity: number;
-          position: number;
-          status: string;
-          scheduleReferences: number;
-          requiredCapacity: number | null;
-        }>();
-      context.rooms = {};
-      for (const row of rows.results) {
-        const existing = context.rooms[row.key];
-        if (existing) {
-          existing.ambiguous = true;
-          continue;
-        }
-        context.rooms[row.key] = { ...row, ambiguous: false };
-      }
-    }
-    if (resource === "tasks") {
-      const taskIds = [...new Set(options.requestedTaskIds ?? [])].slice(
-        0,
-        200,
-      );
-      const rows = taskIds.length
-        ? await this.env.DB.prepare(
-            `SELECT task.id, task.id AS key, task.event_id AS eventId,
-                    task.revision, task.status, task.task_type AS taskType,
-                    EXISTS (
-                      SELECT 1
-                        FROM task_instance_dependencies dependency
-                        JOIN task_instances prerequisite
-                          ON prerequisite.id = dependency.depends_on_task_id
-                       WHERE dependency.task_id = task.id
-                         AND prerequisite.status NOT IN ('completed','waived')
-                    ) AS dependenciesBlocked,
-                    EXISTS (
-                      SELECT 1
-                        FROM task_instance_dependencies dependency
-                        JOIN task_instances dependent
-                          ON dependent.id = dependency.task_id
-                       WHERE dependency.depends_on_task_id = task.id
-                         AND dependent.status IN ('submitted','completed')
-                    ) AS dependentAdvanced,
-                    EXISTS (
-                      SELECT 1
-                        FROM task_evidence evidence
-                        JOIN file_assets asset
-                          ON asset.id = evidence.file_asset_id
-                         AND asset.event_id = evidence.event_id
-                        JOIN file_versions version
-                          ON version.id = json_extract(evidence.evidence_json, '$.fileVersionId')
-                         AND version.asset_id = asset.id
-                         AND version.event_id = asset.event_id
-                       WHERE evidence.task_id = task.id
-                         AND evidence.status = 'submitted'
-                         AND asset.status = 'active'
-                         AND version.scan_status = 'clean'
-                         AND version.signature_status = 'valid'
-                         AND version.released_at IS NOT NULL
-                    ) AS safeSubmittedEvidence
-               FROM task_instances task
-              WHERE task.id IN (${taskIds.map(() => "?").join(", ")})`,
-          )
-            .bind(...taskIds)
-            .all<{
-              id: string;
-              key: string;
-              eventId: string;
-              revision: number;
-              status: string;
-              taskType: string;
-              dependenciesBlocked: number;
-              dependentAdvanced: number;
-              safeSubmittedEvidence: number;
-            }>()
-        : { results: [] };
-      context.tasks = Object.fromEntries(
-        rows.results.map((row) => [row.key, row]),
-      );
-    }
-    return context;
-  }
-
   private async revalidate(
     viewer: Viewer,
     resource: EventImportResource,
@@ -1239,7 +696,7 @@ export class DataImportService {
       .first<{ sessionFormatsJson: string }>();
     if (!event)
       throw new DataImportStateError("The import event no longer exists.");
-    const context = await this.validationContext(viewer, resource, {
+    const context = await this.validationContext.load(viewer, resource, {
       requestedTaskIds:
         resource === "tasks" ? rows.map((row) => String(row.values.id)) : [],
       requestedPersonEmails: requestedPersonEmails(
@@ -1387,34 +844,6 @@ export class DataImportService {
           );
         }
       }
-    }
-  }
-
-  private async configuredSessionFormats(viewer: Viewer) {
-    const event = await this.env.DB.prepare(
-      `SELECT session_formats_json AS sessionFormatsJson
-         FROM events
-        WHERE id = ? AND organisation_id = ?`,
-    )
-      .bind(viewer.eventId, viewer.organisationId)
-      .first<{ sessionFormatsJson: string }>();
-    if (!event) {
-      throw new DataImportStateError(
-        "The import event is unavailable in the authorised organisation.",
-      );
-    }
-    return this.parseConfiguredSessionFormats(event.sessionFormatsJson);
-  }
-
-  private parseConfiguredSessionFormats(value: string) {
-    try {
-      return parseSessionFormatsConfiguration(value);
-    } catch (error) {
-      throw new DataImportStateError(
-        error instanceof Error
-          ? error.message
-          : "The event has invalid session-format configuration.",
-      );
     }
   }
 
