@@ -4,7 +4,7 @@ import type {
   ImportScalar,
   NormalizedImportRow,
   ValidationContextRecord,
-} from "./data-import-service.server";
+} from "./data-import-validation.server";
 
 function readiness(status: string) {
   if (status === "completed" || status === "waived")

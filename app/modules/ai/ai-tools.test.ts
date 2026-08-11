@@ -6,7 +6,8 @@ import { IntegrationService } from "~/modules/integrations/integration-service.s
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { AiAssistantService } from "./ai-assistant-service.server";
-import { AiToolExecutor } from "./ai-tools.server";
+import { AiReadToolExecutor } from "./ai-read-tool-executor.server";
+import { AiToolExecutor, AiToolPermissionError } from "./ai-tools.server";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",
@@ -19,6 +20,17 @@ const viewer: Viewer = {
 };
 
 describe("AI tool authority boundary", () => {
+  it("keeps the extracted read executor behind the administrator boundary", () => {
+    const speaker = { ...viewer, role: "speaker" } satisfies Viewer;
+
+    expect(() =>
+      new AiReadToolExecutor(
+        env as unknown as CloudflareEnvironment,
+        speaker,
+      ).execute("get_event_readiness", "{}"),
+    ).toThrow(AiToolPermissionError);
+  });
+
   it("fails closed before querying an unreadable Airtable projection", async () => {
     const unavailable = new Error("Airtable projection is unavailable.");
     const assertReadable = vi.fn(async () => {
