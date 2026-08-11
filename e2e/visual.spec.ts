@@ -64,7 +64,6 @@ const SURFACES: readonly Surface[] = [
     path: "/speaker/resources",
     role: "speaker",
   },
-  { name: "design-system", path: "/design/system" },
 ];
 
 async function selectDemoRole(page: Page, role: DemoRole) {

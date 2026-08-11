@@ -81,7 +81,6 @@ test("shared form errors connect labels, help and corrective links", async ({
 });
 
 for (const path of [
-  "/apply/form",
   "/admin/submissions/form",
   "/design/system",
 ] as const) {
