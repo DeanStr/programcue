@@ -196,7 +196,9 @@ export function adminPageBreadcrumbs(pathname: string) {
               ? "Data retention"
               : section === "submissions"
                 ? "Application detail"
-                : "Detail";
+                : section === "speakers"
+                  ? "Speaker detail"
+                  : "Detail";
 
   return [
     { label: sectionLabel, href: sectionHref },

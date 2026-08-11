@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoSpeakerData } from "./demo.server";
 import {
+  SpeakerAdminIntegrityError,
+  SpeakerAdminStateError,
   SpeakerProfileConflictError,
   SpeakerService,
 } from "./speaker-service.server";
@@ -155,6 +157,263 @@ describe("speaker profile service", () => {
         role: "speaker",
       }),
     ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("loads an event-scoped organiser speaker detail and refuses a person outside the event", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    const detail = await service.getAdminSpeakerDetail(admin, speaker.personId);
+    expect(detail.profile.id).toBe(speaker.personId);
+    expect(detail.event.timezone).toBe("America/Toronto");
+    expect(detail.sessions.map((session) => session.id)).toContain(
+      "session-demo-speaker",
+    );
+    expect(detail.tasks.outstanding).toBeGreaterThan(0);
+    expect(
+      detail.files.every((file) =>
+        file.versions.every((version) => version.assetId === file.id),
+      ),
+    ).toBe(true);
+
+    const outsiderId = `outside-event-person-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO people (id, email, display_name, email_verified, profile_status)
+       VALUES (?, ?, 'Outside Event Speaker', 1, 'draft')`,
+    )
+      .bind(outsiderId, `${outsiderId}@example.invalid`)
+      .run();
+    await expect(
+      service.getAdminSpeakerDetail(admin, outsiderId),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.updateAdminSpeakerProfile(admin, outsiderId, {
+        revision: 1,
+        name: "Outside Event Speaker",
+        biography: "",
+        pronunciation: "",
+        organisationName: "",
+        jobTitle: "",
+        profileStatus: "published",
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      testEnv.DB.prepare(
+        "SELECT profile_status AS profileStatus FROM people WHERE id = ?",
+      )
+        .bind(outsiderId)
+        .first(),
+    ).resolves.toEqual({ profileStatus: "draft" });
+
+    const brokenAssetId = `broken-current-version-${crypto.randomUUID()}`;
+    const otherAssetId = `other-current-version-${crypto.randomUUID()}`;
+    const otherVersionId = `other-version-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status
+         ) VALUES (?, ?, ?, 'session', ?, 'other', 'active')`,
+      ).bind(
+        otherAssetId,
+        admin.eventId,
+        speaker.personId,
+        "session-demo-speaker",
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, size_bytes,
+           upload_status, signature_status, scan_status
+         ) VALUES (?, ?, ?, 1, ?, 'other-asset.pdf', 'application/pdf', 10,
+                   'uploaded', 'valid', 'clean')`,
+      ).bind(
+        otherVersionId,
+        admin.eventId,
+        otherAssetId,
+        `tests/${otherVersionId}`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           current_version_id, status
+         ) VALUES (?, ?, ?, 'person', ?, 'other', ?, 'active')`,
+      ).bind(
+        brokenAssetId,
+        admin.eventId,
+        speaker.personId,
+        speaker.personId,
+        otherVersionId,
+      ),
+    ]);
+    await expect(
+      service.getAdminSpeakerDetail(admin, speaker.personId),
+    ).rejects.toBeInstanceOf(SpeakerAdminIntegrityError);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare("DELETE FROM file_assets WHERE id = ?").bind(
+        brokenAssetId,
+      ),
+      testEnv.DB.prepare("DELETE FROM file_assets WHERE id = ?").bind(
+        otherAssetId,
+      ),
+    ]);
+  });
+
+  it("commits one organiser profile revision and rejects a stale organiser save", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    const revokedMembershipId = `revoked-shared-membership-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO memberships (
+         id, organisation_id, event_id, person_id, role, invited_at,
+         accepted_at, revoked_at, created_at
+       ) VALUES (?, ?, NULL, ?, 'administrator', unixepoch() - 300,
+                 unixepoch() - 200, unixepoch() - 100, unixepoch() - 300)`,
+    )
+      .bind(revokedMembershipId, admin.organisationId, speaker.personId)
+      .run();
+    const before = await service.getAdminSpeakerDetail(admin, speaker.personId);
+    expect(before.profileShared).toBe(false);
+
+    await expect(
+      service.updateAdminSpeakerProfile(admin, speaker.personId, {
+        revision: before.profile.revision,
+        name: "Incomplete organiser input",
+        biography: "This must not clear omitted fields.",
+        pronunciation: "",
+        organisationName: "EventLab",
+        profileStatus: "published",
+      }),
+    ).rejects.toMatchObject({ name: "ZodError" });
+    const afterRejectedInput = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    expect(afterRejectedInput.profile).toMatchObject({
+      revision: before.profile.revision,
+      name: before.profile.name,
+      jobTitle: before.profile.jobTitle,
+    });
+
+    const saved = await service.updateAdminSpeakerProfile(
+      admin,
+      speaker.personId,
+      {
+        revision: before.profile.revision,
+        name: "Priya Shah",
+        biography: "Organiser-corrected biography for the published programme.",
+        pronunciation: "PREE-yah SHAH",
+        organisationName: "EventLab",
+        jobTitle: "Head of Experience Design",
+        profileStatus: "published",
+      },
+    );
+    expect(saved).toMatchObject({
+      revision: before.profile.revision + 1,
+      profileStatus: "published",
+    });
+
+    const after = await service.getAdminSpeakerDetail(admin, speaker.personId);
+    expect(after.profile.jobTitle).toBe("Head of Experience Design");
+    expect(after.profile.profileStatus).toBe("published");
+    expect(after.profile.revision).toBe(before.profile.revision + 1);
+
+    const audits = await testEnv.DB.prepare(
+      `SELECT COUNT(*) AS count FROM audit_events
+        WHERE event_id = ? AND entity_id = ?
+          AND action = 'speaker.admin.profile.updated'`,
+    )
+      .bind(admin.eventId, speaker.personId)
+      .first<{ count: number }>();
+    expect(audits?.count).toBe(1);
+
+    await expect(
+      service.updateAdminSpeakerProfile(admin, speaker.personId, {
+        revision: before.profile.revision,
+        name: "Stale Organiser Name",
+        biography: "",
+        pronunciation: "",
+        organisationName: "",
+        jobTitle: "",
+        profileStatus: "draft",
+      }),
+    ).rejects.toBeInstanceOf(SpeakerProfileConflictError);
+    const unchanged = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    expect(unchanged.profile.name).toBe("Priya Shah");
+    expect(unchanged.profile.revision).toBe(before.profile.revision + 1);
+    await testEnv.DB.prepare("DELETE FROM memberships WHERE id = ?")
+      .bind(revokedMembershipId)
+      .run();
+  });
+
+  it("keeps a shared canonical identity read-only for an event organiser", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const token = crypto.randomUUID();
+    const otherOrganisationId = `speaker-shared-org-${token}`;
+    const otherEventId = `speaker-shared-event-${token}`;
+    const otherSessionId = `speaker-shared-session-${token}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "INSERT INTO organisations (id, name, slug) VALUES (?, 'Shared identity organisation', ?)",
+      ).bind(otherOrganisationId, `speaker-shared-org-${token}`),
+      testEnv.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           file_policy_json
+         ) VALUES (?, ?, 'Shared identity event', ?, 'UTC', 1800000000,
+                   1800086400,
+                   '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')`,
+      ).bind(
+        otherEventId,
+        otherOrganisationId,
+        `speaker-shared-event-${token}`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes, status,
+           visibility
+         ) VALUES (?, ?, 'Shared identity session', ?, 'presentation', 45,
+                   'unscheduled', 'public')`,
+      ).bind(otherSessionId, otherEventId, `speaker-shared-session-${token}`),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label, visibility
+         ) VALUES (?, ?, ?, 0, 'Speaker', 'public')`,
+      ).bind(otherSessionId, otherEventId, speaker.personId),
+    ]);
+
+    const service = new SpeakerService(testEnv);
+    const before = await service.getAdminSpeakerDetail(admin, speaker.personId);
+    expect(before.profileShared).toBe(true);
+
+    await expect(
+      service.updateAdminSpeakerProfile(admin, speaker.personId, {
+        revision: before.profile.revision,
+        name: "Cross-organisation overwrite",
+        biography: "This change must not reach the shared person record.",
+        pronunciation: "",
+        organisationName: "Wrong organisation",
+        jobTitle: "Wrong title",
+        profileStatus: "archived",
+      }),
+    ).rejects.toBeInstanceOf(SpeakerAdminStateError);
+
+    const unchanged = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    expect(unchanged.profile).toMatchObject({
+      name: before.profile.name,
+      organisationName: before.profile.organisationName,
+      jobTitle: before.profile.jobTitle,
+      profileStatus: before.profile.profileStatus,
+      revision: before.profile.revision,
+    });
   });
 
   it("pages the authoritative event speaker set and applies readiness filters server-side", async () => {

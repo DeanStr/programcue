@@ -475,7 +475,8 @@ export class FileService {
              fv.detected_content_type AS contentType,
              fv.object_etag AS objectEtag
         FROM file_assets fa
-        JOIN file_versions fv ON fv.id = fa.current_version_id AND fv.event_id = fa.event_id
+        JOIN file_versions fv ON fv.id = fa.current_version_id
+         AND fv.event_id = fa.event_id AND fv.asset_id = fa.id
        WHERE fa.id = ? AND fa.event_id = ? AND fa.owner_person_id = ? AND fa.status = 'active'
          AND fv.upload_status = 'uploaded' AND fv.signature_status = 'valid'
          AND fv.scan_status = 'clean' AND fv.released_at IS NOT NULL AND fv.deleted_at IS NULL
@@ -489,6 +490,70 @@ export class FileService {
         contentType: string | null;
       }>();
     if (!version) throw new FileScanPendingError();
+    return this.releasedDownload(version);
+  }
+
+  async administratorSpeakerFileDownload(
+    viewer: Viewer,
+    personId: string,
+    assetId: string,
+  ) {
+    if (
+      !(["owner", "administrator"] as const).includes(
+        viewer.role as "owner" | "administrator",
+      )
+    ) {
+      throw new FileAccessError("Administrator access is required.");
+    }
+    const version = await this.env.DB.prepare(
+      `
+      SELECT version.object_key AS objectKey,
+             version.object_etag AS objectEtag,
+             version.original_filename AS filename,
+             version.detected_content_type AS contentType
+        FROM file_assets asset
+        JOIN events event
+          ON event.id = asset.event_id AND event.organisation_id = ?
+        JOIN file_versions version
+          ON version.id = asset.current_version_id
+         AND version.event_id = asset.event_id
+         AND version.asset_id = asset.id
+       WHERE asset.id = ? AND asset.event_id = ?
+         AND asset.owner_person_id = ? AND asset.status = 'active'
+         AND version.upload_status = 'uploaded'
+         AND version.signature_status = 'valid'
+         AND version.scan_status = 'clean'
+         AND version.released_at IS NOT NULL AND version.deleted_at IS NULL
+         AND (
+           EXISTS (
+             SELECT 1 FROM session_speakers link
+              WHERE link.event_id = asset.event_id
+                AND link.person_id = asset.owner_person_id
+           )
+           OR EXISTS (
+             SELECT 1 FROM memberships membership
+              WHERE membership.event_id = asset.event_id
+                AND membership.person_id = asset.owner_person_id
+                AND membership.role = 'speaker'
+                AND membership.accepted_at IS NOT NULL
+                AND membership.revoked_at IS NULL
+           )
+         )
+       LIMIT 1
+    `,
+    )
+      .bind(viewer.organisationId, assetId, viewer.eventId, personId)
+      .first<{
+        objectKey: string;
+        objectEtag: string | null;
+        filename: string;
+        contentType: string | null;
+      }>();
+    if (!version) {
+      throw new FileAccessError(
+        "The speaker file is unavailable, quarantined or outside this event.",
+      );
+    }
     return this.releasedDownload(version);
   }
 
@@ -555,7 +620,8 @@ export class FileService {
         JOIN resource_page_versions rv ON rv.id = ra.resource_page_version_id AND rv.event_id = ra.event_id AND rv.status = 'published'
         JOIN resource_pages rp ON rp.id = rv.resource_page_id AND rp.event_id = rv.event_id AND rp.status = 'published'
         JOIN file_assets fa ON fa.id = ra.file_asset_id AND fa.event_id = ra.event_id AND fa.status = 'active'
-        JOIN file_versions fv ON fv.id = fa.current_version_id AND fv.event_id = fa.event_id
+        JOIN file_versions fv ON fv.id = fa.current_version_id
+         AND fv.event_id = fa.event_id AND fv.asset_id = fa.id
        WHERE fa.id = ? AND fa.event_id = ?
          AND fv.upload_status = 'uploaded' AND fv.signature_status = 'valid'
          AND fv.scan_status = 'clean' AND fv.released_at IS NOT NULL AND fv.deleted_at IS NULL

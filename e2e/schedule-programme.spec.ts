@@ -472,6 +472,11 @@ test("publishes speaker profiles and a read-only itinerary share link", async ({
   await page.locator(".programme-row").first().click();
   await page.getByRole("button", { name: "Add to itinerary" }).click();
   await expect(page.getByText("Saved ✓").first()).toBeVisible();
+  const itineraryItem = page.locator(".itinerary-item").first();
+  await expect(itineraryItem).toContainText(
+    "Main Stage · keynote · Leadership",
+  );
+  await expect(itineraryItem).toContainText("Priya Shah");
   await page
     .getByRole("button", { name: "Create read-only share link" })
     .click();
@@ -490,6 +495,113 @@ test("publishes speaker profiles and a read-only itinerary share link", async ({
   await expect(
     page.getByRole("button", { name: /add to|remove from itinerary/i }),
   ).toHaveCount(0);
+});
+
+test("public programme filters sessions by track, format and room", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/public/programme/future-of-events-2025");
+  const rows = page.locator(".programme-row");
+  const total = await rows.count();
+  expect(total).toBe(5);
+  await expect(
+    page.getByText(`Showing ${total} of ${total} published sessions.`),
+  ).toBeVisible();
+
+  await page.getByLabel("Filter by track").selectOption("AI & Innovation");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".session-detail-panel h2")).toHaveText(
+    "AI in Event Operations",
+  );
+  await expect(
+    page.getByText(
+      `Showing 2 of ${total} published sessions for the current filters.`,
+    ),
+  ).toBeVisible();
+
+  await page.getByLabel("Filter by format").selectOption("breakout");
+  await expect(rows).toHaveCount(1);
+  await expect(rows.locator("h3")).toHaveText("Building Better Event Data");
+  // The speaker roster follows the active session filters.
+  await expect(page.locator("#speakers > .grid article")).toHaveCount(1);
+
+  await page.getByLabel("Filter by room").selectOption("Main Stage");
+  await expect(rows).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "No matching sessions" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Clear filters" }).first().click();
+  await expect(rows).toHaveCount(total);
+  await expect(page.getByLabel("Filter by track")).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "Clear filters" }),
+  ).toBeDisabled();
+
+  // A query that matches session content keeps that session's speaker and
+  // profile route available even when the profile text does not match itself.
+  await page
+    .getByLabel("Search sessions, speakers, or topics")
+    .fill("future of attendee");
+  await expect(rows).toHaveCount(1);
+  await expect(page.locator("#speakers > .grid article")).toHaveCount(1);
+  const detailProfileLink = page
+    .locator(".session-detail-panel")
+    .getByRole("link", { name: "View Priya Shah’s profile" });
+  await detailProfileLink.click();
+  const profile = page.locator("#programme-speaker-profile");
+  await expect(profile).toBeVisible();
+  await expect(profile.locator(".stack a")).toHaveCount(1);
+  await profile.getByRole("button", { name: "Close profile" }).click();
+  await expect(detailProfileLink).toBeFocused();
+});
+
+test("public programme exposes speaker affiliations and a closable profile panel", async ({
+  page,
+}) => {
+  // Opening the organiser roster materialises the demo speaker's title and
+  // organisation; the public surface only renders what D1 already holds.
+  await waitForInterface(page, "/admin/speakers");
+  await waitForInterface(page, "/public/programme/future-of-events-2025");
+
+  // Each session-row affiliation remains attached to the matching speaker and
+  // includes both title and organisation.
+  await expect(page.locator(".programme-row-speaker").first()).toContainText(
+    "Priya Shah — Director of Experience Design · EventLab",
+  );
+  await page.locator(".programme-row").first().click();
+  const detail = page.locator(".session-detail-panel");
+  await expect(detail).toContainText(
+    "Director of Experience Design · EventLab",
+  );
+  await expect(detail).toContainText("Leadership");
+
+  // The profile panel is opt-in, names the speaker's role and rooms, and
+  // returns focus to the control that opened it.
+  await expect(page.locator("#programme-speaker-profile")).toHaveCount(0);
+  const profileLink = page.locator("#speaker-profile-link-person-demo-speaker");
+  await profileLink.click();
+  const profile = page.locator("#programme-speaker-profile");
+  await expect(profile).toBeVisible();
+  await expect(profile).toContainText("Director of Experience Design");
+  await expect(profile).toBeFocused();
+  await expect(profile.locator(".stack a")).toHaveCount(3);
+  await expect(profile.locator(".stack a").first()).toContainText("Main Stage");
+
+  await profile.getByRole("button", { name: "Close profile" }).click();
+  await expect(page.locator("#programme-speaker-profile")).toHaveCount(0);
+  await expect(profileLink).toBeFocused();
+
+  // A shared profile URL has no opener recorded in component state, so close
+  // falls back to its visible speaker-card link instead of dropping focus.
+  await page.goto(
+    "/public/programme/future-of-events-2025#speaker-person-demo-speaker",
+  );
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(profile).toBeVisible();
+  await profile.getByRole("button", { name: "Close profile" }).click();
+  await expect(profileLink).toBeFocused();
 });
 
 test("programme contains its wide table and explains mobile scrolling", async ({

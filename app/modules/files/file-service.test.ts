@@ -203,6 +203,66 @@ describe("private R2 file lifecycle", () => {
     expect(new Uint8Array(await response.arrayBuffer()).slice(0, 4)).toEqual(
       new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
     );
+    const administratorResponse =
+      await service.administratorSpeakerFileDownload(
+        admin,
+        speaker.personId,
+        uploaded.assetId,
+      );
+    expect(administratorResponse.status).toBe(200);
+    expect(administratorResponse.headers.get("content-disposition")).toContain(
+      'filename="headshot.png"',
+    );
+    await expect(
+      service.administratorSpeakerFileDownload(
+        admin,
+        "person-demo-evaluator",
+        uploaded.assetId,
+      ),
+    ).rejects.toBeInstanceOf(FileAccessError);
+    const otherAssetId = `cross-asset-${crypto.randomUUID()}`;
+    const otherVersionId = `cross-version-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status
+         ) VALUES (?, ?, ?, 'person', ?, 'other', 'active')`,
+      ).bind(otherAssetId, speaker.eventId, speaker.personId, speaker.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status,
+           scan_status, released_at
+         ) VALUES (?, ?, ?, 1, ?, 'other.pdf', 'application/pdf',
+                   'application/pdf', 10, 'other-etag', 'uploaded', 'valid',
+                   'clean', unixepoch())`,
+      ).bind(
+        otherVersionId,
+        speaker.eventId,
+        otherAssetId,
+        `tests/${otherVersionId}`,
+      ),
+      testEnv.DB.prepare(
+        "UPDATE file_assets SET current_version_id = ? WHERE id = ?",
+      ).bind(otherVersionId, uploaded.assetId),
+    ]);
+    await expect(
+      service.administratorSpeakerFileDownload(
+        admin,
+        speaker.personId,
+        uploaded.assetId,
+      ),
+    ).rejects.toBeInstanceOf(FileAccessError);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "UPDATE file_assets SET current_version_id = ? WHERE id = ?",
+      ).bind(uploaded.versionId, uploaded.assetId),
+      testEnv.DB.prepare("DELETE FROM file_assets WHERE id = ?").bind(
+        otherAssetId,
+      ),
+    ]);
     await expect(
       service.participantDownload(
         {

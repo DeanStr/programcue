@@ -9,6 +9,7 @@ import { ApiKeyService } from "~/platform/api/api-key-service.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { DEMO_IDENTITIES, ensureDemoData } from "~/platform/demo/seed.server";
 import { loader as adminTaskFileLoader } from "./admin-task-file-download";
+import { loader as adminSpeakerFileLoader } from "./admin-speaker-file-download";
 import { loader as administrationApiLoader } from "./api-administration-resources";
 import { action as administrationCommandAction } from "./api-administration-command";
 import {
@@ -562,6 +563,17 @@ const boundaries: readonly Boundary[] = [
           body: "{",
         }),
         params: { operation: "initiate" },
+        context: context(),
+      } as never),
+  },
+  {
+    name: "administrator speaker file loader",
+    allowed: adminActors,
+    allowedStatus: 404,
+    invoke: (actor) =>
+      adminSpeakerFileLoader({
+        request: requestFor(actor, "/admin/speakers/missing/files/missing"),
+        params: { personId: "missing", assetId: "missing" },
         context: context(),
       } as never),
   },
