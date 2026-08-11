@@ -1,8 +1,9 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 
+import { e2eOrigin } from "./e2e-origin";
 import { resetDemoEvent } from "./reset-demo-event";
 
-const sameOriginHeaders = { origin: "http://127.0.0.1:5173" };
+const sameOriginHeaders = { origin: e2eOrigin };
 
 export async function prepareVisualBaseline(request: APIRequestContext) {
   await resetDemoEvent(request);

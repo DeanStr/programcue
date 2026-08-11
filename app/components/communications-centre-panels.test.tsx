@@ -4,10 +4,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   CalendarAdministration,
-  CommunicationPreviewConfirmation,
   CommunicationRecipientIdentity,
-  deliveryActionLabel,
 } from "./communications-centre-panels";
+import {
+  CommunicationDraftPreview,
+  deliveryActionLabel,
+} from "./communication-draft-preview";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 
 describe("communications presentation", () => {
@@ -80,46 +82,34 @@ describe("communications presentation", () => {
   });
 
   it("isolates tenant-authored email preview HTML from the application origin", () => {
-    const actionData = {
-      ok: true,
-      intent: "preview",
-      message: "Preview ready.",
-      idempotencyKey: "send-1",
-      fields: {
-        templateVersionId: "template-version-1",
-        audienceType: "manual",
-        manualRecipients: "priya@example.com",
-        kind: "transactional",
-        scheduledAt: "",
+    const preview = {
+      recipients: {
+        selected: 1,
+        deliverable: [{ name: "Priya Shah", address: "priya@example.com" }],
+        suppressed: [],
+        invalid: [],
       },
-      preview: {
-        recipients: {
-          selected: 1,
-          deliverable: [{ name: "Priya Shah", address: "priya@example.com" }],
-          suppressed: [],
-          invalid: [],
-        },
-        rendered: { html: "<script>window.parent.pwned = true</script>" },
-        provider: { configured: true, queueConfigured: true },
-        confirmation: {
-          recipientFingerprint: "recipients",
-          deliverableFingerprint: "deliverable",
-          suppressedCount: 0,
-        },
+      rendered: { html: "<script>window.parent.pwned = true</script>" },
+      provider: { configured: true, queueConfigured: true },
+      confirmation: {
+        recipientFingerprint: "recipients",
+        deliverableFingerprint: "deliverable",
+        suppressedCount: 0,
       },
-    } as unknown as Parameters<
-      typeof CommunicationPreviewConfirmation
-    >[0]["actionData"];
+    } as unknown as Parameters<typeof CommunicationDraftPreview>[0]["preview"];
     const router = createMemoryRouter(
       [
         {
           path: "/",
           element: (
-            <CommunicationPreviewConfirmation
-              actionData={actionData}
+            <CommunicationDraftPreview
+              preview={preview}
+              revision={1}
+              scheduledAt={null}
               eventTimezone="UTC"
               working={false}
               pendingIntent={null}
+              configurationDirty={false}
             />
           ),
         },

@@ -1,7 +1,10 @@
-import type { SpeakerDashboardData } from "~/routes/speaker-dashboard";
+import type { SpeakerService } from "~/modules/speakers/speaker-service.server";
+import type { TaskService } from "~/modules/tasks/task-service.server";
 
-export type SpeakerPortal = SpeakerDashboardData["portal"];
-export type SpeakerTask = SpeakerDashboardData["tasks"][number];
+export type SpeakerPortal = Awaited<ReturnType<SpeakerService["getPortal"]>>;
+export type SpeakerTask = Awaited<
+  ReturnType<TaskService["listParticipantTasks"]>
+>[number];
 
 export function speakerStatusClass(status: string) {
   if (["completed", "waived", "active", "published"].includes(status))

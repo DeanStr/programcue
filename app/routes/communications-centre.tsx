@@ -10,10 +10,8 @@ import { ZodError } from "zod";
 
 import type { Route } from "./+types/communications-centre";
 import {
-  AudienceComposer,
   CalendarLifecycleTable,
   CalendarAdministration,
-  CommunicationPreviewConfirmation,
   CommunicationAutomation,
   DeliveryConfiguration,
   RecentCommunications,
@@ -37,7 +35,6 @@ import {
   CommunicationService,
   CommunicationStateError,
   communicationErrorMessage,
-  type CommunicationPreview,
 } from "~/modules/communications/communication-service.server";
 import {
   audienceTypeSchema,
@@ -45,10 +42,6 @@ import {
   type AudienceType,
   type CommunicationCategory,
 } from "~/modules/communications/communication-schema";
-import {
-  assertCommunicationScheduleStillMatchesPreview,
-  communicationScheduledEpoch,
-} from "~/modules/communications/communication-time";
 import { UnknownMergeVariableError } from "~/modules/communications/merge-template";
 import { RecipientLimitError } from "~/modules/communications/recipient-query.server";
 import { EventService } from "~/modules/events/event-service.server";
@@ -65,23 +58,12 @@ import {
 
 export const meta = () => [{ title: "Communications Centre · Program Cue" }];
 
-type PreviewFields = {
-  templateVersionId: string;
-  audienceType: string;
-  manualRecipients: string;
-  kind: string;
-  scheduledAt: string;
-};
 export type ActionResult = {
   ok: boolean;
   intent: string;
   message: string;
-  preview?: CommunicationPreview;
-  fields?: PreviewFields;
-  idempotencyKey?: string;
   operationId?: string;
   senderRecords?: string;
-  scheduledAt?: number;
 };
 
 export type CommunicationsCentreLoaderData = Route.ComponentProps["loaderData"];
@@ -174,6 +156,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       requestedRecoveryRecord === selected.templateId)
       ? requestedRecoveryRecord
       : null;
+  const composedId = search.get("communication");
+  const composedStatus = search.get("composed");
+  const composedCommunication = centre.communications.find(
+    (communication) =>
+      communication.id === composedId &&
+      communication.status === composedStatus &&
+      ["queued", "scheduled", "sending", "sent"].includes(communication.status),
+  );
+  const discardedId = search.get("discarded");
+  const discardedCommunication = centre.communications.find(
+    (communication) =>
+      communication.id === discardedId && communication.status === "cancelled",
+  );
   return {
     ...centre,
     invitations,
@@ -196,6 +191,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     notice: persistedSave
       ? `Draft version ${selected.versionNumber} is stored in D1.`
       : "",
+    deliveryNotice: composedCommunication
+      ? `Communication ${composedCommunication.id} is ${composedCommunication.status}. This is the authoritative delivery result for that draft.`
+      : discardedCommunication
+        ? "The communication draft was discarded and retained as cancelled history."
+        : "",
   };
 }
 
@@ -283,110 +283,6 @@ export async function action({ request, context }: Route.ActionArgs) {
         ok: true,
         intent,
         message: `Version ${published.versionNumber} is now the published sending version.`,
-      });
-    }
-    if (intent === "preview" || intent === "confirm") {
-      const fields: PreviewFields = {
-        templateVersionId: String(form.get("templateVersionId") ?? ""),
-        audienceType: String(form.get("audienceType") ?? ""),
-        manualRecipients: String(form.get("manualRecipients") ?? ""),
-        kind: String(form.get("kind") ?? ""),
-        scheduledAt: String(form.get("scheduledAt") ?? "").trim(),
-      };
-      let scheduledAt: number | null = null;
-      let scheduledEventTimezone: string | null = null;
-      if (fields.scheduledAt) {
-        const event = await new EventService(env).getSetup(viewer);
-        scheduledEventTimezone = event.timezone;
-        try {
-          scheduledAt = communicationScheduledEpoch(
-            fields.scheduledAt,
-            event.timezone,
-          );
-        } catch (error) {
-          throw new CommunicationStateError(
-            error instanceof Error
-              ? error.message
-              : "Scheduled delivery time is invalid.",
-          );
-        }
-      }
-      if (intent === "confirm" && scheduledAt !== null) {
-        try {
-          assertCommunicationScheduleStillMatchesPreview(
-            form.get("previewedScheduledAt"),
-            scheduledAt,
-          );
-        } catch (error) {
-          throw new CommunicationStateError(
-            error instanceof Error
-              ? error.message
-              : "The scheduled delivery preview is invalid.",
-          );
-        }
-      }
-      if (intent === "preview") {
-        const preview = await service.preview(
-          viewer,
-          fields as Parameters<CommunicationService["preview"]>[1],
-        );
-        return data<ActionResult>({
-          ok: true,
-          intent,
-          message: `${new Intl.NumberFormat("en").format(preview.recipients.deliverable.length)} deliverable recipients. Nothing has been queued.`,
-          preview,
-          fields,
-          scheduledAt: scheduledAt ?? undefined,
-          idempotencyKey: crypto.randomUUID(),
-        });
-      }
-      const confirmedInput = {
-        ...fields,
-        idempotencyKey: String(form.get("idempotencyKey") ?? ""),
-        recipientFingerprint: String(form.get("recipientFingerprint") ?? ""),
-        deliverableFingerprint: String(
-          form.get("deliverableFingerprint") ?? "",
-        ),
-        suppressedCount:
-          typeof form.get("suppressedCount") === "string"
-            ? Number(form.get("suppressedCount"))
-            : Number.NaN,
-      } as Parameters<CommunicationService["confirm"]>[1];
-      const result =
-        scheduledAt === null
-          ? await service.confirm(viewer, confirmedInput)
-          : await service.schedule(viewer, {
-              ...confirmedInput,
-              scheduledAt,
-            });
-      if (
-        result.duplicate &&
-        ["failed", "partially_failed", "cancelled"].includes(result.status)
-      ) {
-        return data<ActionResult>(
-          {
-            ok: false,
-            intent,
-            message: `This exact send was already recorded with status ${result.status.replaceAll("_", " ")}. Inspect the operation before retrying.`,
-            operationId: result.operationId ?? undefined,
-          },
-          { status: 409 },
-        );
-      }
-      if (result.status === "scheduled" && !scheduledEventTimezone) {
-        throw new Error(
-          "A scheduled communication is missing its authoritative event timezone.",
-        );
-      }
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message: result.duplicate
-          ? "This exact send was already recorded."
-          : result.status === "scheduled"
-            ? `Delivery intent and recipients are durable. The scheduler will queue it at the confirmed ${scheduledEventTimezone} event time.`
-            : "Delivery intent is durable and queued. Follow provider progress in the Operation Centre.",
-        operationId: result.operationId ?? undefined,
       });
     }
     if (intent === "test-send") {
@@ -608,25 +504,20 @@ export default function CommunicationsCentre({
       void recovery.markServerSaved();
     }
   }, [actionData?.intent, actionData?.ok, recovery.markServerSaved]);
-  const publishedTemplates = useMemo(
-    () =>
-      loaderData.templates.filter(
-        (template) => template.versionStatus === "published",
-      ),
-    [loaderData.templates],
-  );
-
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Communications Centre</h1>
           <p>
-            Version content, inspect the exact audience, then confirm durable
-            delivery.
+            Manage delivery configuration and versioned content, then launch a
+            durable staged draft for each audience.
           </p>
         </div>
         <div className="page-actions">
+          <Link className="btn primary" to="/admin/communications/compose">
+            New communication
+          </Link>
           <Link className="btn" to="/admin/operations">
             Operation Centre
           </Link>
@@ -663,6 +554,12 @@ export default function CommunicationsCentre({
           </span>
         </div>
       ) : null}
+      {loaderData.deliveryNotice ? (
+        <div className="card pad mb validation-item ok" role="status">
+          <strong>✓</strong>
+          <span>{loaderData.deliveryNotice}</span>
+        </div>
+      ) : null}
       {loaderData.audiencePreset ? (
         <div className="card pad mb validation-item warn" role="status">
           <strong>Reminder preset</strong>
@@ -672,6 +569,17 @@ export default function CommunicationsCentre({
               : "An audience has been preselected."}{" "}
             Review the exact recipients in preview before confirming delivery.
           </span>
+          <Link
+            className="btn small"
+            to={`/admin/communications/compose?${new URLSearchParams({
+              audience: loaderData.audiencePreset,
+              ...(loaderData.categoryPreset
+                ? { category: loaderData.categoryPreset }
+                : {}),
+            })}`}
+          >
+            Start durable draft
+          </Link>
         </div>
       ) : null}
       {actionData ? (
@@ -752,21 +660,23 @@ export default function CommunicationsCentre({
               setTemplateDirty(true);
             }}
           />
-          <AudienceComposer
-            actionData={actionData}
-            selected={selected}
-            publishedTemplates={publishedTemplates}
-            audiencePreset={loaderData.audiencePreset}
-            eventTimezone={loaderData.eventTimezone}
-            working={working}
-            pendingIntent={pendingIntent}
-          />
-          <CommunicationPreviewConfirmation
-            actionData={actionData}
-            eventTimezone={loaderData.eventTimezone}
-            working={working}
-            pendingIntent={pendingIntent}
-          />
+          <section className="card pad">
+            <div className="card-title">
+              <div>
+                <h2>Compose and send</h2>
+                <p className="help">
+                  Audience configuration, preview and confirmation live in a
+                  durable communication draft that can be resumed safely.
+                </p>
+              </div>
+              <Link
+                className="btn primary right"
+                to="/admin/communications/compose"
+              >
+                New communication
+              </Link>
+            </div>
+          </section>
         </main>
       </div>
 

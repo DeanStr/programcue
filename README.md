@@ -68,6 +68,8 @@ npm run check
 
 This runs configuration contracts, TypeScript and React Router type generation, fast Node rule tests, isolated workerd/D1/R2/Agent integration tests, one production build, migration/recovery/OpenAPI validation, and Playwright behavior/accessibility/visual coverage against a freshly built local production Worker in Chromium plus Firefox/WebKit smoke coverage.
 
+When another worktree already owns the default test port, set an isolated one for the complete browser-backed command, for example `PROGRAM_CUE_E2E_PORT=5174 npm run check`.
+
 Use the smaller commands while developing:
 
 ```bash

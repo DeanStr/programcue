@@ -47,9 +47,7 @@ test("task status bulk actions require an exact preview and can be cancelled", a
   const candidate = page.locator(".bulk-record-picker label").filter({
     hasText: "Complete your speaker profile",
   });
-  await expect(candidate).toContainText(
-    "Priya Shah · completed · revision 1",
-  );
+  await expect(candidate).toContainText("Priya Shah · completed · revision 1");
   await candidate.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Preview exact changes" }).click();
   await expect(page).toHaveURL(/operation=/);
@@ -94,7 +92,7 @@ test("a speaker can undo a reversible task completion from its status notice", a
   page,
 }) => {
   await selectSpeaker(page);
-  await waitForInterface(page, "/speaker/dashboard");
+  await waitForInterface(page, "/speaker/tasks");
   const task = page.locator("article.speaker-task").filter({
     hasText: "Read the speaker handbook",
   });
@@ -133,7 +131,7 @@ test("speaker task evidence uses the signed direct uploader", async ({
   page,
 }) => {
   await selectSpeaker(page);
-  await waitForInterface(page, "/speaker/dashboard");
+  await waitForInterface(page, "/speaker/tasks");
   const task = page.locator("article.speaker-task").filter({
     hasText: "Upload presentation slides",
   });

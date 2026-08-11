@@ -5,6 +5,8 @@ import { promisify } from "node:util";
 
 import { expect, test } from "@playwright/test";
 
+import { e2eOrigin } from "./support/e2e-origin";
+
 const enabled = process.env.PERFORMANCE_EVIDENCE === "1";
 const execFileAsync = promisify(execFile);
 const repositoryRoot = process.cwd();
@@ -593,7 +595,7 @@ test.describe("explicit local performance evidence", () => {
         (index % 2) * 3_600;
       const startedAt = performance.now();
       const response = await page.request.post("/admin/schedule", {
-        headers: { origin: "http://127.0.0.1:5173" },
+        headers: { origin: e2eOrigin },
         form: {
           intent: "place",
           scheduleVersionId: "perf-scale-schedule-draft",

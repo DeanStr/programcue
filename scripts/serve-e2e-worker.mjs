@@ -4,6 +4,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+const configuredPort = process.env.PROGRAM_CUE_E2E_PORT?.trim() || "5173";
+const port = Number(configuredPort);
+if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+  throw new Error(
+    `PROGRAM_CUE_E2E_PORT must be an integer from 1 to 65535; received ${JSON.stringify(configuredPort)}.`,
+  );
+}
+const e2ePort = String(port);
+
 const signingSecret = randomBytes(48).toString("base64url");
 const privateDirectory = await mkdtemp(join(tmpdir(), "program-cue-e2e-"));
 const variableFile = join(privateDirectory, "worker.env");
@@ -27,7 +36,11 @@ const wrangler = spawn(
     "--persist-to",
     ".wrangler/e2e-state",
     "--port",
-    "5173",
+    e2ePort,
+    "--var",
+    `BETTER_AUTH_URL:http://localhost:${e2ePort}`,
+    "--var",
+    `CORS_ALLOWED_ORIGINS:http://localhost:${e2ePort},http://127.0.0.1:${e2ePort}`,
     "--log-level",
     "warn",
     "--env-file",

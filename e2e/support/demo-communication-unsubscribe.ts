@@ -1,8 +1,10 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 
+import { e2eOrigin } from "./e2e-origin";
+
 const fixturePath = "/demo/fixtures/communication-unsubscribe";
 const confirmation = "manage-communication-unsubscribe-demo-fixture";
-const sameOriginHeaders = { origin: "http://127.0.0.1:5173" };
+const sameOriginHeaders = { origin: e2eOrigin };
 
 export type DemoCommunicationUnsubscribeFixture = {
   unsubscribePath: string;
@@ -34,7 +36,9 @@ export async function readDemoCommunicationUnsubscribe(
   return response.json() as Promise<DemoCommunicationUnsubscribeFixture>;
 }
 
-export async function clearDemoCommunicationUnsubscribe(request: APIRequestContext) {
+export async function clearDemoCommunicationUnsubscribe(
+  request: APIRequestContext,
+) {
   const response = await request.post(fixturePath, {
     form: { confirm: confirmation, intent: "clear" },
     headers: sameOriginHeaders,

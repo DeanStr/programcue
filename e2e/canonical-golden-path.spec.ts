@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { e2eOrigin } from "./support/e2e-origin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 const TEAM_NAME = "Golden path review team";
@@ -36,7 +37,7 @@ async function switchDemoRole(
 ) {
   const response = await page.request.post("/demo/role", {
     form: { role },
-    headers: { origin: "http://127.0.0.1:5173" },
+    headers: { origin: e2eOrigin },
   });
   expect(response.ok()).toBeTruthy();
 }

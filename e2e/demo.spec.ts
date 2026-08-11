@@ -70,17 +70,19 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
   );
 
   await waitForInterface(page, "/admin/communications");
-  const audienceComposer = page.locator("section").filter({
-    has: page.getByRole("heading", { name: "1. Configure audience" }),
+  await page.getByRole("link", { name: "New communication" }).first().click();
+  const draftComposer = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "1. Create the durable draft" }),
   });
-  await expect(audienceComposer.getByLabel("Published template")).toHaveValue(
+  await expect(draftComposer.getByLabel("Published template")).toHaveValue(
     "c4be71b7-cf55-4e8a-ac28-73f2c83bde42",
   );
-  await audienceComposer
-    .getByRole("button", { name: "Preview recipients and content" })
+  await draftComposer
+    .getByRole("button", { name: "Create durable draft" })
     .click();
+  await page.getByRole("button", { name: "Generate current preview" }).click();
   await expect(
-    page.getByRole("heading", { name: "Verify preview" }),
+    page.getByRole("heading", { name: "2. Verify the authoritative preview" }),
   ).toBeVisible();
   await expect(page.getByText("Nothing queued", { exact: true })).toBeVisible();
   await expect(
@@ -88,4 +90,38 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
       .getByRole("table", { name: "Deliverable recipient sample" })
       .getByRole("cell", { name: "Priya Shah", exact: true }),
   ).toBeVisible();
+  const savedConfiguration = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "1. Saved draft configuration" }),
+  });
+  await savedConfiguration
+    .getByRole("textbox", { name: /Manual addresses/ })
+    .fill("unsaved@example.com");
+  await expect(
+    page.getByText(/visible configuration has unsaved changes/i),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Generate current preview" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: /Confirm \d+ deliver/ }),
+  ).toBeDisabled();
+
+  await waitForInterface(
+    page,
+    "/admin/communications?composed=queued&communication=00000000-0000-4000-8000-000000000000",
+  );
+  await expect(page.getByText(/authoritative delivery result/i)).toHaveCount(0);
+  const missingDraftActionStatus = await page.evaluate(async () => {
+    const response = await fetch("/admin/communications/compose", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ intent: "preview-draft" }),
+    });
+    return response.status;
+  });
+  expect(missingDraftActionStatus).toBe(404);
+  const missingDraft = await page.goto(
+    "/admin/communications/compose/00000000-0000-4000-8000-000000000000",
+  );
+  expect(missingDraft?.status()).toBe(404);
 });

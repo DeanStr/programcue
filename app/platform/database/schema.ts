@@ -2118,6 +2118,7 @@ export const communications = sqliteTable(
         | "failed"
         | "cancelled"
       >(),
+    revision: integer("revision").notNull().default(1),
     audienceJson: text("audience_json").notNull(),
     contentSnapshotJson: text("content_snapshot_json").notNull(),
     recipientCount: integer("recipient_count").notNull().default(0),

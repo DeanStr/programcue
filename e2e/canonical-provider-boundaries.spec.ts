@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { e2eOrigin } from "./support/e2e-origin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 const FIXTURE_CONFIRMATION = "seed-golden-path-browser-fixture";
@@ -7,7 +8,7 @@ const PART_SIZE_BYTES = 10 * 1_048_576;
 const EVIDENCE_BYTES = Buffer.from(
   "%PDF-1.4\nProgram Cue deterministic local task evidence.\n%%EOF\n",
 );
-const LOCAL_PART_URL = "http://127.0.0.1:5173/__e2e/r2/part-1";
+const LOCAL_PART_URL = `${e2eOrigin}/__e2e/r2/part-1`;
 
 async function waitForInterface(page: Page, path: string) {
   const response = await page.goto(path);
@@ -24,7 +25,7 @@ async function expectStatus(page: Page, text: string) {
 async function switchDemoRole(page: Page, role: "administrator" | "speaker") {
   const response = await page.request.post("/demo/role", {
     form: { role },
-    headers: { origin: "http://127.0.0.1:5173" },
+    headers: { origin: e2eOrigin },
   });
   expect(response.ok()).toBeTruthy();
 }
@@ -47,7 +48,7 @@ test.describe.serial("canonical provider boundaries", () => {
         intent: "seed_task_evidence",
         confirm: FIXTURE_CONFIRMATION,
       },
-      headers: { origin: "http://127.0.0.1:5173" },
+      headers: { origin: e2eOrigin },
     });
     const fixtureText = await fixture.text();
     expect(fixture.ok(), fixtureText).toBeTruthy();
@@ -182,7 +183,7 @@ test.describe.serial("canonical provider boundaries", () => {
     });
 
     await switchDemoRole(page, "speaker");
-    await waitForInterface(page, "/speaker/dashboard");
+    await waitForInterface(page, "/speaker/tasks");
     const uploadTask = page.locator("article.speaker-task").filter({
       hasText: "Upload presentation slides",
     });
@@ -222,7 +223,7 @@ test.describe.serial("canonical provider boundaries", () => {
     await expect(
       page.getByText("You acknowledged this exact published version."),
     ).toBeVisible();
-    await waitForInterface(page, "/speaker/dashboard");
+    await waitForInterface(page, "/speaker/tasks");
     const handbookTask = page.locator("article.speaker-task").filter({
       hasText: "Read the speaker handbook",
     });
@@ -262,7 +263,7 @@ test.describe.serial("canonical provider boundaries", () => {
         intent: "seed_accelevents_no_write",
         confirm: FIXTURE_CONFIRMATION,
       },
-      headers: { origin: "http://127.0.0.1:5173" },
+      headers: { origin: e2eOrigin },
     });
     const fixtureText = await fixture.text();
     expect(fixture.ok(), fixtureText).toBeTruthy();

@@ -1,8 +1,10 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 import { UNSAFE_decodeViaTurboStream } from "react-router";
 
+import { e2eOrigin } from "./e2e-origin";
+
 const confirmation = "Future of Events 2025";
-const sameOriginHeaders = { origin: "http://127.0.0.1:5173" };
+const sameOriginHeaders = { origin: e2eOrigin };
 
 export async function resetDemoEvent(request: APIRequestContext) {
   const deadline = Date.now() + 30_000;

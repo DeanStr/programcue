@@ -1,9 +1,11 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 
+import { e2eOrigin } from "./e2e-origin";
+
 const resetConfirmation = "reset-submissions-demo";
 const resetTimeoutMs = 15_000;
 const resetRetryIntervalMs = 250;
-const sameOriginHeaders = { origin: "http://127.0.0.1:5173" };
+const sameOriginHeaders = { origin: e2eOrigin };
 
 type ResetResponse = {
   ok?: boolean;

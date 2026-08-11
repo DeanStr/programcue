@@ -993,6 +993,7 @@ CREATE TABLE communications (
   kind TEXT NOT NULL DEFAULT 'transactional' CHECK (kind IN ('transactional','optional')),
   channel TEXT NOT NULL DEFAULT 'email' CHECK (channel IN ('email','sms','push','calendar')),
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','scheduled','queued','sending','sent','partially_failed','failed','cancelled')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
   audience_json TEXT NOT NULL CHECK (json_valid(audience_json)),
   content_snapshot_json TEXT NOT NULL CHECK (json_valid(content_snapshot_json)),
   recipient_count INTEGER NOT NULL DEFAULT 0 CHECK (recipient_count >= 0),

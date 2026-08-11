@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { e2eOrigin } from "./support/e2e-origin";
+
 async function waitForInterface(
   page: import("@playwright/test").Page,
   path: string,
@@ -147,9 +149,12 @@ test("representative shells remain usable at a 200 percent equivalent layout vie
     "/apply/form",
     "/public/programme",
     "/speaker/dashboard",
+    "/speaker/tasks",
+    "/admin/communications/compose",
     "/design/system",
   ] as const) {
     if (path.startsWith("/speaker/")) await selectDemoRole(page, "speaker");
+    if (path.startsWith("/admin/")) await selectDemoRole(page, "administrator");
     await waitForInterface(page, path);
     await expect(page.locator("#main")).toBeVisible();
     const overflow = await page.evaluate(
@@ -187,9 +192,12 @@ test("representative surfaces have one primary main landmark and unique ids", as
     "/apply/form",
     "/public/programme",
     "/speaker/resources",
+    "/speaker/tasks",
+    "/admin/communications/compose",
     "/design/system",
   ] as const) {
     if (path.startsWith("/speaker/")) await selectDemoRole(page, "speaker");
+    if (path.startsWith("/admin/")) await selectDemoRole(page, "administrator");
     await waitForInterface(page, path);
     await expect(page.locator("main#main")).toHaveCount(1);
     const duplicateIds = await page.locator("[id]").evaluateAll((elements) => {
@@ -216,7 +224,7 @@ test("server-rendered timestamps hydrate in a non-UTC browser timezone", async (
   browser,
 }) => {
   const context = await browser.newContext({
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: e2eOrigin,
     locale: "en-US",
     timezoneId: "America/Los_Angeles",
   });
@@ -234,6 +242,7 @@ test("server-rendered timestamps hydrate in a non-UTC browser timezone", async (
     "/admin/settings",
     "/admin/submissions/form",
     "/speaker/resources",
+    "/admin/communications/compose",
     "/admin/integrations",
   ] as const) {
     if (path.startsWith("/speaker/")) await selectDemoRole(page, "speaker");

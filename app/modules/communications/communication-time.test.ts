@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertCommunicationScheduleStillMatchesPreview,
   communicationScheduledEpoch,
+  communicationScheduledLocalValue,
 } from "./communication-time";
 
 describe("event-local communication scheduling", () => {
@@ -10,6 +11,17 @@ describe("event-local communication scheduling", () => {
     expect(
       communicationScheduledEpoch("2027-07-10T09:30", "America/Toronto"),
     ).toBe(Date.parse("2027-07-10T13:30:00Z") / 1_000);
+  });
+
+  it("round-trips a stored instant into the event-local composer value", () => {
+    const epoch = communicationScheduledEpoch(
+      "2027-07-10T09:30",
+      "America/Toronto",
+    );
+    expect(communicationScheduledLocalValue(epoch, "America/Toronto")).toBe(
+      "2027-07-10T09:30",
+    );
+    expect(communicationScheduledLocalValue(null, "America/Toronto")).toBe("");
   });
 
   it("rejects a wall time that does not exist across a DST transition", () => {
