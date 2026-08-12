@@ -560,11 +560,12 @@ export class SubmissionDraftFinalizer {
       finalStatements.push(
         this.env.DB.prepare(
           `INSERT INTO session_speakers (
-             session_id, event_id, person_id, position, role_label, visibility
+             session_id, event_id, person_id, position, role_label,
+             participation_status, participation_confirmed_at, visibility
            ) SELECT ?, speaker.event_id, speaker.person_id, speaker.position,
                     CASE WHEN speaker.is_primary = 1
                          THEN 'Primary speaker' ELSE 'Co-speaker' END,
-                    'public'
+                    'confirmed', unixepoch(), 'public'
                FROM submission_speakers speaker
               WHERE speaker.submission_id = ? AND speaker.event_id = ?
                 AND speaker.person_id IS NOT NULL

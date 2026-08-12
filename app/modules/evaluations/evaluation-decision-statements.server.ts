@@ -505,9 +505,13 @@ export function buildDecisionStatements(input: {
           ),
           env.DB.prepare(
             `
-          INSERT INTO session_speakers (session_id, event_id, person_id, position, role_label, visibility)
+          INSERT INTO session_speakers (
+            session_id, event_id, person_id, position, role_label,
+            participation_status, participation_confirmed_at, visibility
+          )
           SELECT ?, event_id, person_id, position,
-                 CASE WHEN is_primary = 1 THEN 'Primary speaker' ELSE 'Co-speaker' END, 'public'
+                 CASE WHEN is_primary = 1 THEN 'Primary speaker' ELSE 'Co-speaker' END,
+                 'confirmed', unixepoch(), 'public'
             FROM submission_speakers
            WHERE submission_id = ? AND event_id = ? AND person_id IS NOT NULL
              AND EXISTS (SELECT 1 FROM sessions WHERE id = ? AND event_id = ?)

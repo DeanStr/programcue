@@ -136,7 +136,7 @@ test.describe.serial("cross-surface interaction standards", () => {
       .click();
     await expect(
       page.getByText(
-        /Direct session created in the unscheduled programme\. Any newly invited speakers must accept before publication\./,
+        /Direct session created in the unscheduled programme\. Speaker participation must be confirmed before publication; portal invitation acceptance is separate\./,
       ),
     ).toBeVisible();
   });

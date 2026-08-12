@@ -79,8 +79,10 @@ export async function scheduledSpeakerEnvironment() {
       `calendar-lifecycle-${token}`,
     ),
     env.DB.prepare(
-      `INSERT INTO session_speakers (session_id, event_id, person_id, position, visibility)
-      VALUES (?, ?, 'person-demo-speaker', 0, 'public')`,
+      `INSERT INTO session_speakers (
+        session_id, event_id, person_id, position,
+        participation_status, participation_confirmed_at, visibility
+      ) VALUES (?, ?, 'person-demo-speaker', 0, 'confirmed', unixepoch(), 'public')`,
     ).bind(sessionId, calendarTestViewer.eventId),
     env.DB.prepare(
       `INSERT INTO schedule_versions (

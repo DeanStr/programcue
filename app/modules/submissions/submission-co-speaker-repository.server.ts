@@ -211,7 +211,8 @@ export class SubmissionCoSpeakerRepository {
       this.env.DB.prepare(
         `
         INSERT INTO session_speakers (
-          session_id, event_id, person_id, position, role_label, visibility
+          session_id, event_id, person_id, position, role_label,
+          participation_status, participation_confirmed_at, visibility
         )
         SELECT session.id, session.event_id, speaker.person_id,
                COALESCE((
@@ -220,7 +221,7 @@ export class SubmissionCoSpeakerRepository {
                   WHERE existing.session_id = session.id
                ), 0),
                CASE WHEN speaker.is_primary = 1 THEN 'Primary speaker' ELSE 'Co-speaker' END,
-               'public'
+               'confirmed', unixepoch(), 'public'
           FROM submission_speakers speaker
           JOIN sessions session
             ON session.source_submission_id = speaker.submission_id

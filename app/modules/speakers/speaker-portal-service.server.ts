@@ -22,6 +22,8 @@ export type SessionRow = {
   durationMinutes: number;
   status: string;
   roleLabel: string | null;
+  participationStatus: "pending" | "confirmed";
+  participationConfirmedAt: number | null;
   startsAt: number | null;
   endsAt: number | null;
   roomName: string | null;
@@ -109,7 +111,10 @@ export class SpeakerPortalService {
       this.env.DB.prepare(
         `
         SELECT s.id, s.title, s.description, s.format, s.duration_minutes AS durationMinutes,
-               s.status, ss.role_label AS roleLabel, se.starts_at AS startsAt,
+               s.status, ss.role_label AS roleLabel,
+               ss.participation_status AS participationStatus,
+               ss.participation_confirmed_at AS participationConfirmedAt,
+               se.starts_at AS startsAt,
                se.ends_at AS endsAt, r.name AS roomName
           FROM session_speakers ss
           JOIN sessions s ON s.id = ss.session_id AND s.event_id = ss.event_id

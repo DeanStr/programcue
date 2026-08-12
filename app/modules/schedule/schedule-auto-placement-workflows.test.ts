@@ -29,9 +29,10 @@ async function resetAutoPlacementSessions() {
     ).bind(viewer.eventId),
     env.DB.prepare(
       `INSERT INTO session_speakers
-         (session_id, event_id, person_id, position, role_label, visibility)
-       VALUES ('schedule-test-one', ?, 'person-demo-speaker', 0, 'Speaker', 'public'),
-              ('schedule-test-two', ?, 'person-demo-submitter', 0, 'Speaker', 'public')`,
+         (session_id, event_id, person_id, position, role_label,
+          participation_status, participation_confirmed_at, visibility)
+       VALUES ('schedule-test-one', ?, 'person-demo-speaker', 0, 'Speaker', 'confirmed', unixepoch(), 'public'),
+              ('schedule-test-two', ?, 'person-demo-submitter', 0, 'Speaker', 'confirmed', unixepoch(), 'public')`,
     ).bind(viewer.eventId, viewer.eventId),
   ]);
 }

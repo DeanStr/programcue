@@ -417,7 +417,7 @@ export class ScheduleService {
     };
   }
 
-  private async findUnacceptedScheduledSpeaker(
+  private async findUnconfirmedScheduledSpeaker(
     viewer: ScheduleEventScope,
     scheduleVersionId: string,
   ) {
@@ -432,14 +432,7 @@ export class ScheduleService {
               SELECT 1 FROM session_speakers relationship
                WHERE relationship.session_id = session.id
                  AND relationship.event_id = session.event_id
-                 AND NOT EXISTS (
-                   SELECT 1 FROM memberships membership
-                    WHERE membership.event_id = relationship.event_id
-                      AND membership.person_id = relationship.person_id
-                      AND membership.role = 'speaker'
-                      AND membership.accepted_at IS NOT NULL
-                      AND membership.revoked_at IS NULL
-                 )
+                 AND relationship.participation_status IS NOT 'confirmed'
             )
           )
         ORDER BY session.title COLLATE NOCASE, session.id
@@ -1013,14 +1006,14 @@ export class ScheduleService {
         "Place at least one session before publishing.",
       );
 
-    const unacceptedSpeaker = await this.findUnacceptedScheduledSpeaker(
+    const unconfirmedSpeaker = await this.findUnconfirmedScheduledSpeaker(
       viewer,
       parsed.scheduleVersionId,
     );
-    if (unacceptedSpeaker) {
+    if (unconfirmedSpeaker) {
       throw new SchedulePublicationBlockedError(
         [],
-        `Every scheduled speaker must accept or claim their invitation before publication. “${unacceptedSpeaker.title}” still has an unaccepted speaker.`,
+        `Every scheduled speaker must confirm their participation before publication. “${unconfirmedSpeaker.title}” still has an unconfirmed speaker.`,
       );
     }
 
@@ -1129,15 +1122,15 @@ export class ScheduleService {
         const replay = await this.replayPublication(viewer, command);
         if (replay) return replay;
       }
-      const newlyUnacceptedSpeaker =
-        await this.findUnacceptedScheduledSpeaker(
+      const newlyUnconfirmedSpeaker =
+        await this.findUnconfirmedScheduledSpeaker(
           viewer,
           parsed.scheduleVersionId,
         );
-      if (newlyUnacceptedSpeaker) {
+      if (newlyUnconfirmedSpeaker) {
         throw new SchedulePublicationBlockedError(
           [],
-          `Every scheduled speaker must accept or claim their invitation before publication. “${newlyUnacceptedSpeaker.title}” still has an unaccepted speaker.`,
+          `Every scheduled speaker must confirm their participation before publication. “${newlyUnconfirmedSpeaker.title}” still has an unconfirmed speaker.`,
         );
       }
       throw new ScheduleRevisionConflictError();

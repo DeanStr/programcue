@@ -134,14 +134,7 @@ export function buildSchedulePublicationStatements(input: {
                     SELECT 1 FROM session_speakers relationship
                      WHERE relationship.session_id = session.id
                        AND relationship.event_id = session.event_id
-                       AND NOT EXISTS (
-                         SELECT 1 FROM memberships membership
-                          WHERE membership.event_id = relationship.event_id
-                            AND membership.person_id = relationship.person_id
-                            AND membership.role = 'speaker'
-                            AND membership.accepted_at IS NOT NULL
-                            AND membership.revoked_at IS NULL
-                       )
+                       AND relationship.participation_status IS NOT 'confirmed'
                   )
                 )
            )

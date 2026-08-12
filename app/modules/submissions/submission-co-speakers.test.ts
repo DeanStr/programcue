@@ -334,9 +334,11 @@ describe("Submissions D1 vertical slice", () => {
         env.DB.prepare(
           `
           INSERT INTO session_speakers (
-            session_id, event_id, person_id, position, role_label, visibility
+            session_id, event_id, person_id, position, role_label,
+            participation_status, participation_confirmed_at, visibility
           )
-          SELECT ?, event_id, person_id, 0, 'Primary speaker', 'public'
+          SELECT ?, event_id, person_id, 0, 'Primary speaker',
+                 'confirmed', unixepoch(), 'public'
             FROM submission_speakers
            WHERE submission_id = ? AND is_primary = 1 AND person_id IS NOT NULL
         `,
@@ -447,8 +449,9 @@ describe("Submissions D1 vertical slice", () => {
         env.DB.prepare(
           `
           INSERT INTO session_speakers (
-            session_id, event_id, person_id, position, role_label, visibility
-          ) VALUES (?, ?, ?, 0, 'Speaker', 'public')
+            session_id, event_id, person_id, position, role_label,
+            participation_status, participation_confirmed_at, visibility
+          ) VALUES (?, ?, ?, 0, 'Speaker', 'confirmed', unixepoch(), 'public')
         `,
         ).bind(unrelatedSessionId, viewer.eventId, lockedSpeaker.personId),
       ]);

@@ -424,8 +424,9 @@ describe("submission demo reset", () => {
       env.DB.prepare(
         `
         INSERT INTO session_speakers (
-          session_id, event_id, person_id, position, role_label
-        ) VALUES (?, ?, ?, 0, 'Primary speaker')
+          session_id, event_id, person_id, position, role_label,
+          participation_status, participation_confirmed_at
+        ) VALUES (?, ?, ?, 0, 'Primary speaker', 'confirmed', unixepoch())
       `,
       ).bind(otherSessionId, otherEventId, otherPersonId),
       env.DB.prepare(

@@ -586,8 +586,9 @@ describe("organisation speaker CRM", () => {
       ),
       testEnv.DB.prepare(
         `INSERT INTO session_speakers (
-           session_id, event_id, person_id, position, visibility
-         ) VALUES (?, ?, ?, 0, 'private')`,
+           session_id, event_id, person_id, position,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES (?, ?, ?, 0, 'confirmed', unixepoch(), 'private')`,
       ).bind(`crm-inactive-session-${token}`, eventId, contact.personId),
     ]);
 

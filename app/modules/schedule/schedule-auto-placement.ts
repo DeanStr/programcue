@@ -8,6 +8,8 @@ import {
 import {
   eventCalendarDayBoundaries,
   eventDayUsableScheduleSlots,
+  eventLocalTimeEpoch,
+  SCHEDULE_DAY_END_HOUR,
 } from "./schedule-time";
 
 export const AUTO_ENTRY_PREFIX = "auto:";
@@ -120,10 +122,14 @@ function unplacedReason(
   attemptedCandidates: number,
   hasRooms: boolean,
   durationMinutes: number,
+  exceededWorkingDay: boolean,
 ) {
   if (!hasRooms) return "No active rooms are configured for this event.";
   if (!Number.isSafeInteger(durationMinutes) || durationMinutes <= 0) {
     return "The session duration must be a positive whole number of minutes.";
+  }
+  if (!attemptedCandidates && exceededWorkingDay) {
+    return "The session duration does not fit within the auto-placement working day.";
   }
   if (!attemptedCandidates) {
     return "No event-date placement slots are available for this session.";
@@ -156,21 +162,33 @@ export function computeAutoPlacements(
     workspace.event.startsAt,
     workspace.event.endsAt,
   );
-  const slots = days.flatMap((day) =>
-    eventDayUsableScheduleSlots(day, workspace.event.timezone),
-  );
+  const slots = days.flatMap((day) => {
+    const workingDayEnd = eventLocalTimeEpoch(
+      day,
+      workspace.event.timezone,
+      SCHEDULE_DAY_END_HOUR,
+    );
+    return eventDayUsableScheduleSlots(day, workspace.event.timezone).map(
+      (startsAt) => ({ startsAt, workingDayEnd }),
+    );
+  });
 
   for (const session of sessions) {
     const durationSeconds = session.durationMinutes * 60;
     const failureMessages: string[] = [];
     let attemptedCandidates = 0;
+    let exceededWorkingDay = false;
     let placed: AutoPlacementProposal | null = null;
 
     if (Number.isSafeInteger(durationSeconds) && durationSeconds > 0) {
-      candidateLoop: for (const startsAt of slots) {
+      candidateLoop: for (const { startsAt, workingDayEnd } of slots) {
+        const endsAt = startsAt + durationSeconds;
+        if (endsAt > workingDayEnd) {
+          exceededWorkingDay = true;
+          continue;
+        }
         for (const room of rooms) {
           attemptedCandidates += 1;
-          const endsAt = startsAt + durationSeconds;
           const conflicts = detectScheduleConflicts({
             candidate: {
               sessionId: session.id,
@@ -216,6 +234,7 @@ export function computeAutoPlacements(
           attemptedCandidates,
           rooms.length > 0,
           session.durationMinutes,
+          exceededWorkingDay,
         ),
       });
       continue;

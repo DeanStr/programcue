@@ -53,13 +53,40 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     "administrator",
   ]);
   const form = await request.formData();
-  if (form.get("_intent") !== "save_speaker_profile") {
+  const intent = form.get("_intent");
+  if (
+    intent !== "save_speaker_profile" &&
+    intent !== "confirm_external_participation"
+  ) {
     return data(
-      { ok: false, message: "Unsupported speaker profile action." },
+      { ok: false, message: "Unsupported speaker action." },
       { status: 400 },
     );
   }
   try {
+    if (intent === "confirm_external_participation") {
+      const result = await new SpeakerService(
+        env,
+      ).confirmExternalParticipation(viewer, params.personId, {
+        sessionId: form.get("sessionId"),
+        confirmation: form.get("confirmation"),
+        externalConfirmation: form.get("externalConfirmation"),
+      });
+      const realtimeFailure = result.changed
+        ? await recordRouteChange(env, viewer, {
+            entityType: "session",
+            entityId: result.sessionId,
+            changeType: "updated",
+          })
+        : null;
+      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
+      return data({
+        ok: true,
+        message: result.changed
+          ? `Recorded external participation confirmation for “${result.title}”. Portal invitation acceptance remains separate.`
+          : `Participation for “${result.title}” was already confirmed.`,
+      });
+    }
     const result = await new SpeakerService(env).updateAdminSpeakerProfile(
       viewer,
       params.personId,
@@ -303,8 +330,10 @@ export default function AdminSpeakerDetail({
                 <tr>
                   <th scope="col">Session</th>
                   <th scope="col">Role</th>
+                  <th scope="col">Participation</th>
                   <th scope="col">Status</th>
                   <th scope="col">Placement</th>
+                  <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -319,6 +348,25 @@ export default function AdminSpeakerDetail({
                       </span>
                     </td>
                     <td data-label="Role">{session.roleLabel ?? "Speaker"}</td>
+                    <td data-label="Participation">
+                      <span
+                        className={`status ${session.participationStatus === "confirmed" ? "success" : session.status === "cancelled" ? "" : "warning"}`}
+                      >
+                        {session.participationStatus === "confirmed"
+                          ? "Confirmed"
+                          : session.status === "cancelled"
+                            ? "Not required"
+                            : "Pending"}
+                      </span>
+                      {session.participationConfirmedAt !== null ? (
+                        <small className="subtle">
+                          {formatTimestamp(
+                            session.participationConfirmedAt,
+                            event.timezone,
+                          )}
+                        </small>
+                      ) : null}
+                    </td>
                     <td data-label="Status">
                       <DomainStatusBadge
                         domain="session"
@@ -339,6 +387,53 @@ export default function AdminSpeakerDetail({
                         <span className="subtle">
                           Not placed in the published schedule
                         </span>
+                      )}
+                    </td>
+                    <td data-label="Action">
+                      {session.participationStatus === "pending" &&
+                      session.status !== "cancelled" ? (
+                        <Form method="post" className="stack">
+                          <input
+                            type="hidden"
+                            name="_intent"
+                            value="confirm_external_participation"
+                          />
+                          <input
+                            type="hidden"
+                            name="sessionId"
+                            value={session.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="confirmation"
+                            value="confirmed"
+                          />
+                          <label className="check-row">
+                            <input
+                              type="checkbox"
+                              name="externalConfirmation"
+                              value="confirmed"
+                              required
+                            />
+                            <span>
+                              I confirm {profile.name} agreed outside Program
+                              Cue to participate in “{session.title}” and be
+                              listed according to its visibility.
+                            </span>
+                          </label>
+                          <button
+                            className="btn small"
+                            type="submit"
+                            disabled={busy}
+                            aria-label={`Record external confirmation for ${session.title}`}
+                          >
+                            Record external confirmation
+                          </button>
+                        </Form>
+                      ) : session.status === "cancelled" ? (
+                        <span className="subtle">Session cancelled</span>
+                      ) : (
+                        <span className="subtle">No action required</span>
                       )}
                     </td>
                   </tr>

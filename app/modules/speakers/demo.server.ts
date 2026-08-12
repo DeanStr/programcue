@@ -116,8 +116,11 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
     ).bind(EVENT_ID),
     env.DB.prepare(
       `
-      INSERT OR IGNORE INTO session_speakers (session_id, event_id, person_id, position, role_label, visibility)
-      VALUES ('session-demo-speaker', ?, ?, 0, 'Speaker', 'public')
+      INSERT OR IGNORE INTO session_speakers (
+        session_id, event_id, person_id, position, role_label,
+        participation_status, participation_confirmed_at, visibility
+      )
+      VALUES ('session-demo-speaker', ?, ?, 0, 'Speaker', 'pending', NULL, 'public')
     `,
     ).bind(EVENT_ID, SPEAKER_ID),
     env.DB.prepare(

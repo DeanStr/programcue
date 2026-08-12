@@ -306,7 +306,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       replayed,
       invitationDeliveries: invitationOutcomes.map((outcome) => outcome.status),
       invitationWarning: invitationNeedsAttention
-        ? "The session was created, but one or more durable speaker invitation operations need attention before publication."
+        ? "The session was created, but one or more durable portal invitation operations need attention in Speakers administration. Participation confirmation remains separate."
         : null,
       webhookDeliveries,
       webhookWarning: webhookNeedsAttention
@@ -515,9 +515,11 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         this.env.DB.prepare(
           `
           INSERT INTO session_speakers (
-            session_id, event_id, person_id, position, role_label
+            session_id, event_id, person_id, position, role_label,
+            participation_status, participation_confirmed_at
           )
-          SELECT session.id, session.event_id, person.id, ?, ?
+          SELECT session.id, session.event_id, person.id, ?, ?,
+                 'pending', NULL
             FROM sessions session
             JOIN people person ON person.email = ? COLLATE NOCASE
            WHERE session.id = ? AND session.event_id = ?

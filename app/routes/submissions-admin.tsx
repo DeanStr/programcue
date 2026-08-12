@@ -170,8 +170,8 @@ export async function action({ request, context }: Route.ActionArgs) {
           ok: !warning,
           partial: Boolean(warning),
           message: warning
-            ? `Direct session created in the unscheduled programme. Any newly invited speakers must accept before publication. ${warning}`
-            : "Direct session created in the unscheduled programme. Any newly invited speakers must accept before publication.",
+            ? `Direct session created in the unscheduled programme. Speaker participation must be confirmed before publication; portal invitation acceptance is separate. ${warning}`
+            : "Direct session created in the unscheduled programme. Speaker participation must be confirmed before publication; portal invitation acceptance is separate.",
         },
         { status: warning ? 207 : 200 },
       );

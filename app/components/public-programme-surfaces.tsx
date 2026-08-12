@@ -72,11 +72,11 @@ function PublicDayTabs({
 }
 
 function PublicSpeakerMetadata({ speaker }: { speaker: PublishedSpeaker }) {
+  const affiliation = speakerAffiliation(speaker);
+  if (!affiliation) return null;
   return (
     <span className="public-speaker-metadata">
-      <span>{speaker.jobTitle || "Job title not provided"}</span>
-      <span aria-hidden="true"> · </span>
-      <span>{speaker.organisationName || "Company not provided"}</span>
+      {affiliation}
     </span>
   );
 }
@@ -131,7 +131,9 @@ function PublicSessionSpeakers({
       {speakers.map((speaker) => (
         <div className="public-session-speaker" key={speaker.id}>
           <strong>{speaker.displayName}</strong>
-          <span>{speakerAffiliation(speaker)}</span>
+          {speakerAffiliation(speaker) ? (
+            <span>{speakerAffiliation(speaker)}</span>
+          ) : null}
         </div>
       ))}
     </div>

@@ -360,8 +360,10 @@ describe("evaluation vertical slice", () => {
         ),
         env.DB.prepare(
           `INSERT INTO session_speakers (
-             session_id, event_id, person_id, position, role_label, visibility
-           ) VALUES (?, ?, 'person-demo-submitter', 0, 'Facilitator', 'public')`,
+             session_id, event_id, person_id, position, role_label,
+             participation_status, participation_confirmed_at, visibility
+           ) VALUES (?, ?, 'person-demo-submitter', 0, 'Facilitator',
+                     'confirmed', unixepoch(), 'public')`,
         ).bind("eval-session-target", admin.eventId),
       ]);
       try {

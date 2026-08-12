@@ -56,8 +56,9 @@ describe("calendar fan-out workflows", () => {
         ),
         testEnv.DB.prepare(
           `INSERT INTO session_speakers (
-               session_id, event_id, person_id, position, visibility
-             ) VALUES (?, ?, ?, ?, 'public')`,
+               session_id, event_id, person_id, position,
+               participation_status, participation_confirmed_at, visibility
+             ) VALUES (?, ?, ?, ?, 'confirmed', unixepoch(), 'public')`,
         ).bind(sessionId, viewer.eventId, personId, index + 1),
       );
     }
@@ -198,8 +199,9 @@ describe("calendar fan-out workflows", () => {
         ),
         testEnv.DB.prepare(
           `INSERT INTO session_speakers (
-               session_id, event_id, person_id, position, visibility
-             ) VALUES (?, ?, ?, ?, 'public')`,
+               session_id, event_id, person_id, position,
+               participation_status, participation_confirmed_at, visibility
+             ) VALUES (?, ?, ?, ?, 'confirmed', unixepoch(), 'public')`,
         ).bind(sessionId, viewer.eventId, personId, index + 1),
       );
     }
@@ -507,8 +509,9 @@ describe("calendar fan-out workflows", () => {
         ),
         testEnv.DB.prepare(
           `INSERT INTO session_speakers (
-               session_id, event_id, person_id, position, visibility
-             ) VALUES (?, ?, ?, ?, 'public')`,
+               session_id, event_id, person_id, position,
+               participation_status, participation_confirmed_at, visibility
+             ) VALUES (?, ?, ?, ?, 'confirmed', unixepoch(), 'public')`,
         ).bind(sessionId, viewer.eventId, personId, index + 1),
       );
     }

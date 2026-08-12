@@ -9,6 +9,7 @@ import type {
 import { PublicSpeakerGallerySurface } from "./public-programme-surfaces";
 import {
   sessionSpeakerDetails,
+  speakerAffiliation,
   type PublicProgrammeModel,
 } from "./public-programme-model";
 
@@ -62,6 +63,32 @@ function model(overrides: Partial<PublicProgrammeModel> = {}) {
 }
 
 describe("public programme speaker surfaces", () => {
+  it("renders only supplied affiliation fields and omits empty metadata", () => {
+    expect(
+      speakerAffiliation({ jobTitle: "Director", organisationName: null }),
+    ).toBe("Director");
+    expect(
+      speakerAffiliation({ jobTitle: null, organisationName: "EventLab" }),
+    ).toBe("EventLab");
+    expect(
+      speakerAffiliation({ jobTitle: " ", organisationName: null }),
+    ).toBe("");
+
+    const missingMetadataSpeaker = {
+      ...speaker,
+      jobTitle: null,
+      organisationName: null,
+    };
+    const markup = renderToStaticMarkup(
+      <PublicSpeakerGallerySurface
+        model={model({ gallerySpeakers: [missingMetadataSpeaker] })}
+      />,
+    );
+    expect(markup).not.toContain("Job title not provided");
+    expect(markup).not.toContain("Company not provided");
+    expect(markup).not.toContain("public-speaker-metadata");
+  });
+
   it("renders a searchable visual gallery card with released photo metadata", () => {
     const markup = renderToStaticMarkup(
       <PublicSpeakerGallerySurface model={model()} />,

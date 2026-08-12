@@ -244,14 +244,20 @@ describe("published programme and itinerary", () => {
       `),
       env.DB.prepare(
         `
-        INSERT INTO session_speakers (session_id, event_id, person_id, position, visibility)
-        VALUES (?, 'evt-foe-2025', 'programme-speaker-late', 20, 'public')
+        INSERT INTO session_speakers (
+          session_id, event_id, person_id, position,
+          participation_status, participation_confirmed_at, visibility
+        ) VALUES (?, 'evt-foe-2025', 'programme-speaker-late', 20,
+                  'confirmed', unixepoch(), 'public')
       `,
       ).bind(publicSessionId),
       env.DB.prepare(
         `
-        INSERT INTO session_speakers (session_id, event_id, person_id, position, visibility)
-        VALUES (?, 'evt-foe-2025', 'programme-speaker-early', 10, 'public')
+        INSERT INTO session_speakers (
+          session_id, event_id, person_id, position,
+          participation_status, participation_confirmed_at, visibility
+        ) VALUES (?, 'evt-foe-2025', 'programme-speaker-early', 10,
+                  'confirmed', unixepoch(), 'public')
       `,
       ).bind(publicSessionId),
     ]);
@@ -279,8 +285,10 @@ describe("published programme and itinerary", () => {
       env.DB.prepare(
         `
         INSERT INTO session_speakers (
-          session_id, event_id, person_id, position, visibility
-        ) VALUES (?, 'evt-foe-2025', 'programme-draft-speaker', 99, 'public')
+          session_id, event_id, person_id, position,
+          participation_status, participation_confirmed_at, visibility
+        ) VALUES (?, 'evt-foe-2025', 'programme-draft-speaker', 99,
+                  'confirmed', unixepoch(), 'public')
       `,
       ).bind(publicSessionId),
     ]);
@@ -351,8 +359,10 @@ describe("published programme and itinerary", () => {
           env.DB.prepare(
             `
             INSERT INTO session_speakers (
-              session_id, event_id, person_id, position, visibility
-            ) VALUES ('demo-session-1', 'evt-foe-2025', ?, ?, 'public')
+              session_id, event_id, person_id, position,
+              participation_status, participation_confirmed_at, visibility
+            ) VALUES ('demo-session-1', 'evt-foe-2025', ?, ?,
+                      'confirmed', unixepoch(), 'public')
           `,
           ).bind(speakerId, index + 1_000),
         ),

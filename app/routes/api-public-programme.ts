@@ -49,13 +49,17 @@ export function staticProgrammeHtml(programme: PublishedProgramme) {
     )
     .join("\n");
   const speakers = programme.speakers
-    .map(
-      (speaker) => `<article id="speaker-${escapeHtml(speaker.id)}">
+    .map((speaker) => {
+      const affiliation = [speaker.jobTitle, speaker.organisationName]
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value))
+        .join(" · ");
+      return `<article id="speaker-${escapeHtml(speaker.id)}">
   <h2>${escapeHtml(speaker.displayName)}</h2>
-  <p>${escapeHtml([speaker.jobTitle, speaker.organisationName].filter(Boolean).join(" · "))}</p>
+  ${affiliation ? `<p>${escapeHtml(affiliation)}</p>` : ""}
   <p>${escapeHtml(speaker.biography ?? "Biography coming soon.")}</p>
-</article>`,
-    )
+</article>`;
+    })
     .join("\n");
   return `<!doctype html>
 <html lang="en">

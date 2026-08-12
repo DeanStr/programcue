@@ -1,5 +1,5 @@
 import { Mic2 } from "lucide-react";
-import { Link } from "react-router";
+import { Form, Link } from "react-router";
 
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
@@ -90,7 +90,13 @@ export function SpeakerDashboardOverview({
   );
 }
 
-export function SpeakerSessionsPanel({ portal }: { portal: SpeakerPortal }) {
+export function SpeakerSessionsPanel({
+  portal,
+  busy,
+}: {
+  portal: SpeakerPortal;
+  busy: boolean;
+}) {
   return (
     <section className="mt" id="sessions">
       <div className="card-title">
@@ -118,6 +124,20 @@ export function SpeakerSessionsPanel({ portal }: { portal: SpeakerPortal }) {
                   <dd>{session.roleLabel ?? "Speaker"}</dd>
                 </div>
                 <div>
+                  <dt>Participation</dt>
+                  <dd>
+                    <span
+                      className={`status ${session.participationStatus === "confirmed" ? "success" : session.status === "cancelled" ? "" : "warning"}`}
+                    >
+                      {session.participationStatus === "confirmed"
+                        ? "Confirmed"
+                        : session.status === "cancelled"
+                          ? "Not required"
+                          : "Confirmation needed"}
+                    </span>
+                  </dd>
+                </div>
+                <div>
                   <dt>When</dt>
                   <dd>
                     {session.startsAt ? (
@@ -136,6 +156,38 @@ export function SpeakerSessionsPanel({ portal }: { portal: SpeakerPortal }) {
                   <dd>{session.roomName ?? "To be confirmed"}</dd>
                 </div>
               </dl>
+              {session.participationStatus === "pending" &&
+              session.status !== "cancelled" ? (
+                <Form method="post" className="stack mt">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="confirm-participation"
+                  />
+                  <input
+                    type="hidden"
+                    name="sessionId"
+                    value={session.id}
+                  />
+                  <input
+                    type="hidden"
+                    name="confirmation"
+                    value="confirmed"
+                  />
+                  <p className="subtle">
+                    Confirm that you agree to participate in this session and
+                    be listed according to its programme visibility.
+                  </p>
+                  <button
+                    className="btn primary"
+                    type="submit"
+                    disabled={busy}
+                    aria-label={`Confirm participation in ${session.title}`}
+                  >
+                    Confirm participation
+                  </button>
+                </Form>
+              ) : null}
             </article>
           ))
         ) : (

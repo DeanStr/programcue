@@ -124,8 +124,9 @@ async function createSecondPublishedEvent(personId: string) {
     ),
     env.DB.prepare(
       `INSERT INTO session_speakers (
-         session_id, event_id, person_id, position, visibility
-       ) VALUES (?, ?, ?, 0, 'public')`,
+         session_id, event_id, person_id, position,
+         participation_status, participation_confirmed_at, visibility
+       ) VALUES (?, ?, ?, 0, 'confirmed', unixepoch(), 'public')`,
     ).bind(sessionId, eventId, personId),
   ]);
   await env.DB.prepare(

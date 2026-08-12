@@ -141,8 +141,14 @@ INSERT INTO sessions (
   'restored-session','Cross-table recovery sentinel.','presentation',60,200,
   '["projector"]','published','public',3,1700000000,1700000000
 );
-INSERT INTO session_speakers (session_id,event_id,person_id,position,role_label,visibility)
-VALUES ('recovery-session','recovery-event','recovery-speaker',0,'Presenter','public');
+INSERT INTO session_speakers (
+  session_id,event_id,person_id,position,role_label,
+  participation_status,participation_confirmed_at,visibility
+)
+VALUES (
+  'recovery-session','recovery-event','recovery-speaker',0,'Presenter',
+  'confirmed',1700000000,'public'
+);
 INSERT INTO schedule_versions (
   id,event_id,version_number,name,status,revision,created_by_person_id,created_at,published_at
 ) VALUES (

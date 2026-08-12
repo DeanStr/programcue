@@ -53,6 +53,125 @@ const webhookCredentialKey = btoa(
 );
 
 describe("speaker profile service", () => {
+  it("records speaker and administrator participation confirmation independently of portal access", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    const sessionId = "session-demo-speaker";
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending', participation_confirmed_at = NULL
+        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+    )
+      .bind(speaker.eventId, sessionId, speaker.personId)
+      .run();
+
+    await expect(
+      service.confirmOwnParticipation(speaker, {
+        sessionId,
+        confirmation: "confirmed",
+      }),
+    ).resolves.toMatchObject({
+      sessionId,
+      participationStatus: "confirmed",
+      changed: true,
+    });
+    await expect(
+      service.confirmOwnParticipation(speaker, {
+        sessionId,
+        confirmation: "confirmed",
+      }),
+    ).resolves.toMatchObject({ changed: false });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT participation_status AS participationStatus,
+                participation_confirmed_at AS participationConfirmedAt
+           FROM session_speakers
+          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+      )
+        .bind(speaker.eventId, sessionId, speaker.personId)
+        .first(),
+    ).resolves.toEqual({
+      participationStatus: "confirmed",
+      participationConfirmedAt: expect.any(Number),
+    });
+
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending', participation_confirmed_at = NULL
+        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+    )
+      .bind(speaker.eventId, sessionId, speaker.personId)
+      .run();
+    await expect(
+      service.confirmExternalParticipation(speaker, speaker.personId, {
+        sessionId,
+        confirmation: "confirmed",
+        externalConfirmation: "confirmed",
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      service.confirmExternalParticipation(admin, speaker.personId, {
+        sessionId,
+        confirmation: "confirmed",
+        externalConfirmation: "confirmed",
+      }),
+    ).resolves.toMatchObject({ changed: true });
+    const audits = await testEnv.DB.prepare(
+      `SELECT actor_person_id AS actorPersonId,
+              json_extract(metadata_json, '$.source') AS source
+         FROM audit_events
+        WHERE event_id = ? AND action = 'speaker.participation.confirmed'
+          AND entity_id = ?
+        ORDER BY created_at, id`,
+    )
+      .bind(speaker.eventId, `${sessionId}:${speaker.personId}`)
+      .all<{ actorPersonId: string; source: string }>();
+    expect(audits.results).toHaveLength(2);
+    expect(audits.results).toEqual(
+      expect.arrayContaining([
+        { actorPersonId: speaker.personId, source: "speaker" },
+        {
+          actorPersonId: admin.personId,
+          source: "administrator_external",
+        },
+      ]),
+    );
+  });
+
+  it("refuses participation confirmation after a session is cancelled", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const sessionId = "session-demo-speaker";
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'pending', participation_confirmed_at = NULL
+          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+      ).bind(speaker.eventId, sessionId, speaker.personId),
+      testEnv.DB.prepare(
+        `UPDATE sessions SET status = 'cancelled'
+          WHERE event_id = ? AND id = ?`,
+      ).bind(speaker.eventId, sessionId),
+    ]);
+
+    try {
+      await expect(
+        new SpeakerService(testEnv).confirmOwnParticipation(speaker, {
+          sessionId,
+          confirmation: "confirmed",
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+    } finally {
+      await testEnv.DB.prepare(
+        `UPDATE sessions SET status = 'scheduled'
+          WHERE event_id = ? AND id = ?`,
+      )
+        .bind(speaker.eventId, sessionId)
+        .run();
+    }
+  });
+
   it("persists and replays one durable invitation delivery operation", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
@@ -684,8 +803,9 @@ describe("speaker profile service", () => {
       ).bind(otherSessionId, otherEventId, `speaker-shared-session-${token}`),
       testEnv.DB.prepare(
         `INSERT INTO session_speakers (
-           session_id, event_id, person_id, position, role_label, visibility
-         ) VALUES (?, ?, ?, 0, 'Speaker', 'public')`,
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES (?, ?, ?, 0, 'Speaker', 'confirmed', unixepoch(), 'public')`,
       ).bind(otherSessionId, otherEventId, speaker.personId),
     ]);
 

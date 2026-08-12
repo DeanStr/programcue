@@ -579,9 +579,11 @@ export function PublicProgrammeWorkspace({
                           )}
                           <div>
                             <h3>{speaker.displayName}</h3>
-                            <p className="help">
-                              <span>{speakerAffiliation(speaker)}</span>
-                            </p>
+                            {speakerAffiliation(speaker) ? (
+                              <p className="help">
+                                {speakerAffiliation(speaker)}
+                              </p>
+                            ) : null}
                           </div>
                         </div>
                         <p>
@@ -627,9 +629,11 @@ export function PublicProgrammeWorkspace({
                         <h2 id="programme-speaker-profile-name">
                           {selectedSpeaker.displayName}
                         </h2>
-                        <p className="help">
-                          {speakerAffiliation(selectedSpeaker)}
-                        </p>
+                        {speakerAffiliation(selectedSpeaker) ? (
+                          <p className="help">
+                            {speakerAffiliation(selectedSpeaker)}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="public-profile-actions">
                         <a
@@ -836,10 +840,7 @@ export function PublicProgrammeWorkspace({
                             )}
                             <div>
                               <strong>{name}</strong>
-                              <small>
-                                {affiliation ||
-                                  "Role and organisation not provided"}
-                              </small>
+                              {affiliation ? <small>{affiliation}</small> : null}
                             </div>
                           </div>
                         );

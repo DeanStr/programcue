@@ -1384,6 +1384,10 @@ export const sessionSpeakers = sqliteTable(
       .references(() => people.id),
     position: integer("position").notNull(),
     roleLabel: text("role_label"),
+    participationStatus: text("participation_status")
+      .notNull()
+      .$type<"pending" | "confirmed">(),
+    participationConfirmedAt: integer("participation_confirmed_at"),
     visibility: text("visibility")
       .notNull()
       .default("public")
@@ -1396,6 +1400,10 @@ export const sessionSpeakers = sqliteTable(
       table.position,
     ),
     index("idx_session_speakers_person").on(table.eventId, table.personId),
+    check(
+      "session_speakers_participation_confirmation_check",
+      sql`(${table.participationStatus} = 'pending' AND ${table.participationConfirmedAt} IS NULL) OR (${table.participationStatus} = 'confirmed' AND ${table.participationConfirmedAt} IS NOT NULL)`,
+    ),
   ],
 );
 

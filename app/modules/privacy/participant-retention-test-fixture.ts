@@ -161,13 +161,15 @@ export async function seedExpiredRetentionEvent() {
     ).bind(scheduleVersionId, eventId),
     testEnv.DB.prepare(
       `INSERT INTO session_speakers (
-         session_id, event_id, person_id, position, role_label, visibility
-       ) VALUES (?, ?, ?, 0, 'Presenter', 'public')`,
+         session_id, event_id, person_id, position, role_label,
+         participation_status, participation_confirmed_at, visibility
+       ) VALUES (?, ?, ?, 0, 'Presenter', 'confirmed', unixepoch(), 'public')`,
     ).bind(sessionId, eventId, exclusiveId),
     testEnv.DB.prepare(
       `INSERT INTO session_speakers (
-         session_id, event_id, person_id, position, role_label, visibility
-       ) VALUES (?, ?, 'person-demo-owner', 1, 'Host', 'public')`,
+         session_id, event_id, person_id, position, role_label,
+         participation_status, participation_confirmed_at, visibility
+       ) VALUES (?, ?, 'person-demo-owner', 1, 'Host', 'confirmed', unixepoch(), 'public')`,
     ).bind(sessionId, eventId),
     testEnv.DB.prepare(
       `INSERT INTO task_instances (

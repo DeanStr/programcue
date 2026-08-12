@@ -37,6 +37,22 @@ test("speaker profile, sessions and D1 task state render through the production 
   await expect(
     page.getByRole("heading", { name: "Designing inclusive event technology" }),
   ).toBeVisible();
+  const sessionCard = page
+    .locator(".speaker-session-card")
+    .filter({ hasText: "Designing inclusive event technology" });
+  await expect(sessionCard).toContainText("Confirmation needed");
+  await sessionCard
+    .getByRole("button", { name: "Confirm participation" })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Participation confirmed",
+  );
+  await expect(sessionCard).toContainText("Confirmed");
+  await expect(
+    sessionCard.getByRole("button", { name: "Confirm participation" }),
+  ).toHaveCount(0);
+  await page.reload();
+  await expect(sessionCard).toContainText("Confirmed");
   await page.getByRole("link", { name: "Tasks" }).click();
   await expect(page).toHaveURL(/\/participant\/tasks$/u);
   await expect(

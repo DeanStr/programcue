@@ -452,8 +452,9 @@ describe("Communications D1 vertical slice", () => {
             ),
             testEnv.DB.prepare(
               `INSERT INTO session_speakers (
-                 session_id, event_id, person_id, position, role_label
-               ) VALUES (?, ?, ?, 0, 'Speaker')`,
+                 session_id, event_id, person_id, position, role_label,
+                 participation_status, participation_confirmed_at
+               ) VALUES (?, ?, ?, 0, 'Speaker', 'confirmed', unixepoch())`,
             ).bind(sessionId, eventId, personId),
           );
         }
@@ -504,8 +505,9 @@ describe("Communications D1 vertical slice", () => {
         ).bind(sessionId, viewer.eventId, `guaranteed-${token}`),
         env.DB.prepare(
           `INSERT INTO session_speakers (
-             session_id, event_id, person_id, position, role_label
-           ) VALUES (?, ?, ?, 0, 'Speaker')`,
+             session_id, event_id, person_id, position, role_label,
+             participation_status, participation_confirmed_at
+           ) VALUES (?, ?, ?, 0, 'Speaker', 'confirmed', unixepoch())`,
         ).bind(sessionId, viewer.eventId, personId),
       ]);
 

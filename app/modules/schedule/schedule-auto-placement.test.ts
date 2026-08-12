@@ -219,7 +219,7 @@ describe("deterministic auto-placement", () => {
     expect(computeAutoPlacements(tooLong).unplaced[0]).toEqual(
       expect.objectContaining({
         sessionId: "too-long",
-        reason: expect.stringContaining("event dates"),
+        reason: expect.stringContaining("working day"),
       }),
     );
 
@@ -311,6 +311,123 @@ describe("deterministic auto-placement", () => {
       roomId: "main",
       startsAt: fixedStart + 3_600,
       endsAt: fixedStart + 9_000,
+    });
+  });
+
+  it("rejects a late candidate that overruns the working day and continues on the next event day", () => {
+    const secondDay = eventStartsAt + 24 * 60 * 60;
+    const occupiedStart = eventLocalTimeEpoch(eventStartsAt, "UTC", 7);
+    const occupiedEnd = eventLocalTimeEpoch(eventStartsAt, "UTC", 21, 30);
+    const input = workspace(
+      [
+        session("fixed", "Fixed session", { status: "scheduled" }),
+        session("new", "Late workshop", { durationMinutes: 90 }),
+      ],
+      {
+        event: {
+          ...workspace([]).event,
+          endsAt: secondDay + 23 * 60 * 60 + 59 * 60 + 59,
+        },
+        rooms: [workspace([]).rooms[0]!],
+        entries: [
+          {
+            id: "fixed-entry",
+            sessionId: "fixed",
+            roomId: "main",
+            startsAt: occupiedStart,
+            endsAt: occupiedEnd,
+            revision: 1,
+          },
+        ],
+      },
+    );
+
+    expect(computeAutoPlacements(input).placements[0]).toMatchObject({
+      sessionId: "new",
+      startsAt: eventLocalTimeEpoch(secondDay, "UTC", 7),
+      endsAt: eventLocalTimeEpoch(secondDay, "UTC", 8, 30),
+    });
+  });
+
+  it("does not place a 60-minute session at 21:30", () => {
+    const occupiedStart = eventLocalTimeEpoch(eventStartsAt, "UTC", 7);
+    const occupiedEnd = eventLocalTimeEpoch(eventStartsAt, "UTC", 21, 30);
+    const input = workspace(
+      [
+        session("fixed", "Fixed session", { status: "scheduled" }),
+        session("new", "Late session", { durationMinutes: 60 }),
+      ],
+      {
+        rooms: [workspace([]).rooms[0]!],
+        entries: [
+          {
+            id: "fixed-entry",
+            sessionId: "fixed",
+            roomId: "main",
+            startsAt: occupiedStart,
+            endsAt: occupiedEnd,
+            revision: 1,
+          },
+        ],
+      },
+    );
+
+    expect(computeAutoPlacements(input)).toMatchObject({
+      placements: [],
+      unplaced: [
+        expect.objectContaining({
+          sessionId: "new",
+        }),
+      ],
+    });
+  });
+
+  it("accepts an exact 22:00 end on a daylight-saving transition day", () => {
+    const transitionDay = Date.parse("2025-11-02T00:00:00Z") / 1_000;
+    const occupiedStart = eventLocalTimeEpoch(
+      transitionDay,
+      "America/Toronto",
+      7,
+    );
+    const occupiedEnd = eventLocalTimeEpoch(
+      transitionDay,
+      "America/Toronto",
+      21,
+      30,
+    );
+    const input = workspace(
+      [
+        session("fixed", "Fixed session", { status: "scheduled" }),
+        session("new", "Closing session", { durationMinutes: 30 }),
+      ],
+      {
+        event: {
+          ...workspace([]).event,
+          startsAt: transitionDay,
+          endsAt: transitionDay + 23 * 60 * 60 + 59 * 60 + 59,
+          timezone: "America/Toronto",
+        },
+        rooms: [workspace([]).rooms[0]!],
+        entries: [
+          {
+            id: "fixed-entry",
+            sessionId: "fixed",
+            roomId: "main",
+            startsAt: occupiedStart,
+            endsAt: occupiedEnd,
+            revision: 1,
+          },
+        ],
+      },
+    );
+
+    expect(computeAutoPlacements(input).placements[0]).toMatchObject({
+      startsAt: occupiedEnd,
+      endsAt: eventLocalTimeEpoch(
+        transitionDay,
+        "America/Toronto",
+        22,
+      ),
     });
   });
 });

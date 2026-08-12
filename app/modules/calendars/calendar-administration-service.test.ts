@@ -107,8 +107,9 @@ describe("calendar administration", () => {
       ).bind(otherSessionId, otherEventId),
       testEnv.DB.prepare(
         `INSERT INTO session_speakers (
-           session_id,event_id,person_id,position,visibility
-         ) VALUES (?,?,'person-demo-speaker',0,'public')`,
+           session_id,event_id,person_id,position,
+           participation_status,participation_confirmed_at,visibility
+         ) VALUES (?,?,'person-demo-speaker',0,'confirmed',unixepoch(),'public')`,
       ).bind(otherSessionId, otherEventId),
       testEnv.DB.prepare(
         `INSERT INTO calendar_connections (

@@ -70,10 +70,17 @@ export async function prepareScheduleServiceTest() {
         WHERE event_id = ? AND id IN ('main', '301a')`,
     ).bind(scheduleTestViewer.eventId),
     env.DB.prepare(
-      "INSERT OR IGNORE INTO session_speakers (session_id, event_id, person_id, position, role_label, visibility) VALUES ('schedule-test-one', ?, 'person-demo-speaker', 0, 'Speaker', 'public')",
+      "INSERT OR IGNORE INTO session_speakers (session_id, event_id, person_id, position, role_label, participation_status, participation_confirmed_at, visibility) VALUES ('schedule-test-one', ?, 'person-demo-speaker', 0, 'Speaker', 'confirmed', unixepoch(), 'public')",
     ).bind(scheduleTestViewer.eventId),
     env.DB.prepare(
-      "INSERT OR IGNORE INTO session_speakers (session_id, event_id, person_id, position, role_label, visibility) VALUES ('schedule-test-two', ?, 'person-demo-submitter', 0, 'Speaker', 'public')",
+      "INSERT OR IGNORE INTO session_speakers (session_id, event_id, person_id, position, role_label, participation_status, participation_confirmed_at, visibility) VALUES ('schedule-test-two', ?, 'person-demo-submitter', 0, 'Speaker', 'confirmed', unixepoch(), 'public')",
+    ).bind(scheduleTestViewer.eventId),
+    env.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'confirmed',
+              participation_confirmed_at = unixepoch()
+        WHERE event_id = ?
+          AND session_id IN ('schedule-test-one', 'schedule-test-two')`,
     ).bind(scheduleTestViewer.eventId),
     env.DB.prepare(
       `INSERT OR IGNORE INTO memberships (
@@ -88,7 +95,8 @@ export async function prepareScheduleServiceTest() {
       `UPDATE memberships
           SET accepted_at = unixepoch(), invitation_expires_at = NULL,
               revoked_at = NULL
-        WHERE event_id = ? AND person_id = 'person-demo-submitter'
+        WHERE event_id = ?
+          AND person_id IN ('person-demo-speaker', 'person-demo-submitter')
           AND role = 'speaker'`,
     ).bind(scheduleTestViewer.eventId),
   ]);

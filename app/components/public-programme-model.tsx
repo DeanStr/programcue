@@ -76,10 +76,9 @@ export function distinctSorted(values: Array<string | null>) {
 export function speakerAffiliation(
   speaker: Pick<PublishedSpeaker, "jobTitle" | "organisationName">,
 ) {
-  return [
-    speaker.jobTitle || "Job title not provided",
-    speaker.organisationName || "Company not provided",
-  ].join(" · ");
+  return [speaker.jobTitle?.trim(), speaker.organisationName?.trim()]
+    .filter((value): value is string => Boolean(value))
+    .join(" · ");
 }
 
 export function sessionSpeakerDetails(
