@@ -1,6 +1,6 @@
 /* Speaker */
 .speaker-shell {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: #f6f8fc;
 }
 .speaker-top {
@@ -46,7 +46,7 @@
 .speaker-layout {
   display: grid;
   grid-template-columns: 210px 1fr;
-  min-height: calc(100vh - 72px);
+  min-height: calc(100dvh - 72px);
 }
 .speaker-nav {
   background: var(--surface);

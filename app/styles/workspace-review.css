@@ -3,7 +3,7 @@
   display: grid;
   grid-template-columns: 310px minmax(420px, 1fr) minmax(390px, 0.95fr);
   gap: var(--space-3);
-  min-height: calc(100vh - 145px);
+  min-height: calc(100dvh - 145px);
 }
 .review-queue,
 .review-detail,

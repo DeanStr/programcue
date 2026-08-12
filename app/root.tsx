@@ -44,7 +44,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* viewport-fit=cover is what makes env(safe-area-inset-*) resolve to
+            anything other than 0, which three rules already depend on. */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
         <Meta />
         <Links />
       </head>

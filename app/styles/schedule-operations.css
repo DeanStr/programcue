@@ -13,7 +13,7 @@
 }
 .schedule-source,
 .schedule-conflicts {
-  max-height: calc(100vh - 235px);
+  max-height: calc(100dvh - 235px);
   overflow: auto;
   position: sticky;
   top: 86px;
@@ -350,7 +350,7 @@
 /* Scalar remains a route in the modular monolith, with a small product escape hatch. */
 .api-reference-page {
   position: relative;
-  min-height: 100vh;
+  min-height: 100dvh;
   box-sizing: border-box;
   padding-top: var(--space-10);
   background: var(--surface);
@@ -408,7 +408,7 @@
 .comms-production-layout .template-column {
   position: sticky;
   top: 86px;
-  max-height: calc(100vh - 110px);
+  max-height: calc(100dvh - 110px);
   overflow: auto;
 }
 .comms-production-layout .template-item {
@@ -692,4 +692,22 @@
 .btn:disabled:hover,
 .icon-btn:disabled:hover {
   filter: none;
+}
+
+/* The dragged card lifts out of the layout and settles on drop. */
+.session-card.is-dragging {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3);
+  width: 220px;
+  border: 1px solid var(--brand-400);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--elev-4);
+  cursor: grabbing;
+  transform: rotate(-1.5deg) scale(1.02);
+}
+.session-card.is-dragging small {
+  color: var(--muted);
+  font-size: var(--text-2xs);
 }

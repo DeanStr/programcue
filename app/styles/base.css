@@ -60,7 +60,7 @@ a {
   box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
 }
 .app-admin {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: var(--sidebar) 1fr;
   grid-template-rows: var(--topbar) 1fr;

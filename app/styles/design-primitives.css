@@ -229,7 +229,7 @@
 }
 .pc-design-board {
   max-width: 1500px;
-  min-height: 100vh;
+  min-height: 100dvh;
   margin: auto;
   padding: var(--space-7);
 }

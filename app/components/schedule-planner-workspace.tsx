@@ -1,10 +1,12 @@
 import {
   DndContext,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, Link, useFetcher, useNavigation } from "react-router";
@@ -202,6 +204,9 @@ export function SchedulePlannerWorkspace({
     "room",
   );
   const [publishOpen, setPublishOpen] = useState(false);
+  const [draggingSessionId, setDraggingSessionId] = useState<string | null>(
+    null,
+  );
   const [autoPreview, setAutoPreview] = useState<AutoPlacementPreview | null>(
     null,
   );
@@ -466,6 +471,19 @@ export function SchedulePlannerWorkspace({
     });
     pendingResizeSessionId.current = null;
   }, [fetcher.state, workspace.entries]);
+
+  function sessionLabel(active: { data: { current?: Record<string, unknown> } }) {
+    const sessionId = String(active.data.current?.sessionId ?? "");
+    return sessionById.get(sessionId)?.title ?? "this session";
+  }
+
+  function slotLabel(over: { data: { current?: Record<string, unknown> } }) {
+    const roomId = String(over.data.current?.roomId ?? "");
+    const startsAt = Number(over.data.current?.startsAt);
+    const room = workspace.rooms.find((candidate) => candidate.id === roomId);
+    if (!room || !startsAt) return "that slot";
+    return `${room.name} at ${scheduleDateTimeLabel(startsAt, workspace.event.timezone)}`;
+  }
 
   function place(event: DragEndEvent) {
     if (
@@ -886,7 +904,36 @@ export function SchedulePlannerWorkspace({
       <DndContext
         id="schedule-planner-dnd-instructions"
         sensors={sensors}
-        onDragEnd={place}
+        accessibility={{
+          screenReaderInstructions: {
+            draggable:
+              "Press space or enter to pick up this session. Use the arrow keys to move it between rooms and times, space or enter to place it, and escape to cancel.",
+          },
+          /* dnd-kit's defaults read the raw identifiers aloud, so a keyboard
+             user heard "slot:room-301a:1747742400" rather than a room and a
+             time. */
+          announcements: {
+            onDragStart: ({ active }) => `Picked up ${sessionLabel(active)}.`,
+            onDragOver: ({ over }) =>
+              over ? `Over ${slotLabel(over)}.` : "Not over a placement slot.",
+            onDragEnd: ({ active, over }) =>
+              over
+                ? `Placed ${sessionLabel(active)} in ${slotLabel(over)}.`
+                : `${sessionLabel(active)} was not placed.`,
+            onDragCancel: ({ active }) =>
+              `Cancelled. ${sessionLabel(active)} was not moved.`,
+          },
+        }}
+        onDragStart={(event: DragStartEvent) =>
+          setDraggingSessionId(
+            String(event.active.data.current?.sessionId ?? ""),
+          )
+        }
+        onDragCancel={() => setDraggingSessionId(null)}
+        onDragEnd={(event) => {
+          setDraggingSessionId(null);
+          place(event);
+        }}
       >
         <div className="schedule-workspace mt">
           <ScheduleSourcePanel
@@ -928,6 +975,21 @@ export function SchedulePlannerWorkspace({
           />
           <ScheduleValidationPanel workspace={workspace} fetcher={fetcher} />
         </div>
+        {/* Rendered in a portal above both panes. Without it the dragged card
+            is clipped the moment it leaves the source list, which has
+            overflow:auto, on its way to a board with overflow:hidden. */}
+        <DragOverlay dropAnimation={null}>
+          {draggingSessionId ? (
+            <div className="session-card is-dragging">
+              <strong>
+                {sessionById.get(draggingSessionId)?.title ?? "Session"}
+              </strong>
+              <small>
+                {sessionById.get(draggingSessionId)?.durationMinutes ?? 0} min
+              </small>
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
       <ScheduleContentWorkflows
         workspace={workspace}

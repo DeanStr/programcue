@@ -56,7 +56,7 @@
     );
   gap: var(--space-4);
   align-items: stretch;
-  min-height: calc(100vh - 190px);
+  min-height: calc(100dvh - 190px);
 }
 .reviewer-shell .review-layout > *,
 .reviewer-shell .review-score-form {
@@ -125,7 +125,7 @@
 .reviewer-shell .review-score {
   grid-column: auto;
   min-width: 0;
-  max-height: calc(100vh - 190px);
+  max-height: calc(100dvh - 190px);
   overflow: hidden;
 }
 .reviewer-shell .review-score-form {

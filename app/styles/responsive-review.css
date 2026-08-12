@@ -3,7 +3,7 @@
   .review-score {
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - 145px);
+    max-height: calc(100dvh - 145px);
     overflow: auto;
     scroll-padding-bottom: 86px;
   }
