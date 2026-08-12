@@ -7,8 +7,8 @@ import { PersonDuplicateService } from "./person-duplicate-service.server";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",
-  name: "Olivia Bennett",
-  email: "olivia@example.com",
+  name: "Jordan Alvarez",
+  email: "sbek-organizer@example.com",
   role: "administrator",
   organisationId: "org-future-events",
   eventId: "evt-foe-2025",
@@ -29,7 +29,7 @@ describe("likely duplicate person checks", () => {
     const result = await new PersonDuplicateService(
       env as unknown as CloudflareEnvironment,
     ).findLikelyDuplicates(viewer, [
-      { name: "Olivia Bennett", email: "olivia@example.com" },
+      { name: "Jordan Alvarez", email: "sbek-organizer@example.com" },
       { name: "Priya   Shah", email: "different-priya@example.com" },
     ]);
 
@@ -85,7 +85,7 @@ describe("likely duplicate person checks", () => {
     const result = await new PersonDuplicateService(
       env as unknown as CloudflareEnvironment,
     ).findLikelyDuplicates(viewer, [
-      { name: "Olivia Bennett", email: "olivia@example.com" },
+      { name: "Jordan Alvarez", email: "sbek-organizer@example.com" },
     ]);
     expect(result).toEqual({ enabled: false, matches: [], truncated: false });
   });

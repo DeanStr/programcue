@@ -80,7 +80,7 @@ function context() {
 
 function actorCookie(actor: Actor, extraCookie?: string) {
   return [
-    `program_cue_demo_role=${actor.cookieRole}`,
+    `program_cue_demo_identity=${actor.cookieRole}`,
     `program_cue_event=${actor.selectedEventId}`,
     extraCookie,
   ]

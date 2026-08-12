@@ -28,7 +28,7 @@ async function waitForInterface(
 async function selectSpeaker(page: import("@playwright/test").Page) {
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "speaker",
       domain: "127.0.0.1",
       path: "/",

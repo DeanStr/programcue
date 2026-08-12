@@ -5,6 +5,7 @@ import { signOutSession } from "~/platform/auth/auth.server";
 import { clearCurrentEventCookie } from "~/platform/auth/current-event.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import { DEMO_IDENTITY_COOKIE } from "~/platform/demo/demo-identities";
 
 export async function action({ request, context }: Route.ActionArgs) {
   if (request.method !== "POST") {
@@ -12,7 +13,13 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
   const { env } = getCloudflareContext(context);
   if (String(env.DEMO_MODE) === "true") {
-    throw new Response("Sign-out is disabled in demo mode", { status: 404 });
+    const headers = new Headers();
+    headers.append(
+      "set-cookie",
+      `${DEMO_IDENTITY_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+    );
+    headers.append("set-cookie", clearCurrentEventCookie(env));
+    return redirect("/demo", { status: 303, headers });
   }
 
   const formData = await request.formData();

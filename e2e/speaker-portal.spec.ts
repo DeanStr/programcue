@@ -5,7 +5,7 @@ test("speaker profile, sessions and D1 task state render through the production 
 }) => {
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "speaker",
       domain: "127.0.0.1",
       path: "/",
@@ -63,7 +63,7 @@ test("an administrator demo identity cannot use a speaker-owned portal", async (
 }) => {
   await page.goto("/admin/event");
   await page.evaluate(
-    () => (document.cookie = "program_cue_demo_role=administrator; Path=/"),
+    () => (document.cookie = "program_cue_demo_identity=administrator; Path=/"),
   );
   const response = await page.goto("/speaker/dashboard");
   expect(response?.status()).toBe(403);

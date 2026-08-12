@@ -637,6 +637,43 @@ describe("evaluation vertical slice", () => {
       }
     });
 
+    it("activates only the exact SBEK reviewer after the explicit demo invitation", async () => {
+      await resetEvaluationFixture();
+      await env.DB.prepare(
+        `DELETE FROM memberships
+          WHERE event_id = ? AND person_id = 'person-sbek-reviewer'
+            AND role = 'evaluator'`,
+      )
+        .bind(admin.eventId)
+        .run();
+      const service = new EvaluationService(
+        env as unknown as CloudflareEnvironment,
+      );
+      const invited = await service.inviteEvaluationMember(admin, {
+        name: "Sam Whitfield",
+        email: "sbek-reviewer@example.com",
+        role: "evaluator",
+        teamId: null,
+      });
+
+      expect(invited).toMatchObject({
+        delivery: "demo_not_sent",
+        demoAccessActivation: "activated",
+      });
+      expect(
+        await env.DB.prepare(
+          `SELECT accepted_at IS NOT NULL AS accepted,
+                  (SELECT COUNT(*) FROM audit_events audit
+                    WHERE audit.entity_id = membership.id
+                      AND audit.action = 'membership.demo_fixture_activated') AS activationAuditCount
+             FROM memberships membership
+            WHERE membership.id = ?`,
+        )
+          .bind(invited.membershipId)
+          .first(),
+      ).toEqual({ accepted: 1, activationAuditCount: 1 });
+    });
+
     it("invites, promotes and revokes committee chairs with administrator-only authority", async () => {
       await resetEvaluationFixture();
       const service = new EvaluationService(

@@ -64,13 +64,11 @@ export function SpeakerShell({
               {viewer.email}
             </small>
           </span>
-          {!viewer.demo ? (
-            <Form method="post" action="/sign-out">
-              <button className="btn small" type="submit">
-                Sign out
-              </button>
-            </Form>
-          ) : null}
+          <Form method="post" action="/sign-out">
+            <button className="btn small" type="submit">
+              Sign out
+            </button>
+          </Form>
         </div>
       </header>
       <div className="speaker-layout">

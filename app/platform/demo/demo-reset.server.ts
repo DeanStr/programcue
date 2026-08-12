@@ -12,6 +12,8 @@ import {
   DEMO_ORGANISATION_ID,
   DEMO_R2_PREFIX,
   DEMO_RESET_CONFIRMATION,
+  SBEK_FIXTURE_PEOPLE,
+  SBEK_SECOND_SPEAKER,
 } from "~/platform/demo/demo-identities";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
@@ -274,7 +276,7 @@ async function clearDemoObjects(bucket: R2Bucket) {
 }
 
 async function resetMutableIdentity(env: CloudflareEnvironment) {
-  const identities = Object.values(DEMO_IDENTITIES);
+  const identities = [...Object.values(DEMO_IDENTITIES), SBEK_SECOND_SPEAKER];
   const statements = [
     env.DB.prepare(
       `UPDATE organisations
@@ -312,10 +314,15 @@ async function resetMutableIdentity(env: CloudflareEnvironment) {
             SET email = ?, display_name = ?, email_verified = 1,
                 image_url = NULL, biography = NULL, pronunciation = NULL,
                 organisation_name = NULL, job_title = NULL,
-                profile_status = 'published', profile_revision = 1,
+                profile_status = ?, profile_revision = 1,
                 last_operation_id = NULL, updated_at = unixepoch()
           WHERE id = ?`,
-      ).bind(identity.email, identity.name, identity.personId),
+      ).bind(
+        identity.email,
+        identity.name,
+        identity.profileStatus,
+        identity.personId,
+      ),
     ),
   ];
   const results = await env.DB.batch(statements);
@@ -373,6 +380,12 @@ export type DemoBaselineEvidence = {
   sessions: number;
   publishedSchedules: number;
   publishedTemplates: number;
+  sbekPeople: number;
+  sbekReviewerMemberships: number;
+  sbekReviewerAssignments: number;
+  sbekSpeakerMemberships: number;
+  sbekSpeakerTasks: number;
+  sbekFixtureSubmissions: number;
 };
 
 export function demoBaselineIsComplete(evidence: DemoBaselineEvidence) {
@@ -383,7 +396,13 @@ export function demoBaselineIsComplete(evidence: DemoBaselineEvidence) {
     evidence.tasks >= 3 &&
     evidence.sessions >= 6 &&
     evidence.publishedSchedules === 1 &&
-    evidence.publishedTemplates === 1
+    evidence.publishedTemplates === 1 &&
+    evidence.sbekPeople === 4 &&
+    evidence.sbekReviewerMemberships === 0 &&
+    evidence.sbekReviewerAssignments === 0 &&
+    evidence.sbekSpeakerMemberships === 0 &&
+    evidence.sbekSpeakerTasks === 0 &&
+    evidence.sbekFixtureSubmissions === 0
   );
 }
 
@@ -397,7 +416,35 @@ async function baselineEvidence(env: CloudflareEnvironment) {
        (SELECT COUNT(*) FROM sessions WHERE event_id = ?) AS sessions,
        (SELECT COUNT(*) FROM schedule_versions WHERE event_id = ? AND status = 'published') AS publishedSchedules,
        (SELECT COUNT(*) FROM communication_template_versions
-         WHERE event_id = ? AND id = ? AND status = 'published') AS publishedTemplates`,
+         WHERE event_id = ? AND id = ? AND status = 'published') AS publishedTemplates,
+       (SELECT COUNT(*) FROM people
+         WHERE (id = ? AND email = ? COLLATE NOCASE AND display_name = ? AND profile_status = ?)
+            OR (id = ? AND email = ? COLLATE NOCASE AND display_name = ? AND profile_status = ?)
+            OR (id = ? AND email = ? COLLATE NOCASE AND display_name = ? AND profile_status = ?)
+            OR (id = ? AND email = ? COLLATE NOCASE AND display_name = ? AND profile_status = ?)) AS sbekPeople,
+       (SELECT COUNT(*) FROM memberships
+         WHERE event_id = ? AND person_id = ? AND role = 'evaluator') AS sbekReviewerMemberships,
+       (SELECT COUNT(*) FROM evaluator_assignments
+         WHERE event_id = ? AND evaluator_person_id = ?) AS sbekReviewerAssignments,
+       (SELECT COUNT(*) FROM memberships
+         WHERE event_id = ? AND person_id IN (?, ?) AND role = 'speaker') AS sbekSpeakerMemberships,
+       (SELECT COUNT(*) FROM task_instances
+         WHERE event_id = ? AND owner_person_id IN (?, ?)) AS sbekSpeakerTasks,
+       (SELECT COUNT(*) FROM submissions submission
+         WHERE submission.event_id = ?
+           AND (
+             submission.submitter_person_id IN (?, ?)
+             OR submission.submitter_email COLLATE NOCASE IN (?, ?)
+             OR EXISTS (
+               SELECT 1 FROM submission_speakers speaker
+                WHERE speaker.event_id = submission.event_id
+                  AND speaker.submission_id = submission.id
+                  AND (
+                    speaker.person_id IN (?, ?)
+                    OR speaker.email COLLATE NOCASE IN (?, ?)
+                  )
+             )
+           )) AS sbekFixtureSubmissions`,
   )
     .bind(
       DEMO_EVENT_ID,
@@ -408,6 +455,31 @@ async function baselineEvidence(env: CloudflareEnvironment) {
       DEMO_EVENT_ID,
       DEMO_EVENT_ID,
       DEMO_REMINDER_VERSION_ID,
+      ...Object.values(SBEK_FIXTURE_PEOPLE).flatMap((identity) => [
+        identity.personId,
+        identity.email,
+        identity.name,
+        identity.profileStatus,
+      ]),
+      DEMO_EVENT_ID,
+      SBEK_FIXTURE_PEOPLE.reviewer.personId,
+      DEMO_EVENT_ID,
+      SBEK_FIXTURE_PEOPLE.reviewer.personId,
+      DEMO_EVENT_ID,
+      SBEK_FIXTURE_PEOPLE.speaker.personId,
+      SBEK_FIXTURE_PEOPLE.speaker2.personId,
+      DEMO_EVENT_ID,
+      SBEK_FIXTURE_PEOPLE.speaker.personId,
+      SBEK_FIXTURE_PEOPLE.speaker2.personId,
+      DEMO_EVENT_ID,
+      SBEK_FIXTURE_PEOPLE.speaker.personId,
+      SBEK_FIXTURE_PEOPLE.speaker2.personId,
+      SBEK_FIXTURE_PEOPLE.speaker.email,
+      SBEK_FIXTURE_PEOPLE.speaker2.email,
+      SBEK_FIXTURE_PEOPLE.speaker.personId,
+      SBEK_FIXTURE_PEOPLE.speaker2.personId,
+      SBEK_FIXTURE_PEOPLE.speaker.email,
+      SBEK_FIXTURE_PEOPLE.speaker2.email,
     )
     .first<DemoBaselineEvidence>();
   if (!row)

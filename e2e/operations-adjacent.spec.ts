@@ -33,7 +33,7 @@ test("event cloning shows its copy boundary and records a clean event", async ({
 }) => {
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "owner",
       domain: "127.0.0.1",
       path: "/",
@@ -175,7 +175,7 @@ test("CSV import exposes a durable preview before confirming", async ({
 }) => {
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "owner",
       domain: "127.0.0.1",
       path: "/",
@@ -235,7 +235,7 @@ test("task import previews disclose every lifecycle transition before confirmati
   await resetDemoEvent(request);
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "owner",
       domain: "127.0.0.1",
       path: "/",

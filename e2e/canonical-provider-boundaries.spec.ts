@@ -24,7 +24,7 @@ async function expectStatus(page: Page, text: string) {
 
 async function switchDemoRole(page: Page, role: "administrator" | "speaker") {
   const response = await page.request.post("/demo/role", {
-    form: { role },
+    form: { identity: role },
     headers: { origin: e2eOrigin },
   });
   expect(response.ok()).toBeTruthy();

@@ -26,7 +26,7 @@ function context(environment: CloudflareEnvironment = testEnv) {
 
 function headers(role: "administrator" | "evaluator", extra: HeadersInit = {}) {
   return new Headers({
-    cookie: `program_cue_demo_role=${role}`,
+    cookie: `program_cue_demo_identity=${role}`,
     origin: "https://programcue.test",
     "content-type": "application/json",
     ...Object.fromEntries(new Headers(extra)),

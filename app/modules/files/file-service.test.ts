@@ -456,7 +456,7 @@ describe("private R2 file lifecycle", () => {
       speakerFileDownload({
         request: new Request(
           `http://localhost/speaker/files/${uploaded.assetId}`,
-          { headers: { cookie: "program_cue_demo_role=speaker" } },
+          { headers: { cookie: "program_cue_demo_identity=speaker" } },
         ),
         params: { assetId: uploaded.assetId },
         context: routeContext(),
@@ -466,7 +466,7 @@ describe("private R2 file lifecycle", () => {
       speakerResourceDownload({
         request: new Request(
           "http://localhost/speaker/resources/missing/download",
-          { headers: { cookie: "program_cue_demo_role=speaker" } },
+          { headers: { cookie: "program_cue_demo_identity=speaker" } },
         ),
         params: { assetId: `missing-${crypto.randomUUID()}` },
         context: routeContext(),

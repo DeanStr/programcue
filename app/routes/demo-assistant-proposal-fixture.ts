@@ -23,8 +23,8 @@ const TASK_TITLE = "Confirm venue accessibility handoff";
 const REMINDER_SUBJECT = "Complete {{task.title}} before event handoff";
 const DEMO_ADMIN: Viewer = {
   personId: ADMIN_ID,
-  name: "Olivia Bennett",
-  email: "olivia@example.com",
+  name: "Jordan Alvarez",
+  email: "sbek-organizer@example.com",
   role: "administrator",
   organisationId: ORGANISATION_ID,
   eventId: EVENT_ID,

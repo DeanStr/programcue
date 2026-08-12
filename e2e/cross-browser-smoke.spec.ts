@@ -17,7 +17,7 @@ test("admin, reviewer and public workflows render in the browser engine", async 
 
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "evaluator",
       domain: "127.0.0.1",
       path: "/",

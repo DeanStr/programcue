@@ -36,6 +36,20 @@ export class EvaluationInvitationDeliveryError extends Error {
   }
 }
 
+export class EvaluationDemoActivationError extends Error {
+  readonly committed = true;
+
+  constructor(
+    readonly membershipId: string,
+    cause: unknown,
+  ) {
+    super(
+      `The invitation was saved, but its exact local SBEK fixture identity could not be activated: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+    this.name = "EvaluationDemoActivationError";
+  }
+}
+
 export class EvaluationDecisionFinalError extends Error {
   constructor() {
     super(

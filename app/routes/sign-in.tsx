@@ -58,7 +58,7 @@ export const meta: Route.MetaFunction = () => [
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
-  if (String(env.DEMO_MODE) === "true") return redirect("/admin/event");
+  if (String(env.DEMO_MODE) === "true") return redirect("/demo");
   const url = new URL(request.url);
   const returnTo = safeReturnTo(url.searchParams.get("returnTo"));
   const oauthProvider =

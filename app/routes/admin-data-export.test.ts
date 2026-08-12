@@ -28,7 +28,7 @@ function exportRequest(
 ) {
   const headers = new Headers({
     cookie: [
-      `program_cue_demo_role=${role}`,
+      `program_cue_demo_identity=${role}`,
       `program_cue_event=${options.eventId ?? eventId}`,
     ]
       .filter(Boolean)

@@ -34,6 +34,9 @@ import {
   reviewSaveCoversCurrentEdits,
 } from "./review-workbench";
 
+const ADMIN_COOKIE =
+  "program_cue_demo_identity=administrator; program_cue_event=evt-foe-2025";
+
 function context() {
   const provider = new RouterContextProvider();
   provider.set(cloudflareContext, {
@@ -48,7 +51,7 @@ function formRequest(url: string, values: Record<string, string>) {
     method: "POST",
     headers: {
       "content-type": "application/x-www-form-urlencoded",
-      cookie: "program_cue_event=evt-foe-2025",
+      cookie: ADMIN_COOKIE,
     },
     body: new URLSearchParams(values),
   });
@@ -96,10 +99,7 @@ describe("frontend route fail-fast boundaries", () => {
     const previouslySyncedGeneration = 0;
 
     expect(
-      reviewSaveCoversCurrentEdits(
-        savedEditGeneration,
-        newerEditGeneration,
-      ),
+      reviewSaveCoversCurrentEdits(savedEditGeneration, newerEditGeneration),
     ).toBe(false);
     expect(
       reviewCanAdoptServerPayload(
@@ -109,16 +109,10 @@ describe("frontend route fail-fast boundaries", () => {
     ).toBe(false);
 
     expect(
-      reviewSaveCoversCurrentEdits(
-        newerEditGeneration,
-        newerEditGeneration,
-      ),
+      reviewSaveCoversCurrentEdits(newerEditGeneration, newerEditGeneration),
     ).toBe(true);
     expect(
-      reviewCanAdoptServerPayload(
-        newerEditGeneration,
-        newerEditGeneration,
-      ),
+      reviewCanAdoptServerPayload(newerEditGeneration, newerEditGeneration),
     ).toBe(true);
   });
 
@@ -159,6 +153,22 @@ describe("frontend route fail-fast boundaries", () => {
     });
   });
 
+  it("reports local SBEK activation failures after a decision commits", () => {
+    const outcome = decisionActionOutcome(
+      "queued",
+      true,
+      null,
+      null,
+      "demo_activation_failed",
+      1,
+    );
+
+    expect(outcome.partial).toBe(true);
+    expect(outcome.message).toMatch(/decision was committed/i);
+    expect(outcome.message).toMatch(/could not be activated/i);
+    expect(outcome.message).toMatch(/no email was sent/i);
+  });
+
   it("rejects explicit unknown record selectors", async () => {
     const missing = `missing-${crypto.randomUUID()}`;
     const testContext = context();
@@ -167,6 +177,7 @@ describe("frontend route fail-fast boundaries", () => {
       formBuilderLoader({
         request: new Request(
           `http://localhost/admin/submissions/form?form=${missing}`,
+          { headers: { cookie: ADMIN_COOKIE } },
         ),
         params: {},
         context: testContext,
@@ -176,6 +187,7 @@ describe("frontend route fail-fast boundaries", () => {
       adminResourceLoader({
         request: new Request(
           `http://localhost/admin/resources?resource=${missing}`,
+          { headers: { cookie: ADMIN_COOKIE } },
         ),
         params: {},
         context: testContext,
@@ -185,6 +197,7 @@ describe("frontend route fail-fast boundaries", () => {
       communicationsLoader({
         request: new Request(
           `http://localhost/admin/communications?template=${missing}`,
+          { headers: { cookie: ADMIN_COOKIE } },
         ),
         params: {},
         context: testContext,
@@ -194,6 +207,7 @@ describe("frontend route fail-fast boundaries", () => {
       reviewLoader({
         request: new Request(
           `http://localhost/review/workbench?assignment=${missing}`,
+          { headers: { cookie: ADMIN_COOKIE } },
         ),
         params: {},
         context: testContext,
@@ -205,6 +219,7 @@ describe("frontend route fail-fast boundaries", () => {
     const application = await applicationLoader({
       request: new Request(
         "http://localhost/apply/form?submitted=1&saved=1&created=1&confirmation=queued",
+        { headers: { cookie: ADMIN_COOKIE } },
       ),
       params: { slug: "form" },
       context: context(),
@@ -219,6 +234,7 @@ describe("frontend route fail-fast boundaries", () => {
     const communications = await communicationsLoader({
       request: new Request(
         "http://localhost/admin/communications?saved=999999",
+        { headers: { cookie: ADMIN_COOKIE } },
       ),
       params: {},
       context: context(),

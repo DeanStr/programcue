@@ -10,7 +10,7 @@ function adminRequest() {
   return new Request("https://programcue.test/admin/crm", {
     headers: {
       cookie:
-        "program_cue_demo_role=administrator; program_cue_event=evt-foe-2025",
+        "program_cue_demo_identity=administrator; program_cue_event=evt-foe-2025",
     },
   });
 }

@@ -24,7 +24,7 @@ function adminRequest(body: URLSearchParams) {
   return new Request("http://localhost/admin/submissions", {
     method: "POST",
     headers: {
-      cookie: `program_cue_demo_role=administrator; ${eventCookie}`,
+      cookie: `program_cue_demo_identity=administrator; ${eventCookie}`,
       origin: "http://localhost",
     },
     body,

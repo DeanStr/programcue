@@ -3,14 +3,17 @@ import {
   DEMO_IDENTITIES,
   DEMO_IDENTITY,
   DEMO_ORGANISATION_ID,
+  SBEK_SECOND_SPEAKER,
 } from "./demo-identities";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 
 export {
+  DEMO_IDENTITY_COOKIE,
   DEMO_IDENTITIES,
   DEMO_IDENTITY,
-  type DemoRole,
+  isDemoIdentityKey,
+  type DemoIdentityKey,
 } from "./demo-identities";
 
 const DEMO_ADMIN_ID = DEMO_IDENTITY.personId;
@@ -29,9 +32,14 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
       `
       INSERT OR IGNORE INTO people (
         id, email, display_name, email_verified, profile_status, created_at, updated_at
-      ) VALUES (?, ?, ?, 1, 'published', unixepoch(), unixepoch())
+      ) VALUES (?, ?, ?, 1, ?, unixepoch(), unixepoch())
     `,
-    ).bind(DEMO_ADMIN_ID, DEMO_IDENTITY.email, DEMO_IDENTITY.name),
+    ).bind(
+      DEMO_ADMIN_ID,
+      DEMO_IDENTITY.email,
+      DEMO_IDENTITY.name,
+      DEMO_IDENTITY.profileStatus,
+    ),
     env.DB.prepare(
       `
       INSERT OR IGNORE INTO organisation_ai_settings (
@@ -40,17 +48,25 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
       ) VALUES (?, 'openai', 'gpt-5.6-terra', 1, ?, unixepoch(), unixepoch())
     `,
     ).bind(DEMO_ORGANISATION_ID, DEMO_ADMIN_ID),
-    ...Object.entries(DEMO_IDENTITIES)
-      .filter(([role]) => role !== "administrator")
-      .map(([, identity]) =>
-        env.DB.prepare(
+    ...[
+      ...Object.entries(DEMO_IDENTITIES)
+        .filter(([identityKey]) => identityKey !== "administrator")
+        .map(([, identity]) => identity),
+      SBEK_SECOND_SPEAKER,
+    ].map((identity) =>
+      env.DB.prepare(
           `
         INSERT OR IGNORE INTO people (
           id, email, display_name, email_verified, profile_status, created_at, updated_at
-        ) VALUES (?, ?, ?, 1, 'published', unixepoch(), unixepoch())
+        ) VALUES (?, ?, ?, 1, ?, unixepoch(), unixepoch())
       `,
-        ).bind(identity.personId, identity.email, identity.name),
+      ).bind(
+        identity.personId,
+        identity.email,
+        identity.name,
+        identity.profileStatus,
       ),
+    ),
     env.DB.prepare(
       `
       INSERT OR IGNORE INTO events (
@@ -89,8 +105,8 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
       ) VALUES ('membership-demo-owner', ?, NULL, ?, 'owner', unixepoch(), unixepoch(), unixepoch())
     `,
     ).bind(DEMO_ORGANISATION_ID, DEMO_IDENTITIES.owner.personId),
-    ...(["evaluator", "submitter", "speaker"] as const).map((role) => {
-      const identity = DEMO_IDENTITIES[role];
+    ...(["evaluator", "submitter", "speaker"] as const).map((identityKey) => {
+      const identity = DEMO_IDENTITIES[identityKey];
       return env.DB.prepare(
         `
         INSERT OR IGNORE INTO memberships (
@@ -98,11 +114,11 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
         ) VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch(), unixepoch())
       `,
       ).bind(
-        `membership-demo-${role}`,
+        `membership-demo-${identityKey}`,
         DEMO_ORGANISATION_ID,
         DEMO_EVENT_ID,
         identity.personId,
-        role,
+        identity.role,
       );
     }),
     ...[

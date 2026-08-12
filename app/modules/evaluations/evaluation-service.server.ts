@@ -4,6 +4,7 @@ import { EvaluationDecisionService } from "./evaluation-decision-service.server"
 import { EvaluationReviewerWorkflows } from "./evaluation-reviewer-workflows.server";
 import { type EvaluationApiCommand } from "./evaluation-service-foundation.server";
 export {
+  EvaluationDemoActivationError,
   EvaluationDecisionAuthorityError,
   EvaluationDecisionFinalError,
   EvaluationInvitationDeliveryError,

@@ -15,7 +15,7 @@ import {
 
 const workerEnv = env as unknown as CloudflareEnvironment;
 
-function demoRequest(cookie = "program_cue_demo_role=administrator") {
+function demoRequest(cookie = "program_cue_demo_identity=administrator") {
   return new Request("https://programcue.test/admin/event", {
     headers: { cookie },
   });
@@ -94,7 +94,7 @@ describe("current event context", () => {
 
   it("loads admin shell state through an event-and-organisation scoped service boundary", async () => {
     const request = demoRequest(
-      "program_cue_demo_role=administrator; program_cue_event=evt-current-context-two",
+      "program_cue_demo_identity=administrator; program_cue_event=evt-current-context-two",
     );
     const viewer = await requireCurrentEventRole(request, workerEnv, [
       "administrator",
@@ -138,7 +138,7 @@ describe("current event context", () => {
     ).toHaveLength(1);
 
     const request = demoRequest(
-      "program_cue_demo_role=administrator; program_cue_event=evt-current-context-two",
+      "program_cue_demo_identity=administrator; program_cue_event=evt-current-context-two",
     );
     await expect(
       requireCurrentEventRole(request, workerEnv, ["administrator"]),
@@ -184,7 +184,7 @@ describe("current event context", () => {
 
     await expect(
       listAuthorisedEvents(
-        demoRequest("program_cue_demo_role=evaluator"),
+        demoRequest("program_cue_demo_identity=evaluator"),
         workerEnv,
         ["evaluator"],
       ),
@@ -210,7 +210,7 @@ describe("current event context", () => {
       .run();
 
     const events = await listAuthorisedEvents(
-      demoRequest("program_cue_demo_role=evaluator"),
+      demoRequest("program_cue_demo_identity=evaluator"),
       workerEnv,
       ["administrator", "evaluator"],
     );
@@ -225,7 +225,7 @@ describe("current event context", () => {
 
   it("records only real, organisation-scoped event context switches", async () => {
     const request = demoRequest(
-      "program_cue_demo_role=administrator; program_cue_event=evt-current-context-two",
+      "program_cue_demo_identity=administrator; program_cue_event=evt-current-context-two",
     );
     const viewer = await requireCurrentEventRole(request, workerEnv, [
       "administrator",
@@ -270,7 +270,7 @@ describe("current event context", () => {
         new Request("https://programcue.test/admin/event", {
           method: "POST",
           headers: {
-            cookie: "program_cue_demo_role=administrator",
+            cookie: "program_cue_demo_identity=administrator",
             origin: "https://programcue.test",
           },
         }),
@@ -298,7 +298,7 @@ describe("current event context", () => {
       ).bind(CANONICAL_EVENT_FILE_POLICY_JSON),
     ]);
     const request = demoRequest(
-      "program_cue_demo_role=administrator; program_cue_event=evt-current-context-isolated",
+      "program_cue_demo_identity=administrator; program_cue_event=evt-current-context-isolated",
     );
     await expect(
       requireCurrentEventRole(request, workerEnv, ["administrator"]),

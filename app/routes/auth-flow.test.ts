@@ -232,7 +232,7 @@ describe("production authentication routes", () => {
       link?: { email?: string; userId?: string };
     };
     expect(payload.link).toMatchObject({
-      email: "olivia@example.com",
+      email: "sbek-organizer@example.com",
       userId: "person-demo-admin",
     });
     await expect(
@@ -435,7 +435,7 @@ describe("production authentication routes", () => {
             id_token: unsignedIdToken({
               sub: "microsoft-person-123",
               name: "Olivia Chen",
-              email: "olivia@example.com",
+              email: "sbek-organizer@example.com",
             }),
           });
         }
@@ -776,7 +776,7 @@ describe("production authentication routes", () => {
         "http://localhost/sign-in",
         {
           _intent: "email_magic_link",
-          email: "olivia@example.com",
+          email: "sbek-organizer@example.com",
           returnTo: "/admin/crm",
           linkProviderAfterEmail: "microsoft",
           "turnstile-token": "turnstile-token",
@@ -836,7 +836,7 @@ describe("production authentication routes", () => {
     }
     expect(authenticated.linkRequest).toEqual({
       provider: "microsoft",
-      email: "olivia@example.com",
+      email: "sbek-organizer@example.com",
       failed: false,
     });
   });
@@ -853,7 +853,7 @@ describe("production authentication routes", () => {
     vi.stubGlobal("fetch", delivery);
 
     await createAuth(testEnv).api.signInMagicLink({
-      body: { email: "olivia@example.com", callbackURL: "/admin/event" },
+      body: { email: "sbek-organizer@example.com", callbackURL: "/admin/event" },
       headers: new Headers({ origin: "http://localhost" }),
     });
 
@@ -870,7 +870,7 @@ describe("production authentication routes", () => {
       to: string[];
       text: string;
     };
-    expect(email.to).toEqual(["olivia@example.com"]);
+    expect(email.to).toEqual(["sbek-organizer@example.com"]);
     const deliveredToken = new URL(
       email.text.match(/https?:\/\/\S+/)?.[0] ?? "http://invalid",
     ).searchParams.get("token");
@@ -924,7 +924,7 @@ describe("production authentication routes", () => {
         "http://localhost/sign-in",
         {
           _intent: "email_magic_link",
-          email: "olivia@example.com",
+          email: "sbek-organizer@example.com",
           returnTo: "/speaker/dashboard?tab=files",
           "turnstile-token": "turnstile-token",
         },
@@ -994,7 +994,7 @@ describe("production authentication routes", () => {
         "http://localhost/sign-in",
         {
           _intent: "email_magic_link",
-          email: "olivia@example.com",
+          email: "sbek-organizer@example.com",
           returnTo: "/admin/event",
           "turnstile-token": "turnstile-token",
         },
@@ -1024,7 +1024,7 @@ describe("production authentication routes", () => {
       errorName: "ResendDeliveryError",
     });
     expect(output).not.toContain("provider-secret-detail");
-    expect(output).not.toContain("olivia@example.com");
+    expect(output).not.toContain("sbek-organizer@example.com");
 
     const rejected = await signInAction({
       request: new Request("http://localhost/sign-in", { method: "PUT" }),
@@ -1171,6 +1171,30 @@ describe("production authentication routes", () => {
         .bind(token)
         .first(),
     ).toBeNull();
+  });
+
+  it("returns a selected demo identity to a genuinely anonymous browser", async () => {
+    const response = await signOutAction({
+      request: formRequest(
+        "http://localhost/sign-out",
+        {},
+        {
+          cookie:
+            "program_cue_demo_identity=administrator; program_cue_event=evt-foe-2025",
+        },
+      ),
+      params: {},
+      context: context(env as unknown as CloudflareEnvironment),
+    } as never);
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/demo");
+    expect(response.headers.get("set-cookie")).toContain(
+      "program_cue_demo_identity=;",
+    );
+    expect(response.headers.get("set-cookie")).toContain(
+      "program_cue_event=;",
+    );
   });
 
   it("rejects cross-origin and non-POST sign-out attempts without deleting the session", async () => {

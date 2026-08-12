@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { assistantProposalMetadataSchema } from "~/modules/ai/ai-tools.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { DEMO_ASSISTANT_FIXTURE_MODEL } from "~/platform/demo/demo-identities";
+import {
+  DEMO_ASSISTANT_FIXTURE_MODEL,
+  SBEK_FIXTURE_PEOPLE,
+} from "~/platform/demo/demo-identities";
 import { ensureDemoData } from "./seed.server";
 import {
   DEMO_EVENT_ID,
@@ -31,8 +34,8 @@ function demoEnvironment(overrides: Partial<CloudflareEnvironment> = {}) {
 
 const demoAdministrator: Viewer = {
   personId: "person-demo-admin",
-  name: "Olivia Bennett",
-  email: "olivia@example.com",
+  name: "Jordan Alvarez",
+  email: "sbek-organizer@example.com",
   role: "administrator",
   organisationId: DEMO_ORGANISATION_ID,
   eventId: DEMO_EVENT_ID,
@@ -142,6 +145,18 @@ describe("complete evaluator demo reset", () => {
           WHERE schedule_version_id = 'demo-schedule-published'
             AND event_id = ? AND session_id = 'demo-session-1'`,
       ).bind(DEMO_EVENT_ID),
+      testEnvironment.DB.prepare(
+        `UPDATE people
+            SET email = 'stale-speaker@example.com',
+                display_name = 'Stale Speaker', profile_status = 'published'
+          WHERE id = ?`,
+      ).bind(SBEK_FIXTURE_PEOPLE.speaker.personId),
+      testEnvironment.DB.prepare(
+        `UPDATE people
+            SET email = 'stale-speaker2@example.com',
+                display_name = 'Stale Speaker Two', profile_status = 'published'
+          WHERE id = ?`,
+      ).bind(SBEK_FIXTURE_PEOPLE.speaker2.personId),
     ]);
     await testEnvironment.FILES.put(`${DEMO_R2_PREFIX}old/slides.pdf`, "old");
     await testEnvironment.FILES.put(
@@ -161,6 +176,12 @@ describe("complete evaluator demo reset", () => {
       assignments: 2,
       publishedSchedules: 1,
       publishedTemplates: 1,
+      sbekPeople: 4,
+      sbekReviewerMemberships: 0,
+      sbekReviewerAssignments: 0,
+      sbekSpeakerMemberships: 0,
+      sbekSpeakerTasks: 0,
+      sbekFixtureSubmissions: 0,
     });
     await expect(
       testEnvironment.FILES.head(`${DEMO_R2_PREFIX}old/slides.pdf`),
@@ -178,6 +199,31 @@ describe("complete evaluator demo reset", () => {
       accent: "#4f46e5",
       provider: "d1",
     });
+    const fixturePeople = await testEnvironment.DB.prepare(
+      `SELECT id, email, display_name AS name, profile_status AS profileStatus
+         FROM people
+        WHERE id IN (?, ?, ?, ?)
+        ORDER BY id`,
+    )
+      .bind(
+        ...Object.values(SBEK_FIXTURE_PEOPLE).map(({ personId }) => personId),
+      )
+      .all<{
+        id: string;
+        email: string;
+        name: string;
+        profileStatus: string;
+      }>();
+    expect(fixturePeople.results).toEqual(
+      Object.values(SBEK_FIXTURE_PEOPLE)
+        .map(({ personId: id, email, name, profileStatus }) => ({
+          id,
+          email,
+          name,
+          profileStatus,
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+    );
     await expect(
       testEnvironment.DB.prepare(
         "SELECT proposal_id FROM assistant_proposal_executions WHERE proposal_id = 'demo-reset-stale-assistant-execution'",

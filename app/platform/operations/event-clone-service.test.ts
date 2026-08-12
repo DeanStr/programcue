@@ -730,7 +730,7 @@ describe("event cloning", () => {
     await expect(
       requireEventRole(
         new Request("https://programcue.test/admin/event", {
-          headers: { cookie: "program_cue_demo_role=owner" },
+          headers: { cookie: "program_cue_demo_identity=owner" },
         }),
         env as unknown as CloudflareEnvironment,
         cloned.eventId,

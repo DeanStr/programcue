@@ -17,7 +17,7 @@ async function selectDemoRole(
 ) {
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: role,
       domain: "127.0.0.1",
       path: "/",
@@ -109,7 +109,7 @@ test("review scoring exposes every criterion control at mobile width", async ({
 }) => {
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "evaluator",
       domain: "127.0.0.1",
       path: "/",
@@ -129,7 +129,7 @@ test("review scoring exposes every criterion control at mobile width", async ({
     await expect(page.getByRole("combobox", { name })).toBeVisible();
   }
   await expect(
-    page.getByRole("button", { name: "Return to administrator demo" }),
+    page.getByRole("button", { name: "Return to organizer demo" }),
   ).toBeVisible();
   const overflow = await page.evaluate(
     () =>

@@ -19,7 +19,7 @@ function request(role: "owner" | "administrator", init?: RequestInit) {
   return new Request("http://localhost/admin/files/retention", {
     ...init,
     headers: {
-      cookie: `program_cue_demo_role=${role}; program_cue_event=evt-foe-2025`,
+      cookie: `program_cue_demo_identity=${role}; program_cue_event=evt-foe-2025`,
       origin: "http://localhost",
       ...(init?.headers ?? {}),
     },

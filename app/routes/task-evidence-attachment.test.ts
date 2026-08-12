@@ -42,7 +42,7 @@ function request(
   const method = options.method ?? "POST";
   const headers = new Headers({
     cookie: [
-      `program_cue_demo_role=${options.role ?? "speaker"}`,
+      `program_cue_demo_identity=${options.role ?? "speaker"}`,
       `program_cue_event=${options.selectedEventId ?? eventId}`,
     ].join("; "),
   });

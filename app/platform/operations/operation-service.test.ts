@@ -11,8 +11,8 @@ import { OperationService } from "./operation-service.server";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",
-  name: "Olivia Bennett",
-  email: "olivia@example.com",
+  name: "Jordan Alvarez",
+  email: "sbek-organizer@example.com",
   role: "administrator",
   organisationId: "org-future-events",
   eventId: "evt-foe-2025",
@@ -20,7 +20,7 @@ const viewer: Viewer = {
 };
 
 function selectedEventCookie(environment: CloudflareEnvironment) {
-  return currentEventCookie(viewer.eventId, environment).split(";", 1)[0];
+  return `program_cue_demo_identity=administrator; ${currentEventCookie(viewer.eventId, environment).split(";", 1)[0]}`;
 }
 
 async function seedFailedAcceleventsOperation() {

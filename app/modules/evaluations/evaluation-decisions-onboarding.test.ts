@@ -264,6 +264,22 @@ describe("evaluation vertical slice", () => {
     await ensureDemoData(testEnv);
     await env.DB.batch([
       env.DB.prepare(
+        `DELETE FROM task_instances
+          WHERE event_id = ? AND owner_person_id = 'person-sbek-speaker'`,
+      ).bind(admin.eventId),
+      env.DB.prepare(
+        `DELETE FROM memberships
+          WHERE event_id = ? AND person_id = 'person-sbek-speaker'
+            AND role = 'speaker'`,
+      ).bind(admin.eventId),
+      env.DB.prepare(
+        `UPDATE submission_speakers
+            SET person_id = 'person-demo-submitter',
+                email = 'alex.submitter@example.com',
+                display_name = 'Alex Morgan'
+          WHERE event_id = ? AND submission_id = 'eval-test-submission'`,
+      ).bind(admin.eventId),
+      env.DB.prepare(
         `INSERT OR IGNORE INTO form_definitions (id, event_id, name, kind, status, public_slug, min_speakers, max_speakers, access_mode, revision, created_by_person_id, created_at, updated_at) VALUES ('eval-test-form', ?, 'Evaluation fixture', 'submission', 'published', 'eval-test-form', 1, 4, 'email_verified', 1, ?, unixepoch(), unixepoch())`,
       ).bind(admin.eventId, admin.personId),
       env.DB.prepare(
@@ -867,6 +883,79 @@ describe("evaluation vertical slice", () => {
         decisionCount: 1,
         sessionCount: 1,
       });
+    });
+
+    it("activates the exact SBEK speaker after an accepted decision", async () => {
+      await resetEvaluationFixture();
+      await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE submission_speakers
+              SET person_id = 'person-sbek-speaker',
+                  email = 'sbek-speaker@example.com',
+                  display_name = 'Priya Raman'
+            WHERE event_id = ? AND submission_id = 'eval-test-submission'`,
+        ).bind(admin.eventId),
+        env.DB.prepare(
+          `DELETE FROM memberships
+            WHERE event_id = ? AND person_id = 'person-sbek-speaker'
+              AND role = 'speaker'`,
+        ).bind(admin.eventId),
+      ]);
+      const service = new EvaluationService(evaluationEnvironment());
+
+      const result = await service.decide(admin, {
+        submissionId: "eval-test-submission",
+        decision: "accepted",
+        sessionTrackId: "demo-track-operations",
+        rationale: "Strong programme fit.",
+        release: true,
+        confirmedWithoutReview: true,
+      });
+
+      expect(result.speakerInvitationStatus).toBe("demo_not_sent");
+      expect(result.speakerInvitationCount).toBe(1);
+      await expect(
+        env.DB.prepare(
+          `SELECT accepted_at IS NOT NULL AS accepted,
+                  invitation_expires_at AS expiresAt,
+                  (SELECT COUNT(*) FROM audit_events audit
+                    WHERE audit.entity_id = membership.id
+                      AND audit.action = 'membership.demo_fixture_activated') AS activationAuditCount
+             FROM memberships membership
+            WHERE event_id = ? AND person_id = 'person-sbek-speaker'
+              AND role = 'speaker'`,
+        )
+          .bind(admin.eventId)
+          .first(),
+      ).resolves.toEqual({
+        accepted: 1,
+        expiresAt: null,
+        activationAuditCount: 1,
+      });
+
+      await env.DB.prepare(
+        `UPDATE memberships
+            SET accepted_at = NULL, invitation_expires_at = unixepoch() - 1
+          WHERE event_id = ? AND person_id = 'person-sbek-speaker'
+            AND role = 'speaker'`,
+      )
+        .bind(admin.eventId)
+        .run();
+      const recovered = await new EvaluationDecisionService(
+        evaluationEnvironment(),
+      ).decide(
+        admin,
+        {
+          submissionId: "eval-test-submission",
+          decision: "accepted",
+          sessionTrackId: "demo-track-operations",
+          rationale: "Strong programme fit.",
+          release: true,
+          confirmedWithoutReview: true,
+        },
+        result.decisionId,
+      );
+      expect(recovered.speakerInvitationStatus).toBe("demo_activation_failed");
     });
 
     it("snapshots selected applicant-facing reviewer feedback for the decision email", async () => {

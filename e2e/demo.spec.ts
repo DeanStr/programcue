@@ -20,11 +20,18 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
   await expect(
     page.getByRole("heading", { name: "Try the complete conference workflow" }),
   ).toBeVisible();
+  await expect(page.getByText(/These people have no password/)).toBeVisible();
   await expect(
-    page.getByText("These identities have no password"),
+    page.getByRole("row", { name: /administrator.*Jordan Alvarez/i }),
   ).toBeVisible();
   await expect(
     page.getByRole("row", { name: /evaluator.*Jordan Lee/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("row", { name: /sbek reviewer.*Sam Whitfield/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("row", { name: /sbek speaker.*Priya Raman/i }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "What to try" }),
@@ -33,19 +40,26 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
     page.getByText("No success is simulated.").first(),
   ).toBeVisible();
 
+  const formBuilder = page.locator("li").filter({
+    has: page.getByRole("heading", { name: "Form builder" }),
+  });
+  await formBuilder
+    .getByRole("button", { name: "Open as Jordan Alvarez" })
+    .click();
+  await expect(page).toHaveURL(/\/admin\/submissions\/form$/);
+  await waitForInterface(page, "/demo");
+
   const evaluatorRow = page.getByRole("row", {
     name: /evaluator.*Jordan Lee/i,
   });
   await evaluatorRow
-    .getByRole("button", { name: "Enter as evaluator" })
+    .getByRole("button", { name: "Continue as Jordan Lee" })
     .click();
   await expect(page).toHaveURL(/\/review\/workbench/);
   await expect(
     page.getByRole("heading", { name: "Review Workbench" }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Return to administrator demo" })
-    .click();
+  await page.getByRole("button", { name: "Return to organizer demo" }).click();
   await expect(page).toHaveURL(/\/admin\/command/);
 
   await waitForInterface(page, "/admin/event");
@@ -126,5 +140,33 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
   expect(missingDraft?.status()).toBe(404);
   await expect(
     page.getByRole("heading", { name: "Page not found" }),
+  ).toBeVisible();
+});
+
+test("an unselected demo browser is anonymous on private routes", async ({
+  page,
+}) => {
+  await page.context().clearCookies();
+  await waitForInterface(page, "/demo");
+  await expect(
+    page.getByText(
+      /Private workspaces do not silently assign an administrator/,
+    ),
+  ).toBeVisible();
+
+  await page.goto("/admin/schedule");
+  await expect(page).toHaveURL(/\/demo\?returnTo=%2Fadmin%2Fschedule$/);
+  await page
+    .getByRole("row", { name: /administrator.*Jordan Alvarez/i })
+    .getByRole("button", { name: "Continue as Jordan Alvarez" })
+    .click();
+  await expect(page).toHaveURL(/\/admin\/schedule$/);
+
+  const publicResponse = await page.goto(
+    "/public/programme/future-of-events-2025",
+  );
+  expect(publicResponse?.ok()).toBeTruthy();
+  await expect(
+    page.getByRole("heading", { name: "Future of Events 2025" }),
   ).toBeVisible();
 });

@@ -2,9 +2,11 @@ import { redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
 import {
+  DEMO_IDENTITY_COOKIE,
   DEMO_IDENTITIES,
   ensureDemoData,
-  type DemoRole,
+  isDemoIdentityKey,
+  type DemoIdentityKey,
 } from "~/platform/demo/seed.server";
 
 export type ViewerRole =
@@ -25,17 +27,15 @@ export type Viewer = {
   demo: boolean;
 };
 
-const DEMO_ROLE_COOKIE = "program_cue_demo_role";
-
-function invalidDemoRoleCookie(): never {
+function invalidDemoIdentityCookie(): never {
   throw new Response(
-    "The demo role selection is invalid. Choose a role again.",
+    "The demo identity selection is invalid. Choose an identity again.",
     {
       status: 400,
       statusText: "Invalid demo identity",
       headers: {
         "cache-control": "no-store",
-        "set-cookie": `${DEMO_ROLE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+        "set-cookie": `${DEMO_IDENTITY_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
       },
     },
   );
@@ -48,10 +48,11 @@ function forbidden(message: string, status = 403): never {
   });
 }
 
-function signInLocation(request: Request) {
+function signInLocation(request: Request, demo = false) {
   const url = new URL(request.url);
   const returnTo = `${url.pathname}${url.search}`;
-  return `/sign-in?${new URLSearchParams({ returnTo })}`;
+  const destination = demo ? "/demo" : "/sign-in";
+  return `${destination}?${new URLSearchParams({ returnTo })}`;
 }
 
 function cookieValue(request: Request, name: string) {
@@ -62,10 +63,23 @@ function cookieValue(request: Request, name: string) {
     try {
       return decodeURIComponent(value.join("="));
     } catch {
-      invalidDemoRoleCookie();
+      invalidDemoIdentityCookie();
     }
   }
   return null;
+}
+
+export function selectedDemoIdentity(request: Request): {
+  identityKey: DemoIdentityKey;
+  identity: (typeof DEMO_IDENTITIES)[DemoIdentityKey];
+} | null {
+  const requestedIdentity = cookieValue(request, DEMO_IDENTITY_COOKIE);
+  if (requestedIdentity === null) return null;
+  if (!isDemoIdentityKey(requestedIdentity)) invalidDemoIdentityCookie();
+  return {
+    identityKey: requestedIdentity,
+    identity: DEMO_IDENTITIES[requestedIdentity],
+  };
 }
 
 export async function requireAuthenticatedPerson(
@@ -74,17 +88,19 @@ export async function requireAuthenticatedPerson(
   unauthenticatedBehavior: "redirect" | "response" = "redirect",
 ) {
   if (String(env.DEMO_MODE) === "true") {
-    const requestedRole = cookieValue(request, DEMO_ROLE_COOKIE);
-    if (
-      requestedRole !== null &&
-      !Object.hasOwn(DEMO_IDENTITIES, requestedRole)
-    ) {
-      invalidDemoRoleCookie();
+    const selected = selectedDemoIdentity(request);
+    if (!selected) {
+      if (unauthenticatedBehavior === "redirect") {
+        throw redirect(signInLocation(request, true));
+      }
+      forbidden("Choose a demo identity before opening a private workspace", 401);
     }
-    const role: DemoRole =
-      requestedRole === null ? "administrator" : (requestedRole as DemoRole);
     await ensureDemoData(env);
-    return { ...DEMO_IDENTITIES[role], demo: true, demoRole: role };
+    return {
+      ...selected.identity,
+      demo: true,
+      demoIdentity: selected.identityKey,
+    };
   }
 
   const session = await createAuth(env).api.getSession({
@@ -100,7 +116,7 @@ export async function requireAuthenticatedPerson(
     name: session.user.name,
     email: session.user.email,
     demo: false,
-    demoRole: null,
+    demoIdentity: null,
   };
 }
 

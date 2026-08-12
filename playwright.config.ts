@@ -28,6 +28,21 @@ export default defineConfig({
     locale: "en-US",
     timezoneId: "UTC",
     trace,
+    storageState: {
+      cookies: [
+        {
+          name: "program_cue_demo_identity",
+          value: "administrator",
+          domain: "127.0.0.1",
+          path: "/",
+          expires: -1,
+          httpOnly: true,
+          secure: false,
+          sameSite: "Lax",
+        },
+      ],
+      origins: [],
+    },
   },
   expect: {
     toHaveScreenshot: {

@@ -32,7 +32,7 @@ function request(values?: Record<string, string>, search = "") {
   return new Request(`http://localhost/admin/operations${search}`, {
     method: values ? "POST" : "GET",
     headers: {
-      cookie: `program_cue_demo_role=administrator; ${selectedEventCookie}`,
+      cookie: `program_cue_demo_identity=administrator; ${selectedEventCookie}`,
       origin: "http://localhost",
     },
     ...(values ? { body: new URLSearchParams(values) } : {}),

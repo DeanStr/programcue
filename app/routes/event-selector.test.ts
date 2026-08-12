@@ -46,7 +46,7 @@ describe("event selector route", () => {
     const result = await loader({
       request: new Request(
         "http://localhost/events/select?returnTo=%2Fadmin%2Ftasks%3Fstate%3Doverdue",
-        { headers: { cookie: "program_cue_demo_role=administrator" } },
+        { headers: { cookie: "program_cue_demo_identity=administrator" } },
       ),
       params: {},
       context: context(),
@@ -64,7 +64,7 @@ describe("event selector route", () => {
         {
           headers: {
             cookie:
-              "program_cue_demo_role=administrator; program_cue_event=evt-foe-2025",
+              "program_cue_demo_identity=administrator; program_cue_event=evt-foe-2025",
           },
         },
       ),
@@ -81,7 +81,7 @@ describe("event selector route", () => {
       loader({
         request: new Request(
           "http://localhost/events/select?eventId=evt-not-authorised",
-          { headers: { cookie: "program_cue_demo_role=administrator" } },
+          { headers: { cookie: "program_cue_demo_identity=administrator" } },
         ),
         params: {},
         context: context(),
@@ -94,7 +94,7 @@ describe("event selector route", () => {
       request: new Request("http://localhost/events/select", {
         method: "POST",
         headers: {
-          cookie: "program_cue_demo_role=administrator",
+          cookie: "program_cue_demo_identity=administrator",
           origin: "http://localhost",
         },
         body: new URLSearchParams({
@@ -116,7 +116,7 @@ describe("event selector route", () => {
       requireCurrentEventRole(
         new Request("http://localhost/admin/event", {
           headers: {
-            cookie: `program_cue_demo_role=administrator; ${browserCookie}`,
+            cookie: `program_cue_demo_identity=administrator; ${browserCookie}`,
           },
         }),
         workerEnv,
@@ -184,7 +184,7 @@ describe("event selector route", () => {
       request: new Request("http://localhost/events/select", {
         method: "POST",
         headers: {
-          cookie: "program_cue_demo_role=evaluator",
+          cookie: "program_cue_demo_identity=evaluator",
           origin: "http://localhost",
         },
         body: new URLSearchParams({
@@ -210,7 +210,7 @@ describe("event selector route", () => {
     const result = await loader({
       request: new Request(
         "http://localhost/events/select?returnTo=https%3A%2F%2Fevil.example",
-        { headers: { cookie: "program_cue_demo_role=administrator" } },
+        { headers: { cookie: "program_cue_demo_identity=administrator" } },
       ),
       params: {},
       context: context(),
@@ -233,7 +233,7 @@ describe("event selector route", () => {
       request: new Request("http://localhost/events/select", {
         method: "POST",
         headers: {
-          cookie: "program_cue_demo_role=speaker",
+          cookie: "program_cue_demo_identity=speaker",
           origin: "http://localhost",
         },
         body: new URLSearchParams({
@@ -262,7 +262,7 @@ describe("event selector route", () => {
       request: new Request("http://localhost/events/select", {
         method: "POST",
         headers: {
-          cookie: "program_cue_demo_role=administrator",
+          cookie: "program_cue_demo_identity=administrator",
           origin: "http://localhost",
         },
         body: new URLSearchParams({

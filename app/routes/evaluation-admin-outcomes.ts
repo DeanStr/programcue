@@ -14,7 +14,8 @@ export function decisionActionOutcome(
     | "not_required"
     | "queued"
     | "queue_failed"
-    | "demo_not_sent" = "not_required",
+    | "demo_not_sent"
+    | "demo_activation_failed" = "not_required",
   speakerInvitationCount = 0,
 ) {
   const warnings = [
@@ -25,6 +26,9 @@ export function decisionActionOutcome(
     webhookWarning,
     speakerInvitationStatus === "queue_failed"
       ? `Speaker access was saved, but ${speakerInvitationCount} sign-in invitation${speakerInvitationCount === 1 ? "" : "s"} need${speakerInvitationCount === 1 ? "s" : ""} a queue retry.`
+      : null,
+    speakerInvitationStatus === "demo_activation_failed"
+      ? "The decision was committed, but an exact local SBEK speaker identity could not be activated. No email was sent; retry the same operation or reset the demo before continuing."
       : null,
   ].filter((warning): warning is string => Boolean(warning));
   if (warnings.length > 0) {

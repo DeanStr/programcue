@@ -22,7 +22,7 @@ function request(values?: Record<string, string>) {
     method: values ? "POST" : "GET",
     headers: {
       cookie:
-        "program_cue_demo_role=administrator; program_cue_event=evt-foe-2025",
+        "program_cue_demo_identity=administrator; program_cue_event=evt-foe-2025",
       origin: "http://localhost",
     },
     ...(values ? { body: new URLSearchParams(values) } : {}),

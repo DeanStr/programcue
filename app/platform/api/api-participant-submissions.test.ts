@@ -51,7 +51,7 @@ function participantHeaders(
   extras: HeadersInit = {},
 ) {
   return new Headers({
-    cookie: `program_cue_demo_role=${role}`,
+    cookie: `program_cue_demo_identity=${role}`,
     ...Object.fromEntries(new Headers(extras)),
   });
 }

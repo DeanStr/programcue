@@ -11,12 +11,17 @@ import {
 
 const eventId = "evt-foe-2025";
 const adminMembershipId = "membership-demo-admin";
-const request = new Request("https://programcue.test/admin/event");
+const request = new Request("https://programcue.test/admin/event", {
+  headers: { cookie: "program_cue_demo_identity=administrator" },
+});
 
 function invitationAcceptanceRequest(origin = "https://programcue.test") {
   return new Request("https://programcue.test/events/select", {
     method: "POST",
-    headers: { origin },
+    headers: {
+      origin,
+      cookie: "program_cue_demo_identity=administrator",
+    },
   });
 }
 
@@ -70,9 +75,29 @@ describe("event role authorization", () => {
     ).rejects.toMatchObject({ status: 401 });
   });
 
+  it("keeps an unselected demo browser anonymous at private boundaries", async () => {
+    const pageResult = await requireAuthenticatedPerson(
+      new Request("http://localhost/admin/tasks?state=overdue"),
+      env as unknown as CloudflareEnvironment,
+    ).catch((error: unknown) => error);
+    expect(pageResult).toBeInstanceOf(Response);
+    expect((pageResult as Response).status).toBe(302);
+    expect((pageResult as Response).headers.get("location")).toBe(
+      "/demo?returnTo=%2Fadmin%2Ftasks%3Fstate%3Doverdue",
+    );
+
+    await expect(
+      requireAuthenticatedPerson(
+        new Request("http://localhost/admin/events/evt-foe-2025/changes"),
+        env as unknown as CloudflareEnvironment,
+        "response",
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+  });
+
   it.each([
-    "program_cue_demo_role=%E0%A4%A",
-    "program_cue_demo_role=not-a-demo-role",
+    "program_cue_demo_identity=%E0%A4%A",
+    "program_cue_demo_identity=not-a-demo-role",
   ])(
     "rejects an invalid demo-role cookie instead of selecting administrator",
     async (cookie) => {
@@ -86,7 +111,7 @@ describe("event role authorization", () => {
       expect(rejected).toBeInstanceOf(Response);
       expect((rejected as Response).status).toBe(400);
       expect((rejected as Response).headers.get("set-cookie")).toContain(
-        "program_cue_demo_role=;",
+        "program_cue_demo_identity=;",
       );
       expect((rejected as Response).headers.get("set-cookie")).toContain(
         "Max-Age=0",

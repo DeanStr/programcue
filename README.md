@@ -59,6 +59,14 @@ Useful routes:
 - API reference: `http://127.0.0.1:5173/api/docs`
 - Design system: `http://127.0.0.1:5173/design/system`
 
+The demo guide is public and task-oriented. A browser without a selected demo
+identity remains anonymous on private routes. Its populated Jordan Lee and
+Priya Shah journeys preserve useful filled-state review and speaker
+walkthroughs, while exact SBEK personas Jordan Alvarez, Priya Raman, Marcus
+Okafor and Sam Whitfield begin clean for evaluator-created cross-role state.
+See [the SBEK evaluation runbook](docs/SBEK_EVALUATION.md) for the isolated
+local harness workflow.
+
 Event slugs are globally unique. Public programme and calendar-session links always include the event slug.
 
 ## Validation

@@ -51,7 +51,7 @@ function participantHeaders(
   extras: HeadersInit = {},
 ) {
   return new Headers({
-    cookie: `program_cue_demo_role=${role}`,
+    cookie: `program_cue_demo_identity=${role}`,
     ...Object.fromEntries(new Headers(extras)),
   });
 }
@@ -305,7 +305,7 @@ describe("participant API resources", () => {
         `https://programcue.test/api/v1/events/${eventId}/participant/profile`,
         {
           headers: participantHeaders("speaker", {
-            cookie: "program_cue_demo_role=administrator",
+            cookie: "program_cue_demo_identity=administrator",
           }),
         },
       ),

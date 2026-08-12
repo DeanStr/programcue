@@ -1,6 +1,11 @@
 import { createAuth } from "~/platform/auth/auth.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  activateSbekDemoInvitation,
+  type SbekDemoActivationOutcome,
+} from "~/platform/demo/sbek-invitation.server";
+import {
+  EvaluationDemoActivationError,
   EvaluationInvitationDeliveryError,
   EvaluationRevisionConflictError,
   EvaluationStateError,
@@ -269,7 +274,25 @@ export abstract class EvaluationAccessWorkflows extends EvaluationPlanWorkflows 
       );
     }
     if (String(this.env.DEMO_MODE) === "true") {
-      return { membershipId, delivery: "demo_not_sent" as const };
+      let demoAccessActivation: SbekDemoActivationOutcome = "not_fixture";
+      if (parsed.role === "evaluator") {
+        try {
+          demoAccessActivation = await activateSbekDemoInvitation(this.env, {
+            membershipId,
+            organisationId: viewer.organisationId,
+            eventId: viewer.eventId,
+            actorPersonId: viewer.personId,
+            role: "evaluator",
+          });
+        } catch (error) {
+          throw new EvaluationDemoActivationError(membershipId, error);
+        }
+      }
+      return {
+        membershipId,
+        delivery: "demo_not_sent" as const,
+        demoAccessActivation,
+      };
     }
     try {
       await createAuth(this.env).api.signInMagicLink({

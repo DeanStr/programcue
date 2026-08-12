@@ -363,29 +363,11 @@ export function AdminAuxiliaryDialogs({
                 Evaluator guide and reset
               </Link>
               <div className="divider" />
-              <h3>Switch demo surface</h3>
-              <div className="grid grid-2">
-                {(
-                  [
-                    "owner",
-                    "administrator",
-                    "evaluator",
-                    "submitter",
-                    "speaker",
-                  ] as const
-                ).map((role) => (
-                  <form method="post" action="/demo/role" key={role}>
-                    <input type="hidden" name="role" value={role} />
-                    <button
-                      className="btn"
-                      type="submit"
-                      style={{ width: "100%", textTransform: "capitalize" }}
-                    >
-                      {role}
-                    </button>
-                  </form>
-                ))}
-              </div>
+              <Form method="post" action="/sign-out">
+                <button className="btn" type="submit">
+                  Browse anonymously
+                </button>
+              </Form>
             </>
           ) : (
             <>

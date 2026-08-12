@@ -401,7 +401,7 @@ describe("CSV imports", () => {
         fileName: "privileged-person.csv",
         csv: [
           "email,name,organisation,jobTitle,profileStatus,role",
-          "olivia@example.com,Olivia Bennett,,,published,administrator",
+          "sbek-organizer@example.com,Jordan Alvarez,,,published,administrator",
         ].join("\n"),
       });
       expect(preview).toMatchObject({ validCount: 1, invalidCount: 0 });
@@ -431,7 +431,7 @@ describe("CSV imports", () => {
       );
 
       const readRequest = new Request("http://localhost/admin/event", {
-        headers: { cookie: "program_cue_demo_role=administrator" },
+        headers: { cookie: "program_cue_demo_identity=administrator" },
       });
       await expect(
         requireEventRole(
@@ -446,7 +446,7 @@ describe("CSV imports", () => {
           new Request("http://localhost/events/select", {
             method: "POST",
             headers: {
-              cookie: "program_cue_demo_role=administrator",
+              cookie: "program_cue_demo_identity=administrator",
               origin: "http://localhost",
             },
           }),

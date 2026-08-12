@@ -188,9 +188,9 @@ export function EvaluationTeamsPanel() {
         <summary>Manage evaluation access</summary>
         <div className="stack mt">
           <p className="help">
-            Access is granted only after the recipient uses the sign-in link.
-            Unaccepted invitations expire after seven days and can be resent
-            with the same email address.
+            {loaderData.demoMode
+              ? "Exact SBEK fixture identities activate locally after this explicit invitation; no email delivery is claimed. Every other unaccepted invitation expires after seven days."
+              : "Access is granted only after the recipient uses the sign-in link. Unaccepted invitations expire after seven days and can be resent with the same email address."}
           </p>
           <Form method="post" className="grid grid-3">
             <input

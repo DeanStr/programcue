@@ -31,19 +31,17 @@ import {
   DEMO_EVENT_ID,
   DEMO_IDENTITIES,
   DEMO_RESET_CONFIRMATION,
-  type DemoRole,
+  type DemoIdentityKey,
 } from "~/platform/demo/demo-identities";
-import { requireEventRole } from "~/platform/auth/authorize.server";
+import { resolveDemoIdentityState } from "~/platform/demo/demo-identity.server";
+import {
+  requireEventRole,
+  selectedDemoIdentity,
+  type Viewer,
+} from "~/platform/auth/authorize.server";
+import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
-
-const destinations = {
-  owner: "/admin/files/retention",
-  administrator: "/admin/command",
-  evaluator: "/review/workbench",
-  submitter: "/apply/form",
-  speaker: "/speaker/dashboard",
-} as const;
 
 const walkthrough = [
   [
@@ -60,9 +58,9 @@ const walkthrough = [
   ],
   [
     "Applicant path",
-    "Start a recoverable draft, add speakers and submit.",
+    "Start a clean SBEK-compatible draft as Priya Raman, add Marcus Okafor and submit.",
     "/apply/form",
-    "submitter",
+    "sbek_speaker",
   ],
   [
     "Review workbench",
@@ -120,11 +118,6 @@ const walkthrough = [
   ],
 ] as const;
 
-function requireDemoRole(role: string): DemoRole {
-  if (Object.hasOwn(DEMO_IDENTITIES, role)) return role as DemoRole;
-  throw new Response("Evaluator demo identity is invalid", { status: 403 });
-}
-
 function assertDemoRoute(env: CloudflareEnvironment) {
   if (
     String(env.DEMO_MODE) !== "true" ||
@@ -135,9 +128,9 @@ function assertDemoRoute(env: CloudflareEnvironment) {
   }
 }
 
-async function demoViewer(
+async function authorizedDemoViewer(
   request: Request,
-  context: Route.LoaderArgs["context"],
+  context: Route.ActionArgs["context"],
 ) {
   const { env } = getCloudflareContext(context);
   assertDemoRoute(env);
@@ -152,7 +145,12 @@ async function demoViewer(
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const { env, viewer } = await demoViewer(request, context);
+  const { env } = getCloudflareContext(context);
+  assertDemoRoute(env);
+  const selected = selectedDemoIdentity(request);
+  const requestedReturnTo = safeReturnTo(
+    new URL(request.url).searchParams.get("returnTo"),
+  );
   const emailConfigurationIssue = emailProviderConfigurationIssue(env);
   const emailProvider = emailConfigurationIssue
     ? null
@@ -179,13 +177,33 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           emailProvider?.provider ?? "email-provider-unavailable",
         )
         .first<{ id: string }>(),
-      new AiProviderSettingsService(env).readiness(viewer),
+      new AiProviderSettingsService(env).readiness({
+        personId: DEMO_IDENTITIES.administrator.personId,
+        name: DEMO_IDENTITIES.administrator.name,
+        email: DEMO_IDENTITIES.administrator.email,
+        role: "administrator",
+        organisationId: "org-future-events",
+        eventId: DEMO_EVENT_ID,
+        demo: true,
+      } satisfies Viewer),
     ]);
   const integrationCredentialsConfigured = Boolean(
     env.INTEGRATION_CREDENTIALS_KEY?.trim(),
   );
+  const selectedState = selected
+    ? await resolveDemoIdentityState(env, selected.identityKey)
+    : null;
   return {
-    viewer: { role: requireDemoRole(viewer.role), name: viewer.name },
+    viewer: selected
+      ? {
+          identityKey: selected.identityKey,
+          name: selected.identity.name,
+          role: selectedState!.role,
+          destination: selectedState!.destination,
+          cohort: selected.identity.cohort,
+        }
+      : null,
+    returnTo: requestedReturnTo === "/" ? null : requestedReturnTo,
     baseline: baselineState.evidence,
     baselineComplete: baselineState.complete,
     activeWork,
@@ -224,7 +242,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       headers: { allow: "POST" },
     });
   }
-  const { env, viewer } = await demoViewer(request, context);
+  const { env, viewer } = await authorizedDemoViewer(request, context);
   if (viewer.role !== "owner" && viewer.role !== "administrator") {
     throw new Response(
       "Only the demo owner or administrator can reset the event",
@@ -374,25 +392,32 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
       ),
     ],
   ] as const;
-  const canOpenAsCurrentViewer = (requiredRole: string) =>
-    requiredRole === loaderData.viewer.role ||
-    (requiredRole === "administrator" &&
-      (loaderData.viewer.role === "administrator" ||
-        loaderData.viewer.role === "owner"));
+  const selectedIdentity = loaderData.viewer;
 
   return (
     <main id="main" className="design-board pc-design-board">
       <PageHeader
         eyebrow="Environment-gated evaluator mode"
         title="Try the complete conference workflow"
-        description={`You are viewing the seeded conference as ${loaderData.viewer.name} (${loaderData.viewer.role}). D1 interactions persist until an explicit reset; external providers are never impersonated.`}
+        description={
+          selectedIdentity
+            ? `You selected ${selectedIdentity.name} (${selectedIdentity.role}). D1 interactions persist until an explicit reset; external providers are never impersonated.`
+            : "Choose a task or browse the published programme anonymously. Private workspaces do not silently assign an administrator identity."
+        }
         actions={
-          <Link
-            className="btn primary"
-            to={destinations[loaderData.viewer.role]}
-          >
-            Open current workspace <ArrowRight aria-hidden size={15} />
-          </Link>
+          selectedIdentity ? (
+            <Link className="btn primary" to={selectedIdentity.destination}>
+              Continue as {selectedIdentity.name}{" "}
+              <ArrowRight aria-hidden size={15} />
+            </Link>
+          ) : (
+            <Link
+              className="btn primary"
+              to="/public/programme/future-of-events-2025"
+            >
+              Browse anonymously <ArrowRight aria-hidden size={15} />
+            </Link>
+          )
         }
       />
 
@@ -423,51 +448,71 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
         <div className="pc-section-heading">
           <div>
             <span className="pc-section-kicker">Start here</span>
-            <h2>Switch test identity</h2>
+            <h2>Choose a test identity</h2>
           </div>
           <p>
-            Demo authentication uses an HttpOnly role cookie. These identities
-            have no password and cannot authenticate against production.
+            Demo authentication uses an HttpOnly identity cookie. These people
+            have no password and cannot authenticate against production. The
+            SBEK speaker and reviewer begin without accepted speaker or
+            evaluator access.
           </p>
         </div>
         <div className="table-wrap pc-responsive-table-wrap">
           <table className="data-table pc-responsive-table">
             <thead>
               <tr>
-                <th>Role</th>
+                <th>Purpose</th>
                 <th>Identity</th>
                 <th>Email</th>
                 <th>Entry point</th>
               </tr>
             </thead>
             <tbody>
-              {Object.entries(DEMO_IDENTITIES).map(([role, identity]) => (
-                <tr key={role}>
-                  <td data-label="Role">
-                    <StatusBadge
-                      tone={
-                        role === loaderData.viewer.role ? "success" : "neutral"
-                      }
-                    >
-                      {role}
-                    </StatusBadge>
-                  </td>
-                  <td data-label="Identity">
-                    <strong>{identity.name}</strong>
-                  </td>
-                  <td data-label="Email">
-                    <code>{identity.email}</code>
-                  </td>
-                  <td data-label="Entry point">
-                    <Form method="post" action="/demo/role">
-                      <input type="hidden" name="role" value={role} />
-                      <button className="btn small" type="submit">
-                        Enter as {role} <ArrowRight aria-hidden size={13} />
-                      </button>
-                    </Form>
-                  </td>
-                </tr>
-              ))}
+              {Object.entries(DEMO_IDENTITIES).map(
+                ([identityKey, identity]) => (
+                  <tr key={identityKey}>
+                    <td data-label="Purpose">
+                      <StatusBadge
+                        tone={
+                          identityKey === selectedIdentity?.identityKey
+                            ? "success"
+                            : identity.cohort === "sbek"
+                              ? "info"
+                              : "neutral"
+                        }
+                      >
+                        {identityKey.replaceAll("_", " ")}
+                      </StatusBadge>
+                    </td>
+                    <td data-label="Identity">
+                      <strong>{identity.name}</strong>
+                    </td>
+                    <td data-label="Email">
+                      <code>{identity.email}</code>
+                    </td>
+                    <td data-label="Entry point">
+                      <Form method="post" action="/demo/role">
+                        <input
+                          type="hidden"
+                          name="identity"
+                          value={identityKey}
+                        />
+                        {loaderData.returnTo ? (
+                          <input
+                            type="hidden"
+                            name="returnTo"
+                            value={loaderData.returnTo}
+                          />
+                        ) : null}
+                        <button className="btn small" type="submit">
+                          Continue as {identity.name}{" "}
+                          <ArrowRight aria-hidden size={13} />
+                        </button>
+                      </Form>
+                    </td>
+                  </tr>
+                ),
+              )}
             </tbody>
           </table>
         </div>
@@ -482,7 +527,7 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
           <ol className="stack">
-            {walkthrough.map(([title, copy, href, role], index) => (
+            {walkthrough.map(([title, copy, href, identityKey], index) => (
               <li className="card pad" key={title}>
                 <div className="card-title">
                   <StatusBadge tone="info">{index + 1}</StatusBadge>
@@ -490,18 +535,18 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
                 </div>
                 <p className="subtle">{copy}</p>
                 <div className="page-actions">
-                  {canOpenAsCurrentViewer(role) ? (
-                    <Link className="btn small" to={href}>
-                      Open <ArrowRight aria-hidden size={13} />
-                    </Link>
-                  ) : (
-                    <Form method="post" action="/demo/role">
-                      <input type="hidden" name="role" value={role} />
-                      <button className="btn small" type="submit">
-                        Switch to {role}
-                      </button>
-                    </Form>
-                  )}
+                  <Form method="post" action="/demo/role">
+                    <input
+                      type="hidden"
+                      name="identity"
+                      value={identityKey satisfies DemoIdentityKey}
+                    />
+                    <input type="hidden" name="returnTo" value={href} />
+                    <button className="btn small" type="submit">
+                      Open as {DEMO_IDENTITIES[identityKey].name}{" "}
+                      <ArrowRight aria-hidden size={13} />
+                    </button>
+                  </Form>
                 </div>
               </li>
             ))}
@@ -602,8 +647,8 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
                   ))}
               </ul>
             ) : null}
-            {loaderData.viewer.role === "owner" ||
-            loaderData.viewer.role === "administrator" ? (
+            {selectedIdentity?.role === "owner" ||
+            selectedIdentity?.role === "administrator" ? (
               <Form
                 method="post"
                 className="stack"

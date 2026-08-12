@@ -842,7 +842,7 @@ describe("Event Setup D1 service", () => {
       new Request("https://programcue.test/events/select", {
         method: "POST",
         headers: {
-          cookie: "program_cue_demo_role=evaluator",
+          cookie: "program_cue_demo_identity=evaluator",
           origin: "https://programcue.test",
         },
       }),
@@ -874,7 +874,7 @@ describe("Event Setup D1 service", () => {
     await expect(
       requireEventRole(
         new Request("https://programcue.test/admin/event", {
-          headers: { cookie: "program_cue_demo_role=evaluator" },
+          headers: { cookie: "program_cue_demo_identity=evaluator" },
         }),
         testEnv,
         viewer.eventId,

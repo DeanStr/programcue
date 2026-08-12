@@ -74,7 +74,7 @@ const SURFACES: readonly Surface[] = [
 async function selectDemoRole(page: Page, role: DemoRole) {
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: role,
       domain: "127.0.0.1",
       path: "/",

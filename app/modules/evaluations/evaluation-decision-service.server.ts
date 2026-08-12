@@ -4,6 +4,7 @@ import {
 } from "~/modules/events/event-configuration";
 import { submittedSnapshotSchema } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { activateSbekDemoInvitation } from "~/platform/demo/sbek-invitation.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
   persistAcceptedSpeakerQueueFailure,
@@ -39,23 +40,61 @@ export class EvaluationDecisionService {
       };
     }
     if (String(this.env.DEMO_MODE) === "true") {
-      const pending = await this.env.DB.prepare(
-        `SELECT COUNT(*) AS count
-           FROM memberships membership
-           JOIN session_speakers speaker
-             ON speaker.event_id = membership.event_id
-            AND speaker.person_id = membership.person_id
-          WHERE speaker.session_id = ? AND membership.organisation_id = ?
-            AND membership.event_id = ? AND membership.role = 'speaker'
-            AND membership.accepted_at IS NULL AND membership.revoked_at IS NULL
-            AND membership.invitation_expires_at > unixepoch()`,
+      const memberships = await this.env.DB.prepare(
+        `SELECT membership.id AS membershipId,
+                membership.accepted_at AS acceptedAt,
+                membership.revoked_at AS revokedAt,
+                membership.invitation_expires_at AS expiresAt
+           FROM session_speakers speaker
+           LEFT JOIN memberships membership
+             ON membership.event_id = speaker.event_id
+            AND membership.person_id = speaker.person_id
+            AND membership.organisation_id = ?
+            AND membership.role = 'speaker'
+          WHERE speaker.session_id = ? AND speaker.event_id = ?`,
       )
-        .bind(sessionId, viewer.organisationId, viewer.eventId)
-        .first<{ count: number }>();
-      const count = Number(pending?.count ?? 0);
+        .bind(viewer.organisationId, sessionId, viewer.eventId)
+        .all<{
+          membershipId: string | null;
+          acceptedAt: number | null;
+          revokedAt: number | null;
+          expiresAt: number | null;
+        }>();
+      let activationFailed = false;
+      let count = 0;
+      const now = Math.floor(Date.now() / 1_000);
+      for (const membership of memberships.results) {
+        if (
+          membership.acceptedAt === null &&
+          membership.revokedAt === null &&
+          membership.expiresAt !== null &&
+          membership.expiresAt > now
+        ) {
+          count += 1;
+        }
+        if (!membership.membershipId) {
+          activationFailed = true;
+          break;
+        }
+        try {
+          await activateSbekDemoInvitation(this.env, {
+            membershipId: membership.membershipId,
+            organisationId: viewer.organisationId,
+            eventId: viewer.eventId,
+            actorPersonId: viewer.personId,
+            role: "speaker",
+          });
+        } catch {
+          activationFailed = true;
+          break;
+        }
+      }
       return {
-        speakerInvitationStatus:
-          count > 0 ? ("demo_not_sent" as const) : ("not_required" as const),
+        speakerInvitationStatus: activationFailed
+          ? ("demo_activation_failed" as const)
+          : count > 0
+            ? ("demo_not_sent" as const)
+            : ("not_required" as const),
         speakerInvitationCount: count,
       };
     }
@@ -733,12 +772,21 @@ export class EvaluationDecisionService {
       }
     }
     let speakerInvitationStatus:
-      "not_required" | "queued" | "queue_failed" | "demo_not_sent" =
-      "not_required";
-    const speakerInvitationCount = speakerInvitations.length;
+      | "not_required"
+      | "queued"
+      | "queue_failed"
+      | "demo_not_sent"
+      | "demo_activation_failed" = "not_required";
+    let speakerInvitationCount = speakerInvitations.length;
     if (speakerInvitationCount > 0) {
       if (String(this.env.DEMO_MODE) === "true") {
-        speakerInvitationStatus = "demo_not_sent";
+        const outcome = await this.acceptedSpeakerInvitationOutcome(
+          viewer,
+          decisionId,
+          sessionId,
+        );
+        speakerInvitationStatus = outcome.speakerInvitationStatus;
+        speakerInvitationCount = outcome.speakerInvitationCount;
       } else {
         speakerInvitationStatus = "queued";
         for (const plan of speakerInvitationPlans) {

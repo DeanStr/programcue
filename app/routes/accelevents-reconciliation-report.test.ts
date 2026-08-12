@@ -26,7 +26,7 @@ function request(role: "administrator" | "speaker", runId: string) {
   return new Request(
     `http://localhost/admin/integrations/accelevents/runs/${encodeURIComponent(runId)}/reconciliation.csv`,
     {
-      headers: { cookie: `program_cue_demo_role=${role}` },
+      headers: { cookie: `program_cue_demo_identity=${role}` },
     },
   );
 }

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { resetDemoEvent } from "./support/reset-demo-event";
 
 test.beforeEach(async ({ request }) => {
   expect((await request.get("/admin/command")).ok()).toBeTruthy();
@@ -9,7 +10,7 @@ test("reviewer queue navigation and submission confirmation preserve context", a
 }) => {
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "evaluator",
       domain: "127.0.0.1",
       path: "/",
@@ -80,7 +81,7 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await expect(
     invitation.getByLabel("Team after evaluator acceptance"),
   ).toBeVisible();
-  await expect(invitation).toContainText("expire after seven days");
+  await expect(invitation).toContainText("expires after seven days");
   await expect(
     invitation
       .getByRole("button", { name: /Promote to chair|Revoke chair/ })
@@ -129,4 +130,51 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await expect(
     page.getByRole("button", { name: "Decide" }).first(),
   ).toBeFocused();
+});
+
+test("the exact SBEK reviewer invitation hands off to Sam without claiming email delivery", async ({
+  page,
+  request,
+}) => {
+  await resetDemoEvent(request);
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/admin/review");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await page.getByText("Manage evaluation access", { exact: true }).click();
+  const invitation = page.locator("details").filter({
+    hasText: "Manage evaluation access",
+  });
+  await invitation.getByLabel("Name").fill("Sam Whitfield");
+  await invitation.getByLabel("Email").fill("sbek-reviewer@example.com");
+  await invitation.getByRole("button", { name: "Send invitation" }).click();
+  await expect(
+    page.getByText(/exact SBEK fixture identity was activated locally/i),
+  ).toBeVisible();
+  await expect(invitation.getByText("Unaccepted invitations")).toHaveCount(0);
+
+  await page.goto("/demo");
+  await page
+    .getByRole("row", { name: /sbek reviewer.*Sam Whitfield/i })
+    .getByRole("button", { name: "Continue as Sam Whitfield" })
+    .click();
+  await expect(page).toHaveURL(/\/review\/workbench/);
+  await expect(
+    page.getByRole("heading", { name: "Review Workbench" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "Signed in as Sam Whitfield" }),
+  ).toBeVisible();
+
+  await page.goto("/demo");
+  await page.getByRole("link", { name: "Continue as Sam Whitfield" }).click();
+  await expect(page).toHaveURL(/\/review\/workbench/);
 });

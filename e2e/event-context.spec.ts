@@ -14,7 +14,7 @@ test("an event switch persists across reloads on the local HTTP Worker", async (
       sameSite: "Lax",
     },
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "owner",
       domain: "127.0.0.1",
       path: "/",

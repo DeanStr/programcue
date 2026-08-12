@@ -192,7 +192,7 @@ test("contextual AI actions stay inside the readiness and review workflows", asy
 
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "evaluator",
       domain: "127.0.0.1",
       path: "/",

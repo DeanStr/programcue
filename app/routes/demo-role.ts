@@ -1,25 +1,15 @@
 import { redirect } from "react-router";
-import { z } from "zod";
 
 import type { Route } from "./+types/demo-role";
 import { currentEventCookie } from "~/platform/auth/current-event.server";
+import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import { DEMO_EVENT_ID } from "~/platform/demo/demo-identities";
-
-const selectionSchema = z.enum([
-  "owner",
-  "administrator",
-  "evaluator",
-  "submitter",
-  "speaker",
-]);
-const destinations: Record<z.infer<typeof selectionSchema>, string> = {
-  owner: "/admin/files/retention",
-  administrator: "/admin/command",
-  evaluator: "/review/workbench",
-  submitter: "/apply/form",
-  speaker: "/speaker/dashboard",
-};
+import {
+  DEMO_EVENT_ID,
+  DEMO_IDENTITY_COOKIE,
+  isDemoIdentityKey,
+} from "~/platform/demo/demo-identities";
+import { resolveDemoIdentityState } from "~/platform/demo/demo-identity.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
   if (request.method !== "POST") {
@@ -34,19 +24,30 @@ export async function action({ request, context }: Route.ActionArgs) {
     env.APP_ENV === "production" ||
     env.DEFAULT_EVENT_ID !== DEMO_EVENT_ID
   ) {
-    throw new Response("Demo role switching is disabled", { status: 404 });
+    throw new Response("Demo identity switching is disabled", { status: 404 });
   }
-  const role = selectionSchema.safeParse((await request.formData()).get("role"));
-  if (!role.success) {
-    throw new Response("Demo role is invalid", { status: 400 });
+  const formData = await request.formData();
+  const identityKey = formData.get("identity");
+  if (typeof identityKey !== "string" || !isDemoIdentityKey(identityKey)) {
+    throw new Response("Demo identity is invalid", { status: 400 });
   }
   const headers = new Headers();
   headers.append(
     "set-cookie",
-    `program_cue_demo_role=${role.data}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`,
+    `${DEMO_IDENTITY_COOKIE}=${identityKey}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`,
   );
   // Each demo identity starts from the canonical judged event. This prevents
   // an administrator's cloned-event selection leaking into another identity.
   headers.append("set-cookie", currentEventCookie(DEMO_EVENT_ID, env));
-  return redirect(destinations[role.data], { headers });
+  const identityState = await resolveDemoIdentityState(env, identityKey);
+  let destination: string = identityState.destination;
+  const requestedDestination = formData.get("returnTo");
+  if (requestedDestination !== null) {
+    const safeDestination = safeReturnTo(requestedDestination);
+    if (safeDestination === "/" && requestedDestination !== "/") {
+      throw new Response("Demo destination is invalid", { status: 400 });
+    }
+    destination = safeDestination;
+  }
+  return redirect(destination, { headers });
 }

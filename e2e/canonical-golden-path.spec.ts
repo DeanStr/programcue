@@ -44,7 +44,7 @@ async function switchDemoRole(
   role: "administrator" | "evaluator" | "speaker",
 ) {
   const response = await page.request.post("/demo/role", {
-    form: { role },
+    form: { identity: role },
     headers: { origin: e2eOrigin },
   });
   expect(response.ok()).toBeTruthy();

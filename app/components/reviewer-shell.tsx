@@ -21,11 +21,11 @@ export function ReviewerShell({ viewer, eventName, children }: {
         <small>Evaluation workspace</small>
       </div>
       <Link className="btn small" to={eventSelectionHref}>Switch event</Link>
-      {viewer.demo ? <form method="post" action="/demo/role" className="review-demo-return"><input type="hidden" name="role" value="administrator" /><button className="btn small">Return to administrator demo</button></form> : null}
+      {viewer.demo ? <form method="post" action="/demo/role" className="review-demo-return"><input type="hidden" name="identity" value="administrator" /><button className="btn small">Return to organizer demo</button></form> : null}
       <div className="review-account">
         <span className="status info">{viewer.role.replaceAll("_", " ")}</span>
         <span className="avatar" role="img" aria-label={`Signed in as ${viewer.name}`} title={viewer.name}>{initials}</span>
-        {!viewer.demo ? <Form method="post" action="/sign-out"><button className="btn small" type="submit">Sign out</button></Form> : null}
+        <Form method="post" action="/sign-out"><button className="btn small" type="submit">Sign out</button></Form>
       </div>
     </header>
     <main className="speaker-main" id="main">{children}</main>

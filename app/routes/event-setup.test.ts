@@ -32,7 +32,7 @@ function request(
   return new Request("http://localhost/admin/event", {
     method: values ? "POST" : "GET",
     headers: {
-      cookie: `program_cue_demo_role=${role}; program_cue_event=evt-foe-2025`,
+      cookie: `program_cue_demo_identity=${role}; program_cue_event=evt-foe-2025`,
       origin: "http://localhost",
     },
     ...(values ? { body: new URLSearchParams(values) } : {}),
@@ -300,7 +300,7 @@ describe("Event Setup administrator scope route", () => {
           method: "PUT",
           headers: {
             cookie:
-              "program_cue_demo_role=administrator; program_cue_event=evt-foe-2025",
+              "program_cue_demo_identity=administrator; program_cue_event=evt-foe-2025",
             origin: "http://localhost",
           },
         }),

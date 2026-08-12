@@ -49,7 +49,7 @@ function headers(
   origin = "https://programcue.test",
 ) {
   return new Headers({
-    cookie: `program_cue_demo_role=${role}`,
+    cookie: `program_cue_demo_identity=${role}`,
     origin,
     "content-type": "application/json",
     "idempotency-key": idempotencyKey,

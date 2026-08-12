@@ -160,7 +160,7 @@ test("Uppy resumes an interrupted direct upload from R2's server-authoritative p
 
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "speaker",
       domain: "127.0.0.1",
       path: "/",
@@ -331,7 +331,7 @@ test("a failed direct transfer remains resumable and cancellable in place", asyn
   );
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "speaker",
       domain: "127.0.0.1",
       path: "/",

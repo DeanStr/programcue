@@ -6,6 +6,7 @@ import {
 import { ZodError } from "zod";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import {
+  EvaluationDemoActivationError,
   EvaluationDecisionAuthorityError,
   EvaluationDecisionFinalError,
   EvaluationInvitationDeliveryError,
@@ -74,6 +75,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     });
   return {
     ...workspace,
+    demoMode: viewer.demo,
     canReleaseDecisions: canReleaseEvaluationDecisions(
       viewer.role,
       workspace.plan,
@@ -155,7 +157,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
       const message =
         result.delivery === "sent"
           ? `${roleLabel} invitation created and a one-time sign-in link was sent.`
-          : `Demo ${roleLabel.toLowerCase()} invitation created in D1. No email was sent in explicit demo mode.`;
+          : result.demoAccessActivation === "activated" ||
+              result.demoAccessActivation === "already_active"
+            ? `Demo ${roleLabel.toLowerCase()} invitation created in D1 and the exact SBEK fixture identity was activated locally. No email was sent.`
+            : `Demo ${roleLabel.toLowerCase()} invitation created in D1. No email was sent in explicit demo mode.`;
       if (realtimeFailure) {
         return data(
           {
@@ -523,6 +528,23 @@ export async function action({ request, context }: ActionFunctionArgs) {
         { status: 422 },
       );
     if (error instanceof EvaluationInvitationDeliveryError) {
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "membership",
+        entityId: error.membershipId,
+        changeType: "created",
+      });
+      return data(
+        {
+          ok: false,
+          committed: true,
+          message: realtimeFailure
+            ? `${error.message} ${realtimeFailure.message}`
+            : error.message,
+        },
+        { status: 207 },
+      );
+    }
+    if (error instanceof EvaluationDemoActivationError) {
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "membership",
         entityId: error.membershipId,
