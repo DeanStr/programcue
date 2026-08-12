@@ -285,6 +285,9 @@ test.describe.serial(
       await expect(
         page.getByRole("navigation", { name: "Assigned review sources" }),
       ).toBeInViewport();
+      await expect(
+        page.getByRole("heading", { name: "Score submission" }),
+      ).toBeInViewport();
       await captureLaptopViewport(page, "review-workbench");
     });
 
@@ -350,6 +353,14 @@ test.describe.serial(
       });
       await mergedPreview.scrollIntoViewIfNeeded();
       await expect(mergedPreview).toBeInViewport();
+      const confirmation = page.getByRole("heading", {
+        name: "3. Confirm durable delivery",
+      });
+      await confirmation.scrollIntoViewIfNeeded();
+      await expect(confirmation).toBeInViewport();
+      await expect(
+        page.getByRole("button", { name: "Schedule 1 delivery" }),
+      ).toBeInViewport();
       await captureLaptopViewport(page, "communications-preview");
     });
 

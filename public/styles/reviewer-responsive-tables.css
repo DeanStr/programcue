@@ -123,6 +123,7 @@
   overflow-wrap: anywhere;
 }
 .reviewer-shell .review-score {
+  grid-column: auto;
   min-width: 0;
   max-height: calc(100vh - 190px);
   overflow: hidden;
