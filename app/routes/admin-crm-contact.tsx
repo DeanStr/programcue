@@ -427,8 +427,9 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
             <CalendarPlus aria-hidden className="subtle" />
           </div>
           <p className="subtle">
-            Creates or restores speaker access using this canonical name, email,
-            title, company and biography.
+            Creates or restores speaker access for this identity. Network
+            profile suggestions remain organisation-scoped until the speaker
+            updates their own profile.
           </p>
           <Form method="post" className="stack mt">
             <input type="hidden" name="_intent" value="add_to_event" />

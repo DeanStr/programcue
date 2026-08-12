@@ -82,10 +82,12 @@ export class CrmService {
     const search = `%${filters.query}%`;
     const rows = await this.env.DB.prepare(
       `${contactScopeCte}
-       SELECT person.id AS personId, person.display_name AS name, person.email,
-              person.job_title AS jobTitle,
-              person.organisation_name AS organisationName,
-              person.biography,
+       SELECT person.id AS personId,
+              COALESCE(profile.display_name, person.display_name) AS name,
+              person.email,
+              COALESCE(profile.job_title, person.job_title) AS jobTitle,
+              COALESCE(profile.organisation_name, person.organisation_name) AS organisationName,
+              COALESCE(profile.biography, person.biography) AS biography,
               COALESCE((
                 SELECT json_group_array(tagged.tag)
                   FROM (
@@ -122,15 +124,20 @@ export class CrmService {
                  AND event.activation_status = 'active') AS sessionCount,
               (SELECT COUNT(*) FROM organisation_contact_ids candidate
                 JOIN people duplicate ON duplicate.id = candidate.person_id
+                LEFT JOIN scoped_contact_profiles duplicate_profile
+                  ON duplicate_profile.person_id = duplicate.id
                WHERE candidate.person_id <> person.id
-                 AND lower(trim(duplicate.display_name)) = lower(trim(person.display_name))) AS duplicateCount
+                 AND lower(trim(COALESCE(duplicate_profile.display_name, duplicate.display_name))) =
+                     lower(trim(COALESCE(profile.display_name, person.display_name)))) AS duplicateCount
          FROM organisation_contact_ids scoped
          JOIN people person ON person.id = scoped.person_id
-        WHERE (? = '%%' OR person.display_name LIKE ? OR person.email LIKE ?
-               OR COALESCE(person.organisation_name, '') LIKE ?
-               OR COALESCE(person.job_title, '') LIKE ?)
-          AND (? = '' OR person.organisation_name = ? COLLATE NOCASE)
-          AND (? = '' OR person.job_title = ? COLLATE NOCASE)
+         LEFT JOIN scoped_contact_profiles profile ON profile.person_id = person.id
+        WHERE (? = '%%' OR COALESCE(profile.display_name, person.display_name) LIKE ?
+               OR person.email LIKE ?
+               OR COALESCE(profile.organisation_name, person.organisation_name, '') LIKE ?
+               OR COALESCE(profile.job_title, person.job_title, '') LIKE ?)
+          AND (? = '' OR COALESCE(profile.organisation_name, person.organisation_name) = ? COLLATE NOCASE)
+          AND (? = '' OR COALESCE(profile.job_title, person.job_title) = ? COLLATE NOCASE)
           AND (? = '' OR EXISTS (
             SELECT 1 FROM organisation_contact_tags tag
              WHERE tag.organisation_id = ? AND tag.person_id = person.id
@@ -141,7 +148,8 @@ export class CrmService {
              WHERE hidden.organisation_id = ? AND hidden.person_id = person.id
                AND hidden.status = 'merged'
           )
-        ORDER BY person.display_name COLLATE NOCASE, person.id
+        ORDER BY COALESCE(profile.display_name, person.display_name) COLLATE NOCASE,
+                 person.id
         LIMIT ? OFFSET ?`,
     )
       .bind(
@@ -221,12 +229,14 @@ export class CrmService {
       throw new Error("The Speaker Network dashboard could not be read.");
     const companies = await this.env.DB.prepare(
       `${contactScopeCte}
-       SELECT person.organisation_name AS name, COUNT(*) AS contacts
+       SELECT COALESCE(profile.organisation_name, person.organisation_name) AS name,
+              COUNT(*) AS contacts
          FROM organisation_contact_ids contact
          JOIN people person ON person.id = contact.person_id
-        WHERE person.organisation_name IS NOT NULL
-          AND trim(person.organisation_name) <> ''
-        GROUP BY person.organisation_name
+         LEFT JOIN scoped_contact_profiles profile ON profile.person_id = person.id
+        WHERE COALESCE(profile.organisation_name, person.organisation_name) IS NOT NULL
+          AND trim(COALESCE(profile.organisation_name, person.organisation_name)) <> ''
+        GROUP BY COALESCE(profile.organisation_name, person.organisation_name)
         ORDER BY contacts DESC, name COLLATE NOCASE
         LIMIT 6`,
     )
@@ -254,12 +264,16 @@ export class CrmService {
     const placeholders = personIds.map(() => "?").join(",");
     const rows = await this.env.DB.prepare(
       `${contactScopeCte}
-       SELECT person.id AS personId, person.display_name AS name, person.email,
-              person.organisation_name AS organisationName
+       SELECT person.id AS personId,
+              COALESCE(profile.display_name, person.display_name) AS name,
+              person.email,
+              COALESCE(profile.organisation_name, person.organisation_name) AS organisationName
          FROM organisation_contact_ids scoped
          JOIN people person ON person.id = scoped.person_id
+         LEFT JOIN scoped_contact_profiles profile ON profile.person_id = person.id
         WHERE person.id IN (${placeholders})
-        ORDER BY person.display_name COLLATE NOCASE, person.id`,
+        ORDER BY COALESCE(profile.display_name, person.display_name) COLLATE NOCASE,
+                 person.id`,
     )
       .bind(...contactScopeBindings(viewer), ...personIds)
       .all<{
@@ -274,17 +288,21 @@ export class CrmService {
   private async directoryFacets(viewer: OrganisationAdministrator) {
     const [companies, titles, tags] = await Promise.all([
       this.env.DB.prepare(
-        `${contactScopeCte} SELECT DISTINCT person.organisation_name AS value
+        `${contactScopeCte} SELECT DISTINCT COALESCE(profile.organisation_name, person.organisation_name) AS value
            FROM organisation_contact_ids contact JOIN people person ON person.id = contact.person_id
-          WHERE person.organisation_name IS NOT NULL AND trim(person.organisation_name) <> ''
+           LEFT JOIN scoped_contact_profiles profile ON profile.person_id = person.id
+          WHERE COALESCE(profile.organisation_name, person.organisation_name) IS NOT NULL
+            AND trim(COALESCE(profile.organisation_name, person.organisation_name)) <> ''
           ORDER BY value COLLATE NOCASE`,
       )
         .bind(...contactScopeBindings(viewer))
         .all<{ value: string }>(),
       this.env.DB.prepare(
-        `${contactScopeCte} SELECT DISTINCT person.job_title AS value
+        `${contactScopeCte} SELECT DISTINCT COALESCE(profile.job_title, person.job_title) AS value
            FROM organisation_contact_ids contact JOIN people person ON person.id = contact.person_id
-          WHERE person.job_title IS NOT NULL AND trim(person.job_title) <> ''
+           LEFT JOIN scoped_contact_profiles profile ON profile.person_id = person.id
+          WHERE COALESCE(profile.job_title, person.job_title) IS NOT NULL
+            AND trim(COALESCE(profile.job_title, person.job_title)) <> ''
           ORDER BY value COLLATE NOCASE`,
       )
         .bind(...contactScopeBindings(viewer))
@@ -307,16 +325,24 @@ export class CrmService {
     const personId = crmPersonIdSchema.parse(rawPersonId);
     const contact = await this.env.DB.prepare(
       `${contactScopeCte}
-       SELECT person.id AS personId, person.display_name AS name, person.email,
-              person.job_title AS jobTitle, person.organisation_name AS organisationName,
-              person.biography, person.image_url AS imageUrl,
+       SELECT person.id AS personId,
+              COALESCE(profile.display_name, person.display_name) AS name,
+              person.email,
+              COALESCE(profile.job_title, person.job_title) AS jobTitle,
+              COALESCE(profile.organisation_name, person.organisation_name) AS organisationName,
+              COALESCE(profile.biography, person.biography) AS biography,
+              person.image_url AS imageUrl,
               person.profile_status AS profileStatus,
               (SELECT COUNT(*) FROM organisation_contact_ids duplicate
                 JOIN people other ON other.id = duplicate.person_id
+                LEFT JOIN scoped_contact_profiles other_profile
+                  ON other_profile.person_id = other.id
                WHERE duplicate.person_id <> person.id
-                 AND lower(trim(other.display_name)) = lower(trim(person.display_name))) AS duplicateCount
+                 AND lower(trim(COALESCE(other_profile.display_name, other.display_name))) =
+                     lower(trim(COALESCE(profile.display_name, person.display_name)))) AS duplicateCount
          FROM organisation_contact_ids scoped
          JOIN people person ON person.id = scoped.person_id
+         LEFT JOIN scoped_contact_profiles profile ON profile.person_id = person.id
         WHERE person.id = ?
           AND NOT EXISTS (SELECT 1 FROM organisation_contacts hidden
             WHERE hidden.organisation_id = ? AND hidden.person_id = person.id
@@ -390,13 +416,16 @@ export class CrmService {
           }>(),
         this.env.DB.prepare(
           `${contactScopeCte}
-         SELECT person.id AS personId, person.display_name AS name, person.email,
-                person.organisation_name AS organisationName,
-                person.job_title AS jobTitle
+         SELECT person.id AS personId,
+                COALESCE(profile.display_name, person.display_name) AS name,
+                person.email,
+                COALESCE(profile.organisation_name, person.organisation_name) AS organisationName,
+                COALESCE(profile.job_title, person.job_title) AS jobTitle
            FROM organisation_contact_ids scoped
            JOIN people person ON person.id = scoped.person_id
+           LEFT JOIN scoped_contact_profiles profile ON profile.person_id = person.id
           WHERE person.id <> ?
-            AND lower(trim(person.display_name)) = lower(trim(?))
+            AND lower(trim(COALESCE(profile.display_name, person.display_name))) = lower(trim(?))
             AND NOT EXISTS (SELECT 1 FROM organisation_contacts hidden
               WHERE hidden.organisation_id = ? AND hidden.person_id = person.id
                 AND hidden.status = 'merged')
@@ -480,21 +509,14 @@ export class CrmService {
     let linked: D1Result;
     let audit: D1Result;
     try {
-      [created, linked, audit] = await this.env.DB.batch([
+      [created, linked, , audit] = await this.env.DB.batch([
         this.env.DB.prepare(
           `INSERT INTO people (
-             id, email, display_name, email_verified, biography,
-             organisation_name, job_title, profile_status, created_at, updated_at
-           ) VALUES (?, ?, ?, 0, ?, ?, ?, 'draft', unixepoch(), unixepoch())
+             id, email, display_name, email_verified, profile_status,
+             created_at, updated_at
+           ) VALUES (?, ?, ?, 0, 'draft', unixepoch(), unixepoch())
            ON CONFLICT(email) DO NOTHING`,
-        ).bind(
-          personId,
-          input.email,
-          input.name,
-          input.biography || null,
-          input.organisationName || null,
-          input.jobTitle || null,
-        ),
+        ).bind(personId, input.email, input.email),
         this.env.DB.prepare(
           `INSERT INTO organisation_contacts (
              organisation_id, person_id, source, status, created_by_person_id,
@@ -515,6 +537,31 @@ export class CrmService {
           personId,
           ...organisationRelationshipBindings(viewer),
           viewer.personId,
+        ),
+        this.env.DB.prepare(
+          `INSERT INTO organisation_contact_profiles (
+             organisation_id, person_id, display_name, biography,
+             organisation_name, job_title, source, created_by_person_id,
+             updated_by_person_id, created_at, updated_at
+           )
+           SELECT ?, person.id, ?, ?, ?, ?, 'manual', ?, ?,
+                  unixepoch(), unixepoch()
+             FROM people person
+             JOIN organisation_contacts contact
+               ON contact.organisation_id = ? AND contact.person_id = person.id
+              AND contact.status = 'active'
+            WHERE person.email = ? COLLATE NOCASE
+           ON CONFLICT(organisation_id, person_id) DO NOTHING`,
+        ).bind(
+          viewer.organisationId,
+          input.name,
+          input.biography || null,
+          input.organisationName || null,
+          input.jobTitle || null,
+          viewer.personId,
+          viewer.personId,
+          viewer.organisationId,
+          input.email,
         ),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
@@ -546,12 +593,19 @@ export class CrmService {
     const resolved = await this.env.DB.prepare(
       `SELECT contact.person_id AS personId, contact.status,
               contact.merged_into_person_id AS mergedIntoPersonId,
-              primary_contact.display_name AS mergedIntoName,
+              profile.person_id AS profilePersonId,
+              COALESCE(primary_profile.display_name, primary_contact.display_name) AS mergedIntoName,
               primary_contact.email AS mergedIntoEmail
          FROM people person
          JOIN organisation_contacts contact ON contact.person_id = person.id
+         LEFT JOIN organisation_contact_profiles profile
+           ON profile.organisation_id = contact.organisation_id
+          AND profile.person_id = contact.person_id
          LEFT JOIN people primary_contact
            ON primary_contact.id = contact.merged_into_person_id
+         LEFT JOIN organisation_contact_profiles primary_profile
+           ON primary_profile.organisation_id = contact.organisation_id
+          AND primary_profile.person_id = primary_contact.id
         WHERE person.email = ? COLLATE NOCASE AND contact.organisation_id = ?`,
     )
       .bind(input.email, viewer.organisationId)
@@ -559,6 +613,7 @@ export class CrmService {
         personId: string;
         status: "active" | "merged";
         mergedIntoPersonId: string | null;
+        profilePersonId: string | null;
         mergedIntoName: string | null;
         mergedIntoEmail: string | null;
       }>();
@@ -577,6 +632,9 @@ export class CrmService {
         `This email belongs to a merged contact. Use ${resolved.mergedIntoName} (${resolved.mergedIntoEmail}) instead.`,
         409,
       );
+    }
+    if (!resolved.profilePersonId) {
+      throw new Error(CONTACT_IDENTITY_INVARIANT_MESSAGE);
     }
     if ((linked.meta.changes ?? 0) !== 1 || (audit.meta.changes ?? 0) !== 1) {
       throw new Error("The Speaker Network contact could not be created.");

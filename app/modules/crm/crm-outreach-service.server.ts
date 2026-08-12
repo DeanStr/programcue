@@ -157,10 +157,13 @@ export class CrmOutreachService {
     const placeholders = uniquePersonIds.map(() => "?").join(",");
     const contacts = await this.env.DB.prepare(
       `${contactScopeCte}
-       SELECT person.id, person.display_name AS name, person.email
+       SELECT person.id,
+              COALESCE(profile.display_name, person.display_name) AS name,
+              person.email
          FROM organisation_contact_ids scoped JOIN people person ON person.id = scoped.person_id
+         LEFT JOIN scoped_contact_profiles profile ON profile.person_id = person.id
         WHERE person.id IN (${placeholders})
-        ORDER BY person.display_name COLLATE NOCASE`,
+        ORDER BY COALESCE(profile.display_name, person.display_name) COLLATE NOCASE`,
     )
       .bind(...contactScopeBindings(viewer), ...uniquePersonIds)
       .all<{ id: string; name: string; email: string }>();

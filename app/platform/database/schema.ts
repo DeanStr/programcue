@@ -228,6 +228,33 @@ export const organisationContacts = sqliteTable(
   ],
 );
 
+export const organisationContactProfiles = sqliteTable(
+  "organisation_contact_profiles",
+  {
+    organisationId: text("organisation_id").notNull(),
+    personId: text("person_id").notNull(),
+    displayName: text("display_name").notNull(),
+    biography: text("biography"),
+    organisationName: text("organisation_name"),
+    jobTitle: text("job_title"),
+    source: text("source").notNull().$type<"import" | "manual">(),
+    createdByPersonId: text("created_by_person_id").references(() => people.id),
+    updatedByPersonId: text("updated_by_person_id").references(() => people.id),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    primaryKey({ columns: [table.organisationId, table.personId] }),
+    foreignKey({
+      columns: [table.organisationId, table.personId],
+      foreignColumns: [
+        organisationContacts.organisationId,
+        organisationContacts.personId,
+      ],
+    }).onDelete("cascade"),
+  ],
+);
+
 export const organisationContactTags = sqliteTable(
   "organisation_contact_tags",
   {

@@ -720,13 +720,18 @@ export class SpeakerService {
          WHERE event_id = ? AND role = 'speaker'
            AND accepted_at IS NOT NULL AND revoked_at IS NULL
       ), page_people AS (
-        SELECT p.id, p.display_name AS name, p.email, p.job_title AS jobTitle,
-               p.organisation_name AS organisationName,
+        SELECT p.id, COALESCE(contact_profile.display_name, p.display_name) AS name,
+               p.email,
+               COALESCE(contact_profile.job_title, p.job_title) AS jobTitle,
+               COALESCE(contact_profile.organisation_name, p.organisation_name) AS organisationName,
                p.profile_status AS profileStatus
           FROM event_speaker_ids speaker
           JOIN people p ON p.id = speaker.person_id
+          LEFT JOIN organisation_contact_profiles contact_profile
+            ON contact_profile.organisation_id = ?
+           AND contact_profile.person_id = p.id
          WHERE (? = '' OR p.profile_status = ?)
-           AND (? = '%%' OR p.display_name LIKE ? OR p.email LIKE ?)
+           AND (? = '%%' OR COALESCE(contact_profile.display_name, p.display_name) LIKE ? OR p.email LIKE ?)
            AND (? = '' OR p.id = ?)
            AND (
              ? = ''
@@ -767,7 +772,7 @@ export class SpeakerService {
                )
              )
            )
-         ORDER BY p.display_name, p.id
+         ORDER BY COALESCE(contact_profile.display_name, p.display_name), p.id
          LIMIT ? OFFSET ?
       )
       SELECT person.*,
@@ -806,6 +811,7 @@ export class SpeakerService {
       .bind(
         viewer.eventId,
         viewer.eventId,
+        viewer.organisationId,
         profileStatus,
         profileStatus,
         query,

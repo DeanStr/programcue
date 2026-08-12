@@ -543,6 +543,56 @@ describe("speaker profile service", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
+  it("uses the organisation-scoped Network label after event handoff", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const suffix = crypto.randomUUID();
+    const personId = `network-speaker-${suffix}`;
+    const email = `network-speaker-${suffix}@example.com`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (id, email, display_name, profile_status)
+         VALUES (?, ?, ?, 'draft')`,
+      ).bind(personId, email, email),
+      testEnv.DB.prepare(
+        `INSERT INTO organisation_contacts (
+           organisation_id, person_id, source, status, created_by_person_id
+         ) VALUES (?, ?, 'manual', 'active', ?)`,
+      ).bind(admin.organisationId, personId, admin.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO organisation_contact_profiles (
+           organisation_id, person_id, display_name, organisation_name,
+           job_title, source, created_by_person_id, updated_by_person_id
+         ) VALUES (?, ?, 'Network Display Name', 'Network Company',
+                   'Network Role', 'manual', ?, ?)`,
+      ).bind(admin.organisationId, personId, admin.personId, admin.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, accepted_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch())`,
+      ).bind(
+        `network-membership-${suffix}`,
+        admin.organisationId,
+        admin.eventId,
+        personId,
+      ),
+    ]);
+
+    const result = await new SpeakerService(testEnv).listAdminSpeakerPage(
+      admin,
+      { personId },
+      1,
+    );
+    expect(result.speakers).toEqual([
+      expect.objectContaining({
+        id: personId,
+        name: "Network Display Name",
+        organisationName: "Network Company",
+        jobTitle: "Network Role",
+      }),
+    ]);
+  });
+
   it("queues the advertised speaker.updated event after the profile commit", async () => {
     const queued: unknown[] = [];
     const testEnv = {

@@ -92,7 +92,7 @@ function withNextPostBatchRace(
 
 describe("organisation speaker CRM", () => {
   it("imports the evaluator CSV shape and supports filters, notes, tags and segments", async () => {
-    const { crm } = await service();
+    const { testEnv, crm } = await service();
     const csv = [
       "name,email,title,company,bio",
       'Priya Raman,priya.crm@example.com,Principal Engineer,Latticework Systems,"Build tooling leader"',
@@ -123,6 +123,35 @@ describe("organisation speaker CRM", () => {
       jobTitle: "Principal Engineer",
     });
     const personId = directory.contacts[0]!.personId;
+    const canonicalPerson = await testEnv.DB.prepare(
+      `SELECT display_name AS name, biography,
+              organisation_name AS organisationName, job_title AS jobTitle
+         FROM people WHERE id = ?`,
+    )
+      .bind(personId)
+      .first();
+    expect(canonicalPerson).toEqual({
+      name: "priya.crm@example.com",
+      biography: null,
+      organisationName: null,
+      jobTitle: null,
+    });
+    const scopedProfile = await testEnv.DB.prepare(
+      `SELECT display_name AS name, biography,
+              organisation_name AS organisationName, job_title AS jobTitle,
+              source
+         FROM organisation_contact_profiles
+        WHERE organisation_id = ? AND person_id = ?`,
+    )
+      .bind(administrator.organisationId, personId)
+      .first();
+    expect(scopedProfile).toEqual({
+      name: "Priya Raman",
+      biography: "Build tooling leader",
+      organisationName: "Latticework Systems",
+      jobTitle: "Principal Engineer",
+      source: "import",
+    });
     await crm.addTag(administrator, personId, "AI");
     await crm.addTag(administrator, personId, "ai");
     await crm.addNote(
@@ -152,6 +181,41 @@ describe("organisation speaker CRM", () => {
         filters: expect.objectContaining({ tag: "AI" }),
       }),
     ]);
+  });
+
+  it("keeps manually entered Network enrichment organisation-scoped", async () => {
+    const { testEnv, crm } = await service();
+    const email = `scoped-manual-${crypto.randomUUID()}@example.com`;
+    const created = await crm.createContact(administrator, {
+      name: "Organiser Suggested Name",
+      email,
+      jobTitle: "Suggested Role",
+      organisationName: "Suggested Company",
+      biography: "Organiser-authored biography",
+    });
+
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT display_name AS name, biography,
+                organisation_name AS organisationName, job_title AS jobTitle
+           FROM people WHERE id = ?`,
+      )
+        .bind(created.personId)
+        .first(),
+    ).resolves.toEqual({
+      name: email,
+      biography: null,
+      organisationName: null,
+      jobTitle: null,
+    });
+    await expect(
+      crm.getContact(administrator, created.personId),
+    ).resolves.toMatchObject({
+      name: "Organiser Suggested Name",
+      biography: "Organiser-authored biography",
+      organisationName: "Suggested Company",
+      jobTitle: "Suggested Role",
+    });
   });
 
   it("surfaces and safely merges an unlinked same-name CRM contact", async () => {
@@ -260,9 +324,10 @@ describe("organisation speaker CRM", () => {
   it("does not rewrite a linked primary identity while merging its CRM-only duplicate", async () => {
     const { testEnv, crm } = await service();
     const suffix = crypto.randomUUID();
+    const primaryEmail = `linked-primary-${suffix}@example.com`;
     const primary = await crm.createContact(administrator, {
       name: "Linked Primary Speaker",
-      email: `linked-primary-${suffix}@example.com`,
+      email: primaryEmail,
       jobTitle: "",
       organisationName: "",
       biography: "",
@@ -297,6 +362,20 @@ describe("organisation speaker CRM", () => {
     await expect(
       crm.getContact(administrator, primary.personId),
     ).resolves.toMatchObject({
+      name: "Linked Primary Speaker",
+      biography: "Secondary biography",
+      organisationName: "Secondary company",
+      jobTitle: "Secondary title",
+    });
+    const canonicalPrimary = await testEnv.DB.prepare(
+      `SELECT display_name AS name, biography,
+              organisation_name AS organisationName, job_title AS jobTitle
+         FROM people WHERE id = ?`,
+    )
+      .bind(primary.personId)
+      .first();
+    expect(canonicalPrimary).toEqual({
+      name: primaryEmail,
       biography: null,
       organisationName: null,
       jobTitle: null,
@@ -800,6 +879,14 @@ describe("organisation speaker CRM", () => {
       .bind(administrator.organisationId, personId)
       .first<{ source: string }>();
     expect(contact?.source).toBe("import");
+    await expect(
+      crm.getContact(administrator, personId),
+    ).resolves.toMatchObject({
+      name: "Imported Name",
+      biography: "Imported biography",
+      organisationName: "Imported Company",
+      jobTitle: "Imported Role",
+    });
   });
 
   it("rolls back a CSV import when an unrelated global identity appears after preview", async () => {

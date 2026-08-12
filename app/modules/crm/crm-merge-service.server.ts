@@ -26,8 +26,10 @@ export class CrmMergeService {
       throw new CrmStateError("Choose two different contacts to merge.", 422);
     const candidates = await this.env.DB.prepare(
       `${contactScopeCte}
-       SELECT person.id, person.display_name AS name
+       SELECT person.id,
+              COALESCE(profile.display_name, person.display_name) AS name
          FROM organisation_contact_ids scoped JOIN people person ON person.id = scoped.person_id
+         LEFT JOIN scoped_contact_profiles profile ON profile.person_id = person.id
         WHERE person.id IN (?, ?)`,
     )
       .bind(...contactScopeBindings(viewer), primaryId, secondaryId)
@@ -102,57 +104,66 @@ export class CrmMergeService {
         viewer.organisationId,
       ),
       this.env.DB.prepare(
-        `UPDATE people
-            SET biography = CASE
-                  WHEN biography IS NULL OR trim(biography) = ''
-                  THEN (SELECT secondary.biography FROM people secondary WHERE secondary.id = ?)
-                  ELSE biography
-                END,
-                organisation_name = CASE
-                  WHEN organisation_name IS NULL OR trim(organisation_name) = ''
-                  THEN (SELECT secondary.organisation_name FROM people secondary WHERE secondary.id = ?)
-                  ELSE organisation_name
-                END,
-                job_title = CASE
-                  WHEN job_title IS NULL OR trim(job_title) = ''
-                  THEN (SELECT secondary.job_title FROM people secondary WHERE secondary.id = ?)
-                  ELSE job_title
-                END,
-                updated_at = unixepoch()
-          WHERE id = ?
+        `INSERT INTO organisation_contact_profiles (
+           organisation_id, person_id, display_name, biography,
+           organisation_name, job_title, source, created_by_person_id,
+           updated_by_person_id, created_at, updated_at
+         )
+         SELECT ?, primary_person.id,
+                COALESCE(primary_profile.display_name, primary_person.display_name),
+                COALESCE(NULLIF(primary_profile.biography, ''), primary_person.biography,
+                         secondary_profile.biography, secondary_person.biography),
+                COALESCE(NULLIF(primary_profile.organisation_name, ''), primary_person.organisation_name,
+                         secondary_profile.organisation_name, secondary_person.organisation_name),
+                COALESCE(NULLIF(primary_profile.job_title, ''), primary_person.job_title,
+                         secondary_profile.job_title, secondary_person.job_title),
+                'manual', ?, ?, unixepoch(), unixepoch()
+           FROM people primary_person
+           JOIN people secondary_person ON secondary_person.id = ?
+           LEFT JOIN organisation_contact_profiles primary_profile
+             ON primary_profile.organisation_id = ?
+            AND primary_profile.person_id = primary_person.id
+           LEFT JOIN organisation_contact_profiles secondary_profile
+             ON secondary_profile.organisation_id = ?
+            AND secondary_profile.person_id = secondary_person.id
+          WHERE primary_person.id = ?
             AND EXISTS (
               SELECT 1 FROM organisation_contacts merged
                WHERE merged.organisation_id = ? AND merged.person_id = ?
                  AND merged.status = 'merged'
-                 AND merged.merged_into_person_id = ?
+                 AND merged.merged_into_person_id = primary_person.id
             )
-            AND NOT EXISTS (SELECT 1 FROM memberships WHERE person_id = ?)
-            AND NOT EXISTS (SELECT 1 FROM submissions WHERE submitter_person_id = ?)
-            AND NOT EXISTS (SELECT 1 FROM submission_speakers WHERE person_id = ?)
-            AND NOT EXISTS (SELECT 1 FROM session_speakers WHERE person_id = ?)
-            AND NOT EXISTS (SELECT 1 FROM auth_accounts WHERE person_id = ?)
-            AND NOT EXISTS (SELECT 1 FROM auth_sessions WHERE person_id = ?)
-            AND NOT EXISTS (
-              SELECT 1 FROM organisation_contacts shared
-               WHERE shared.person_id = ? AND shared.organisation_id <> ?
-                 AND shared.status = 'active'
-            )`,
+         ON CONFLICT(organisation_id, person_id) DO UPDATE SET
+           biography = CASE
+             WHEN organisation_contact_profiles.biography IS NULL
+               OR trim(organisation_contact_profiles.biography) = ''
+             THEN excluded.biography
+             ELSE organisation_contact_profiles.biography
+           END,
+           organisation_name = CASE
+             WHEN organisation_contact_profiles.organisation_name IS NULL
+               OR trim(organisation_contact_profiles.organisation_name) = ''
+             THEN excluded.organisation_name
+             ELSE organisation_contact_profiles.organisation_name
+           END,
+           job_title = CASE
+             WHEN organisation_contact_profiles.job_title IS NULL
+               OR trim(organisation_contact_profiles.job_title) = ''
+             THEN excluded.job_title
+             ELSE organisation_contact_profiles.job_title
+           END,
+           updated_by_person_id = excluded.updated_by_person_id,
+           updated_at = unixepoch()`,
       ).bind(
+        viewer.organisationId,
+        viewer.personId,
+        viewer.personId,
         secondaryId,
-        secondaryId,
-        secondaryId,
+        viewer.organisationId,
+        viewer.organisationId,
         primaryId,
         viewer.organisationId,
         secondaryId,
-        primaryId,
-        primaryId,
-        primaryId,
-        primaryId,
-        primaryId,
-        primaryId,
-        primaryId,
-        primaryId,
-        viewer.organisationId,
       ),
       this.env.DB.prepare(
         `INSERT OR IGNORE INTO organisation_contact_tags (

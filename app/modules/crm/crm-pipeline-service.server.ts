@@ -26,16 +26,21 @@ export class CrmPipelineService {
     const rows = await this.env.DB.prepare(
       `SELECT entry.id, entry.person_id AS personId, entry.stage, entry.score,
               entry.rationale, entry.revision, entry.updated_at AS updatedAt,
-              person.display_name AS name, person.email,
-              person.job_title AS jobTitle,
-              person.organisation_name AS organisationName
+              COALESCE(profile.display_name, person.display_name) AS name,
+              person.email,
+              COALESCE(profile.job_title, person.job_title) AS jobTitle,
+              COALESCE(profile.organisation_name, person.organisation_name) AS organisationName
          FROM crm_pipeline_entries entry
          JOIN organisation_contacts contact
            ON contact.organisation_id = entry.organisation_id
           AND contact.person_id = entry.person_id AND contact.status = 'active'
          JOIN people person ON person.id = entry.person_id
+         LEFT JOIN organisation_contact_profiles profile
+           ON profile.organisation_id = entry.organisation_id
+          AND profile.person_id = entry.person_id
         WHERE entry.organisation_id = ?
-        ORDER BY entry.updated_at DESC, person.display_name COLLATE NOCASE`,
+        ORDER BY entry.updated_at DESC,
+                 COALESCE(profile.display_name, person.display_name) COLLATE NOCASE`,
     )
       .bind(viewer.organisationId)
       .all<{

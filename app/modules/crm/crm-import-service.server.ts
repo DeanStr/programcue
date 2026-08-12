@@ -140,18 +140,11 @@ export class CrmImportService {
       statements.push(
         this.env.DB.prepare(
           `INSERT INTO people (
-             id, email, display_name, email_verified, biography,
-             organisation_name, job_title, profile_status, created_at, updated_at
-           ) VALUES (?, ?, ?, 0, ?, ?, ?, 'draft', unixepoch(), unixepoch())
+             id, email, display_name, email_verified, profile_status,
+             created_at, updated_at
+           ) VALUES (?, ?, ?, 0, 'draft', unixepoch(), unixepoch())
            ON CONFLICT(email) DO NOTHING`,
-        ).bind(
-          personId,
-          row.email,
-          row.name,
-          row.biography || null,
-          row.organisationName || null,
-          row.jobTitle || null,
-        ),
+        ).bind(personId, row.email, row.email),
         this.env.DB.prepare(
           `INSERT INTO organisation_contacts (
              organisation_id, person_id, source, status, created_by_person_id,
@@ -178,6 +171,31 @@ export class CrmImportService {
           ...organisationRelationshipBindings(viewer),
           viewer.organisationId,
           viewer.personId,
+        ),
+        this.env.DB.prepare(
+          `INSERT INTO organisation_contact_profiles (
+             organisation_id, person_id, display_name, biography,
+             organisation_name, job_title, source, created_by_person_id,
+             updated_by_person_id, created_at, updated_at
+           )
+           SELECT ?, person.id, ?, ?, ?, ?, 'import', ?, ?,
+                  unixepoch(), unixepoch()
+             FROM people person
+             JOIN organisation_contacts contact
+               ON contact.organisation_id = ? AND contact.person_id = person.id
+              AND contact.status = 'active'
+            WHERE person.email = ? COLLATE NOCASE
+           ON CONFLICT(organisation_id, person_id) DO NOTHING`,
+        ).bind(
+          viewer.organisationId,
+          row.name,
+          row.biography || null,
+          row.organisationName || null,
+          row.jobTitle || null,
+          viewer.personId,
+          viewer.personId,
+          viewer.organisationId,
+          row.email,
         ),
       );
     }

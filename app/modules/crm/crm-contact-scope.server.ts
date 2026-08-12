@@ -5,7 +5,7 @@ const EMAIL_RELATIONSHIP_LOOKUP_SIZE = 90;
 export const CONTACT_RELATIONSHIP_REQUIRED_MESSAGE =
   "This email cannot be added directly. Invite the speaker or connect them through an event first.";
 const CONTACT_RELATIONSHIP_CONSTRAINT =
-  "NOT NULL constraint failed: organisation_contacts.person_id";
+  /NOT NULL constraint failed: (?:organisation_contacts|organisation_contact_profiles)\.person_id/u;
 export const CONTACT_IDENTITY_INVARIANT_MESSAGE =
   "The Speaker Network contact identity was missing after creation.";
 
@@ -40,10 +40,14 @@ export const contactScopeCte = `WITH candidate_contact_ids(person_id) AS (
       WHERE merged.organisation_id = ? AND merged.person_id = candidate.person_id
         AND merged.status = 'merged'
    )
+), scoped_contact_profiles AS (
+  SELECT profile.*
+    FROM organisation_contact_profiles profile
+   WHERE profile.organisation_id = ?
 )`;
 
 export function contactScopeBindings(viewer: OrganisationAdministrator) {
-  return Array(5).fill(viewer.organisationId);
+  return Array(6).fill(viewer.organisationId);
 }
 
 export const existingPersonOrganisationRelationshipSql = `(
@@ -130,6 +134,6 @@ export async function unavailableExistingEmails(
 export function isContactRelationshipConstraint(error: unknown) {
   return (
     error instanceof Error &&
-    error.message.includes(CONTACT_RELATIONSHIP_CONSTRAINT)
+    CONTACT_RELATIONSHIP_CONSTRAINT.test(error.message)
   );
 }

@@ -19,7 +19,7 @@ tables = {
 }
 required = {
     "organisations", "people", "organisation_ai_settings", "events", "memberships",
-    "organisation_contacts", "organisation_contact_tags", "organisation_contact_notes",
+    "organisation_contacts", "organisation_contact_profiles", "organisation_contact_tags", "organisation_contact_notes",
     "crm_segments", "crm_pipeline_entries", "crm_pipeline_activity",
     "form_definitions", "form_versions", "submissions", "submission_revisions",
     "submission_track_selections", "submission_routing_teams",
@@ -68,6 +68,7 @@ for table, expected in {
     "organisation_ai_settings": {"provider", "model", "revision", "last_updated_by_person_id", "last_operation_id"},
     "memberships": {"organisation_id", "event_id", "person_id", "role", "revoked_at"},
     "organisation_contacts": {"organisation_id", "person_id", "source", "status", "merged_into_person_id"},
+    "organisation_contact_profiles": {"organisation_id", "person_id", "display_name", "biography", "organisation_name", "job_title", "source", "created_by_person_id", "updated_by_person_id"},
     "organisation_contact_notes": {"organisation_id", "person_id", "author_person_id", "body"},
     "crm_pipeline_entries": {"organisation_id", "person_id", "stage", "score", "rationale", "revision"},
     "crm_pipeline_activity": {"organisation_id", "pipeline_entry_id", "kind", "from_stage", "to_stage"},
