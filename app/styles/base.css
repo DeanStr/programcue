@@ -556,6 +556,9 @@ a {
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-3);
+  /* Status pills are nowrap by design, so the row has to wrap instead or the
+     pill pushes the card past the viewport. */
+  flex-wrap: wrap;
 }
 .card-title h2 {
   font-size: var(--text-base);
