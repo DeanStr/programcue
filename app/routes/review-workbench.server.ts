@@ -1,7 +1,11 @@
-import { data, redirect } from "react-router";
+import {
+  data,
+  redirect,
+  type ActionFunctionArgs,
+  type LoaderFunctionArgs,
+} from "react-router";
 import { ZodError } from "zod";
 
-import type { Route } from "./+types/review-workbench";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import {
   EvaluationRevisionConflictError,
@@ -13,7 +17,7 @@ import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
-export async function loader({ request, context }: Route.LoaderArgs) {
+export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env } = getCloudflareContext(context);
   const viewer = await requireCurrentEventRole(request, env, [
     "owner",
@@ -31,7 +35,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return { viewer, eventName: result.eventName, workspace: result.workspace };
 }
 
-export async function action({ request, context }: Route.ActionArgs) {
+export async function action({ request, context }: ActionFunctionArgs) {
   const { env } = getCloudflareContext(context);
   const viewer = await requireCurrentEventRole(request, env, [
     "owner",
