@@ -226,6 +226,45 @@ simulated provider success.
 deployment. The scanner boundary is live, but a complete deployed application
 environment has not been verified from this workspace.
 
+### Production evaluation fixture
+
+The final SBEK run uses the ordinary production deployment, authentication and
+provider paths. It does not enable demo mode or alter normal request handling.
+An operator may temporarily install a dedicated reset secret plus four real,
+distinct evaluator addresses and invoke one narrow reset endpoint:
+
+```bash
+wrangler secret put EVALUATION_FIXTURE_SECRET -c wrangler.jsonc
+wrangler secret put EVALUATION_RESEND_API_KEY -c wrangler.jsonc
+wrangler secret put EVALUATOR_ORGANIZER_EMAIL -c wrangler.jsonc
+wrangler secret put EVALUATOR_SPEAKER_EMAIL -c wrangler.jsonc
+wrangler secret put EVALUATOR_SECOND_SPEAKER_EMAIL -c wrangler.jsonc
+wrangler secret put EVALUATOR_REVIEWER_EMAIL -c wrangler.jsonc
+
+EVALUATION_FIXTURE_SECRET='<same 32+ character value>' \
+  npm run evaluation:fixture:reset -- --yes
+```
+
+`EVALUATION_RESEND_API_KEY` is a temporary full-access Resend key used only to
+read domain status; the application's domain-scoped sending-only key remains
+unchanged. The command fails before mutation unless production is using Resend,
+the `AUTH_EMAIL_FROM` domain is verified by Resend, Workers AI and the
+production D1/R2 bindings are available, the canonical fixture IDs are
+tenant-isolated, and the target addresses do not collide with another person.
+It resets only the dedicated Future Events Association event and R2 prefix,
+revokes prior fixture sessions, provider links and outstanding authentication
+tokens, leaves the four evaluator addresses unverified until their real magic
+links are consumed, configures that organisation for Workers AI
+`@cf/openai/gpt-oss-120b`, and verifies the resulting baseline. Normal users
+continue to use Better Auth and every normal production feature throughout.
+
+After seeding, delete `EVALUATION_FIXTURE_SECRET` and the temporary
+`EVALUATION_RESEND_API_KEY`; the endpoint then returns 404. The four address
+secrets may also be removed because the seeded people retain their addresses in
+D1. Authenticate each persona through ordinary Resend magic links and save its
+evaluator browser state. Full instructions are in [the SBEK evaluation
+runbook](docs/SBEK_EVALUATION.md).
+
 Backup and point-in-time recovery procedures are in [docs/RECOVERY.md](docs/RECOVERY.md). Production configuration includes a fail-closed daily D1-export Workflow to a separate private R2 bucket; it is not evidence that a live backup has run. `npm run recovery:drill` exercises a clean-room logical export and restore without touching development or production data.
 
 The repeatable local browser-budget method, isolated 10,000-record fixture and latest measurements are in [docs/PERFORMANCE.md](docs/PERFORMANCE.md). These local results do not replace deployed p75/RUM and production-like scale acceptance.

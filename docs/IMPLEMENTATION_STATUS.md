@@ -116,6 +116,21 @@ The one-time production bootstrap created accepted active owner `Dean <dean@geni
 
 ## Remaining acceptance work
 
+The repository now contains production-safe evaluation-fixture tooling. A
+temporary bearer secret can expose one POST-only operator reset for the
+dedicated Future Events Association organisation and event while the Worker
+remains in ordinary production mode. The operation validates four distinct
+non-reserved evaluator addresses, tenant/identity collisions, production D1,
+R2 and Workers AI bindings, the selected Resend provider and Resend's live
+verified-domain status through a temporary full-access key before destructive
+work. It then performs the existing event-scoped D1/R2 reset, revokes fixture
+sessions, provider accounts and outstanding authentication tokens, leaves the
+four new addresses unverified until their real magic links are consumed,
+configures the fixture organisation for Workers AI
+`@cf/openai/gpt-oss-120b`, installs a verified sender and verifies the exact
+result. This is repository evidence, not evidence that the production fixture
+has been seeded or that any evaluator mailbox received a magic link.
+
 1. Report the historical flagged calendar callback to Google Safe Browsing. Exercise live Microsoft and Google invitation/update/cancellation lifecycle; both provider connections, both social sign-ins and the owner Resend magic-link path are complete. Google external production publication and any required verification/privacy-policy work remain provider-side.
 2. Exercise clean, EICAR and provider-error callbacks through the live private R2-to-scanner path, plus tracked Resend receipt reconciliation, Airtable authority/recovery, Accelevents dry/live reconciliation and external model-provider paths.
 3. Confirm the next scheduled D1 Workflow instance writes and verifies its immutable daily backup, then run and document an alert and restore exercise with measured RPO/RTO. The separate live manual export evidence is recorded above.

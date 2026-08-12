@@ -509,8 +509,9 @@ export async function prepareJudgedDemoWorkflow(env: CloudflareEnvironment) {
 
 export async function resetDemoEvent(
   env: CloudflareEnvironment,
-  actorPersonId: string,
+  actorPersonId: string | null,
   confirmation: unknown,
+  actorId: string | null = null,
 ) {
   assertDemoRuntime(env);
   if (confirmation !== DEMO_RESET_CONFIRMATION) {
@@ -605,15 +606,16 @@ export async function resetDemoEvent(
   }
   await env.DB.prepare(
     `INSERT INTO audit_events (
-       id, organisation_id, event_id, actor_person_id, action,
+       id, organisation_id, event_id, actor_person_id, actor_id, action,
        entity_type, entity_id, metadata_json, created_at
-     ) VALUES (?, ?, ?, ?, 'demo.reset', 'event', ?, ?, unixepoch())`,
+     ) VALUES (?, ?, ?, ?, ?, 'demo.reset', 'event', ?, ?, unixepoch())`,
   )
     .bind(
       crypto.randomUUID(),
       DEMO_ORGANISATION_ID,
       DEMO_EVENT_ID,
       actorPersonId,
+      actorId,
       DEMO_EVENT_ID,
       JSON.stringify({
         objectCount,

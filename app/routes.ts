@@ -23,6 +23,10 @@ export default [
   ),
   route("demo/fixtures/golden-path", "routes/demo-golden-path-fixture.ts"),
   route("api/v1/health", "routes/api-health.ts"),
+  route(
+    "api/internal/evaluation-fixture/reset",
+    "routes/api-internal-evaluation-fixture-reset.ts",
+  ),
   route("api/v1/events/:eventId", "routes/api-event.ts"),
   route(
     "api/v1/events/:eventId/evaluation/:resource",
