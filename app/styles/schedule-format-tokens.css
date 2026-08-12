@@ -11,8 +11,8 @@
   color: #9a3412;
 }
 .format-workshop {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--state-good-surface);
+  color: var(--state-good-text);
 }
 .format-breakout {
   background: #cffafe;

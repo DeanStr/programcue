@@ -29,7 +29,7 @@
   color: #a16207;
 }
 .impact.low {
-  color: #15803d;
+  color: var(--state-good-solid);
 }
 .task-bottom {
   display: grid;

@@ -335,7 +335,7 @@ a {
   background: #fff5f5;
 }
 .btn.warning {
-  color: #92400e;
+  color: var(--state-warn-text);
   border-color: #fde68a;
   background: #fffbeb;
 }
@@ -641,24 +641,55 @@ a {
   color: var(--muted);
   font-weight: var(--weight-semibold);
 }
+/* The instrument numeral: the number carries the tone and the container stays
+   neutral. A red 12 on a plain tile is louder and more honest than a pink
+   1.45:1 border, which is all the alert-* classes used to change. */
 .metric .value {
   font-size: var(--text-2xl);
   font-weight: var(--weight-extrabold);
   letter-spacing: -0.04em;
   margin: var(--space-1) 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--metric-tone, var(--ink));
 }
 .metric .helper {
   font-size: var(--text-2xs);
   color: var(--muted);
 }
+/* Tone reaches the numeral and a leading rail, not just a border tint that
+   computed 1.45:1 against white and was effectively invisible. */
 .metric.alert-red {
+  --metric-tone: var(--state-bad-text);
+  --rail: var(--state-bad-solid);
   border-color: #fecaca;
 }
 .metric.alert-amber {
+  --metric-tone: var(--state-warn-text);
+  --rail: var(--state-warn-solid);
   border-color: #fde68a;
 }
 .metric.alert-purple {
-  border-color: #ddd6fe;
+  --metric-tone: var(--state-info-text);
+  --rail: var(--state-info-solid);
+  border-color: var(--brand-200);
+}
+.metric.alert-red,
+.metric.alert-amber,
+.metric.alert-purple {
+  border-top: 3px solid var(--rail);
+}
+
+/* --- State rail ----------------------------------------------------------
+   One leading edge answering "what kind of thing is this, and what state is
+   it in". The constraint that keeps it honest: the rail never carries
+   information a word does not also carry, so it survives colour blindness,
+   print and forced-colors. border-color is repainted by the UA; box-shadow
+   is not, which is why this is a border. */
+.rail-top {
+  border-top: 3px solid var(--rail, var(--brand-600));
+}
+.rail-left {
+  border-left: 3px solid var(--rail, var(--brand-600));
 }
 .status {
   display: inline-flex;
@@ -671,16 +702,16 @@ a {
   white-space: nowrap;
 }
 .status.success {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--state-good-surface);
+  color: var(--state-good-text);
 }
 .status.warning {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--state-warn-surface);
+  color: var(--state-warn-text);
 }
 .status.danger {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--state-bad-surface);
+  color: var(--state-bad-text);
 }
 .status.info {
   background: #dbeafe;
@@ -705,7 +736,7 @@ a {
 .progress {
   height: 7px;
   border-radius: var(--radius-full);
-  background: #e8edf5;
+  background: var(--track);
   overflow: hidden;
 }
 /* A gradient on a measurement is a lie: it implies the value varies across
@@ -718,13 +749,19 @@ a {
   transition: width var(--dur-slow) var(--ease-out);
 }
 .progress.green > span {
-  background: var(--green);
+  background: var(--state-good-solid);
 }
 .progress.amber > span {
-  background: var(--amber);
+  background: var(--state-warn-solid);
 }
 .progress.red > span {
-  background: var(--red);
+  background: var(--state-bad-solid);
+}
+/* Zero is a reading, not an absence. Without this the worst number on the
+   page renders as the faintest thing on it. */
+.progress.is-zero {
+  background: var(--state-bad-surface);
+  box-shadow: inset 0 0 0 1px #fecaca;
 }
 .progress-row {
   display: grid;
@@ -743,22 +780,39 @@ a {
   align-items: center;
   padding: var(--space-5);
 }
+/* The gauge reads its tone from the state the server already derived, so the
+   arc and the caption agree with the number. Previously the caption was
+   hardcoded green, printing "At risk" at 56% in success green. */
 .gauge {
+  --gauge-arc: var(--state-info-solid);
+  --gauge-text: var(--state-info-text);
   width: 150px;
   height: 150px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: conic-gradient(var(--brand-600) calc(var(--pct) * 1%), #e8edf5 0);
+  background: conic-gradient(var(--gauge-arc) calc(var(--pct) * 1%), var(--track) 0);
   position: relative;
   margin: auto;
+}
+.gauge[data-state="ready"] {
+  --gauge-arc: var(--state-good-solid);
+  --gauge-text: var(--state-good-text);
+}
+.gauge[data-state="at_risk"] {
+  --gauge-arc: var(--state-warn-solid);
+  --gauge-text: var(--state-warn-text);
+}
+.gauge[data-state="blocked"] {
+  --gauge-arc: var(--state-bad-solid);
+  --gauge-text: var(--state-bad-text);
 }
 .gauge::before {
   content: "";
   position: absolute;
   width: 112px;
   height: 112px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 50%;
 }
 .gauge-inner {
@@ -768,10 +822,11 @@ a {
 .gauge strong {
   font-size: var(--text-3xl);
   letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
 }
 .gauge small {
   display: block;
-  color: var(--green);
+  color: var(--gauge-text);
   font-weight: var(--weight-bold);
 }
 .gauge.compact {

@@ -21,6 +21,10 @@ export function SpeakerDashboardOverview({
   const waitingOnTeam = next
     ? ["submitted", "blocked"].includes(next.status)
     : false;
+  const readinessState =
+    progress >= 100 ? "ready" : progress >= 60 ? "on_track" : "at_risk";
+  const readinessLabel =
+    progress >= 100 ? "Complete" : progress >= 60 ? "On track" : "In progress";
   return (
     <>
       <div className="speaker-portal-head">
@@ -77,11 +81,12 @@ export function SpeakerDashboardOverview({
         >
           <div
             className="gauge compact"
+            data-state={readinessState}
             style={{ "--pct": progress } as React.CSSProperties}
           >
             <div className="gauge-inner">
               <strong>{progress}%</strong>
-              <small>Complete</small>
+              <small>{readinessLabel}</small>
             </div>
           </div>
         </div>

@@ -72,6 +72,25 @@
   --text-inverse: #fff;
   --text-accent: var(--brand-700);
 
+  /* --- State -------------------------------------------------------------
+     Two weights per state, because a fill and a label have different jobs.
+     *-solid paints graphical objects and clears 3:1 against the #e8edf5 track
+     (--green and --amber themselves do not: 2.80:1 and 2.71:1).
+     *-text paints labels and clears 4.5:1 on white. */
+  --state-good-solid: #15803d;
+  --state-good-text: #166534;
+  --state-good-surface: #dcfce7;
+  --state-warn-solid: #b45309;
+  --state-warn-text: #92400e;
+  --state-warn-surface: #fef3c7;
+  --state-bad-solid: #dc2626;
+  --state-bad-text: #991b1b;
+  --state-bad-surface: #fee2e2;
+  --state-info-solid: var(--brand-600);
+  --state-info-text: var(--brand-700);
+  --state-info-surface: var(--brand-50);
+  --track: #e8edf5;
+
   /* --- Borders ----------------------------------------------------------- */
   --border: var(--line);
   --border-strong: #cbd5e1;

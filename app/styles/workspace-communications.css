@@ -71,12 +71,12 @@
   font-size: var(--text-2xs);
 }
 .diff-line.add {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--state-good-surface);
+  color: var(--state-good-text);
 }
 .diff-line.del {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--state-bad-surface);
+  color: var(--state-bad-text);
   text-decoration: line-through;
 }
 .validation-item {
@@ -89,12 +89,12 @@
 }
 .validation-item.error {
   background: #fef2f2;
-  color: #991b1b;
+  color: var(--state-bad-text);
 }
 .validation-item.warn {
   background: #fffbeb;
-  color: #92400e;
+  color: var(--state-warn-text);
 }
 .validation-item.ok {
-  color: #166534;
+  color: var(--state-good-text);
 }

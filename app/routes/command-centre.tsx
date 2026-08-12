@@ -90,6 +90,15 @@ function AutoRefresh({ eventId, cursor }: { eventId: string; cursor: number }) {
   );
 }
 
+/* A measured value carries its own reading. Without this the two 0% workflows
+   rendered as the faintest thing on the page and the three 100% ones got the
+   most saturated fill. */
+function progressTone(score: number) {
+  if (score >= 90) return "green";
+  if (score >= 50) return "";
+  return score > 0 ? "amber" : "red";
+}
+
 export default function CommandCentre({ loaderData }: Route.ComponentProps) {
   const featured = loaderData.blockers.slice(0, 4);
   const completedSetupSteps = loaderData.setupGuide.filter(
@@ -175,6 +184,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
         <section className="card readiness-card">
           <div
             className="gauge"
+            data-state={loaderData.readiness.status}
             style={
               {
                 "--pct": loaderData.readiness.percentage,
@@ -260,7 +270,10 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                 <strong>{workflow.label}</strong>
                 <small className="subtle">{workflow.detail}</small>
               </span>
-              <div className="progress" aria-hidden>
+              <div
+                className={`progress ${progressTone(workflow.score)}${workflow.score === 0 ? " is-zero" : ""}`}
+                aria-hidden
+              >
                 <span style={{ width: `${workflow.score}%` }} />
               </div>
               <b>{workflow.score}%</b>
