@@ -109,6 +109,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     throw error;
   }
   if (!result.matched) {
+    if (!result.retryable) {
+      return Response.json({ matched: false, duplicate: false, ignored: true });
+    }
     return Response.json(
       {
         error:

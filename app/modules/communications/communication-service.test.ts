@@ -1017,17 +1017,24 @@ describe("Communications D1 vertical slice", () => {
       ).toEqual({ count: 1, idempotencyKey: expectedKey });
 
       const providerKeys: string[] = [];
+      const providerTags: unknown[] = [];
       const provider = new ResendEmailProvider(
         "long-address-provider-key",
         async (_input, init) => {
           providerKeys.push(
             new Headers(init?.headers).get("idempotency-key") ?? "",
           );
+          providerTags.push(
+            (JSON.parse(String(init?.body)) as { tags?: unknown }).tags,
+          );
           return Response.json({ id: "resend-long-address-001" });
         },
       );
       await processCommunicationSend(sent[0], testEnv, { email: provider });
       expect(providerKeys).toEqual([expectedKey]);
+      expect(providerTags).toEqual([
+        [{ name: "program_cue_delivery", value: "tracked" }],
+      ]);
     });
 
     it("rejects provider drift before claiming or sending a queued communication", async () => {

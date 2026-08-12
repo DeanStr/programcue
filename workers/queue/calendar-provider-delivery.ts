@@ -7,6 +7,7 @@ import {
 import { CalendarOAuthService } from "../../app/modules/calendars/calendar-oauth.server";
 import { generateInvitationIcs } from "../../app/modules/calendars/ics.server";
 import { renderProgramCueEmail } from "../../app/modules/communications/email-templates/render-email.server";
+import { TRACKED_DELIVERY_EMAIL_TAG } from "../../app/modules/communications/email-provider";
 import { createEmailProvider } from "../../app/modules/communications/email-provider.server";
 import {
   QueueClaimLeaseLostError,
@@ -183,6 +184,7 @@ export async function deliverCalendarProvider(input: {
         html: rendered.html,
         text: rendered.text,
         idempotencyKey: delivery.idempotencyKey,
+        tags: [TRACKED_DELIVERY_EMAIL_TAG],
         attachments: [
           {
             filename: "program-cue-invitation.ics",

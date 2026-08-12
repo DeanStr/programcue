@@ -7,6 +7,7 @@ import {
   createEmailProvider,
   requireEmailProviderConfiguration,
 } from "~/modules/communications/email-provider.server";
+import { TRACKED_DELIVERY_EMAIL_TAG } from "~/modules/communications/email-provider";
 import { ResendEmailProvider } from "~/modules/communications/resend.server";
 
 const server = setupServer();
@@ -23,6 +24,7 @@ const emailInput = {
   html: "<p>Your invitation</p>",
   text: "Your invitation",
   idempotencyKey: "calendar:session-1:speaker-1:0",
+  tags: [TRACKED_DELIVERY_EMAIL_TAG],
   attachments: [
     {
       filename: "program-cue-invitation.ics",
@@ -44,6 +46,7 @@ describe("provider HTTP contracts through MSW", () => {
           from: emailInput.from,
           to: [emailInput.to],
           reply_to: emailInput.replyTo,
+          tags: [TRACKED_DELIVERY_EMAIL_TAG],
           attachments: [
             {
               filename: "program-cue-invitation.ics",

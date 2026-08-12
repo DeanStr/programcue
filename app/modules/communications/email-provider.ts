@@ -6,6 +6,16 @@ export type EmailAttachment = {
   contentType: string;
 };
 
+export type EmailTag = {
+  name: string;
+  value: string;
+};
+
+export const TRACKED_DELIVERY_EMAIL_TAG = {
+  name: "program_cue_delivery",
+  value: "tracked",
+} as const satisfies EmailTag;
+
 export type SendEmailInput = {
   from: string;
   replyTo?: string | null;
@@ -15,6 +25,7 @@ export type SendEmailInput = {
   text: string;
   idempotencyKey: string;
   attachments?: EmailAttachment[];
+  tags?: EmailTag[];
 };
 
 export type SendEmailResult = {

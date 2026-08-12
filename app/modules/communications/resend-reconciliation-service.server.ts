@@ -1,5 +1,6 @@
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
 import { resendWebhookEventSchema } from "./communication-schema";
+import { TRACKED_DELIVERY_EMAIL_TAG } from "./email-provider";
 import {
   resendDeliveryEventStates,
   resendDeliveryEventStatesJson,
@@ -33,7 +34,15 @@ export class ResendReconciliationService {
         address: string;
         organisationId: string;
       }>();
-    if (!delivery) return { matched: false, duplicate: false };
+    if (!delivery) {
+      return {
+        matched: false,
+        duplicate: false,
+        retryable:
+          event.data.tags?.[TRACKED_DELIVERY_EMAIL_TAG.name] ===
+          TRACKED_DELIVERY_EMAIL_TAG.value,
+      };
+    }
     const occurredAt = event.created_at
       ? Math.floor(Date.parse(event.created_at) / 1_000)
       : Math.floor(Date.now() / 1_000);
