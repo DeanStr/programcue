@@ -17,6 +17,10 @@ export type AirtableProvisioningRoom = {
   position: number;
 };
 
+export const EVENT_CREATION_STALLED_CODE = "event_creation_lease_expired";
+export const EVENT_CREATION_STALLED_MESSAGE =
+  "Event creation stopped before Airtable provisioning recorded a terminal result. The incomplete event is unavailable until you recover or discard it.";
+
 type EventRepositoryProvisioningDependencies = {
   rooms?: Pick<AirtableRoomRepository, "provisionForEvent" | "replaceRooms">;
   eventData?: Pick<AirtableEventDataRepository, "synchronizeFromD1">;
@@ -35,6 +39,14 @@ export class EventRepositoryProvisioningError extends Error {
     super(message, options);
     this.name = "EventRepositoryProvisioningError";
   }
+}
+
+export function eventRepositoryProvisioningFailureMessage(
+  failureKind: "provider" | "internal",
+) {
+  return failureKind === "provider"
+    ? "Airtable provisioning did not complete. The incomplete event is unavailable until you retry Airtable, explicitly keep it on D1, or discard it."
+    : "Repository finalization failed unexpectedly. The incomplete event is unavailable until you recover or discard it.";
 }
 
 function boundedError(error: unknown) {
@@ -58,6 +70,51 @@ export class EventRepositoryProvisioningService {
       new AirtableEventDataRepository(env, {
         rooms: this.rooms as AirtableRoomRepository,
       });
+  }
+
+  private async isCurrentOperation(
+    viewer: Viewer,
+    eventId: string,
+    operationId: string,
+  ) {
+    return Boolean(
+      await this.env.DB.prepare(
+        `SELECT 1
+           FROM events event
+           JOIN operation_jobs operation ON operation.id = ?
+          WHERE event.id = ? AND event.organisation_id = ?
+            AND event.repository_provider = 'airtable'
+            AND event.activation_status = 'provisioning'
+            AND event.last_operation_id = operation.id
+            AND operation.organisation_id = event.organisation_id
+            AND operation.status = 'running'
+            AND operation.type IN (
+              'event.create','event.clone','event.repository.provision'
+            )
+            AND (
+              operation.type <> 'event.create'
+              OR (
+                operation.claim_expires_at IS NOT NULL
+                AND operation.claim_expires_at > unixepoch()
+              )
+            )
+            AND json_extract(operation.payload_json, '$.targetEventId') = event.id`,
+      )
+        .bind(operationId, eventId, viewer.organisationId)
+        .first(),
+    );
+  }
+
+  private async assertCurrentOperation(
+    viewer: Viewer,
+    eventId: string,
+    operationId: string,
+  ) {
+    if (!(await this.isCurrentOperation(viewer, eventId, operationId))) {
+      throw new Error(
+        "Airtable provisioning is no longer the current event operation.",
+      );
+    }
   }
 
   private connectionInsert(
@@ -147,24 +204,7 @@ export class EventRepositoryProvisioningService {
     rooms: AirtableProvisioningRoom[],
     result: Record<string, unknown> = {},
   ) {
-    const current = await this.env.DB.prepare(
-      `SELECT 1
-         FROM events event
-         JOIN operation_jobs operation ON operation.id = ?
-        WHERE event.id = ? AND event.organisation_id = ?
-          AND event.repository_provider = 'airtable'
-          AND event.activation_status = 'provisioning'
-          AND event.last_operation_id = operation.id
-          AND operation.organisation_id = event.organisation_id
-          AND operation.status = 'running'
-          AND operation.type IN (
-            'event.create','event.clone','event.repository.provision'
-          )
-          AND json_extract(operation.payload_json, '$.targetEventId') = event.id`,
-    )
-      .bind(operationId, eventId, viewer.organisationId)
-      .first();
-    if (!current)
+    if (!(await this.isCurrentOperation(viewer, eventId, operationId)))
       throw new EventRepositoryProvisioningError(
         "Airtable provisioning is no longer the current event operation. No provider request was made.",
         eventId,
@@ -186,6 +226,7 @@ export class EventRepositoryProvisioningService {
         rawConnection,
         { connectionId: existing?.id },
       );
+      await this.assertCurrentOperation(viewer, eventId, operationId);
       const connectionResults = await this.env.DB.batch([
         this.connectionInsert(viewer, eventId, operationId, prepared),
         this.connectionAuditInsert(viewer, eventId, operationId, prepared),
@@ -198,7 +239,9 @@ export class EventRepositoryProvisioningService {
           "The validated Airtable connection could not be recorded completely.",
         );
 
+      await this.assertCurrentOperation(viewer, eventId, operationId);
       await this.rooms.replaceRooms(viewer.organisationId, eventId, rooms, 1);
+      await this.assertCurrentOperation(viewer, eventId, operationId);
       const synchronization = await this.eventData.synchronizeFromD1(
         {
           organisationId: viewer.organisationId,
@@ -210,6 +253,7 @@ export class EventRepositoryProvisioningService {
           reason: workflow,
         },
       );
+      await this.assertCurrentOperation(viewer, eventId, operationId);
       const statements: D1PreparedStatement[] = [
         this.env.DB.prepare(
           `UPDATE events
@@ -230,6 +274,13 @@ export class EventRepositoryProvisioningService {
                    AND operation.type IN (
                      'event.create','event.clone','event.repository.provision'
                    )
+                   AND (
+                     operation.type <> 'event.create'
+                     OR (
+                       operation.claim_expires_at IS NOT NULL
+                       AND operation.claim_expires_at > unixepoch()
+                     )
+                   )
                    AND json_extract(operation.payload_json, '$.targetEventId') = ?
               )`,
         ).bind(
@@ -245,11 +296,20 @@ export class EventRepositoryProvisioningService {
         this.env.DB.prepare(
           `UPDATE operation_jobs
               SET status = 'completed', progress_completed = progress_total,
-                  result_json = ?, completed_at = unixepoch(), updated_at = unixepoch()
+                  result_json = ?, claim_token = NULL,
+                  claim_expires_at = NULL, completed_at = unixepoch(),
+                  updated_at = unixepoch()
             WHERE id = ? AND organisation_id = ?
               AND status = 'running'
               AND type IN (
                 'event.create','event.clone','event.repository.provision'
+              )
+              AND (
+                type <> 'event.create'
+                OR (
+                  claim_expires_at IS NOT NULL
+                  AND claim_expires_at > unixepoch()
+                )
               )
               AND json_extract(payload_json, '$.targetEventId') = ?
               AND EXISTS (
@@ -323,6 +383,17 @@ export class EventRepositoryProvisioningService {
       const failureKind = isAirtableRepositoryError(error)
         ? "provider"
         : "internal";
+      const expiredCreationResult = JSON.stringify({
+        targetEventId: eventId,
+        repositoryProvider: "airtable",
+        failureKind: "internal",
+        failureCode: EVENT_CREATION_STALLED_CODE,
+      });
+      const failureResult = JSON.stringify({
+        targetEventId: eventId,
+        repositoryProvider: "airtable",
+        failureKind,
+      });
       await this.env.DB.batch([
         this.env.DB.prepare(
           `UPDATE events
@@ -337,14 +408,29 @@ export class EventRepositoryProvisioningService {
         this.env.DB.prepare(
           `UPDATE operation_jobs
               SET status = 'failed', progress_failed = progress_total,
-                  last_error = ?, completed_at = unixepoch(), updated_at = unixepoch()
+                  result_json = CASE
+                    WHEN type = 'event.create'
+                     AND claim_expires_at IS NOT NULL
+                     AND claim_expires_at <= unixepoch() THEN ?
+                    WHEN type = 'event.create' THEN ?
+                    ELSE result_json END,
+                  last_error = ?, claim_token = NULL,
+                  claim_expires_at = NULL, completed_at = unixepoch(),
+                  updated_at = unixepoch()
             WHERE id = ? AND organisation_id = ?
               AND status = 'running'
               AND type IN (
                 'event.create','event.clone','event.repository.provision'
               )
               AND json_extract(payload_json, '$.targetEventId') = ?`,
-        ).bind(message, operationId, viewer.organisationId, eventId),
+        ).bind(
+          expiredCreationResult,
+          failureResult,
+          message,
+          operationId,
+          viewer.organisationId,
+          eventId,
+        ),
         this.env.DB.prepare(
           `UPDATE integration_connections
               SET status = 'needs_attention', revision = revision + 1,
@@ -378,7 +464,14 @@ export class EventRepositoryProvisioningService {
                    AND event.organisation_id = operation.organisation_id
                    AND event.activation_status = 'provisioning_failed'
                    AND event.last_operation_id = operation.id
-              )`,
+              )
+                AND NOT EXISTS (
+                  SELECT 1 FROM audit_events existing
+                   WHERE existing.organisation_id = ?
+                     AND existing.event_id = ?
+                     AND existing.action = 'event.repository.provisioning_failed'
+                     AND existing.correlation_id = ?
+                )`,
         ).bind(
           crypto.randomUUID(),
           viewer.organisationId,
@@ -389,21 +482,37 @@ export class EventRepositoryProvisioningService {
           JSON.stringify({
             operationId,
             requestedRepositoryProvider: "airtable",
-            failureKind,
+            observedFailureKind: failureKind,
             errorName: error instanceof Error ? error.name : "UnknownError",
           }),
           eventId,
           operationId,
           viewer.organisationId,
+          viewer.organisationId,
+          eventId,
+          operationId,
         ),
       ]);
+      const terminal = await this.env.DB.prepare(
+        `SELECT json_extract(result_json, '$.failureCode') = ? AS leaseExpired
+           FROM operation_jobs
+          WHERE id = ? AND organisation_id = ? AND event_id = ?`,
+      )
+        .bind(
+          EVENT_CREATION_STALLED_CODE,
+          operationId,
+          viewer.organisationId,
+          eventId,
+        )
+        .first<{ leaseExpired: number | null }>();
+      const terminalFailureKind = terminal?.leaseExpired ? "internal" : failureKind;
       throw new EventRepositoryProvisioningError(
-        failureKind === "provider"
-          ? "Airtable provisioning did not complete. The incomplete event is unavailable until you retry Airtable, explicitly keep it on D1, or discard it."
-          : "Repository finalization failed unexpectedly. The incomplete event is unavailable until you recover or discard it.",
+        terminal?.leaseExpired
+          ? EVENT_CREATION_STALLED_MESSAGE
+          : eventRepositoryProvisioningFailureMessage(terminalFailureKind),
         eventId,
         operationId,
-        failureKind,
+        terminalFailureKind,
         { cause: error },
       );
     }

@@ -1,6 +1,11 @@
 import { airtableConnectionInputSchema } from "~/modules/airtable/airtable-schema";
 import { AIRTABLE_REPOSITORY_PROVIDER } from "~/modules/airtable/airtable-room-repository.server";
 import {
+  EventCreationLeaseStateError,
+  EventCreationService,
+} from "~/modules/events/event-creation-service.server";
+import {
+  EVENT_CREATION_STALLED_CODE,
   EventRepositoryProvisioningService,
   type AirtableProvisioningRoom,
 } from "~/modules/events/event-repository-provisioning.server";
@@ -19,6 +24,9 @@ type RecoverableEvent = {
   repositoryProvider: "d1" | "airtable";
   lastOperationId: string | null;
   operationStatus: string | null;
+  operationType: string | null;
+  operationLeaseExpired: number | null;
+  operationFailureCode: string | null;
   lastError: string | null;
 };
 
@@ -104,7 +112,11 @@ export class EventRepositoryRecoveryService {
               event.activation_status AS activationStatus,
               event.repository_provider AS repositoryProvider,
               event.last_operation_id AS lastOperationId,
-              operation.status AS operationStatus,
+              operation.status AS operationStatus, operation.type AS operationType,
+              CASE WHEN operation.claim_expires_at IS NULL THEN NULL
+                   WHEN operation.claim_expires_at <= unixepoch() THEN 1
+                   ELSE 0 END AS operationLeaseExpired,
+              json_extract(operation.result_json, '$.failureCode') AS operationFailureCode,
               operation.last_error AS lastError
          FROM events event
          LEFT JOIN operation_jobs operation
@@ -117,6 +129,38 @@ export class EventRepositoryRecoveryService {
     if (!event)
       throw new Response("Incomplete event not found.", { status: 404 });
     return event;
+  }
+
+  async failStalledCreation(viewer: Viewer, eventId: string) {
+    const event = await this.inspect(viewer, eventId);
+    if (
+      event.repositoryProvider !== "airtable" ||
+      event.activationStatus !== "provisioning" ||
+      event.operationType !== "event.create" ||
+      event.operationStatus !== "running" ||
+      event.operationLeaseExpired !== 1 ||
+      !event.lastOperationId
+    ) {
+      throw new EventRepositoryRecoveryStateError(
+        "Only an expired Airtable creation operation can enter recovery.",
+      );
+    }
+    try {
+      const result = await new EventCreationService(
+        this.env,
+      ).failStalledCreation(viewer, event.lastOperationId);
+      if (result.eventId !== eventId) {
+        throw new Error(
+          "The stalled event-creation operation targeted a different event.",
+        );
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof EventCreationLeaseStateError) {
+        throw new EventRepositoryRecoveryStateError(error.message);
+      }
+      throw error;
+    }
   }
 
   private assertFailedAirtable(event: RecoverableEvent) {
@@ -175,9 +219,14 @@ export class EventRepositoryRecoveryService {
   }
 
   async retryAirtable(viewer: Viewer, eventId: string, rawConnection: unknown) {
-    const connection = airtableConnectionInputSchema.parse(rawConnection);
     const event = await this.inspect(viewer, eventId);
     this.assertFailedAirtable(event);
+    if (event.operationFailureCode === EVENT_CREATION_STALLED_CODE) {
+      throw new EventRepositoryRecoveryStateError(
+        "Airtable retry is unavailable after an expired creation lease because the original provider call may still finish. Explicitly keep the event on D1 or discard it.",
+      );
+    }
+    const connection = airtableConnectionInputSchema.parse(rawConnection);
     const rooms = await this.rooms(viewer.organisationId, eventId);
     const operationId = crypto.randomUUID();
     const correlationId = crypto.randomUUID();

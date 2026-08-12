@@ -10,7 +10,10 @@ import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { EventRepositoryProvisioningService } from "./event-repository-provisioning.server";
-import { EventRepositoryRecoveryService } from "./event-repository-recovery.server";
+import {
+  EventRepositoryRecoveryService,
+  EventRepositoryRecoveryStateError,
+} from "./event-repository-recovery.server";
 
 const testEnv = env as unknown as CloudflareEnvironment;
 const viewer: Viewer = {
@@ -156,6 +159,83 @@ describe("incomplete event repository recovery", () => {
       "DELETE FROM memberships WHERE id = 'membership-recovery-org-admin'",
     ).run();
     await expect(service.listIncomplete(viewer)).resolves.toEqual([]);
+  });
+
+  it("moves an expired blank creation to explicit recovery without provider work", async () => {
+    const eventId = `stalled-recovery-${crypto.randomUUID()}`;
+    const operationId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           repository_provider, activation_status, file_policy_json,
+           last_operation_id, last_updated_by_person_id
+         ) VALUES (?, ?, 'Stalled Airtable event', ?, 'UTC', 1800000000,
+                   1800086400, 'airtable', 'provisioning', ?, ?, ?)`,
+      ).bind(
+        eventId,
+        viewer.organisationId,
+        `stalled-${eventId}`,
+        CANONICAL_EVENT_FILE_POLICY_JSON,
+        operationId,
+        viewer.personId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json,
+           progress_total, progress_completed, progress_failed, cancellable,
+           claim_expires_at, started_at
+         ) VALUES (?, ?, ?, ?, 'event.create', ?, ?, 'running', ?,
+                   1, 0, 0, 0, unixepoch() - 1, unixepoch() - 901)`,
+      ).bind(
+        operationId,
+        viewer.organisationId,
+        eventId,
+        viewer.personId,
+        `stalled-create-${operationId}`,
+        operationId,
+        JSON.stringify({
+          type: "event.create",
+          targetEventId: eventId,
+          requestedRepositoryProvider: "airtable",
+          requestHash: "a".repeat(64),
+        }),
+      ),
+    ]);
+    const service = new EventRepositoryRecoveryService(testEnv);
+
+    await expect(service.inspect(viewer, eventId)).resolves.toMatchObject({
+      operationType: "event.create",
+      operationStatus: "running",
+      operationLeaseExpired: 1,
+    });
+    await expect(service.failStalledCreation(viewer, eventId)).resolves.toEqual(
+      {
+        eventId,
+        operationId,
+        activationStatus: "provisioning_failed",
+      },
+    );
+    await expect(service.inspect(viewer, eventId)).resolves.toMatchObject({
+      activationStatus: "provisioning_failed",
+      operationStatus: "failed",
+      operationLeaseExpired: null,
+      operationFailureCode: "event_creation_lease_expired",
+    });
+    await expect(
+      service.retryAirtable(viewer, eventId, {}),
+    ).rejects.toThrow(/retry is unavailable after an expired creation lease/iu);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM operation_jobs WHERE event_id = ?",
+      )
+        .bind(eventId)
+        .first(),
+    ).toEqual({ count: 1 });
+    await expect(
+      service.failStalledCreation(viewer, eventId),
+    ).rejects.toBeInstanceOf(EventRepositoryRecoveryStateError);
   });
 
   it("retries Airtable through a fresh durable operation and activates only after reconciliation", async () => {

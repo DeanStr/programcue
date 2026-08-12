@@ -8,7 +8,7 @@ import { ensureDemoData } from "~/platform/demo/seed.server";
 import { action, loader } from "./admin-event-repository-recovery";
 
 const workerEnv = env as unknown as CloudflareEnvironment;
-const targetEventId = "route-incomplete-airtable-event";
+let targetEventId = "";
 
 function context() {
   const value = new RouterContextProvider();
@@ -35,6 +35,7 @@ function request(intent?: string) {
 }
 
 beforeEach(async () => {
+  targetEventId = `route-incomplete-airtable-${crypto.randomUUID()}`;
   await ensureDemoData(workerEnv);
   await env.DB.prepare(
     `INSERT OR REPLACE INTO memberships (
@@ -44,9 +45,6 @@ beforeEach(async () => {
                'person-demo-admin', 'administrator', unixepoch(),
                unixepoch(), unixepoch())`,
   ).run();
-  await env.DB.prepare("DELETE FROM events WHERE id = ?")
-    .bind(targetEventId)
-    .run();
   const operationId = crypto.randomUUID();
   await env.DB.batch([
     env.DB.prepare(
@@ -55,10 +53,15 @@ beforeEach(async () => {
          repository_provider, activation_status, file_policy_json,
          last_operation_id, last_updated_by_person_id
        ) VALUES (?, 'org-future-events', 'Route recovery event',
-                 'route-recovery-event', 'UTC', 1800000000, 1800086400,
+                 ?, 'UTC', 1800000000, 1800086400,
                  'airtable', 'provisioning_failed', ?, ?,
                  'person-demo-admin')`,
-    ).bind(targetEventId, CANONICAL_EVENT_FILE_POLICY_JSON, operationId),
+    ).bind(
+      targetEventId,
+      `route-recovery-${targetEventId}`,
+      CANONICAL_EVENT_FILE_POLICY_JSON,
+      operationId,
+    ),
     env.DB.prepare(
       `INSERT INTO operation_jobs (
          id, organisation_id, event_id, requested_by_person_id, type,
@@ -119,5 +122,39 @@ describe("event repository recovery route", () => {
         .bind(targetEventId)
         .first(),
     ).toEqual({ provider: "d1", activationStatus: "active" });
+  });
+
+  it("moves only an expired creation lease into explicit recovery", async () => {
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE events SET activation_status = 'provisioning'
+          WHERE id = ?`,
+      ).bind(targetEventId),
+      env.DB.prepare(
+        `UPDATE operation_jobs
+            SET status = 'running', result_json = NULL, progress_failed = 0,
+                last_error = NULL, claim_expires_at = unixepoch() - 1,
+                payload_json = json_set(payload_json, '$.requestHash', ?)
+          WHERE event_id = ? AND type = 'event.create'`,
+      ).bind("a".repeat(64), targetEventId),
+    ]);
+
+    const response = await action({
+      request: request("fail_stalled_creation"),
+      params: { eventId: targetEventId },
+      context: context(),
+    } as never);
+    if (response instanceof Response)
+      throw new Error("Stalled recovery action returned a raw response.");
+
+    expect(response.data).toMatchObject({
+      ok: true,
+      pendingRecovery: true,
+      message: expect.stringMatching(/No Airtable request was made/iu),
+      result: {
+        eventId: targetEventId,
+        activationStatus: "provisioning_failed",
+      },
+    });
   });
 });

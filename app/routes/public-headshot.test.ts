@@ -224,6 +224,28 @@ describe("published programme headshots", () => {
     );
   });
 
+  it("does not expose a clean headshot for an inactive event", async () => {
+    const service = new PublicProgrammeService(testEnv);
+    const programme = await service.getPublished("future-of-events-2025");
+    const personId = programme!.speakers[0].id;
+    await createCleanHeadshot("evt-foe-2025", personId);
+    await env.DB.prepare(
+      `UPDATE events SET activation_status = 'provisioning_failed'
+        WHERE id = 'evt-foe-2025'`,
+    ).run();
+
+    try {
+      expect(
+        (await responseFor("future-of-events-2025", personId)).status,
+      ).toBe(404);
+    } finally {
+      await env.DB.prepare(
+        `UPDATE events SET activation_status = 'active'
+          WHERE id = 'evt-foe-2025'`,
+      ).run();
+    }
+  });
+
   it("never resolves another event's private headshot through a public slug", async () => {
     const service = new PublicProgrammeService(testEnv);
     const primary = await service.getPublished("future-of-events-2025");

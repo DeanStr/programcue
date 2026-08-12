@@ -98,9 +98,12 @@ export class CrmService {
                  FROM (
                    SELECT membership.event_id
                      FROM memberships membership
+                     JOIN events event ON event.id = membership.event_id
                     WHERE membership.person_id = person.id
                       AND membership.organisation_id = ?
                       AND membership.event_id IS NOT NULL
+                      AND event.organisation_id = membership.organisation_id
+                      AND event.activation_status = 'active'
                       AND membership.role = 'speaker'
                       AND membership.accepted_at IS NOT NULL
                       AND membership.revoked_at IS NULL
@@ -110,11 +113,13 @@ export class CrmService {
                      JOIN events event ON event.id = speaker.event_id
                     WHERE speaker.person_id = person.id
                       AND event.organisation_id = ?
+                      AND event.activation_status = 'active'
                  ) linked) AS eventCount,
               (SELECT COUNT(*) FROM session_speakers speaker
                 JOIN events event ON event.id = speaker.event_id
                WHERE speaker.person_id = person.id
-                 AND event.organisation_id = ?) AS sessionCount,
+                 AND event.organisation_id = ?
+                 AND event.activation_status = 'active') AS sessionCount,
               (SELECT COUNT(*) FROM organisation_contact_ids candidate
                 JOIN people duplicate ON duplicate.id = candidate.person_id
                WHERE candidate.person_id <> person.id

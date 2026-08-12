@@ -55,6 +55,19 @@ export async function action({ request, context, params }: Route.ActionArgs) {
           result,
         });
       }
+      case "fail_stalled_creation": {
+        const result = await service.failStalledCreation(
+          viewer,
+          params.eventId,
+        );
+        return data({
+          ok: true as const,
+          pendingRecovery: true as const,
+          message:
+            "The stalled creation was moved to explicit repository recovery. No Airtable request was made.",
+          result,
+        });
+      }
       case "keep_d1": {
         const result = await service.keepOnD1(viewer, params.eventId);
         return data({
@@ -122,9 +135,22 @@ export default function AdminEventRepositoryRecovery({
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
+  const pendingRecovery = Boolean(
+    actionData &&
+      "pendingRecovery" in actionData &&
+      actionData.pendingRecovery,
+  );
   const active = loaderData.activationStatus === "active";
   const discarded = loaderData.activationStatus === "discarded";
   const failed = loaderData.activationStatus === "provisioning_failed";
+  const retryFenced =
+    failed &&
+    loaderData.operationFailureCode === "event_creation_lease_expired";
+  const stalledCreation =
+    loaderData.activationStatus === "provisioning" &&
+    loaderData.operationType === "event.create" &&
+    loaderData.operationStatus === "running" &&
+    loaderData.operationLeaseExpired === 1;
   return (
     <>
       <div className="page-head pc-page-header">
@@ -146,13 +172,17 @@ export default function AdminEventRepositoryRecovery({
 
       {actionData ? (
         <div
-          className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
+          className={`pc-status-notice ${actionData.ok && !pendingRecovery ? "is-success" : actionData.ok ? "" : "is-danger"} mb`}
           role={actionData.ok ? "status" : "alert"}
         >
           <AlertTriangle aria-hidden size={18} />
           <div className="pc-status-notice-copy">
             <strong>
-              {actionData.ok ? "Recovery complete" : "Recovery failed"}
+              {pendingRecovery
+                ? "Recovery decision required"
+                : actionData.ok
+                  ? "Recovery complete"
+                  : "Recovery failed"}
             </strong>
             <div>{actionData.message}</div>
             {actionData.result?.activationStatus === "active" ? (
@@ -200,42 +230,87 @@ export default function AdminEventRepositoryRecovery({
         ) : null}
       </section>
 
+      {stalledCreation ? (
+        <section className="card pad stack mt">
+          <div className="card-title">
+            <h2>Creation stalled</h2>
+            <AlertTriangle aria-hidden size={19} />
+          </div>
+          <p>
+            The creation lease expired without a terminal result. Move this
+            event to explicit recovery before retrying Airtable, choosing D1 or
+            discarding it. This action does not contact Airtable.
+          </p>
+          <Form
+            method="post"
+            onSubmit={(event) => {
+              if (
+                !window.confirm(
+                  "Move this stalled creation into repository recovery? The expired operation cannot resume after this change.",
+                )
+              )
+                event.preventDefault();
+            }}
+          >
+            <input type="hidden" name="intent" value="fail_stalled_creation" />
+            <button className="btn danger" type="submit" disabled={busy}>
+              Move stalled creation to recovery
+            </button>
+          </Form>
+        </section>
+      ) : null}
+
       {failed ? (
         <div className="grid grid-2 mt">
           <section className="card pad">
             <div className="card-title">
-              <h2>Retry Airtable</h2>
-              <RotateCcw aria-hidden size={19} />
+              <h2>{retryFenced ? "Airtable retry unavailable" : "Retry Airtable"}</h2>
+              {retryFenced ? (
+                <AlertTriangle aria-hidden size={19} />
+              ) : (
+                <RotateCcw aria-hidden size={19} />
+              )}
             </div>
-            <p>
-              Credentials and repository identifiers are required again. Program
-              Cue does not substitute a stored, stale, or different repository
-              configuration.
-            </p>
-            <Form method="post" className="stack">
-              <input type="hidden" name="intent" value="retry_airtable" />
-              <label className="label">
-                Personal access token
-                <input
-                  className="field"
-                  type="password"
-                  name="personalAccessToken"
-                  autoComplete="off"
-                  required
-                />
-              </label>
-              <label className="label">
-                Base ID
-                <input className="field" name="baseId" required />
-              </label>
-              <label className="label">
-                Rooms table
-                <input className="field" name="tableName" required />
-              </label>
-              <button className="btn primary" type="submit" disabled={busy}>
-                Retry Airtable
-              </button>
-            </Form>
+            {retryFenced ? (
+              <p>
+                The expired executor may still finish its provider request, so
+                starting another Airtable provisioning attempt is unsafe. Keep
+                this event on D1 or discard it; Program Cue will not guess that
+                the old provider work has stopped.
+              </p>
+            ) : (
+              <>
+                <p>
+                  Credentials and repository identifiers are required again.
+                  Program Cue does not substitute a stored, stale, or different
+                  repository configuration.
+                </p>
+                <Form method="post" className="stack">
+                  <input type="hidden" name="intent" value="retry_airtable" />
+                  <label className="label">
+                    Personal access token
+                    <input
+                      className="field"
+                      type="password"
+                      name="personalAccessToken"
+                      autoComplete="off"
+                      required
+                    />
+                  </label>
+                  <label className="label">
+                    Base ID
+                    <input className="field" name="baseId" required />
+                  </label>
+                  <label className="label">
+                    Rooms table
+                    <input className="field" name="tableName" required />
+                  </label>
+                  <button className="btn primary" type="submit" disabled={busy}>
+                    Retry Airtable
+                  </button>
+                </Form>
+              </>
+            )}
           </section>
 
           <section className="card pad stack">

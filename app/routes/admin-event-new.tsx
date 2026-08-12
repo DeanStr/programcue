@@ -5,6 +5,8 @@ import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-event-new";
 import {
+  EventCreationInProgressError,
+  EventCreationIntentConflictError,
   EventCreationService,
   EventCreationSlugConflictError,
 } from "~/modules/events/event-creation-service.server";
@@ -15,6 +17,7 @@ import { getCloudflareContext } from "~/platform/cloudflare-context";
 type ActionResponse = {
   ok: boolean;
   committed: boolean;
+  inProgress?: boolean;
   message: string;
   result: {
     eventId: string;
@@ -60,6 +63,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
   try {
     const result = await new EventCreationService(env).create(viewer, {
+      creationIntentId: form.get("creationIntentId"),
       name: form.get("name"),
       slug: form.get("slug"),
       timezone: form.get("timezone"),
@@ -91,7 +95,21 @@ export async function action({ request, context }: Route.ActionArgs) {
         },
         { status: error.failureKind === "provider" ? 502 : 500 },
       );
-    if (error instanceof EventCreationSlugConflictError)
+    if (error instanceof EventCreationInProgressError)
+      return data<ActionResponse>(
+        {
+          ok: false,
+          committed: true,
+          inProgress: true,
+          message: error.message,
+          result: error.result,
+        },
+        { status: 409 },
+      );
+    if (
+      error instanceof EventCreationSlugConflictError ||
+      error instanceof EventCreationIntentConflictError
+    )
       return data<ActionResponse>(
         {
           ok: false,
@@ -140,17 +158,19 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
       </div>
       {actionData ? (
         <div
-          className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
-          role={actionData.ok ? "status" : "alert"}
+          className={`pc-status-notice ${actionData.ok ? "is-success" : actionData.inProgress ? "" : "is-danger"} mb`}
+          role={actionData.ok || actionData.inProgress ? "status" : "alert"}
         >
           <Plus aria-hidden size={18} />
           <div className="pc-status-notice-copy">
             <strong>
               {actionData.ok
                 ? "Event created"
-                : actionData.committed
-                  ? "Airtable provisioning failed"
-                  : "Event creation blocked"}
+                : actionData.inProgress
+                  ? "Event creation in progress"
+                  : actionData.committed
+                    ? "Airtable provisioning failed"
+                    : "Event creation blocked"}
             </strong>
             <div>{actionData.message}</div>
             {actionData.result ? (
@@ -196,7 +216,9 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                     className="btn small"
                     to={`/admin/events/${encodeURIComponent(actionData.result.eventId)}/repository-recovery`}
                   >
-                    Recover incomplete event
+                    {actionData.inProgress
+                      ? "View provisioning status"
+                      : "Recover incomplete event"}
                   </Link>
                 )}
               </>
@@ -223,6 +245,11 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
             }}
           >
             <input type="hidden" name="intent" value="create" />
+            <input
+              type="hidden"
+              name="creationIntentId"
+              value={loaderData.creationIntentId}
+            />
             <label className="label">
               Event name
               <input className="field" name="name" required maxLength={160} />

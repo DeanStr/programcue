@@ -478,6 +478,45 @@ describe("organisation speaker CRM", () => {
       organisationName: "",
       biography: "",
     });
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role,
+           invited_at, accepted_at, created_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(
+        `crm-inactive-membership-${token}`,
+        administrator.organisationId,
+        eventId,
+        contact.personId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes, status,
+           visibility, created_at, updated_at
+         ) VALUES (?, ?, 'Inactive event session', ?, 'presentation', 30,
+                   'unscheduled', 'private', unixepoch(), unixepoch())`,
+      ).bind(
+        `crm-inactive-session-${token}`,
+        eventId,
+        `crm-inactive-session-${token}`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, visibility
+         ) VALUES (?, ?, ?, 0, 'private')`,
+      ).bind(`crm-inactive-session-${token}`, eventId, contact.personId),
+    ]);
+
+    const directory = await crm.listDirectory(
+      administrator,
+      { ...emptyFilters, query: "Inactive Event Contact" },
+      1,
+    );
+    expect(directory.contacts[0]).toMatchObject({
+      eventCount: 0,
+      sessionCount: 0,
+    });
 
     await expect(crm.listEvents(administrator)).resolves.not.toContainEqual(
       expect.objectContaining({ id: eventId }),

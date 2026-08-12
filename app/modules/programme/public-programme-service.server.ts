@@ -408,7 +408,8 @@ export class PublicProgrammeService {
           ON version.id = asset.current_version_id
          AND version.asset_id = asset.id
          AND version.event_id = asset.event_id
-       WHERE event.slug = ? AND event.programme_published_at IS NOT NULL
+       WHERE event.slug = ? AND event.activation_status = 'active'
+         AND event.programme_published_at IS NOT NULL
          AND person.id = ? AND person.profile_status = 'published'
          AND session.status = 'published' AND content.visibility = 'public'
          AND relation.visibility = 'public'
@@ -478,7 +479,9 @@ export class PublicProgrammeService {
              venue_name AS venue, city, description, brand_accent AS brandAccent,
              organisation_id AS organisationId,
              repository_provider AS repositoryProvider
-        FROM events WHERE slug = ? AND programme_published_at IS NOT NULL
+        FROM events
+       WHERE slug = ? AND activation_status = 'active'
+         AND programme_published_at IS NOT NULL
     `,
     )
       .bind(slug)

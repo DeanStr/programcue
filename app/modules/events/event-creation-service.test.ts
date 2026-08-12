@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
+  EventCreationInProgressError,
+  EventCreationIntentConflictError,
   EventCreationService,
   EventCreationSlugConflictError,
 } from "./event-creation-service.server";
@@ -74,6 +76,7 @@ describe("blank event creation", () => {
     const result = await new EventCreationService(
       env as unknown as CloudflareEnvironment,
     ).create(viewer, {
+      creationIntentId: crypto.randomUUID(),
       name: `Blank event ${token}`,
       slug: `blank-event-${token}`,
       timezone: "Australia/Sydney",
@@ -141,11 +144,56 @@ describe("blank event creation", () => {
     ).toEqual({ action: "event.created" });
   });
 
+  it("replays the exact event and operation for one creation intent", async () => {
+    const token = crypto.randomUUID().slice(0, 8);
+    const creationIntentId = crypto.randomUUID();
+    const input = {
+      creationIntentId,
+      name: `Replay event ${token}`,
+      slug: `replay-event-${token}`,
+      timezone: "UTC",
+      startDate: "2027-09-10",
+      endDate: "2027-09-12",
+      repositoryProvider: "d1" as const,
+      personalAccessToken: "",
+      baseId: "",
+      tableName: "Program Cue Rooms",
+    };
+    const service = new EventCreationService(
+      env as unknown as CloudflareEnvironment,
+    );
+
+    const [first, replay] = await Promise.all([
+      service.create(viewer, input),
+      service.create(viewer, input),
+    ]);
+
+    expect(replay).toEqual(first);
+    expect(first.operationId).toBe(creationIntentId);
+    expect(
+      await env.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM events WHERE slug = ?) AS events,
+           (SELECT COUNT(*) FROM operation_jobs
+             WHERE id = ? AND type = 'event.create') AS operations,
+           (SELECT COUNT(*) FROM audit_events
+             WHERE event_id = ? AND action = 'event.created') AS audits`,
+      )
+        .bind(input.slug, creationIntentId, first.eventId)
+        .first(),
+    ).toEqual({ events: 1, operations: 1, audits: 1 });
+
+    await expect(
+      service.create(viewer, { ...input, name: "Different event intent" }),
+    ).rejects.toBeInstanceOf(EventCreationIntentConflictError);
+  });
+
   it("rejects duplicate slugs without creating another event", async () => {
     await expect(
       new EventCreationService(env as unknown as CloudflareEnvironment).create(
         viewer,
         {
+          creationIntentId: crypto.randomUUID(),
           name: "Duplicate event",
           slug: "future-of-events-2025",
           timezone: "UTC",
@@ -167,6 +215,7 @@ describe("blank event creation", () => {
       new EventCreationService(env as unknown as CloudflareEnvironment).create(
         viewer,
         {
+          creationIntentId: crypto.randomUUID(),
           name: "Invalid Airtable event",
           slug,
           timezone: "UTC",
@@ -234,6 +283,7 @@ describe("blank event creation", () => {
     const result = await new EventCreationService(testEnv, {
       provisioning,
     }).create(viewer, {
+      creationIntentId: crypto.randomUUID(),
       name: `Airtable event ${token}`,
       slug: `airtable-event-${token}`,
       timezone: "UTC",
@@ -261,12 +311,292 @@ describe("blank event creation", () => {
     ).toEqual({ status: "completed" });
   });
 
+  it("reports an existing Airtable operation as in progress without repeating provider work", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    let releaseProvisioning!: () => void;
+    let markProvisioningStarted!: () => void;
+    const provisioningStarted = new Promise<void>((resolve) => {
+      markProvisioningStarted = resolve;
+    });
+    const provisioningRelease = new Promise<void>((resolve) => {
+      releaseProvisioning = resolve;
+    });
+    let provisionCount = 0;
+    const provisioning = {
+      provisionAirtable: async (
+        _viewer: Viewer,
+        eventId: string,
+        operationId: string,
+      ) => {
+        provisionCount += 1;
+        markProvisioningStarted();
+        await provisioningRelease;
+        await testEnv.DB.batch([
+          testEnv.DB.prepare(
+            `UPDATE events
+                SET activation_status = 'active', repository_locked_at = unixepoch()
+              WHERE id = ? AND last_operation_id = ?`,
+          ).bind(eventId, operationId),
+          testEnv.DB.prepare(
+            `UPDATE operation_jobs
+                SET status = 'completed', progress_completed = progress_total,
+                    result_json = ?, completed_at = unixepoch(), updated_at = unixepoch()
+              WHERE id = ? AND event_id = ? AND status = 'running'`,
+          ).bind(
+            JSON.stringify({
+              targetEventId: eventId,
+              repositoryProvider: "airtable",
+            }),
+            operationId,
+            eventId,
+          ),
+        ]);
+        return { runId: "controlled-provisioning", idempotent: false };
+      },
+    };
+    const creationIntentId = crypto.randomUUID();
+    const token = crypto.randomUUID().slice(0, 8);
+    const input = {
+      creationIntentId,
+      name: `In-progress Airtable event ${token}`,
+      slug: `in-progress-airtable-${token}`,
+      timezone: "UTC",
+      startDate: "2027-04-10",
+      endDate: "2027-04-11",
+      repositoryProvider: "airtable" as const,
+      personalAccessToken: "pat-test-token-at-least-twenty",
+      baseId: "app12345678901234",
+      tableName: "Program Cue Rooms",
+    };
+    const service = new EventCreationService(testEnv, { provisioning });
+    const first = service.create(viewer, input);
+    await provisioningStarted;
+
+    await expect(service.create(viewer, input)).rejects.toMatchObject({
+      name: EventCreationInProgressError.name,
+      result: {
+        operationId: creationIntentId,
+        repositoryProvider: "airtable",
+      },
+    });
+    expect(provisionCount).toBe(1);
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT claim_expires_at > unixepoch() AS leaseActive
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(creationIntentId)
+        .first(),
+    ).toEqual({ leaseActive: 1 });
+
+    releaseProvisioning();
+    await expect(first).resolves.toMatchObject({
+      operationId: creationIntentId,
+      repositoryProvider: "airtable",
+    });
+  });
+
+  it("fails an expired Airtable creation lease without repeating provider work", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const prepared = preparedConnection();
+    let releaseProvisioning!: () => void;
+    let markProvisioningStarted!: () => void;
+    const provisioningStarted = new Promise<void>((resolve) => {
+      markProvisioningStarted = resolve;
+    });
+    const provisioningRelease = new Promise<void>((resolve) => {
+      releaseProvisioning = resolve;
+    });
+    let provisionCount = 0;
+    let replaceCount = 0;
+    let synchronizationCount = 0;
+    const provisioning = new EventRepositoryProvisioningService(testEnv, {
+      rooms: {
+        provisionForEvent: async () => {
+          provisionCount += 1;
+          markProvisioningStarted();
+          await provisioningRelease;
+          return prepared;
+        },
+        replaceRooms: async () => {
+          replaceCount += 1;
+          return { rooms: [] } as never;
+        },
+      },
+      eventData: {
+        synchronizeFromD1: async () => {
+          synchronizationCount += 1;
+          return { runId: "stale-provisioning-sync", idempotent: false };
+        },
+      },
+    });
+    const creationIntentId = crypto.randomUUID();
+    const token = crypto.randomUUID().slice(0, 8);
+    const input = {
+      creationIntentId,
+      name: `Expired Airtable event ${token}`,
+      slug: `expired-airtable-${token}`,
+      timezone: "UTC",
+      startDate: "2027-04-10",
+      endDate: "2027-04-11",
+      repositoryProvider: "airtable" as const,
+      personalAccessToken: "pat-test-token-at-least-twenty",
+      baseId: "app12345678901234",
+      tableName: "Program Cue Rooms",
+    };
+    const service = new EventCreationService(testEnv, { provisioning });
+    const first = service.create(viewer, input);
+    await provisioningStarted;
+    await testEnv.DB.prepare(
+      `UPDATE operation_jobs SET claim_expires_at = unixepoch() - 1
+        WHERE id = ? AND status = 'running'`,
+    )
+      .bind(creationIntentId)
+      .run();
+
+    await expect(service.create(viewer, input)).rejects.toMatchObject({
+      name: EventRepositoryProvisioningError.name,
+      operationId: creationIntentId,
+      failureKind: "internal",
+      message: expect.stringMatching(/stopped before Airtable provisioning/iu),
+    });
+    expect(provisionCount).toBe(1);
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT event.activation_status AS activationStatus,
+                operation.status, operation.claim_expires_at AS claimExpiresAt,
+                json_extract(operation.result_json, '$.failureCode') AS failureCode,
+                (SELECT COUNT(*) FROM audit_events audit
+                  WHERE audit.event_id = event.id
+                    AND audit.action = 'event.repository.provisioning_failed'
+                    AND audit.correlation_id = operation.id) AS failureAudits
+           FROM operation_jobs operation
+           JOIN events event ON event.id = operation.event_id
+          WHERE operation.id = ?`,
+      )
+        .bind(creationIntentId)
+        .first(),
+    ).toEqual({
+      activationStatus: "provisioning_failed",
+      status: "failed",
+      claimExpiresAt: null,
+      failureCode: "event_creation_lease_expired",
+      failureAudits: 1,
+    });
+
+    releaseProvisioning();
+    await expect(first).rejects.toMatchObject({
+      name: EventRepositoryProvisioningError.name,
+      operationId: creationIntentId,
+      failureKind: "internal",
+    });
+    expect(replaceCount).toBe(0);
+    expect(synchronizationCount).toBe(0);
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT activation_status AS activationStatus
+           FROM events WHERE last_operation_id = ?`,
+      )
+        .bind(creationIntentId)
+        .first(),
+    ).toEqual({ activationStatus: "provisioning_failed" });
+  });
+
+  it("does not activate when the Airtable creation lease expires during provider work", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const prepared = preparedConnection();
+    let releaseProvisioning!: () => void;
+    let markProvisioningStarted!: () => void;
+    const provisioningStarted = new Promise<void>((resolve) => {
+      markProvisioningStarted = resolve;
+    });
+    const provisioningRelease = new Promise<void>((resolve) => {
+      releaseProvisioning = resolve;
+    });
+    let replaceCount = 0;
+    let synchronizationCount = 0;
+    const provisioning = new EventRepositoryProvisioningService(testEnv, {
+      rooms: {
+        provisionForEvent: async () => {
+          markProvisioningStarted();
+          await provisioningRelease;
+          return prepared;
+        },
+        replaceRooms: async () => {
+          replaceCount += 1;
+          return { rooms: [] } as never;
+        },
+      },
+      eventData: {
+        synchronizeFromD1: async () => {
+          synchronizationCount += 1;
+          return { runId: "expired-provider-work", idempotent: false };
+        },
+      },
+    });
+    const creationIntentId = crypto.randomUUID();
+    const token = crypto.randomUUID().slice(0, 8);
+    const creation = new EventCreationService(testEnv, { provisioning }).create(
+      viewer,
+      {
+        creationIntentId,
+        name: `Expired provider work ${token}`,
+        slug: `expired-provider-work-${token}`,
+        timezone: "UTC",
+        startDate: "2027-04-10",
+        endDate: "2027-04-11",
+        repositoryProvider: "airtable",
+        personalAccessToken: "pat-test-token-at-least-twenty",
+        baseId: "app12345678901234",
+        tableName: "Program Cue Rooms",
+      },
+    );
+    await provisioningStarted;
+    await testEnv.DB.prepare(
+      `UPDATE operation_jobs SET claim_expires_at = unixepoch() - 1
+        WHERE id = ? AND status = 'running'`,
+    )
+      .bind(creationIntentId)
+      .run();
+
+    releaseProvisioning();
+    await expect(creation).rejects.toMatchObject({
+      name: EventRepositoryProvisioningError.name,
+      operationId: creationIntentId,
+      failureKind: "internal",
+      message: expect.stringMatching(/stopped before Airtable provisioning/iu),
+    });
+    expect(replaceCount).toBe(0);
+    expect(synchronizationCount).toBe(0);
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT event.activation_status AS activationStatus,
+                operation.status, operation.claim_expires_at AS claimExpiresAt,
+                json_extract(operation.result_json, '$.failureCode') AS failureCode
+           FROM operation_jobs operation
+           JOIN events event ON event.id = operation.event_id
+          WHERE operation.id = ?`,
+      )
+        .bind(creationIntentId)
+        .first(),
+    ).toEqual({
+      activationStatus: "provisioning_failed",
+      status: "failed",
+      claimExpiresAt: null,
+      failureCode: "event_creation_lease_expired",
+    });
+  });
+
   it("keeps a failed Airtable event inactive when reconciliation fails after commit", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     const prepared = preparedConnection();
+    let provisionCount = 0;
     const provisioning = new EventRepositoryProvisioningService(testEnv, {
       rooms: {
-        provisionForEvent: async () => prepared,
+        provisionForEvent: async () => {
+          provisionCount += 1;
+          return prepared;
+        },
         replaceRooms: async () => ({ rooms: [] }) as never,
       },
       eventData: {
@@ -278,20 +608,26 @@ describe("blank event creation", () => {
       },
     });
     const slug = `airtable-failed-${crypto.randomUUID().slice(0, 8)}`;
+    const creationIntentId = crypto.randomUUID();
+    const input = {
+      creationIntentId,
+      name: "Failed Airtable event",
+      slug,
+      timezone: "UTC",
+      startDate: "2027-04-10",
+      endDate: "2027-04-11",
+      repositoryProvider: "airtable" as const,
+      personalAccessToken: "pat-test-token-at-least-twenty",
+      baseId: "app12345678901234",
+      tableName: "Program Cue Rooms",
+    };
     let failure: EventRepositoryProvisioningError | null = null;
 
     try {
-      await new EventCreationService(testEnv, { provisioning }).create(viewer, {
-        name: "Failed Airtable event",
-        slug,
-        timezone: "UTC",
-        startDate: "2027-04-10",
-        endDate: "2027-04-11",
-        repositoryProvider: "airtable",
-        personalAccessToken: "pat-test-token-at-least-twenty",
-        baseId: "app12345678901234",
-        tableName: "Program Cue Rooms",
-      });
+      await new EventCreationService(testEnv, { provisioning }).create(
+        viewer,
+        input,
+      );
     } catch (error) {
       if (error instanceof EventRepositoryProvisioningError) failure = error;
       else throw error;
@@ -299,6 +635,21 @@ describe("blank event creation", () => {
 
     expect(failure).not.toBeNull();
     expect(failure!.failureKind).toBe("provider");
+    await expect(
+      new EventCreationService(testEnv, { provisioning }).create(viewer, input),
+    ).rejects.toMatchObject({
+      eventId: failure!.eventId,
+      operationId: creationIntentId,
+      failureKind: "provider",
+    });
+    expect(provisionCount).toBe(1);
+    await expect(
+      new EventCreationService(testEnv, { provisioning }).create(viewer, {
+        ...input,
+        personalAccessToken: "pat-different-token-at-least-twenty",
+      }),
+    ).rejects.toBeInstanceOf(EventCreationIntentConflictError);
+    expect(provisionCount).toBe(1);
     expect(
       await env.DB.prepare(
         `SELECT repository_provider AS provider,
@@ -362,6 +713,7 @@ describe("blank event creation", () => {
 
     try {
       await new EventCreationService(testEnv, { provisioning }).create(viewer, {
+        creationIntentId: crypto.randomUUID(),
         name: "Prelocked Airtable event",
         slug: `airtable-prelocked-${crypto.randomUUID().slice(0, 8)}`,
         timezone: "UTC",
@@ -411,6 +763,7 @@ describe("blank event creation", () => {
 
     try {
       await new EventCreationService(testEnv, { provisioning }).create(viewer, {
+        creationIntentId: crypto.randomUUID(),
         name: "Rejected Airtable event",
         slug,
         timezone: "UTC",
@@ -470,6 +823,7 @@ describe("blank event creation", () => {
 
     try {
       await new EventCreationService(testEnv, { provisioning }).create(viewer, {
+        creationIntentId: crypto.randomUUID(),
         name: "Concurrent Airtable event",
         slug: `airtable-concurrent-${crypto.randomUUID().slice(0, 8)}`,
         timezone: "UTC",
@@ -531,6 +885,7 @@ describe("blank event creation", () => {
       new EventCreationService(env as unknown as CloudflareEnvironment).create(
         viewer,
         {
+          creationIntentId: crypto.randomUUID(),
           name: "Forbidden event",
           slug: `forbidden-event-${crypto.randomUUID()}`,
           timezone: "UTC",

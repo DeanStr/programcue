@@ -51,6 +51,7 @@ describe("new event route", () => {
     } as never);
 
     expect(result).toMatchObject({
+      creationIntentId: expect.any(String),
       timezone: "America/Toronto",
       airtableTableName: "Program Cue Rooms",
     });
@@ -58,20 +59,25 @@ describe("new event route", () => {
 
   it("creates a blank D1 event without requiring hidden Airtable fields", async () => {
     const token = crypto.randomUUID().slice(0, 8);
-    const response = await action({
-      request: request({
-        intent: "create",
-        name: `Route blank event ${token}`,
-        slug: `route-blank-event-${token}`,
-        timezone: "UTC",
-        startDate: "2027-10-01",
-        endDate: "2027-10-02",
-        repositoryProvider: "d1",
-        tableName: "Program Cue Rooms",
-      }),
-      params: {},
-      context: context(),
-    } as never);
+    const creationIntentId = crypto.randomUUID();
+    const values = {
+      intent: "create",
+      creationIntentId,
+      name: `Route blank event ${token}`,
+      slug: `route-blank-event-${token}`,
+      timezone: "UTC",
+      startDate: "2027-10-01",
+      endDate: "2027-10-02",
+      repositoryProvider: "d1",
+      tableName: "Program Cue Rooms",
+    };
+    const args = () =>
+      ({
+        request: request(values),
+        params: {},
+        context: context(),
+      }) as never;
+    const response = await action(args());
     if (response instanceof Response)
       throw new Error("New event action returned a raw response.");
 
@@ -80,12 +86,19 @@ describe("new event route", () => {
       committed: true,
       result: { repositoryProvider: "d1" },
     });
+    const replay = await action(args());
+    if (replay instanceof Response)
+      throw new Error("New event replay returned a raw response.");
+    expect(replay.data).toEqual(response.data);
+    expect(replay.data.result?.operationId).toBe(creationIntentId);
     expect(
       await env.DB.prepare(
-        "SELECT repository_provider AS provider FROM events WHERE slug = ?",
+        `SELECT repository_provider AS provider,
+                (SELECT COUNT(*) FROM events WHERE slug = ?) AS eventCount
+           FROM events WHERE slug = ?`,
       )
-        .bind(`route-blank-event-${token}`)
+        .bind(`route-blank-event-${token}`, `route-blank-event-${token}`)
         .first(),
-    ).toEqual({ provider: "d1" });
+    ).toEqual({ provider: "d1", eventCount: 1 });
   });
 });

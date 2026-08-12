@@ -269,6 +269,28 @@ describe("published programme and itinerary", () => {
     ).toBe(false);
   });
 
+  it("does not expose stale publication state for an inactive event", async () => {
+    const service = new PublicProgrammeService(
+      env as unknown as CloudflareEnvironment,
+    );
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    await env.DB.prepare(
+      `UPDATE events SET activation_status = 'provisioning_failed'
+        WHERE id = 'evt-foe-2025'`,
+    ).run();
+
+    try {
+      await expect(
+        service.getPublished("future-of-events-2025"),
+      ).resolves.toBeNull();
+    } finally {
+      await env.DB.prepare(
+        `UPDATE events SET activation_status = 'active'
+          WHERE id = 'evt-foe-2025'`,
+      ).run();
+    }
+  });
+
   it("does not fall back to D1 when the authoritative Airtable repository is unavailable", async () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
