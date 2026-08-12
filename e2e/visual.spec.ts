@@ -27,6 +27,7 @@ const SURFACES: readonly Surface[] = [
     path: "/admin/files/retention",
     role: "owner",
   },
+  { name: "event-new", path: "/admin/events/new", role: "owner" },
   { name: "event-clone", path: "/admin/events/clone", role: "owner" },
   { name: "command-centre", path: "/admin/command" },
   { name: "form-builder", path: "/admin/submissions/form" },
@@ -226,8 +227,7 @@ async function captureState(page: Page, target: Locator, name: string) {
   });
   try {
     await expect(target).toHaveScreenshot(`${name}.png`, {
-      maxDiffPixelRatio:
-        name === "event-switcher-current-event" ? 0.04 : 0.01,
+      maxDiffPixelRatio: name === "event-switcher-current-event" ? 0.04 : 0.01,
     });
   } finally {
     await unrelatedFixedChrome.evaluate((style) =>

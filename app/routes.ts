@@ -126,6 +126,7 @@ export default [
     route("admin/crm/outreach", "routes/admin-crm-outreach.tsx"),
     route("admin/crm/contacts/:personId", "routes/admin-crm-contact.tsx"),
     route("admin/assistant", "routes/assistant.tsx"),
+    route("admin/events/new", "routes/admin-event-new.tsx"),
     route("admin/events/clone", "routes/admin-event-clone.tsx"),
     route("admin/search", "routes/admin-command-search.ts"),
     route("admin/views", "routes/admin-saved-views.ts"),

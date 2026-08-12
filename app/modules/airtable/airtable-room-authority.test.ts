@@ -303,6 +303,48 @@ describe("Airtable authoritative room repository", () => {
   });
 
   describe("room authority workflows", () => {
+    it("validates and prepares an event connection without persisting it", async () => {
+      const provider = fakeAirtable();
+      const repository = new AirtableRoomRepository(
+        env as unknown as CloudflareEnvironment,
+        { createClient: () => provider.client },
+      );
+      const prepared = await repository.provisionForEvent(
+        owner,
+        owner.eventId,
+        connectionInput,
+      );
+
+      expect(prepared.configuration.baseId).toBe(connectionInput.baseId);
+      expect(prepared.configuration.tables.rooms.name).toBe(
+        AIRTABLE_ROOMS_TABLE,
+      );
+      expect(prepared.encryptedCredentials).not.toContain(
+        connectionInput.personalAccessToken,
+      );
+      expect(provider.records).toEqual([]);
+      expect(
+        await env.DB.prepare(
+          "SELECT 1 FROM integration_connections WHERE id = ?",
+        )
+          .bind(prepared.connectionId)
+          .first(),
+      ).toBeNull();
+    });
+
+    it("rejects event-scoped administrators before provisioning a repository", async () => {
+      const provider = fakeAirtable();
+      const repository = new AirtableRoomRepository(
+        env as unknown as CloudflareEnvironment,
+        { createClient: () => provider.client },
+      );
+
+      await expect(
+        repository.provisionForEvent(viewer, viewer.eventId, connectionInput),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(provider.tables).toEqual([]);
+    });
+
     it("provisions the managed schema, encrypts credentials and audits configuration", async () => {
       const provider = fakeAirtable();
       const repository = new AirtableRoomRepository(

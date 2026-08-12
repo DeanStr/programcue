@@ -74,6 +74,12 @@ export type AirtableRepositoryConnection = {
   revision: number;
 };
 
+export type PreparedAirtableRepositoryConnection = {
+  connectionId: string;
+  encryptedCredentials: string;
+  configuration: AirtableConnectionConfiguration;
+};
+
 export type AirtableRoomSnapshot = {
   rooms: AirtableRoom[];
   fetchedAt: number;
@@ -312,52 +318,17 @@ export class AirtableRoomRepository {
     return table;
   }
 
-  async configure(viewer: Viewer, raw: unknown) {
-    assertAdministrator(viewer);
-    const input = airtableConnectionInputSchema.parse(raw);
+  private async provisionConnection(
+    eventId: string,
+    input: AirtableConnectionInput,
+    options: {
+      connectionId?: string;
+      authoritativeConfiguration?: AirtableConnectionConfiguration | null;
+    } = {},
+  ): Promise<PreparedAirtableRepositoryConnection> {
     const credentials = airtableCredentialsSchema.parse(input);
-    const [event, existing] = await Promise.all([
-      this.env.DB.prepare(
-        `SELECT repository_provider AS repositoryProvider
-           FROM events WHERE id = ? AND organisation_id = ?`,
-      )
-        .bind(viewer.eventId, viewer.organisationId)
-        .first<{ repositoryProvider: "d1" | "airtable" }>(),
-      this.env.DB.prepare(
-        `SELECT id, revision, configuration_json AS configurationJson
-           FROM integration_connections
-          WHERE organisation_id = ? AND event_id = ? AND provider = ?`,
-      )
-        .bind(
-          viewer.organisationId,
-          viewer.eventId,
-          AIRTABLE_REPOSITORY_PROVIDER,
-        )
-        .first<{ id: string; revision: number; configurationJson: string }>(),
-    ]);
-    if (!event)
-      throw new AirtableRepositoryConfigurationError("Event not found.");
-    let authoritativeConfiguration: AirtableConnectionConfiguration | null =
-      null;
-    if (event.repositoryProvider === "airtable") {
-      try {
-        authoritativeConfiguration =
-          airtableConnectionConfigurationSchema.parse(
-            JSON.parse(existing?.configurationJson ?? ""),
-          );
-      } catch {
-        throw new AirtableRepositoryConfigurationError(
-          "The authoritative Airtable repository configuration is invalid. Migrate or repair it before reconfiguring credentials.",
-        );
-      }
-      if (
-        credentials.baseId !== authoritativeConfiguration.baseId ||
-        input.tableName !== authoritativeConfiguration.tables.rooms.name
-      )
-        throw new AirtableRepositoryConfigurationError(
-          "An authoritative Airtable repository cannot be switched to another base or room table through reconfiguration. Migrate authority to D1 first.",
-        );
-    }
+    const authoritativeConfiguration =
+      options.authoritativeConfiguration ?? null;
     const client = this.client(credentials);
     const knownTables = await client.getBaseSchema();
     const roomTable = await this.provisionAndValidateSchema(
@@ -370,7 +341,7 @@ export class AirtableRoomRepository {
     );
     const validationId = crypto.randomUUID();
     const validationKey = `connection-validation-${validationId}`;
-    const validationEventId = `connection-validation:${viewer.eventId}:${validationId}`;
+    const validationEventId = `connection-validation:${eventId}:${validationId}`;
     const validationWrite = await client.upsertRecords(roomTable.id, [
       {
         fields: {
@@ -450,33 +421,120 @@ export class AirtableRoomRepository {
       );
       eventDataTables[key] = { id: table.id, name: table.name };
     }
-    const connectionId = existing?.id ?? crypto.randomUUID();
+    const connectionId = options.connectionId ?? crypto.randomUUID();
     const encryptedCredentials = await encryptIntegrationCredentials(
       credentials,
       this.env.INTEGRATION_CREDENTIALS_KEY,
       connectionId,
     );
-    const configuration: AirtableConnectionConfiguration = {
-      baseId: credentials.baseId,
-      schemaVersion: AIRTABLE_SCHEMA_VERSION,
-      tables: {
-        rooms: { id: roomTable.id, name: roomTable.name },
-        speakers: { id: speakerTable.id, name: speakerTable.name },
-        sessions: { id: sessionTable.id, name: sessionTable.name },
-        schedule: { id: scheduleTable.id, name: scheduleTable.name },
-        ...eventDataTables,
+    return {
+      connectionId,
+      encryptedCredentials,
+      configuration: {
+        baseId: credentials.baseId,
+        schemaVersion: AIRTABLE_SCHEMA_VERSION,
+        tables: {
+          rooms: { id: roomTable.id, name: roomTable.name },
+          speakers: { id: speakerTable.id, name: speakerTable.name },
+          sessions: { id: sessionTable.id, name: sessionTable.name },
+          schedule: { id: scheduleTable.id, name: scheduleTable.name },
+          ...eventDataTables,
+        },
+        authoritativeEntities: [
+          "rooms",
+          "event_configuration",
+          "forms",
+          "submissions",
+          "evaluations",
+          "sessions",
+          "tasks",
+          "published_programme",
+        ],
       },
-      authoritativeEntities: [
-        "rooms",
-        "event_configuration",
-        "forms",
-        "submissions",
-        "evaluations",
-        "sessions",
-        "tasks",
-        "published_programme",
-      ],
     };
+  }
+
+  async provisionForEvent(
+    viewer: Viewer,
+    eventId: string,
+    raw: unknown,
+  ): Promise<PreparedAirtableRepositoryConnection> {
+    assertAdministrator(viewer);
+    const authorised = await this.env.DB.prepare(
+      `SELECT 1
+         FROM events event
+         JOIN memberships membership
+           ON membership.organisation_id = event.organisation_id
+          AND membership.event_id IS NULL
+          AND membership.person_id = ?
+          AND membership.role IN ('owner','administrator')
+          AND membership.accepted_at IS NOT NULL
+          AND membership.revoked_at IS NULL
+        WHERE event.id = ? AND event.organisation_id = ?
+        LIMIT 1`,
+    )
+      .bind(viewer.personId, eventId, viewer.organisationId)
+      .first();
+    if (!authorised)
+      throw new Response(
+        "Organisation owner or administrator access is required to provision an event repository.",
+        { status: 403 },
+      );
+    const input = airtableConnectionInputSchema.parse(raw);
+    return this.provisionConnection(eventId, input);
+  }
+
+  async configure(viewer: Viewer, raw: unknown) {
+    assertAdministrator(viewer);
+    const input = airtableConnectionInputSchema.parse(raw);
+    const credentials = airtableCredentialsSchema.parse(input);
+    const [event, existing] = await Promise.all([
+      this.env.DB.prepare(
+        `SELECT repository_provider AS repositoryProvider
+           FROM events WHERE id = ? AND organisation_id = ?`,
+      )
+        .bind(viewer.eventId, viewer.organisationId)
+        .first<{ repositoryProvider: "d1" | "airtable" }>(),
+      this.env.DB.prepare(
+        `SELECT id, revision, configuration_json AS configurationJson
+           FROM integration_connections
+          WHERE organisation_id = ? AND event_id = ? AND provider = ?`,
+      )
+        .bind(
+          viewer.organisationId,
+          viewer.eventId,
+          AIRTABLE_REPOSITORY_PROVIDER,
+        )
+        .first<{ id: string; revision: number; configurationJson: string }>(),
+    ]);
+    if (!event)
+      throw new AirtableRepositoryConfigurationError("Event not found.");
+    let authoritativeConfiguration: AirtableConnectionConfiguration | null =
+      null;
+    if (event.repositoryProvider === "airtable") {
+      try {
+        authoritativeConfiguration =
+          airtableConnectionConfigurationSchema.parse(
+            JSON.parse(existing?.configurationJson ?? ""),
+          );
+      } catch {
+        throw new AirtableRepositoryConfigurationError(
+          "The authoritative Airtable repository configuration is invalid. Migrate or repair it before reconfiguring credentials.",
+        );
+      }
+      if (
+        credentials.baseId !== authoritativeConfiguration.baseId ||
+        input.tableName !== authoritativeConfiguration.tables.rooms.name
+      )
+        throw new AirtableRepositoryConfigurationError(
+          "An authoritative Airtable repository cannot be switched to another base or room table through reconfiguration. Migrate authority to D1 first.",
+        );
+    }
+    const prepared = await this.provisionConnection(viewer.eventId, input, {
+      connectionId: existing?.id,
+      authoritativeConfiguration,
+    });
+    const { connectionId, encryptedCredentials, configuration } = prepared;
     const operationId = crypto.randomUUID();
     const connectionStatement = existing
       ? this.env.DB.prepare(

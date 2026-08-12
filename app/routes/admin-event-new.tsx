@@ -1,19 +1,29 @@
-import { Copy, ShieldCheck } from "lucide-react";
+import { Database, Plus, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
-import type { Route } from "./+types/admin-event-clone";
-import { isAirtableRepositoryError } from "~/modules/airtable/airtable-room-repository.server";
+import type { Route } from "./+types/admin-event-new";
+import {
+  EventCreationService,
+  EventCreationSlugConflictError,
+} from "~/modules/events/event-creation-service.server";
 import { EventRepositoryProvisioningError } from "~/modules/events/event-repository-provisioning.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import {
-  EventCloneService,
-  EventCloneSlugConflictError,
-} from "~/platform/operations/event-clone-service.server";
 
-async function administrator(
+type ActionResponse = {
+  ok: boolean;
+  committed: boolean;
+  message: string;
+  result: {
+    eventId: string;
+    operationId: string;
+    repositoryProvider: "d1" | "airtable";
+  } | null;
+};
+
+async function organisationAdministrator(
   request: Request,
   context: Route.LoaderArgs["context"],
 ) {
@@ -26,31 +36,30 @@ async function administrator(
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const { env, viewer } = await administrator(request, context);
-  return new EventCloneService(env).prepare(viewer);
+  const { env, viewer } = await organisationAdministrator(request, context);
+  return new EventCreationService(env).prepare(viewer);
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  if (request.method !== "POST") {
+  if (request.method !== "POST")
     throw new Response("Method not allowed", {
       status: 405,
       headers: { allow: "POST" },
     });
-  }
-  const { env, viewer } = await administrator(request, context);
+  const { env, viewer } = await organisationAdministrator(request, context);
   const form = await request.formData();
-  if (form.get("intent") !== "clone") {
-    return data(
+  if (form.get("intent") !== "create")
+    return data<ActionResponse>(
       {
-        ok: false as const,
-        message: "Unsupported event clone action.",
+        ok: false,
+        committed: false,
+        message: "Unsupported event creation action.",
         result: null,
       },
       { status: 400 },
     );
-  }
   try {
-    const result = await new EventCloneService(env).clone(viewer, {
+    const result = await new EventCreationService(env).create(viewer, {
       name: form.get("name"),
       slug: form.get("slug"),
       timezone: form.get("timezone"),
@@ -61,56 +70,54 @@ export async function action({ request, context }: Route.ActionArgs) {
       baseId: form.get("baseId") ?? undefined,
       tableName: form.get("tableName") ?? undefined,
     });
-    return data({
-      ok: true as const,
-      message: `Event created from the current configuration with ${result.repositoryProvider === "airtable" ? "Airtable" : "D1"} authority. Operational records, unrelated provider credentials, sender identities and publication state were not copied.`,
+    return data<ActionResponse>({
+      ok: true,
+      committed: true,
+      message: `Blank event created with ${result.repositoryProvider === "airtable" ? "Airtable" : "D1"} as its event-data authority.`,
       result,
     });
   } catch (error) {
-    if (error instanceof EventRepositoryProvisioningError) {
-      return data(
+    if (error instanceof EventRepositoryProvisioningError)
+      return data<ActionResponse>(
         {
-          ok: false as const,
-          committed: true as const,
+          ok: false,
+          committed: true,
           message: error.message,
           result: {
             eventId: error.eventId,
             operationId: error.operationId,
-            repositoryProvider: "d1" as const,
+            repositoryProvider: "d1",
           },
         },
         { status: error.failureKind === "provider" ? 502 : 500 },
       );
-    }
-    if (error instanceof EventCloneSlugConflictError) {
-      return data(
-        { ok: false as const, message: error.message, result: null },
+    if (error instanceof EventCreationSlugConflictError)
+      return data<ActionResponse>(
+        {
+          ok: false,
+          committed: false,
+          message: error.message,
+          result: null,
+        },
         { status: 409 },
       );
-    }
-    if (error instanceof ZodError) {
-      return data(
+    if (error instanceof ZodError)
+      return data<ActionResponse>(
         {
-          ok: false as const,
-          message: error.issues[0]?.message ?? "Review the clone settings.",
+          ok: false,
+          committed: false,
+          message: error.issues[0]?.message ?? "Review the event settings.",
           result: null,
         },
         { status: 422 },
       );
-    }
-    if (isAirtableRepositoryError(error)) {
-      return data(
-        { ok: false as const, message: error.message, result: null },
-        { status: 422 },
-      );
-    }
     throw error;
   }
 }
 
-export const meta = () => [{ title: "Clone event · Program Cue" }];
+export const meta = () => [{ title: "New event · Program Cue" }];
 
-export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
+export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [repositoryProvider, setRepositoryProvider] = useState<
@@ -120,11 +127,11 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
     <>
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Reusable event template</span>
-          <h1>Clone {loaderData.source.name}</h1>
+          <span className="pc-page-eyebrow">Blank event workspace</span>
+          <h1>New event</h1>
           <p>
-            Create a clean event with the current branding, rooms, tracks,
-            policies and reusable form, evaluation, task and email templates.
+            Start with Program Cue defaults and no rooms, tracks, forms,
+            submissions, schedules or reusable templates.
           </p>
         </div>
         <Link className="btn" to="/admin/event">
@@ -136,26 +143,36 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
           className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
           role={actionData.ok ? "status" : "alert"}
         >
-          <Copy aria-hidden size={18} />
+          <Plus aria-hidden size={18} />
           <div className="pc-status-notice-copy">
             <strong>
               {actionData.ok
-                ? "Clone complete"
-                : actionData.result
-                  ? "Clone created with provider setup incomplete"
-                  : "Clone blocked"}
+                ? "Event created"
+                : actionData.committed
+                  ? "Event created with provider setup incomplete"
+                  : "Event creation blocked"}
             </strong>
             <div>{actionData.message}</div>
             {actionData.result ? (
               <>
                 <p>
-                  <code>{actionData.result.eventId}</code> ·{" "}
-                  <Link
-                    to={`/admin/operations?operation=${encodeURIComponent(actionData.result.operationId)}`}
-                  >
-                    view clone audit
-                  </Link>
+                  <code>{actionData.result.eventId}</code>
                 </p>
+                <Form method="post" action="/events/select">
+                  <input
+                    type="hidden"
+                    name="eventId"
+                    value={actionData.result.eventId}
+                  />
+                  <input
+                    type="hidden"
+                    name="returnTo"
+                    value={`/admin/operations?operation=${encodeURIComponent(actionData.result.operationId)}`}
+                  />
+                  <button className="btn small" type="submit">
+                    View creation operation
+                  </button>
+                </Form>
                 <Form method="post" action="/events/select">
                   <input
                     type="hidden"
@@ -164,7 +181,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                   />
                   <input type="hidden" name="returnTo" value="/admin/event" />
                   <button className="btn small" type="submit">
-                    Open cloned event
+                    Open new event
                   </button>
                 </Form>
               </>
@@ -175,8 +192,8 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
       <div className="grid grid-2">
         <section className="card pad">
           <div className="card-title">
-            <h2>New event identity</h2>
-            <Copy aria-hidden size={19} />
+            <h2>Event identity</h2>
+            <Plus aria-hidden size={19} />
           </div>
           <Form
             method="post"
@@ -184,29 +201,22 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
             onSubmit={(event) => {
               if (
                 !window.confirm(
-                  `Create this clean event from the current configuration and templates using ${repositoryProvider === "airtable" ? "Airtable" : "D1"}?`,
+                  `Create this blank event using ${repositoryProvider === "airtable" ? "Airtable" : "D1"}?`,
                 )
               )
                 event.preventDefault();
             }}
           >
-            <input type="hidden" name="intent" value="clone" />
+            <input type="hidden" name="intent" value="create" />
             <label className="label">
               Event name
-              <input
-                className="field"
-                name="name"
-                defaultValue={loaderData.defaults.name}
-                required
-                maxLength={160}
-              />
+              <input className="field" name="name" required maxLength={160} />
             </label>
             <label className="label">
               Public slug
               <input
                 className="field"
                 name="slug"
-                defaultValue={loaderData.defaults.slug}
                 required
                 pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
                 maxLength={120}
@@ -217,7 +227,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
               <input
                 className="field"
                 name="timezone"
-                defaultValue={loaderData.defaults.timezone}
+                defaultValue={loaderData.timezone}
                 required
               />
             </label>
@@ -228,7 +238,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                   className="field"
                   type="date"
                   name="startDate"
-                  defaultValue={loaderData.defaults.startDate}
+                  defaultValue={loaderData.startDate}
                   required
                 />
               </label>
@@ -238,7 +248,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                   className="field"
                   type="date"
                   name="endDate"
-                  defaultValue={loaderData.defaults.endDate}
+                  defaultValue={loaderData.endDate}
                   required
                 />
               </label>
@@ -256,7 +266,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                 <span>
                   <strong>Cloudflare D1 — recommended</strong>
                   <small>
-                    Clone all reusable configuration transactionally.
+                    Transactional default with no external credentials.
                   </small>
                 </span>
               </label>
@@ -271,8 +281,8 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                 <span>
                   <strong>Airtable</strong>
                   <small>
-                    Save the D1 clone first, then validate and synchronize its
-                    managed schema before activating Airtable authority.
+                    Saves the event safely in D1, then validates, synchronizes
+                    and activates the managed Airtable schema.
                   </small>
                 </span>
               </label>
@@ -306,7 +316,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                   <input
                     className="field"
                     name="tableName"
-                    defaultValue={loaderData.defaults.airtableTableName}
+                    defaultValue={loaderData.airtableTableName}
                     required
                     maxLength={100}
                   />
@@ -316,7 +326,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
               <input
                 type="hidden"
                 name="tableName"
-                value={loaderData.defaults.airtableTableName}
+                value={loaderData.airtableTableName}
               />
             )}
             <button
@@ -324,32 +334,39 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
               type="submit"
               disabled={navigation.state !== "idle"}
             >
-              <Copy aria-hidden size={14} /> Create clean clone
+              <Plus aria-hidden size={14} /> Create blank event
             </button>
           </Form>
         </section>
         <section className="card pad">
           <div className="card-title">
-            <h2>Copy boundary</h2>
+            <h2>Starting state</h2>
             <ShieldCheck aria-hidden size={19} />
           </div>
-          <h3>Copied as editable templates</h3>
+          <h3>Included</h3>
           <p>
-            Branding and access defaults, schedule conflict policy, rooms,
-            tracks, form versions, evaluation rounds and criteria, task
-            templates and dependencies, email templates and disabled triggers.
+            Canonical session formats, private-file limits, schedule conflict
+            policy, secure submission defaults and complete creation audit.
           </p>
-          <h3>Intentionally excluded</h3>
+          <h3>Empty by design</h3>
           <p>
-            People and memberships other than the creator, submissions, reviews
-            and decisions, sessions and schedules, task instances, files,
-            messages, calendar invitations, API keys, provider credentials,
-            webhooks and publication state.
+            Rooms, tracks, forms, evaluation plans, task templates,
+            communication templates, people, submissions, sessions, files and
+            publication state.
           </p>
+          <div className="pc-status-notice mt">
+            <Database aria-hidden size={18} />
+            <div className="pc-status-notice-copy">
+              <strong>Repository choice is consequential</strong>
+              <div>
+                Changing it later requires the existing preview, reconciliation
+                and confirmation workflow.
+              </div>
+            </div>
+          </div>
           <p className="help">
-            Fixed deadlines, form close dates and evaluation round windows are
-            cleared so historical dates cannot silently carry into the new
-            event.
+            To reuse configuration instead, return to the event menu and choose
+            Clone current event.
           </p>
         </section>
       </div>

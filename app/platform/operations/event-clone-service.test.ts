@@ -14,6 +14,8 @@ import {
   parseEventFilePolicy,
 } from "~/modules/files/file-policy";
 import { TaskService } from "~/modules/tasks/task-service.server";
+import type { PreparedAirtableRepositoryConnection } from "~/modules/airtable/airtable-room-repository.server";
+import { EventRepositoryProvisioningService } from "~/modules/events/event-repository-provisioning.server";
 import {
   EventCloneService,
   EventCloneSlugConflictError,
@@ -28,6 +30,29 @@ const viewer: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+
+function preparedConnection(): PreparedAirtableRepositoryConnection {
+  return {
+    connectionId: crypto.randomUUID(),
+    encryptedCredentials: '{"version":1,"iv":"test","ciphertext":"test"}',
+    configuration: {
+      baseId: "app12345678901234",
+      schemaVersion: 4,
+      tables:
+        {} as PreparedAirtableRepositoryConnection["configuration"]["tables"],
+      authoritativeEntities: [
+        "rooms",
+        "event_configuration",
+        "forms",
+        "submissions",
+        "evaluations",
+        "sessions",
+        "tasks",
+        "published_programme",
+      ],
+    },
+  };
+}
 
 describe("event cloning", () => {
   beforeEach(async () => {
@@ -194,6 +219,7 @@ describe("event cloning", () => {
       timezone: "America/Toronto",
       startDate: "2027-05-20",
       endDate: "2027-05-22",
+      repositoryProvider: "d1",
     });
 
     expect(cloned.copied).toMatchObject({
@@ -345,6 +371,7 @@ describe("event cloning", () => {
       timezone: "UTC",
       startDate: "2027-08-01",
       endDate: "2027-08-02",
+      repositoryProvider: "d1",
     });
 
     expect(cloned.copied.rooms).toBe(active?.count);
@@ -353,6 +380,123 @@ describe("event cloning", () => {
         "SELECT id FROM rooms WHERE event_id = ? AND name = 'Former venue'",
       )
         .bind(cloned.eventId)
+        .first(),
+    ).toBeNull();
+  });
+
+  it("can activate Airtable authority after cloned configuration reconciles", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const prepared = preparedConnection();
+    const provisioning = new EventRepositoryProvisioningService(testEnv, {
+      rooms: {
+        provisionForEvent: async (_viewer, _eventId, connection) => {
+          expect(connection).toEqual({
+            personalAccessToken: "pat-test-token-at-least-twenty",
+            baseId: "app12345678901234",
+            tableName: "Program Cue Rooms",
+          });
+          return prepared;
+        },
+        replaceRooms: async () => ({ rooms: [] }) as never,
+      },
+      eventData: {
+        synchronizeFromD1: async () => ({
+          runId: "clone-airtable-sync",
+          idempotent: false,
+        }),
+      },
+    });
+    const token = crypto.randomUUID().slice(0, 8);
+
+    const cloned = await new EventCloneService(testEnv, {
+      provisioning,
+    }).clone(viewer, {
+      name: `Airtable clone ${token}`,
+      slug: `airtable-clone-${token}`,
+      timezone: "UTC",
+      startDate: "2027-08-01",
+      endDate: "2027-08-02",
+      repositoryProvider: "airtable",
+      personalAccessToken: "pat-test-token-at-least-twenty",
+      baseId: "app12345678901234",
+    });
+
+    expect(cloned.repositoryProvider).toBe("airtable");
+    expect(
+      await env.DB.prepare(
+        "SELECT repository_provider AS provider FROM events WHERE id = ?",
+      )
+        .bind(cloned.eventId)
+        .first(),
+    ).toEqual({ provider: "airtable" });
+    expect(
+      await env.DB.prepare("SELECT status FROM operation_jobs WHERE id = ?")
+        .bind(cloned.operationId)
+        .first(),
+    ).toEqual({ status: "completed" });
+  });
+
+  it("validates Airtable room projection data before committing the clone", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await testEnv.DB.prepare(
+      `UPDATE rooms SET resources_json = '[1]'
+        WHERE id = (
+          SELECT id FROM rooms WHERE event_id = ? AND status = 'active' LIMIT 1
+        )`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    let providerCalled = false;
+    const slug = `invalid-airtable-clone-${crypto.randomUUID().slice(0, 8)}`;
+
+    await expect(
+      new EventCloneService(testEnv, {
+        provisioning: {
+          provisionAirtable: async () => {
+            providerCalled = true;
+            throw new Error("provider should not be called");
+          },
+        },
+      }).clone(viewer, {
+        name: "Invalid Airtable clone",
+        slug,
+        timezone: "UTC",
+        startDate: "2027-08-01",
+        endDate: "2027-08-02",
+        repositoryProvider: "airtable",
+        personalAccessToken: "pat-test-token-at-least-twenty",
+        baseId: "app12345678901234",
+        tableName: "Program Cue Rooms",
+      }),
+    ).rejects.toThrow("Room 1 contains invalid resource configuration.");
+    expect(providerCalled).toBe(false);
+    expect(
+      await testEnv.DB.prepare("SELECT 1 FROM events WHERE slug = ?")
+        .bind(slug)
+        .first(),
+    ).toBeNull();
+  });
+
+  it("rejects malformed Airtable credentials before committing the clone", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const slug = `invalid-airtable-credentials-${crypto.randomUUID().slice(0, 8)}`;
+
+    await expect(
+      new EventCloneService(testEnv).clone(viewer, {
+        name: "Invalid Airtable credentials clone",
+        slug,
+        timezone: "UTC",
+        startDate: "2027-08-01",
+        endDate: "2027-08-02",
+        repositoryProvider: "airtable",
+        personalAccessToken: "short",
+        baseId: "not-a-base",
+        tableName: "Program Cue Rooms",
+      }),
+    ).rejects.toThrow("Enter a valid Airtable personal access token.");
+    expect(
+      await testEnv.DB.prepare("SELECT 1 FROM events WHERE slug = ?")
+        .bind(slug)
         .first(),
     ).toBeNull();
   });
@@ -394,6 +538,7 @@ describe("event cloning", () => {
           timezone: "UTC",
           startDate: "2027-01-01",
           endDate: "2027-01-02",
+          repositoryProvider: "d1",
         },
       ),
     ).rejects.toMatchObject({ status: 403 });
@@ -444,6 +589,7 @@ describe("event cloning", () => {
       timezone: "UTC",
       startDate: "2027-07-01",
       endDate: "2027-07-02",
+      repositoryProvider: "d1",
     });
 
     const routing = await env.DB.prepare(
@@ -504,6 +650,7 @@ describe("event cloning", () => {
       timezone: "UTC",
       startDate: "2027-06-01",
       endDate: "2027-06-02",
+      repositoryProvider: "d1",
     });
 
     expect(
@@ -539,6 +686,7 @@ describe("event cloning", () => {
           timezone: "UTC",
           startDate: "2027-01-01",
           endDate: "2027-01-02",
+          repositoryProvider: "d1",
         },
       ),
     ).rejects.toBeInstanceOf(EventCloneSlugConflictError);
@@ -560,6 +708,7 @@ describe("event cloning", () => {
           timezone: "UTC",
           startDate: "2027-01-01",
           endDate: "2027-01-02",
+          repositoryProvider: "d1",
         },
       ),
     ).rejects.toBeInstanceOf(EventConfigurationDataError);
@@ -588,6 +737,7 @@ describe("event cloning", () => {
       timezone: "America/Toronto",
       startDate: "2027-05-20",
       endDate: "2027-05-22",
+      repositoryProvider: "d1",
     });
     const clonedViewer = { ...viewer, eventId: cloned.eventId };
     const before = await testEnv.DB.prepare(

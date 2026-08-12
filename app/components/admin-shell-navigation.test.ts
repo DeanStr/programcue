@@ -19,6 +19,10 @@ describe("administrator navigation context", () => {
       { label: "Event Setup", href: "/admin/event" },
       { label: "Clone event", href: null },
     ]);
+    expect(adminPageBreadcrumbs("/admin/events/new")).toEqual([
+      { label: "Event Setup", href: "/admin/event" },
+      { label: "New event", href: null },
+    ]);
     expect(adminPageBreadcrumbs("/admin/speakers/person-demo-speaker")).toEqual(
       [
         { label: "Speakers", href: "/admin/speakers" },

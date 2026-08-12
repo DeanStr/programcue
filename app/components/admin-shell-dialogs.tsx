@@ -243,16 +243,28 @@ export function AdminAuxiliaryDialogs({
                   </p>
                 </Link>
                 {viewer.canCreateEvents ? (
-                  <Link
-                    className="card pad"
-                    to="/admin/events/clone"
-                    onClick={closeDialog}
-                  >
-                    <strong>Clone event</strong>
-                    <p className="subtle">
-                      Create a clean event from these templates.
-                    </p>
-                  </Link>
+                  <>
+                    <Link
+                      className="card pad"
+                      to="/admin/events/new"
+                      onClick={closeDialog}
+                    >
+                      <strong>New event</strong>
+                      <p className="subtle">
+                        Start with Program Cue defaults and no templates.
+                      </p>
+                    </Link>
+                    <Link
+                      className="card pad"
+                      to="/admin/events/clone"
+                      onClick={closeDialog}
+                    >
+                      <strong>Clone current event</strong>
+                      <p className="subtle">
+                        Reuse this event’s configuration and templates.
+                      </p>
+                    </Link>
+                  </>
                 ) : null}
               </div>
             </>

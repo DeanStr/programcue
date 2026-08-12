@@ -1,0 +1,321 @@
+import { AirtableEventDataRepository } from "~/modules/airtable/airtable-event-data-repository.server";
+import {
+  AIRTABLE_REPOSITORY_PROVIDER,
+  AirtableRoomRepository,
+  isAirtableRepositoryError,
+  type PreparedAirtableRepositoryConnection,
+} from "~/modules/airtable/airtable-room-repository.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+
+export type AirtableProvisioningRoom = {
+  id: string;
+  name: string;
+  building?: string | null;
+  level?: string | null;
+  capacity: number;
+  resources: string[];
+  position: number;
+};
+
+type EventRepositoryProvisioningDependencies = {
+  rooms?: Pick<AirtableRoomRepository, "provisionForEvent" | "replaceRooms">;
+  eventData?: Pick<AirtableEventDataRepository, "synchronizeFromD1">;
+};
+
+export class EventRepositoryProvisioningError extends Error {
+  readonly committed = true;
+
+  constructor(
+    message: string,
+    readonly eventId: string,
+    readonly operationId: string,
+    readonly failureKind: "provider" | "internal",
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "EventRepositoryProvisioningError";
+  }
+}
+
+function boundedError(error: unknown) {
+  return (error instanceof Error ? error.message : String(error)).slice(
+    0,
+    2_000,
+  );
+}
+
+export class EventRepositoryProvisioningService {
+  private readonly rooms;
+  private readonly eventData;
+
+  constructor(
+    private readonly env: CloudflareEnvironment,
+    dependencies: EventRepositoryProvisioningDependencies = {},
+  ) {
+    this.rooms = dependencies.rooms ?? new AirtableRoomRepository(env);
+    this.eventData =
+      dependencies.eventData ??
+      new AirtableEventDataRepository(env, {
+        rooms: this.rooms as AirtableRoomRepository,
+      });
+  }
+
+  private connectionInsert(
+    viewer: Viewer,
+    eventId: string,
+    operationId: string,
+    prepared: PreparedAirtableRepositoryConnection,
+  ) {
+    return this.env.DB.prepare(
+      `INSERT INTO integration_connections (
+         id, organisation_id, event_id, provider, status, direction,
+         conflict_policy, encrypted_credentials, configuration_json,
+         revision, last_operation_id, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, 'connected', 'bidirectional',
+                 'single_authority_no_dual_write', ?, ?, 1, ?,
+                 unixepoch(), unixepoch())`,
+    ).bind(
+      prepared.connectionId,
+      viewer.organisationId,
+      eventId,
+      AIRTABLE_REPOSITORY_PROVIDER,
+      prepared.encryptedCredentials,
+      JSON.stringify(prepared.configuration),
+      operationId,
+    );
+  }
+
+  private connectionAuditInsert(
+    viewer: Viewer,
+    eventId: string,
+    operationId: string,
+    prepared: PreparedAirtableRepositoryConnection,
+  ) {
+    return this.env.DB.prepare(
+      `INSERT INTO audit_events (
+         id, organisation_id, event_id, actor_person_id, action,
+         entity_type, entity_id, correlation_id, metadata_json, created_at
+       ) VALUES (?, ?, ?, ?, 'airtable.repository.configured',
+                 'integration_connection', ?, ?, ?, unixepoch())`,
+    ).bind(
+      crypto.randomUUID(),
+      viewer.organisationId,
+      eventId,
+      viewer.personId,
+      prepared.connectionId,
+      operationId,
+      JSON.stringify({
+        baseId: prepared.configuration.baseId,
+        tables: prepared.configuration.tables,
+        schemaVersion: prepared.configuration.schemaVersion,
+        authoritativeEntities: prepared.configuration.authoritativeEntities,
+      }),
+    );
+  }
+
+  async provisionAirtable(
+    viewer: Viewer,
+    eventId: string,
+    operationId: string,
+    workflow: "blank_event_creation" | "event_clone",
+    rawConnection: unknown,
+    rooms: AirtableProvisioningRoom[],
+    result: Record<string, unknown> = {},
+  ) {
+    try {
+      const prepared = await this.rooms.provisionForEvent(
+        viewer,
+        eventId,
+        rawConnection,
+      );
+      const connectionResults = await this.env.DB.batch([
+        this.connectionInsert(viewer, eventId, operationId, prepared),
+        this.connectionAuditInsert(viewer, eventId, operationId, prepared),
+      ]);
+      if (
+        (connectionResults[0]?.meta.changes ?? 0) !== 1 ||
+        (connectionResults[1]?.meta.changes ?? 0) !== 1
+      )
+        throw new Error(
+          "The validated Airtable connection could not be recorded completely.",
+        );
+
+      await this.rooms.replaceRooms(viewer.organisationId, eventId, rooms, 1);
+      const synchronization = await this.eventData.synchronizeFromD1(
+        {
+          organisationId: viewer.organisationId,
+          eventId,
+          personId: viewer.personId,
+        },
+        {
+          idempotencyKey: `event-provisioning:${operationId}`,
+          reason: workflow,
+        },
+      );
+      const statements: D1PreparedStatement[] = [
+        this.env.DB.prepare(
+          `UPDATE events
+              SET repository_provider = 'airtable',
+                  repository_locked_at = COALESCE(repository_locked_at, unixepoch()),
+                  revision = revision + 1, last_operation_id = ?,
+                  last_updated_by_person_id = ?, updated_at = unixepoch()
+            WHERE id = ? AND organisation_id = ?
+              AND repository_provider = 'd1' AND last_operation_id = ?
+              AND EXISTS (
+                SELECT 1 FROM operation_jobs operation
+                 WHERE operation.id = ?
+                   AND operation.organisation_id = ?
+                   AND operation.status = 'running'
+                   AND operation.type IN ('event.create','event.clone')
+                   AND json_extract(operation.payload_json, '$.targetEventId') = ?
+              )`,
+        ).bind(
+          operationId,
+          viewer.personId,
+          eventId,
+          viewer.organisationId,
+          operationId,
+          operationId,
+          viewer.organisationId,
+          eventId,
+        ),
+        this.env.DB.prepare(
+          `UPDATE operation_jobs
+              SET status = 'completed', progress_completed = progress_total,
+                  result_json = ?, completed_at = unixepoch(), updated_at = unixepoch()
+            WHERE id = ? AND organisation_id = ?
+              AND status = 'running'
+              AND type IN ('event.create','event.clone')
+              AND json_extract(payload_json, '$.targetEventId') = ?
+              AND EXISTS (
+                SELECT 1 FROM events event
+                 WHERE event.id = ? AND event.organisation_id = ?
+                   AND event.repository_provider = 'airtable'
+                   AND event.last_operation_id = ?
+              )`,
+        ).bind(
+          JSON.stringify({
+            ...result,
+            targetEventId: eventId,
+            repositoryProvider: "airtable",
+            synchronizationRunId: synchronization.runId,
+          }),
+          operationId,
+          viewer.organisationId,
+          eventId,
+          eventId,
+          viewer.organisationId,
+          operationId,
+        ),
+        this.env.DB.prepare(
+          `INSERT INTO audit_events (
+             id, organisation_id, event_id, actor_person_id, action,
+             entity_type, entity_id, correlation_id, metadata_json, created_at
+           ) SELECT ?, ?, ?, ?, 'event.repository.selected',
+                    'event', ?, ?, ?, unixepoch()
+              WHERE EXISTS (
+                SELECT 1
+                  FROM events event
+                  JOIN operation_jobs operation ON operation.id = ?
+                 WHERE event.id = ? AND event.organisation_id = ?
+                   AND event.repository_provider = 'airtable'
+                   AND event.last_operation_id = ?
+                   AND operation.organisation_id = ?
+                   AND operation.status = 'completed'
+                   AND operation.type IN ('event.create','event.clone')
+                   AND json_extract(operation.payload_json, '$.targetEventId') = ?
+              )`,
+        ).bind(
+          crypto.randomUUID(),
+          viewer.organisationId,
+          eventId,
+          viewer.personId,
+          eventId,
+          operationId,
+          JSON.stringify({
+            repositoryProvider: "airtable",
+            synchronizationRunId: synchronization.runId,
+          }),
+          operationId,
+          eventId,
+          viewer.organisationId,
+          operationId,
+          viewer.organisationId,
+          eventId,
+        ),
+      ];
+      const results = await this.env.DB.batch(statements);
+      if (results.some((result) => (result.meta.changes ?? 0) !== 1))
+        throw new Error(
+          "Airtable synchronized, but the event authority switch did not commit completely.",
+        );
+      return synchronization;
+    } catch (error) {
+      const message = boundedError(error);
+      const failureKind = isAirtableRepositoryError(error)
+        ? "provider"
+        : "internal";
+      await this.env.DB.batch([
+        this.env.DB.prepare(
+          `UPDATE operation_jobs
+              SET status = 'failed', progress_failed = progress_total,
+                  last_error = ?, completed_at = unixepoch(), updated_at = unixepoch()
+            WHERE id = ? AND organisation_id = ?
+              AND status = 'running'
+              AND type IN ('event.create','event.clone')
+              AND json_extract(payload_json, '$.targetEventId') = ?`,
+        ).bind(message, operationId, viewer.organisationId, eventId),
+        this.env.DB.prepare(
+          `UPDATE integration_connections
+              SET status = 'needs_attention', updated_at = unixepoch()
+            WHERE organisation_id = ? AND event_id = ?
+              AND provider = ? AND last_operation_id = ?
+              AND status = 'connected'`,
+        ).bind(
+          viewer.organisationId,
+          eventId,
+          AIRTABLE_REPOSITORY_PROVIDER,
+          operationId,
+        ),
+        this.env.DB.prepare(
+          `INSERT INTO audit_events (
+             id, organisation_id, event_id, actor_person_id, action,
+             entity_type, entity_id, correlation_id, metadata_json, created_at
+           ) SELECT ?, ?, ?, ?, 'event.repository.provisioning_failed',
+                    'event', ?, ?, ?, unixepoch()
+              WHERE EXISTS (
+                SELECT 1 FROM operation_jobs
+                 WHERE id = ? AND organisation_id = ? AND status = 'failed'
+                   AND type IN ('event.create','event.clone')
+                   AND json_extract(payload_json, '$.targetEventId') = ?
+              )`,
+        ).bind(
+          crypto.randomUUID(),
+          viewer.organisationId,
+          eventId,
+          viewer.personId,
+          eventId,
+          operationId,
+          JSON.stringify({
+            operationId,
+            requestedRepositoryProvider: "airtable",
+            failureKind,
+            errorName: error instanceof Error ? error.name : "UnknownError",
+          }),
+          operationId,
+          viewer.organisationId,
+          eventId,
+        ),
+      ]);
+      throw new EventRepositoryProvisioningError(
+        failureKind === "provider"
+          ? "The event was saved with D1 authority, but Airtable provisioning did not complete. Review the failed operation, then reconfigure and migrate the repository from Event Setup."
+          : "The event was saved with D1 authority, but repository finalization failed unexpectedly. Review the failed operation before continuing from Event Setup.",
+        eventId,
+        operationId,
+        failureKind,
+        { cause: error },
+      );
+    }
+  }
+}

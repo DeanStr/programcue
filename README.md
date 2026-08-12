@@ -48,6 +48,7 @@ Useful routes:
 - Evaluator guide and complete demo reset: `http://127.0.0.1:5173/demo`
 - Command Centre: `http://127.0.0.1:5173/admin/command`
 - Event Setup: `http://127.0.0.1:5173/admin/event`
+- New blank event: `http://127.0.0.1:5173/admin/events/new`
 - Submissions and forms: `http://127.0.0.1:5173/admin/submissions`
 - Review administration: `http://127.0.0.1:5173/admin/review`
 - Schedule: `http://127.0.0.1:5173/admin/schedule`

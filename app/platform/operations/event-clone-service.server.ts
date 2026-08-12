@@ -1,8 +1,16 @@
 import { z } from "zod";
 
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import {
+  AIRTABLE_ROOMS_TABLE,
+  airtableConnectionInputSchema,
+} from "~/modules/airtable/airtable-schema";
 import { communicationTriggerConfigurationSchema } from "~/modules/communications/communication-schema";
 import { parseSessionFormatsConfiguration } from "~/modules/events/event-configuration";
+import {
+  EventRepositoryProvisioningService,
+  type AirtableProvisioningRoom,
+} from "~/modules/events/event-repository-provisioning.server";
 import { timezoneSchema } from "~/modules/events/event-schema";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
 import { routingSchema } from "~/modules/submissions/submission-schema";
@@ -25,11 +33,32 @@ const cloneEventSchema = z
     timezone: timezoneSchema,
     startDate: z.iso.date(),
     endDate: z.iso.date(),
+    repositoryProvider: z.enum(["d1", "airtable"]),
+    personalAccessToken: z.string().trim().optional(),
+    baseId: z.string().trim().optional(),
+    tableName: z.string().trim().optional(),
   })
   .strict()
-  .refine((value) => value.endDate >= value.startDate, {
-    path: ["endDate"],
-    message: "End date cannot be before the start date.",
+  .superRefine((value, context) => {
+    if (value.endDate < value.startDate)
+      context.addIssue({
+        code: "custom",
+        path: ["endDate"],
+        message: "End date cannot be before the start date.",
+      });
+    if (value.repositoryProvider !== "airtable") return;
+    const connection = airtableConnectionInputSchema.safeParse({
+      personalAccessToken: value.personalAccessToken,
+      baseId: value.baseId,
+      tableName: value.tableName,
+    });
+    if (!connection.success)
+      for (const issue of connection.error.issues)
+        context.addIssue({
+          code: "custom",
+          path: issue.path,
+          message: issue.message,
+        });
   });
 
 function startEpoch(date: string) {
@@ -185,6 +214,7 @@ export class EventCloneSlugConflictError extends Error {
 export type EventCloneSummary = {
   eventId: string;
   operationId: string;
+  repositoryProvider: "d1" | "airtable";
   copied: {
     rooms: number;
     tracks: number;
@@ -213,18 +243,32 @@ export type EventClonePreparation = {
     timezone: string;
     startDate: string;
     endDate: string;
+    airtableTableName: string;
   };
 };
 
 export class EventCloneService {
   private readonly airtable: AirtableProviderBoundary;
+  private readonly provisioning: Pick<
+    EventRepositoryProvisioningService,
+    "provisionAirtable"
+  >;
 
   constructor(
     private readonly env: CloudflareEnvironment,
-    dependencies: { airtable?: AirtableProviderBoundary } = {},
+    dependencies: {
+      airtable?: AirtableProviderBoundary;
+      provisioning?: Pick<
+        EventRepositoryProvisioningService,
+        "provisionAirtable"
+      >;
+    } = {},
   ) {
     this.airtable =
       dependencies.airtable ?? new AirtableProviderBoundary(this.env);
+    this.provisioning =
+      dependencies.provisioning ??
+      new EventRepositoryProvisioningService(this.env);
   }
 
   private async assertOrganisationAuthority(viewer: Viewer) {
@@ -266,20 +310,29 @@ export class EventCloneService {
         timezone: source.timezone,
         startDate: nextYear(date(source.startsAt)),
         endDate: nextYear(date(source.endsAt)),
+        airtableTableName: AIRTABLE_ROOMS_TABLE,
       },
     };
   }
 
   async clone(viewer: Viewer, rawInput: unknown): Promise<EventCloneSummary> {
     await this.assertOrganisationAuthority(viewer);
-    await this.airtable.assertReadable(viewer);
     const input = cloneEventSchema.parse(rawInput);
+    const airtableConnection =
+      input.repositoryProvider === "airtable"
+        ? airtableConnectionInputSchema.parse({
+            personalAccessToken: input.personalAccessToken,
+            baseId: input.baseId,
+            tableName: input.tableName,
+          })
+        : null;
     const conflict = await this.env.DB.prepare(
       "SELECT 1 FROM events WHERE slug = ? LIMIT 1",
     )
       .bind(input.slug)
       .first();
     if (conflict) throw new EventCloneSlugConflictError();
+    await this.airtable.assertReadable(viewer);
 
     const [
       source,
@@ -320,10 +373,11 @@ export class EventCloneService {
           filePolicyJson: string;
         }>(),
       this.env.DB.prepare(
-        "SELECT name, building, level, capacity, resources_json AS resourcesJson, position, status FROM rooms WHERE event_id = ? AND status = 'active' ORDER BY position, id",
+        "SELECT id, name, building, level, capacity, resources_json AS resourcesJson, position, status FROM rooms WHERE event_id = ? AND status = 'active' ORDER BY position, id",
       )
         .bind(viewer.eventId)
         .all<{
+          id: string;
           name: string;
           building: string | null;
           level: string | null;
@@ -518,9 +572,39 @@ export class EventCloneService {
     const eventId = crypto.randomUUID();
     const operationId = crypto.randomUUID();
     const correlationId = crypto.randomUUID();
+    const pendingAirtable = airtableConnection !== null;
     const formIds = new Map(
       forms.results.map((row) => [row.id, crypto.randomUUID()]),
     );
+    const roomIds = new Map(
+      rooms.results.map((row) => [row.id, crypto.randomUUID()]),
+    );
+    const clonedRooms: AirtableProvisioningRoom[] = pendingAirtable
+      ? rooms.results.map((room, index) => {
+          let resources: unknown;
+          try {
+            resources = JSON.parse(room.resourcesJson);
+          } catch {
+            throw new Error(
+              `Room ${index + 1} contains invalid resource configuration JSON.`,
+            );
+          }
+          const parsedResources = z.array(z.string()).safeParse(resources);
+          if (!parsedResources.success)
+            throw new Error(
+              `Room ${index + 1} contains invalid resource configuration.`,
+            );
+          return {
+            id: roomIds.get(room.id)!,
+            name: room.name,
+            building: room.building,
+            level: room.level,
+            capacity: room.capacity,
+            resources: parsedResources.data,
+            position: room.position,
+          };
+        })
+      : [];
     const trackIds = new Map(
       tracks.results.map((row) => [row.id, crypto.randomUUID()]),
     );
@@ -593,7 +677,7 @@ export class EventCloneService {
         this.env.DB.prepare(
           "INSERT INTO rooms (id,event_id,name,building,level,capacity,resources_json,position,status) VALUES (?,?,?,?,?,?,?,?,?)",
         ).bind(
-          crypto.randomUUID(),
+          roomIds.get(row.id),
           eventId,
           row.name,
           row.building,
@@ -799,7 +883,8 @@ export class EventCloneService {
            correlation_id,status,payload_json,result_json,progress_total,
            progress_completed,progress_failed,cancellable,started_at,completed_at,
            created_at,updated_at
-         ) VALUES (?,?,?,?,'event.clone',?,?,'completed',?,?,?, ?,0,0,unixepoch(),unixepoch(),unixepoch(),unixepoch())`,
+         ) VALUES (?, ?, ?, ?, 'event.clone', ?, ?, ?, ?, ?, ?, ?, 0, 0,
+                   unixepoch(), ?, unixepoch(), unixepoch())`,
       ).bind(
         operationId,
         viewer.organisationId,
@@ -807,14 +892,23 @@ export class EventCloneService {
         viewer.personId,
         `event-clone:${operationId}`,
         correlationId,
+        pendingAirtable ? "running" : "completed",
         JSON.stringify({
           type: "event.clone",
           sourceEventId: viewer.eventId,
           targetEventId: eventId,
+          requestedRepositoryProvider: input.repositoryProvider,
         }),
-        JSON.stringify({ targetEventId: eventId, copied }),
+        pendingAirtable
+          ? null
+          : JSON.stringify({
+              targetEventId: eventId,
+              copied,
+              repositoryProvider: "d1",
+            }),
         recordCount,
-        recordCount,
+        pendingAirtable ? 0 : recordCount,
+        pendingAirtable ? null : Math.floor(Date.now() / 1_000),
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
@@ -835,6 +929,7 @@ export class EventCloneService {
           name: input.name,
           slug: input.slug,
           copied,
+          requestedRepositoryProvider: input.repositoryProvider,
         }),
       ),
       this.env.DB.prepare(
@@ -863,6 +958,22 @@ export class EventCloneService {
       }
       throw error;
     }
-    return { eventId, operationId, copied };
+    if (pendingAirtable) {
+      await this.provisioning.provisionAirtable(
+        viewer,
+        eventId,
+        operationId,
+        "event_clone",
+        airtableConnection,
+        clonedRooms,
+        { copied },
+      );
+    }
+    return {
+      eventId,
+      operationId,
+      copied,
+      repositoryProvider: input.repositoryProvider,
+    };
   }
 }
