@@ -115,7 +115,7 @@ export async function readEventCloneSource(
         decisionRole: string;
       }>(),
     env.DB.prepare(
-      "SELECT r.id, r.plan_id AS planId, r.round_number AS roundNumber, r.name, r.opens_at AS opensAt, r.closes_at AS closesAt, r.advancement_rule_json AS advancementRuleJson FROM evaluation_rounds r JOIN evaluation_plans p ON p.id = r.plan_id AND p.event_id = r.event_id WHERE r.event_id = ? AND r.status <> 'archived' AND p.status <> 'archived' ORDER BY r.plan_id, r.round_number",
+      "SELECT r.id, r.plan_id AS planId, r.round_number AS roundNumber, r.name, r.opens_at AS opensAt, r.closes_at AS closesAt, r.blinded_reviewing AS blindedReviewing, r.scorecard_id AS scorecardId, r.scorecard_version AS scorecardVersion, r.advancement_rule_json AS advancementRuleJson FROM evaluation_rounds r JOIN evaluation_plans p ON p.id = r.plan_id AND p.event_id = r.event_id WHERE r.event_id = ? AND r.status <> 'archived' AND p.status <> 'archived' ORDER BY r.plan_id, r.round_number",
     )
       .bind(viewer.eventId)
       .all<{
@@ -125,10 +125,13 @@ export async function readEventCloneSource(
         name: string;
         opensAt: number | null;
         closesAt: number | null;
+        blindedReviewing: number;
+        scorecardId: string;
+        scorecardVersion: number;
         advancementRuleJson: string;
       }>(),
     env.DB.prepare(
-      "SELECT c.id, c.round_id AS roundId, c.name, c.description, c.input_type AS inputType, c.weight_percent AS weightPercent, c.required, c.position FROM evaluation_criteria c JOIN evaluation_rounds r ON r.id = c.round_id AND r.event_id = c.event_id JOIN evaluation_plans p ON p.id = r.plan_id AND p.event_id = r.event_id WHERE c.event_id = ? AND r.status <> 'archived' AND p.status <> 'archived' ORDER BY c.round_id, c.position",
+      "SELECT c.id, c.round_id AS roundId, c.name, c.description, c.input_type AS inputType, c.options_json AS optionsJson, c.weight_percent AS weightPercent, c.required, c.position FROM evaluation_criteria c JOIN evaluation_rounds r ON r.id = c.round_id AND r.event_id = c.event_id JOIN evaluation_plans p ON p.id = r.plan_id AND p.event_id = r.event_id WHERE c.event_id = ? AND r.status <> 'archived' AND p.status <> 'archived' ORDER BY c.round_id, c.position",
     )
       .bind(viewer.eventId)
       .all<{
@@ -137,6 +140,7 @@ export async function readEventCloneSource(
         name: string;
         description: string | null;
         inputType: string;
+        optionsJson: string;
         weightPercent: number;
         required: number;
         position: number;

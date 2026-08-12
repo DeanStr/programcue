@@ -4,7 +4,17 @@ export const criterionSchema = z.object({
   id: z.string().trim().min(1).max(80),
   name: z.string().trim().min(1, "Criterion name is required.").max(120),
   description: z.string().trim().max(500).default(""),
-  inputType: z.enum(["scale_5", "scale_10", "yes_no", "free_text"]),
+  inputType: z.enum([
+    "scale_5",
+    "scale_10",
+    "yes_no",
+    "free_text",
+    "dropdown",
+  ]),
+  options: z
+    .array(z.string().trim().min(1, "Dropdown options cannot be blank.").max(120))
+    .max(100)
+    .default([]),
   weightPercent: z.coerce.number().int().min(0).max(100),
   required: z.boolean(),
   position: z.coerce.number().int().min(0),
@@ -14,8 +24,12 @@ export const evaluationRoundSchema = z
   .object({
     id: z.string().trim().min(1).max(80),
     name: z.string().trim().min(1, "Round name is required.").max(120),
+    opensAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    closesAt: z.iso.datetime({ offset: true }).nullable().optional(),
     dueAt: z.iso.datetime({ offset: true }).nullable().optional(),
     anonymous: z.boolean().default(false),
+    scorecardId: z.string().trim().min(1).max(120).optional(),
+    scorecardVersion: z.coerce.number().int().positive().default(1),
     criteria: z
       .array(criterionSchema)
       .min(1, "Add at least one criterion.")
@@ -37,6 +51,28 @@ export const evaluationRoundSchema = z
       });
     }
     for (const [index, criterion] of round.criteria.entries()) {
+      if (criterion.inputType === "dropdown") {
+        if (criterion.options.length === 0) {
+          context.addIssue({
+            code: "custom",
+            path: ["criteria", index, "options"],
+            message: "Dropdown criteria need at least one option.",
+          });
+        }
+        if (new Set(criterion.options).size !== criterion.options.length) {
+          context.addIssue({
+            code: "custom",
+            path: ["criteria", index, "options"],
+            message: "Dropdown options must be unique.",
+          });
+        }
+      } else if (criterion.options.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["criteria", index, "options"],
+          message: "Only dropdown criteria can define options.",
+        });
+      }
       if (
         criterion.inputType.startsWith("scale_") &&
         criterion.weightPercent === 0
@@ -62,9 +98,24 @@ export const evaluationRoundSchema = z
         context.addIssue({
           code: "custom",
           path: ["criteria", index, "weightPercent"],
-          message: "Yes/no and free-text criteria must have zero weight.",
+          message:
+            "Yes/no, dropdown and free-text criteria must have zero weight.",
         });
       }
+    }
+    const opensAt = round.opensAt ?? null;
+    const closesAt =
+      round.closesAt !== undefined ? round.closesAt : (round.dueAt ?? null);
+    if (
+      opensAt &&
+      closesAt &&
+      Date.parse(closesAt) <= Date.parse(opensAt)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["closesAt"],
+        message: "The round close date must be after its open date.",
+      });
     }
     if (
       new Set(round.criteria.map((criterion) => criterion.id)).size !==
@@ -99,14 +150,6 @@ export const evaluationPlanSchema = z
         code: "custom",
         path: ["rounds"],
         message: "Round identifiers must be unique.",
-      });
-    }
-    if (new Set(plan.rounds.map((round) => round.anonymous)).size > 1) {
-      context.addIssue({
-        code: "custom",
-        path: ["rounds"],
-        message:
-          "Blinded reviewing applies to the whole evaluation plan, so every round must use the same setting.",
       });
     }
   });
@@ -252,6 +295,24 @@ export const evaluationTeamMemberSchema = z.object({
   operation: z.enum(["add", "remove"]),
 });
 
+export const evaluationRoundReviewerSchema = z
+  .object({
+    roundId: z.string().trim().min(1),
+    personId: z.string().trim().min(1),
+    operation: z.enum(["add", "remove"]),
+    confirmed: z.literal(true).optional(),
+  })
+  .superRefine((input, context) => {
+    if (input.operation === "remove" && input.confirmed !== true) {
+      context.addIssue({
+        code: "custom",
+        path: ["confirmed"],
+        message:
+          "Confirm the round reviewer removal; unfinished assignments will be cancelled.",
+      });
+    }
+  });
+
 export const evaluationMemberInvitationSchema = z
   .object({
     name: z.string().trim().min(1, "Participant name is required.").max(120),
@@ -278,20 +339,46 @@ export const committeeChairAccessSchema = z.object({
   confirmed: z.literal(true),
 });
 
-export const nextRoundSchema = z.object({
-  planId: z.string().trim().min(1),
-  planRevision: z.coerce.number().int().positive(),
-  name: z.string().trim().min(1, "Round name is required.").max(120),
-  dueAt: z.iso.datetime({ offset: true }).nullable().default(null),
-  cloneRoundId: z.string().trim().min(1),
-});
+export const nextRoundSchema = z
+  .object({
+    planId: z.string().trim().min(1),
+    planRevision: z.coerce.number().int().positive(),
+    name: z.string().trim().min(1, "Round name is required.").max(120),
+    opensAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    closesAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    dueAt: z.iso.datetime({ offset: true }).nullable().default(null),
+    anonymous: z.boolean().optional(),
+    scorecardId: z.string().trim().min(1).max(120).nullable().optional(),
+    scorecardVersion: z.coerce.number().int().positive().optional(),
+    cloneRoundId: z.string().trim().min(1),
+  })
+  .superRefine((round, context) => {
+    const closesAt =
+      round.closesAt !== undefined ? round.closesAt : round.dueAt;
+    if (
+      round.opensAt &&
+      closesAt &&
+      Date.parse(closesAt) <= Date.parse(round.opensAt)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["closesAt"],
+        message: "The round close date must be after its open date.",
+      });
+    }
+  });
 
 export const draftRoundUpdateSchema = z
   .object({
     roundId: z.string().trim().min(1),
     revision: z.coerce.number().int().positive(),
     name: z.string().trim().min(1, "Round name is required.").max(120),
+    opensAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    closesAt: z.iso.datetime({ offset: true }).nullable().optional(),
     dueAt: z.iso.datetime({ offset: true }).nullable().default(null),
+    anonymous: z.boolean().optional(),
+    scorecardId: z.string().trim().min(1).max(120).nullable().optional(),
+    scorecardVersion: z.coerce.number().int().positive().optional(),
     criteria: z.array(criterionSchema).min(1).max(30),
   })
   .superRefine((round, context) => {
@@ -311,6 +398,28 @@ export const draftRoundUpdateSchema = z
     }
     for (const [index, criterion] of round.criteria.entries()) {
       const scaled = criterion.inputType.startsWith("scale_");
+      if (criterion.inputType === "dropdown") {
+        if (criterion.options.length === 0) {
+          context.addIssue({
+            code: "custom",
+            path: ["criteria", index, "options"],
+            message: "Dropdown criteria need at least one option.",
+          });
+        }
+        if (new Set(criterion.options).size !== criterion.options.length) {
+          context.addIssue({
+            code: "custom",
+            path: ["criteria", index, "options"],
+            message: "Dropdown options must be unique.",
+          });
+        }
+      } else if (criterion.options.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["criteria", index, "options"],
+          message: "Only dropdown criteria can define options.",
+        });
+      }
       if (scaled && criterion.weightPercent === 0) {
         context.addIssue({
           code: "custom",
@@ -330,9 +439,23 @@ export const draftRoundUpdateSchema = z
         context.addIssue({
           code: "custom",
           path: ["criteria", index, "weightPercent"],
-          message: "Yes/no and free-text criteria must have zero weight.",
+          message:
+            "Yes/no, dropdown and free-text criteria must have zero weight.",
         });
       }
+    }
+    const closesAt =
+      round.closesAt !== undefined ? round.closesAt : round.dueAt;
+    if (
+      round.opensAt &&
+      closesAt &&
+      Date.parse(closesAt) <= Date.parse(round.opensAt)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["closesAt"],
+        message: "The round close date must be after its open date.",
+      });
     }
     if (
       new Set(round.criteria.map((criterion) => criterion.id)).size !==

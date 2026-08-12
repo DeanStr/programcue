@@ -23,6 +23,7 @@ import {
   DemoResetConfirmationError,
   DemoResetStorageError,
   DemoResetUnavailableError,
+  clearDemoEvaluationWorkflow,
   prepareJudgedDemoWorkflow,
   readDemoActiveWork,
   resetDemoEvent,
@@ -252,6 +253,34 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
   }
   const form = await request.formData();
+  if (form.get("intent") === "clear-evaluation") {
+    try {
+      const result = await clearDemoEvaluationWorkflow(
+        env,
+        form.get("confirmation"),
+      );
+      return data({
+        ok: true as const,
+        committed: true,
+        message:
+          "The demo evaluation graph was cleared for a focused acceptance workflow.",
+        result,
+      });
+    } catch (error) {
+      if (error instanceof DemoResetConfirmationError) {
+        return data(
+          {
+            ok: false as const,
+            committed: false,
+            message: error.message,
+            result: null,
+          },
+          { status: 422 },
+        );
+      }
+      throw error;
+    }
+  }
   if (form.get("intent") !== "reset") {
     return data(
       {

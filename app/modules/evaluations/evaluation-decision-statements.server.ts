@@ -404,7 +404,7 @@ export function buildDecisionStatements(input: {
       `
         UPDATE evaluator_assignments
            SET status = 'cancelled', revision = revision + 1,
-               last_operation_id = ?
+               last_operation_id = ?, cancellation_reason = 'decision_published'
          WHERE event_id = ? AND submission_id = ?
            AND status IN ('assigned','in_progress','reopened')
            AND ? = 'published'

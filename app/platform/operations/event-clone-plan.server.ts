@@ -513,19 +513,22 @@ export function buildEventClonePlan(
     ),
     ...rounds.results.map((row) =>
       env.DB.prepare(
-        "INSERT INTO evaluation_rounds (id,event_id,plan_id,round_number,name,status,opens_at,closes_at,advancement_rule_json,revision,created_at,updated_at) VALUES (?,?,?,?,?,'draft',NULL,NULL,?,1,unixepoch(),unixepoch())",
+        "INSERT INTO evaluation_rounds (id,event_id,plan_id,round_number,name,status,opens_at,closes_at,blinded_reviewing,scorecard_id,scorecard_version,advancement_rule_json,revision,created_at,updated_at) VALUES (?,?,?,?,?,'draft',NULL,NULL,?,?,?, ?,1,unixepoch(),unixepoch())",
       ).bind(
         roundIds.get(row.id),
         eventId,
         planIds.get(row.planId),
         row.roundNumber,
         row.name,
+        row.blindedReviewing,
+        row.scorecardId,
+        row.scorecardVersion,
         row.advancementRuleJson,
       ),
     ),
     ...criteria.results.map((row) =>
       env.DB.prepare(
-        "INSERT INTO evaluation_criteria (id,event_id,round_id,name,description,input_type,weight_percent,required,position) VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO evaluation_criteria (id,event_id,round_id,name,description,input_type,options_json,weight_percent,required,position) VALUES (?,?,?,?,?,?,?,?,?,?)",
       ).bind(
         crypto.randomUUID(),
         eventId,
@@ -533,6 +536,7 @@ export function buildEventClonePlan(
         row.name,
         row.description,
         row.inputType,
+        row.optionsJson,
         row.weightPercent,
         row.required,
         row.position,

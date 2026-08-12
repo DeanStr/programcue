@@ -13,13 +13,111 @@ import {
 import {
   advancementCommandResultSchema,
   evaluationAuditActor,
+  persistedRubricSignature,
   roundCommandResultSchema,
+  rubricSignature,
   type Criterion,
   type EvaluationAdminActor,
   type EvaluationAdvancementExecutionResult,
   type EvaluationAdvancementResult,
   type EvaluationApiCommand,
+  type PersistedRubricShape,
 } from "./evaluation-service-foundation.server";
+
+function assertEffectiveRoundDateRange(
+  opensAt: string | null,
+  closesAt: string | null,
+) {
+  if (opensAt && closesAt && Date.parse(closesAt) <= Date.parse(opensAt)) {
+    throw new EvaluationStateError(
+      "The round close date must be after its open date.",
+    );
+  }
+}
+
+async function requireScorecardSourceRoundId(
+  db: D1Database,
+  organisationId: string,
+  eventId: string,
+  planId: string,
+  scorecardId: string,
+  scorecardVersion: number,
+) {
+  const sourceRounds = await db
+    .prepare(
+      `
+      SELECT r.id AS sourceRoundId
+        FROM evaluation_rounds r
+        JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+       WHERE r.event_id = ? AND r.plan_id = ?
+         AND r.scorecard_id = ? AND r.scorecard_version = ?
+       ORDER BY r.id
+    `,
+    )
+    .bind(
+      organisationId,
+      eventId,
+      planId,
+      scorecardId,
+      scorecardVersion,
+    )
+    .all<{ sourceRoundId: string }>();
+  if (sourceRounds.results.length === 0) {
+    throw new EvaluationStateError(
+      "The selected scorecard is not available in this evaluation plan.",
+    );
+  }
+  if (sourceRounds.results.length > 1) {
+    const sourceRoundIds = sourceRounds.results.map(
+      (sourceRound) => sourceRound.sourceRoundId,
+    );
+    const placeholders = sourceRoundIds.map(() => "?").join(",");
+    const criteria = await db
+      .prepare(
+        `
+        SELECT c.round_id AS roundId, c.name, c.description,
+               c.input_type AS inputType, c.options_json AS optionsJson,
+               c.weight_percent AS weightPercent, c.required, c.position
+          FROM evaluation_criteria c
+          JOIN evaluation_rounds r
+            ON r.id = c.round_id AND r.event_id = c.event_id
+          JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+         WHERE c.event_id = ? AND r.plan_id = ?
+           AND c.round_id IN (${placeholders})
+         ORDER BY c.round_id, c.position
+      `,
+      )
+      .bind(
+        organisationId,
+        eventId,
+        planId,
+        ...sourceRoundIds,
+      )
+      .all<PersistedRubricShape & { roundId: string }>();
+    const criteriaByRound = new Map<string, PersistedRubricShape[]>();
+    for (const criterion of criteria.results) {
+      const roundCriteria = criteriaByRound.get(criterion.roundId) ?? [];
+      roundCriteria.push(criterion);
+      criteriaByRound.set(criterion.roundId, roundCriteria);
+    }
+    const signatures = new Set<string>();
+    for (const sourceRoundId of sourceRoundIds) {
+      const sourceCriteria = criteriaByRound.get(sourceRoundId);
+      if (!sourceCriteria || sourceCriteria.length === 0) {
+        throw new EvaluationStateError(
+          `Scorecard ${scorecardId} version ${scorecardVersion} is missing a persisted rubric.`,
+        );
+      }
+      signatures.add(persistedRubricSignature(sourceCriteria));
+    }
+    if (signatures.size > 1) {
+      throw new EvaluationStateError(
+        `Scorecard ${scorecardId} version ${scorecardVersion} is linked to different persisted rubrics. Choose a new scorecard version before saving.`,
+      );
+    }
+  }
+  return sourceRounds.results[0]!.sourceRoundId;
+}
 
 export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWorkflows {
   async addNextRound(
@@ -53,35 +151,55 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
     if (commandState.replay) return commandState.replay.roundId;
     const commandGuard = this.commandGuard(commandState.prepared);
     const parsed = nextRoundSchema.parse(input);
-    const [plan, clone, criteria] = await Promise.all([
+    const [plan, clone, cloneCriteria] = await Promise.all([
       this.env.DB.prepare(
         `
-        SELECT id, revision FROM evaluation_plans
-         WHERE id = ? AND event_id = ? AND status IN ('draft','active')
+        SELECT p.id, p.revision FROM evaluation_plans p
+        JOIN events e ON e.id = p.event_id AND e.organisation_id = ?
+         WHERE p.id = ? AND p.event_id = ? AND p.status IN ('draft','active')
       `,
       )
-        .bind(parsed.planId, viewer.eventId)
+        .bind(viewer.organisationId, parsed.planId, viewer.eventId)
         .first<{ id: string; revision: number }>(),
       this.env.DB.prepare(
         `
-        SELECT id FROM evaluation_rounds
-         WHERE id = ? AND event_id = ? AND plan_id = ?
+        SELECT r.id, blinded_reviewing AS anonymous,
+               opens_at AS opensAt, closes_at AS closesAt,
+               scorecard_id AS scorecardId,
+               scorecard_version AS scorecardVersion
+          FROM evaluation_rounds r
+          JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+         WHERE r.id = ? AND r.event_id = ? AND r.plan_id = ?
       `,
       )
-        .bind(parsed.cloneRoundId, viewer.eventId, parsed.planId)
-        .first<{ id: string }>(),
+        .bind(
+          viewer.organisationId,
+          parsed.cloneRoundId,
+          viewer.eventId,
+          parsed.planId,
+        )
+        .first<{
+          id: string;
+          anonymous: number | boolean;
+          opensAt: number | null;
+          closesAt: number | null;
+          scorecardId: string;
+          scorecardVersion: number;
+        }>(),
       this.env.DB.prepare(
         `
-        SELECT name, description, input_type AS inputType,
-               weight_percent AS weightPercent, required, position
-          FROM evaluation_criteria
-         WHERE event_id = ? AND round_id = ? ORDER BY position
+        SELECT c.name, c.description, c.input_type AS inputType,
+               c.options_json AS optionsJson, c.weight_percent AS weightPercent,
+               c.required, c.position
+          FROM evaluation_criteria c
+          JOIN events e ON e.id = c.event_id AND e.organisation_id = ?
+         WHERE c.event_id = ? AND c.round_id = ? ORDER BY position
       `,
       )
-        .bind(viewer.eventId, parsed.cloneRoundId)
-        .all<Omit<Criterion, "id">>(),
+        .bind(viewer.organisationId, viewer.eventId, parsed.cloneRoundId)
+        .all<Omit<Criterion, "id" | "options"> & { optionsJson: string }>(),
     ]);
-    if (!plan || !clone || criteria.results.length === 0) {
+    if (!plan || !clone || cloneCriteria.results.length === 0) {
       throw new EvaluationStateError(
         "The plan or source rubric is no longer available.",
       );
@@ -91,11 +209,60 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
         "The evaluation plan changed before the round could be added.",
       );
     }
+    let criteriaToClone = cloneCriteria.results;
+    let selectedScorecardSourceRoundId: string | null = null;
+    if (parsed.scorecardId) {
+      const sourceRoundId = await requireScorecardSourceRoundId(
+        this.env.DB,
+        viewer.organisationId,
+        viewer.eventId,
+        parsed.planId,
+        parsed.scorecardId,
+        parsed.scorecardVersion ?? 1,
+      );
+      const selectedCriteria = await this.env.DB.prepare(
+        `
+        SELECT c.name, c.description, c.input_type AS inputType,
+               c.options_json AS optionsJson, c.weight_percent AS weightPercent,
+               c.required, c.position
+          FROM evaluation_criteria c
+          JOIN evaluation_rounds r
+            ON r.id = c.round_id AND r.event_id = c.event_id
+          JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+         WHERE c.event_id = ? AND c.round_id = ? AND r.plan_id = ?
+         ORDER BY c.position
+      `,
+      )
+        .bind(
+          viewer.organisationId,
+          viewer.eventId,
+          sourceRoundId,
+          parsed.planId,
+        )
+        .all<Omit<Criterion, "id" | "options"> & { optionsJson: string }>();
+      if (selectedCriteria.results.length === 0) {
+        throw new EvaluationStateError(
+          "The selected scorecard has no persisted rubric.",
+        );
+      }
+      persistedRubricSignature(selectedCriteria.results);
+      criteriaToClone = selectedCriteria.results;
+      selectedScorecardSourceRoundId = sourceRoundId;
+    }
     const roundId = crypto.randomUUID();
     const operationId = crypto.randomUUID();
-    const dueAt = parsed.dueAt
-      ? Math.floor(Date.parse(parsed.dueAt) / 1_000)
-      : null;
+    const opensAt =
+      parsed.opensAt !== undefined
+        ? parsed.opensAt
+        : null;
+    const closesAtValue =
+      parsed.closesAt !== undefined
+        ? parsed.closesAt
+        : (parsed.dueAt ?? null);
+    assertEffectiveRoundDateRange(opensAt, closesAtValue);
+    const anonymous = parsed.anonymous ?? Boolean(clone.anonymous);
+    const scorecardId = parsed.scorecardId ?? roundId;
+    const scorecardVersion = parsed.scorecardVersion ?? 1;
     const commandStatements = this.commandClaimStatements(
       commandState.prepared,
     );
@@ -133,7 +300,14 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
       this.env.DB.prepare(
         `
         UPDATE evaluation_plans
-           SET revision = revision + 1, updated_at = unixepoch()
+           SET revision = revision + 1,
+               blinded_reviewing = CASE WHEN ? = 1 OR EXISTS (
+                 SELECT 1 FROM evaluation_rounds plan_round
+                  WHERE plan_round.plan_id = evaluation_plans.id
+                    AND plan_round.event_id = evaluation_plans.event_id
+                    AND plan_round.blinded_reviewing = 1
+               ) THEN 1 ELSE 0 END,
+               updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND revision = ?
            AND EXISTS (
              SELECT 1 FROM events
@@ -141,6 +315,7 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
            )
       `,
       ).bind(
+        anonymous ? 1 : 0,
         parsed.planId,
         viewer.eventId,
         parsed.planRevision,
@@ -151,13 +326,14 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
       this.env.DB.prepare(
         `
         INSERT INTO evaluation_rounds (
-          id, event_id, plan_id, round_number, name, status, closes_at,
+          id, event_id, plan_id, round_number, name, status, opens_at, closes_at,
+          blinded_reviewing, scorecard_id, scorecard_version,
           advancement_rule_json, revision, created_at, updated_at
         )
         SELECT ?, p.event_id, p.id,
                COALESCE((SELECT MAX(round_number) FROM evaluation_rounds
                           WHERE event_id = p.event_id AND plan_id = p.id), 0) + 1,
-               ?, 'draft', ?,
+               ?, 'draft', ?, ?, ?, ?, ?,
                '{}', 1, unixepoch(), unixepoch()
           FROM evaluation_plans p
          WHERE p.id = ? AND p.event_id = ? AND p.revision = ?
@@ -169,7 +345,11 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
       ).bind(
         roundId,
         parsed.name,
-        dueAt,
+        opensAt ? Math.floor(Date.parse(opensAt) / 1_000) : null,
+        closesAtValue ? Math.floor(Date.parse(closesAtValue) / 1_000) : null,
+        anonymous ? 1 : 0,
+        scorecardId,
+        scorecardVersion,
         parsed.planId,
         viewer.eventId,
         parsed.planRevision + 1,
@@ -178,18 +358,22 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
         operationId,
       ),
     ];
-    for (const criterion of criteria.results) {
+    for (const criterion of criteriaToClone) {
       statements.push(
         this.env.DB.prepare(
           `
           INSERT INTO evaluation_criteria (
             id, event_id, round_id, name, description, input_type,
-            weight_percent, required, position
+            options_json, weight_percent, required, position
           )
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
            WHERE EXISTS (
-             SELECT 1 FROM evaluation_rounds
-              WHERE id = ? AND event_id = ? AND plan_id = ?
+             SELECT 1 FROM evaluation_rounds source_round
+              JOIN events source_event
+                ON source_event.id = source_round.event_id
+               AND source_event.organisation_id = ?
+              WHERE source_round.id = ? AND source_round.event_id = ?
+                AND source_round.plan_id = ?
            )
         `,
         ).bind(
@@ -199,9 +383,11 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
           criterion.name,
           criterion.description,
           criterion.inputType,
+          criterion.optionsJson,
           criterion.weightPercent,
           criterion.required ? 1 : 0,
           criterion.position,
+          viewer.organisationId,
           roundId,
           viewer.eventId,
           parsed.planId,
@@ -218,7 +404,10 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
         SELECT ?, ?, ?, ?, ?, 'evaluation.round.created',
                'evaluation_round', ?, ?, unixepoch()
          WHERE EXISTS (
-           SELECT 1 FROM evaluation_rounds WHERE id = ? AND event_id = ?
+           SELECT 1 FROM evaluation_rounds round
+           JOIN events event
+             ON event.id = round.event_id AND event.organisation_id = ?
+            WHERE round.id = ? AND round.event_id = ?
          )
       `,
       ).bind(
@@ -228,7 +417,13 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
         auditActor.personId,
         auditActor.actorId,
         roundId,
-        JSON.stringify({ clonedFromRoundId: parsed.cloneRoundId }),
+        JSON.stringify({
+          clonedFromRoundId: parsed.cloneRoundId,
+          scorecardId,
+          scorecardVersion,
+          scorecardSourceRoundId: selectedScorecardSourceRoundId,
+        }),
+        viewer.organisationId,
         roundId,
         viewer.eventId,
       ),
@@ -317,6 +512,108 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
     await this.assertViewerEvent(viewer);
     this.assertEvaluationManager(viewer);
     const parsed = draftRoundUpdateSchema.parse(input);
+    const currentRound = await this.env.DB.prepare(
+      `
+      SELECT r.plan_id AS planId, r.opens_at AS opensAt, r.closes_at AS closesAt,
+             r.blinded_reviewing AS anonymous, r.scorecard_id AS scorecardId,
+             r.scorecard_version AS scorecardVersion
+        FROM evaluation_rounds r
+        JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+       WHERE r.id = ? AND r.event_id = ? AND r.status = 'draft'
+    `,
+    )
+      .bind(viewer.organisationId, parsed.roundId, viewer.eventId)
+      .first<{
+        planId: string;
+        opensAt: number | null;
+        closesAt: number | null;
+        anonymous: number | boolean;
+        scorecardId: string;
+        scorecardVersion: number;
+      }>();
+    if (!currentRound) {
+      throw new EvaluationStateError(
+        "The draft evaluation round is not available in this event.",
+      );
+    }
+    const currentCriteria = await this.env.DB.prepare(
+      `
+      SELECT c.name, c.description, c.input_type AS inputType,
+             c.options_json AS optionsJson, c.weight_percent AS weightPercent,
+             c.required, c.position
+        FROM evaluation_criteria c
+        JOIN evaluation_rounds r
+          ON r.id = c.round_id AND r.event_id = c.event_id
+        JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+       WHERE c.event_id = ? AND c.round_id = ? AND r.plan_id = ?
+       ORDER BY c.position
+    `,
+    )
+      .bind(
+        viewer.organisationId,
+        viewer.eventId,
+        parsed.roundId,
+        currentRound.planId,
+      )
+      .all<PersistedRubricShape>();
+    if (currentCriteria.results.length === 0) {
+      throw new EvaluationStateError(
+        "The draft evaluation round has no persisted scorecard rubric.",
+      );
+    }
+    const submittedRubricSignature = rubricSignature(parsed.criteria);
+    const currentRubricSignature = persistedRubricSignature(
+      currentCriteria.results,
+    );
+    const criteriaChanged =
+      submittedRubricSignature !== currentRubricSignature;
+    const requestedScorecardId =
+      parsed.scorecardId ?? currentRound.scorecardId;
+    const requestedScorecardVersion =
+      parsed.scorecardVersion ?? currentRound.scorecardVersion;
+    if (
+      !criteriaChanged &&
+      (requestedScorecardId !== currentRound.scorecardId ||
+        requestedScorecardVersion !== currentRound.scorecardVersion)
+    ) {
+      const sourceRoundId = await requireScorecardSourceRoundId(
+        this.env.DB,
+        viewer.organisationId,
+        viewer.eventId,
+        currentRound.planId,
+        requestedScorecardId,
+        requestedScorecardVersion,
+      );
+      const selectedCriteria = await this.env.DB.prepare(
+        `
+        SELECT c.name, c.description, c.input_type AS inputType,
+               c.options_json AS optionsJson, c.weight_percent AS weightPercent,
+               c.required, c.position
+          FROM evaluation_criteria c
+          JOIN evaluation_rounds r
+            ON r.id = c.round_id AND r.event_id = c.event_id
+          JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+         WHERE c.event_id = ? AND c.round_id = ? AND r.plan_id = ?
+         ORDER BY c.position
+      `,
+      )
+        .bind(
+          viewer.organisationId,
+          viewer.eventId,
+          sourceRoundId,
+          currentRound.planId,
+        )
+        .all<PersistedRubricShape>();
+      if (
+        selectedCriteria.results.length === 0 ||
+        persistedRubricSignature(selectedCriteria.results) !==
+          submittedRubricSignature
+      ) {
+        throw new EvaluationStateError(
+          "The selected scorecard version is linked to a different rubric. Choose a new scorecard version before saving.",
+        );
+      }
+    }
     const recover = operation
       ? () =>
           this.env.DB.prepare(
@@ -343,9 +640,29 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
       : null;
     if (await recover?.()) return;
     const operationId = operation?.operationId ?? crypto.randomUUID();
-    const dueAt = parsed.dueAt
-      ? Math.floor(Date.parse(parsed.dueAt) / 1_000)
-      : null;
+    const opensAt =
+      parsed.opensAt !== undefined
+        ? parsed.opensAt
+        : currentRound.opensAt === null
+          ? null
+          : new Date(currentRound.opensAt * 1_000).toISOString();
+    const closesAtValue =
+      parsed.closesAt !== undefined
+        ? parsed.closesAt
+        : parsed.dueAt ??
+          (currentRound.closesAt === null
+            ? null
+            : new Date(currentRound.closesAt * 1_000).toISOString());
+    assertEffectiveRoundDateRange(opensAt, closesAtValue);
+    const anonymous = parsed.anonymous ?? Boolean(currentRound.anonymous);
+    const scorecardId = criteriaChanged
+      ? parsed.roundId
+      : requestedScorecardId;
+    const scorecardVersion = criteriaChanged
+      ? currentRound.scorecardId === parsed.roundId
+        ? currentRound.scorecardVersion + 1
+        : 1
+      : requestedScorecardVersion;
     const statements: D1PreparedStatement[] = [
       this.env.DB.prepare(
         `
@@ -372,7 +689,8 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
       ),
       this.env.DB.prepare(
         `
-        UPDATE evaluation_rounds SET name = ?, closes_at = ?,
+        UPDATE evaluation_rounds SET name = ?, opens_at = ?, closes_at = ?,
+               blinded_reviewing = ?, scorecard_id = ?, scorecard_version = ?,
                revision = revision + 1, last_operation_id = ?,
                updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND revision = ? AND status = 'draft'
@@ -387,7 +705,11 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
       `,
       ).bind(
         parsed.name,
-        dueAt,
+        opensAt ? Math.floor(Date.parse(opensAt) / 1_000) : null,
+        closesAtValue ? Math.floor(Date.parse(closesAtValue) / 1_000) : null,
+        anonymous ? 1 : 0,
+        scorecardId,
+        scorecardVersion,
         operationId,
         parsed.roundId,
         viewer.eventId,
@@ -401,6 +723,12 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
       this.env.DB.prepare(
         `
         UPDATE evaluation_plans SET revision = revision + 1,
+               blinded_reviewing = CASE WHEN EXISTS (
+                 SELECT 1 FROM evaluation_rounds plan_round
+                  WHERE plan_round.plan_id = evaluation_plans.id
+                    AND plan_round.event_id = evaluation_plans.event_id
+                    AND plan_round.blinded_reviewing = 1
+               ) THEN 1 ELSE 0 END,
                updated_at = unixepoch()
          WHERE event_id = ? AND id = (
            SELECT plan_id FROM evaluation_rounds
@@ -452,9 +780,9 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
           `
           INSERT INTO evaluation_criteria (
             id, event_id, round_id, name, description, input_type,
-            weight_percent, required, position
+            options_json, weight_percent, required, position
           )
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
            WHERE EXISTS (
              SELECT 1 FROM evaluation_rounds
               WHERE id = ? AND event_id = ? AND revision = ?
@@ -472,6 +800,7 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
           criterion.name,
           criterion.description || null,
           criterion.inputType,
+          JSON.stringify(criterion.options),
           criterion.weightPercent,
           criterion.required ? 1 : 0,
           criterion.position,
@@ -566,6 +895,7 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
     const parsed = roundAdvancementSchema.parse(input);
     const evaluatorPersonIds = await this.resolveEvaluatorTarget(
       viewer,
+      parsed.toRoundId,
       parsed.teamId,
       parsed.evaluatorPersonIds,
     );
@@ -609,6 +939,7 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
            AND source_round.status = 'active' AND source_round.revision = ?
            AND target_round.id = ? AND target_round.status = 'draft'
            AND target_round.revision = ?
+           AND (target_round.closes_at IS NULL OR target_round.closes_at > unixepoch())
       )
       AND NOT EXISTS (
         SELECT 1 FROM evaluator_assignments unfinished
@@ -647,6 +978,16 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
            AND m.role IN ('evaluator','committee_chair')
            AND m.person_id IN (${evaluatorPlaceholders})
       ) = ?
+      AND (
+        SELECT COUNT(DISTINCT pool.person_id)
+          FROM evaluation_round_reviewers pool
+          JOIN events pool_event
+            ON pool_event.id = pool.event_id
+           AND pool_event.organisation_id = ?
+         WHERE pool.event_id = ?
+           AND pool.round_id = ?
+           AND pool.person_id IN (${evaluatorPlaceholders})
+      ) = ?
       ${
         parsed.teamId
           ? `AND (
@@ -669,6 +1010,10 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
           FROM evaluation_team_members tm
           JOIN evaluation_teams t
             ON t.id = tm.team_id AND t.event_id = tm.event_id
+          JOIN evaluation_round_reviewers pool
+            ON pool.event_id = tm.event_id
+           AND pool.round_id = ?
+           AND pool.person_id = tm.person_id
           JOIN memberships team_membership
             ON team_membership.event_id = tm.event_id
            AND team_membership.person_id = tm.person_id
@@ -698,12 +1043,18 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
       viewer.eventId,
       ...evaluatorPersonIds,
       evaluatorPersonIds.length,
+      viewer.organisationId,
+      viewer.eventId,
+      parsed.toRoundId,
+      ...evaluatorPersonIds,
+      evaluatorPersonIds.length,
       ...(parsed.teamId
         ? [
             viewer.eventId,
             parsed.teamId,
             ...evaluatorPersonIds,
             evaluatorPersonIds.length,
+            parsed.toRoundId,
             viewer.eventId,
             parsed.teamId,
             evaluatorPersonIds.length,
@@ -749,7 +1100,7 @@ export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWo
       ),
       this.env.DB.prepare(
         `
-        UPDATE evaluation_rounds SET status = 'active', opens_at = unixepoch(),
+        UPDATE evaluation_rounds SET status = 'active',
                revision = revision + 1, updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND revision = ? AND status = 'draft'
            AND EXISTS (

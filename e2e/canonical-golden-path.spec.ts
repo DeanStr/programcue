@@ -228,6 +228,17 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await page.getByLabel("Next round name").fill("Final programme review");
     await page.getByRole("button", { name: "Add next round" }).click();
     await expectStatus(page, "Next round created from the rubric");
+    const finalRound = page.locator("section.card").filter({
+      has: page.getByRole("heading", {
+        name: "Final programme review",
+        exact: true,
+      }),
+    });
+    await finalRound
+      .getByLabel("Reviewer for Final programme review")
+      .selectOption("person-demo-evaluator");
+    await finalRound.getByRole("button", { name: "Add reviewer" }).click();
+    await expectStatus(page, "Reviewer added to this round pool");
     await page.getByRole("button", { name: "Review advancement" }).click();
     const advancement = page.getByRole("dialog", {
       name: "Advance to Final programme review",

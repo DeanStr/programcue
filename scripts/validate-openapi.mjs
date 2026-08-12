@@ -96,6 +96,10 @@ const routeAliases = new Map([
     "/api/v1/events/{eventId}/evaluation/assignments",
     "/api/v1/events/{eventId}/evaluation/{resource}",
   ],
+  [
+    "/api/v1/events/{eventId}/evaluation/round-reviewers",
+    "/api/v1/events/{eventId}/evaluation/{resource}",
+  ],
 ]);
 const documentedPaths = new Set(Object.keys(yamlDocument.paths ?? {}));
 for (const path of configuredPaths) {

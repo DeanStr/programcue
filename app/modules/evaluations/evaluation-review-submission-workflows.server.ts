@@ -28,17 +28,26 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
     const parsed = reviewDraftSchema.parse(input);
     const assignment = await this.env.DB.prepare(
       `
-      SELECT a.id, a.status, a.revision,
+        SELECT a.id, a.status, a.revision,
              a.submission_id AS submissionId, a.session_id AS sessionId,
              a.round_id AS roundId
         FROM evaluator_assignments a
         JOIN evaluation_rounds r ON r.id = a.round_id AND r.event_id = a.event_id
+        JOIN evaluation_round_reviewers pool
+          ON pool.event_id = a.event_id
+         AND pool.round_id = a.round_id
+         AND pool.person_id = a.evaluator_person_id
+        JOIN events event ON event.id = a.event_id
+         AND event.organisation_id = ?
         LEFT JOIN submissions submission
           ON submission.id = a.submission_id
          AND submission.event_id = a.event_id
         LEFT JOIN sessions session
           ON session.id = a.session_id AND session.event_id = a.event_id
-       WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ? AND a.status IN ('assigned','in_progress','reopened') AND r.status = 'active'
+       WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ?
+         AND a.status IN ('assigned','in_progress','reopened') AND r.status = 'active'
+         AND (r.opens_at IS NULL OR r.opens_at <= unixepoch())
+         AND (r.closes_at IS NULL OR r.closes_at > unixepoch())
          AND (
            (a.submission_id IS NOT NULL
             AND submission.status IN ('submitted','assigned','in_review','decision_ready'))
@@ -48,7 +57,12 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
          )
     `,
     )
-      .bind(parsed.assignmentId, viewer.eventId, viewer.personId)
+      .bind(
+        viewer.organisationId,
+        parsed.assignmentId,
+        viewer.eventId,
+        viewer.personId,
+      )
       .first<{
         id: string;
         status: string;
@@ -62,12 +76,27 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
         "This assignment is unavailable or already submitted.",
       );
     const criteria = await this.env.DB.prepare(
-      `SELECT id, input_type AS inputType, weight_percent AS weightPercent, required FROM evaluation_criteria WHERE event_id = ? AND round_id = ? ORDER BY position`,
+      `SELECT criterion.id, criterion.input_type AS inputType,
+              criterion.options_json AS optionsJson,
+              criterion.weight_percent AS weightPercent, criterion.required
+         FROM evaluation_criteria criterion
+         JOIN evaluation_rounds round
+           ON round.id = criterion.round_id AND round.event_id = criterion.event_id
+         JOIN events event
+           ON event.id = criterion.event_id AND event.organisation_id = ?
+        WHERE criterion.event_id = ? AND criterion.round_id = ?
+        ORDER BY criterion.position`,
     )
-      .bind(viewer.eventId, assignment.roundId)
+      .bind(viewer.organisationId, viewer.eventId, assignment.roundId)
       .all<{
         id: string;
-        inputType: "scale_5" | "scale_10" | "yes_no" | "free_text";
+        inputType:
+          | "scale_5"
+          | "scale_10"
+          | "yes_no"
+          | "free_text"
+          | "dropdown";
+        optionsJson: string;
         weightPercent: number;
         required: number | boolean;
       }>();
@@ -115,6 +144,26 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
         }
         responses[criterion.id] =
           typeof raw === "boolean" ? raw : raw === "yes";
+      } else if (criterion.inputType === "dropdown") {
+        if (typeof raw !== "string") {
+          throw new EvaluationValidationError(
+            "A dropdown rubric response must be one of its configured options.",
+          );
+        }
+        let options: unknown;
+        try {
+          options = JSON.parse(criterion.optionsJson);
+        } catch {
+          throw new EvaluationStateError(
+            `Criterion ${criterion.id} has invalid persisted dropdown options.`,
+          );
+        }
+        if (!Array.isArray(options) || !options.includes(raw.trim())) {
+          throw new EvaluationValidationError(
+            "Choose one of the configured dropdown options.",
+          );
+        }
+        responses[criterion.id] = raw.trim();
       } else {
         if (typeof raw !== "string") {
           throw new EvaluationValidationError(
@@ -140,9 +189,13 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
         ? calculateRubricWeightedScore(scaledCriteria, responses)
         : null;
     const existing = await this.env.DB.prepare(
-      "SELECT id, revision, status FROM reviews WHERE event_id = ? AND assignment_id = ?",
+      `SELECT review.id, review.revision, review.status
+         FROM reviews review
+         JOIN events event
+           ON event.id = review.event_id AND event.organisation_id = ?
+        WHERE review.event_id = ? AND review.assignment_id = ?`,
     )
-      .bind(viewer.eventId, assignment.id)
+      .bind(viewer.organisationId, viewer.eventId, assignment.id)
       .first<{ id: string; revision: number; status: string }>();
     if ((existing?.revision ?? 0) !== parsed.revision)
       throw new EvaluationRevisionConflictError();
@@ -178,7 +231,13 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
              submitter_feedback = ?, private_notes = ?, revision = revision + 1, last_operation_id = ?,
              updated_at = unixepoch(), submitted_at = CASE WHEN ? = 'submitted' THEN unixepoch() ELSE submitted_at END,
              locked_at = CASE WHEN ? = 'submitted' THEN unixepoch() ELSE locked_at END
-       WHERE id = ? AND event_id = ? AND revision = ? AND status IN ('draft','reopened')
+       WHERE id = ? AND event_id = ?
+         AND EXISTS (
+           SELECT 1 FROM events review_event
+            WHERE review_event.id = reviews.event_id
+              AND review_event.organisation_id = ?
+         )
+         AND revision = ? AND status IN ('draft','reopened')
          AND EXISTS (
            SELECT 1 FROM evaluator_assignments assignment
            LEFT JOIN submissions active_submission
@@ -190,6 +249,20 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
             WHERE assignment.id = ? AND assignment.event_id = ?
               AND assignment.evaluator_person_id = ? AND assignment.revision = ?
               AND assignment.status IN ('assigned','in_progress','reopened')
+              AND EXISTS (
+                SELECT 1 FROM evaluation_rounds review_round
+                 WHERE review_round.id = assignment.round_id
+                   AND review_round.event_id = assignment.event_id
+                   AND review_round.status = 'active'
+                   AND (review_round.opens_at IS NULL OR review_round.opens_at <= unixepoch())
+                   AND (review_round.closes_at IS NULL OR review_round.closes_at > unixepoch())
+              )
+              AND EXISTS (
+                SELECT 1 FROM evaluation_round_reviewers pool
+                 WHERE pool.event_id = assignment.event_id
+                   AND pool.round_id = assignment.round_id
+                   AND pool.person_id = assignment.evaluator_person_id
+              )
               AND (
                 (assignment.submission_id IS NOT NULL
                  AND active_submission.status IN ('submitted','assigned','in_review','decision_ready'))
@@ -212,6 +285,7 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
           status,
           reviewId,
           viewer.eventId,
+          viewer.organisationId,
           parsed.revision,
           assignment.id,
           viewer.eventId,
@@ -232,8 +306,27 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
           ON active_session.id = assignment.session_id
          AND active_session.event_id = assignment.event_id
        WHERE assignment.id = ? AND assignment.event_id = ?
+         AND EXISTS (
+           SELECT 1 FROM events review_event
+            WHERE review_event.id = assignment.event_id
+              AND review_event.organisation_id = ?
+         )
          AND assignment.evaluator_person_id = ? AND assignment.revision = ?
          AND assignment.status IN ('assigned','in_progress','reopened')
+         AND EXISTS (
+           SELECT 1 FROM evaluation_rounds review_round
+            WHERE review_round.id = assignment.round_id
+              AND review_round.event_id = assignment.event_id
+              AND review_round.status = 'active'
+              AND (review_round.opens_at IS NULL OR review_round.opens_at <= unixepoch())
+              AND (review_round.closes_at IS NULL OR review_round.closes_at > unixepoch())
+         )
+         AND EXISTS (
+           SELECT 1 FROM evaluation_round_reviewers pool
+            WHERE pool.event_id = assignment.event_id
+              AND pool.round_id = assignment.round_id
+              AND pool.person_id = assignment.evaluator_person_id
+         )
          AND (
            (assignment.submission_id IS NOT NULL
             AND active_submission.status IN ('submitted','assigned','in_review','decision_ready'))
@@ -257,6 +350,7 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
           status,
           assignment.id,
           viewer.eventId,
+          viewer.organisationId,
           viewer.personId,
           assignment.revision,
         );
@@ -266,9 +360,30 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
         `
         UPDATE evaluator_assignments
            SET status = ?, revision = revision + 1, last_operation_id = ?,
+               cancellation_reason = NULL,
                submitted_at = CASE WHEN ? = 'submitted' THEN unixepoch() ELSE submitted_at END
-         WHERE id = ? AND event_id = ? AND evaluator_person_id = ? AND revision = ?
+         WHERE id = ? AND event_id = ?
+           AND EXISTS (
+             SELECT 1 FROM events assignment_event
+              WHERE assignment_event.id = evaluator_assignments.event_id
+                AND assignment_event.organisation_id = ?
+           )
+           AND evaluator_person_id = ? AND revision = ?
            AND status IN ('assigned','in_progress','reopened')
+           AND EXISTS (
+             SELECT 1 FROM evaluation_rounds review_round
+              WHERE review_round.id = evaluator_assignments.round_id
+                AND review_round.event_id = evaluator_assignments.event_id
+                AND review_round.status = 'active'
+                AND (review_round.opens_at IS NULL OR review_round.opens_at <= unixepoch())
+                AND (review_round.closes_at IS NULL OR review_round.closes_at > unixepoch())
+           )
+           AND EXISTS (
+             SELECT 1 FROM evaluation_round_reviewers pool
+              WHERE pool.event_id = evaluator_assignments.event_id
+                AND pool.round_id = evaluator_assignments.round_id
+                AND pool.person_id = evaluator_assignments.evaluator_person_id
+           )
            AND EXISTS (SELECT 1 FROM reviews WHERE id = ? AND last_operation_id = ?)
       `,
       ).bind(
@@ -277,6 +392,7 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
         status,
         assignment.id,
         viewer.eventId,
+        viewer.organisationId,
         viewer.personId,
         assignment.revision,
         reviewId,
@@ -286,7 +402,12 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
         `
         INSERT INTO review_revisions (id, event_id, review_id, revision_number, scores_json, content_json, save_kind, saved_by_person_id, idempotency_key, created_at)
         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()
-         WHERE EXISTS (SELECT 1 FROM reviews WHERE id = ? AND last_operation_id = ?)
+         WHERE EXISTS (
+           SELECT 1 FROM reviews review
+            JOIN events event
+              ON event.id = review.event_id AND event.organisation_id = ?
+           WHERE review.id = ? AND review.last_operation_id = ?
+         )
            AND EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND last_operation_id = ?)
       `,
       ).bind(
@@ -306,21 +427,40 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
         operationId,
         reviewId,
         operationId,
+        viewer.organisationId,
         assignment.id,
         operationId,
       ),
       this.env.DB.prepare(
-        `UPDATE submissions SET status = 'in_review', revision = revision + 1, updated_at = unixepoch() WHERE id = ? AND event_id = ? AND status IN ('assigned','submitted') AND EXISTS (SELECT 1 FROM reviews WHERE id = ? AND last_operation_id = ?) AND EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND last_operation_id = ?)`,
+        `UPDATE submissions SET status = 'in_review', revision = revision + 1, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?
+            AND EXISTS (
+              SELECT 1 FROM events submission_event
+               WHERE submission_event.id = submissions.event_id
+                 AND submission_event.organisation_id = ?
+            )
+            AND status IN ('assigned','submitted')
+            AND EXISTS (SELECT 1 FROM reviews WHERE id = ? AND last_operation_id = ?)
+            AND EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND last_operation_id = ?)`,
       ).bind(
         assignment.submissionId,
         viewer.eventId,
+        viewer.organisationId,
         reviewId,
         operationId,
         assignment.id,
         operationId,
       ),
       this.env.DB.prepare(
-        `INSERT INTO audit_events (id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at) SELECT ?, ?, ?, ?, ?, 'review', ?, ?, unixepoch() WHERE EXISTS (SELECT 1 FROM reviews WHERE id = ? AND last_operation_id = ?) AND EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND last_operation_id = ?)`,
+        `INSERT INTO audit_events (id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at)
+         SELECT ?, ?, ?, ?, ?, 'review', ?, ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM reviews review
+             JOIN events event
+               ON event.id = review.event_id AND event.organisation_id = ?
+            WHERE review.id = ? AND review.last_operation_id = ?
+          )
+            AND EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND last_operation_id = ?)`,
       ).bind(
         auditEventId,
         viewer.organisationId,
@@ -329,6 +469,7 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
         parsed.intent === "submit" ? "review.submitted" : "review.saved",
         reviewId,
         JSON.stringify({ revision: nextRevision }),
+        viewer.organisationId,
         reviewId,
         operationId,
         assignment.id,
@@ -352,15 +493,23 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
               FROM evaluator_assignments a
               JOIN evaluation_rounds r
                 ON r.id = a.round_id AND r.event_id = a.event_id
+              JOIN evaluation_round_reviewers pool
+                ON pool.event_id = a.event_id
+               AND pool.round_id = a.round_id
+               AND pool.person_id = a.evaluator_person_id
+              JOIN events event
+                ON event.id = a.event_id AND event.organisation_id = ?
              WHERE a.event_id = ? AND a.evaluator_person_id = ?
                AND a.id <> ? AND a.status IN ('assigned','in_progress','reopened')
                AND r.status = 'active'
+               AND (r.opens_at IS NULL OR r.opens_at <= unixepoch())
+               AND (r.closes_at IS NULL OR r.closes_at > unixepoch())
              ORDER BY CASE a.status WHEN 'in_progress' THEN 0 WHEN 'reopened' THEN 1 ELSE 2 END,
                       a.due_at, a.assigned_at
              LIMIT 1
           `,
           )
-            .bind(viewer.eventId, viewer.personId, assignment.id)
+            .bind(viewer.organisationId, viewer.eventId, viewer.personId, assignment.id)
             .first<{ id: string }>()
         : null;
     return {
@@ -386,13 +535,31 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
     await this.assertViewerEvent(viewer);
     const parsed = conflictDeclarationSchema.parse(input);
     const assignment = await this.env.DB.prepare(
-      `SELECT id, revision, round_id AS roundId,
+      `SELECT assignment.id, assignment.revision, assignment.round_id AS roundId,
               submission_id AS submissionId, session_id AS sessionId
-         FROM evaluator_assignments
-        WHERE id = ? AND event_id = ? AND evaluator_person_id = ?
-          AND status IN ('assigned','in_progress')`,
+         FROM evaluator_assignments assignment
+         JOIN evaluation_round_reviewers pool
+           ON pool.event_id = assignment.event_id
+          AND pool.round_id = assignment.round_id
+          AND pool.person_id = assignment.evaluator_person_id
+         JOIN evaluation_rounds round
+           ON round.id = assignment.round_id
+          AND round.event_id = assignment.event_id
+         JOIN events event
+           ON event.id = assignment.event_id AND event.organisation_id = ?
+        WHERE assignment.id = ? AND assignment.event_id = ?
+          AND assignment.evaluator_person_id = ?
+          AND assignment.status IN ('assigned','in_progress')
+          AND round.status = 'active'
+          AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
+          AND (round.closes_at IS NULL OR round.closes_at > unixepoch())`,
     )
-      .bind(parsed.assignmentId, viewer.eventId, viewer.personId)
+      .bind(
+        viewer.organisationId,
+        parsed.assignmentId,
+        viewer.eventId,
+        viewer.personId,
+      )
       .first<{
         id: string;
         revision: number;
@@ -420,6 +587,20 @@ export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationRevi
                revision = revision + 1, last_operation_id = ?
          WHERE id = ? AND event_id = ? AND evaluator_person_id = ?
            AND revision = ? AND status IN ('assigned','in_progress')
+           AND EXISTS (
+             SELECT 1 FROM evaluation_rounds round
+              WHERE round.id = evaluator_assignments.round_id
+                AND round.event_id = evaluator_assignments.event_id
+                AND round.status = 'active'
+                AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
+                AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
+           )
+           AND EXISTS (
+             SELECT 1 FROM evaluation_round_reviewers pool
+              WHERE pool.event_id = evaluator_assignments.event_id
+                AND pool.round_id = evaluator_assignments.round_id
+                AND pool.person_id = evaluator_assignments.evaluator_person_id
+           )
       `,
       ).bind(
         operationId,

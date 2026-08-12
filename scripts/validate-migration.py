@@ -25,7 +25,7 @@ required = {
     "submission_track_selections", "submission_routing_teams",
     "submission_email_verifications", "submission_speakers",
     "evaluation_plans", "evaluation_teams", "evaluation_team_members", "evaluation_rounds",
-    "evaluation_criteria", "evaluator_conflicts", "evaluator_assignments", "reviews",
+    "evaluation_criteria", "evaluation_round_reviewers", "evaluator_conflicts", "evaluator_assignments", "reviews",
     "review_revisions", "review_moderations", "submission_decisions",
     "tracks", "rooms", "schedule_policies", "sessions", "session_speakers",
     "tags", "session_tags", "session_archives",
@@ -80,10 +80,11 @@ for table, expected in {
     "submission_revisions": {"answers_json", "speaker_snapshot_json", "save_kind", "idempotency_key"},
     "submission_email_verifications": {"form_id", "token_hash", "status", "attempt_count", "verified_at", "consumed_at"},
     "submission_speakers": {"person_id", "email", "invitation_status", "claim_token_hash", "claimed_at"},
-    "evaluation_rounds": {"plan_id", "round_number", "advancement_rule_json", "revision", "last_operation_id"},
-    "evaluation_criteria": {"round_id", "input_type", "weight_percent", "required"},
+    "evaluation_rounds": {"plan_id", "round_number", "advancement_rule_json", "revision", "last_operation_id", "opens_at", "closes_at", "blinded_reviewing", "scorecard_id", "scorecard_version"},
+    "evaluation_criteria": {"round_id", "input_type", "options_json", "weight_percent", "required"},
+    "evaluation_round_reviewers": {"event_id", "round_id", "person_id", "added_by_person_id", "revision"},
     "evaluator_conflicts": {"round_id", "submission_id", "session_id", "evaluator_person_id"},
-    "evaluator_assignments": {"round_id", "submission_id", "session_id", "session_snapshot_json", "team_id", "revision", "due_at"},
+    "evaluator_assignments": {"round_id", "submission_id", "session_id", "session_snapshot_json", "team_id", "revision", "cancellation_reason", "due_at"},
     "reviews": {"status", "scores_json", "revision", "locked_at"},
     "file_versions": {"object_key", "upload_status", "signature_status", "scan_status", "released_at"},
     "file_multipart_uploads": {"version_id", "asset_id", "upload_id", "idempotency_key", "status", "manifest_json", "expires_at"},
@@ -135,6 +136,7 @@ required_indexes = {
     "idx_operation_jobs_event_status", "idx_operation_items_status",
     "idx_event_changes_cursor", "idx_webhook_deliveries_status",
     "idx_audit_event_created",
+    "idx_evaluation_rounds_schedule", "idx_evaluation_round_reviewers_round", "idx_evaluation_round_reviewers_person", "evaluation_criteria_position_unique",
     "idx_organisation_contacts_status", "idx_organisation_contact_tags_tag",
     "idx_crm_pipeline_stage", "idx_crm_pipeline_activity_entry",
     "assistant_proposal_executions_claim_idx",
@@ -272,6 +274,27 @@ must_fail(
     "VALUES ('missing-calendar-credentials','org-a','event-a','person-a','google','missing','[]','connected')",
     "A connected calendar account without durable credentials was accepted",
 )
+connection.execute(
+    "INSERT INTO evaluation_plans (id,event_id,name,status) "
+    "VALUES ('migration-evaluation-plan','event-a','Migration evaluation plan','draft')"
+)
+must_fail(
+    "INSERT INTO evaluation_rounds "
+    "(id,event_id,plan_id,round_number,name,status) "
+    "VALUES ('missing-scorecard-round','event-a','migration-evaluation-plan',1,'Missing scorecard','draft')",
+    "An evaluation round without a scorecard identity was accepted",
+)
+connection.execute(
+    "INSERT INTO evaluation_rounds "
+    "(id,event_id,plan_id,round_number,name,status,scorecard_id) "
+    "VALUES ('dropdown-round','event-a','migration-evaluation-plan',1,'Dropdown round','draft','dropdown-scorecard')"
+)
+must_fail(
+    "INSERT INTO evaluation_criteria "
+    "(id,event_id,round_id,name,input_type,weight_percent,required,position) "
+    "VALUES ('empty-dropdown','event-a','dropdown-round','Recommendation','dropdown',0,1,0)",
+    "A dropdown criterion without persisted options was accepted",
+)
 
 connection.execute(
     "UPDATE events SET participant_retention_completed_at=unixepoch() WHERE id='event-a'"
@@ -308,6 +331,8 @@ required_triggers = {
     "calendar_sync_attempts_participant_retention_no_pii_update",
     "schedule_session_contents_participant_retention_no_pii_insert",
     "schedule_session_contents_participant_retention_no_pii_update",
+    "evaluation_rounds_scorecard_id_required_insert",
+    "evaluation_rounds_scorecard_id_required_update",
 }
 if required_triggers - triggers:
     raise SystemExit(f"Migration triggers are missing: {sorted(required_triggers - triggers)}")

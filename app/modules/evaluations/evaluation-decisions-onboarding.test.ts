@@ -133,6 +133,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -143,6 +145,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -153,6 +157,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -163,6 +169,7 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: "reviewers",
+          blindReviewVisibility: "content",
           condition: null,
         },
         {
@@ -256,6 +263,25 @@ async function resetEvaluationFixture() {
         WHERE event_id = ? AND person_id = ? AND role = 'evaluator'`,
     ).bind(admin.eventId, evaluator.personId),
   ]);
+}
+
+async function addRoundReviewer(
+  roundId: string,
+  personId = evaluator.personId,
+) {
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO evaluation_round_reviewers
+       (id, event_id, round_id, person_id, added_by_person_id)
+     VALUES (?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      `test-round-reviewer-${roundId}-${personId}`,
+      admin.eventId,
+      roundId,
+      personId,
+      admin.personId,
+    )
+    .run();
 }
 
 describe("evaluation vertical slice", () => {
@@ -505,6 +531,7 @@ describe("evaluation vertical slice", () => {
         workspace = await service.getAdminWorkspace(admin);
       }
       const roundId = workspace.plan!.rounds[0]!.id;
+      await addRoundReviewer(roundId);
       await testEnv.DB.prepare(
         `
         INSERT INTO submissions (
@@ -971,9 +998,9 @@ describe("evaluation vertical slice", () => {
         ).bind(planId, admin.eventId),
         env.DB.prepare(
           `INSERT INTO evaluation_rounds (
-             id, event_id, plan_id, round_number, name, status
-           ) VALUES (?, ?, ?, 1, 'Completed review round', 'active')`,
-        ).bind(roundId, admin.eventId, planId),
+             id, event_id, plan_id, round_number, name, status, scorecard_id
+           ) VALUES (?, ?, ?, 1, 'Completed review round', 'active', ?)`,
+        ).bind(roundId, admin.eventId, planId, roundId),
         env.DB.prepare(
           `INSERT INTO evaluator_assignments (
              id, event_id, round_id, submission_id, evaluator_person_id,
@@ -1854,6 +1881,7 @@ describe("evaluation vertical slice", () => {
         });
         adminWorkspace = await service.getAdminWorkspace(admin);
       }
+      await addRoundReviewer(adminWorkspace.plan!.rounds[0]!.id);
       await env.DB.prepare(
         `
         INSERT OR IGNORE INTO submissions (

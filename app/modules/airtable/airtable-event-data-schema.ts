@@ -15,6 +15,13 @@ const jsonText = z.string().refine((value) => {
     return false;
   }
 }, "must contain valid JSON");
+const jsonArrayText = jsonText.refine((value) => {
+  try {
+    return Array.isArray(JSON.parse(value));
+  } catch {
+    return false;
+  }
+}, "must contain a JSON array");
 const nullableJsonText = z
   .string()
   .nullable()
@@ -386,7 +393,8 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
     domain: "evaluations",
     entityType: "evaluation_round",
     query: `SELECT id, event_id, plan_id, round_number, name, status,
-                   opens_at, closes_at, advancement_rule_json, revision,
+                   opens_at, closes_at, blinded_reviewing, scorecard_id,
+                   scorecard_version, advancement_rule_json, revision,
                    created_at, updated_at
               FROM evaluation_rounds WHERE event_id = ? ORDER BY id`,
     schema: z
@@ -398,7 +406,30 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
         status: z.enum(["draft", "active", "closed", "archived"]),
         opens_at: nullableInteger,
         closes_at: nullableInteger,
+        blinded_reviewing: booleanInteger,
+        scorecard_id: text.min(1),
+        scorecard_version: integer.positive(),
         advancement_rule_json: jsonText,
+        revision: integer.positive(),
+        ...timestamps,
+      })
+      .strict(),
+    entityId: id,
+    revision,
+  },
+  {
+    key: "evaluationRoundReviewers",
+    domain: "evaluations",
+    entityType: "evaluation_round_reviewer",
+    query: `SELECT id, event_id, round_id, person_id, added_by_person_id,
+                   revision, created_at, updated_at
+              FROM evaluation_round_reviewers WHERE event_id = ? ORDER BY id`,
+    schema: z
+      .object({
+        ...eventRecord,
+        round_id: text.min(1),
+        person_id: text.min(1),
+        added_by_person_id: nullableText,
         revision: integer.positive(),
         ...timestamps,
       })
@@ -411,7 +442,7 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
     domain: "evaluations",
     entityType: "evaluation_criterion",
     query: `SELECT id, event_id, round_id, name, description, input_type,
-                   weight_percent, required, position
+                   options_json, weight_percent, required, position
               FROM evaluation_criteria WHERE event_id = ? ORDER BY id`,
     schema: z
       .object({
@@ -419,7 +450,14 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
         round_id: text.min(1),
         name: text.min(1),
         description: nullableText,
-        input_type: z.enum(["scale_5", "scale_10", "yes_no", "free_text"]),
+        input_type: z.enum([
+          "scale_5",
+          "scale_10",
+          "yes_no",
+          "free_text",
+          "dropdown",
+        ]),
+        options_json: jsonArrayText,
         weight_percent: integer.min(0).max(100),
         required: booleanInteger,
         position: integer.nonnegative(),
@@ -434,8 +472,8 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
     entityType: "evaluator_assignment",
     query: `SELECT id, event_id, round_id, submission_id, session_id,
                    session_snapshot_json, evaluator_person_id, team_id, status,
-                   revision, due_at, conflict_declared_at, assigned_at,
-                   submitted_at
+                   revision, due_at, conflict_declared_at, cancellation_reason,
+                   assigned_at, submitted_at
               FROM evaluator_assignments WHERE event_id = ? ORDER BY id`,
     schema: z
       .object({
@@ -457,6 +495,13 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
         revision: integer.positive(),
         due_at: nullableInteger,
         conflict_declared_at: nullableInteger,
+        cancellation_reason: z
+          .enum([
+            "reviewer_removed",
+            "submission_withdrawn",
+            "decision_published",
+          ])
+          .nullable(),
         assigned_at: integer,
         submitted_at: nullableInteger,
       })

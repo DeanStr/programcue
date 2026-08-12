@@ -133,6 +133,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -143,6 +145,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -153,6 +157,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -163,6 +169,7 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: "reviewers",
+          blindReviewVisibility: "content",
           condition: null,
         },
         {
@@ -451,6 +458,19 @@ describe("evaluation vertical slice", () => {
           requestHash: "different-plan-hash",
         }),
       ).rejects.toThrow(/different evaluation request/);
+      await env.DB.prepare(
+        `INSERT INTO evaluation_round_reviewers
+           (id, event_id, round_id, person_id, added_by_person_id)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+        .bind(
+          "eval-api-round-reviewer",
+          admin.eventId,
+          "eval-api-round",
+          evaluator.personId,
+          admin.personId,
+        )
+        .run();
       const roundInput = {
         planId,
         planRevision: 1,

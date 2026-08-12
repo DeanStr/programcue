@@ -666,7 +666,7 @@ export class SubmissionApplicantRepository {
       this.env.DB.prepare(
         `UPDATE evaluator_assignments
             SET status = 'cancelled', revision = revision + 1,
-                last_operation_id = ?
+                last_operation_id = ?, cancellation_reason = 'submission_withdrawn'
           WHERE submission_id = ? AND event_id = ? AND status = 'assigned'
             AND EXISTS (
               SELECT 1 FROM submissions

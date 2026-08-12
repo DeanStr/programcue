@@ -797,6 +797,11 @@ export const evaluationRounds = sqliteTable(
       .$type<"draft" | "active" | "closed" | "archived">(),
     opensAt: integer("opens_at"),
     closesAt: integer("closes_at"),
+    blindedReviewing: integer("blinded_reviewing", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    scorecardId: text("scorecard_id").notNull(),
+    scorecardVersion: integer("scorecard_version").notNull().default(1),
     advancementRuleJson: text("advancement_rule_json").notNull().default("{}"),
     revision: integer("revision").notNull().default(1),
     lastOperationId: text("last_operation_id"),
@@ -812,6 +817,20 @@ export const evaluationRounds = sqliteTable(
       table.eventId,
       table.status,
       table.roundNumber,
+    ),
+    index("idx_evaluation_rounds_schedule").on(
+      table.eventId,
+      table.opensAt,
+      table.closesAt,
+      table.status,
+    ),
+    check(
+      "evaluation_rounds_date_order_check",
+      sql`${table.closesAt} IS NULL OR ${table.opensAt} IS NULL OR ${table.closesAt} > ${table.opensAt}`,
+    ),
+    check(
+      "evaluation_rounds_scorecard_id_check",
+      sql`length(trim(${table.scorecardId})) > 0`,
     ),
   ],
 );
@@ -831,7 +850,8 @@ export const evaluationCriteria = sqliteTable(
     inputType: text("input_type")
       .notNull()
       .default("scale_5")
-      .$type<"scale_5" | "scale_10" | "yes_no" | "free_text">(),
+      .$type<"scale_5" | "scale_10" | "yes_no" | "free_text" | "dropdown">(),
+    optionsJson: text("options_json").notNull().default("[]"),
     weightPercent: integer("weight_percent").notNull().default(0),
     required: integer("required", { mode: "boolean" }).notNull().default(true),
     position: integer("position").notNull(),
@@ -840,6 +860,48 @@ export const evaluationCriteria = sqliteTable(
     uniqueIndex("evaluation_criteria_position_unique").on(
       table.roundId,
       table.position,
+    ),
+    check(
+      "evaluation_criteria_options_check",
+      sql`(${table.inputType} = 'dropdown' AND json_array_length(${table.optionsJson}) > 0) OR (${table.inputType} <> 'dropdown' AND json_array_length(${table.optionsJson}) = 0)`,
+    ),
+  ],
+);
+
+export const evaluationRoundReviewers = sqliteTable(
+  "evaluation_round_reviewers",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    roundId: text("round_id").notNull(),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    addedByPersonId: text("added_by_person_id").references(() => people.id),
+    revision: integer("revision").notNull().default(1),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("evaluation_round_reviewers_round_person_unique").on(
+      table.roundId,
+      table.personId,
+    ),
+    foreignKey({
+      columns: [table.roundId, table.eventId],
+      foreignColumns: [evaluationRounds.id, evaluationRounds.eventId],
+    }).onDelete("cascade"),
+    index("idx_evaluation_round_reviewers_round").on(
+      table.eventId,
+      table.roundId,
+      table.personId,
+    ),
+    index("idx_evaluation_round_reviewers_person").on(
+      table.eventId,
+      table.personId,
+      table.roundId,
     ),
   ],
 );
@@ -928,6 +990,9 @@ export const evaluatorAssignments = sqliteTable(
       >(),
     revision: integer("revision").notNull().default(1),
     lastOperationId: text("last_operation_id"),
+    cancellationReason: text("cancellation_reason").$type<
+      "reviewer_removed" | "submission_withdrawn" | "decision_published"
+    >(),
     dueAt: integer("due_at"),
     conflictDeclaredAt: integer("conflict_declared_at"),
     assignedAt: integer("assigned_at").notNull().default(epochNow),

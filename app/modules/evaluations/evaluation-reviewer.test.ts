@@ -133,6 +133,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -143,6 +145,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -153,6 +157,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -163,6 +169,7 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: "reviewers",
+          blindReviewVisibility: "content",
           condition: null,
         },
         {
@@ -258,6 +265,25 @@ async function resetEvaluationFixture() {
   ]);
 }
 
+async function addRoundReviewer(
+  roundId: string,
+  personId = evaluator.personId,
+) {
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO evaluation_round_reviewers
+       (id, event_id, round_id, person_id, added_by_person_id)
+     VALUES (?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      `test-round-reviewer-${roundId}-${personId}`,
+      admin.eventId,
+      roundId,
+      personId,
+      admin.personId,
+    )
+    .run();
+}
+
 describe("evaluation vertical slice", () => {
   beforeEach(async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
@@ -310,9 +336,10 @@ describe("evaluation vertical slice", () => {
             name: "Initial review",
             anonymous: true,
             criteria,
-          },
-        ],
-      });
+            },
+          ],
+        });
+      await addRoundReviewer("eval-test-round");
       await service.assign(admin, {
         roundId: "eval-test-round",
         targetType: "submission",
@@ -440,6 +467,7 @@ describe("evaluation vertical slice", () => {
       const roundId =
         adminWorkspace.plan!.rounds.find((round) => round.status === "active")
           ?.id ?? adminWorkspace.plan!.rounds[0]!.id;
+      await addRoundReviewer(roundId);
       await env.DB.prepare(
         "UPDATE evaluation_rounds SET status = 'active' WHERE id = ? AND event_id = ?",
       )
@@ -512,6 +540,7 @@ describe("evaluation vertical slice", () => {
         });
         adminWorkspace = await service.getAdminWorkspace(admin);
       }
+      await addRoundReviewer(adminWorkspace.plan!.rounds[0]!.id);
       await env.DB.prepare(
         `
         INSERT OR IGNORE INTO submissions (

@@ -3,7 +3,10 @@ import {
   AirtableProviderBoundary,
   airtableCommandKey,
 } from "~/modules/airtable/airtable-provider-boundary.server";
-import { submittedSnapshotSchema } from "~/modules/submissions/submission-schema";
+import {
+  reviewerVisibleAnswers,
+  submittedSnapshotSchema,
+} from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { type WebhookEventResult } from "~/platform/operations/webhook-service.server";
 import {
@@ -44,6 +47,13 @@ export type EvaluationAssignmentResult = {
   undoExpiresAt: number | null;
 };
 
+export type EvaluationRoundReviewerResult = {
+  roundId: string;
+  personId: string;
+  operation: "add" | "remove";
+  cancelledAssignmentCount: number;
+};
+
 export type EvaluationAdvancementResult = {
   advancedSubmissionCount: number;
   assignmentCount: number;
@@ -58,6 +68,7 @@ export type EvaluationAdvancementExecutionResult =
 export type EvaluationCommandScope =
   | "evaluation.plan.save"
   | "evaluation.round.add"
+  | "evaluation.round_reviewer.change"
   | "evaluation.assign"
   | "evaluation.advance";
 
@@ -73,6 +84,13 @@ export const planCommandResultSchema = z.object({ planId: z.string().min(1) });
 
 export const roundCommandResultSchema = z.object({
   roundId: z.string().min(1),
+});
+
+export const roundReviewerCommandResultSchema = z.object({
+  roundId: z.string().min(1),
+  personId: z.string().min(1),
+  operation: z.enum(["add", "remove"]),
+  cancelledAssignmentCount: z.number().int().nonnegative(),
 });
 
 export const assignmentCommandResultSchema = z.object({
@@ -98,10 +116,118 @@ export type Criterion = {
   name: string;
   description: string | null;
   weightPercent: number;
-  inputType: "scale_5" | "scale_10" | "yes_no" | "free_text";
+  inputType:
+    | "scale_5"
+    | "scale_10"
+    | "yes_no"
+    | "free_text"
+    | "dropdown";
+  options: string[];
   required: boolean;
   position: number;
 };
+
+export type RubricShape = {
+  name: string;
+  description: string | null;
+  inputType: string;
+  options: readonly string[];
+  weightPercent: number;
+  required: boolean | number;
+  position: number;
+};
+
+export type PersistedRubricShape = Omit<RubricShape, "options"> & {
+  optionsJson: string;
+};
+
+export function rubricSignature(criteria: readonly RubricShape[]) {
+  return JSON.stringify(
+    [...criteria]
+      .sort((left, right) => left.position - right.position)
+      .map((criterion) => ({
+        name: criterion.name.trim(),
+        description: criterion.description?.trim() ?? "",
+        inputType: criterion.inputType,
+        options: criterion.options.map((option) => option.trim()),
+        weightPercent: Number(criterion.weightPercent),
+        required: Boolean(criterion.required),
+        position: criterion.position,
+      })),
+  );
+}
+
+export function parsePersistedRubricOptions(
+  optionsJson: string,
+  criterionName: string,
+  inputType: string,
+) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(optionsJson);
+  } catch {
+    throw new EvaluationStateError(
+      `Criterion ${criterionName} has invalid persisted scorecard options.`,
+    );
+  }
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((option) => typeof option !== "string" || !option.trim())
+  ) {
+    throw new EvaluationStateError(
+      `Criterion ${criterionName} has invalid persisted scorecard options.`,
+    );
+  }
+  if (inputType === "dropdown" && parsed.length === 0) {
+    throw new EvaluationStateError(
+      `Criterion ${criterionName} has no persisted dropdown options.`,
+    );
+  }
+  if (inputType !== "dropdown" && parsed.length > 0) {
+    throw new EvaluationStateError(
+      `Criterion ${criterionName} has options but is not a dropdown.`,
+    );
+  }
+  return parsed as string[];
+}
+
+export function persistedRubricSignature(
+  criteria: readonly PersistedRubricShape[],
+) {
+  return rubricSignature(
+    criteria.map((criterion) => ({
+      ...criterion,
+      options: parsePersistedRubricOptions(
+        criterion.optionsJson,
+        criterion.name,
+        criterion.inputType,
+      ),
+    })),
+  );
+}
+
+export function assertPlanScorecardConsistency(
+  rounds: ReadonlyArray<{
+    id: string;
+    scorecardId?: string;
+    scorecardVersion: number;
+    criteria: readonly RubricShape[];
+  }>,
+) {
+  const scorecards = new Map<string, string>();
+  for (const round of rounds) {
+    const scorecardId = round.scorecardId ?? round.id;
+    const key = `${scorecardId}:${round.scorecardVersion}`;
+    const signature = rubricSignature(round.criteria);
+    const previous = scorecards.get(key);
+    if (previous && previous !== signature) {
+      throw new EvaluationStateError(
+        `Scorecard ${scorecardId} version ${round.scorecardVersion} is linked to different rubrics. Choose a new scorecard version before saving.`,
+      );
+    }
+    scorecards.set(key, signature);
+  }
+}
 
 export type Round = {
   id: string;
@@ -110,6 +236,11 @@ export type Round = {
   status: string;
   revision: number;
   anonymous: boolean;
+  opensAt: number | null;
+  closesAt: number | null;
+  scorecardId: string;
+  scorecardVersion: number;
+  reviewers: Array<{ personId: string; name: string; email: string }>;
   criteria: Criterion[];
 };
 
@@ -165,6 +296,33 @@ export function summaryAnswer(value: unknown) {
     return items.length ? items.join(", ") : null;
   }
   return null;
+}
+
+/**
+ * Return the server-side blind projection of reviewer-visible answers. The
+ * submitted snapshot is immutable source data, but this projection is the
+ * only answer shape exposed to a blinded reviewer. Unknown or legacy fields
+ * fail closed because labels and IDs are not a reliable privacy boundary.
+ */
+export function blindReviewerVisibleAnswers(
+  snapshot: ReturnType<typeof requireSubmittedSnapshot>,
+) {
+  const reviewerAnswers = reviewerVisibleAnswers(
+    snapshot.schema,
+    snapshot.answers,
+  );
+  const allowedFields = snapshot.schema.fields.filter((field) => {
+    return (
+      field.reviewVisibility === "reviewers" &&
+      field.blindReviewVisibility === "content"
+    );
+  });
+  const allowedIds = new Set(allowedFields.map((field) => field.id));
+  return Object.fromEntries(
+    Object.entries(reviewerAnswers).filter(([fieldId]) =>
+      allowedIds.has(fieldId),
+    ),
+  );
 }
 
 export const sessionReviewSnapshotSchema = z.object({
@@ -513,7 +671,8 @@ export abstract class EvaluationServiceFoundation {
   }
 
   protected async resolveEvaluatorTarget(
-    viewer: Pick<Viewer, "eventId">,
+    viewer: Pick<Viewer, "eventId" | "organisationId">,
+    roundId: string,
     teamId: string | null,
     explicitPersonIds: string[],
   ) {
@@ -526,6 +685,12 @@ export abstract class EvaluationServiceFoundation {
             ON t.id = tm.team_id AND t.event_id = tm.event_id
           JOIN memberships m
             ON m.event_id = tm.event_id AND m.person_id = tm.person_id
+          JOIN evaluation_round_reviewers pool
+            ON pool.event_id = tm.event_id
+           AND pool.round_id = ?
+           AND pool.person_id = tm.person_id
+          JOIN events e
+            ON e.id = tm.event_id AND e.organisation_id = ?
          WHERE tm.event_id = ? AND tm.team_id = ? AND tm.removed_at IS NULL
            AND t.status = 'active' AND m.accepted_at IS NOT NULL
            AND m.revoked_at IS NULL
@@ -533,7 +698,7 @@ export abstract class EvaluationServiceFoundation {
          ORDER BY tm.person_id
       `,
       )
-        .bind(viewer.eventId, teamId)
+        .bind(roundId, viewer.organisationId, viewer.eventId, teamId)
         .all<{ personId: string }>();
       const evaluatorPersonIds = members.results.map(
         (member) => member.personId,
@@ -546,10 +711,31 @@ export abstract class EvaluationServiceFoundation {
       return evaluatorPersonIds;
     }
     const evaluatorPersonIds = [...new Set(explicitPersonIds)];
+    if (evaluatorPersonIds.length === 0) {
+      throw new EvaluationStateError("Choose at least one round reviewer.");
+    }
     const validEvaluators = await this.env.DB.prepare(
-      `SELECT DISTINCT person_id AS id FROM memberships WHERE event_id = ? AND accepted_at IS NOT NULL AND revoked_at IS NULL AND role IN ('evaluator','committee_chair') AND person_id IN (${evaluatorPersonIds.map(() => "?").join(",")})`,
+      `
+      SELECT DISTINCT membership.person_id AS id
+        FROM memberships membership
+        JOIN evaluation_round_reviewers pool
+          ON pool.event_id = membership.event_id
+         AND pool.round_id = ?
+         AND pool.person_id = membership.person_id
+        JOIN events e
+          ON e.id = membership.event_id AND e.organisation_id = ?
+       WHERE membership.event_id = ? AND membership.accepted_at IS NOT NULL
+         AND membership.revoked_at IS NULL
+         AND membership.role IN ('evaluator','committee_chair')
+         AND membership.person_id IN (${evaluatorPersonIds.map(() => "?").join(",")})
+    `,
     )
-      .bind(viewer.eventId, ...evaluatorPersonIds)
+      .bind(
+        roundId,
+        viewer.organisationId,
+        viewer.eventId,
+        ...evaluatorPersonIds,
+      )
       .all<{ id: string }>();
     if (validEvaluators.results.length !== evaluatorPersonIds.length) {
       throw new EvaluationStateError(

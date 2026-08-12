@@ -133,6 +133,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -143,6 +145,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -153,6 +157,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -163,6 +169,7 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: "reviewers",
+          blindReviewVisibility: "content",
           condition: null,
         },
         {
@@ -256,6 +263,25 @@ async function resetEvaluationFixture() {
         WHERE event_id = ? AND person_id = ? AND role = 'evaluator'`,
     ).bind(admin.eventId, evaluator.personId),
   ]);
+}
+
+async function addRoundReviewer(
+  roundId: string,
+  personId = evaluator.personId,
+) {
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO evaluation_round_reviewers
+       (id, event_id, round_id, person_id, added_by_person_id)
+     VALUES (?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      `test-round-reviewer-${roundId}-${personId}`,
+      admin.eventId,
+      roundId,
+      personId,
+      admin.personId,
+    )
+    .run();
 }
 
 describe("evaluation vertical slice", () => {
@@ -363,6 +389,7 @@ describe("evaluation vertical slice", () => {
             },
           ],
         });
+        await addRoundReviewer("eval-session-round");
         const assigned = await service.assign(admin, {
           roundId: "eval-session-round",
           targetType: "session",
@@ -500,6 +527,7 @@ describe("evaluation vertical slice", () => {
       const roundId =
         adminWorkspace.plan!.rounds.find((round) => round.status === "active")
           ?.id ?? adminWorkspace.plan!.rounds[0]!.id;
+      await addRoundReviewer(roundId);
       await env.DB.prepare(
         "UPDATE evaluation_rounds SET status = 'active' WHERE id = ? AND event_id = ?",
       )
@@ -562,11 +590,11 @@ describe("evaluation vertical slice", () => {
         env.DB.prepare(
           `
           INSERT INTO evaluation_rounds (
-            id, event_id, plan_id, round_number, name, status, revision,
+            id, event_id, plan_id, round_number, name, status, scorecard_id, revision,
             created_at, updated_at
           ) VALUES (
             'eval-recused-access-round', ?, 'eval-recused-access-plan', 1,
-            'Initial review', 'active', 1, unixepoch(), unixepoch()
+            'Initial review', 'active', 'eval-recused-access-round', 1, unixepoch(), unixepoch()
           )
         `,
         ).bind(admin.eventId),
@@ -795,9 +823,10 @@ describe("evaluation vertical slice", () => {
             name: "Assistant assignment round",
             anonymous: false,
             criteria,
-          },
-        ],
-      });
+            },
+          ],
+        });
+      await addRoundReviewer("eval-assistant-assignment-round");
       const input = {
         roundId: "eval-assistant-assignment-round",
         targetType: "submission" as const,
@@ -835,9 +864,10 @@ describe("evaluation vertical slice", () => {
             name: "Initial review",
             anonymous: false,
             criteria,
-          },
-        ],
-      });
+            },
+          ],
+        });
+      await addRoundReviewer("eval-undo-round");
       const assigned = await service.assign(admin, {
         roundId: "eval-undo-round",
         targetType: "submission",

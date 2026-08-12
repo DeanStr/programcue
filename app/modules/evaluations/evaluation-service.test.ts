@@ -133,6 +133,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -143,6 +145,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -153,6 +157,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -163,6 +169,7 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: "reviewers",
+          blindReviewVisibility: "content",
           condition: null,
         },
         {

@@ -241,6 +241,14 @@ export abstract class EvaluationReviewerWorkflows extends EvaluationReviewSubmis
        WHERE a.id = ? AND a.event_id = ?
          AND a.status = 'submitted' AND r.status IN ('submitted','locked')
          AND round.status = 'active'
+         AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
+         AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
+         AND EXISTS (
+           SELECT 1 FROM evaluation_round_reviewers pool
+            WHERE pool.event_id = a.event_id
+              AND pool.round_id = a.round_id
+              AND pool.person_id = a.evaluator_person_id
+         )
          AND NOT EXISTS (
            SELECT 1 FROM submission_decisions final_decision
             WHERE final_decision.event_id = a.event_id
@@ -294,6 +302,14 @@ export abstract class EvaluationReviewerWorkflows extends EvaluationReviewSubmis
            AND EXISTS (
              SELECT 1 FROM evaluation_rounds
               WHERE id = ? AND event_id = ? AND status = 'active'
+                AND (opens_at IS NULL OR opens_at <= unixepoch())
+                AND (closes_at IS NULL OR closes_at > unixepoch())
+                AND EXISTS (
+                  SELECT 1 FROM evaluation_round_reviewers pool
+                   WHERE pool.event_id = evaluator_assignments.event_id
+                     AND pool.round_id = evaluator_assignments.round_id
+                     AND pool.person_id = evaluator_assignments.evaluator_person_id
+                )
            )
            AND NOT EXISTS (
              SELECT 1 FROM submission_decisions

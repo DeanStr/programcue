@@ -237,9 +237,9 @@ describe("Submissions D1 vertical slice", () => {
         ).bind(planId, viewer.eventId),
         env.DB.prepare(
           `INSERT INTO evaluation_rounds (
-             id, event_id, plan_id, round_number, name, status
-           ) VALUES (?, ?, ?, 1, 'Manual review', 'active')`,
-        ).bind(roundId, viewer.eventId, planId),
+             id, event_id, plan_id, round_number, name, status, scorecard_id
+           ) VALUES (?, ?, ?, 1, 'Manual review', 'active', ?)`,
+        ).bind(roundId, viewer.eventId, planId, roundId),
         env.DB.prepare(
           `INSERT INTO evaluation_teams (id, event_id, name, status)
            VALUES (?, ?, ?, 'active')`,

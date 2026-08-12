@@ -15,7 +15,14 @@ import {
   EvaluationStateError,
   EvaluationValidationError,
 } from "~/modules/evaluations/evaluation-service.server";
+import {
+  parseScorecardSelection,
+  ScorecardSelectionError,
+} from "~/modules/evaluations/evaluation-scorecard-selection";
 import { EventService } from "~/modules/events/event-service.server";
+import {
+  communicationScheduledEpoch,
+} from "~/modules/communications/communication-time";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
@@ -28,6 +35,7 @@ function readRubricCriteria(values: FormData) {
   const names = values.getAll("criterionName").map(String);
   const descriptions = values.getAll("criterionDescription").map(String);
   const inputTypes = values.getAll("criterionInputType").map(String);
+  const options = values.getAll("criterionOptions").map(String);
   const weights = values.getAll("criterionWeight").map(String);
   const required = values.getAll("criterionRequired").map(String);
   return names
@@ -36,6 +44,10 @@ function readRubricCriteria(values: FormData) {
       name,
       description: descriptions[index],
       inputType: inputTypes[index],
+      options: (options[index] ?? "")
+        .split(/[\n,]/u)
+        .map((option) => option.trim())
+        .filter(Boolean),
       weightPercent: weights[index],
       required:
         required[index] === "true"
@@ -47,6 +59,26 @@ function readRubricCriteria(values: FormData) {
     }))
     .filter((criterion) => criterion.name.trim())
     .map((criterion, position) => ({ ...criterion, position }));
+}
+
+function readRoundDateTime(
+  values: FormData,
+  field: string,
+  eventTimezone: string,
+) {
+  const value = String(values.get(field) ?? "").trim();
+  if (!value) return null;
+  try {
+    return new Date(
+      communicationScheduledEpoch(value, eventTimezone) * 1_000,
+    ).toISOString();
+  } catch (error) {
+    throw new EvaluationValidationError(
+      error instanceof Error
+        ? error.message
+        : "Enter a valid round date and time.",
+    );
+  }
 }
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
@@ -201,6 +233,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
     if (values.get("intent") === "create-plan") {
       const criteria = readRubricCriteria(values);
+      const event = await new EventService(env).getSetup(viewer);
       const planId = await service.savePlan(viewer, {
         revision: 0,
         name: values.get("planName"),
@@ -211,6 +244,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
             id: crypto.randomUUID(),
             name: values.get("roundName"),
             anonymous: values.get("anonymous") === "true",
+            opensAt: readRoundDateTime(values, "roundOpensAt", event.timezone),
+            closesAt: readRoundDateTime(values, "roundClosesAt", event.timezone),
             criteria,
           },
         ],
@@ -261,12 +296,29 @@ export async function action({ request, context }: ActionFunctionArgs) {
       };
     }
     if (values.get("intent") === "add-next-round") {
+      const event = await new EventService(env).getSetup(viewer);
+      let scorecardSelection;
+      try {
+        scorecardSelection = parseScorecardSelection(
+          values.get("scorecardSelection"),
+        );
+      } catch (error) {
+        if (error instanceof ScorecardSelectionError) {
+          throw new EvaluationValidationError(error.message);
+        }
+        throw error;
+      }
       const roundId = await service.addNextRound(viewer, {
         planId: values.get("planId"),
         planRevision: values.get("planRevision"),
         name: values.get("name"),
+        opensAt: readRoundDateTime(values, "roundOpensAt", event.timezone),
+        closesAt: readRoundDateTime(values, "roundClosesAt", event.timezone),
+        anonymous: values.get("anonymous") === "true",
         dueAt: null,
         cloneRoundId: values.get("cloneRoundId"),
+        scorecardId: scorecardSelection.scorecardId,
+        scorecardVersion: scorecardSelection.scorecardVersion,
       });
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "evaluation_round",
@@ -277,10 +329,16 @@ export async function action({ request, context }: ActionFunctionArgs) {
       return { ok: true, message: "Next round created from the rubric." };
     }
     if (values.get("intent") === "update-draft-round") {
+      const event = await new EventService(env).getSetup(viewer);
       await service.updateDraftRound(viewer, {
         roundId: values.get("roundId"),
         revision: values.get("roundRevision"),
         name: values.get("name"),
+        opensAt: readRoundDateTime(values, "roundOpensAt", event.timezone),
+        closesAt: readRoundDateTime(values, "roundClosesAt", event.timezone),
+        anonymous: values.get("anonymous") === "true",
+        scorecardId: values.get("scorecardId") || null,
+        scorecardVersion: values.get("scorecardVersion") || undefined,
         dueAt: null,
         criteria: readRubricCriteria(values),
       });
@@ -291,6 +349,29 @@ export async function action({ request, context }: ActionFunctionArgs) {
       });
       if (realtimeFailure) return data(realtimeFailure, { status: 207 });
       return { ok: true, message: "Draft round and rubric saved." };
+    }
+    if (values.get("intent") === "change-round-reviewer") {
+      const result = await service.changeRoundReviewerPool(viewer, {
+        roundId: values.get("roundId"),
+        personId: values.get("personId"),
+        operation: values.get("operation"),
+        confirmed: values.get("confirmed") === "true" ? true : undefined,
+      });
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "evaluation_round",
+        entityId: String(values.get("roundId") ?? ""),
+        changeType: "updated",
+      });
+      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
+      return {
+        ok: true,
+        message:
+          values.get("operation") === "remove"
+            ? result.cancelledAssignmentCount > 0
+              ? `Reviewer removed from this round pool. ${result.cancelledAssignmentCount} unfinished assignment${result.cancelledAssignmentCount === 1 ? "" : "s"} cancelled and available for reassignment.`
+              : "Reviewer removed from this round pool. No unfinished assignments were cancelled."
+            : "Reviewer added to this round pool.",
+      };
     }
     if (values.get("intent") === "assign") {
       const assignmentTarget = String(values.get("assignmentTarget") ?? "");

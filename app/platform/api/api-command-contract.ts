@@ -35,6 +35,7 @@ const apiFormFieldSchema = formFieldSchema
   .safeExtend({
     required: z.boolean(),
     reviewVisibility: z.enum(["reviewers", "administrators_only"]),
+    blindReviewVisibility: z.enum(["content", "identity"]).optional(),
     condition: z
       .object({
         fieldId: z.string(),

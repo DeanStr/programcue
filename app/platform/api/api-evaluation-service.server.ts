@@ -13,6 +13,7 @@ export const EVALUATION_API_RESOURCES = [
   "plans",
   "teams",
   "rounds",
+  "round-reviewers",
   "assignments",
   "reviews",
   "conflicts",
@@ -53,6 +54,14 @@ const querySchemas = {
       q: z.string().trim().min(1).max(160).optional(),
       status: z.enum(["draft", "active", "closed", "archived"]).optional(),
       planId: z.string().trim().min(1).max(200).optional(),
+    })
+    .strict(),
+  "round-reviewers": z
+    .object({
+      ...baseQuery,
+      q: z.string().trim().min(1).max(160).optional(),
+      roundId: z.string().trim().min(1).max(200).optional(),
+      evaluatorPersonId: z.string().trim().min(1).max(200).optional(),
     })
     .strict(),
   assignments: z
@@ -179,7 +188,9 @@ function filters(
 }
 
 function parseJson(value: unknown, label: string) {
-  if (typeof value !== "string") return value;
+  if (typeof value !== "string") {
+    throw new Error(`${label} is missing persisted JSON.`);
+  }
   try {
     return JSON.parse(value) as unknown;
   } catch {
@@ -187,10 +198,32 @@ function parseJson(value: unknown, label: string) {
   }
 }
 
+function parseCriterionOptions(
+  value: unknown,
+  label: string,
+  inputType: string,
+) {
+  const parsed = parseJson(value, label);
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((option) => typeof option !== "string" || !option.trim())
+  ) {
+    throw new Error(`${label} has an invalid persisted option list.`);
+  }
+  if (inputType === "dropdown" && parsed.length === 0) {
+    throw new Error(`${label} cannot be empty for a dropdown criterion.`);
+  }
+  if (inputType !== "dropdown" && parsed.length > 0) {
+    throw new Error(`${label} is present on a non-dropdown criterion.`);
+  }
+  return parsed;
+}
+
 const responseKeys: Record<EvaluationApiResource, string> = {
   plans: "plans",
   teams: "teams",
   rounds: "rounds",
+  "round-reviewers": "roundReviewers",
   assignments: "assignments",
   reviews: "reviews",
   conflicts: "conflicts",
@@ -224,6 +257,7 @@ export class ApiEvaluationService {
       const criteria = await this.env.DB.prepare(
         `SELECT criterion.id, criterion.round_id AS roundId, criterion.name,
                 criterion.description, criterion.input_type AS inputType,
+                criterion.options_json AS optionsJson,
                 criterion.weight_percent AS weightPercent,
                 criterion.required, criterion.position
            FROM evaluation_criteria criterion
@@ -242,8 +276,13 @@ export class ApiEvaluationService {
       for (const record of records) {
         record.criteria = criteria.results
           .filter((criterion) => criterion.roundId === record.id)
-          .map((criterion) => ({
+          .map(({ optionsJson, ...criterion }) => ({
             ...criterion,
+            options: parseCriterionOptions(
+              optionsJson,
+              `Evaluation criterion ${String(criterion.id)} options`,
+              String(criterion.inputType),
+            ),
             required: Boolean(criterion.required),
           }));
       }
@@ -274,7 +313,12 @@ export class ApiEvaluationService {
       });
       sql = `SELECT * FROM (
         SELECT plan.id, plan.created_at AS sort, plan.name, plan.status,
-               plan.blinded_reviewing AS blindedReviewing,
+               CASE WHEN EXISTS (
+                 SELECT 1 FROM evaluation_rounds round
+                  WHERE round.plan_id = plan.id
+                    AND round.event_id = plan.event_id
+                    AND round.blinded_reviewing = 1
+               ) THEN 1 ELSE 0 END AS blindedReviewing,
                plan.decision_role AS decisionRole, plan.revision,
                plan.created_by_person_id AS createdByPersonId,
                plan.created_at AS createdAt, plan.updated_at AS updatedAt,
@@ -317,6 +361,9 @@ export class ApiEvaluationService {
         SELECT round.id, round.created_at AS sort, round.plan_id AS planId,
                round.round_number AS roundNumber, round.name, round.status,
                round.opens_at AS opensAt, round.closes_at AS closesAt,
+               round.blinded_reviewing AS blindedReviewing,
+               round.scorecard_id AS scorecardId,
+               round.scorecard_version AS scorecardVersion,
                round.advancement_rule_json AS advancementRuleJson,
                round.revision, round.created_at AS createdAt,
                round.updated_at AS updatedAt
@@ -324,6 +371,29 @@ export class ApiEvaluationService {
           JOIN events event ON event.id = round.event_id
             AND event.organisation_id = ?
          WHERE round.event_id = ?
+      ) base WHERE 1 = 1${selectedFilters.sql}
+      ORDER BY base.sort DESC, base.id DESC LIMIT ?`;
+    } else if (resource === "round-reviewers") {
+      selectedFilters = filters(input, {
+        q: "base.personName",
+        roundId: "base.roundId",
+        evaluatorPersonId: "base.personId",
+      });
+      sql = `SELECT * FROM (
+        SELECT pool.id, pool.created_at AS sort,
+               pool.round_id AS roundId, round.name AS roundName,
+               pool.person_id AS personId, person.display_name AS personName,
+               person.email AS personEmail,
+               pool.added_by_person_id AS addedByPersonId,
+               pool.revision, pool.created_at AS createdAt,
+               pool.updated_at AS updatedAt
+          FROM evaluation_round_reviewers pool
+          JOIN events event ON event.id = pool.event_id
+            AND event.organisation_id = ?
+          JOIN evaluation_rounds round ON round.id = pool.round_id
+            AND round.event_id = pool.event_id
+          JOIN people person ON person.id = pool.person_id
+         WHERE pool.event_id = ?
       ) base WHERE 1 = 1${selectedFilters.sql}
       ORDER BY base.sort DESC, base.id DESC LIMIT ?`;
     } else if (resource === "assignments") {
@@ -503,6 +573,7 @@ export class ApiEvaluationService {
     if (resource === "plans")
       result.blindedReviewing = Boolean(result.blindedReviewing);
     if (resource === "rounds") {
+      result.blindedReviewing = Boolean(result.blindedReviewing);
       result.advancementRule = parseJson(
         result.advancementRuleJson,
         `Evaluation round ${String(result.id)} advancement rule`,

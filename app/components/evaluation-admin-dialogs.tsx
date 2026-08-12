@@ -187,7 +187,7 @@ export function RoundAdvancementDialog() {
     activeRound,
     nextRound,
     advanceableSubmissions,
-    assignmentTargets,
+    nextRoundAssignmentTargets,
   } = useEvaluationAdminModel();
   return advanceOpen && activeRound && nextRound ? (
     <Dialog
@@ -239,7 +239,7 @@ export function RoundAdvancementDialog() {
           Next-round reviewers
           <select className="select" name="assignmentTarget" required>
             {(["Teams", "Individuals"] as const).map((kind) => {
-              const targets = assignmentTargets.filter(
+              const targets = nextRoundAssignmentTargets.filter(
                 (target) => target.kind === kind,
               );
               return targets.length ? (

@@ -69,6 +69,11 @@ export type EvaluationAdminModel = {
     label: string;
     kind: string;
   }>;
+  nextRoundAssignmentTargets: Array<{
+    value: string;
+    label: string;
+    kind: string;
+  }>;
   bulkAssignableSubmissions: EvaluationSubmission[];
   bulkSelectedSubmissions: EvaluationSubmission[];
   bulkAssignmentTargetLabel: string | undefined;
@@ -168,22 +173,39 @@ export function useEvaluationAdminState(
             assignment.reviewStatus === "locked"),
       ),
   );
-  const assignmentTargets = [
-    ...loaderData.teams
-      .filter(
-        (team) => team.status === "active" && team.eligibleMemberCount > 0,
-      )
-      .map((team) => ({
-        value: `team:${team.id}`,
-        label: `${team.name} (${team.eligibleMemberCount})`,
-        kind: "Teams",
-      })),
-    ...loaderData.evaluators.map((evaluator) => ({
-      value: `person:${evaluator.id}`,
-      label: evaluator.name,
-      kind: "Individuals",
-    })),
-  ];
+  const assignmentTargetsForRound = (round: EvaluationRound | undefined) => {
+    if (!round) return [];
+    const reviewerIds = new Set(
+      round.reviewers.map((reviewer) => reviewer.personId),
+    );
+    return [
+      ...loaderData.teams
+        .filter((team) => team.status === "active")
+        .map((team) => {
+          const eligibleMemberCount = team.members.filter(
+            (member) => member.authorised && reviewerIds.has(member.personId),
+          ).length;
+          return { team, eligibleMemberCount };
+        })
+        .filter(({ eligibleMemberCount }) => eligibleMemberCount > 0)
+        .map(({ team, eligibleMemberCount }) => ({
+          value: `team:${team.id}`,
+          label: `${team.name} (${eligibleMemberCount})`,
+          kind: "Teams",
+        })),
+      ...loaderData.evaluators
+        .filter((evaluator) => reviewerIds.has(evaluator.id))
+        .map((evaluator) => ({
+          value: `person:${evaluator.id}`,
+          label: evaluator.name,
+          kind: "Individuals",
+        })),
+    ];
+  };
+  const assignmentTargets = assignmentTargetsForRound(activeRound);
+  const nextRoundAssignmentTargets = assignmentTargetsForRound(
+    nextRound ?? undefined,
+  );
   const bulkAssignableSubmissions = loaderData.submissions.filter(
     (submission) =>
       ["submitted", "assigned", "in_review"].includes(submission.status),
@@ -242,6 +264,7 @@ export function useEvaluationAdminState(
     unfinishedAssignmentCount,
     advanceableSubmissions,
     assignmentTargets,
+    nextRoundAssignmentTargets,
     bulkAssignableSubmissions,
     bulkSelectedSubmissions,
     bulkAssignmentTargetLabel,

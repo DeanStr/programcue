@@ -5,6 +5,7 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { ensureJudgedDemoWorkflow } from "~/platform/demo/demo-reset.server";
+import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import {
   EventService,
   EventRepositoryMigrationRequiredError,
@@ -306,6 +307,81 @@ describe("Airtable authoritative room repository", () => {
   });
 
   describe("additional workflow coverage", () => {
+    it("projects round-owned evaluation depth through the managed Airtable schema", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoEvaluationData(testEnv);
+      await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE evaluation_rounds
+              SET opens_at = unixepoch() - 60,
+                  closes_at = unixepoch() + 3600,
+                  blinded_reviewing = 1,
+                  revision = revision + 1
+            WHERE id = 'demo-evaluation-round' AND event_id = ?`,
+        ).bind(viewer.eventId),
+        env.DB.prepare(
+          `UPDATE evaluation_criteria
+              SET input_type = 'dropdown',
+                  options_json = '["Accept","Maybe","Reject"]'
+            WHERE id = 'demo-evaluation-criterion-relevance'
+              AND event_id = ?`,
+        ).bind(viewer.eventId),
+      ]);
+
+      const provider = fakeAirtable();
+      const rooms = new AirtableRoomRepository(testEnv, {
+        createClient: () => provider.client,
+      });
+      await rooms.configure(viewer, connectionInput);
+      const eventData = eventDataRepository(testEnv, rooms, provider);
+      const migration = new AirtableMigrationService(testEnv, {
+        rooms,
+        eventData,
+      });
+      const preview = await migration.preview(viewer, "airtable");
+      await migration.confirm(viewer, preview.previewId);
+
+      const synchronized = await eventData.assertSynchronized(
+        viewer.organisationId,
+        viewer.eventId,
+      );
+      const round = synchronized.d1.entities.find(
+        (entity) =>
+          entity.entityType === "evaluation_round" &&
+          entity.entityId === "demo-evaluation-round",
+      );
+      const criterion = synchronized.d1.entities.find(
+        (entity) =>
+          entity.entityType === "evaluation_criterion" &&
+          entity.entityId === "demo-evaluation-criterion-relevance",
+      );
+      const poolMember = synchronized.d1.entities.find(
+        (entity) => entity.entityType === "evaluation_round_reviewer",
+      );
+      const assignment = synchronized.d1.entities.find(
+        (entity) => entity.entityType === "evaluator_assignment",
+      );
+
+      expect(round?.payload).toMatchObject({
+        opens_at: expect.any(Number),
+        closes_at: expect.any(Number),
+        blinded_reviewing: 1,
+        scorecard_id: "demo-evaluation-round",
+        scorecard_version: 1,
+      });
+      expect(criterion?.payload).toMatchObject({
+        input_type: "dropdown",
+        options_json: '["Accept","Maybe","Reject"]',
+      });
+      expect(poolMember?.payload).toMatchObject({
+        event_id: viewer.eventId,
+        round_id: "demo-evaluation-round",
+        person_id: "person-demo-evaluator",
+      });
+      expect(assignment?.payload).toHaveProperty("cancellation_reason", null);
+      expect(synchronized.airtable.hash).toBe(synchronized.d1.hash);
+    });
+
     it("fails when an existing managed table has an incompatible primary field", async () => {
       const provider = fakeAirtable([
         {

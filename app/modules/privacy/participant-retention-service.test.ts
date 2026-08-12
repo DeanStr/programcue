@@ -312,9 +312,9 @@ describe("participant retention", () => {
       ).bind(planId, seeded.eventId),
       seeded.testEnv.DB.prepare(
         `INSERT INTO evaluation_rounds (
-           id, event_id, plan_id, round_number, name, status
-         ) VALUES (?, ?, ?, 1, 'Retained session review', 'archived')`,
-      ).bind(roundId, seeded.eventId, planId),
+           id, event_id, plan_id, round_number, name, status, scorecard_id
+         ) VALUES (?, ?, ?, 1, 'Retained session review', 'archived', ?)`,
+      ).bind(roundId, seeded.eventId, planId, roundId),
       seeded.testEnv.DB.prepare(
         `INSERT INTO evaluator_assignments (
            id, event_id, round_id, session_id, session_snapshot_json,

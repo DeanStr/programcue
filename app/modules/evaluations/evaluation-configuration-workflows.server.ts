@@ -5,9 +5,16 @@ import {
 } from "./evaluation-errors";
 import { EvaluationAccessWorkflows } from "./evaluation-access-workflows.server";
 import {
+  evaluationRoundReviewerSchema,
   evaluationTeamMemberSchema,
   evaluationTeamSchema,
 } from "./evaluation-schema";
+import {
+  roundReviewerCommandResultSchema,
+  type EvaluationAdminActor,
+  type EvaluationApiCommand,
+  type EvaluationRoundReviewerResult,
+} from "./evaluation-service-foundation.server";
 
 export abstract class EvaluationConfigurationWorkflows extends EvaluationAccessWorkflows {
   async saveTeam(viewer: Viewer, input: unknown) {
@@ -407,7 +414,7 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationAccessW
     );
     const results = await this.env.DB.batch(statements);
     const changed = results[0];
-    const audited = results.at(-1);
+    const audited = results.at(-1)!;
     if (
       (changed?.meta.changes ?? 0) !== 1 ||
       (audited?.meta.changes ?? 0) !== 1
@@ -418,5 +425,304 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationAccessW
           : "The team member could not be saved.",
       );
     }
+  }
+
+  async changeRoundReviewerPool(
+    viewer: EvaluationAdminActor,
+    input: unknown,
+    command?: EvaluationApiCommand,
+  ) {
+    return this.projectCommand(
+      viewer,
+      "evaluation.round_reviewer.change",
+      input,
+      command,
+      () => this.changeRoundReviewerPoolD1(viewer, input, command),
+    );
+  }
+
+  protected async changeRoundReviewerPoolD1(
+    viewer: EvaluationAdminActor,
+    input: unknown,
+    command?: EvaluationApiCommand,
+  ): Promise<EvaluationRoundReviewerResult> {
+    await this.assertViewerEvent(viewer);
+    this.assertEvaluationManager(viewer);
+    const commandState = await this.prepareApiCommand(
+      viewer,
+      "evaluation.round_reviewer.change",
+      command,
+      roundReviewerCommandResultSchema,
+    );
+    if (commandState.replay) return commandState.replay;
+    const commandGuard = this.commandGuard(commandState.prepared);
+    const parsed = evaluationRoundReviewerSchema.parse(input);
+    const membership =
+      parsed.operation === "add"
+        ? await this.env.DB.prepare(
+            `
+            SELECT 1
+              FROM memberships m
+              JOIN events e
+                ON e.id = m.event_id AND e.organisation_id = ?
+             WHERE m.event_id = ? AND m.person_id = ?
+               AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL
+               AND m.role IN ('evaluator','committee_chair')
+          `,
+          )
+            .bind(viewer.organisationId, viewer.eventId, parsed.personId)
+            .first()
+        : await this.env.DB.prepare(
+            `
+            SELECT 1
+              FROM evaluation_round_reviewers pool
+              JOIN events e
+                ON e.id = pool.event_id AND e.organisation_id = ?
+             WHERE pool.event_id = ? AND pool.round_id = ? AND pool.person_id = ?
+          `,
+          )
+            .bind(
+              viewer.organisationId,
+              viewer.eventId,
+              parsed.roundId,
+              parsed.personId,
+            )
+            .first();
+    if (!membership) {
+      throw new EvaluationStateError(
+        parsed.operation === "add"
+          ? "Only an active evaluator or committee chair in this event can join a round pool."
+          : "The evaluator is not in this round pool.",
+      );
+    }
+    const operationId = crypto.randomUUID();
+    const mutations =
+      parsed.operation === "add"
+        ? [
+            this.env.DB.prepare(
+              `
+            INSERT INTO evaluation_round_reviewers (
+              id, event_id, round_id, person_id, added_by_person_id,
+              revision, created_at, updated_at
+            )
+            SELECT ?, r.event_id, r.id, ?, ?, 1, unixepoch(), unixepoch()
+              FROM evaluation_rounds r
+              JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+              JOIN memberships m
+                ON m.event_id = r.event_id
+               AND m.person_id = ?
+               AND m.accepted_at IS NOT NULL
+               AND m.revoked_at IS NULL
+               AND m.role IN ('evaluator','committee_chair')
+             WHERE r.id = ? AND r.event_id = ?
+               AND r.status IN ('draft','active','closed')
+               ${commandGuard.sql}
+            ON CONFLICT(round_id, person_id) DO UPDATE SET
+              revision = evaluation_round_reviewers.revision + 1,
+              updated_at = unixepoch(), added_by_person_id = excluded.added_by_person_id
+          `,
+            ).bind(
+              crypto.randomUUID(),
+              parsed.personId,
+              viewer.personId,
+              viewer.organisationId,
+              parsed.personId,
+              parsed.roundId,
+              viewer.eventId,
+              ...commandGuard.bindings,
+            ),
+          ]
+        : [
+            this.env.DB.prepare(
+              `
+            UPDATE evaluator_assignments
+               SET status = 'cancelled', revision = revision + 1,
+                   last_operation_id = ?, cancellation_reason = 'reviewer_removed'
+             WHERE event_id = ? AND round_id = ? AND evaluator_person_id = ?
+               AND status IN ('assigned','in_progress','reopened')
+               AND EXISTS (
+                 SELECT 1 FROM evaluation_rounds r
+                 JOIN events e
+                   ON e.id = r.event_id AND e.organisation_id = ?
+                WHERE r.id = evaluator_assignments.round_id
+                  AND r.event_id = evaluator_assignments.event_id
+               )
+               ${commandGuard.sql}
+          `,
+            ).bind(
+              operationId,
+              viewer.eventId,
+              parsed.roundId,
+              parsed.personId,
+              viewer.organisationId,
+              ...commandGuard.bindings,
+            ),
+            this.env.DB.prepare(
+              `
+            DELETE FROM evaluation_round_reviewers
+             WHERE event_id = ? AND round_id = ? AND person_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM events e
+                  WHERE e.id = evaluation_round_reviewers.event_id
+                    AND e.organisation_id = ?
+               )
+               ${commandGuard.sql}
+          `,
+            ).bind(
+              viewer.eventId,
+              parsed.roundId,
+              parsed.personId,
+              viewer.organisationId,
+              ...commandGuard.bindings,
+            ),
+          ];
+    const audit = this.env.DB.prepare(
+      `
+      INSERT INTO audit_events (
+        id, organisation_id, event_id, actor_person_id, action,
+        entity_type, entity_id, metadata_json, created_at
+      )
+      SELECT ?, ?, ?, ?, ?, 'evaluation_round', ?,
+              json_object(
+                'personId', ?,
+                'cancelledAssignmentCount', (
+                  SELECT COUNT(*) FROM evaluator_assignments assignment
+                   WHERE assignment.event_id = ?
+                     AND assignment.round_id = ?
+                     AND assignment.evaluator_person_id = ?
+                     AND assignment.last_operation_id = ?
+                     AND assignment.status = 'cancelled'
+                )
+              ), unixepoch()
+       WHERE EXISTS (
+         SELECT 1 FROM evaluation_rounds r
+         JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+        WHERE r.id = ? AND r.event_id = ?
+       )
+       ${commandGuard.sql}
+    `,
+    ).bind(
+      operationId,
+      viewer.organisationId,
+      viewer.eventId,
+      viewer.personId,
+      parsed.operation === "add"
+        ? "evaluation.round.reviewer.added"
+        : "evaluation.round.reviewer.removed",
+      parsed.roundId,
+      parsed.personId,
+      viewer.eventId,
+      parsed.roundId,
+      parsed.personId,
+      operationId,
+      viewer.organisationId,
+      parsed.roundId,
+      viewer.eventId,
+      ...commandGuard.bindings,
+    );
+    const commandStatements = this.commandClaimStatements(
+      commandState.prepared,
+    );
+    const domainStatementIndex = commandStatements.length;
+    const auditIndex = domainStatementIndex + mutations.length;
+    const statements: D1PreparedStatement[] = [
+      ...commandStatements,
+      ...mutations,
+      audit,
+    ];
+    if (commandState.prepared) {
+      statements.push(
+        this.env.DB.prepare(
+          `
+          UPDATE idempotency_records
+             SET status = 'completed', response_status = 200,
+                 response_json = json_object(
+                   'roundId', ?,
+                   'personId', ?,
+                   'operation', ?,
+                   'cancelledAssignmentCount', CASE WHEN ? = 'remove' THEN (
+                     SELECT COUNT(*) FROM evaluator_assignments assignment
+                      WHERE assignment.event_id = ?
+                        AND assignment.round_id = ?
+                        AND assignment.evaluator_person_id = ?
+                        AND assignment.last_operation_id = ?
+                        AND assignment.status = 'cancelled'
+                   ) ELSE 0 END
+                 ),
+                 entity_type = 'evaluation_round_reviewer', entity_id = ?,
+                 completed_at = unixepoch()
+           WHERE id = ? AND organisation_id = ? AND event_id = ?
+             AND actor_id = ? AND scope = 'evaluation.round_reviewer.change'
+             AND idempotency_key = ? AND request_hash = ?
+             AND status = 'processing'
+             AND EXISTS (
+               SELECT 1 FROM audit_events committed_audit
+                WHERE committed_audit.id = ?
+                  AND committed_audit.organisation_id = idempotency_records.organisation_id
+                  AND committed_audit.event_id = idempotency_records.event_id
+                  AND committed_audit.action = ?
+             )
+        `,
+        ).bind(
+          parsed.roundId,
+          parsed.personId,
+          parsed.operation,
+          parsed.operation,
+          viewer.eventId,
+          parsed.roundId,
+          parsed.personId,
+          operationId,
+          parsed.roundId,
+          commandState.prepared.recordId,
+          viewer.organisationId,
+          viewer.eventId,
+          commandState.prepared.actor.actorId,
+          commandState.prepared.input.idempotencyKey,
+          commandState.prepared.input.requestHash,
+          operationId,
+          parsed.operation === "add"
+            ? "evaluation.round.reviewer.added"
+            : "evaluation.round.reviewer.removed",
+        ),
+      );
+    }
+    const results = await this.env.DB.batch(statements);
+    const changed = results[
+      domainStatementIndex + (parsed.operation === "add" ? 0 : 1)
+    ];
+    const audited = results[auditIndex];
+    const commandCompleted = commandState.prepared
+      ? (results.at(-1)?.meta.changes ?? 0) === 1
+      : true;
+    if (
+      (changed?.meta.changes ?? 0) !== 1 ||
+      (audited?.meta.changes ?? 0) !== 1 ||
+      !commandCompleted
+    ) {
+      const replay = await this.recoverApiCommand(commandState.prepared);
+      if (replay) return replay;
+      throw new EvaluationRevisionConflictError(
+        "The round reviewer pool changed before it could be saved. Refresh and try again.",
+      );
+    }
+    const result: EvaluationRoundReviewerResult = {
+      roundId: parsed.roundId,
+      personId: parsed.personId,
+      operation: parsed.operation,
+      cancelledAssignmentCount:
+        parsed.operation === "remove"
+          ? (results[domainStatementIndex]?.meta.changes ?? 0)
+          : 0,
+    };
+    if (commandState.prepared) {
+      const replay = await this.readApiCommand(commandState.prepared);
+      if (!replay) {
+        throw new Error(
+          "The evaluation reviewer-pool command did not commit an idempotency result.",
+        );
+      }
+      return replay;
+    }
+    return result;
   }
 }

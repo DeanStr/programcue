@@ -50,13 +50,18 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
     const parsed = assignmentBatchSchema.parse(input);
     const evaluatorPersonIds = await this.resolveEvaluatorTarget(
       viewer,
+      parsed.roundId,
       parsed.teamId,
       parsed.evaluatorPersonIds,
     );
     const round = await this.env.DB.prepare(
       `
       SELECT r.id FROM evaluation_rounds r JOIN evaluation_plans p ON p.id = r.plan_id AND p.event_id = r.event_id
-      JOIN events e ON e.id = r.event_id WHERE r.id = ? AND r.event_id = ? AND e.organisation_id = ? AND r.status = 'active'
+      JOIN events e ON e.id = r.event_id
+       WHERE r.id = ? AND r.event_id = ? AND e.organisation_id = ?
+         AND r.status = 'active'
+         AND (r.opens_at IS NULL OR r.opens_at <= unixepoch())
+         AND (r.closes_at IS NULL OR r.closes_at > unixepoch())
     `,
     )
       .bind(parsed.roundId, viewer.eventId, viewer.organisationId)
@@ -73,9 +78,15 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
       parsed.targetType === "submission" ? "submission_id" : "session_id";
     const targetPlaceholders = parsed.targetIds.map(() => "?").join(",");
     const validTargets = await this.env.DB.prepare(
-      `SELECT id FROM ${targetTable} WHERE event_id = ? AND id IN (${targetPlaceholders}) AND ${targetStatus}`,
+      `SELECT target.id
+         FROM ${targetTable} target
+         JOIN events event
+           ON event.id = target.event_id AND event.organisation_id = ?
+        WHERE target.event_id = ?
+          AND target.id IN (${targetPlaceholders})
+          AND target.${targetStatus}`,
     )
-      .bind(viewer.eventId, ...parsed.targetIds)
+      .bind(viewer.organisationId, viewer.eventId, ...parsed.targetIds)
       .all<{ id: string }>();
     if (validTargets.results.length !== parsed.targetIds.length)
       throw new EvaluationStateError(
@@ -92,7 +103,10 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
            AND current_plan.event_id = current_round.event_id
           JOIN events current_event ON current_event.id = current_round.event_id
          WHERE current_round.id = ? AND current_round.event_id = ?
-           AND current_event.organisation_id = ? AND current_round.status = 'active'
+           AND current_event.organisation_id = ?
+           AND current_round.status = 'active'
+           AND (current_round.opens_at IS NULL OR current_round.opens_at <= unixepoch())
+           AND (current_round.closes_at IS NULL OR current_round.closes_at > unixepoch())
       )
       AND (
         SELECT COUNT(*) FROM ${targetTable} current_target
@@ -108,6 +122,16 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
            AND current_membership.revoked_at IS NULL
            AND current_membership.role IN ('evaluator','committee_chair')
            AND current_membership.person_id IN (${evaluatorPlaceholders})
+        ) = ?
+      AND (
+        SELECT COUNT(DISTINCT current_pool.person_id)
+          FROM evaluation_round_reviewers current_pool
+          JOIN events current_pool_event
+            ON current_pool_event.id = current_pool.event_id
+           AND current_pool_event.organisation_id = ?
+         WHERE current_pool.event_id = ?
+           AND current_pool.round_id = ?
+           AND current_pool.person_id IN (${evaluatorPlaceholders})
       ) = ?
       ${
         parsed.teamId
@@ -135,6 +159,10 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
           JOIN evaluation_teams current_team
             ON current_team.id = current_team_member.team_id
            AND current_team.event_id = current_team_member.event_id
+          JOIN evaluation_round_reviewers current_pool
+            ON current_pool.event_id = current_team_member.event_id
+           AND current_pool.round_id = ?
+           AND current_pool.person_id = current_team_member.person_id
           JOIN memberships current_team_membership
             ON current_team_membership.event_id = current_team_member.event_id
            AND current_team_membership.person_id = current_team_member.person_id
@@ -154,7 +182,16 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
            AND blocked_assignment.round_id = ?
            AND blocked_assignment.${targetColumn} IN (${targetPlaceholders})
            AND blocked_assignment.evaluator_person_id IN (${evaluatorPlaceholders})
-           AND blocked_assignment.status IN ('recused','cancelled')
+           AND (
+             blocked_assignment.status = 'recused'
+             OR (
+               blocked_assignment.status = 'cancelled'
+               AND (
+                 blocked_assignment.cancellation_reason IS NULL
+                 OR blocked_assignment.cancellation_reason <> 'reviewer_removed'
+               )
+             )
+           )
       )
       ${commandGuard.sql}
     `;
@@ -168,12 +205,18 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
       viewer.eventId,
       ...evaluatorPersonIds,
       evaluatorPersonIds.length,
+      viewer.organisationId,
+      viewer.eventId,
+      parsed.roundId,
+      ...evaluatorPersonIds,
+      evaluatorPersonIds.length,
       ...(parsed.teamId
         ? [
             viewer.eventId,
             parsed.teamId,
             ...evaluatorPersonIds,
             evaluatorPersonIds.length,
+            parsed.roundId,
             viewer.eventId,
             parsed.teamId,
             evaluatorPersonIds.length,
@@ -238,7 +281,17 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
              ), '[]'))
            )`;
     const conflictTarget = `ON CONFLICT(round_id, ${targetColumn}, evaluator_person_id)
-      WHERE ${targetColumn} IS NOT NULL DO NOTHING`;
+      WHERE ${targetColumn} IS NOT NULL DO UPDATE SET
+        status = 'assigned',
+        session_snapshot_json = excluded.session_snapshot_json,
+        team_id = excluded.team_id,
+        revision = evaluator_assignments.revision + 1,
+        last_operation_id = excluded.last_operation_id,
+        assigned_at = unixepoch(),
+        submitted_at = NULL,
+        cancellation_reason = NULL
+      WHERE evaluator_assignments.status = 'cancelled'
+        AND evaluator_assignments.cancellation_reason = 'reviewer_removed'`;
     for (const targetId of parsed.targetIds)
       for (const evaluatorId of evaluatorPersonIds) {
         statements.push(

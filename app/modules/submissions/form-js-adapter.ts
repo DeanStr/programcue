@@ -59,6 +59,7 @@ const programCueFieldMetadataSchema = z
       "video",
     ]),
     reviewVisibility: z.enum(["reviewers", "administrators_only"]),
+    blindReviewVisibility: z.enum(["content", "identity"]).optional(),
     example: z.string().max(300).optional(),
   })
   .strict();
@@ -284,6 +285,9 @@ export function toFormJsSchema(
         programCue: {
           fieldType: field.type,
           reviewVisibility: field.reviewVisibility ?? "administrators_only",
+          ...(field.blindReviewVisibility
+            ? { blindReviewVisibility: field.blindReviewVisibility }
+            : {}),
           example: field.example || undefined,
         },
       })),
@@ -333,6 +337,8 @@ export function fromFormJsSchema(
         );
       }
       const type = fieldTypeFor(component);
+      const blindReviewVisibility =
+        component.programCue?.blindReviewVisibility;
       return {
         id: component.key,
         label: component.label,
@@ -343,6 +349,7 @@ export function fromFormJsSchema(
         options: optionsFor(component, type),
         reviewVisibility:
           component.programCue?.reviewVisibility ?? "administrators_only",
+        ...(blindReviewVisibility ? { blindReviewVisibility } : {}),
         condition: component.conditional
           ? conditionFromFeel(component.conditional.hide)
           : null,

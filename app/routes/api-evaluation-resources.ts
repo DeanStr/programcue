@@ -8,6 +8,7 @@ import {
   apiAssignmentSchema,
   apiEvaluationPlanSchema,
   apiNextRoundSchema,
+  apiRoundReviewerSchema,
   evaluationApiError,
 } from "~/platform/api/api-evaluation-commands.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
@@ -66,6 +67,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     if (!(
       resource === "plans" ||
       resource === "rounds" ||
+      resource === "round-reviewers" ||
       resource === "assignments"
     )) {
       throw new ApiError(
@@ -105,6 +107,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         requestHash: await apiRequestHash(input),
       });
       return apiSuccess({ roundId, correlationId: requestCorrelationId });
+    }
+    if (resource === "round-reviewers") {
+      const input = apiRoundReviewerSchema.parse(raw);
+      const result = await service.changeRoundReviewerPool(actor, input, {
+        idempotencyKey,
+        requestHash: await apiRequestHash(input),
+      });
+      return apiSuccess({ ...result, correlationId: requestCorrelationId });
     }
     const input = apiAssignmentSchema.parse(raw);
     const result = await service.assign(actor, input, {

@@ -316,9 +316,18 @@ function ReviewScorePanel() {
                       disabled={readOnly}
                     >
                       <option value="">
-                        {criterion.inputType === "yes_no" ? "Choose…" : "Score"}
+                        {criterion.inputType === "yes_no" ||
+                        criterion.inputType === "dropdown"
+                          ? "Choose…"
+                          : "Score"}
                       </option>
-                      {criterion.inputType === "yes_no" ? (
+                      {criterion.inputType === "dropdown" ? (
+                        criterion.options.map((option) => (
+                          <option value={option} key={option}>
+                            {option}
+                          </option>
+                        ))
+                      ) : criterion.inputType === "yes_no" ? (
                         <>
                           <option value="yes">Yes</option>
                           <option value="no">No</option>

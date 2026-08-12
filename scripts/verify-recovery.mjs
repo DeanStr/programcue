@@ -310,13 +310,30 @@ try {
   const migrationSql = (
     await Promise.all(migrations.map((migration) => readFile(migration, "utf8")))
   ).join("\n");
-  const tables = Array.from(
-    migrationSql.matchAll(
-      /^CREATE TABLE(?: IF NOT EXISTS)? ([a-z][a-z0-9_]*)/gmu,
-    ),
-    (match) => match[1],
-  );
-  if (tables.length === 0 || new Set(tables).size !== tables.length)
+  // Build the final application inventory rather than counting CREATE TABLE
+  // tokens. A numbered migration may rebuild a table by renaming the old
+  // definition, creating the replacement, then dropping the legacy name.
+  // Counting raw CREATE statements would reject that valid migration shape.
+  const tables = new Set();
+  for (const statement of migrationSql.split(/;\s*(?:\r?\n|$)/u)) {
+    const create = statement.match(
+      /(?:^|\n)CREATE TABLE(?: IF NOT EXISTS)? ([a-z][a-z0-9_]*)/u,
+    );
+    const rename = statement.match(
+      /(?:^|\n)ALTER TABLE ([a-z][a-z0-9_]*) RENAME TO ([a-z][a-z0-9_]*)/u,
+    );
+    const drop = statement.match(
+      /(?:^|\n)DROP TABLE(?: IF EXISTS)? ([a-z][a-z0-9_]*)/u,
+    );
+    if (create) tables.add(create[1]);
+    if (rename) {
+      tables.delete(rename[1]);
+      tables.add(rename[2]);
+    }
+    if (drop) tables.delete(drop[1]);
+  }
+  const tableInventory = [...tables];
+  if (tableInventory.length === 0)
     fail(
       "The baseline migration did not expose a unique application table inventory.",
     );
@@ -339,7 +356,7 @@ try {
     representativeSeedSql,
     "--yes",
   ]);
-  const source = await inspectDatabase(sourceCwd, sourceConfig, tables);
+  const source = await inspectDatabase(sourceCwd, sourceConfig, tableInventory);
   const sourceChain = await inspectRepresentativeChain(sourceCwd, sourceConfig);
 
   runWrangler(sourceCwd, sourceConfig, [
@@ -361,7 +378,11 @@ try {
     backup,
     "--yes",
   ]);
-  const restored = await inspectDatabase(restoreCwd, restoreConfig, tables);
+  const restored = await inspectDatabase(
+    restoreCwd,
+    restoreConfig,
+    tableInventory,
+  );
   const restoredChain = await inspectRepresentativeChain(
     restoreCwd,
     restoreConfig,
@@ -397,7 +418,7 @@ try {
 
   const digest = createHash("sha256").update(backupBytes).digest("hex");
   console.log(
-    `Recovery drill passed: ${tables.length} tables, ${restored.indexCount} indexes, ${restored.triggerCount} triggers, ${backupBytes.byteLength} backup bytes, sha256 ${digest}.`,
+    `Recovery drill passed: ${tableInventory.length} tables, ${restored.indexCount} indexes, ${restored.triggerCount} triggers, ${backupBytes.byteLength} backup bytes, sha256 ${digest}.`,
   );
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });

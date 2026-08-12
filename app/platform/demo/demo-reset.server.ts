@@ -140,6 +140,7 @@ export const DEMO_RESET_EVENT_TABLES = [
   "submission_revisions",
   "submissions",
   "evaluation_criteria",
+  "evaluation_round_reviewers",
   "evaluation_team_members",
   "evaluation_rounds",
   "evaluation_teams",
@@ -150,6 +151,10 @@ export const DEMO_RESET_EVENT_TABLES = [
   "event_changes",
   "memberships",
 ] as const;
+
+const DEMO_EVALUATION_RESET_CONFIRMATION = "clear-abstract-evaluation";
+
+export { DEMO_EVALUATION_RESET_CONFIRMATION };
 
 const DEMO_REMINDER_TEMPLATE_ID = "4eb07b55-60fe-4fd4-aab5-56a171283335";
 const DEMO_REMINDER_VERSION_ID = "c4be71b7-cf55-4e8a-ac28-73f2c83bde42";
@@ -505,6 +510,43 @@ export async function prepareJudgedDemoWorkflow(env: CloudflareEnvironment) {
   await seedJudgedDemoWorkflow(env);
   const evidence = await baselineEvidence(env);
   return { evidence, complete: demoBaselineIsComplete(evidence) };
+}
+
+/**
+ * Empty only the demo evaluation graph so a browser acceptance workflow can
+ * create its own protected plan through the real administration route. This
+ * is deliberately separate from the canonical reset, which restores the
+ * judged baseline used by the evaluator guide.
+ */
+export async function clearDemoEvaluationWorkflow(
+  env: CloudflareEnvironment,
+  confirmation: unknown,
+) {
+  assertDemoRuntime(env);
+  if (confirmation !== DEMO_EVALUATION_RESET_CONFIRMATION) {
+    throw new DemoResetConfirmationError();
+  }
+  await env.DB.batch(
+    [
+      "submission_decisions",
+      "review_moderations",
+      "review_revisions",
+      "reviews",
+      "evaluator_conflicts",
+      "evaluator_assignments",
+      "evaluation_criteria",
+      "evaluation_round_reviewers",
+      "evaluation_team_members",
+      "evaluation_rounds",
+      "evaluation_teams",
+      "evaluation_plans",
+    ].map((table) =>
+      env.DB.prepare(`DELETE FROM ${table} WHERE event_id = ?`).bind(
+        DEMO_EVENT_ID,
+      ),
+    ),
+  );
+  return { cleared: true };
 }
 
 export async function resetDemoEvent(

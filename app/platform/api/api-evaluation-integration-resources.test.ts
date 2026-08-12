@@ -101,11 +101,14 @@ describe("evaluation and integration API reads", () => {
       "plans",
       "teams",
       "reviews",
+      "round-reviewers",
       "conflicts",
       "moderations",
     ] as const) {
       const page = await service.list(principal, resource, { limit: 10 });
-      expect((page as unknown as Record<string, unknown>)[resource]).toEqual(
+      const responseKey =
+        resource === "round-reviewers" ? "roundReviewers" : resource;
+      expect((page as unknown as Record<string, unknown>)[responseKey]).toEqual(
         expect.any(Array),
       );
     }
@@ -290,6 +293,8 @@ describe("evaluation and integration API reads", () => {
           name: "First review",
           dueAt: null,
           anonymous: false,
+          scorecardId: `api-scorecard-${suffix}`,
+          scorecardVersion: 1,
           criteria: [
             {
               id: `api-criterion-${suffix}`,
@@ -336,6 +341,19 @@ describe("evaluation and integration API reads", () => {
     await expect(missingAnonymous.json()).resolves.toMatchObject({
       error: { code: "VALIDATION_ERROR" },
     });
+    const {
+      scorecardId: _scorecardId,
+      scorecardVersion: _scorecardVersion,
+      ...roundWithoutScorecard
+    } = body.rounds[0]!;
+    const missingScorecard = await invoke({
+      ...body,
+      rounds: [roundWithoutScorecard],
+    });
+    expect(missingScorecard.status).toBe(422);
+    await expect(missingScorecard.json()).resolves.toMatchObject({
+      error: { code: "VALIDATION_ERROR" },
+    });
     const first = await invoke(body);
     expect(first.status).toBe(200);
     const firstBody = (await first.json()) as { planId: string };
@@ -359,6 +377,40 @@ describe("evaluation and integration API reads", () => {
     ).resolves.toEqual({
       actorPersonId: null,
       actorId: `api_key:${keyId}`,
+    });
+
+    const invokeReviewer = (value: unknown, idempotencyKey: string) =>
+      evaluationResourceAction({
+        request: new Request(
+          `https://programcue.test/api/v1/events/${eventId}/evaluation/round-reviewers`,
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${token}`,
+              "content-type": "application/json",
+              "idempotency-key": idempotencyKey,
+            },
+            body: JSON.stringify(value),
+          },
+        ),
+        params: { eventId, resource: "round-reviewers" },
+        context,
+      } as never);
+    const reviewerBody = {
+      roundId: body.rounds[0]!.id,
+      personId: "person-demo-evaluator",
+      operation: "add",
+    };
+    const reviewerResponse = await invokeReviewer(
+      reviewerBody,
+      `evaluation-round-reviewer-${suffix}`,
+    );
+    expect(reviewerResponse.status).toBe(200);
+    await expect(reviewerResponse.json()).resolves.toMatchObject({
+      roundId: reviewerBody.roundId,
+      personId: reviewerBody.personId,
+      operation: "add",
+      cancelledAssignmentCount: 0,
     });
 
     const assignmentBody = {
@@ -420,6 +472,20 @@ describe("evaluation and integration API reads", () => {
         targetTitle: "API direct session",
       }),
     ]);
+    const unconfirmedRemoval = await invokeReviewer(
+      { ...reviewerBody, operation: "remove" },
+      `evaluation-round-reviewer-remove-unconfirmed-${suffix}`,
+    );
+    expect(unconfirmedRemoval.status).toBe(422);
+    const removalResponse = await invokeReviewer(
+      { ...reviewerBody, operation: "remove", confirmed: true },
+      `evaluation-round-reviewer-remove-${suffix}`,
+    );
+    expect(removalResponse.status).toBe(200);
+    await expect(removalResponse.json()).resolves.toMatchObject({
+      operation: "remove",
+      cancelledAssignmentCount: 1,
+    });
     const legacyAssignment = await invokeAssignment(
       {
         roundId: body.rounds[0]!.id,

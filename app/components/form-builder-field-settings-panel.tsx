@@ -168,7 +168,7 @@ export function FieldSettingsPanel({
             </fieldset>
           ) : null}
           <label className="label mt">
-            Blinded-review visibility
+            Reviewer visibility
             <select
               className="select"
               value={selected.reviewVisibility ?? "administrators_only"}
@@ -185,8 +185,30 @@ export function FieldSettingsPanel({
               </option>
             </select>
             <span className="help">
-              Keep identity and biography answers hidden. This setting applies
-              only when blinded reviewing is enabled.
+              Controls whether reviewers can use this answer in an ordinary
+              review. Identity, biography and contact fields should remain
+              hidden.
+            </span>
+          </label>
+          <label className="label mt">
+            Blinded-review visibility
+            <select
+              className="select"
+              value={selected.blindReviewVisibility ?? "identity"}
+              onChange={(event) =>
+                patchField({
+                  blindReviewVisibility: event.target
+                    .value as FormField["blindReviewVisibility"],
+                })
+              }
+            >
+              <option value="content">Show safe content to reviewers</option>
+              <option value="identity">Hide field when review is blind</option>
+            </select>
+            <span className="help">
+              Only explicitly classified content is returned during blind
+              review. Identity, employer, profile and contact fields stay
+              hidden even if their normal reviewer visibility is enabled.
             </span>
           </label>
           <label className="toggle mt">

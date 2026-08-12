@@ -20,6 +20,7 @@ export {
   type EvaluationApiActor,
   type EvaluationApiCommand,
   type EvaluationAssignmentResult,
+  type EvaluationRoundReviewerResult,
 } from "./evaluation-service-foundation.server";
 
 export class EvaluationService extends EvaluationReviewerWorkflows {

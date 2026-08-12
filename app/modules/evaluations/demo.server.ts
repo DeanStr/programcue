@@ -28,6 +28,7 @@ const formSchema = {
       example: "",
       options: [],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: null,
     },
     {
@@ -39,6 +40,7 @@ const formSchema = {
       example: "",
       options: ["Event Operations", "Experience Design"],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: null,
     },
     {
@@ -50,6 +52,7 @@ const formSchema = {
       example: "",
       options: ["Workshop", "Presentation"],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: null,
     },
     {
@@ -61,6 +64,7 @@ const formSchema = {
       example: "",
       options: [],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: null,
     },
     {
@@ -72,6 +76,7 @@ const formSchema = {
       example: "",
       options: [],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: null,
     },
     {
@@ -83,6 +88,7 @@ const formSchema = {
       example: "",
       options: [],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: null,
     },
   ],
@@ -297,26 +303,32 @@ export async function ensureDemoEvaluationData(env: CloudflareEnvironment) {
              'administrator', 1, ?, unixepoch(), unixepoch()
         FROM events e
        WHERE e.id = ? AND e.organisation_id = ?
+         AND NOT EXISTS (
+           SELECT 1 FROM evaluation_plans existing_plan
+            WHERE existing_plan.event_id = e.id
+              AND existing_plan.status <> 'archived'
+         )
     `).bind(PLAN_ID, DEMO_ADMIN_ID, DEMO_EVENT_ID, DEMO_ORGANISATION_ID),
     env.DB.prepare(`
       INSERT OR IGNORE INTO evaluation_rounds (
         id, event_id, plan_id, round_number, name, status,
+        blinded_reviewing, scorecard_id, scorecard_version,
         advancement_rule_json, revision, created_at, updated_at
       )
-      SELECT ?, p.event_id, p.id, 1, 'Initial review', 'active', '{}', 1,
+      SELECT ?, p.event_id, p.id, 1, 'Initial review', 'active', 0, ?, 1, '{}', 1,
              unixepoch(), unixepoch()
         FROM evaluation_plans p
        WHERE p.id = ? AND p.event_id = ? AND p.status = 'active'
-    `).bind(ROUND_ID, PLAN_ID, DEMO_EVENT_ID),
+    `).bind(ROUND_ID, ROUND_ID, PLAN_ID, DEMO_EVENT_ID),
   );
 
   for (const criterion of criteria) {
     statements.push(env.DB.prepare(`
       INSERT OR IGNORE INTO evaluation_criteria (
         id, event_id, round_id, name, description, input_type,
-        weight_percent, required, position
+        options_json, weight_percent, required, position
       )
-      SELECT ?, r.event_id, r.id, ?, ?, 'scale_5', ?, 1, ?
+      SELECT ?, r.event_id, r.id, ?, ?, 'scale_5', '[]', ?, 1, ?
         FROM evaluation_rounds r
        WHERE r.id = ? AND r.event_id = ? AND r.status = 'active'
     `).bind(
@@ -329,6 +341,26 @@ export async function ensureDemoEvaluationData(env: CloudflareEnvironment) {
       DEMO_EVENT_ID,
     ));
   }
+
+  statements.push(env.DB.prepare(`
+    INSERT OR IGNORE INTO evaluation_round_reviewers (
+      id, event_id, round_id, person_id, added_by_person_id,
+      revision, created_at, updated_at
+    )
+    SELECT 'demo-evaluation-round-reviewer', r.event_id, r.id, m.person_id, ?, 1,
+           unixepoch(), unixepoch()
+      FROM evaluation_rounds r
+      JOIN memberships m
+        ON m.event_id = r.event_id AND m.person_id = ?
+       AND m.role = 'evaluator'
+       AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL
+     WHERE r.id = ? AND r.event_id = ? AND r.status = 'active'
+  `).bind(
+    DEMO_ADMIN_ID,
+    DEMO_EVALUATOR_ID,
+    ROUND_ID,
+    DEMO_EVENT_ID,
+  ));
 
   for (const [index, proposal] of proposals.entries()) {
     statements.push(env.DB.prepare(`
@@ -344,6 +376,10 @@ export async function ensureDemoEvaluationData(env: CloudflareEnvironment) {
                           AND m.role = 'evaluator'
                           AND m.accepted_at IS NOT NULL
                           AND m.revoked_at IS NULL
+        JOIN evaluation_round_reviewers pool
+          ON pool.event_id = r.event_id
+         AND pool.round_id = r.id
+         AND pool.person_id = m.person_id
        WHERE r.id = ? AND r.event_id = ? AND r.status = 'active'
     `).bind(
       `demo-evaluation-assignment-${index + 1}`,

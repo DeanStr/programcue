@@ -15,6 +15,7 @@ import {
 } from "~/modules/files/file-policy";
 import { TaskService } from "~/modules/tasks/task-service.server";
 import type { PreparedAirtableRepositoryConnection } from "~/modules/airtable/airtable-room-repository.server";
+import { AIRTABLE_SCHEMA_VERSION } from "~/modules/airtable/airtable-schema";
 import { EventRepositoryProvisioningService } from "~/modules/events/event-repository-provisioning.server";
 import {
   EventCloneConfigurationError,
@@ -38,7 +39,7 @@ function preparedConnection(): PreparedAirtableRepositoryConnection {
     encryptedCredentials: '{"version":1,"iv":"test","ciphertext":"test"}',
     configuration: {
       baseId: "app12345678901234",
-      schemaVersion: 4,
+      schemaVersion: AIRTABLE_SCHEMA_VERSION,
       tables:
         {} as PreparedAirtableRepositoryConnection["configuration"]["tables"],
       authoritativeEntities: [
@@ -113,10 +114,10 @@ describe("event cloning", () => {
         "INSERT OR IGNORE INTO evaluation_plans (id,event_id,name,status,created_by_person_id) VALUES ('clone-plan',?,'Review plan','active',?)",
       ).bind(viewer.eventId, viewer.personId),
       env.DB.prepare(
-        "INSERT OR IGNORE INTO evaluation_rounds (id,event_id,plan_id,round_number,name,status,opens_at,closes_at) VALUES ('clone-round',?,'clone-plan',1,'First round','active',unixepoch(),unixepoch()+86400)",
+        "INSERT OR IGNORE INTO evaluation_rounds (id,event_id,plan_id,round_number,name,status,opens_at,closes_at,blinded_reviewing,scorecard_id,scorecard_version) VALUES ('clone-round',?,'clone-plan',1,'First round','active',unixepoch(),unixepoch()+86400,1,'clone-scorecard',2)",
       ).bind(viewer.eventId),
       env.DB.prepare(
-        "INSERT OR IGNORE INTO evaluation_criteria (id,event_id,round_id,name,input_type,weight_percent,required,position) VALUES ('clone-criterion',?,'clone-round','Fit','scale_5',100,1,0)",
+        "INSERT OR IGNORE INTO evaluation_criteria (id,event_id,round_id,name,input_type,options_json,weight_percent,required,position) VALUES ('clone-criterion',?,'clone-round','Fit','dropdown','[\"Strong\",\"Weak\"]',0,1,0)",
       ).bind(viewer.eventId),
       env.DB.prepare(
         "INSERT OR IGNORE INTO form_definitions (id,event_id,name,kind,status,public_slug,closes_at,min_speakers,access_mode,access_password_hash,created_by_person_id) VALUES ('clone-form',?,'Call for speakers','submission','published','clone-form-public',unixepoch()+86400,1,'password_protected','source-password-hash',?)",
@@ -299,11 +300,32 @@ describe("event cloning", () => {
     });
     expect(
       await env.DB.prepare(
-        "SELECT status, opens_at AS opensAt, closes_at AS closesAt FROM evaluation_rounds WHERE event_id = ?",
+        `SELECT status, opens_at AS opensAt, closes_at AS closesAt,
+                blinded_reviewing AS blindedReviewing, scorecard_id AS scorecardId,
+                scorecard_version AS scorecardVersion
+           FROM evaluation_rounds WHERE event_id = ?`,
       )
         .bind(cloned.eventId)
         .first(),
-    ).toEqual({ status: "draft", opensAt: null, closesAt: null });
+    ).toEqual({
+      status: "draft",
+      opensAt: null,
+      closesAt: null,
+      blindedReviewing: 1,
+      scorecardId: "clone-scorecard",
+      scorecardVersion: 2,
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT input_type AS inputType, options_json AS optionsJson, weight_percent AS weightPercent FROM evaluation_criteria WHERE event_id = ?",
+      )
+        .bind(cloned.eventId)
+        .first(),
+    ).toEqual({
+      inputType: "dropdown",
+      optionsJson: '["Strong","Weak"]',
+      weightPercent: 0,
+    });
     expect(
       await env.DB.prepare(
         "SELECT status, published_at AS publishedAt FROM communication_template_versions WHERE event_id = ?",

@@ -133,6 +133,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -143,6 +145,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -153,6 +157,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -163,6 +169,7 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: "reviewers",
+          blindReviewVisibility: "content",
           condition: null,
         },
         {
@@ -258,6 +265,25 @@ async function resetEvaluationFixture() {
   ]);
 }
 
+async function addRoundReviewer(
+  roundId: string,
+  personId = evaluator.personId,
+) {
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO evaluation_round_reviewers
+       (id, event_id, round_id, person_id, added_by_person_id)
+     VALUES (?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      `test-round-reviewer-${roundId}-${personId}`,
+      admin.eventId,
+      roundId,
+      personId,
+      admin.personId,
+    )
+    .run();
+}
+
 describe("evaluation vertical slice", () => {
   beforeEach(async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
@@ -323,9 +349,10 @@ describe("evaluation vertical slice", () => {
             name: "Committee review",
             anonymous: false,
             criteria,
-          },
-        ],
-      });
+            },
+          ],
+        });
+      await addRoundReviewer("eval-team-round");
       const assigned = await service.assign(admin, {
         roundId: "eval-team-round",
         targetType: "submission",
@@ -559,7 +586,6 @@ describe("evaluation vertical slice", () => {
         expect(
           workspace.teams.find((team) => team.id === teamId),
         ).toMatchObject({
-          eligibleMemberCount: 0,
           members: [
             expect.objectContaining({
               email: "taylor.reviewer@example.com",
@@ -618,7 +644,9 @@ describe("evaluation vertical slice", () => {
         expect(acceptedWorkspace.evaluationInvitations).toEqual([]);
         expect(
           acceptedWorkspace.teams.find((team) => team.id === teamId),
-        ).toMatchObject({ eligibleMemberCount: 1 });
+        ).toMatchObject({
+          members: [expect.objectContaining({ authorised: true })],
+        });
         expect(acceptedWorkspace.evaluators).toContainEqual(
           expect.objectContaining({ email: "taylor.reviewer@example.com" }),
         );

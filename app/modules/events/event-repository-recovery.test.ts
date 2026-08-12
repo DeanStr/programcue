@@ -6,6 +6,7 @@ import {
   AirtableRepositoryConfigurationError,
   type PreparedAirtableRepositoryConnection,
 } from "~/modules/airtable/airtable-room-repository.server";
+import { AIRTABLE_SCHEMA_VERSION } from "~/modules/airtable/airtable-schema";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
@@ -112,7 +113,7 @@ function preparedConnection(
     encryptedCredentials: '{"version":1,"iv":"retry","ciphertext":"retry"}',
     configuration: {
       baseId: "app12345678901234",
-      schemaVersion: 4,
+      schemaVersion: AIRTABLE_SCHEMA_VERSION,
       tables:
         {} as PreparedAirtableRepositoryConnection["configuration"]["tables"],
       authoritativeEntities: [

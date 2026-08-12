@@ -16,12 +16,47 @@ import {
 } from "./evaluation-schema";
 import {
   parseSubmittedSnapshot,
+  blindReviewerVisibleAnswers,
   requireSessionReviewSnapshot,
   requireSubmittedSnapshot,
   reviewerCanSeeSubmissionAttachment,
   summaryAnswer,
   type Criterion,
 } from "./evaluation-service-foundation.server";
+
+function parseReviewerCriterionOptions(
+  value: string,
+  criterionId: string,
+  inputType: string,
+) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new EvaluationStateError(
+      `Criterion ${criterionId} has invalid persisted dropdown options.`,
+    );
+  }
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((option) => typeof option !== "string" || !option.trim())
+  ) {
+    throw new EvaluationStateError(
+      `Criterion ${criterionId} has invalid persisted dropdown options.`,
+    );
+  }
+  if (inputType === "dropdown" && parsed.length === 0) {
+    throw new EvaluationStateError(
+      `Criterion ${criterionId} has no persisted dropdown options.`,
+    );
+  }
+  if (inputType !== "dropdown" && parsed.length > 0) {
+    throw new EvaluationStateError(
+      `Criterion ${criterionId} has options but is not a dropdown.`,
+    );
+  }
+  return parsed as string[];
+}
 
 export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAssignmentWorkflows {
   async getReviewerWorkspace(viewer: Viewer, selectedAssignmentId?: string) {
@@ -90,13 +125,14 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
     await this.assertViewerEvent(viewer);
     const assignments = await this.env.DB.prepare(
       `
-      SELECT a.id, a.status, a.revision, a.due_at AS dueAt,
+      SELECT a.id, a.round_id AS roundId, a.status, a.revision, a.due_at AS dueAt,
              a.submission_id AS submissionId, a.session_id AS sessionId,
              submission.public_reference AS submissionReference,
              submission.submitted_snapshot_json AS submissionSnapshotJson,
              session.slug AS sessionReference,
              a.session_snapshot_json AS sessionSnapshotJson,
-             p.blinded_reviewing AS blindedReviewing
+             r.blinded_reviewing AS blindedReviewing,
+             r.opens_at AS opensAt, r.closes_at AS closesAt
         FROM evaluator_assignments a
         LEFT JOIN submissions submission
           ON submission.id = a.submission_id
@@ -104,16 +140,30 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
         LEFT JOIN sessions session
           ON session.id = a.session_id AND session.event_id = a.event_id
         JOIN evaluation_rounds r ON r.id = a.round_id AND r.event_id = a.event_id
-        JOIN evaluation_plans p ON p.id = r.plan_id AND p.event_id = r.event_id
+        JOIN evaluation_round_reviewers pool
+          ON pool.event_id = a.event_id
+         AND pool.round_id = a.round_id
+         AND pool.person_id = a.evaluator_person_id
+        JOIN memberships reviewer_membership
+          ON reviewer_membership.event_id = a.event_id
+         AND reviewer_membership.person_id = a.evaluator_person_id
+         AND reviewer_membership.accepted_at IS NOT NULL
+         AND reviewer_membership.revoked_at IS NULL
+         AND reviewer_membership.role IN ('evaluator','committee_chair')
+        JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
        WHERE a.event_id = ? AND a.evaluator_person_id = ?
          AND a.status NOT IN ('recused','cancelled')
+         AND r.status = 'active'
+         AND (r.opens_at IS NULL OR r.opens_at <= unixepoch())
+         AND (r.closes_at IS NULL OR r.closes_at > unixepoch())
        ORDER BY CASE a.status WHEN 'in_progress' THEN 0 WHEN 'reopened' THEN 0 WHEN 'assigned' THEN 1 ELSE 2 END,
                 a.due_at, a.assigned_at
     `,
     )
-      .bind(viewer.eventId, viewer.personId)
+      .bind(viewer.organisationId, viewer.eventId, viewer.personId)
       .all<{
         id: string;
+        roundId: string;
         status: string;
         revision: number;
         dueAt: number | null;
@@ -124,24 +174,34 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
         sessionReference: string | null;
         sessionSnapshotJson: string | null;
         blindedReviewing: number | boolean;
-      }>();
+        opensAt: number | null;
+        closesAt: number | null;
+    }>();
     const reviewerAssignments = assignments.results.map(
-      ({ submissionSnapshotJson, sessionSnapshotJson, ...assignment }) => {
+      ({
+        submissionSnapshotJson,
+        sessionSnapshotJson,
+        submissionReference,
+        sessionReference,
+        ...assignment
+      }) => {
         const blindedReviewing = Boolean(assignment.blindedReviewing);
         if (assignment.submissionId) {
           const snapshot = requireSubmittedSnapshot(
             assignment.submissionId,
             submissionSnapshotJson,
           );
-          const answers = reviewerVisibleAnswers(
-            snapshot.schema,
-            snapshot.answers,
-          );
+          const answers = blindedReviewing
+            ? blindReviewerVisibleAnswers(snapshot)
+            : reviewerVisibleAnswers(snapshot.schema, snapshot.answers);
           return {
             ...assignment,
+            ...(blindedReviewing ? {} : { submissionReference }),
             targetType: "submission" as const,
             targetId: assignment.submissionId,
-            reference: assignment.submissionReference!,
+            reference: blindedReviewing
+              ? "Proposal · blinded"
+              : submissionReference!,
             title:
               summaryAnswer(answers.title) ??
               (blindedReviewing
@@ -163,11 +223,14 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
         );
         return {
           ...assignment,
+          ...(blindedReviewing ? {} : { sessionReference }),
           targetType: "session" as const,
           targetId: assignment.sessionId,
-          reference: `Session · ${assignment.sessionReference!}`,
-          title: snapshot.title,
-          category: snapshot.trackName,
+          reference: blindedReviewing
+            ? "Session · blinded"
+            : `Session · ${sessionReference!}`,
+          title: blindedReviewing ? "Blinded session" : snapshot.title,
+          category: blindedReviewing ? null : snapshot.trackName,
           format: snapshot.format,
           blindedReviewing,
         };
@@ -195,13 +258,27 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
       this.env.DB.prepare(
         `
         SELECT c.id, c.name, c.description, c.input_type AS inputType,
-               c.weight_percent AS weightPercent, c.required, c.position
-          FROM evaluation_criteria c JOIN evaluator_assignments a ON a.round_id = c.round_id AND a.event_id = c.event_id
-         WHERE a.id = ? AND a.event_id = ? ORDER BY c.position
+               c.options_json AS optionsJson, c.weight_percent AS weightPercent,
+               c.required, c.position
+          FROM evaluation_criteria c
+          JOIN evaluator_assignments a
+            ON a.round_id = c.round_id AND a.event_id = c.event_id
+          JOIN evaluation_round_reviewers pool
+            ON pool.round_id = a.round_id
+           AND pool.event_id = a.event_id
+           AND pool.person_id = a.evaluator_person_id
+          JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
+         WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ?
+         ORDER BY c.position
       `,
       )
-        .bind(selected.id, viewer.eventId)
-        .all<Criterion>(),
+        .bind(
+          viewer.organisationId,
+          selected.id,
+          viewer.eventId,
+          viewer.personId,
+        )
+        .all<Omit<Criterion, "options"> & { optionsJson: string }>(),
       this.env.DB.prepare(
         `
         SELECT a.submission_id AS submissionId, a.session_id AS sessionId,
@@ -211,10 +288,19 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
           LEFT JOIN submissions submission
             ON submission.id = a.submission_id
            AND submission.event_id = a.event_id
+         JOIN evaluation_rounds round
+           ON round.id = a.round_id AND round.event_id = a.event_id
+         JOIN evaluation_round_reviewers pool
+           ON pool.round_id = a.round_id
+          AND pool.event_id = a.event_id
+          AND pool.person_id = a.evaluator_person_id
+         JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
          WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ?
+           AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
+           AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
       `,
       )
-        .bind(selected.id, viewer.eventId, viewer.personId)
+        .bind(viewer.organisationId, selected.id, viewer.eventId, viewer.personId)
         .first<{
           submissionId: string | null;
           sessionId: string | null;
@@ -226,11 +312,18 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
         SELECT r.id, r.status, r.scores_json AS scoresJson, r.weighted_score AS weightedScore,
                r.recommendation, r.confidence, r.submitter_feedback AS submitterFeedback,
                r.private_notes AS privateNotes, r.revision
-          FROM reviews r JOIN evaluator_assignments a ON a.id = r.assignment_id AND a.event_id = r.event_id
+          FROM reviews r
+          JOIN evaluator_assignments a
+            ON a.id = r.assignment_id AND a.event_id = r.event_id
+          JOIN evaluation_round_reviewers pool
+            ON pool.event_id = a.event_id
+           AND pool.round_id = a.round_id
+           AND pool.person_id = a.evaluator_person_id
+          JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
          WHERE r.assignment_id = ? AND r.event_id = ? AND a.evaluator_person_id = ?
       `,
       )
-        .bind(selected.id, viewer.eventId, viewer.personId)
+        .bind(viewer.organisationId, selected.id, viewer.eventId, viewer.personId)
         .first<{
           id: string;
           status: string;
@@ -258,8 +351,16 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
              OR
              (fa.target_type = 'session' AND a.session_id = fa.target_id)
            )
+          JOIN evaluation_rounds round
+            ON round.id = a.round_id AND round.event_id = a.event_id
+          JOIN evaluation_round_reviewers pool
+            ON pool.event_id = a.event_id
+           AND pool.round_id = a.round_id
+           AND pool.person_id = a.evaluator_person_id
+          JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
          WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ?
            AND a.status NOT IN ('recused','cancelled')
+           AND round.blinded_reviewing = 0
            AND fa.status = 'active'
            AND fv.upload_status = 'uploaded'
            AND fv.signature_status = 'valid' AND fv.scan_status = 'clean'
@@ -267,7 +368,12 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
          ORDER BY fa.created_at, fa.id
       `,
       )
-        .bind(selected.id, viewer.eventId, viewer.personId)
+        .bind(
+          viewer.organisationId,
+          selected.id,
+          viewer.eventId,
+          viewer.personId,
+        )
         .all<{
           id: string;
           versionId: string;
@@ -292,7 +398,9 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
         source.submissionSnapshotJson,
       );
       selectedSubmissionSnapshot = snapshot;
-      const answers = reviewerVisibleAnswers(snapshot.schema, snapshot.answers);
+      const answers = selected.blindedReviewing
+        ? blindReviewerVisibleAnswers(snapshot)
+        : reviewerVisibleAnswers(snapshot.schema, snapshot.answers);
       submissionView = {
         sourceType: "submission" as const,
         id: source.submissionId,
@@ -325,16 +433,20 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
         source.sessionSnapshotJson,
       );
       const sessionAnswers = {
-        description: snapshot.description ?? "",
+        description: selected.blindedReviewing
+          ? ""
+          : (snapshot.description ?? ""),
         format: snapshot.format,
         durationMinutes: snapshot.durationMinutes,
-        track: snapshot.trackName ?? "Unassigned",
+        track: selected.blindedReviewing
+          ? "Unassigned"
+          : (snapshot.trackName ?? "Unassigned"),
       };
       submissionView = {
         sourceType: "session" as const,
         id: source.sessionId,
-        title: snapshot.title,
-        category: snapshot.trackName,
+        title: selected.blindedReviewing ? "Blinded session" : snapshot.title,
+        category: selected.blindedReviewing ? null : snapshot.trackName,
         format: snapshot.format,
         answers: sessionAnswers,
         answerFields: [
@@ -365,8 +477,13 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
     return {
       assignments: reviewerAssignments,
       selected,
-      criteria: criteria.results.map((criterion) => ({
+      criteria: criteria.results.map(({ optionsJson, ...criterion }) => ({
         ...criterion,
+        options: parseReviewerCriterionOptions(
+          optionsJson,
+          criterion.id,
+          criterion.inputType,
+        ),
         required: Boolean(criterion.required),
       })),
       submission: submissionView,
@@ -435,6 +552,15 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
          AND (
            ? = 1 OR EXISTS (
              SELECT 1 FROM evaluator_assignments a
+              JOIN evaluation_rounds round
+                ON round.id = a.round_id AND round.event_id = a.event_id
+              JOIN evaluation_round_reviewers pool
+                ON pool.event_id = a.event_id
+               AND pool.round_id = a.round_id
+               AND pool.person_id = a.evaluator_person_id
+              JOIN events assignment_event
+                ON assignment_event.id = a.event_id
+               AND assignment_event.organisation_id = ?
               WHERE a.event_id = fa.event_id
                 AND (
                   (fa.target_type = 'submission'
@@ -444,6 +570,10 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
                 )
                 AND a.evaluator_person_id = ?
                 AND a.status NOT IN ('recused','cancelled')
+                AND round.status = 'active'
+                AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
+                AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
+                AND round.blinded_reviewing = 0
            )
          )
     `,
@@ -453,6 +583,7 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
         assetId,
         viewer.eventId,
         manager ? 1 : 0,
+        viewer.organisationId,
         viewer.personId,
       )
       .first<{

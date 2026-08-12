@@ -25,6 +25,7 @@ function newField(type: FormField["type"], index: number): FormField {
         ? ["Option 1", "Option 2"]
         : [],
     reviewVisibility: "administrators_only",
+    blindReviewVisibility: "identity",
     condition: null,
   };
 }

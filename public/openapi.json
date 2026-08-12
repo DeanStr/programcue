@@ -1192,7 +1192,7 @@
       "get": {
         "operationId": "listEvaluationResource",
         "summary": "List event evaluation state",
-        "description": "Requires the `evaluation:read` scope. Returns plans, teams, rounds with rubric criteria, assignments, reviews, conflicts or moderation records.",
+        "description": "Requires the `evaluation:read` scope. Returns plans, teams, rounds with rubric criteria, round reviewer pools, assignments, reviews, conflicts or moderation records.",
         "x-required-api-key-scope": "evaluation:read",
         "security": [
           {
@@ -1536,6 +1536,73 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EvaluationAssignmentCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorised"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/evaluation/round-reviewers": {
+      "post": {
+        "operationId": "changeEvaluationRoundReviewerPool",
+        "summary": "Add or remove a reviewer from a round pool",
+        "description": "Requires `evaluation:write` and an Idempotency-Key. The evaluator membership, round, organisation and unfinished assignments are revalidated atomically; removing a reviewer cancels only that reviewer's unfinished assignments so an explicit re-add can reinstate them.",
+        "x-required-api-key-scope": "evaluation:write",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationRoundReviewerCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reviewer-pool change committed or an exact retry replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationRoundReviewerCommandResponse"
                 }
               }
             }
@@ -2791,6 +2858,7 @@
             "plans",
             "teams",
             "rounds",
+            "round-reviewers",
             "assignments",
             "reviews",
             "conflicts",
@@ -5461,8 +5529,19 @@
               "scale_5",
               "scale_10",
               "yes_no",
-              "free_text"
+              "free_text",
+              "dropdown"
             ]
+          },
+          "options": {
+            "type": "array",
+            "maxItems": 100,
+            "default": [],
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
           },
           "weightPercent": {
             "type": "integer",
@@ -5485,6 +5564,8 @@
           "id",
           "name",
           "anonymous",
+          "scorecardId",
+          "scorecardVersion",
           "criteria"
         ],
         "properties": {
@@ -5498,6 +5579,20 @@
             "minLength": 1,
             "maxLength": 120
           },
+          "opensAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "closesAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
           "dueAt": {
             "type": [
               "string",
@@ -5507,6 +5602,15 @@
           },
           "anonymous": {
             "type": "boolean"
+          },
+          "scorecardId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "scorecardVersion": {
+            "type": "integer",
+            "minimum": 1
           },
           "criteria": {
             "type": "array",
@@ -5587,6 +5691,20 @@
             "minLength": 1,
             "maxLength": 120
           },
+          "opensAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "closesAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
           "dueAt": {
             "type": [
               "string",
@@ -5594,6 +5712,21 @@
             ],
             "format": "date-time",
             "default": null
+          },
+          "anonymous": {
+            "type": "boolean"
+          },
+          "scorecardId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "scorecardVersion": {
+            "type": "integer",
+            "minimum": 1
           },
           "cloneRoundId": {
             "type": "string",
@@ -5787,6 +5920,72 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "EvaluationRoundReviewerCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "roundId",
+          "personId",
+          "operation"
+        ],
+        "description": "Set `confirmed` to true when removing a reviewer. The response reports the exact number of unfinished assignments cancelled.",
+        "properties": {
+          "roundId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "personId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove"
+            ]
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "EvaluationRoundReviewerCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "roundId",
+          "personId",
+          "operation",
+          "cancelledAssignmentCount",
+          "correlationId"
+        ],
+        "properties": {
+          "roundId": {
+            "type": "string"
+          },
+          "personId": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove"
+            ]
+          },
+          "cancelledAssignmentCount": {
+            "type": "integer",
+            "minimum": 0
           },
           "correlationId": {
             "type": "string"
@@ -6833,6 +7032,13 @@
                       "enum": [
                         "reviewers",
                         "administrators_only"
+                      ]
+                    },
+                    "blindReviewVisibility": {
+                      "type": "string",
+                      "enum": [
+                        "content",
+                        "identity"
                       ]
                     },
                     "condition": {

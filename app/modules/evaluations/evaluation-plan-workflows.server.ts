@@ -16,13 +16,149 @@ import {
 } from "./evaluation-schema";
 import {
   EvaluationServiceFoundation,
+  assertPlanScorecardConsistency,
   evaluationAuditActor,
   planCommandResultSchema,
+  persistedRubricSignature,
+  rubricSignature,
   type Criterion,
   type EvaluationAdminActor,
   type EvaluationApiCommand,
+  type PersistedRubricShape,
+  type RubricShape,
   type Round,
+  requireSubmittedSnapshot,
 } from "./evaluation-service-foundation.server";
+
+function parseCriterionOptions(
+  value: string,
+  criterionId: string,
+  inputType: string,
+) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new EvaluationStateError(
+      `Criterion ${criterionId} has invalid persisted dropdown options.`,
+    );
+  }
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((option) => typeof option !== "string" || !option.trim())
+  ) {
+    throw new EvaluationStateError(
+      `Criterion ${criterionId} has invalid persisted dropdown options.`,
+    );
+  }
+  if (inputType === "dropdown" && parsed.length === 0) {
+    throw new EvaluationStateError(
+      `Criterion ${criterionId} has no persisted dropdown options.`,
+    );
+  }
+  if (inputType !== "dropdown" && parsed.length > 0) {
+    throw new EvaluationStateError(
+      `Criterion ${criterionId} has options but is not a dropdown.`,
+    );
+  }
+  return parsed as string[];
+}
+
+async function assertPersistedScorecardConsistency(
+  db: D1Database,
+  organisationId: string,
+  eventId: string,
+  planId: string,
+  rounds: ReadonlyArray<{
+    id: string;
+    scorecardId?: string;
+    scorecardVersion: number;
+    criteria: readonly RubricShape[];
+  }>,
+) {
+  const persisted = await db
+    .prepare(
+      `
+      SELECT r.id AS roundId, r.scorecard_id AS scorecardId,
+             r.scorecard_version AS scorecardVersion,
+             c.name, c.description, c.input_type AS inputType,
+             c.options_json AS optionsJson, c.weight_percent AS weightPercent,
+             c.required, c.position
+        FROM evaluation_rounds r
+        JOIN evaluation_criteria c
+          ON c.round_id = r.id AND c.event_id = r.event_id
+        JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+       WHERE r.id IN (
+         SELECT id FROM evaluation_rounds
+          WHERE plan_id = ? AND event_id = ?
+       )
+       ORDER BY r.id, c.position
+    `,
+    )
+    .bind(organisationId, planId, eventId)
+    .all<
+      PersistedRubricShape & {
+        roundId: string;
+        scorecardId: string;
+        scorecardVersion: number;
+      }
+    >();
+  const persistedByRound = new Map<
+    string,
+    {
+      key: string;
+      criteria: PersistedRubricShape[];
+    }
+  >();
+  for (const criterion of persisted.results) {
+    const key = `${criterion.scorecardId}:${criterion.scorecardVersion}`;
+    const round = persistedByRound.get(criterion.roundId) ?? {
+      key,
+      criteria: [],
+    };
+    round.criteria.push(criterion);
+    persistedByRound.set(criterion.roundId, round);
+  }
+  const signatures = new Map<string, string>();
+  for (const { key, criteria } of persistedByRound.values()) {
+    const signature = persistedRubricSignature(criteria);
+    const previous = signatures.get(key);
+    if (previous && previous !== signature) {
+      throw new EvaluationStateError(
+        `Scorecard ${key.replace(":", " version ")} is already linked to different persisted rubrics. Choose a new scorecard version before saving.`,
+      );
+    }
+    signatures.set(key, signature);
+  }
+  const persistedRoundIds = new Set(persistedByRound.keys());
+  const persistedRoundRows = await db
+    .prepare(
+      `
+      SELECT r.id
+        FROM evaluation_rounds r
+        JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+       WHERE r.plan_id = ? AND r.event_id = ?
+    `,
+    )
+    .bind(organisationId, planId, eventId)
+    .all<{ id: string }>();
+  for (const round of persistedRoundRows.results) {
+    if (!persistedRoundIds.has(round.id)) {
+      throw new EvaluationStateError(
+        `Evaluation round ${round.id} is missing its persisted scorecard rubric.`,
+      );
+    }
+  }
+  for (const round of rounds) {
+    const key = `${round.scorecardId ?? round.id}:${round.scorecardVersion}`;
+    const previous = signatures.get(key);
+    if (previous && previous !== rubricSignature(round.criteria)) {
+      throw new EvaluationStateError(
+        `Scorecard ${key.replace(":", " version ")} is already linked to a different persisted rubric. Choose a new scorecard version before saving.`,
+      );
+    }
+  }
+}
 
 export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundation {
   async getAdminWorkspace(viewer: Viewer) {
@@ -69,21 +205,15 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
         `
         SELECT t.id, t.name, t.description,
                t.chair_person_id AS chairPersonId, t.status,
-               COUNT(tm.person_id) AS memberCount,
-               SUM(CASE WHEN tm.person_id IS NOT NULL AND EXISTS (
-                 SELECT 1 FROM memberships active_membership
-                  WHERE active_membership.event_id = t.event_id
-                    AND active_membership.person_id = tm.person_id
-                    AND active_membership.accepted_at IS NOT NULL
-                    AND active_membership.revoked_at IS NULL
-                    AND active_membership.role IN ('evaluator','committee_chair')
-               ) THEN 1 ELSE 0 END) AS eligibleMemberCount
+               COUNT(tm.person_id) AS memberCount
           FROM evaluation_teams t
+          JOIN events event
+            ON event.id = t.event_id AND event.organisation_id = ?
           LEFT JOIN evaluation_team_members tm ON tm.team_id = t.id AND tm.event_id = t.event_id AND tm.removed_at IS NULL
          WHERE t.event_id = ? GROUP BY t.id ORDER BY t.name
       `,
       )
-        .bind(viewer.eventId)
+        .bind(viewer.organisationId, viewer.eventId)
         .all<{
           id: string;
           name: string;
@@ -91,7 +221,6 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
           chairPersonId: string | null;
           status: string;
           memberCount: number;
-          eligibleMemberCount: number;
         }>(),
       this.env.DB.prepare(
         `
@@ -109,12 +238,14 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
           JOIN evaluation_teams t
             ON t.id = tm.team_id AND t.event_id = tm.event_id
           JOIN people p ON p.id = tm.person_id
+          JOIN events event
+            ON event.id = tm.event_id AND event.organisation_id = ?
          WHERE tm.event_id = ? AND tm.removed_at IS NULL
            AND t.status = 'active'
          ORDER BY p.display_name
       `,
       )
-        .bind(viewer.eventId)
+        .bind(viewer.organisationId, viewer.eventId)
         .all<{
           teamId: string;
           personId: string;
@@ -130,14 +261,17 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
                     THEN 'committee_chair' ELSE 'evaluator' END AS role,
                MAX(CASE WHEN m.role = 'committee_chair' THEN m.id END)
                  AS chairMembershipId
-          FROM memberships m JOIN people p ON p.id = m.person_id
+          FROM memberships m
+          JOIN people p ON p.id = m.person_id
+          JOIN events event
+            ON event.id = m.event_id AND event.organisation_id = ?
          WHERE m.event_id = ? AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL
            AND m.role IN ('evaluator','committee_chair')
          GROUP BY p.id, p.display_name, p.email
          ORDER BY p.display_name
       `,
       )
-        .bind(viewer.eventId)
+        .bind(viewer.organisationId, viewer.eventId)
         .all<{
           id: string;
           name: string;
@@ -157,13 +291,15 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
                END AS status
           FROM memberships m
           JOIN people p ON p.id = m.person_id
+          JOIN events event
+            ON event.id = m.event_id AND event.organisation_id = ?
          WHERE m.event_id = ? AND m.role IN ('evaluator','committee_chair')
            AND m.accepted_at IS NULL AND m.invited_at IS NOT NULL
            AND m.revoked_at IS NULL
          ORDER BY m.invited_at DESC, p.display_name
       `,
       )
-        .bind(viewer.eventId)
+        .bind(viewer.organisationId, viewer.eventId)
         .all<{
           id: string;
           name: string;
@@ -220,6 +356,16 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
                  json_extract(s.submitted_snapshot_json, '$.routing')
                ) AS routingJson,
                s.submitter_email AS submitterEmail,
+               s.submitted_snapshot_json AS submittedSnapshotJson,
+               COALESCE((
+                 SELECT json_group_array(json_object(
+                          'name', speaker.display_name,
+                          'email', speaker.email
+                        ))
+                   FROM submission_speakers speaker
+                  WHERE speaker.event_id = s.event_id
+                    AND speaker.submission_id = s.id
+               ), '[]') AS speakersJson,
                (SELECT COUNT(*) FROM submission_speakers ss
                  WHERE ss.event_id = s.event_id AND ss.submission_id = s.id
                    AND ss.person_id IS NULL) AS unclaimedSpeakerCount,
@@ -249,6 +395,8 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
           routedTeamIdsJson: string;
           routingJson: string | null;
           submitterEmail: string | null;
+          submittedSnapshotJson: string | null;
+          speakersJson: string;
           unclaimedSpeakerCount: number;
           assignmentCount: number;
           completedReviewCount: number;
@@ -356,6 +504,8 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
                conflict.status AS conflictStatus
           FROM evaluator_assignments a
           JOIN people p ON p.id = a.evaluator_person_id
+          JOIN events event
+            ON event.id = a.event_id AND event.organisation_id = ?
           LEFT JOIN evaluation_teams t
             ON t.id = a.team_id AND t.event_id = a.event_id
           LEFT JOIN submissions submission
@@ -379,7 +529,7 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
          ORDER BY a.assigned_at, p.display_name
       `,
       )
-        .bind(viewer.eventId)
+        .bind(viewer.organisationId, viewer.eventId)
         .all<{
           id: string;
           roundId: string;
@@ -412,10 +562,12 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
                p.display_name AS moderatorName
           FROM review_moderations m
           JOIN people p ON p.id = m.moderator_person_id
+          JOIN events event
+            ON event.id = m.event_id AND event.organisation_id = ?
          WHERE m.event_id = ? AND m.status IN ('draft','confirmed')
       `,
       )
-        .bind(viewer.eventId)
+        .bind(viewer.organisationId, viewer.eventId)
         .all<{
           id: string;
           roundId: string;
@@ -431,12 +583,19 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
     const rounds = planRow
       ? await this.getRounds(
           viewer.eventId,
+          viewer.organisationId,
           planRow.id,
-          Boolean(planRow.blindedReviewing),
         )
       : [];
     const submissions = submissionRows.results.map(
-      ({ routedTeamIdsJson, routingJson, tracksJson, ...submission }) => {
+      ({
+        routedTeamIdsJson,
+        routingJson,
+        tracksJson,
+        speakersJson,
+        submittedSnapshotJson,
+        ...submission
+      }) => {
         if (!submission.category) {
           throw new EvaluationStateError(
             `Submission ${submission.id} is missing persisted track selections.`,
@@ -471,8 +630,17 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
           )
           .min(1)
           .parse(JSON.parse(tracksJson));
+        const speakers = z
+          .array(z.object({ name: z.string(), email: z.string() }))
+          .parse(JSON.parse(speakersJson));
+        const submittedSnapshot = requireSubmittedSnapshot(
+          submission.id,
+          submittedSnapshotJson,
+        );
         return {
           ...submission,
+          speakers,
+          identityAnswers: submittedSnapshot.answers,
           routedTeamIds,
           routedTeamName:
             routedTeamNames.length > 0 ? routedTeamNames.join(", ") : null,
@@ -484,7 +652,7 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
       plan: planRow
         ? {
             ...planRow,
-            blindedReviewing: Boolean(planRow.blindedReviewing),
+            blindedReviewing: rounds.some((round) => round.anonymous),
             rounds,
           }
         : null,
@@ -509,37 +677,80 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
 
   protected async getRounds(
     eventId: string,
+    organisationId: string,
     planId: string,
-    anonymous: boolean,
   ): Promise<Round[]> {
-    const [roundRows, criterionRows] = await Promise.all([
+    const [roundRows, criterionRows, reviewerRows] = await Promise.all([
       this.env.DB.prepare(
         `
-        SELECT id, name, round_number AS roundNumber, status, revision
-          FROM evaluation_rounds WHERE event_id = ? AND plan_id = ? ORDER BY round_number
+        SELECT r.id, r.name, r.round_number AS roundNumber, r.status, r.revision,
+               r.opens_at AS opensAt, r.closes_at AS closesAt,
+               r.blinded_reviewing AS anonymous,
+               r.scorecard_id AS scorecardId,
+               r.scorecard_version AS scorecardVersion
+          FROM evaluation_rounds r
+          JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+         WHERE r.event_id = ? AND r.plan_id = ? ORDER BY r.round_number
       `,
       )
-        .bind(eventId, planId)
-        .all<Omit<Round, "criteria" | "anonymous">>(),
+        .bind(organisationId, eventId, planId)
+        .all<
+          Omit<Round, "criteria" | "reviewers"> & {
+            anonymous: number | boolean;
+          }
+        >(),
       this.env.DB.prepare(
         `
         SELECT c.id, c.round_id AS roundId, c.name, c.description,
                c.input_type AS inputType, c.weight_percent AS weightPercent,
-               c.required, c.position
-          FROM evaluation_criteria c JOIN evaluation_rounds r ON r.id = c.round_id AND r.event_id = c.event_id
+               c.options_json AS optionsJson, c.required, c.position
+          FROM evaluation_criteria c
+          JOIN evaluation_rounds r
+            ON r.id = c.round_id AND r.event_id = c.event_id
+          JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
          WHERE c.event_id = ? AND r.plan_id = ? ORDER BY r.round_number, c.position
       `,
       )
-        .bind(eventId, planId)
-        .all<Criterion & { roundId: string }>(),
+        .bind(organisationId, eventId, planId)
+        .all<
+          Omit<Criterion, "options"> & { roundId: string; optionsJson: string }
+        >(),
+      this.env.DB.prepare(
+        `
+        SELECT pool.round_id AS roundId, pool.person_id AS personId,
+               person.display_name AS name, person.email
+          FROM evaluation_round_reviewers pool
+          JOIN people person ON person.id = pool.person_id
+          JOIN evaluation_rounds r
+            ON r.id = pool.round_id AND r.event_id = pool.event_id
+          JOIN events e ON e.id = pool.event_id AND e.organisation_id = ?
+         WHERE pool.event_id = ? AND r.plan_id = ?
+         ORDER BY pool.round_id, person.display_name, person.id
+      `,
+      )
+        .bind(organisationId, eventId, planId)
+        .all<{
+          roundId: string;
+          personId: string;
+          name: string;
+          email: string;
+        }>(),
     ]);
     return roundRows.results.map((round) => ({
       ...round,
-      anonymous,
+      anonymous: Boolean(round.anonymous),
+      reviewers: reviewerRows.results
+        .filter((reviewer) => reviewer.roundId === round.id)
+        .map(({ roundId: _roundId, ...reviewer }) => reviewer),
       criteria: criterionRows.results
         .filter((criterion) => criterion.roundId === round.id)
-        .map((criterion) => ({
+        .map(({ optionsJson, ...criterion }) => ({
           ...criterion,
+          options: parseCriterionOptions(
+            optionsJson,
+            criterion.id,
+            criterion.inputType,
+          ),
           required: Boolean(criterion.required),
         })),
     }));
@@ -576,19 +787,25 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
     if (commandState.replay) return commandState.replay.planId;
     const commandGuard = this.commandGuard(commandState.prepared);
     const parsed = evaluationPlanSchema.parse(input);
-    const blindedReviewing = parsed.rounds[0].anonymous ? 1 : 0;
+    assertPlanScorecardConsistency(parsed.rounds);
+    const blindedReviewing = parsed.rounds.some((round) => round.anonymous)
+      ? 1
+      : 0;
     const existing = await this.env.DB.prepare(
       `
-      SELECT id, revision, decision_role AS decisionRole
-        FROM evaluation_plans
-       WHERE event_id = ? AND status <> 'archived' ORDER BY created_at DESC LIMIT 1
+      SELECT plan.id, plan.revision, plan.decision_role AS decisionRole
+        FROM evaluation_plans plan
+        JOIN events event
+          ON event.id = plan.event_id AND event.organisation_id = ?
+       WHERE plan.event_id = ? AND plan.status <> 'archived'
+       ORDER BY plan.created_at DESC LIMIT 1
     `,
     )
-      .bind(viewer.eventId)
+      .bind(viewer.organisationId, viewer.eventId)
       .first<{
         id: string;
         revision: number;
-        decisionRole: "administrator" | "committee_chair";
+      decisionRole: "administrator" | "committee_chair";
       }>();
     if (existing && existing.revision !== parsed.revision)
       throw new EvaluationRevisionConflictError(
@@ -607,17 +824,57 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
     if (existing) {
       const assignment = await this.env.DB.prepare(
         `
-        SELECT a.id FROM evaluator_assignments a JOIN evaluation_rounds r ON r.id = a.round_id
-         WHERE r.plan_id = ? LIMIT 1
+        SELECT a.id
+          FROM evaluator_assignments a
+          JOIN evaluation_rounds r
+            ON r.id = a.round_id AND r.event_id = a.event_id
+          JOIN events event
+            ON event.id = r.event_id AND event.organisation_id = ?
+         WHERE r.plan_id = ? AND r.event_id = ? LIMIT 1
       `,
       )
-        .bind(existing.id)
+        .bind(viewer.organisationId, existing.id, viewer.eventId)
         .first();
       if (assignment)
         throw new EvaluationStateError(
           "A plan with assignments cannot have its rounds or rubric replaced. Create the next round instead.",
         );
     }
+    if (existing) {
+      await assertPersistedScorecardConsistency(
+        this.env.DB,
+        viewer.organisationId,
+        viewer.eventId,
+        existing.id,
+        parsed.rounds,
+      );
+    }
+    const existingReviewerRows = existing
+      ? (
+          await this.env.DB.prepare(
+            `
+            SELECT pool.id, pool.round_id AS roundId, pool.person_id AS personId,
+                   pool.added_by_person_id AS addedByPersonId,
+                   pool.revision, pool.created_at AS createdAt
+              FROM evaluation_round_reviewers pool
+              JOIN evaluation_rounds round
+                ON round.id = pool.round_id AND round.event_id = pool.event_id
+              JOIN events event
+                ON event.id = pool.event_id AND event.organisation_id = ?
+             WHERE pool.event_id = ? AND round.plan_id = ?
+          `,
+          )
+            .bind(viewer.organisationId, viewer.eventId, existing.id)
+            .all<{
+              id: string;
+              roundId: string;
+              personId: string;
+              addedByPersonId: string | null;
+              revision: number;
+              createdAt: number;
+            }>()
+        ).results
+      : [];
     const planId = existing?.id ?? crypto.randomUUID();
     const operationId = crypto.randomUUID();
     const planHasNoAssignments = `
@@ -761,14 +1018,17 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
           ]),
     ];
     for (const [roundIndex, round] of parsed.rounds.entries()) {
+      const closesAt =
+        round.closesAt !== undefined ? round.closesAt : (round.dueAt ?? null);
       statements.push(
         this.env.DB.prepare(
           `
         INSERT INTO evaluation_rounds (
-          id, event_id, plan_id, round_number, name, status, closes_at,
+          id, event_id, plan_id, round_number, name, status, opens_at, closes_at,
+          blinded_reviewing, scorecard_id, scorecard_version,
           advancement_rule_json, revision, created_at, updated_at
         )
-        SELECT ?, p.event_id, p.id, ?, ?, ?, ?, '{}', 1, unixepoch(), unixepoch()
+        SELECT ?, p.event_id, p.id, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, unixepoch(), unixepoch()
           FROM evaluation_plans p
          WHERE p.id = ? AND p.event_id = ? AND p.revision = ? AND p.name = ? AND p.status = ?
            AND EXISTS (
@@ -781,7 +1041,11 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
           roundIndex + 1,
           round.name,
           parsed.status === "active" && roundIndex === 0 ? "active" : "draft",
-          round.dueAt ? Math.floor(Date.parse(round.dueAt) / 1_000) : null,
+          round.opensAt ? Math.floor(Date.parse(round.opensAt) / 1_000) : null,
+          closesAt ? Math.floor(Date.parse(closesAt) / 1_000) : null,
+          round.anonymous ? 1 : 0,
+          round.scorecardId ?? round.id,
+          round.scorecardVersion,
           planId,
           viewer.eventId,
           parsed.revision + 1,
@@ -797,9 +1061,10 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
           this.env.DB.prepare(
             `
           INSERT INTO evaluation_criteria (
-            id, event_id, round_id, name, description, input_type, weight_percent, required, position
+            id, event_id, round_id, name, description, input_type, options_json,
+            weight_percent, required, position
           )
-          SELECT ?, r.event_id, r.id, ?, ?, ?, ?, ?, ?
+          SELECT ?, r.event_id, r.id, ?, ?, ?, ?, ?, ?, ?
             FROM evaluation_rounds r
             JOIN evaluation_plans p ON p.id = r.plan_id AND p.event_id = r.event_id
            WHERE r.id = ? AND r.event_id = ? AND p.id = ? AND p.revision = ? AND p.name = ? AND p.status = ?
@@ -813,6 +1078,7 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
             criterion.name,
             criterion.description || null,
             criterion.inputType,
+            JSON.stringify(criterion.options),
             criterion.weightPercent,
             criterion.required ? 1 : 0,
             criterion.position,
@@ -825,6 +1091,34 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
             viewer.eventId,
             viewer.organisationId,
             operationId,
+          ),
+        );
+      }
+      for (const reviewer of existingReviewerRows.filter(
+        (candidate) => candidate.roundId === round.id,
+      )) {
+        statements.push(
+          this.env.DB.prepare(
+            `
+            INSERT INTO evaluation_round_reviewers (
+              id, event_id, round_id, person_id, added_by_person_id,
+              revision, created_at, updated_at
+            )
+            SELECT ?, r.event_id, r.id, ?, ?, ?, ?, unixepoch()
+              FROM evaluation_rounds r
+              JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
+             WHERE r.id = ? AND r.event_id = ? AND r.plan_id = ?
+          `,
+          ).bind(
+            reviewer.id,
+            reviewer.personId,
+            reviewer.addedByPersonId,
+            reviewer.revision,
+            reviewer.createdAt,
+            viewer.organisationId,
+            round.id,
+            viewer.eventId,
+            planId,
           ),
         );
       }
@@ -915,13 +1209,16 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
       if (existing) {
         const assignment = await this.env.DB.prepare(
           `
-          SELECT a.id FROM evaluator_assignments a
-          JOIN evaluation_rounds r
-            ON r.id = a.round_id AND r.event_id = a.event_id
-         WHERE r.plan_id = ? AND r.event_id = ? LIMIT 1
+          SELECT a.id
+            FROM evaluator_assignments a
+            JOIN evaluation_rounds r
+              ON r.id = a.round_id AND r.event_id = a.event_id
+            JOIN events event
+              ON event.id = r.event_id AND event.organisation_id = ?
+           WHERE r.plan_id = ? AND r.event_id = ? LIMIT 1
         `,
         )
-          .bind(existing.id, viewer.eventId)
+          .bind(viewer.organisationId, existing.id, viewer.eventId)
           .first();
         if (assignment) {
           throw new EvaluationStateError(

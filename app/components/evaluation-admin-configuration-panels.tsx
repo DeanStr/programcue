@@ -1,6 +1,7 @@
 import { Form } from "react-router";
 
 import { EventDateTime } from "~/components/ui/event-date-time";
+import { communicationScheduledLocalValue } from "~/modules/communications/communication-time";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import {
   EvaluationProgressionPanel,
@@ -55,6 +56,7 @@ export function RubricFields({
     name: string;
     description: string | null;
     inputType: string;
+    options?: ReadonlyArray<string>;
     weightPercent: number;
     required: boolean;
   }>;
@@ -67,16 +69,18 @@ export function RubricFields({
       inputType: "free_text",
       weightPercent: 0,
       required: false,
+      options: [],
     },
   ];
   return (
     <fieldset className="stack">
       <legend className="label">Rubric criteria</legend>
       <p className="help">
-        Scored 1–5 and 1–10 criteria must total 100%. Yes/no and free-text
-        criteria are contextual and must have zero weight. Every scored
-        criterion is required; contextual criteria may be optional. Leave the
-        final row blank unless another criterion is needed.
+        Scored 1–5 and 1–10 criteria must total 100%. Yes/no, dropdown and
+        free-text criteria are contextual and must have zero weight. Every
+        scored criterion is required; contextual criteria may be optional.
+        Dropdown options are saved in the order entered, separated by commas.
+        Leave the final row blank unless another criterion is needed.
       </p>
       {rows.map((criterion, index) => (
         <div className="card pad" key={`${criterion.name}-${index}`}>
@@ -100,6 +104,7 @@ export function RubricFields({
                 <option value="scale_5">Score 1–5</option>
                 <option value="scale_10">Score 1–10</option>
                 <option value="yes_no">Yes / no</option>
+                <option value="dropdown">Dropdown</option>
                 <option value="free_text">Free text</option>
               </select>
             </label>
@@ -122,6 +127,15 @@ export function RubricFields({
               className="input"
               name="criterionDescription"
               defaultValue={criterion.description ?? ""}
+            />
+          </label>
+          <label className="label mt">
+            Dropdown options
+            <input
+              className="input"
+              name="criterionOptions"
+              defaultValue={criterion.options?.join(", ") ?? ""}
+              placeholder="Accept, Maybe, Reject"
             />
           </label>
           <label className="label mt">
@@ -547,6 +561,23 @@ export function EvaluationRoundsPanel() {
             </span>
           </div>
           <h3>{round.name}</h3>
+          <p className="subtle">
+            Opens: {round.opensAt ? (
+              <EventDateTime
+                epochSeconds={round.opensAt}
+                timeZone={loaderData.eventTimezone}
+                showTimeZone
+              />
+            ) : "immediately"} {" · "} Closes: {round.closesAt ? (
+              <EventDateTime
+                epochSeconds={round.closesAt}
+                timeZone={loaderData.eventTimezone}
+                showTimeZone
+              />
+            ) : "no closing date"} {" · "}
+            {round.anonymous ? "blind review" : "identity visible"} {" · "}
+            Scorecard v{round.scorecardVersion}
+          </p>
           {round.criteria.map((criterion) => (
             <div className="progress-row" key={criterion.id}>
               <span>
@@ -559,6 +590,8 @@ export function EvaluationRoundsPanel() {
                       ? "Score 1–10"
                       : criterion.inputType === "yes_no"
                         ? "Yes / no"
+                        : criterion.inputType === "dropdown"
+                          ? `Dropdown: ${criterion.options.join(", ")}`
                         : "Free text"}
                 </small>
               </span>
@@ -594,12 +627,135 @@ export function EvaluationRoundsPanel() {
                     required
                   />
                 </label>
+                <div className="grid grid-2">
+                  <label className="label">
+                    Opens ({loaderData.eventTimezone})
+                    <input
+                      className="input"
+                      type="datetime-local"
+                      name="roundOpensAt"
+                      defaultValue={communicationScheduledLocalValue(
+                        round.opensAt,
+                        loaderData.eventTimezone,
+                      )}
+                    />
+                  </label>
+                  <label className="label">
+                    Closes ({loaderData.eventTimezone})
+                    <input
+                      className="input"
+                      type="datetime-local"
+                      name="roundClosesAt"
+                      defaultValue={communicationScheduledLocalValue(
+                        round.closesAt,
+                        loaderData.eventTimezone,
+                      )}
+                    />
+                  </label>
+                </div>
+                <input type="hidden" name="scorecardId" value={round.scorecardId} />
+                <input
+                  type="hidden"
+                  name="scorecardVersion"
+                  value={round.scorecardVersion}
+                />
+                <label className="validation-item">
+                  <input
+                    type="checkbox"
+                    name="anonymous"
+                    value="true"
+                    defaultChecked={round.anonymous}
+                  />
+                  <span>Blind reviewer identity for this round</span>
+                </label>
                 <RubricFields criteria={round.criteria} />
                 <button className="btn" disabled={navigation.state !== "idle"}>
                   Save draft round
                 </button>
               </Form>
             </details>
+          ) : null}
+          <div className="divider" />
+          <div className="card-title">
+            <div>
+              <h3>Round reviewer pool</h3>
+              <p className="help">
+                Event evaluator access does not add anyone here automatically.
+              </p>
+            </div>
+            <span className="status info">{round.reviewers.length}</span>
+          </div>
+          {round.reviewers.length ? (
+            <ul className="list-clean">
+              {round.reviewers.map((reviewer) => (
+                <li key={reviewer.personId}>
+                  <span>
+                    <strong>{reviewer.name}</strong>
+                    <small className="subtle">{reviewer.email}</small>
+                  </span>
+                  <Form
+                    method="post"
+                    onSubmit={(event) => {
+                      if (
+                        !window.confirm(
+                          `Remove ${reviewer.name} from ${round.name}? Any unfinished assignments for this round will be cancelled and need reassignment.`,
+                        )
+                      ) {
+                        event.preventDefault();
+                      }
+                    }}
+                  >
+                    <input
+                      type="hidden"
+                      name="intent"
+                      value="change-round-reviewer"
+                    />
+                    <input type="hidden" name="roundId" value={round.id} />
+                    <input
+                      type="hidden"
+                      name="personId"
+                      value={reviewer.personId}
+                    />
+                    <input type="hidden" name="confirmed" value="true" />
+                    <button
+                      className="btn small"
+                      name="operation"
+                      value="remove"
+                      disabled={navigation.state !== "idle"}
+                    >
+                      Remove
+                    </button>
+                  </Form>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="help">No reviewers are in this round pool.</p>
+          )}
+          {loaderData.evaluators.length ? (
+            <Form method="post" className="inline-form mt">
+              <input
+                type="hidden"
+                name="intent"
+                value="change-round-reviewer"
+              />
+              <input type="hidden" name="roundId" value={round.id} />
+              <select className="select" name="personId" aria-label={`Reviewer for ${round.name}`}>
+                {loaderData.evaluators.map((evaluator) => (
+                  <option key={evaluator.id} value={evaluator.id}>
+                    {evaluator.name} · {evaluator.email}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn small"
+                name="operation"
+                value="add"
+                disabled={navigation.state !== "idle"}
+              >
+                Add reviewer
+              </button>
+            </Form>
           ) : null}
         </section>
       ))}
@@ -636,6 +792,16 @@ export function EvaluationPlanState() {
             required
           />
         </label>
+        <div className="grid grid-2">
+          <label className="label">
+            Opens ({loaderData.eventTimezone})
+            <input className="input" type="datetime-local" name="roundOpensAt" />
+          </label>
+          <label className="label">
+            Closes ({loaderData.eventTimezone})
+            <input className="input" type="datetime-local" name="roundClosesAt" />
+          </label>
+        </div>
         <label className="validation-item">
           <input type="checkbox" name="anonymous" value="true" />
           <span>

@@ -21,6 +21,11 @@ export const formFieldSchema = z
     example: z.string().trim().max(300).default(""),
     options: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
     reviewVisibility: z.enum(["reviewers", "administrators_only"]).optional(),
+    /**
+     * Blind review is fail-closed: a field must be explicitly classified as
+     * content before it can be returned to a blinded reviewer.
+     */
+    blindReviewVisibility: z.enum(["content", "identity"]).optional(),
     condition: z
       .object({
         fieldId: z.string(),
@@ -575,6 +580,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       example: "How a small programme team removed three weeks of manual work",
       options: [],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: null,
     },
     {
@@ -587,6 +593,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
         "Describe the problem, what you tried, the outcome and what attendees can apply themselves.",
       options: [],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: null,
     },
     {
@@ -598,6 +605,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       example: "",
       options: ["AI & Innovation", "Event Operations", "Experience Design"],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: null,
     },
     {
@@ -609,6 +617,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       example: "",
       options: ["Workshop", "Presentation", "Panel", "Keynote"],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: null,
     },
     {
@@ -620,6 +629,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       example: "Moveable tables, a projector and space for groups of six.",
       options: [],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: { fieldId: "format", equals: "Workshop" },
     },
     {
@@ -631,6 +641,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       example: "https://…",
       options: [],
       reviewVisibility: "reviewers",
+      blindReviewVisibility: "content",
       condition: null,
     },
   ],

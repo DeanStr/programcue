@@ -21,6 +21,7 @@ import {
   AirtableRepositoryReconciliationError,
   type PreparedAirtableRepositoryConnection,
 } from "~/modules/airtable/airtable-room-repository.server";
+import { AIRTABLE_SCHEMA_VERSION } from "~/modules/airtable/airtable-schema";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",
@@ -38,7 +39,7 @@ function preparedConnection(): PreparedAirtableRepositoryConnection {
     encryptedCredentials: '{"version":1,"iv":"test","ciphertext":"test"}',
     configuration: {
       baseId: "app12345678901234",
-      schemaVersion: 4,
+      schemaVersion: AIRTABLE_SCHEMA_VERSION,
       tables:
         {} as PreparedAirtableRepositoryConnection["configuration"]["tables"],
       authoritativeEntities: [

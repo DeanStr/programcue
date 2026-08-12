@@ -133,6 +133,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -143,6 +145,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -153,6 +157,8 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: coreReviewVisibility,
+          blindReviewVisibility:
+            coreReviewVisibility === "reviewers" ? "content" : "identity",
           condition: null,
         },
         {
@@ -163,6 +169,7 @@ function submittedSnapshot(
           help: "",
           options: [],
           reviewVisibility: "reviewers",
+          blindReviewVisibility: "content",
           condition: null,
         },
         {
@@ -256,6 +263,25 @@ async function resetEvaluationFixture() {
         WHERE event_id = ? AND person_id = ? AND role = 'evaluator'`,
     ).bind(admin.eventId, evaluator.personId),
   ]);
+}
+
+async function addRoundReviewer(
+  roundId: string,
+  personId = evaluator.personId,
+) {
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO evaluation_round_reviewers
+       (id, event_id, round_id, person_id, added_by_person_id)
+     VALUES (?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      `test-round-reviewer-${roundId}-${personId}`,
+      admin.eventId,
+      roundId,
+      personId,
+      admin.personId,
+    )
+    .run();
 }
 
 describe("evaluation vertical slice", () => {
@@ -465,9 +491,16 @@ describe("evaluation vertical slice", () => {
         planId,
         planRevision: 1,
         name: "Final review draft",
+        opensAt: "2026-08-11T09:00:00.000Z",
+        closesAt: "2099-12-31T17:00:00.000Z",
         dueAt: null,
         cloneRoundId: "eval-multi-round-one",
       });
+      const configuredOpeningTime = Math.floor(
+        Date.parse("2026-08-11T09:00:00.000Z") / 1_000,
+      );
+      await addRoundReviewer("eval-multi-round-one");
+      await addRoundReviewer(nextRoundId);
       const draftRoundUpdate = {
         roundId: nextRoundId,
         revision: 1,
@@ -586,6 +619,7 @@ describe("evaluation vertical slice", () => {
         SELECT
           (SELECT status FROM evaluation_rounds WHERE id = 'eval-multi-round-one') AS firstStatus,
           (SELECT status FROM evaluation_rounds WHERE id = ?) AS secondStatus,
+          (SELECT opens_at FROM evaluation_rounds WHERE id = ?) AS secondOpensAt,
           (SELECT status FROM reviews WHERE id = ?) AS reviewStatus,
           (SELECT status FROM submissions WHERE id = 'eval-test-submission') AS submissionStatus,
           (SELECT status FROM submissions
@@ -599,11 +633,18 @@ describe("evaluation vertical slice", () => {
               AND submission_id = 'eval-multi-round-not-advanced') AS nonAdvancedAssignmentCount
       `,
       )
-        .bind(nextRoundId, submitted.reviewId, nextRoundId, nextRoundId)
+        .bind(
+          nextRoundId,
+          nextRoundId,
+          submitted.reviewId,
+          nextRoundId,
+          nextRoundId,
+        )
         .first();
       expect(state).toEqual({
         firstStatus: "closed",
         secondStatus: "active",
+        secondOpensAt: configuredOpeningTime,
         reviewStatus: "locked",
         submissionStatus: "assigned",
         nonAdvancedSubmissionStatus: "decision_ready",
@@ -663,6 +704,7 @@ describe("evaluation vertical slice", () => {
           },
         ],
       });
+      await addRoundReviewer("eval-moderation-round");
       await service.assign(admin, {
         roundId: "eval-moderation-round",
         targetType: "submission",
