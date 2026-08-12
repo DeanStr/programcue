@@ -5,6 +5,7 @@ import {
   eventCalendarDayBoundaries,
   eventDayHourlySlots,
   eventDayScheduleSlots,
+  eventDayUsableScheduleSlots,
   eventLocalCalendarDate,
   eventLocalEndOfDayEpoch,
   eventLocalTimeEpoch,
@@ -81,6 +82,15 @@ describe("event-local schedule time", () => {
       eventDayScheduleSlots(days[1]!, "America/Toronto", [existingStart]),
     ).toContain(existingStart);
     expect(eventDayScheduleSlots(days[1]!, "America/Toronto")).toHaveLength(48);
+    expect(
+      eventDayUsableScheduleSlots(days[1]!, "America/Toronto", [existingStart]),
+    ).toHaveLength(31);
+    expect(
+      eventDayUsableScheduleSlots(days[1]!, "America/Toronto", [existingStart]),
+    ).toContain(existingStart);
+    expect(
+      eventDayUsableScheduleSlots(days[1]!, "America/Toronto"),
+    ).not.toContain(eventLocalTimeEpoch(days[1]!, "America/Toronto", 0));
   });
 
   it("uses the actual length of a daylight-saving event day", () => {

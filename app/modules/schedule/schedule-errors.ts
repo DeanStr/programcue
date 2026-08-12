@@ -1,10 +1,10 @@
 import type { ScheduleConflict } from "./schedule-rules";
 
 export class ScheduleRevisionConflictError extends Error {
-  constructor() {
-    super(
-      "The schedule changed after this page loaded. Refresh before applying another change.",
-    );
+  constructor(
+    message = "The schedule changed after this page loaded. Refresh before applying another change.",
+  ) {
+    super(message);
     this.name = "ScheduleRevisionConflictError";
   }
 }

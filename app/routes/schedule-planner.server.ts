@@ -154,6 +154,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   const values = await request.formData();
   const service = new ScheduleService(env);
   const intent = String(values.get("intent") ?? "");
+  const autoPlacementIntent =
+    intent === "auto-place-preview" || intent === "auto-place-confirm"
+      ? intent
+      : null;
   try {
     switch (intent) {
       case "create-draft": {
@@ -168,6 +172,48 @@ export async function action({ request, context }: Route.ActionArgs) {
         });
         if (realtimeFailure) return data(realtimeFailure, { status: 207 });
         return { ok: true, scheduleVersionId };
+      }
+      case "auto-place-preview": {
+        const preview = await service.previewAutoPlacement(viewer);
+        return {
+          ok: true,
+          intent,
+          autoPreview: preview,
+        };
+      }
+      case "auto-place-confirm": {
+        const serializedProposal = values.get("proposal");
+        let proposal: unknown;
+        try {
+          proposal = JSON.parse(String(serializedProposal ?? ""));
+        } catch {
+          return data(
+            {
+              ok: false,
+              intent,
+              error:
+                "The auto-place preview is invalid. Prepare a fresh preview.",
+            },
+            { status: 422 },
+          );
+        }
+        const result = await service.confirmAutoPlacement(viewer, proposal);
+        const realtimeFailure = await recordRouteChange(env, viewer, {
+          entityType: "schedule_version",
+          entityId: result.scheduleVersionId,
+          changeType: "updated",
+        });
+        const response = {
+          ok: !realtimeFailure,
+          committed: true,
+          intent,
+          message: `Auto-place applied ${result.appliedCount} placement${result.appliedCount === 1 ? "" : "s"}. The schedule remains a draft and was not published.`,
+          appliedCount: result.appliedCount,
+          unplacedCount: result.unplacedCount,
+          scheduleRevision: result.scheduleRevision,
+          warning: realtimeFailure?.message ?? null,
+        };
+        return data(response, realtimeFailure ? { status: 207 } : undefined);
       }
       case "place": {
         const result = await service.place(viewer, {
@@ -457,6 +503,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data(
         {
           ok: false,
+          ...(autoPlacementIntent ? { intent: autoPlacementIntent } : {}),
           error: error.issues[0]?.message ?? "Invalid schedule change.",
         },
         { status: 422 },
@@ -485,6 +532,17 @@ export async function action({ request, context }: Route.ActionArgs) {
           { status: 409 },
         );
       }
+      if (intent === "auto-place-confirm") {
+        return data(
+          {
+            ok: false,
+            intent,
+            conflict: true,
+            error: error.message,
+          },
+          { status: 409 },
+        );
+      }
       return data({ ok: false, error: error.message }, { status: 409 });
     }
     if (error instanceof ScheduleIdempotencyConflictError)
@@ -500,13 +558,27 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (error instanceof ScheduleUndoUnavailableError)
       return data({ ok: false, error: error.message }, { status: 409 });
     if (error instanceof ScheduleNotFoundError)
-      return data({ ok: false, error: error.message }, { status: 404 });
+      return data(
+        {
+          ok: false,
+          ...(autoPlacementIntent ? { intent: autoPlacementIntent } : {}),
+          error: error.message,
+        },
+        { status: 404 },
+      );
     if (error instanceof SchedulePlacementBlockedError)
       return data({ ok: false, error: error.message }, { status: 409 });
     if (error instanceof SchedulePublicationBlockedError)
       return data({ ok: false, error: error.message }, { status: 409 });
     if (error instanceof ScheduleConfigurationError)
-      return data({ ok: false, error: error.message }, { status: 422 });
+      return data(
+        {
+          ok: false,
+          ...(autoPlacementIntent ? { intent: autoPlacementIntent } : {}),
+          error: error.message,
+        },
+        { status: 422 },
+      );
     if (error instanceof Response) throw error;
     throw error;
   }

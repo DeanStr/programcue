@@ -9,7 +9,7 @@ async function waitForInterface(page: Page, path: string) {
   await page.locator("body[data-hydrated='true']").waitFor();
 }
 
-async function expectStatus(page: Page, text: string) {
+async function expectStatus(page: Page, text: string | RegExp) {
   await expect(
     page.getByRole("status").filter({ hasText: text }).first(),
   ).toBeVisible();
@@ -544,6 +544,108 @@ test.describe("mutable schedule authoring", () => {
     await expect(undo).toBeVisible();
     await undo.click();
     await expectStatus(page, "Schedule change undone");
+  });
+
+  test("previews and confirms deterministic auto-placement without publishing", async ({
+    page,
+  }) => {
+    test.slow();
+    const unique = Date.now();
+    const titles = [
+      `Auto-place first ${unique}`,
+      `Auto-place second ${unique}`,
+    ];
+
+    await waitForInterface(page, "/admin/submissions");
+    for (const [index, title] of titles.entries()) {
+      const directSession = page.locator("details").filter({
+        has: page.getByText("Create a guaranteed direct session", {
+          exact: true,
+        }),
+      });
+      if ((await directSession.getAttribute("open")) === null) {
+        await directSession
+          .getByText("Create a guaranteed direct session", { exact: true })
+          .click();
+      }
+      await directSession.getByLabel("Session title").fill(title);
+      await directSession.getByLabel("Track").selectOption({ index: 1 });
+      await directSession
+        .getByLabel("Description")
+        .fill("A deterministic auto-placement test session.");
+      await directSession
+        .getByLabel("Speaker 1 name")
+        .fill(`Auto Speaker ${index + 1}`);
+      await directSession
+        .getByLabel("Email", { exact: true })
+        .fill(`auto-place-${unique}-${index}@example.com`);
+      await directSession
+        .getByRole("button", { name: "Create unscheduled session" })
+        .click();
+      await expect(
+        page.locator(".validation-item.ok[role='status']").filter({
+          hasText: "Direct session created in the unscheduled programme.",
+        }),
+      ).toBeVisible();
+    }
+
+    await waitForInterface(page, "/admin/schedule");
+    await page.getByRole("button", { name: "Create next draft" }).click();
+    await expect(page.getByText(/Version \d+ · draft/)).toBeVisible();
+
+    const autoPlace = page.getByRole("button", {
+      name: "Auto-place unscheduled sessions",
+    });
+    await expect(autoPlace).toBeEnabled();
+    await autoPlace.click();
+    const preview = page.getByRole("dialog", {
+      name: "Preview auto-placement",
+    });
+    await expect(preview).toBeVisible();
+    await expect(
+      preview.getByRole("heading", { name: "Proposed placements" }),
+    ).toBeVisible();
+    await expect(preview.getByTestId("auto-placement-proposal")).toHaveCount(2);
+    for (const title of titles) {
+      await expect(preview.getByText(title, { exact: true })).toBeVisible();
+    }
+    await expect(
+      preview.getByRole("button", { name: "Confirm placements" }),
+    ).toBeEnabled();
+    await preview.getByRole("button", { name: "Confirm placements" }).click();
+
+    await expectStatus(page, /Auto-place applied 2 placements/);
+    for (const title of titles) {
+      await expect(
+        page.locator(".schedule-entry-draggable").filter({ hasText: title }),
+      ).toBeVisible();
+    }
+    await expect(page.getByText(/draft.*not published/i)).toBeVisible();
+    for (const title of titles) {
+      await expect(
+        page.locator(".schedule-entry-draggable").filter({
+          hasText: title,
+        }),
+      ).toHaveCount(1);
+    }
+
+    const publicProgramme = await page.request.get(
+      "/api/v1/public/events/future-of-events-2025/programme",
+    );
+    expect(publicProgramme.ok()).toBeTruthy();
+    const publicProgrammeBody = JSON.stringify(await publicProgramme.json());
+    expect(publicProgrammeBody).not.toContain(titles[0]);
+    expect(publicProgrammeBody).not.toContain(titles[1]);
+
+    await waitForInterface(page, "/admin/schedule");
+    await expect(page.getByText(/Version \d+ · draft/)).toBeVisible();
+    for (const title of titles) {
+      await expect(
+        page.locator(".schedule-entry-draggable").filter({
+          hasText: title,
+        }),
+      ).toHaveCount(1);
+    }
   });
 });
 

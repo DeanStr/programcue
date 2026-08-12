@@ -24,6 +24,7 @@ export const nodeOnlyTestFiles = [
   "app/modules/submissions/form-js-adapter.test.ts",
   "app/modules/readiness/readiness-rules.test.ts",
   "app/modules/schedule/schedule-rules.test.ts",
+  "app/modules/schedule/schedule-auto-placement.test.ts",
   "app/modules/schedule/schedule-time.test.ts",
   "app/modules/files/uppy-multipart-client.test.ts",
   "app/modules/files/file-policy.test.ts",

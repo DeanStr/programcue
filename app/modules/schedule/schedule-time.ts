@@ -147,3 +147,26 @@ export function eventDayScheduleSlots(
   }
   return [...slots].sort((left, right) => left - right);
 }
+
+export const SCHEDULE_DAY_START_HOUR = 7;
+export const SCHEDULE_DAY_END_HOUR = 22;
+
+export function eventDayUsableScheduleSlots(
+  boundaryEpoch: number,
+  timezone: string,
+  existingStarts: ReadonlyArray<number> = [],
+) {
+  const start = eventLocalTimeEpoch(
+    boundaryEpoch,
+    timezone,
+    SCHEDULE_DAY_START_HOUR,
+  );
+  const end = eventLocalTimeEpoch(
+    boundaryEpoch,
+    timezone,
+    SCHEDULE_DAY_END_HOUR,
+  );
+  return eventDayScheduleSlots(boundaryEpoch, timezone, existingStarts).filter(
+    (slot) => slot >= start && slot < end,
+  );
+}

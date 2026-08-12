@@ -39,6 +39,74 @@ export const scheduleUndoSchema = z.object({
   undoToken: z.string().uuid(),
 });
 
+const autoPlacementSessionRevisionSchema = z.object({
+  sessionId: z.string().trim().min(1),
+  revision: z.coerce.number().int().positive(),
+});
+
+const autoPlacementCandidateSchema = z
+  .object({
+    sessionId: z.string().trim().min(1),
+    roomId: z.string().trim().min(1),
+    startsAt: z.coerce.number().int().positive(),
+    endsAt: z.coerce.number().int().positive(),
+  })
+  .refine((value) => value.endsAt > value.startsAt, {
+    path: ["endsAt"],
+    message: "The proposed session must end after it starts.",
+  });
+
+const autoPlacementUnplacedSchema = z.object({
+  sessionId: z.string().trim().min(1),
+  reason: z.string().trim().min(1).max(2_000),
+});
+
+export const MAX_AUTO_PLACEMENT_SESSIONS = 500;
+
+export const scheduleAutoPlacementConfirmSchema = z
+  .object({
+    idempotencyKey: editorIdempotencyKeySchema,
+    scheduleVersionId: z.string().trim().min(1),
+    scheduleRevision: z.coerce.number().int().positive(),
+    eventRevision: z.coerce.number().int().positive(),
+    policyRevision: z.coerce.number().int().positive(),
+    sessionRevisions: z
+      .array(autoPlacementSessionRevisionSchema)
+      .max(MAX_AUTO_PLACEMENT_SESSIONS),
+    placements: z
+      .array(autoPlacementCandidateSchema)
+      .max(MAX_AUTO_PLACEMENT_SESSIONS),
+    unplaced: z
+      .array(autoPlacementUnplacedSchema)
+      .max(MAX_AUTO_PLACEMENT_SESSIONS),
+  })
+  .superRefine((value, context) => {
+    const sessionIds = value.sessionRevisions.map((item) => item.sessionId);
+    if (new Set(sessionIds).size !== sessionIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["sessionRevisions"],
+        message: "Each unscheduled session must appear once.",
+      });
+    }
+    const proposedIds = value.placements.map((item) => item.sessionId);
+    if (new Set(proposedIds).size !== proposedIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["placements"],
+        message: "Each proposed session placement must appear once.",
+      });
+    }
+    const unplacedIds = value.unplaced.map((item) => item.sessionId);
+    if (new Set(unplacedIds).size !== unplacedIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["unplaced"],
+        message: "Each unplaced session must appear once.",
+      });
+    }
+  });
+
 export const scheduleBreakSchema = z
   .object({
     title: z.string().trim().min(1).max(160),
@@ -126,6 +194,9 @@ export const scheduleNotesSchema = z.object({
 
 export type SchedulePlacementInput = z.infer<typeof schedulePlacementSchema>;
 export type SchedulePublishInput = z.infer<typeof schedulePublishSchema>;
+export type ScheduleAutoPlacementConfirmInput = z.infer<
+  typeof scheduleAutoPlacementConfirmSchema
+>;
 export type ScheduleSessionContentInput = z.infer<
   typeof scheduleSessionContentSchema
 >;

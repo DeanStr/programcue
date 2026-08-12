@@ -11,11 +11,16 @@ import { Form, Link, useFetcher, useNavigation } from "react-router";
 
 import { Dialog } from "~/components/dialog";
 import { ScheduleContentWorkflows } from "~/components/schedule-content-workflows";
+import type {
+  AutoPlacementPreview,
+  AutoPlacementUnplaced,
+} from "~/modules/schedule/schedule-auto-placement";
 import type { ScheduleWorkspace } from "~/modules/schedule/schedule-service.server";
 import {
   eventBoundaryCalendarDate,
   eventCalendarDayBoundaries,
   eventDayScheduleSlots,
+  eventDayUsableScheduleSlots,
   eventLocalCalendarDate,
   eventLocalTimeEpoch,
 } from "~/modules/schedule/schedule-time";
@@ -37,12 +42,153 @@ function localHour(epoch: number, timezone: string) {
   return Number(hour);
 }
 
+function scheduleDateTimeLabel(epoch: number, timezone: string) {
+  return new Intl.DateTimeFormat("en", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: timezone,
+  }).format(new Date(epoch * 1_000));
+}
+
+type AutoPlacementResultNotice = {
+  appliedCount: number;
+  unplacedCount: number;
+  unplaced: AutoPlacementUnplaced[];
+  warning: string | null;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isAutoPlacementUnplaced(
+  value: unknown,
+): value is AutoPlacementUnplaced {
+  return (
+    isRecord(value) &&
+    typeof value.sessionId === "string" &&
+    value.sessionId.length > 0 &&
+    typeof value.reason === "string" &&
+    value.reason.length > 0
+  );
+}
+
+function isAutoPlacementPreview(value: unknown): value is AutoPlacementPreview {
+  if (!isRecord(value)) return false;
+  if (
+    typeof value.idempotencyKey !== "string" ||
+    typeof value.scheduleVersionId !== "string" ||
+    !isPositiveSafeInteger(value.scheduleRevision) ||
+    !isPositiveSafeInteger(value.eventRevision) ||
+    !isPositiveSafeInteger(value.policyRevision) ||
+    !Array.isArray(value.sessionRevisions) ||
+    !Array.isArray(value.placements) ||
+    !Array.isArray(value.unplaced)
+  ) {
+    return false;
+  }
+  if (
+    !value.sessionRevisions.every(
+      (revision) =>
+        isRecord(revision) &&
+        typeof revision.sessionId === "string" &&
+        revision.sessionId.length > 0 &&
+        isPositiveSafeInteger(revision.revision),
+    )
+  ) {
+    return false;
+  }
+  if (!value.unplaced.every(isAutoPlacementUnplaced)) return false;
+  return value.placements.every((placement) => {
+    if (!isRecord(placement)) return false;
+    if (
+      typeof placement.sessionId !== "string" ||
+      placement.sessionId.length === 0 ||
+      typeof placement.roomId !== "string" ||
+      placement.roomId.length === 0 ||
+      !isPositiveSafeInteger(placement.startsAt) ||
+      !isPositiveSafeInteger(placement.endsAt) ||
+      placement.endsAt <= placement.startsAt ||
+      !Array.isArray(placement.warnings)
+    ) {
+      return false;
+    }
+    return placement.warnings.every(
+      (warning) =>
+        isRecord(warning) &&
+        typeof warning.type === "string" &&
+        (warning.severity === "warning" || warning.severity === "blocking") &&
+        typeof warning.message === "string" &&
+        (warning.conflictingEntryId === undefined ||
+          typeof warning.conflictingEntryId === "string"),
+    );
+  });
+}
+
+type AutoPlacementConfirmation = {
+  committed: true;
+  appliedCount: number;
+  scheduleRevision: number;
+  unplacedCount: number;
+  warning: string | null;
+};
+
+function isAutoPlacementConfirmation(
+  value: unknown,
+): value is AutoPlacementConfirmation {
+  return (
+    isRecord(value) &&
+    value.committed === true &&
+    isNonNegativeSafeInteger(value.appliedCount) &&
+    isPositiveSafeInteger(value.scheduleRevision) &&
+    isNonNegativeSafeInteger(value.unplacedCount) &&
+    (value.warning === null ||
+      (typeof value.warning === "string" && value.warning.length > 0))
+  );
+}
+
+function autoPlacementResponseError(result: Record<string, unknown>) {
+  return typeof result.error === "string" && result.error.length > 0
+    ? result.error
+    : "Auto-place returned an invalid response. Refresh and try again.";
+}
+
+function serializeAutoPlacementPreview(preview: AutoPlacementPreview) {
+  const payload = JSON.stringify({
+    ...preview,
+    placements: preview.placements.map(
+      ({ sessionId, roomId, startsAt, endsAt }) => ({
+        sessionId,
+        roomId,
+        startsAt,
+        endsAt,
+      }),
+    ),
+  });
+  if (payload === undefined) {
+    throw new Error("The auto-place preview could not be serialized.");
+  }
+  return payload;
+}
+
 export function SchedulePlannerWorkspace({
   workspace,
 }: {
   workspace: SchedulePlannerWorkspaceData;
 }) {
   const fetcher = useFetcher<typeof action>();
+  const autoPlacementFetcher = useFetcher<typeof action>();
   const navigation = useNavigation();
   useEffect(() => {
     if (!workspace.focusedConflictId) return;
@@ -56,6 +202,12 @@ export function SchedulePlannerWorkspace({
     "room",
   );
   const [publishOpen, setPublishOpen] = useState(false);
+  const [autoPreview, setAutoPreview] = useState<AutoPlacementPreview | null>(
+    null,
+  );
+  const [autoResult, setAutoResult] =
+    useState<AutoPlacementResultNotice | null>(null);
+  const [autoError, setAutoError] = useState<string | null>(null);
   const eventDays = useMemo(
     () =>
       eventCalendarDayBoundaries(
@@ -137,17 +289,13 @@ export function SchedulePlannerWorkspace({
     ? "Create the next draft to place"
     : "Create a schedule to place";
   const unscheduledSessions = workspace.sessions.filter(
-    (session) => !scheduledSessionIds.has(session.id),
+    (session) =>
+      session.status === "unscheduled" && !scheduledSessionIds.has(session.id),
   );
   const allPlacementSlots = useMemo(
     () =>
       eventDays.flatMap((eventDay) =>
-        eventDayScheduleSlots(eventDay, workspace.event.timezone).filter(
-          (slot) => {
-            const hour = localHour(slot, workspace.event.timezone);
-            return hour >= 7 && hour < 22;
-          },
-        ),
+        eventDayUsableScheduleSlots(eventDay, workspace.event.timezone),
       ),
     [eventDays, workspace.event.timezone],
   );
@@ -186,6 +334,52 @@ export function SchedulePlannerWorkspace({
     (entry) => entry.sessionId === quickSessionId,
   );
   const defaultQuickRoomId = workspace.rooms[0]?.id ?? "";
+
+  const autoActionResult = autoPlacementFetcher.data;
+  useEffect(() => {
+    if (autoActionResult === undefined) return;
+    if (!isRecord(autoActionResult)) {
+      setAutoPreview(null);
+      setAutoResult(null);
+      setAutoError(
+        "Auto-place returned an invalid response. Refresh and try again.",
+      );
+      return;
+    }
+    const result = autoActionResult as unknown as Record<string, unknown>;
+    if (result.intent === "auto-place-preview") {
+      if (isAutoPlacementPreview(result.autoPreview)) {
+        setAutoPreview(result.autoPreview);
+        setAutoResult(null);
+        setAutoError(null);
+      } else {
+        setAutoPreview(null);
+        setAutoResult(null);
+        setAutoError(autoPlacementResponseError(result));
+      }
+      return;
+    }
+    if (result.intent === "auto-place-confirm") {
+      if (isAutoPlacementConfirmation(result)) {
+        setAutoResult({
+          appliedCount: result.appliedCount,
+          unplacedCount: result.unplacedCount,
+          unplaced: autoPreview?.unplaced ?? [],
+          warning: result.warning,
+        });
+        setAutoPreview(null);
+        setAutoError(null);
+        return;
+      }
+      setAutoPreview(null);
+      setAutoResult(null);
+      setAutoError(autoPlacementResponseError(result));
+      return;
+    }
+    setAutoPreview(null);
+    setAutoResult(null);
+    setAutoError(autoPlacementResponseError(result));
+  }, [autoActionResult]);
 
   useEffect(() => {
     if (workspace.focusedSessionId) {
@@ -445,6 +639,9 @@ export function SchedulePlannerWorkspace({
     return () => window.clearTimeout(timeout);
   }, [undo?.expiresAt, undo?.token]);
   const undoAvailable = undo && undo.expiresAt > undoClock ? undo : null;
+  const autoPlacementPayload = autoPreview
+    ? serializeAutoPlacementPreview(autoPreview)
+    : undefined;
   return (
     <>
       <div className="page-head">
@@ -453,6 +650,36 @@ export function SchedulePlannerWorkspace({
           <p>Build and publish a conflict-checked programme.</p>
         </div>
         <div className="page-actions">
+          <button
+            className="btn"
+            type="button"
+            disabled={
+              !placementAvailable ||
+              unscheduledSessions.length === 0 ||
+              autoPlacementFetcher.state !== "idle"
+            }
+            title={
+              !workspace.version
+                ? "Create a draft schedule before auto-placing sessions."
+                : workspace.version.status !== "draft"
+                  ? "Create the next draft before auto-placing sessions."
+                  : unscheduledSessions.length === 0
+                    ? "There are no unscheduled sessions to place."
+                    : undefined
+            }
+            onClick={() => {
+              setAutoError(null);
+              setAutoResult(null);
+              autoPlacementFetcher.submit(
+                { intent: "auto-place-preview" },
+                { method: "post" },
+              );
+            }}
+          >
+            {autoPlacementFetcher.state === "idle"
+              ? "Auto-place unscheduled sessions"
+              : "Preparing auto-place preview…"}
+          </button>
           {workspace.version ? (
             <span
               className={`status ${workspace.version.status === "published" ? "success" : "info"}`}
@@ -483,6 +710,52 @@ export function SchedulePlannerWorkspace({
           )}
         </div>
       </div>
+      {autoError ? (
+        <div className="validation-item error mb" role="alert">
+          <strong>Auto-place blocked</strong>
+          <span>{autoError}</span>
+        </div>
+      ) : null}
+      {autoResult ? (
+        <div
+          className={`validation-item ${autoResult.warning || autoResult.unplacedCount ? "warn" : "ok"} mb`}
+          role="status"
+        >
+          <strong>
+            Auto-place applied {autoResult.appliedCount} placement
+            {autoResult.appliedCount === 1 ? "" : "s"}.
+          </strong>
+          <span>The draft schedule was refreshed and was not published.</span>
+          {autoResult.warning ? <span>{autoResult.warning}</span> : null}
+          {autoResult.unplacedCount ? (
+            <>
+              <span>
+                {autoResult.unplacedCount} session
+                {autoResult.unplacedCount === 1 ? " remains" : "s remain"} in
+                the source list.
+              </span>
+              {autoResult.unplaced.length ? (
+                <div
+                  className="stack"
+                  data-testid="auto-placement-confirmed-unplaced"
+                >
+                  <strong>Unplaced reasons</strong>
+                  {autoResult.unplaced.map((item) => (
+                    <span key={item.sessionId}>
+                      {sessionById.get(item.sessionId)?.title ?? item.sessionId}
+                      : {item.reason}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span>
+                  Prepare a fresh preview to review the blocking reasons.
+                </span>
+              )}
+            </>
+          ) : null}
+        </div>
+      ) : null}
       {workspace.activeFilter ? (
         <div className="validation-item info mb" role="status">
           <strong>Filtered view</strong>
@@ -666,6 +939,149 @@ export function SchedulePlannerWorkspace({
             : null
         }
       />
+      {autoPreview ? (
+        <Dialog
+          title="Preview auto-placement"
+          onClose={() => {
+            if (autoPlacementFetcher.state === "idle") setAutoPreview(null);
+          }}
+          footer={
+            <>
+              <button
+                className="btn"
+                type="button"
+                disabled={autoPlacementFetcher.state !== "idle"}
+                onClick={() => setAutoPreview(null)}
+              >
+                Cancel
+              </button>
+              <autoPlacementFetcher.Form
+                method="post"
+                onSubmit={() => setAutoError(null)}
+              >
+                <input type="hidden" name="intent" value="auto-place-confirm" />
+                <input
+                  type="hidden"
+                  name="proposal"
+                  value={autoPlacementPayload}
+                />
+                <button
+                  className="btn primary"
+                  type="submit"
+                  disabled={
+                    autoPreview.placements.length === 0 ||
+                    autoPlacementFetcher.state !== "idle"
+                  }
+                >
+                  {autoPlacementFetcher.state === "idle"
+                    ? "Confirm placements"
+                    : "Applying placements…"}
+                </button>
+              </autoPlacementFetcher.Form>
+            </>
+          }
+        >
+          <div className="stack" data-testid="auto-placement-preview">
+            <p>
+              Deterministic first-fit assistance for draft version{" "}
+              <strong>{autoPreview.scheduleVersionId}</strong> at expected
+              schedule revision <strong>{autoPreview.scheduleRevision}</strong>.
+              No publication is part of this action.
+            </p>
+            <div className="grid grid-3">
+              <div className="metric">
+                <span className="value">
+                  {autoPreview.sessionRevisions.length}
+                </span>
+                <span className="label">Unscheduled inspected</span>
+              </div>
+              <div className="metric">
+                <span className="value">{autoPreview.placements.length}</span>
+                <span className="label">Proposed placements</span>
+              </div>
+              <div className="metric">
+                <span className="value">{autoPreview.unplaced.length}</span>
+                <span className="label">Unplaced</span>
+              </div>
+            </div>
+            <p className="help">
+              Event configuration revision {autoPreview.eventRevision}, conflict
+              policy revision {autoPreview.policyRevision}, and every listed
+              session revision will be revalidated on confirmation.
+            </p>
+            <section aria-labelledby="auto-placement-proposed-heading">
+              <h3 id="auto-placement-proposed-heading">Proposed placements</h3>
+              {autoPreview.placements.length ? (
+                <div className="stack">
+                  {autoPreview.placements.map((placement) => {
+                    const session = sessionById.get(placement.sessionId);
+                    const room = workspace.rooms.find(
+                      (candidate) => candidate.id === placement.roomId,
+                    );
+                    return (
+                      <div
+                        className={`validation-item ${placement.warnings.length ? "warn" : "ok"}`}
+                        data-testid="auto-placement-proposal"
+                        key={placement.sessionId}
+                      >
+                        <strong>{session?.title ?? placement.sessionId}</strong>
+                        <span>
+                          {room?.name ?? placement.roomId} ·{" "}
+                          {scheduleDateTimeLabel(
+                            placement.startsAt,
+                            workspace.event.timezone,
+                          )}{" "}
+                          –{" "}
+                          {scheduleDateTimeLabel(
+                            placement.endsAt,
+                            workspace.event.timezone,
+                          )}
+                        </span>
+                        {placement.warnings.length ? (
+                          <small>
+                            Warning:{" "}
+                            {placement.warnings
+                              .map((warning) => warning.message)
+                              .join(" ")}
+                          </small>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="validation-item warn">
+                  No valid placements were found. Confirmation is disabled.
+                </div>
+              )}
+            </section>
+            <section aria-labelledby="auto-placement-unplaced-heading">
+              <h3 id="auto-placement-unplaced-heading">Unplaced sessions</h3>
+              {autoPreview.unplaced.length ? (
+                <div className="stack">
+                  {autoPreview.unplaced.map((item) => (
+                    <div
+                      className="validation-item warn"
+                      data-testid="auto-placement-unplaced"
+                      key={item.sessionId}
+                    >
+                      <strong>
+                        {sessionById.get(item.sessionId)?.title ??
+                          item.sessionId}
+                      </strong>
+                      <span>{item.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="help">
+                  Every inspected unscheduled session has a proposal.
+                </p>
+              )}
+            </section>
+          </div>
+        </Dialog>
+      ) : null}
       {publishOpen && workspace.version ? (
         <Dialog
           title="Publish schedule"

@@ -109,12 +109,13 @@ export async function loadScheduleWorkspaceD1(
         notes: string;
       }>(),
     env.DB.prepare(
-      "SELECT id, name, capacity, resources_json AS resourcesJson FROM rooms WHERE event_id = ? AND status = 'active' ORDER BY position, name",
+      "SELECT id, name, position, capacity, resources_json AS resourcesJson FROM rooms WHERE event_id = ? AND status = 'active' ORDER BY position, name",
     )
       .bind(viewer.eventId)
       .all<{
         id: string;
         name: string;
+        position: number;
         capacity: number;
         resourcesJson: string;
       }>(),

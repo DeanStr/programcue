@@ -20,6 +20,11 @@ import {
 import { buildSchedulePublicationStatements } from "./schedule-publication-statements.server";
 import { scheduleConflictInsert } from "./schedule-conflict-statement.server";
 import { ScheduleContentWorkflow } from "./schedule-content-workflow.server";
+import {
+  autoPlacementRequestHash,
+  type AutoPlacementPreview,
+} from "./schedule-auto-placement";
+import { ScheduleAutoPlacementWorkflow } from "./schedule-auto-placement-workflow.server";
 import { SchedulePlacementWorkflow } from "./schedule-placement-workflow.server";
 import {
   detectWorkspaceConflicts,
@@ -29,6 +34,7 @@ import {
 import { type ScheduleConflict, type SchedulePolicies } from "./schedule-rules";
 import {
   scheduleBreakSchema,
+  scheduleAutoPlacementConfirmSchema,
   scheduleNotesSchema,
   schedulePublishSchema,
   scheduleSessionContentSchema,
@@ -86,6 +92,7 @@ export type ScheduleWorkspace = {
   rooms: Array<{
     id: string;
     name: string;
+    position: number;
     capacity: number;
     resources: string[];
   }>;
@@ -141,6 +148,13 @@ export type SchedulePlacementResult = {
   undo: { token: string; expiresAt: number };
 };
 
+export type ScheduleAutoPlacementResult = {
+  scheduleVersionId: string;
+  scheduleRevision: number;
+  appliedCount: number;
+  unplacedCount: number;
+};
+
 export type ScheduleUnassignmentResult = {
   entryId: string;
   scheduleRevision: number;
@@ -172,6 +186,7 @@ export type SchedulePublicationResult = {
 export class ScheduleService {
   private readonly airtable;
   private readonly contentWorkflow: ScheduleContentWorkflow;
+  private readonly autoPlacementWorkflow: ScheduleAutoPlacementWorkflow;
   private readonly placementWorkflow: SchedulePlacementWorkflow;
   private projectionDepth = 0;
 
@@ -185,6 +200,10 @@ export class ScheduleService {
       getWorkspace: (viewer: ScheduleEventScope) => this.getWorkspace(viewer),
     };
     this.contentWorkflow = new ScheduleContentWorkflow(
+      this.env,
+      workflowDependencies,
+    );
+    this.autoPlacementWorkflow = new ScheduleAutoPlacementWorkflow(
       this.env,
       workflowDependencies,
     );
@@ -399,6 +418,30 @@ export class ScheduleService {
   async getWorkspace(viewer: ScheduleEventScope): Promise<ScheduleWorkspace> {
     if (this.projectionDepth === 0) await this.airtable.assertReadable(viewer);
     return loadScheduleWorkspaceD1(this.env, viewer);
+  }
+
+  async previewAutoPlacement(
+    viewer: ScheduleEventScope,
+  ): Promise<AutoPlacementPreview> {
+    return this.autoPlacementWorkflow.preview(viewer);
+  }
+
+  async confirmAutoPlacement(
+    viewer: Viewer,
+    input: unknown,
+  ): Promise<ScheduleAutoPlacementResult> {
+    const parsed = scheduleAutoPlacementConfirmSchema.parse(input);
+    const requestHash = await autoPlacementRequestHash(parsed);
+    return this.projectCommand(
+      viewer,
+      "schedule.auto_place",
+      parsed,
+      () => this.autoPlacementWorkflow.confirmD1(viewer, parsed, requestHash),
+      {
+        idempotencyKey: `airtable:${viewer.eventId}:schedule.auto_place:actor:${viewer.personId}:${parsed.idempotencyKey}`,
+        requestHash,
+      },
+    );
   }
 
   async getConflictedSessionIds(
