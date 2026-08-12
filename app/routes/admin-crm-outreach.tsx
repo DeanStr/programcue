@@ -21,7 +21,7 @@ import { currentEventCookie } from "~/platform/auth/current-event.server";
 import { requireOrganisationAdministrator } from "~/platform/auth/organisation.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
-export const meta = () => [{ title: "CRM bulk outreach · Program Cue" }];
+export const meta = () => [{ title: "Speaker invitations · Program Cue" }];
 type ActionResult = { ok: boolean; message: string };
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -116,15 +116,16 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
     <>
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Organization Speaker CRM</span>
-          <h1>Bulk speaker outreach</h1>
+          <span className="pc-page-eyebrow">Organization Speaker Network</span>
+          <h1>Bulk speaker invitations</h1>
           <p>
-            Select at least two contacts, write an ad-hoc message, then use the
-            existing authoritative preview and confirmation workflow.
+            Select at least two speaker contacts, write an event-specific
+            invitation, then use the existing authoritative preview and
+            confirmation workflow.
           </p>
         </div>
         <Link className="btn" to="/admin/crm">
-          <ArrowLeft aria-hidden size={15} /> CRM directory
+          <ArrowLeft aria-hidden size={15} /> Speaker Network directory
         </Link>
       </div>
       {actionData ? (
@@ -175,7 +176,7 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
         <section className="card pad">
           <div className="card-title">
             <div>
-              <span className="pc-section-kicker">Ad-hoc campaign</span>
+              <span className="pc-section-kicker">Event invitation</span>
               <h2>Compose email</h2>
             </div>
             <Mail aria-hidden className="subtle" />

@@ -166,7 +166,7 @@ describe("current event context", () => {
     await expect(
       requireCurrentEventRole(
         demoRequest(
-          "program_cue_demo_role=administrator; program_cue_event=evt-current-context-two",
+          "program_cue_demo_identity=administrator; program_cue_event=evt-current-context-two",
         ),
         workerEnv,
         ["administrator"],

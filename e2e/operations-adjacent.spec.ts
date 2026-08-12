@@ -77,7 +77,7 @@ test("blank event creation keeps templates empty and makes repository authority 
 }) => {
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "owner",
       domain: "127.0.0.1",
       path: "/",
@@ -111,7 +111,7 @@ test("failed Airtable creation stays inaccessible until D1 is explicitly selecte
 }) => {
   await page.context().addCookies([
     {
-      name: "program_cue_demo_role",
+      name: "program_cue_demo_identity",
       value: "owner",
       domain: "127.0.0.1",
       path: "/",

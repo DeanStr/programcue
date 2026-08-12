@@ -26,7 +26,7 @@ function request(intent?: string) {
       method: intent ? "POST" : "GET",
       headers: {
         cookie:
-          "program_cue_demo_role=administrator; program_cue_event=evt-foe-2025",
+          "program_cue_demo_identity=administrator; program_cue_event=evt-foe-2025",
         origin: "http://localhost",
       },
       ...(intent ? { body: new URLSearchParams({ intent }) } : {}),

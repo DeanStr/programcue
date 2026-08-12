@@ -249,4 +249,4 @@ e2e/                        Browser behavior, accessibility and visual tests
 docs/                       Decisions, security, design system, API and verified status
 ```
 
-The canonical product scope is [the full implementation specification](sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md). The product includes a deliberately narrow Speaker CRM for cross-event speaker relationships and sourcing; it still excludes a general sales CRM, broad marketing automation, payments, multilingual expansion and a general-purpose CMS.
+The canonical product scope is [the full implementation specification](sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md). The competition build also includes Speaker Network, a deliberately bounded extra-credit surface for cross-event speaker relationships and sourcing. General-purpose CRM, broad marketing automation, payments, multilingual expansion and a general-purpose CMS remain excluded.

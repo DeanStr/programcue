@@ -30,7 +30,7 @@ describe("administrator navigation context", () => {
       ],
     );
     expect(adminPageBreadcrumbs("/admin/crm/pipeline")).toEqual([
-      { label: "Speaker CRM", href: "/admin/crm" },
+      { label: "Speaker Network", href: "/admin/crm" },
       { label: "Sourcing pipeline", href: null },
     ]);
   });

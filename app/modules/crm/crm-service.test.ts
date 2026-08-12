@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-import { CrmService } from "./crm-service.server";
+import { CrmService, CrmStateError } from "./crm-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import type { OrganisationAdministrator } from "~/platform/auth/organisation.server";
 
@@ -35,6 +35,61 @@ async function service() {
   return { testEnv, crm: new CrmService(testEnv) };
 }
 
+function withNextBatchRace(
+  testEnv: CloudflareEnvironment,
+  race: () => Promise<void>,
+) {
+  let pending = true;
+  const racingDb = new Proxy(testEnv.DB, {
+    get(target, property) {
+      if (property === "batch") {
+        return async (statements: D1PreparedStatement[]) => {
+          if (pending) {
+            pending = false;
+            await race();
+          }
+          return target.batch(statements);
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return new Proxy(testEnv, {
+    get(target, property) {
+      return property === "DB" ? racingDb : Reflect.get(target, property);
+    },
+  });
+}
+
+function withNextPostBatchRace(
+  testEnv: CloudflareEnvironment,
+  race: () => Promise<void>,
+) {
+  let pending = true;
+  const racingDb = new Proxy(testEnv.DB, {
+    get(target, property) {
+      if (property === "batch") {
+        return async (statements: D1PreparedStatement[]) => {
+          const results = await target.batch(statements);
+          if (pending) {
+            pending = false;
+            await race();
+          }
+          return results;
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return new Proxy(testEnv, {
+    get(target, property) {
+      return property === "DB" ? racingDb : Reflect.get(target, property);
+    },
+  });
+}
+
 describe("organisation speaker CRM", () => {
   it("imports the evaluator CSV shape and supports filters, notes, tags and segments", async () => {
     const { crm } = await service();
@@ -43,7 +98,7 @@ describe("organisation speaker CRM", () => {
       'Priya Raman,priya.crm@example.com,Principal Engineer,Latticework Systems,"Build tooling leader"',
       'Marcus Okafor,marcus.crm@example.com,Staff Developer Advocate,Cloudreach Labs,"AI agents in production"',
     ].join("\n");
-    const preview = await crm.previewImport(csv);
+    const preview = await crm.previewImport(administrator, csv);
     expect(preview.mapping).toEqual({
       name: "name",
       email: "email",
@@ -101,9 +156,10 @@ describe("organisation speaker CRM", () => {
 
   it("surfaces and safely merges an unlinked same-name CRM contact", async () => {
     const { testEnv, crm } = await service();
+    const primaryEmail = `primary-${crypto.randomUUID()}@example.com`;
     const primary = await crm.createContact(administrator, {
       name: "Duplicate Speaker",
-      email: `primary-${crypto.randomUUID()}@example.com`,
+      email: primaryEmail,
       jobTitle: "",
       organisationName: "",
       biography: "",
@@ -178,14 +234,18 @@ describe("organisation speaker CRM", () => {
       .first<{ count: number }>();
     expect(Number(pipelineRows?.count)).toBe(1);
 
-    const recreated = await crm.createContact(administrator, {
-      name: "Duplicate Speaker",
-      email: secondaryEmail,
-      jobTitle: "",
-      organisationName: "",
-      biography: "",
+    await expect(
+      crm.createContact(administrator, {
+        name: "Duplicate Speaker",
+        email: secondaryEmail,
+        jobTitle: "",
+        organisationName: "",
+        biography: "",
+      }),
+    ).rejects.toMatchObject({
+      message: `This email belongs to a merged contact. Use Duplicate Speaker (${primaryEmail}) instead.`,
+      status: 409,
     });
-    expect(recreated.personId).toBe(primary.personId);
     await expect(
       crm.confirmImport(
         administrator,
@@ -495,6 +555,18 @@ describe("organisation speaker CRM", () => {
       1,
     );
     expect(directory.contacts).toEqual([]);
+    await expect(
+      crm.createContact(administrator, {
+        name: "Pending CRM Speaker",
+        email: `pending-${suffix}@example.com`,
+        jobTitle: "",
+        organisationName: "",
+        biography: "",
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("connect them through an event"),
+      status: 409,
+    });
   });
 
   it("counts only accepted active speaker memberships in contact history", async () => {
@@ -555,19 +627,106 @@ describe("organisation speaker CRM", () => {
     expect(directory.contacts[0]?.eventCount).toBe(1);
   });
 
-  it("links an existing identity without overwriting profile data from another organisation", async () => {
+  it("refuses manual and CSV links to an identity known only to another organisation", async () => {
     const { testEnv, crm } = await service();
     const suffix = crypto.randomUUID();
+    const otherOrganisationId = `shared-import-org-${suffix}`;
     const personId = `shared-import-${suffix}`;
     const email = `shared-import-${suffix}@example.com`;
-    await testEnv.DB.prepare(
-      `INSERT INTO people (
-         id, email, display_name, biography, organisation_name, job_title
-       ) VALUES (?, ?, 'Existing Identity', 'Existing biography',
-                 'Existing Company', 'Existing Role')`,
+    const newEmail = `new-import-${suffix}@example.com`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "INSERT INTO organisations (id, name, slug) VALUES (?, 'Profile Owner', ?)",
+      ).bind(otherOrganisationId, otherOrganisationId),
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, biography, organisation_name, job_title
+         ) VALUES (?, ?, 'Existing Identity', 'Private biography',
+                   'Private Company', 'Private Role')`,
+      ).bind(personId, email),
+      testEnv.DB.prepare(
+        `INSERT INTO organisation_contacts (
+           organisation_id, person_id, source, status, created_at, updated_at
+         ) VALUES (?, ?, 'manual', 'active', unixepoch(), unixepoch())`,
+      ).bind(otherOrganisationId, personId),
+    ]);
+
+    await expect(
+      crm.createContact(administrator, {
+        name: "Existing Identity",
+        email,
+        jobTitle: "Imported Role",
+        organisationName: "Imported Company",
+        biography: "Imported biography",
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("connect them through an event"),
+      status: 409,
+    });
+
+    const csv = [
+      "name,email,title,company,bio",
+      `Existing Identity,${email},Imported Role,Imported Company,Imported biography`,
+      `New Identity,${newEmail},New Role,New Company,New biography`,
+    ].join("\n");
+    const preview = await crm.previewImport(administrator, csv);
+    expect(preview.valid.map((row) => row.email)).toEqual([newEmail]);
+    expect(preview.invalid).toEqual([
+      {
+        rowNumber: 2,
+        errors: [
+          "This email cannot be added directly. Invite the speaker or connect them through an event first.",
+        ],
+      },
+    ]);
+    await expect(crm.confirmImport(administrator, csv)).rejects.toMatchObject({
+      message:
+        "Resolve every invalid contact row before confirming the import.",
+      status: 422,
+    });
+
+    const currentContact = await testEnv.DB.prepare(
+      `SELECT 1 FROM organisation_contacts
+        WHERE organisation_id = ? AND person_id = ?`,
     )
-      .bind(personId, email)
-      .run();
+      .bind(administrator.organisationId, personId)
+      .first();
+    expect(currentContact).toBeNull();
+    await expect(crm.getContact(administrator, personId)).rejects.toMatchObject(
+      { status: 404 },
+    );
+    const partiallyImported = await testEnv.DB.prepare(
+      "SELECT 1 FROM people WHERE email = ? COLLATE NOCASE",
+    )
+      .bind(newEmail)
+      .first();
+    expect(partiallyImported).toBeNull();
+  });
+
+  it("links an existing identity with a current organisation relationship without overwriting its profile", async () => {
+    const { testEnv, crm } = await service();
+    const suffix = crypto.randomUUID();
+    const personId = `related-import-${suffix}`;
+    const email = `related-import-${suffix}@example.com`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, biography, organisation_name, job_title
+         ) VALUES (?, ?, 'Existing Identity', 'Existing biography',
+                   'Existing Company', 'Existing Role')`,
+      ).bind(personId, email),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role,
+           invited_at, accepted_at, created_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(
+        `related-import-membership-${suffix}`,
+        administrator.organisationId,
+        administrator.currentEventId,
+        personId,
+      ),
+    ]);
 
     await crm.confirmImport(
       administrator,
@@ -604,24 +763,225 @@ describe("organisation speaker CRM", () => {
     expect(contact?.source).toBe("import");
   });
 
+  it("rolls back a CSV import when an unrelated global identity appears after preview", async () => {
+    const { testEnv } = await service();
+    const suffix = crypto.randomUUID();
+    const otherOrganisationId = `racing-import-org-${suffix}`;
+    const racingPersonId = `racing-import-person-${suffix}`;
+    const racingEmail = `racing-import-${suffix}@example.com`;
+    const safeEmail = `safe-import-${suffix}@example.com`;
+    await testEnv.DB.prepare(
+      "INSERT INTO organisations (id, name, slug) VALUES (?, 'Race owner', ?)",
+    )
+      .bind(otherOrganisationId, otherOrganisationId)
+      .run();
+    const racingEnv = withNextBatchRace(testEnv, async () => {
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO people (id, email, display_name)
+           VALUES (?, ?, 'Unrelated global identity')`,
+        ).bind(racingPersonId, racingEmail),
+        testEnv.DB.prepare(
+          `INSERT INTO organisation_contacts (
+             organisation_id, person_id, source, status, created_at, updated_at
+           ) VALUES (?, ?, 'manual', 'active', unixepoch(), unixepoch())`,
+        ).bind(otherOrganisationId, racingPersonId),
+      ]);
+    });
+    const racingCrm = new CrmService(racingEnv);
+    const csv = [
+      "name,email",
+      `Safe contact,${safeEmail}`,
+      `Racing contact,${racingEmail}`,
+    ].join("\n");
+
+    await expect(
+      racingCrm.confirmImport(administrator, csv),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("connect them through an event"),
+      status: 409,
+    });
+    const currentOrganisationContacts = await testEnv.DB.prepare(
+      `SELECT COUNT(*) AS count
+         FROM organisation_contacts
+        WHERE organisation_id = ? AND person_id IN (
+          SELECT id FROM people WHERE email IN (?, ?)
+        )`,
+    )
+      .bind(administrator.organisationId, safeEmail, racingEmail)
+      .first<{ count: number }>();
+    expect(Number(currentOrganisationContacts?.count)).toBe(0);
+    await expect(
+      testEnv.DB.prepare("SELECT 1 FROM people WHERE email = ?")
+        .bind(safeEmail)
+        .first(),
+    ).resolves.toBeNull();
+  });
+
+  it("refuses a manual link when an unrelated global identity appears after validation", async () => {
+    const { testEnv } = await service();
+    const suffix = crypto.randomUUID();
+    const otherOrganisationId = `racing-manual-org-${suffix}`;
+    const racingPersonId = `racing-manual-person-${suffix}`;
+    const email = `racing-manual-${suffix}@example.com`;
+    await testEnv.DB.prepare(
+      "INSERT INTO organisations (id, name, slug) VALUES (?, 'Race owner', ?)",
+    )
+      .bind(otherOrganisationId, otherOrganisationId)
+      .run();
+    const racingEnv = withNextBatchRace(testEnv, async () => {
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO people (id, email, display_name, biography)
+           VALUES (?, ?, 'Unrelated identity', 'Private existing biography')`,
+        ).bind(racingPersonId, email),
+        testEnv.DB.prepare(
+          `INSERT INTO organisation_contacts (
+             organisation_id, person_id, source, status, created_at, updated_at
+           ) VALUES (?, ?, 'manual', 'active', unixepoch(), unixepoch())`,
+        ).bind(otherOrganisationId, racingPersonId),
+      ]);
+    });
+    const racingCrm = new CrmService(racingEnv);
+
+    await expect(
+      racingCrm.createContact(administrator, {
+        name: "Attempted replacement",
+        email,
+        jobTitle: "",
+        organisationName: "",
+        biography: "Attempted replacement biography",
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("connect them through an event"),
+      status: 409,
+    });
+    await expect(
+      testEnv.DB.prepare(`SELECT biography FROM people WHERE id = ?`)
+        .bind(racingPersonId)
+        .first(),
+    ).resolves.toEqual({ biography: "Private existing biography" });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT 1 FROM organisation_contacts
+          WHERE organisation_id = ? AND person_id = ?`,
+      )
+        .bind(administrator.organisationId, racingPersonId)
+        .first(),
+    ).resolves.toBeNull();
+  });
+
+  it("surfaces a missing post-creation contact as an invariant failure", async () => {
+    const { testEnv } = await service();
+    const email = `missing-created-contact-${crypto.randomUUID()}@example.com`;
+    const racingEnv = withNextPostBatchRace(testEnv, async () => {
+      await testEnv.DB.prepare(
+        `DELETE FROM organisation_contacts
+          WHERE organisation_id = ? AND person_id = (
+            SELECT id FROM people WHERE email = ? COLLATE NOCASE
+          )`,
+      )
+        .bind(administrator.organisationId, email)
+        .run();
+    });
+    const racingCrm = new CrmService(racingEnv);
+
+    let failure: unknown;
+    try {
+      await racingCrm.createContact(administrator, {
+        name: "Missing created contact",
+        email,
+        jobTitle: "",
+        organisationName: "",
+        biography: "",
+      });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(CrmStateError);
+    expect((failure as Error).message).toBe(
+      "The Speaker Network contact identity was missing after creation.",
+    );
+  });
+
+  it("rolls back a CSV import when an existing contact is merged after validation", async () => {
+    const { testEnv } = await service();
+    const suffix = crypto.randomUUID();
+    const primaryPersonId = `merge-race-primary-${suffix}`;
+    const secondaryPersonId = `merge-race-secondary-${suffix}`;
+    const secondaryEmail = `merge-race-secondary-${suffix}@example.com`;
+    const safeEmail = `merge-race-safe-${suffix}@example.com`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "INSERT INTO people (id, email, display_name) VALUES (?, ?, 'Primary contact')",
+      ).bind(primaryPersonId, `merge-race-primary-${suffix}@example.com`),
+      testEnv.DB.prepare(
+        "INSERT INTO people (id, email, display_name) VALUES (?, ?, 'Secondary contact')",
+      ).bind(secondaryPersonId, secondaryEmail),
+      ...[primaryPersonId, secondaryPersonId].map((personId) =>
+        testEnv.DB.prepare(
+          `INSERT INTO organisation_contacts (
+             organisation_id, person_id, source, status, created_at, updated_at
+           ) VALUES (?, ?, 'manual', 'active', unixepoch(), unixepoch())`,
+        ).bind(administrator.organisationId, personId),
+      ),
+    ]);
+    const racingEnv = withNextBatchRace(testEnv, async () => {
+      await testEnv.DB.prepare(
+        `UPDATE organisation_contacts
+            SET status = 'merged', merged_into_person_id = ?,
+                updated_at = unixepoch()
+          WHERE organisation_id = ? AND person_id = ? AND status = 'active'`,
+      )
+        .bind(primaryPersonId, administrator.organisationId, secondaryPersonId)
+        .run();
+    });
+    const racingCrm = new CrmService(racingEnv);
+
+    await expect(
+      racingCrm.confirmImport(
+        administrator,
+        [
+          "name,email",
+          `Safe contact,${safeEmail}`,
+          `Secondary contact,${secondaryEmail}`,
+        ].join("\n"),
+      ),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("connect them through an event"),
+      status: 409,
+    });
+    await expect(
+      testEnv.DB.prepare("SELECT 1 FROM people WHERE email = ?")
+        .bind(safeEmail)
+        .first(),
+    ).resolves.toBeNull();
+  });
+
   it("rejects malformed, oversized and duplicate-row CSV imports", async () => {
     const { crm } = await service();
     await expect(
-      crm.previewImport('name,email\n"Unclosed,broken@example.com'),
+      crm.previewImport(
+        administrator,
+        'name,email\n"Unclosed,broken@example.com',
+      ),
     ).rejects.toMatchObject({
       message: "The CSV file ends inside a quoted field.",
       status: 422,
     });
     await expect(
       crm.previewImport(
+        administrator,
         `name,email,bio\nLarge,large@example.com,${"x".repeat(512_000)}`,
       ),
     ).rejects.toMatchObject({
-      message: "CRM CSV files cannot exceed 512 KB.",
+      message: "Speaker Network CSV files cannot exceed 512 KB.",
       status: 422,
     });
 
     const preview = await crm.previewImport(
+      administrator,
       [
         "name,email",
         "First,duplicate@example.com",
@@ -635,5 +995,23 @@ describe("organisation speaker CRM", () => {
         errors: ["Email duplicates another row in this import."],
       },
     ]);
+  });
+
+  it("previews more contacts than one D1 parameter window", async () => {
+    const { crm } = await service();
+    const suffix = crypto.randomUUID();
+    const rows = Array.from(
+      { length: 120 },
+      (_, index) =>
+        `Contact ${index},parameter-window-${index}-${suffix}@example.com`,
+    );
+
+    const preview = await crm.previewImport(
+      administrator,
+      ["name,email", ...rows].join("\n"),
+    );
+
+    expect(preview.valid).toHaveLength(120);
+    expect(preview.invalid).toEqual([]);
   });
 });

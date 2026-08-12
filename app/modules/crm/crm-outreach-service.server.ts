@@ -142,7 +142,7 @@ export class CrmOutreachService {
     const uniquePersonIds = [...new Set(input.personIds)];
     if (uniquePersonIds.length < 2) {
       throw new CrmStateError(
-        "Choose at least two different contacts for bulk outreach.",
+        "Choose at least two different contacts for speaker invitations.",
         422,
       );
     }
@@ -219,7 +219,7 @@ export class CrmOutreachService {
       (await templates.saveTemplate(
         targetViewer,
         {
-          name: `CRM outreach · ${input.subject}`.slice(0, 160),
+          name: `Speaker invitation · ${input.subject}`.slice(0, 160),
           category: "ad_hoc",
           subject: input.subject,
           content: {

@@ -28,7 +28,9 @@ import { requireOrganisationAdministrator } from "~/platform/auth/organisation.s
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
 export const meta = ({ loaderData }: Route.MetaArgs) => [
-  { title: `${loaderData?.contact.name ?? "CRM contact"} · Speaker CRM` },
+  {
+    title: `${loaderData?.contact.name ?? "Speaker contact"} · Speaker Network`,
+  },
 ];
 
 type ActionResult = { ok: boolean; message: string };
@@ -116,7 +118,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       );
     }
     return data<ActionResult>(
-      { ok: false, message: "Unsupported CRM contact action." },
+      { ok: false, message: "Unsupported Speaker Network contact action." },
       { status: 400 },
     );
   } catch (error) {
@@ -163,7 +165,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
     <>
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Organization Speaker CRM</span>
+          <span className="pc-page-eyebrow">Organization Speaker Network</span>
           <h1>{contact.name}</h1>
           <p>
             {[contact.jobTitle, contact.organisationName]
@@ -174,7 +176,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
         </div>
         <div className="page-actions">
           <Link className="btn" to="/admin/crm">
-            <ArrowLeft aria-hidden size={15} /> CRM directory
+            <ArrowLeft aria-hidden size={15} /> Speaker Network directory
           </Link>
           <Link className="btn" to="/admin/crm/pipeline">
             <Network aria-hidden size={15} /> Pipeline
@@ -202,8 +204,8 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
           </div>
           <p>
             These contacts have the same normalized name. Choose which record
-            remains visible as the primary CRM contact. Linked identities are
-            refused rather than merged unsafely.
+            remains visible as the primary Speaker Network contact. Linked
+            identities are refused rather than merged unsafely.
           </p>
           <div className="stack mt">
             {contact.duplicates.map((duplicate) => (
@@ -218,7 +220,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                     onSubmit={(event) => {
                       if (
                         !window.confirm(
-                          "Merge these CRM contacts? The secondary contact will no longer appear in the organization directory.",
+                          "Merge these Speaker Network contacts? The secondary contact will no longer appear in the organization directory.",
                         )
                       )
                         event.preventDefault();
@@ -244,7 +246,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                     onSubmit={(event) => {
                       if (
                         !window.confirm(
-                          "Merge these CRM contacts? The secondary contact will no longer appear in the organization directory.",
+                          "Merge these Speaker Network contacts? The secondary contact will no longer appear in the organization directory.",
                         )
                       )
                         event.preventDefault();
@@ -466,7 +468,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
               <p>
                 <span className="status info">{contact.pipeline.stage}</span>
                 {contact.pipeline.score !== null
-                  ? ` · score ${contact.pipeline.score}`
+                  ? ` · fit score ${contact.pipeline.score}`
                   : ""}
               </p>
               {contact.pipeline.rationale ? (
@@ -520,7 +522,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                 </select>
               </label>
               <label className="label">
-                Score (optional)
+                Speaker fit score (optional)
                 <input
                   className="field"
                   type="number"
@@ -530,7 +532,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                 />
               </label>
               <label className="label">
-                Rationale
+                Fit rationale
                 <textarea className="textarea" name="rationale" />
               </label>
               <button className="btn primary" disabled={busy}>

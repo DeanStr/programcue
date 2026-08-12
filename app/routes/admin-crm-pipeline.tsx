@@ -98,7 +98,7 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
     <>
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Organization Speaker CRM</span>
+          <span className="pc-page-eyebrow">Organization Speaker Network</span>
           <h1>Speaker sourcing pipeline</h1>
           <p>
             Move reusable contacts from identification through confirmed or
@@ -106,7 +106,7 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <Link className="btn" to="/admin/crm">
-          <ArrowLeft aria-hidden size={15} /> CRM directory
+          <ArrowLeft aria-hidden size={15} /> Speaker Network directory
         </Link>
       </div>
       {actionData ? (
@@ -144,7 +144,7 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
             </label>
             <div className="form-row">
               <label className="label">
-                Score (optional)
+                Speaker fit score (optional)
                 <input
                   className="field"
                   name="score"
@@ -154,7 +154,7 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
                 />
               </label>
               <label className="label">
-                Rationale
+                Fit rationale
                 <input className="field" name="rationale" />
               </label>
             </div>
@@ -192,7 +192,7 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
                       .join(" · ") || entry.email}
                   </p>
                   {entry.score !== null ? (
-                    <span className="status info">Score {entry.score}</span>
+                    <span className="status info">Fit score {entry.score}</span>
                   ) : null}
                   {entry.rationale ? <p>{entry.rationale}</p> : null}
                   <Form method="post" className="stack mt">

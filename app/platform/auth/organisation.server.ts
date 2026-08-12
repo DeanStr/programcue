@@ -35,7 +35,7 @@ export async function requireOrganisationAdministrator(
     .first<{ role: "owner" | "administrator" }>();
   if (!membership) {
     throw new Response(
-      "Organisation-wide owner or administrator access is required for Speaker CRM.",
+      "Organisation-wide owner or administrator access is required for Speaker Network.",
       { status: 403, statusText: "Forbidden" },
     );
   }

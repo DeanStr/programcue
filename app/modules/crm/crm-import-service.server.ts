@@ -4,15 +4,25 @@ import { CsvParseError, parseCsv } from "~/platform/operations/csv";
 import type { OrganisationAdministrator } from "~/platform/auth/organisation.server";
 import { createCrmContactSchema } from "./crm-schema";
 import { CrmStateError } from "./crm-errors";
+import {
+  CONTACT_RELATIONSHIP_REQUIRED_MESSAGE,
+  existingPersonOrganisationRelationshipSql,
+  isContactRelationshipConstraint,
+  organisationRelationshipBindings,
+  unavailableExistingEmails,
+} from "./crm-contact-scope.server";
 
 const IMPORT_BYTES_LIMIT = 512_000;
 
 export class CrmImportService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
-  preview(rawCsv: string) {
+  async preview(viewer: OrganisationAdministrator, rawCsv: string) {
     if (new TextEncoder().encode(rawCsv).byteLength > IMPORT_BYTES_LIMIT) {
-      throw new CrmStateError("CRM CSV files cannot exceed 512 KB.", 422);
+      throw new CrmStateError(
+        "Speaker Network CSV files cannot exceed 512 KB.",
+        422,
+      );
     }
     let parsed: ReturnType<typeof parseCsv>;
     try {
@@ -73,11 +83,31 @@ export class CrmImportService {
         });
       }
     });
-    return { headers: parsed.headers, mapping, valid, invalid, csv: rawCsv };
+    const unavailableEmails = await unavailableExistingEmails(
+      this.env,
+      viewer,
+      valid.map((row) => row.email),
+    );
+    const linkable = valid.filter((row) => {
+      if (!unavailableEmails.has(row.email)) return true;
+      invalid.push({
+        rowNumber: row.rowNumber,
+        errors: [CONTACT_RELATIONSHIP_REQUIRED_MESSAGE],
+      });
+      return false;
+    });
+    invalid.sort((left, right) => left.rowNumber - right.rowNumber);
+    return {
+      headers: parsed.headers,
+      mapping,
+      valid: linkable,
+      invalid,
+      csv: rawCsv,
+    };
   }
 
   async confirm(viewer: OrganisationAdministrator, rawCsv: string) {
-    const preview = this.preview(rawCsv);
+    const preview = await this.preview(viewer, rawCsv);
     if (!preview.valid.length || preview.invalid.length) {
       throw new CrmStateError(
         "Resolve every invalid contact row before confirming the import.",
@@ -126,12 +156,29 @@ export class CrmImportService {
           `INSERT INTO organisation_contacts (
              organisation_id, person_id, source, status, created_by_person_id,
              created_at, updated_at
-           ) SELECT ?, person.id, 'import', 'active', ?, unixepoch(), unixepoch()
-               FROM people person WHERE person.email = ? COLLATE NOCASE
+           ) VALUES (
+             ?,
+             (SELECT person.id FROM people person
+               WHERE person.email = ? COLLATE NOCASE
+                 AND (person.id = ? OR ${existingPersonOrganisationRelationshipSql})
+                 AND NOT EXISTS (
+                   SELECT 1 FROM organisation_contacts merged_contact
+                    WHERE merged_contact.organisation_id = ?
+                      AND merged_contact.person_id = person.id
+                      AND merged_contact.status = 'merged'
+                 )),
+             'import', 'active', ?, unixepoch(), unixepoch()
+           )
            ON CONFLICT(organisation_id, person_id) DO UPDATE SET
-             updated_at = unixepoch()
-           WHERE organisation_contacts.status = 'active'`,
-        ).bind(viewer.organisationId, viewer.personId, row.email),
+             updated_at = unixepoch()`,
+        ).bind(
+          viewer.organisationId,
+          row.email,
+          personId,
+          ...organisationRelationshipBindings(viewer),
+          viewer.organisationId,
+          viewer.personId,
+        ),
       );
     }
     statements.push(
@@ -147,7 +194,14 @@ export class CrmImportService {
         JSON.stringify({ count: preview.valid.length }),
       ),
     );
-    await this.env.DB.batch(statements);
+    try {
+      await this.env.DB.batch(statements);
+    } catch (error) {
+      if (isContactRelationshipConstraint(error)) {
+        throw new CrmStateError(CONTACT_RELATIONSHIP_REQUIRED_MESSAGE, 409);
+      }
+      throw error;
+    }
     return { imported: preview.valid.length };
   }
 }

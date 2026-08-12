@@ -175,6 +175,6 @@ test("the exact SBEK reviewer invitation hands off to Sam without claiming email
   ).toBeVisible();
 
   await page.goto("/demo");
-  await page.getByRole("link", { name: "Continue as Sam Whitfield" }).click();
+  await page.getByRole("button", { name: "Continue as Sam Whitfield" }).click();
   await expect(page).toHaveURL(/\/review\/workbench/);
 });

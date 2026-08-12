@@ -8,8 +8,14 @@ import {
 } from "./crm-schema";
 import type { OrganisationAdministrator } from "~/platform/auth/organisation.server";
 import {
+  CONTACT_IDENTITY_INVARIANT_MESSAGE,
+  CONTACT_RELATIONSHIP_REQUIRED_MESSAGE,
   contactScopeBindings,
   contactScopeCte,
+  existingPersonOrganisationRelationshipSql,
+  isContactRelationshipConstraint,
+  organisationRelationshipBindings,
+  unavailableExistingEmails,
 } from "./crm-contact-scope.server";
 import { CrmStateError } from "./crm-errors";
 import { CrmImportService } from "./crm-import-service.server";
@@ -55,6 +61,15 @@ export class CrmService {
     this.outreach = new CrmOutreachService(env, (viewer, personId) =>
       this.getContact(viewer, personId),
     );
+  }
+
+  private async requireLinkableExistingEmails(
+    viewer: OrganisationAdministrator,
+    emails: string[],
+  ) {
+    if ((await unavailableExistingEmails(this.env, viewer, emails)).size) {
+      throw new CrmStateError(CONTACT_RELATIONSHIP_REQUIRED_MESSAGE, 409);
+    }
   }
 
   async listDirectory(
@@ -197,7 +212,8 @@ export class CrmService {
         eventCount: number;
         returningSpeakers: number;
       }>();
-    if (!summary) throw new Error("The CRM dashboard could not be read.");
+    if (!summary)
+      throw new Error("The Speaker Network dashboard could not be read.");
     const companies = await this.env.DB.prepare(
       `${contactScopeCte}
        SELECT person.organisation_name AS name, COUNT(*) AS contacts
@@ -313,7 +329,8 @@ export class CrmService {
         profileStatus: string;
         duplicateCount: number;
       }>();
-    if (!contact) throw new Response("CRM contact not found.", { status: 404 });
+    if (!contact)
+      throw new Response("Speaker Network contact not found.", { status: 404 });
     const [tags, notes, connections, duplicateRows, pipeline] =
       await Promise.all([
         this.env.DB.prepare(
@@ -444,65 +461,92 @@ export class CrmService {
         .bind(viewer.organisationId, personId)
         .first();
       if (!exists)
-        throw new Response("CRM contact not found.", { status: 404 });
+        throw new Response("Speaker Network contact not found.", {
+          status: 404,
+        });
     }
   }
 
   async createContact(viewer: OrganisationAdministrator, rawInput: unknown) {
     const input = createCrmContactSchema.parse(rawInput);
+    await this.requireLinkableExistingEmails(viewer, [input.email]);
     const personId = crypto.randomUUID();
-    const [created, linked, audit] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `INSERT INTO people (
-           id, email, display_name, email_verified, biography,
-           organisation_name, job_title, profile_status, created_at, updated_at
-         ) VALUES (?, ?, ?, 0, ?, ?, ?, 'draft', unixepoch(), unixepoch())
-         ON CONFLICT(email) DO NOTHING`,
-      ).bind(
-        personId,
-        input.email,
-        input.name,
-        input.biography || null,
-        input.organisationName || null,
-        input.jobTitle || null,
-      ),
-      this.env.DB.prepare(
-        `INSERT INTO organisation_contacts (
-           organisation_id, person_id, source, status, created_by_person_id,
-           created_at, updated_at
-         )
-         SELECT ?, person.id, 'manual', 'active', ?, unixepoch(), unixepoch()
-           FROM people person WHERE person.email = ? COLLATE NOCASE
-         ON CONFLICT(organisation_id, person_id) DO UPDATE SET
-           updated_at = unixepoch()
-         WHERE organisation_contacts.status = 'active'`,
-      ).bind(viewer.organisationId, viewer.personId, input.email),
-      this.env.DB.prepare(
-        `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
-           entity_type, entity_id, metadata_json, created_at
-         ) SELECT ?, ?, NULL, ?, 'crm.contact.created', 'person', person.id,
-                  json_object('email', person.email), unixepoch()
-             FROM people person WHERE person.email = ? COLLATE NOCASE
-               AND EXISTS (
-                 SELECT 1 FROM organisation_contacts contact
-                  WHERE contact.organisation_id = ?
-                    AND contact.person_id = person.id
-                    AND contact.status = 'active'
-               )`,
-      ).bind(
-        crypto.randomUUID(),
-        viewer.organisationId,
-        viewer.personId,
-        input.email,
-        viewer.organisationId,
-      ),
-    ]);
+    let created: D1Result;
+    let linked: D1Result;
+    let audit: D1Result;
+    try {
+      [created, linked, audit] = await this.env.DB.batch([
+        this.env.DB.prepare(
+          `INSERT INTO people (
+             id, email, display_name, email_verified, biography,
+             organisation_name, job_title, profile_status, created_at, updated_at
+           ) VALUES (?, ?, ?, 0, ?, ?, ?, 'draft', unixepoch(), unixepoch())
+           ON CONFLICT(email) DO NOTHING`,
+        ).bind(
+          personId,
+          input.email,
+          input.name,
+          input.biography || null,
+          input.organisationName || null,
+          input.jobTitle || null,
+        ),
+        this.env.DB.prepare(
+          `INSERT INTO organisation_contacts (
+             organisation_id, person_id, source, status, created_by_person_id,
+             created_at, updated_at
+           ) VALUES (
+             ?,
+             (SELECT person.id FROM people person
+               WHERE person.email = ? COLLATE NOCASE
+                 AND (person.id = ? OR ${existingPersonOrganisationRelationshipSql})),
+             'manual', 'active', ?, unixepoch(), unixepoch()
+           )
+           ON CONFLICT(organisation_id, person_id) DO UPDATE SET
+             updated_at = unixepoch()
+           WHERE organisation_contacts.status = 'active'`,
+        ).bind(
+          viewer.organisationId,
+          input.email,
+          personId,
+          ...organisationRelationshipBindings(viewer),
+          viewer.personId,
+        ),
+        this.env.DB.prepare(
+          `INSERT INTO audit_events (
+             id, organisation_id, event_id, actor_person_id, action,
+             entity_type, entity_id, metadata_json, created_at
+           ) SELECT ?, ?, NULL, ?, 'crm.contact.created', 'person', person.id,
+                    json_object('email', person.email), unixepoch()
+               FROM people person WHERE person.email = ? COLLATE NOCASE
+                 AND EXISTS (
+                   SELECT 1 FROM organisation_contacts contact
+                    WHERE contact.organisation_id = ?
+                      AND contact.person_id = person.id
+                      AND contact.status = 'active'
+                 )`,
+        ).bind(
+          crypto.randomUUID(),
+          viewer.organisationId,
+          viewer.personId,
+          input.email,
+          viewer.organisationId,
+        ),
+      ]);
+    } catch (error) {
+      if (isContactRelationshipConstraint(error)) {
+        throw new CrmStateError(CONTACT_RELATIONSHIP_REQUIRED_MESSAGE, 409);
+      }
+      throw error;
+    }
     const resolved = await this.env.DB.prepare(
       `SELECT contact.person_id AS personId, contact.status,
-              contact.merged_into_person_id AS mergedIntoPersonId
+              contact.merged_into_person_id AS mergedIntoPersonId,
+              primary_contact.display_name AS mergedIntoName,
+              primary_contact.email AS mergedIntoEmail
          FROM people person
          JOIN organisation_contacts contact ON contact.person_id = person.id
+         LEFT JOIN people primary_contact
+           ON primary_contact.id = contact.merged_into_person_id
         WHERE person.email = ? COLLATE NOCASE AND contact.organisation_id = ?`,
     )
       .bind(input.email, viewer.organisationId)
@@ -510,13 +554,27 @@ export class CrmService {
         personId: string;
         status: "active" | "merged";
         mergedIntoPersonId: string | null;
+        mergedIntoName: string | null;
+        mergedIntoEmail: string | null;
       }>();
-    if (!resolved) throw new Error("The CRM contact identity was not found.");
-    if (resolved.status === "merged" && resolved.mergedIntoPersonId) {
-      return { personId: resolved.mergedIntoPersonId, identityCreated: false };
+    if (!resolved) {
+      throw new Error(CONTACT_IDENTITY_INVARIANT_MESSAGE);
+    }
+    if (resolved.status === "merged") {
+      if (
+        !resolved.mergedIntoPersonId ||
+        !resolved.mergedIntoName ||
+        !resolved.mergedIntoEmail
+      ) {
+        throw new Error(CONTACT_IDENTITY_INVARIANT_MESSAGE);
+      }
+      throw new CrmStateError(
+        `This email belongs to a merged contact. Use ${resolved.mergedIntoName} (${resolved.mergedIntoEmail}) instead.`,
+        409,
+      );
     }
     if ((linked.meta.changes ?? 0) !== 1 || (audit.meta.changes ?? 0) !== 1) {
-      throw new Error("The CRM contact could not be created.");
+      throw new Error("The Speaker Network contact could not be created.");
     }
     return {
       personId: resolved.personId,
@@ -608,7 +666,9 @@ export class CrmService {
         error instanceof Error &&
         /UNIQUE constraint failed: crm_segments/i.test(error.message)
       ) {
-        throw new CrmStateError("A CRM segment with that name already exists.");
+        throw new CrmStateError(
+          "A Speaker Network segment with that name already exists.",
+        );
       }
       throw error;
     }
@@ -642,7 +702,8 @@ export class CrmService {
     )
       .bind(id, viewer.organisationId, viewer.personId)
       .first<{ name: string; filtersJson: string }>();
-    if (!row) throw new Response("CRM segment not found.", { status: 404 });
+    if (!row)
+      throw new Response("Speaker Network segment not found.", { status: 404 });
     return {
       id,
       name: row.name,
@@ -650,8 +711,8 @@ export class CrmService {
     };
   }
 
-  async previewImport(rawCsv: string) {
-    return this.imports.preview(rawCsv);
+  async previewImport(viewer: OrganisationAdministrator, rawCsv: string) {
+    return this.imports.preview(viewer, rawCsv);
   }
 
   async confirmImport(viewer: OrganisationAdministrator, rawCsv: string) {

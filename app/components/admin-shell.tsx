@@ -49,11 +49,11 @@ export type AdminNavigationItem = readonly [string, LucideIcon, string];
 
 export const NAV_ITEMS = [
   ["command", LayoutDashboard, "Command Centre"],
-  ["crm", ContactRound, "Speaker CRM"],
   ["event", CalendarCog, "Event Setup"],
   ["submissions", Files, "Submissions"],
   ["review", Sparkles, "Review"],
   ["speakers", UsersRound, "Speakers"],
+  ["crm", ContactRound, "Speaker Network"],
   ["resources", BookOpen, "Resources"],
   ["schedule", CalendarDays, "Schedule"],
   ["communications", Mail, "Communications"],
@@ -186,7 +186,7 @@ export function adminPageBreadcrumbs(pathname: string) {
                   : section === "crm" && parts[2] === "pipeline"
                     ? "Sourcing pipeline"
                     : section === "crm" && parts[2] === "outreach"
-                      ? "Bulk outreach"
+                      ? "Speaker invitations"
                       : section === "crm" && parts[2] === "contacts"
                         ? "Contact"
                         : section === "speakers"

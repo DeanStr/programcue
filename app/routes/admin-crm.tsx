@@ -29,7 +29,7 @@ import {
 import { requireOrganisationAdministrator } from "~/platform/auth/organisation.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
-export const meta = () => [{ title: "Speaker CRM · Program Cue" }];
+export const meta = () => [{ title: "Speaker Network · Program Cue" }];
 
 type ActionResult = {
   ok: boolean;
@@ -100,11 +100,17 @@ export async function action({ request, context }: Route.ActionArgs) {
       }
       if (file.size > 512_000) {
         return data<ActionResult>(
-          { ok: false, message: "CRM CSV files cannot exceed 512 KB." },
+          {
+            ok: false,
+            message: "Speaker Network CSV files cannot exceed 512 KB.",
+          },
           { status: 422 },
         );
       }
-      const importPreview = await service.previewImport(await file.text());
+      const importPreview = await service.previewImport(
+        viewer,
+        await file.text(),
+      );
       return data<ActionResult>({
         ok: importPreview.invalid.length === 0,
         message: `${importPreview.valid.length} valid contact${importPreview.valid.length === 1 ? "" : "s"}; ${importPreview.invalid.length} invalid row${importPreview.invalid.length === 1 ? "" : "s"}. Nothing has been imported yet.`,
@@ -128,7 +134,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       return redirect("/admin/crm?segmentSaved=yes");
     }
     return data<ActionResult>(
-      { ok: false, message: "Unsupported CRM action." },
+      { ok: false, message: "Unsupported Speaker Network action." },
       { status: 400 },
     );
   } catch (error) {
@@ -139,7 +145,8 @@ export async function action({ request, context }: Route.ActionArgs) {
           message:
             error instanceof CrmStateError
               ? error.message
-              : (error.issues[0]?.message ?? "Review the CRM fields."),
+              : (error.issues[0]?.message ??
+                "Review the Speaker Network fields."),
         },
         { status: error instanceof CrmStateError ? error.status : 422 },
       );
@@ -185,10 +192,11 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           <span className="pc-page-eyebrow">
             Organization workspace · all events
           </span>
-          <h1>Speaker CRM</h1>
+          <h1>Speaker Network</h1>
           <p>
-            Search reusable speaker identities, record relationship context and
-            move prospects into any event without re-entering profile data.
+            A cross-event speaker CRM for reusable profiles, private
+            relationship context and sourcing prospects into events without
+            re-entering data.
           </p>
         </div>
         <div className="page-actions">
@@ -196,12 +204,12 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
             <Network aria-hidden size={16} /> Sourcing pipeline
           </Link>
           <Link className="btn primary" to="/admin/crm/outreach">
-            <Mail aria-hidden size={16} /> Bulk outreach
+            <Mail aria-hidden size={16} /> Speaker invitations
           </Link>
         </div>
       </div>
 
-      <div className="grid grid-4 mb" aria-label="CRM overview">
+      <div className="grid grid-4 mb" aria-label="Speaker Network overview">
         <section className="card metric">
           <div className="label">Total contacts</div>
           <div className="value">{dashboard.totalContacts}</div>
@@ -333,7 +341,10 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           </div>
         </Form>
         {filtersActive ? (
-          <div className="crm-chip-row mt" aria-label="Active CRM filters">
+          <div
+            className="crm-chip-row mt"
+            aria-label="Active directory filters"
+          >
             {Object.entries(directory.filters)
               .filter(([, value]) => value)
               .map(([key, value]) => (
@@ -425,7 +436,10 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           {directory.contacts.length === 1 ? "" : "s"}.
         </p>
         {directory.page > 1 || directory.hasNext ? (
-          <nav className="row-actions mt" aria-label="CRM directory pages">
+          <nav
+            className="row-actions mt"
+            aria-label="Speaker Network directory pages"
+          >
             {directory.page > 1 ? (
               <Link
                 className="btn"
@@ -458,7 +472,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
         <details className="card pad">
           <summary>
             <strong>
-              <UserPlus aria-hidden size={16} /> Add contact manually
+              <UserPlus aria-hidden size={16} /> Add speaker contact manually
             </strong>
           </summary>
           <Form method="post" className="stack mt">
@@ -488,14 +502,14 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
               <textarea className="textarea" name="biography" />
             </label>
             <button className="btn primary" disabled={busy}>
-              Create contact
+              Create speaker contact
             </button>
           </Form>
         </details>
         <details className="card pad" open={Boolean(actionData?.importPreview)}>
           <summary>
             <strong>
-              <Upload aria-hidden size={16} /> Import contacts from CSV
+              <Upload aria-hidden size={16} /> Import speaker contacts from CSV
             </strong>
           </summary>
           <Form
