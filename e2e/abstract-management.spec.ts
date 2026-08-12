@@ -28,12 +28,16 @@ async function waitForInterface(page: Page, path: string) {
 async function switchDemoRole(
   page: Page,
   identity: "administrator" | "sbek_reviewer" | "sbek_speaker",
+  returnTo: string,
 ) {
   const response = await page.request.post("/demo/role", {
-    form: { identity },
+    form: { identity, returnTo },
     headers: { origin: e2eOrigin },
   });
-  expect(response.ok()).toBeTruthy();
+  expect(
+    response.ok(),
+    `switching to ${identity} failed with ${response.status()}: ${await response.text()}`,
+  ).toBeTruthy();
 }
 
 async function createInitialRoundThroughAdminAction(page: Page) {
@@ -121,7 +125,7 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
   }) => {
     test.setTimeout(120_000);
 
-    await switchDemoRole(page, "administrator");
+    await switchDemoRole(page, "administrator", "/admin/review");
     await clearDemoEvaluation(page);
     await resetDemoSubmissions(page.request, { verifiedLocalSender: true });
     await createInitialRoundThroughAdminAction(page);
@@ -172,7 +176,7 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
     await expect(finalCard).toContainText("No reviewers are in this round pool.");
     await expect(initialCard).toContainText("Sam Whitfield");
 
-    await switchDemoRole(page, "sbek_speaker");
+    await switchDemoRole(page, "sbek_speaker", "/apply/form");
     await waitForInterface(page, "/apply/form");
     await page.getByLabel("Email address").fill(PRIYA_EMAIL);
     await page.getByRole("button", { name: "Send verification code" }).click();
@@ -207,7 +211,7 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
       "This application is submitted and stored in D1",
     );
 
-    await switchDemoRole(page, "administrator");
+    await switchDemoRole(page, "administrator", "/admin/review");
     await waitForInterface(page, "/admin/review");
     const submissionRow = page.locator("tr").filter({ hasText: SUBMISSION_TITLE });
     await expect(submissionRow).toBeVisible();
@@ -223,7 +227,7 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
       /assignment/i,
     );
 
-    await switchDemoRole(page, "sbek_reviewer");
+    await switchDemoRole(page, "sbek_reviewer", "/review/workbench");
     await waitForInterface(page, "/review/workbench");
     await expect(
       page.getByRole("heading", { name: SUBMISSION_TITLE }).last(),
@@ -238,7 +242,7 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
     await page.locator("body[data-hydrated='true']").waitFor();
     await expectReviewerCannotSeeIdentity(page);
 
-    await switchDemoRole(page, "administrator");
+    await switchDemoRole(page, "administrator", "/admin/review");
     await waitForInterface(
       page,
       `/admin/submissions?query=${encodeURIComponent(SUBMISSION_TITLE)}`,
