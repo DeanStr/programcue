@@ -42,7 +42,7 @@
   .conflict-side {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: var(--space-3);
   }
   .comms-layout {
     grid-template-columns: 210px 1fr;
@@ -51,7 +51,7 @@
     grid-column: 1/-1;
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: var(--space-3);
   }
   .tasks-layout {
     grid-template-columns: 1fr;
@@ -59,7 +59,7 @@
   .tasks-side {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
+    gap: var(--space-3);
   }
   .public-main {
     grid-template-columns: 1fr;
@@ -101,7 +101,7 @@
     min-width: 200px;
   }
   .main {
-    padding: 18px;
+    padding: var(--space-5);
   }
   .command-grid {
     grid-template-columns: 1fr 1fr;
@@ -184,8 +184,8 @@
     width: 100dvw;
     min-width: 0;
     max-width: 100dvw;
-    gap: 8px;
-    padding: 8px 10px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
     overflow: hidden;
   }
   .event-switcher {
@@ -194,7 +194,7 @@
     flex: 1;
     overflow: hidden;
     border: 0;
-    padding: 4px;
+    padding: var(--space-1);
   }
   .event-switcher > span:nth-child(2) {
     min-width: 0;
@@ -226,7 +226,7 @@
   }
   .top-actions {
     flex: none;
-    gap: 4px;
+    gap: var(--space-1);
   }
   .main {
     padding: calc(var(--topbar) + 14px) 14px 14px;
@@ -275,12 +275,10 @@
     display: block;
   }
   .page-head .page-actions {
-    margin-top: 10px;
+    margin-top: var(--space-2);
   }
-  .grid-2,
-  .grid-3,
-  .grid-4,
-  .grid-5,
+  /* .grid-* now reflow intrinsically via --grid-min in base.css, so they no
+     longer need a blanket collapse here. .form-row still does. */
   .form-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -333,9 +331,9 @@
   .form-js-scroll-hint,
   .schedule-standard-scroll-hint {
     display: block;
-    margin: 8px 0;
+    margin: var(--space-2) 0;
     color: var(--muted);
-    font-size: 12px;
+    font-size: var(--text-2xs);
   }
   .schedule-standard-calendar-width-day,
   .schedule-standard-calendar-width-list {
@@ -374,18 +372,18 @@
   }
   .speaker-top {
     height: auto;
-    padding: 9px 12px;
+    padding: var(--space-2) var(--space-3);
   }
   .speaker-top .event-title {
-    font-size: 14px;
+    font-size: var(--text-sm);
   }
   .resource-grid {
     grid-template-columns: 1fr;
   }
   .public-top {
     min-width: 0;
-    gap: 8px;
-    padding: 8px 12px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
   }
   .public-top .brand {
     flex: none;
@@ -403,13 +401,13 @@
   }
   .public-mobile-nav > summary.btn.small {
     min-height: 38px;
-    padding: 8px 10px;
-    font-size: 12px;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-2xs);
   }
   .public-top > a.btn {
     min-width: 0;
-    padding-inline: 8px;
-    font-size: 12px;
+    padding-inline: var(--space-2);
+    font-size: var(--text-2xs);
     white-space: nowrap;
   }
   .public-shell #programme,
@@ -419,10 +417,10 @@
   }
   .hero {
     min-height: 190px;
-    padding: 24px;
+    padding: var(--space-6);
   }
   .hero h1 {
-    font-size: 31px;
+    font-size: var(--text-3xl);
   }
   .public-main {
     display: block;
@@ -430,21 +428,21 @@
   .public-filters {
     position: static;
     background: white;
-    padding: 8px 0;
+    padding: var(--space-2) 0;
   }
   .programme-entry:not(.active) .programme-entry-description {
     display: none;
   }
   .programme-row {
     grid-template-columns: 82px 1fr 44px;
-    padding: 11px;
+    padding: var(--space-3);
   }
   .programme-row > .room-col,
   .programme-row > .track-col {
     display: none;
   }
   .itinerary {
-    margin-top: 12px;
+    margin-top: var(--space-3);
   }
   .drawer {
     top: 0;
@@ -460,7 +458,7 @@
   }
   .review-detail,
   .review-score {
-    margin-top: 12px;
+    margin-top: var(--space-3);
   }
   .rubric-row {
     grid-template-columns: 1fr 45px 125px;

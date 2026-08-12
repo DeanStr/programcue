@@ -10,8 +10,7 @@
   align-items: end;
   padding: clamp(28px, 6vw, 76px) max(24px, calc((100vw - 1180px) / 2));
   color: white;
-  background:
-    radial-gradient(
+  background: radial-gradient(
       circle at 82% 30%,
       color-mix(in srgb, var(--event-accent) 85%, white) 0 8%,
       transparent 38%
@@ -29,16 +28,16 @@
 .cfp-event-facts dt {
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
 }
 .cfp-open-state {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-2);
   border: 1px solid rgba(255, 255, 255, 0.42);
-  border-radius: 99px;
-  padding: 6px 10px;
+  border-radius: var(--radius-full);
+  padding: var(--space-2) var(--space-3);
   background: rgba(8, 17, 38, 0.42);
 }
 .cfp-open-state::before {
@@ -52,7 +51,7 @@
   background: #fbbf24;
 }
 .cfp-kicker {
-  margin: 24px 0 6px;
+  margin: var(--space-6) 0 var(--space-1);
   color: rgba(255, 255, 255, 0.74);
 }
 .cfp-masthead h1 {
@@ -65,7 +64,7 @@
 }
 .cfp-thesis {
   max-width: 62ch;
-  margin: 22px 0;
+  margin: var(--space-5) 0;
   color: rgba(255, 255, 255, 0.9);
   font-size: clamp(17px, 2vw, 21px);
   line-height: 1.5;
@@ -73,8 +72,8 @@
 .cfp-event-facts {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px 28px;
-  margin: 24px 0;
+  gap: var(--space-3) var(--space-6);
+  margin: var(--space-6) 0;
 }
 .cfp-event-facts div {
   min-width: min(200px, 100%);
@@ -84,12 +83,12 @@
 }
 .cfp-event-facts dd {
   margin: 3px 0 0;
-  font-weight: 700;
+  font-weight: var(--weight-bold);
 }
 .cfp-hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--space-2);
 }
 .cfp-hero-actions .btn {
   min-height: 44px;
@@ -107,16 +106,15 @@
 .cfp-main {
   width: min(1180px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 56px 0 72px;
+  padding: var(--space-10) 0 var(--space-12);
 }
 .cfp-wide-notice {
-  margin-bottom: 28px;
+  margin-bottom: var(--space-6);
 }
 .cfp-content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
-  grid-template-areas:
-    "invitation entry"
+  grid-template-areas: "invitation entry"
     "outline entry";
   gap: 54px clamp(32px, 6vw, 80px);
   align-items: start;
@@ -132,14 +130,14 @@
 }
 .cfp-editorial-section h2,
 .cfp-featured h2 {
-  margin: 6px 0 14px;
+  margin: var(--space-1) 0 var(--space-3);
   font-size: clamp(28px, 4vw, 42px);
   line-height: 1.05;
   letter-spacing: -0.04em;
 }
 .cfp-editorial-section > p:not(.cfp-section-label) {
   max-width: 70ch;
-  font-size: 17px;
+  font-size: var(--text-base);
   line-height: 1.7;
   color: #455064;
 }
@@ -150,9 +148,9 @@
 .cfp-organizer {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 26px;
-  padding-top: 22px;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
   border-top: 1px solid #dedbd5;
 }
 .cfp-organizer > span:last-child {
@@ -169,57 +167,57 @@
   scroll-margin-top: 84px;
 }
 .cfp-access-card {
-  padding: 24px;
+  padding: var(--space-6);
   border-top: 4px solid var(--event-accent);
   box-shadow: 0 16px 45px rgba(25, 32, 48, 0.1);
 }
 .cfp-access-card h2 {
-  margin: 10px 0 8px;
-  font-size: 26px;
+  margin: var(--space-2) 0 var(--space-2);
+  font-size: var(--text-2xl);
 }
 .cfp-access-primary .btn {
   width: 100%;
   min-height: 46px;
 }
 .cfp-returning {
-  margin-top: 20px;
-  padding-top: 20px;
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
   border-top: 1px solid var(--line);
 }
 .cfp-returning h3 {
-  margin: 0 0 4px;
+  margin: 0 0 var(--space-1);
 }
 .cfp-returning .btn {
   width: 100%;
 }
 .cfp-entry-assurances {
   display: grid;
-  gap: 10px;
-  margin: 18px 0 0;
-  padding: 0 6px;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  padding: 0 var(--space-2);
   list-style: none;
   color: #5d677a;
-  font-size: 13px;
+  font-size: var(--text-xs);
 }
 .cfp-entry-assurances li {
   display: grid;
   grid-template-columns: 18px 1fr;
-  gap: 7px;
+  gap: var(--space-2);
 }
 .cfp-entry-assurances li::before {
   content: "✓";
   color: var(--event-accent);
-  font-weight: 900;
+  font-weight: var(--weight-extrabold);
 }
 .cfp-section-heading {
   display: flex;
   justify-content: space-between;
   align-items: end;
-  gap: 18px;
-  margin-bottom: 18px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
 }
 .cfp-section-heading h2 {
-  margin-bottom: 5px;
+  margin-bottom: var(--space-1);
 }
 .cfp-section-heading p {
   margin: 0;
@@ -234,7 +232,7 @@
 }
 .cfp-question-outline li {
   position: relative;
-  padding: 20px 8px 20px 48px;
+  padding: var(--space-5) var(--space-2) var(--space-5) var(--space-9);
   border-bottom: 1px solid #dedbd5;
   counter-increment: cfp-question;
 }
@@ -244,17 +242,17 @@
   left: 7px;
   top: 20px;
   color: #8991a0;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
 }
 .cfp-question-outline li > div {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .cfp-question-outline p {
-  margin: 5px 0 0;
+  margin: var(--space-1) 0 0;
   color: #606a7b;
   line-height: 1.5;
 }
@@ -264,27 +262,27 @@
 }
 .cfp-question-outline .cfp-condition {
   color: #4f5a6d;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
 }
 .cfp-example span,
 .cfp-required {
   color: var(--event-accent);
-  font-size: 11px;
+  font-size: var(--text-2xs);
   font-style: normal;
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 .cfp-featured {
-  margin-top: 70px;
-  padding-top: 48px;
+  margin-top: var(--space-11);
+  padding-top: var(--space-9);
   border-top: 1px solid #dedbd5;
 }
 .cfp-featured-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 16px;
+  gap: var(--space-4);
 }
 .cfp-speaker-card {
   min-width: 0;
@@ -299,29 +297,29 @@
   object-fit: cover;
   background: color-mix(in srgb, var(--event-accent) 16%, white);
   color: var(--event-accent);
-  font-weight: 850;
+  font-weight: var(--weight-extrabold);
 }
 .cfp-speaker-card h3 {
-  margin: 12px 0 3px;
-  font-size: 16px;
+  margin: var(--space-3) 0 3px;
+  font-size: var(--text-base);
 }
 .cfp-speaker-card p {
   margin: 0;
   color: #5f697d;
-  font-size: 13px;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 .sessionize-import {
   display: grid;
-  gap: 12px;
-  margin: 12px 0 20px;
-  padding: 16px;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 var(--space-5);
+  padding: var(--space-4);
   border: 1px solid #dbe3f0;
-  border-radius: 12px;
-  background: #f8fafc;
+  border-radius: var(--radius);
+  background: var(--soft);
 }
 .sessionize-import p {
-  margin: 4px 0 0;
+  margin: var(--space-1) 0 0;
 }
 .sessionize-import .form-row {
   grid-template-columns: minmax(0, 1fr) auto;
@@ -332,15 +330,13 @@
   }
   .cfp-content-grid {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "invitation"
+    grid-template-areas: "invitation"
       "entry"
       "outline";
-    gap: 36px;
+    gap: var(--space-7);
   }
   .cfp-content-grid.without-invitation {
-    grid-template-areas:
-      "entry"
+    grid-template-areas: "entry"
       "outline";
   }
   .cfp-entry {
@@ -350,7 +346,7 @@
 @media (max-width: 600px) {
   .cfp-masthead {
     min-height: 580px;
-    padding: 30px 20px;
+    padding: var(--space-7) var(--space-5);
     background-position: 38% center;
   }
   .cfp-masthead.has-image {
@@ -361,11 +357,11 @@
   }
   .cfp-event-facts {
     display: grid;
-    gap: 12px;
+    gap: var(--space-3);
   }
   .cfp-main {
     width: min(100% - 28px, 1180px);
-    padding-top: 28px;
+    padding-top: var(--space-7);
   }
   .cfp-section-heading,
   .cfp-question-outline li > div {
@@ -373,7 +369,7 @@
     flex-direction: column;
   }
   .cfp-question-outline li > div {
-    gap: 5px;
+    gap: var(--space-1);
   }
   .cfp-featured-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -1,7 +1,7 @@
 .table-wrap {
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: white;
 }
 .data-table {
@@ -12,17 +12,17 @@
 .data-table th {
   position: sticky;
   top: 0;
-  background: #f8fafc;
-  color: #475569;
+  background: var(--soft);
+  color: var(--text-secondary);
   text-align: left;
-  font-size: 11px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.02em;
-  padding: 11px;
+  padding: var(--space-3);
   border-bottom: 1px solid var(--line);
   z-index: 1;
 }
 .data-table td {
-  padding: 11px;
+  padding: var(--space-3);
   border-bottom: 1px solid #edf1f6;
   vertical-align: middle;
 }
@@ -35,21 +35,21 @@
 .pc-data-grid-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   min-height: 42px;
-  margin: 10px 0;
+  margin: var(--space-2) 0;
 }
 .pc-data-grid-selection {
   display: flex;
   align-items: center;
   flex: 1;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .pc-data-grid-density {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   white-space: nowrap;
 }
 .pc-data-grid-density .select {
@@ -71,27 +71,27 @@
   right: 0;
   z-index: 20;
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 190px;
   margin: 0;
-  padding: 12px;
+  padding: var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: #fff;
   box-shadow: var(--shadow);
 }
 .pc-data-grid-columns legend {
-  padding: 0 4px;
+  padding: 0 var(--space-1);
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .pc-data-grid-columns label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   cursor: pointer;
 }
 .pc-data-grid input[type="checkbox"],
@@ -120,24 +120,24 @@
 }
 .pc-data-grid.is-compact th,
 .pc-data-grid.is-compact td {
-  padding: 7px 9px;
+  padding: var(--space-2) var(--space-2);
 }
 .row-main {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-2);
 }
 .row-main strong {
   display: block;
-  font-size: 13px;
+  font-size: var(--text-xs);
 }
 .row-main small {
   color: var(--muted);
 }
 .table-toolbar {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-2);
 }

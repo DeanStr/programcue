@@ -1,7 +1,7 @@
 .application-layout {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-  gap: 16px;
+  gap: var(--space-4);
 }
 .application-drafts {
   align-self: start;
@@ -14,13 +14,13 @@
   color: inherit;
 }
 .application-drafts .queue-card h3 {
-  margin: 8px 0 4px;
+  margin: var(--space-2) 0 var(--space-1);
 }
 .field-error {
   display: block;
   color: var(--red);
-  font-size: 11px;
-  margin-top: 4px;
+  font-size: var(--text-2xs);
+  margin-top: var(--space-1);
 }
 @media (max-width: 1024px) {
   .public-top .brand span {
@@ -39,6 +39,6 @@
     grid-auto-flow: column;
     grid-auto-columns: minmax(220px, 80%);
     overflow-x: auto;
-    padding-bottom: 6px;
+    padding-bottom: var(--space-2);
   }
 }

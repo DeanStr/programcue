@@ -2,73 +2,73 @@
 .comms-layout {
   display: grid;
   grid-template-columns: 220px minmax(500px, 1fr) 315px;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .template-list {
   display: grid;
-  gap: 5px;
+  gap: var(--space-1);
 }
 .template-item {
-  padding: 8px;
-  border-radius: 8px;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
 }
 .template-item.active {
-  background: #eef2ff;
-  color: #4338ca;
+  background: var(--brand-50);
+  color: var(--brand-700);
 }
 .channel-tabs {
   display: flex;
-  gap: 5px;
+  gap: var(--space-1);
 }
 .channel-tab {
   border: 1px solid var(--line);
   background: white;
-  border-radius: 9px;
-  padding: 8px 12px;
-  font-weight: 700;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-weight: var(--weight-bold);
 }
 .channel-tab.active {
-  border-color: #818cf8;
-  color: #4338ca;
+  border-color: var(--brand-400);
+  color: var(--brand-700);
   background: #f7f7ff;
 }
 .preview-diff-confirm {
   display: grid;
   grid-template-columns: 1.15fr 0.9fr 0.8fr;
-  gap: 12px;
-  margin-top: 12px;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
 }
 .step-card {
-  padding: 13px;
+  padding: var(--space-3);
 }
 .step-num {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #4f46e5;
+  background: var(--brand-600);
   color: white;
   display: inline-grid;
   place-items: center;
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
 }
 .channel-previews {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 7px;
-  margin-top: 10px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 .preview-mini {
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px;
-  font-size: 10px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  font-size: var(--text-2xs);
   min-height: 130px;
   background: #fafcff;
 }
 .diff-line {
-  padding: 5px 7px;
+  padding: var(--space-1) var(--space-2);
   font-family: ui-monospace, monospace;
-  font-size: 11px;
+  font-size: var(--text-2xs);
 }
 .diff-line.add {
   background: #dcfce7;
@@ -82,10 +82,10 @@
 .validation-item {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px;
-  border-radius: 7px;
-  font-size: 12px;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
 }
 .validation-item.error {
   background: #fef2f2;

@@ -11,7 +11,7 @@
 .schedule-view-tabs {
   margin-left: auto;
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
   flex-wrap: wrap;
 }
 .schedule-alt {
@@ -20,12 +20,12 @@
 .week-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 .week-day {
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .week-day > .card {
@@ -34,16 +34,16 @@
 .track-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 .track-column {
   display: grid;
   align-content: start;
-  gap: 8px;
-  background: #f8fafc;
+  gap: var(--space-2);
+  background: var(--soft);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: var(--radius);
+  padding: var(--space-3);
   min-width: 0;
 }
 .track-column > button {

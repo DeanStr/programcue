@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { repositoryRoot } from "./e2e-runtime.mjs";
 
 const STYLE_DIR = join(repositoryRoot, "app/styles");
-const TOKEN_FILE = "base.css";
+const TOKEN_FILE = "tokens.css";
 const MIN_FONT_PX = 12;
 
 /* Values that are legitimately not tokens. */
@@ -93,12 +93,16 @@ for (const [file, source] of sources) {
       }
     }
 
-    /* 4. raw px spacing */
+    /* 4. raw px spacing.
+       Fluid values are exempt: clamp()/calc()/min()/max() spacing is a
+       deliberate responsive choice, not the drift this rule exists to catch.
+       Negative offsets are optical corrections, not scale steps. */
     for (const [, prop, value] of code.matchAll(
-      /\b(padding|margin|gap|row-gap|column-gap)(?:-(?:top|right|bottom|left|inline|block))?\s*:\s*([^;{]+)/gi,
+      /(?:^|[;{]|\s)(padding|margin|gap|row-gap|column-gap)(?:-(?:top|right|bottom|left|inline|block))?\s*:\s*([^;{]+)/gi,
     )) {
+      if (/\b(clamp|calc|min|max)\(/i.test(value)) continue;
       for (const [, px] of value.matchAll(/(-?\d+px)/g)) {
-        if (ALLOWED_SPACE_PX.has(px)) continue;
+        if (ALLOWED_SPACE_PX.has(px) || px.startsWith("-")) continue;
         record(file, line, "raw-space", `${prop}: ${px} should use a --space-* token`);
       }
     }

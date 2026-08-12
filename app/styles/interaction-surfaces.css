@@ -8,7 +8,7 @@ body.portal-open {
   bottom: 18px;
   z-index: 120;
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
   max-width: min(390px, calc(100vw - 36px));
 }
 .toast {
@@ -17,12 +17,12 @@ body.portal-open {
   color: white;
   border: 1px solid var(--line);
   border-left: 4px solid var(--green);
-  border-radius: 12px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 11px 12px;
+  padding: var(--space-3) var(--space-3);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
 }
 .toast.success {
   border-left-color: #22c55e;
@@ -40,19 +40,19 @@ body.portal-open {
   margin-left: auto;
   border: 0;
   background: transparent;
-  color: #cbd5e1;
-  font-size: 18px;
+  color: var(--nav-text);
+  font-size: var(--text-lg);
 }
 .shortcut-list {
   display: grid;
-  gap: 10px;
+  gap: var(--space-2);
 }
 .shortcut-list > div {
   display: grid;
   grid-template-columns: 110px 1fr;
   align-items: center;
-  gap: 12px;
-  padding: 8px;
+  gap: var(--space-3);
+  padding: var(--space-2);
   border-bottom: 1px solid var(--line);
 }
 .sidebar-is-collapsed {
@@ -72,7 +72,7 @@ body.portal-open {
 }
 .schedule-drop.drop-target,
 .form-field-card.drop-target {
-  background: #eef2ff !important;
+  background: var(--brand-50) !important;
   outline: 3px dashed var(--brand-500);
   outline-offset: -4px;
 }
@@ -98,7 +98,7 @@ body.portal-open {
 }
 .form-field-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .form-field-actions .icon-btn {
   width: 28px;
@@ -112,7 +112,7 @@ body.portal-open {
   background: rgba(2, 6, 23, 0.58);
   display: grid;
   place-items: center;
-  padding: 18px;
+  padding: var(--space-5);
   z-index: 110;
 }
 .command-overlay {
@@ -120,7 +120,7 @@ body.portal-open {
 }
 .modal {
   background: #fff;
-  border-radius: 16px;
+  border-radius: var(--radius);
   box-shadow: 0 30px 80px rgba(2, 6, 23, 0.32);
   width: min(680px, 100%);
   max-height: calc(100vh - 36px);
@@ -130,8 +130,8 @@ body.portal-open {
 .modal-foot {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 14px 16px;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4);
   border-bottom: 1px solid var(--line);
 }
 .modal-head h2 {
@@ -141,7 +141,7 @@ body.portal-open {
   margin-left: auto;
 }
 .modal-body {
-  padding: 16px;
+  padding: var(--space-4);
 }
 .modal-foot {
   border-top: 1px solid var(--line);
@@ -152,60 +152,60 @@ body.portal-open {
   width: min(720px, 100%);
   max-height: min(680px, calc(100vh - 40px));
   background: #fff;
-  border-radius: 16px;
+  border-radius: var(--radius);
   box-shadow: 0 30px 80px rgba(2, 6, 23, 0.32);
   overflow: hidden;
 }
 .command-input {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px;
+  gap: var(--space-2);
+  padding: var(--space-4);
   border-bottom: 1px solid var(--line);
 }
 .command-input input {
   flex: 1;
   border: 0;
   background: transparent;
-  font-size: 17px;
+  font-size: var(--text-base);
 }
 .command-results {
   max-height: 520px;
   overflow: auto;
-  padding: 8px;
+  padding: var(--space-2);
 }
 .command-group-title {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   color: var(--muted);
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  padding: 10px;
+  padding: var(--space-3);
 }
 .command-item {
   display: grid;
   grid-template-columns: 110px 1fr 30px;
   align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 9px;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
 }
 .command-item:hover,
 .command-item.selected {
-  background: #eef2ff;
+  background: var(--brand-50);
 }
 .command-item .meta {
   margin-left: auto;
   color: var(--muted);
   text-align: right;
-  font-size: 11px;
+  font-size: var(--text-2xs);
 }
 .command-footer {
   display: flex;
-  gap: 16px;
-  padding: 10px 14px;
-  background: #f8fafc;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--soft);
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-2xs);
 }

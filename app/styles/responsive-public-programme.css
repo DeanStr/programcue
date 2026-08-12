@@ -2,7 +2,7 @@
   position: static;
 }
 .public-shell.embedded .hero {
-  margin-top: 12px;
+  margin-top: var(--space-3);
   min-height: 170px;
 }
 .public-shell.embedded .public-main {
@@ -14,20 +14,20 @@
 }
 .public-shell.embedded.embed-compact .hero {
   min-height: 118px;
-  padding: 20px 24px;
+  padding: var(--space-5) var(--space-6);
 }
 .public-shell.embedded.embed-compact .hero h1 {
-  margin: 8px 0 6px;
-  font-size: 30px;
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: var(--text-2xl);
 }
 .public-shell.embedded.embed-compact .public-filters {
-  margin-bottom: 6px;
+  margin-bottom: var(--space-1);
 }
 .public-shell.embedded.embed-compact .programme-row {
-  padding-block: 8px;
+  padding-block: var(--space-2);
 }
 .public-shell.embedded.embed-compact .programme-entry-description {
-  padding-bottom: 8px;
+  padding-bottom: var(--space-2);
 }
 @media (max-width: 1000px) {
   .speaker-gallery-grid {
@@ -53,7 +53,7 @@
   }
   .public-itinerary-card {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: var(--space-2);
   }
   .public-itinerary-time {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -67,7 +67,7 @@
 }
 @media (max-width: 600px) {
   .public-surface-heading h1 {
-    font-size: 26px;
+    font-size: var(--text-2xl);
   }
   .agenda-board,
   .speaker-gallery-grid {
@@ -75,18 +75,18 @@
   }
   .agenda-card-header,
   .public-itinerary-card {
-    padding: 14px;
+    padding: var(--space-4);
   }
   .agenda-card-header {
     padding-bottom: 0;
   }
   .agenda-card-title {
-    margin-right: 14px;
-    margin-left: 14px;
+    margin-right: var(--space-3);
+    margin-left: var(--space-3);
   }
   .agenda-card-description {
-    margin-right: 14px;
-    margin-left: 14px;
+    margin-right: var(--space-3);
+    margin-left: var(--space-3);
   }
   .public-speaker-detail-heading {
     align-items: flex-start;
@@ -117,7 +117,7 @@
   }
   .programme-embed-preview {
     min-height: 340px;
-    padding: 6px;
+    padding: var(--space-2);
   }
   .programme-embed-preview iframe {
     min-height: 328px;

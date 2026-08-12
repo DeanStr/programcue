@@ -2,12 +2,12 @@
 .tasks-summary {
   display: grid;
   grid-template-columns: 1.25fr repeat(5, 0.7fr);
-  gap: 10px;
+  gap: var(--space-2);
 }
 .tasks-layout {
   display: grid;
   grid-template-columns: minmax(760px, 1fr) 300px;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .tasks-side .field,
 .tasks-side .select,
@@ -17,7 +17,7 @@
   max-width: 100%;
 }
 .impact {
-  font-weight: 750;
+  font-weight: var(--weight-bold);
 }
 .impact.critical {
   color: #b91c1c;
@@ -34,6 +34,6 @@
 .task-bottom {
   display: grid;
   grid-template-columns: 0.75fr 0.75fr 1fr 1fr;
-  gap: 12px;
-  margin-top: 12px;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
 }

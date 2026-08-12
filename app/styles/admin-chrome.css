@@ -1,31 +1,31 @@
 /* Canonical administrator chrome: dark navigation and dark context bar, light work canvas. */
 .app-admin .topbar {
-  background: linear-gradient(180deg, #091426, #0b172b);
+  background: linear-gradient(180deg, var(--nav), #0b172b);
   border-bottom-color: #1e293b;
-  color: #f8fafc;
+  color: var(--soft);
 }
 .app-admin .event-switcher {
-  background: #101e35;
+  background: var(--nav-2);
   border-color: #263750;
-  color: #f8fafc;
+  color: var(--soft);
 }
 .app-admin .event-switcher small {
   color: #a9b8cc;
 }
 .app-admin .command-trigger {
-  background: #101e35;
+  background: var(--nav-2);
   border-color: #263750;
   color: #b8c5d8;
 }
 .app-admin .command-trigger kbd {
-  background: #091426;
+  background: var(--nav);
   border-color: #334155;
-  color: #cbd5e1;
+  color: var(--nav-text);
 }
 .app-admin .topbar .icon-btn {
-  background: #101e35;
+  background: var(--nav-2);
   border-color: #263750;
-  color: #f8fafc;
+  color: var(--soft);
 }
 .app-admin .topbar .avatar {
   border: 2px solid #334155;

@@ -1,7 +1,7 @@
 .crm-chip-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
 }
 
@@ -9,9 +9,9 @@
   display: inline-flex;
   align-items: center;
   min-height: 30px;
-  padding: 5px 10px;
+  padding: var(--space-1) var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: #fff;
   color: var(--ink);
   font: inherit;
@@ -39,26 +39,26 @@ button.crm-chip {
 }
 
 .crm-field-with-icon > .field {
-  padding-left: 36px;
+  padding-left: var(--space-8);
 }
 
 .crm-detail-list {
   display: grid;
-  gap: 10px;
+  gap: var(--space-2);
   margin: 0;
 }
 
 .crm-detail-list > div {
   display: grid;
   grid-template-columns: minmax(100px, 0.35fr) minmax(0, 1fr);
-  gap: 14px;
+  gap: var(--space-3);
   border-bottom: 1px solid var(--line);
-  padding-bottom: 8px;
+  padding-bottom: var(--space-2);
 }
 
 .crm-detail-list dt {
   color: var(--muted);
-  font-weight: 650;
+  font-weight: var(--weight-semibold);
 }
 
 .crm-detail-list dd {
@@ -69,9 +69,9 @@ button.crm-chip {
 .crm-pipeline-board {
   display: grid;
   grid-template-columns: repeat(5, minmax(230px, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
   overflow-x: auto;
-  padding-bottom: 12px;
+  padding-bottom: var(--space-3);
   align-items: start;
 }
 

@@ -3,22 +3,22 @@
   display: grid;
   grid-template-columns: 130px 1fr 1fr;
   align-items: center;
-  gap: 18px;
-  padding: 18px;
+  gap: var(--space-4);
+  padding: var(--space-5);
   background: linear-gradient(135deg, #f8faff, #fff);
-  border-color: #c7d2fe;
+  border-color: var(--brand-200);
 }
 .integration-logo {
   width: 42px;
   height: 42px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
-  background: #eef2ff;
-  color: #4338ca;
-  font-weight: 900;
+  background: var(--brand-50);
+  color: var(--brand-700);
+  font-weight: var(--weight-extrabold);
 }
 .integration-row td {
-  padding-top: 14px;
-  padding-bottom: 14px;
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
 }

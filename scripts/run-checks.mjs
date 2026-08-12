@@ -43,6 +43,11 @@ const coreRuns = await Promise.all([
         label: "configuration tests",
       },
       {
+        command: "node",
+        args: ["scripts/check-css-hygiene.mjs"],
+        label: "CSS hygiene",
+      },
+      {
         command: npmCommand,
         args: ["run", "test:scanner"],
         label: "scanner tests",

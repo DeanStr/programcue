@@ -1,0 +1,194 @@
+/* Inter Variable, self-hosted. The weights and tracking below are tuned for it. */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/fonts/inter-latin-var.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/fonts/inter-latin-ext-var.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  color-scheme: light;
+  --brand-50: #eef2ff;
+  --brand-100: #e0e7ff;
+  --brand-200: #c7d2fe;
+  --brand-300: #a5b4fc;
+  --brand-400: #818cf8;
+  --brand-500: #6366f1;
+  --brand-600: #4f46e5;
+  --brand-700: #4338ca;
+  --brand-900: #312e81;
+  --violet: #7c3aed;
+  --teal: #0d9488;
+  --green: #16a34a;
+  --amber: #d97706;
+  --red: #dc2626;
+  --blue: #2563eb;
+  --ink: #0f172a;
+  --muted: #617188;
+  --muted-on-surface: #5b6b81;
+  /* 4.76:1 on white, 4.39:1 on --canvas. Was #94a3b8 at 2.56:1, below AA. */
+  --muted-2: #64748b;
+  --line: #e2e8f0;
+  --soft: #f8fafc;
+  --canvas: #f3f6fb;
+  --nav: #091426;
+  --nav-2: #101e35;
+  --nav-text: #cbd5e1;
+  --nav-active: #4f46e5;
+  --font:
+    "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --sidebar: 230px;
+  --topbar: 70px;
+
+  /* --- Semantic surfaces -------------------------------------------------
+     Roles, not colours. Everything that paints a background reads from here
+     so a theme swap is a token edit rather than a per-site edit. */
+  --surface: #fff;
+  --surface-raised: #fff;
+  --surface-sunken: var(--soft);
+  --surface-canvas: var(--canvas);
+  --surface-nav: var(--nav);
+  --surface-inverse: var(--ink);
+
+  /* --- Semantic text ----------------------------------------------------- */
+  --text-primary: var(--ink);
+  --text-secondary: #475569; /* 7.58:1 on white */
+  --text-tertiary: var(--muted-on-surface); /* 5.43:1 on white */
+  --text-inverse: #fff;
+  --text-accent: var(--brand-700);
+
+  /* --- Borders ----------------------------------------------------------- */
+  --border: var(--line);
+  --border-strong: #cbd5e1;
+  --border-accent: var(--brand-200);
+
+  /* --- Focus -------------------------------------------------------------
+     Two-tone by design. The dark ring carries contrast on light grounds
+     (10.5-11.4:1); the white halo carries it on dark and saturated grounds
+     (6.3-18.4:1). Together they clear 3:1 on every surface in the product,
+     which is why no per-surface focus override is needed anywhere. */
+  --focus-ring: var(--brand-900);
+  --focus-halo: #fff;
+  --focus-width: 2px;
+  --focus-halo-width: 3px;
+
+  /* --- Elevation ---------------------------------------------------------
+     border contains, tint groups, shadow floats.
+     A card on canvas = 1px border + --elev-1. A panel inside a card = sunken
+     tint, no border, no shadow. A popover = --elev-3 and no border. */
+  --elev-0: none;
+  --elev-1:
+    0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.04);
+  --elev-2:
+    0 2px 4px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(15, 23, 42, 0.05);
+  --elev-3:
+    0 4px 8px rgba(15, 23, 42, 0.07), 0 12px 24px rgba(15, 23, 42, 0.08);
+  --elev-4:
+    0 8px 16px rgba(15, 23, 42, 0.08), 0 24px 48px rgba(15, 23, 42, 0.12);
+  --shadow: var(--elev-3);
+
+  /* --- Radius ------------------------------------------------------------- */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+
+  /* --- Space -------------------------------------------------------------
+     4px grid. Snap to the nearest step; do not introduce intermediate values. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 56px;
+  --space-11: 64px;
+  --space-12: 80px;
+
+  /* --- Type --------------------------------------------------------------
+     Eight roles. 12px is the floor: anything smaller was unreadable at the
+     exact moments it mattered most (errors, required marks, metadata). */
+  --text-2xs: 12px;
+  --text-xs: 13px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 19px;
+  --text-xl: 23px;
+  --text-2xl: 28px;
+  --text-3xl: 34px;
+  --display-2: clamp(28px, 4vw, 42px);
+  --display-1: clamp(40px, 6vw, 72px);
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
+
+  --tracking-tight: -0.035em;
+  --tracking-snug: -0.015em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.09em;
+
+  --measure-prose: 68ch;
+  --measure-app: 1560px;
+
+  /* --- Motion -------------------------------------------------------------
+     Reduced motion collapses these to 1ms rather than killing animation
+     outright, so pseudo-element and loading states stay coherent. */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 340ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.5, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 1ms;
+    --dur-base: 1ms;
+    --dur-slow: 1ms;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+  /* Catches anything still declaring a literal duration. */
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  /* Loading signals stay legible: slowed, not stopped. Going static would
+     leave a spinner looking like a frozen page. */
+  .pc-spin,
+  .pc-skeleton-stack span {
+    animation-duration: 2.4s !important;
+    animation-iteration-count: infinite !important;
+  }
+}

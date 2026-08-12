@@ -1,20 +1,19 @@
 /* Form builder */
 .builder-layout {
   display: grid;
-  grid-template-columns:
-    minmax(180px, 220px) minmax(300px, 1fr) minmax(250px, 300px)
+  grid-template-columns: minmax(180px, 220px) minmax(300px, 1fr) minmax(250px, 300px)
     minmax(280px, 345px);
-  gap: 12px;
+  gap: var(--space-3);
   align-items: start;
 }
 .builder-panel {
-  padding: 13px;
+  padding: var(--space-3);
   min-width: 0;
 }
 .builder-inspector-stack {
   display: grid;
   grid-column: 3;
-  gap: 12px;
+  gap: var(--space-3);
   min-width: 0;
 }
 .builder-layout > .preview-panel {
@@ -33,12 +32,12 @@
 }
 .presentation-settings-panel > summary small {
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
   line-height: 1.35;
 }
 .presentation-settings-fields {
-  margin-top: 14px;
+  margin-top: var(--space-3);
 }
 .form-js-editor-card {
   overflow: visible;
@@ -59,8 +58,8 @@
 .schedule-standard-event-time {
   display: block;
   min-width: 0;
-  font-size: 10px;
-  font-weight: 750;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
   line-height: 1.2;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -69,8 +68,8 @@
 .schedule-standard-event-title {
   display: block;
   min-width: 0;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
   line-height: 1.2;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -84,8 +83,8 @@
   max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
-  padding-bottom: 4px;
-  scrollbar-color: var(--brand-400) #e2e8f0;
+  padding-bottom: var(--space-1);
+  scrollbar-color: var(--brand-400) var(--line);
   scrollbar-gutter: stable;
   touch-action: pan-x pan-y;
 }
@@ -95,20 +94,20 @@
 }
 .schedule-standard-calendar-week .schedule-standard-scroll-hint {
   display: block;
-  margin: 8px 0;
+  margin: var(--space-2) 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .program-cue-form-js {
   height: 640px;
   min-height: 520px;
   overflow: auto hidden;
   overscroll-behavior-inline: contain;
-  scrollbar-color: var(--brand-400) #e2e8f0;
+  scrollbar-color: var(--brand-400) var(--line);
   scrollbar-gutter: stable;
   touch-action: pan-x pan-y;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: white;
 }
 .program-cue-form-js > .fjs-container,
@@ -131,44 +130,44 @@
   display: grid;
   place-items: center;
   border: 1px dashed var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius);
   color: var(--muted);
-  background: #f8fafc;
+  background: var(--soft);
 }
 .field-library {
   display: grid;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .field-option {
   border: 1px solid var(--line);
   background: white;
-  border-radius: 8px;
-  padding: 8px 9px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-2);
   text-align: left;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .field-option:hover {
-  border-color: #a5b4fc;
+  border-color: var(--brand-300);
   background: #f8faff;
 }
 .form-canvas {
   display: grid;
-  gap: 7px;
+  gap: var(--space-2);
 }
 .form-field-card {
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
   background: white;
   display: grid;
   grid-template-columns: 22px 1fr auto;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: start;
 }
 .form-field-card.selected {
-  border-color: #7c3aed;
+  border-color: var(--violet);
   box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.12);
   background: #fbfaff;
 }
@@ -177,17 +176,17 @@
   cursor: grab;
 }
 .conditional-note {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: #6d28d9;
   background: #ede9fe;
-  border-radius: 99px;
-  padding: 3px 6px;
+  border-radius: var(--radius-full);
+  padding: 3px var(--space-2);
   display: inline-block;
-  margin-top: 5px;
+  margin-top: var(--space-1);
 }
 .phone {
   border: 8px solid #111827;
-  border-radius: 30px;
+  border-radius: var(--radius-lg);
   background: white;
   min-height: 640px;
   overflow: hidden;
@@ -206,11 +205,11 @@
   min-height: 540px;
   margin-inline: auto;
   border-width: 5px;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
 }
 .preview-viewport-controls {
   display: inline-flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .preview-viewport-controls .btn[aria-pressed="true"] {
   border-color: var(--brand-600);
@@ -218,58 +217,58 @@
   color: var(--brand-700);
 }
 .phone-head {
-  background: linear-gradient(135deg, #111b3f, #4f46e5);
+  background: linear-gradient(135deg, #111b3f, var(--brand-600));
   color: white;
-  padding: 20px 16px;
+  padding: var(--space-5) var(--space-4);
 }
 .phone-body {
-  padding: 14px;
+  padding: var(--space-4);
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .stepbar {
   display: flex;
-  gap: 5px;
+  gap: var(--space-1);
 }
 .stepbar span {
   height: 5px;
   flex: 1;
-  border-radius: 99px;
+  border-radius: var(--radius-full);
   background: #dbe2ee;
 }
 .stepbar span.on {
-  background: #4f46e5;
+  background: var(--brand-600);
 }
 .routing-row {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
-  margin-top: 6px;
+  margin-top: var(--space-1);
 }
 .wysiwyg {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   background: white;
 }
 .wysiwyg-toolbar {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   border-bottom: 1px solid var(--line);
-  padding: 7px;
-  background: #f8fafc;
+  padding: var(--space-2);
+  background: var(--soft);
 }
 .wysiwyg-toolbar button {
   border: 0;
   background: transparent;
-  border-radius: 5px;
-  padding: 5px 7px;
+  border-radius: var(--radius-xs);
+  padding: var(--space-1) var(--space-2);
 }
 .wysiwyg-toolbar button:hover {
-  background: #e2e8f0;
+  background: var(--line);
 }
 .wysiwyg-editor {
   min-height: 180px;
-  padding: 12px;
+  padding: var(--space-3);
 }

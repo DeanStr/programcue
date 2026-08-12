@@ -3,12 +3,12 @@
   display: grid;
   grid-template-columns: repeat(5, 1fr) 1.8fr;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: white;
-  margin: 12px 0;
+  margin: var(--space-3) 0;
 }
 .schedule-summary > div {
-  padding: 12px;
+  padding: var(--space-3);
   border-right: 1px solid var(--line);
 }
 .schedule-summary > div:last-child {
@@ -21,12 +21,12 @@
 .schedule-layout {
   display: grid;
   grid-template-columns: minmax(760px, 1fr) 340px;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .schedule-board {
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: white;
 }
 .schedule-grid {
@@ -39,22 +39,22 @@
 .schedule-grid .cell {
   border-right: 1px solid #e7ebf2;
   border-bottom: 1px solid #edf1f6;
-  padding: 5px;
+  padding: var(--space-1);
   position: relative;
 }
 .schedule-grid .header {
-  background: #f8fafc;
-  font-size: 11px;
-  font-weight: 700;
+  background: var(--soft);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
   text-align: center;
   position: sticky;
   top: 0;
   z-index: 5;
 }
 .schedule-grid .time {
-  font-size: 11px;
-  color: #475569;
-  font-weight: 650;
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+  font-weight: var(--weight-semibold);
   background: #fbfcfe;
   position: sticky;
   left: 0;
@@ -63,16 +63,16 @@
 .session-card {
   position: absolute;
   border: 1px solid;
-  border-radius: 8px;
-  padding: 7px;
-  font-size: 10px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  font-size: var(--text-2xs);
   overflow: hidden;
   z-index: 3;
   cursor: grab;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .session-card strong {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   display: block;
 }
 .session-card.keynote {
@@ -107,39 +107,39 @@
   color: #991b1b;
 }
 .drop-target {
-  outline: 2px dashed #818cf8;
+  outline: 2px dashed var(--brand-400);
   outline-offset: -4px;
-  background: #eef2ff !important;
+  background: var(--brand-50) !important;
 }
 .conflict-panel {
-  padding: 14px;
+  padding: var(--space-4);
 }
 .validation-list {
   display: grid;
-  gap: 7px;
+  gap: var(--space-2);
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
-  padding: 10px;
-  border-radius: 9px;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
   color: #166534;
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .unscheduled {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   overflow: auto;
-  padding-bottom: 4px;
+  padding-bottom: var(--space-1);
 }
 .unscheduled-card {
   min-width: 150px;
   border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 9px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
   background: white;
 }
 .pending-change {
   border: 1px solid #fde68a;
   background: #fffbeb;
-  border-radius: 10px;
-  padding: 10px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
 }

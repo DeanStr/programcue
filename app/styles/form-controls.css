@@ -3,10 +3,30 @@
 .textarea {
   border: 1px solid var(--line);
   background: #fff;
-  border-radius: 9px;
-  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
   color: var(--ink);
   min-height: 38px;
+}
+/* Replace the OS chevron so selects match the rest of the control set and
+   can express the error state, which native chrome ignores. */
+.select {
+  appearance: none;
+  padding-right: var(--space-7);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 4.5 6 8.5 10 4.5' fill='none' stroke='%23617188' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+  background-size: 12px 12px;
+}
+.select::-ms-expand {
+  display: none;
+}
+.field,
+.select,
+.textarea {
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 .field:focus,
 .select:focus,
@@ -17,7 +37,10 @@
   box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
 }
 .field {
-  min-width: 220px;
+  /* The 220px floor was global but its neutralising patch was scoped to
+     .app-admin .main, leaving the speaker, reviewer and public shells to
+     overflow below ~250px. */
+  min-width: min(220px, 100%);
 }
 .textarea {
   min-height: 110px;
@@ -26,14 +49,14 @@
 }
 .label {
   display: grid;
-  gap: 5px;
-  font-weight: 650;
-  font-size: 12px;
+  gap: var(--space-1);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-2xs);
 }
 .pc-repository-choice {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
+  gap: var(--space-2);
   align-items: start;
   cursor: pointer;
 }
@@ -50,32 +73,32 @@
 .pc-repository-choice small {
   margin-top: 3px;
   color: var(--muted);
-  font-weight: 400;
+  font-weight: var(--weight-normal);
   line-height: 1.45;
 }
 .help {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   color: var(--muted);
-  font-weight: 400;
+  font-weight: var(--weight-normal);
 }
 .form-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 .toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .toggle input {
   appearance: none;
   width: 38px;
   height: 22px;
-  border-radius: 99px;
-  background: #cbd5e1;
+  border-radius: var(--radius-full);
+  background: var(--nav-text);
   position: relative;
-  transition: 0.2s;
+  transition: background-color var(--dur-base) var(--ease-out);
 }
 .toggle input::after {
   content: "";
@@ -87,26 +110,27 @@
   top: 2px;
   left: 2px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-  transition: 0.2s;
+  /* Transform rather than left: it composites instead of triggering layout. */
+  transition: transform var(--dur-base) var(--ease-out);
 }
 .toggle input:checked {
   background: var(--brand-600);
 }
 .toggle input:checked::after {
-  left: 18px;
+  transform: translateX(16px);
 }
 .tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   border-bottom: 1px solid var(--line);
 }
 .tab {
   border: 0;
   background: transparent;
-  padding: 10px 12px;
+  padding: var(--space-3) var(--space-3);
   color: var(--muted);
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   border-bottom: 2px solid transparent;
 }
 .tab.active {
@@ -115,23 +139,23 @@
 }
 .pillbar {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
   flex-wrap: wrap;
 }
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  border-radius: 99px;
-  padding: 5px 8px;
-  font-size: 11px;
-  color: #475569;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
 }
 .pill.track {
-  background: #eef2ff;
-  color: #4338ca;
+  background: var(--brand-50);
+  color: var(--brand-700);
 }
 .pill.format {
   background: #ecfeff;
@@ -157,11 +181,53 @@
   top: 0;
   background: white;
   border-bottom: 1px solid var(--line);
-  padding: 15px 18px;
+  padding: var(--space-4) var(--space-5);
   display: flex;
   align-items: center;
   z-index: 1;
 }
 .drawer-body {
-  padding: 18px;
+  padding: var(--space-5);
+}
+
+/* iOS zooms the viewport when a focused control is under 16px. Applies to the
+   pointer-coarse case generally, not just the admin shell. */
+@media (max-width: 760px) {
+  .field,
+  .select,
+  .textarea {
+    font-size: var(--text-base);
+  }
+}
+
+/* Native checkbox and radio chrome, sized and coloured once. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-600);
+  cursor: pointer;
+}
+
+/* Pointer-coarse targets. 38px is comfortable with a mouse and tight with a
+   thumb, so the whole control set relaxes on touch. */
+@media (pointer: coarse) {
+  .btn,
+  .icon-btn,
+  .field,
+  .select,
+  .textarea {
+    min-height: 44px;
+  }
+  .btn.small {
+    min-height: 38px;
+  }
+  .icon-btn {
+    width: 44px;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 20px;
+    height: 20px;
+  }
 }
