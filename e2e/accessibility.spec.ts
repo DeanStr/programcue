@@ -147,12 +147,12 @@ test("representative shells remain usable at a 200 percent equivalent layout vie
     "/admin/submissions",
     "/apply/form",
     "/public/programme/future-of-events-2025",
-    "/speaker/dashboard",
-    "/speaker/tasks",
+    "/participant/dashboard",
+    "/participant/tasks",
     "/admin/communications/compose",
     "/design/system",
   ] as const) {
-    if (path.startsWith("/speaker/")) await selectDemoRole(page, "speaker");
+    if (path.startsWith("/participant/")) await selectDemoRole(page, "speaker");
     if (path.startsWith("/admin/")) await selectDemoRole(page, "administrator");
     await waitForInterface(page, path);
     await expect(page.locator("#main")).toBeVisible();
@@ -190,12 +190,12 @@ test("representative surfaces have one primary main landmark and unique ids", as
     "/admin/review",
     "/apply/form",
     "/public/programme/future-of-events-2025",
-    "/speaker/resources",
-    "/speaker/tasks",
+    "/participant/resources",
+    "/participant/tasks",
     "/admin/communications/compose",
     "/design/system",
   ] as const) {
-    if (path.startsWith("/speaker/")) await selectDemoRole(page, "speaker");
+    if (path.startsWith("/participant/")) await selectDemoRole(page, "speaker");
     if (path.startsWith("/admin/")) await selectDemoRole(page, "administrator");
     await waitForInterface(page, path);
     await expect(page.locator("main#main")).toHaveCount(1);
@@ -240,11 +240,11 @@ test("server-rendered timestamps hydrate in a non-UTC browser timezone", async (
     "/admin/operations",
     "/admin/settings",
     "/admin/submissions/form",
-    "/speaker/resources",
+    "/participant/resources",
     "/admin/communications/compose",
     "/admin/integrations",
   ] as const) {
-    if (path.startsWith("/speaker/")) await selectDemoRole(page, "speaker");
+    if (path.startsWith("/participant/")) await selectDemoRole(page, "speaker");
     if (path.startsWith("/admin/")) await selectDemoRole(page, "administrator");
     await waitForInterface(page, path);
   }

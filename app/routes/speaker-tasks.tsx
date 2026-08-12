@@ -12,7 +12,7 @@ import {
 } from "~/modules/tasks/task-service.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
-export const meta = () => [{ title: "Speaker Tasks · Program Cue" }];
+export const meta = () => [{ title: "Participant Tasks · Program Cue" }];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
@@ -121,7 +121,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data({ ok: true, message: "Comment added." });
     }
     return data(
-      { ok: false, message: "Unsupported speaker task action." },
+      { ok: false, message: "Unsupported participant task action." },
       { status: 400 },
     );
   } catch (error) {

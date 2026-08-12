@@ -58,6 +58,8 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
     entityType: "event_configuration",
     query: `SELECT id, id AS event_id, name, slug, timezone, starts_at,
                    ends_at, venue_name, city, description, brand_accent,
+                   participant_logo_url, participant_welcome_text,
+                   participant_support_url,
                    session_formats_json, file_policy_json,
                    submission_access_mode,
                    allow_anonymous_drafts, duplicate_person_warnings
@@ -74,6 +76,9 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
         city: nullableText,
         description: nullableText,
         brand_accent: text.regex(/^#[0-9a-fA-F]{6}$/),
+        participant_logo_url: nullableText,
+        participant_welcome_text: nullableText,
+        participant_support_url: nullableText,
         session_formats_json: jsonText,
         file_policy_json: jsonText,
         submission_access_mode: z.enum([

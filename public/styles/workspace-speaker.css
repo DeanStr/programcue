@@ -25,6 +25,24 @@
   align-items: center;
   gap: 10px;
 }
+.participant-logo {
+  display: block;
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  border-radius: 9px;
+}
+.participant-support-link {
+  margin-left: 10px;
+}
+.participant-welcome {
+  border-left: 4px solid var(--event-accent, var(--indigo));
+  margin-bottom: 18px;
+}
+.participant-welcome p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
 .speaker-layout {
   display: grid;
   grid-template-columns: 210px 1fr;

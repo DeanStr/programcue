@@ -21,7 +21,11 @@ export async function readEventCloneSource(
   ] = await Promise.all([
     env.DB.prepare(
       `SELECT venue_name AS venueName, city, description,
-              brand_accent AS brandAccent, retention_months AS retentionMonths,
+              brand_accent AS brandAccent,
+              participant_logo_url AS participantLogoUrl,
+              participant_welcome_text AS participantWelcomeText,
+              participant_support_url AS participantSupportUrl,
+              retention_months AS retentionMonths,
               session_formats_json AS sessionFormatsJson,
               submission_access_mode AS submissionAccessMode,
               allow_anonymous_drafts AS allowAnonymousDrafts,
@@ -35,6 +39,9 @@ export async function readEventCloneSource(
         city: string | null;
         description: string | null;
         brandAccent: string;
+        participantLogoUrl: string | null;
+        participantWelcomeText: string | null;
+        participantSupportUrl: string | null;
         retentionMonths: number;
         sessionFormatsJson: string;
         submissionAccessMode: string;

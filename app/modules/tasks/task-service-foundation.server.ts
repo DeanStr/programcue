@@ -76,6 +76,7 @@ export type TaskRow = {
   templateId: string | null;
   targetType: string;
   targetId: string;
+  targetLabel?: string | null;
   ownerPersonId: string | null;
   ownerName: string | null;
   title: string;

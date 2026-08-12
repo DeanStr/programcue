@@ -30,7 +30,7 @@ export async function resolveDemoIdentityState(
     destination:
       identityKey === "sbek_reviewer"
         ? "/review/workbench"
-        : "/speaker/dashboard",
+        : "/participant/dashboard",
     role: activatedRole,
   };
 }

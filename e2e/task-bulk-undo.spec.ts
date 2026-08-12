@@ -92,7 +92,7 @@ test("a speaker can undo a reversible task completion from its status notice", a
   page,
 }) => {
   await selectSpeaker(page);
-  await waitForInterface(page, "/speaker/tasks");
+  await waitForInterface(page, "/participant/tasks");
   const task = page.locator("article.speaker-task").filter({
     hasText: "Read the speaker handbook",
   });
@@ -127,7 +127,7 @@ test("speaker task evidence uses the signed direct uploader", async ({
   page,
 }) => {
   await selectSpeaker(page);
-  await waitForInterface(page, "/speaker/tasks");
+  await waitForInterface(page, "/participant/tasks");
   const task = page.locator("article.speaker-task").filter({
     hasText: "Upload presentation slides",
   });

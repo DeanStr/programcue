@@ -455,7 +455,7 @@ describe("private R2 file lifecycle", () => {
     await expect(
       speakerFileDownload({
         request: new Request(
-          `http://localhost/speaker/files/${uploaded.assetId}`,
+          `http://localhost/participant/files/${uploaded.assetId}`,
           { headers: { cookie: "program_cue_demo_identity=speaker" } },
         ),
         params: { assetId: uploaded.assetId },
@@ -465,7 +465,7 @@ describe("private R2 file lifecycle", () => {
     await expect(
       speakerResourceDownload({
         request: new Request(
-          "http://localhost/speaker/resources/missing/download",
+          "http://localhost/participant/resources/missing/download",
           { headers: { cookie: "program_cue_demo_identity=speaker" } },
         ),
         params: { assetId: `missing-${crypto.randomUUID()}` },

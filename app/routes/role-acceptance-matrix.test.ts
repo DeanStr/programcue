@@ -404,34 +404,34 @@ const boundaries: readonly Boundary[] = [
       } as never),
   },
   {
-    name: "speaker workspace layout loader",
-    allowed: new Set<ActorName>(["speaker"]),
+    name: "participant workspace layout loader",
+    allowed: new Set<ActorName>(["speaker", "submitter"]),
     allowedStatus: 200,
     invoke: (actor) =>
       speakerLayoutLoader({
-        request: requestFor(actor, "/speaker/dashboard"),
+        request: requestFor(actor, "/participant/dashboard"),
         params: {},
         context: context(),
       } as never),
   },
   {
-    name: "speaker dashboard data loader",
-    allowed: new Set<ActorName>(["speaker"]),
+    name: "participant dashboard data loader",
+    allowed: new Set<ActorName>(["speaker", "submitter"]),
     allowedStatus: 200,
     invoke: (actor) =>
       speakerLoader({
-        request: requestFor(actor, "/speaker/dashboard"),
+        request: requestFor(actor, "/participant/dashboard"),
         params: {},
         context: context(),
       } as never),
   },
   {
-    name: "speaker workspace action",
-    allowed: new Set<ActorName>(["speaker"]),
+    name: "participant workspace action",
+    allowed: new Set<ActorName>(["speaker", "submitter"]),
     allowedStatus: 400,
     invoke: (actor) =>
       speakerAction({
-        request: requestFor(actor, "/speaker/tasks", {
+        request: requestFor(actor, "/participant/tasks", {
           method: "POST",
           body: new URLSearchParams({ intent: "unsupported" }),
         }),
@@ -600,12 +600,12 @@ const boundaries: readonly Boundary[] = [
       } as never),
   },
   {
-    name: "speaker-owned file loader",
-    allowed: new Set<ActorName>(["speaker"]),
+    name: "participant-owned file loader",
+    allowed: new Set<ActorName>(["speaker", "submitter"]),
     allowedStatus: 423,
     invoke: (actor) =>
       speakerFileLoader({
-        request: requestFor(actor, "/speaker/files/missing"),
+        request: requestFor(actor, "/participant/files/missing"),
         params: { assetId: "missing" },
         context: context(),
       } as never),

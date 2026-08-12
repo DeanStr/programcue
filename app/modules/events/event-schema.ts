@@ -119,6 +119,29 @@ export const eventSetupInputSchema = z
     brandAccent: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, "Choose a valid brand colour."),
+    participantLogoUrl: z
+      .union([
+        z.literal(""),
+        z.url("Enter a valid participant logo URL.").startsWith("https://", {
+          message: "Participant logo URLs must use HTTPS.",
+        }),
+      ])
+      .refine(
+        (value) => value.length <= 2_048,
+        "Participant logo URL is too long.",
+      ),
+    participantWelcomeText: z.string().trim().max(500),
+    participantSupportUrl: z
+      .union([
+        z.literal(""),
+        z.url("Enter a valid participant support URL.").startsWith("https://", {
+          message: "Participant support URLs must use HTTPS.",
+        }),
+      ])
+      .refine(
+        (value) => value.length <= 2_048,
+        "Participant support URL is too long.",
+      ),
     description: z.string().trim().max(2_000),
     repositoryProvider: z.enum(["d1", "airtable"]),
     retentionMonths: z.coerce

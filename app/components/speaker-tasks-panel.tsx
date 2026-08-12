@@ -97,6 +97,12 @@ export function SpeakerTasksPanel({
                     </span>
                   </div>
                   <h3>{task.title}</h3>
+                  {task.targetType === "session" && task.targetLabel ? (
+                    <p className="tiny">
+                      <span className="status info">Session deliverable</span>{" "}
+                      <strong>{task.targetLabel}</strong>
+                    </p>
+                  ) : null}
                   <p className="subtle">{task.description}</p>
                   <p className="tiny subtle">
                     <Clock3 aria-hidden size={13} />{" "}

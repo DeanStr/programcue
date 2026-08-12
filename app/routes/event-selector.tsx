@@ -28,8 +28,8 @@ const landingPage: Record<ViewerRole, string> = {
   administrator: "/admin/event",
   committee_chair: "/admin/review",
   evaluator: "/review/workbench",
-  speaker: "/speaker/dashboard",
-  submitter: "/",
+  speaker: "/participant/dashboard",
+  submitter: "/participant/dashboard",
 };
 
 function selectionReturnTo(value: unknown) {
@@ -47,8 +47,8 @@ function roleCanUseReturnTo(role: ViewerRole, returnTo: string) {
     );
   if (role === "evaluator")
     return pathname === "/review" || pathname.startsWith("/review/");
-  if (role === "speaker")
-    return pathname === "/speaker" || pathname.startsWith("/speaker/");
+  if (role === "speaker" || role === "submitter")
+    return pathname === "/participant" || pathname.startsWith("/participant/");
   return false;
 }
 
@@ -68,7 +68,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     if (!(error instanceof Response) || error.status !== 400) throw error;
   }
   const requestedEventId = url.searchParams.get("eventId");
-  if (requestedEventId && !events.some((event) => event.eventId === requestedEventId))
+  if (
+    requestedEventId &&
+    !events.some((event) => event.eventId === requestedEventId)
+  )
     throw new Response("You do not have access to the requested event.", {
       status: 403,
       statusText: "Forbidden",

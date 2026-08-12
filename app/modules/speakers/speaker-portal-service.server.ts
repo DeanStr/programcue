@@ -60,12 +60,12 @@ export class SpeakerPortalService {
     private readonly airtable: AirtableProviderBoundary,
   ) {}
 
-  private async assertSpeaker(viewer: Viewer) {
+  private async assertParticipant(viewer: Viewer) {
     const membership = await this.env.DB.prepare(
       `
       SELECT 1 AS allowed
         FROM memberships
-       WHERE event_id = ? AND person_id = ? AND role = 'speaker'
+       WHERE event_id = ? AND person_id = ? AND role IN ('speaker', 'submitter')
          AND accepted_at IS NOT NULL AND revoked_at IS NULL
        LIMIT 1
     `,
@@ -73,14 +73,14 @@ export class SpeakerPortalService {
       .bind(viewer.eventId, viewer.personId)
       .first();
     if (!membership)
-      throw new Response("A current speaker membership is required.", {
+      throw new Response("A current participant membership is required.", {
         status: 403,
       });
   }
 
   async getPortal(viewer: Viewer) {
     await this.airtable.assertReadable(viewer);
-    await this.assertSpeaker(viewer);
+    await this.assertParticipant(viewer);
     const [profile, event, sessions, files] = await Promise.all([
       this.env.DB.prepare(
         `
@@ -96,6 +96,9 @@ export class SpeakerPortalService {
         `
         SELECT name, timezone, starts_at AS startsAt, ends_at AS endsAt,
                venue_name AS venue, city, brand_accent AS brandAccent,
+               participant_logo_url AS participantLogoUrl,
+               participant_welcome_text AS participantWelcomeText,
+               participant_support_url AS participantSupportUrl,
                file_policy_json AS filePolicyJson
           FROM events WHERE id = ? AND organisation_id = ?
       `,
@@ -109,6 +112,9 @@ export class SpeakerPortalService {
           venue: string | null;
           city: string | null;
           brandAccent: string;
+          participantLogoUrl: string | null;
+          participantWelcomeText: string | null;
+          participantSupportUrl: string | null;
           filePolicyJson: string;
         }>(),
       this.env.DB.prepare(
@@ -201,7 +207,7 @@ export class SpeakerPortalService {
   }
 
   async updateProfile(viewer: Viewer, rawInput: unknown) {
-    await this.assertSpeaker(viewer);
+    await this.assertParticipant(viewer);
     const input = speakerProfileSchema.parse(rawInput);
     const operationId = crypto.randomUUID();
     const auditEventId = crypto.randomUUID();

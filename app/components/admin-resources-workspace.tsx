@@ -652,7 +652,7 @@ function ResourceAdminHeader() {
       <div className="page-actions">
         <Link
           className="btn"
-          to="/speaker/resources"
+          to="/participant/resources"
           target="_blank"
           rel="noopener noreferrer"
         >

@@ -164,6 +164,43 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
     await env.DB.batch([
       env.DB.prepare(
+        `WITH target_sessions AS (
+           SELECT session.id
+             FROM sessions session
+             JOIN session_speakers speaker
+               ON speaker.session_id = session.id
+              AND speaker.event_id = session.event_id
+             JOIN people person ON person.id = speaker.person_id
+            WHERE session.event_id = ?
+              AND session.source_submission_id IS NULL
+              AND session.title LIKE 'Sponsor briefing %'
+              AND person.email LIKE 'sponsor-%@example.com'
+         ), target_speakers AS (
+           SELECT DISTINCT speaker.person_id
+             FROM session_speakers speaker
+            WHERE speaker.event_id = ?
+              AND speaker.session_id IN (SELECT id FROM target_sessions)
+              AND NOT EXISTS (
+                SELECT 1 FROM session_speakers retained
+                 WHERE retained.event_id = speaker.event_id
+                   AND retained.person_id = speaker.person_id
+                   AND retained.session_id NOT IN (SELECT id FROM target_sessions)
+              )
+         )
+         DELETE FROM memberships
+          WHERE event_id = ? AND role = 'speaker'
+            AND person_id IN (SELECT person_id FROM target_speakers)
+            AND EXISTS (
+              SELECT 1 FROM idempotency_records command
+               WHERE command.id = memberships.last_operation_id
+                 AND command.event_id = memberships.event_id
+                 AND command.scope = 'submission.admin.direct_session.create'
+                 AND command.status = 'completed'
+                 AND command.entity_type = 'session'
+                 AND command.entity_id IN (SELECT id FROM target_sessions)
+            )`,
+      ).bind(env.DEFAULT_EVENT_ID, env.DEFAULT_EVENT_ID, env.DEFAULT_EVENT_ID),
+      env.DB.prepare(
         `
         WITH
           target_submissions AS (

@@ -16,6 +16,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     event: {
       name: portal.event.name,
       brandAccent: portal.event.brandAccent,
+      participantLogoUrl: portal.event.participantLogoUrl,
+      participantSupportUrl: portal.event.participantSupportUrl,
       ...formatSpeakerEvent(portal.event),
     },
     viewer: {

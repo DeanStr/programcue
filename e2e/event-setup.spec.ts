@@ -16,6 +16,12 @@ test.beforeEach(async ({ context }) => {
 });
 
 test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
+  await page.route("https://branding.example.test/event.svg", (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#4f46e5"/></svg>',
+    }),
+  );
   await page.goto("/admin/event");
   await expect(
     page.getByRole("heading", { name: "Event Setup" }),
@@ -23,16 +29,71 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
 
   const venue = page.getByLabel("Venue");
   const original = await venue.inputValue();
+  const logo = page.getByLabel("Participant logo URL");
+  const welcome = page.getByLabel("Participant welcome message");
+  const support = page.getByLabel("Participant support URL");
+  const originalLogo = await logo.inputValue();
+  const originalWelcome = await welcome.inputValue();
+  const originalSupport = await support.inputValue();
   try {
     await venue.fill("Beanfield Centre — persistence check");
+    await logo.fill("https://branding.example.test/event.svg");
+    await welcome.fill(
+      "Welcome to the browser-verified participant workspace.",
+    );
+    await support.fill("https://support.example.test/participants");
     await page.getByRole("button", { name: "Save event" }).click();
     await expect(
       page.getByText("Event settings saved to D1.", { exact: true }),
     ).toBeVisible();
     await page.reload();
     await expect(venue).toHaveValue("Beanfield Centre — persistence check");
+    await expect(logo).toHaveValue("https://branding.example.test/event.svg");
+    await expect(welcome).toHaveValue(
+      "Welcome to the browser-verified participant workspace.",
+    );
+
+    await page.goto("/apply/form");
+    await expect(
+      page.getByText("Welcome to the browser-verified participant workspace."),
+    ).toBeVisible();
+
+    await page.context().addCookies([
+      {
+        name: "program_cue_demo_identity",
+        value: "speaker",
+        domain: "127.0.0.1",
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    await page.goto("/participant/dashboard");
+    await expect(
+      page.getByText("Welcome to the browser-verified participant workspace."),
+    ).toBeVisible();
+    await expect(
+      page.getByAltText("Future of Events 2025 logo"),
+    ).toHaveAttribute("src", "https://branding.example.test/event.svg");
+    await expect(
+      page.getByRole("link", { name: "Participant support" }),
+    ).toHaveAttribute("href", "https://support.example.test/participants");
   } finally {
+    await page.context().addCookies([
+      {
+        name: "program_cue_demo_identity",
+        value: "administrator",
+        domain: "127.0.0.1",
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    await page.goto("/admin/event");
     await page.getByLabel("Venue").fill(original);
+    await page.getByLabel("Participant logo URL").fill(originalLogo);
+    await page.getByLabel("Participant welcome message").fill(originalWelcome);
+    await page.getByLabel("Participant support URL").fill(originalSupport);
     await page.getByRole("button", { name: "Save event" }).click();
     await expect(
       page.getByText("Event settings saved to D1.", { exact: true }),
@@ -71,9 +132,7 @@ test("tracks added by keyboard and button survive reload and reach the schedule 
     ).toBeVisible();
 
     await newTrack.fill(buttonTrack);
-    await page
-      .getByRole("button", { name: "Add track", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Add track", exact: true }).click();
     await expect(
       page.getByLabel(`${buttonTrack} track settings`),
     ).toBeVisible();

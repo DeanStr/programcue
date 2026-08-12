@@ -55,6 +55,13 @@ export type CommandCentreSnapshot = {
     declaredBlockers: number;
     explanation: string;
   };
+  setupGuide: Array<{
+    key: string;
+    label: string;
+    description: string;
+    href: string;
+    complete: boolean;
+  }>;
   workflows: ReadinessWorkflow[];
   blockers: ReadinessBlocker[];
   deliveryHealth: Array<{
@@ -269,11 +276,56 @@ export class ReadinessService {
     await this.airtable.assertReadable(viewer);
     const event = await this.env.DB.prepare(
       `
-      SELECT id, timezone FROM events WHERE id = ? AND organisation_id = ?
+      SELECT id, timezone,
+             length(trim(COALESCE(description, ''))) > 0 AS detailsComplete,
+             EXISTS (
+               SELECT 1 FROM form_definitions form
+               JOIN form_versions version
+                 ON version.form_id = form.id
+                AND version.event_id = form.event_id
+                AND version.status = 'published'
+              WHERE form.event_id = events.id AND form.status = 'published'
+             ) AS formComplete,
+             EXISTS (
+               SELECT 1 FROM evaluation_plans plan
+               JOIN evaluation_rounds round
+                 ON round.plan_id = plan.id AND round.event_id = plan.event_id
+               JOIN evaluation_criteria criterion
+                 ON criterion.round_id = round.id
+                AND criterion.event_id = round.event_id
+              WHERE plan.event_id = events.id
+                AND plan.status IN ('draft', 'active')
+                AND round.status IN ('draft', 'active')
+             ) AS reviewComplete,
+             EXISTS (
+               SELECT 1 FROM task_templates template
+                WHERE template.event_id = events.id
+                  AND template.status = 'active'
+             ) AS tasksComplete,
+             EXISTS (
+               SELECT 1 FROM sender_profiles sender
+                WHERE sender.event_id = events.id
+                  AND sender.status = 'verified'
+             ) AS communicationsComplete,
+             EXISTS (
+               SELECT 1 FROM schedule_versions version
+                WHERE version.event_id = events.id
+                  AND version.status = 'published'
+             ) AS publicationComplete
+        FROM events WHERE id = ? AND organisation_id = ?
     `,
     )
       .bind(viewer.eventId, viewer.organisationId)
-      .first<{ id: string; timezone: string }>();
+      .first<{
+        id: string;
+        timezone: string;
+        detailsComplete: number;
+        formComplete: number;
+        reviewComplete: number;
+        tasksComplete: number;
+        communicationsComplete: number;
+        publicationComplete: number;
+      }>();
     if (!event) throw new Response("Event not found", { status: 404 });
 
     const now = Math.floor(Date.now() / 1000);
@@ -511,6 +563,56 @@ export class ReadinessService {
       0,
     );
     const percentage = calculateOverallReadiness(workflows, declaredBlockers);
+    const setupGuide = [
+      {
+        key: "event-details",
+        label: "Describe the event",
+        description:
+          "Add the public event description and confirm identity, dates and location.",
+        href: "/admin/event",
+        complete: Boolean(event.detailsComplete),
+      },
+      {
+        key: "application-form",
+        label: "Publish an application form",
+        description:
+          "Configure participant intake and publish its first version.",
+        href: "/admin/submissions/form",
+        complete: Boolean(event.formComplete),
+      },
+      {
+        key: "review-plan",
+        label: "Configure review",
+        description:
+          "Create a review plan with a round and at least one criterion.",
+        href: "/admin/review",
+        complete: Boolean(event.reviewComplete),
+      },
+      {
+        key: "participant-tasks",
+        label: "Prepare participant tasks",
+        description:
+          "Create the requirements participants will complete after acceptance.",
+        href: "/admin/tasks",
+        complete: Boolean(event.tasksComplete),
+      },
+      {
+        key: "communications",
+        label: "Verify communications",
+        description:
+          "Verify the sender identity used for participant messages.",
+        href: "/admin/communications",
+        complete: Boolean(event.communicationsComplete),
+      },
+      {
+        key: "publication",
+        label: "Publish the programme",
+        description:
+          "Publish a conflict-free schedule when the programme is ready.",
+        href: "/admin/schedule",
+        complete: Boolean(event.publicationComplete),
+      },
+    ];
     return {
       eventId: viewer.eventId,
       eventTimezone: event.timezone,
@@ -528,6 +630,7 @@ export class ReadinessService {
         explanation:
           "Equal-weighted average across six workflows. Any declared blocker prevents a 100% ready result.",
       },
+      setupGuide,
       workflows,
       blockers,
       deliveryHealth: deliveryChannels.results.map((row) => ({

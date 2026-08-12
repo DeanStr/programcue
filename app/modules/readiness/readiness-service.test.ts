@@ -21,6 +21,42 @@ beforeEach(async () => {
 });
 
 describe("D1-backed command centre", () => {
+  it("derives getting-started completion from authoritative event records", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await testEnv.DB.prepare(
+      "UPDATE events SET description = NULL WHERE id = ?",
+    )
+      .bind(viewer.eventId)
+      .run();
+
+    const incomplete = await new ReadinessService(testEnv).getCommandCentre(
+      viewer,
+    );
+    expect(incomplete.setupGuide.map((step) => step.key)).toEqual([
+      "event-details",
+      "application-form",
+      "review-plan",
+      "participant-tasks",
+      "communications",
+      "publication",
+    ]);
+    expect(
+      incomplete.setupGuide.find((step) => step.key === "event-details"),
+    ).toMatchObject({ complete: false, href: "/admin/event" });
+
+    await testEnv.DB.prepare(
+      "UPDATE events SET description = 'A configured event.' WHERE id = ?",
+    )
+      .bind(viewer.eventId)
+      .run();
+    const completed = await new ReadinessService(testEnv).getCommandCentre(
+      viewer,
+    );
+    expect(
+      completed.setupGuide.find((step) => step.key === "event-details"),
+    ).toMatchObject({ complete: true });
+  });
+
   it("fails closed before calculating readiness from an unreadable Airtable projection", async () => {
     const unavailable = new Error("Airtable projection is unavailable.");
     const assertReadable = vi.fn(async () => {

@@ -21,24 +21,24 @@ test("speaker profile, sessions and D1 task state render through the production 
       sameSite: "Lax",
     },
   ]);
-  await page.goto("/speaker/dashboard");
+  await page.goto("/participant/dashboard");
   await expect(
     page.getByRole("heading", { name: /Welcome back, Priya/ }),
   ).toBeVisible();
   await expect(
     page.getByRole("progressbar", { name: /complete/ }),
   ).toHaveAttribute("aria-valuenow");
-  await expect(page.getByRole("link", { name: "Dashboard" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Overview" })).toHaveAttribute(
     "aria-current",
     "page",
   );
   await page.getByRole("link", { name: "My sessions", exact: true }).click();
-  await expect(page).toHaveURL(/\/speaker\/sessions$/u);
+  await expect(page).toHaveURL(/\/participant\/sessions$/u);
   await expect(
     page.getByRole("heading", { name: "Designing inclusive event technology" }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Tasks" }).click();
-  await expect(page).toHaveURL(/\/speaker\/tasks$/u);
+  await expect(page).toHaveURL(/\/participant\/tasks$/u);
   await expect(
     page.getByRole("heading", { name: "Upload presentation slides" }).first(),
   ).toBeVisible();
@@ -47,7 +47,7 @@ test("speaker profile, sessions and D1 task state render through the production 
     "page",
   );
   await expect(
-    page.getByRole("link", { name: "Dashboard" }),
+    page.getByRole("link", { name: "Overview" }),
   ).not.toHaveAttribute("aria-current");
   await page.getByRole("link", { name: "Files" }).click();
   await expect(page.getByRole("link", { name: /^Download / })).toHaveCount(0);
@@ -58,6 +58,38 @@ test("speaker profile, sessions and D1 task state render through the production 
   await expect(page.getByLabel("Job title")).toHaveValue(/Director/);
 });
 
+test("a submitter enters the same participant workspace and can open applications", async ({
+  page,
+}) => {
+  await page.context().addCookies([
+    {
+      name: "program_cue_demo_identity",
+      value: "submitter",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/participant/dashboard");
+  await expect(
+    page.getByRole("navigation", { name: "Participant workspace" }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Applications" }).first().click();
+  await expect(page).toHaveURL(/\/participant\/applications$/u);
+  await expect(
+    page.getByRole("heading", { name: "Applications", level: 1 }),
+  ).toBeVisible();
+});
+
 test("an administrator demo identity cannot use a speaker-owned portal", async ({
   page,
 }) => {
@@ -65,7 +97,7 @@ test("an administrator demo identity cannot use a speaker-owned portal", async (
   await page.evaluate(
     () => (document.cookie = "program_cue_demo_identity=administrator; Path=/"),
   );
-  const response = await page.goto("/speaker/dashboard");
+  const response = await page.goto("/participant/dashboard");
   expect(response?.status()).toBe(403);
   await expect(page.getByText(/do not have permission/i)).toBeVisible();
 });

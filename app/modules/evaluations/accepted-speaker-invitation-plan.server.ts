@@ -109,7 +109,7 @@ export function authenticationBaseUrl(env: CloudflareEnvironment) {
 export function magicLink(baseUrl: URL, token: string, eventId: string) {
   const callback = new URL("/events/select", baseUrl);
   callback.searchParams.set("eventId", eventId);
-  callback.searchParams.set("returnTo", "/speaker/dashboard");
+  callback.searchParams.set("returnTo", "/participant/dashboard");
   const url = new URL("/api/auth/magic-link/verify", baseUrl);
   url.searchParams.set("token", token);
   url.searchParams.set("callbackURL", `${callback.pathname}${callback.search}`);

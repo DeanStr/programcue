@@ -482,10 +482,29 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
             to={`/apply/${form.publicSlug}`}
             style={{ color: "var(--ink)", padding: 0 }}
           >
-            <span className="brand-mark">P</span>
+            {form.participantLogoUrl ? (
+              <img
+                className="participant-logo"
+                src={form.participantLogoUrl}
+                alt={`${form.eventName} logo`}
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="brand-mark">P</span>
+            )}
             <span>Program Cue</span>
           </Link>
           <span className="subtle">{form.eventName}</span>
+          {form.participantSupportUrl ? (
+            <a
+              className="tiny"
+              href={form.participantSupportUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Participant support
+            </a>
+          ) : null}
           {programmeUrl ? (
             <Link className="btn right" to={programmeUrl}>
               Programme
@@ -517,10 +536,29 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
           to={`/apply/${form.publicSlug}`}
           style={{ color: "var(--ink)", padding: 0 }}
         >
-          <span className="brand-mark">P</span>
+          {form.participantLogoUrl ? (
+            <img
+              className="participant-logo"
+              src={form.participantLogoUrl}
+              alt={`${form.eventName} logo`}
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <span className="brand-mark">P</span>
+          )}
           <span>Program Cue</span>
         </Link>
         <span className="subtle">{form.eventName}</span>
+        {form.participantSupportUrl ? (
+          <a
+            className="tiny"
+            href={form.participantSupportUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Participant support
+          </a>
+        ) : null}
         {applicant ? (
           <Form method="post" style={{ marginLeft: "auto" }}>
             <input type="hidden" name="_intent" value="sign_out" />
@@ -540,6 +578,12 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
           padding: "0 16px",
         }}
       >
+        {form.participantWelcomeText ? (
+          <section className="card pad mb participant-welcome">
+            <span className="pc-page-eyebrow">From the event team</span>
+            <p>{form.participantWelcomeText}</p>
+          </section>
+        ) : null}
         {claimRequested ? (
           <ClaimPanel claim={claim} actionData={actionData} />
         ) : applicant ? (

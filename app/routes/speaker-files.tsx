@@ -13,14 +13,14 @@ import {
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
-export const meta = () => [{ title: "Speaker Files · Program Cue" }];
+export const meta = () => [{ title: "Participant Files · Program Cue" }];
 
 export async function action({ request, context }: Route.ActionArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
   const form = await request.formData();
   if (form.get("intent") !== "delete-file") {
     return data(
-      { ok: false, message: "Unsupported speaker file action." },
+      { ok: false, message: "Unsupported participant file action." },
       { status: 400 },
     );
   }
@@ -80,7 +80,7 @@ export default function SpeakerFiles(_props: Route.ComponentProps) {
     <>
       <div className="page-head">
         <div>
-          <span className="pc-page-eyebrow">Private file workspace</span>
+          <span className="pc-page-eyebrow">Private participant workspace</span>
           <h1>Files</h1>
           <p>
             Upload, inspect and manage the files shared with the event team.

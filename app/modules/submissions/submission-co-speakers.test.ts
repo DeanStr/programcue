@@ -643,6 +643,21 @@ describe("Submissions D1 vertical slice", () => {
         durationMinutes: 45,
         speakerCount: 2,
       });
+      await expect(
+        env.DB.prepare(
+          `SELECT COUNT(*) AS count
+             FROM memberships membership
+             JOIN session_speakers relationship
+               ON relationship.person_id = membership.person_id
+              AND relationship.event_id = membership.event_id
+            WHERE relationship.session_id = ?
+              AND membership.role = 'speaker'
+              AND membership.accepted_at IS NOT NULL
+              AND membership.revoked_at IS NULL`,
+        )
+          .bind(result.directSessionId)
+          .first(),
+      ).resolves.toEqual({ count: 2 });
 
       const invitation = await env.DB.prepare(
         `SELECT speaker.id, speaker.claim_token_hash AS tokenHash,

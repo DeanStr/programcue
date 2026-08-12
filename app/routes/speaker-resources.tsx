@@ -16,7 +16,7 @@ import {
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
-export const meta = () => [{ title: "Speaker Resources · Program Cue" }];
+export const meta = () => [{ title: "Participant Resources · Program Cue" }];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
@@ -90,12 +90,13 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <span className="pc-page-eyebrow">Knowledge library</span>
-          <h1>Speaker resources</h1>
+          <h1>Participant resources</h1>
           <p>
-            Published guidance selected for your speaker identity and sessions.
+            Published guidance selected for your participant identity and
+            sessions.
           </p>
         </div>
-        <Link className="btn" to="/speaker/dashboard">
+        <Link className="btn" to="/participant/dashboard">
           Back to dashboard
         </Link>
       </div>
@@ -119,7 +120,7 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
           </div>
           {workspace.pages.map((page) => (
             <Link
-              to={`/speaker/resources?resource=${page.slug}`}
+              to={`/participant/resources?resource=${page.slug}`}
               className={`resource-link${selected?.id === page.id ? " active" : ""}`}
               key={page.id}
             >
@@ -174,7 +175,7 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
                 {selected.attachments.map((attachment) => (
                   <a
                     className="file-version-row"
-                    href={`/speaker/resources/files/${attachment.id}`}
+                    href={`/participant/resources/files/${attachment.id}`}
                     key={attachment.id}
                   >
                     <span className="file-kind-icon">

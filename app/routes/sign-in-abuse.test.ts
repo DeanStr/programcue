@@ -219,7 +219,7 @@ describe("sign-in abuse boundary", () => {
         body: new URLSearchParams({
           _intent: "social_sign_in",
           provider: "google",
-          returnTo: "/speaker/dashboard",
+          returnTo: "/participant/dashboard",
         }),
       }),
       params: {},

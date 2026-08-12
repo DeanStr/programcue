@@ -350,7 +350,7 @@ describe("production authentication routes", () => {
           {
             _intent: "social_sign_in",
             provider,
-            returnTo: "/speaker/dashboard?tab=calendar",
+            returnTo: "/participant/dashboard?tab=calendar",
             "turnstile-token": "social-turnstile-token",
           },
           { "cf-connecting-ip": "203.0.113.13" },
@@ -853,7 +853,10 @@ describe("production authentication routes", () => {
     vi.stubGlobal("fetch", delivery);
 
     await createAuth(testEnv).api.signInMagicLink({
-      body: { email: "sbek-organizer@example.com", callbackURL: "/admin/event" },
+      body: {
+        email: "sbek-organizer@example.com",
+        callbackURL: "/admin/event",
+      },
       headers: new Headers({ origin: "http://localhost" }),
     });
 
@@ -890,8 +893,8 @@ describe("production authentication routes", () => {
   });
 
   it("accepts only safe same-origin return paths", () => {
-    expect(safeReturnTo("/speaker/dashboard?tab=files")).toBe(
-      "/speaker/dashboard?tab=files",
+    expect(safeReturnTo("/participant/dashboard?tab=files")).toBe(
+      "/participant/dashboard?tab=files",
     );
     expect(safeReturnTo("https://attacker.example/path")).toBe("/");
     expect(safeReturnTo("//attacker.example/path")).toBe("/");
@@ -925,7 +928,7 @@ describe("production authentication routes", () => {
         {
           _intent: "email_magic_link",
           email: "sbek-organizer@example.com",
-          returnTo: "/speaker/dashboard?tab=files",
+          returnTo: "/participant/dashboard?tab=files",
           "turnstile-token": "turnstile-token",
         },
         { "cf-connecting-ip": "203.0.113.10" },
@@ -939,7 +942,7 @@ describe("production authentication routes", () => {
         {
           _intent: "email_magic_link",
           email: `unknown-${crypto.randomUUID()}@example.com`,
-          returnTo: "/speaker/dashboard?tab=files",
+          returnTo: "/participant/dashboard?tab=files",
           "turnstile-token": "turnstile-token",
         },
         { "cf-connecting-ip": "203.0.113.11" },
@@ -967,7 +970,7 @@ describe("production authentication routes", () => {
       const delivered = JSON.parse(String(init.body)) as { text: string };
       const link = delivered.text.match(/https?:\/\/\S+/)?.[0];
       expect(new URL(link!).searchParams.get("callbackURL")).toBe(
-        "/speaker/dashboard?tab=files",
+        "/participant/dashboard?tab=files",
       );
     }
   });
@@ -1045,8 +1048,8 @@ describe("production authentication routes", () => {
     for (const [personId, expected] of [
       ["person-demo-admin", "/admin/event"],
       ["person-demo-evaluator", "/review/workbench"],
-      ["person-demo-speaker", "/speaker/dashboard"],
-      ["person-demo-submitter", "/apply/form"],
+      ["person-demo-speaker", "/participant/dashboard"],
+      ["person-demo-submitter", "/participant/dashboard"],
     ] as const) {
       const { cookie } = await sessionCookie(personId);
       const eventCookie = currentEventCookie("evt-foe-2025", testEnv).split(
@@ -1192,9 +1195,7 @@ describe("production authentication routes", () => {
     expect(response.headers.get("set-cookie")).toContain(
       "program_cue_demo_identity=;",
     );
-    expect(response.headers.get("set-cookie")).toContain(
-      "program_cue_event=;",
-    );
+    expect(response.headers.get("set-cookie")).toContain("program_cue_event=;");
   });
 
   it("rejects cross-origin and non-POST sign-out attempts without deleting the session", async () => {

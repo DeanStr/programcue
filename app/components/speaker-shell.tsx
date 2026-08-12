@@ -1,6 +1,7 @@
 import {
   BookOpen,
   CheckSquare,
+  ClipboardList,
   FileStack,
   Home,
   Mic2,
@@ -19,6 +20,8 @@ export function SpeakerShell({
     dateLabel: string;
     locationLabel: string;
     brandAccent: string;
+    participantLogoUrl: string | null;
+    participantSupportUrl: string | null;
   };
   viewer: { name: string; email: string; demo: boolean };
 }) {
@@ -41,10 +44,19 @@ export function SpeakerShell({
       <header className="speaker-top">
         <NavLink
           className="brand"
-          to="/speaker/dashboard"
+          to="/participant/dashboard"
           style={{ color: "var(--ink)", padding: 0 }}
         >
-          <span className="brand-mark">P</span>
+          {event.participantLogoUrl ? (
+            <img
+              className="participant-logo"
+              src={event.participantLogoUrl}
+              alt={`${event.name} logo`}
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <span className="brand-mark">P</span>
+          )}
           <span>Program Cue</span>
         </NavLink>
         <div>
@@ -55,6 +67,16 @@ export function SpeakerShell({
           <Link className="tiny" to={eventSelectionHref}>
             Switch event
           </Link>
+          {event.participantSupportUrl ? (
+            <a
+              className="tiny participant-support-link"
+              href={event.participantSupportUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Participant support
+            </a>
+          ) : null}
         </div>
         <div className="right">
           <span className="avatar">{initials}</span>
@@ -72,23 +94,26 @@ export function SpeakerShell({
         </div>
       </header>
       <div className="speaker-layout">
-        <nav className="speaker-nav" aria-label="Speaker portal">
-          <NavLink to="/speaker/dashboard">
-            <Home aria-hidden size={17} /> <span>Dashboard</span>
+        <nav className="speaker-nav" aria-label="Participant workspace">
+          <NavLink to="/participant/dashboard">
+            <Home aria-hidden size={17} /> <span>Overview</span>
           </NavLink>
-          <NavLink to="/speaker/sessions">
+          <NavLink to="/participant/applications">
+            <ClipboardList aria-hidden size={17} /> <span>Applications</span>
+          </NavLink>
+          <NavLink to="/participant/sessions">
             <Mic2 aria-hidden size={17} /> <span>My sessions</span>
           </NavLink>
-          <NavLink to="/speaker/tasks">
+          <NavLink to="/participant/tasks">
             <CheckSquare aria-hidden size={17} /> <span>Tasks</span>
           </NavLink>
-          <NavLink to="/speaker/files">
+          <NavLink to="/participant/files">
             <FileStack aria-hidden size={17} /> <span>Files</span>
           </NavLink>
-          <NavLink to="/speaker/resources">
+          <NavLink to="/participant/resources">
             <BookOpen aria-hidden size={17} /> <span>Resources</span>
           </NavLink>
-          <NavLink to="/speaker/profile">
+          <NavLink to="/participant/profile">
             <UserRound aria-hidden size={17} /> <span>Profile</span>
           </NavLink>
         </nav>

@@ -92,6 +92,9 @@ function AutoRefresh({ eventId, cursor }: { eventId: string; cursor: number }) {
 
 export default function CommandCentre({ loaderData }: Route.ComponentProps) {
   const featured = loaderData.blockers.slice(0, 4);
+  const completedSetupSteps = loaderData.setupGuide.filter(
+    (step) => step.complete,
+  ).length;
   const hasOverdueTasks = loaderData.blockers.some(
     (blocker) => blocker.key === "overdue_tasks",
   );
@@ -127,6 +130,46 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
           </>
         }
       />
+
+      {completedSetupSteps < loaderData.setupGuide.length ? (
+        <section className="card pad command-setup-guide">
+          <div className="card-title">
+            <div>
+              <span className="pc-section-kicker">Getting started</span>
+              <h2>Set up this event</h2>
+              <p className="subtle">
+                These steps reflect the event's current records; there is no
+                separate checklist to maintain.
+              </p>
+            </div>
+            <StatusBadge tone="info">
+              {completedSetupSteps} of {loaderData.setupGuide.length} complete
+            </StatusBadge>
+          </div>
+          <div className="command-setup-steps">
+            {loaderData.setupGuide.map((step) => (
+              <Link className="suggestion" to={step.href} key={step.key}>
+                {step.complete ? (
+                  <CheckCircle2
+                    aria-label="Complete"
+                    className="tone-success"
+                    size={18}
+                  />
+                ) : (
+                  <Clock3 aria-label="Not complete" size={18} />
+                )}
+                <span>
+                  <strong>{step.label}</strong>
+                  <small className="subtle">{step.description}</small>
+                </span>
+                <span className="chev" aria-hidden>
+                  ›
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="command-grid">
         <section className="card readiness-card">

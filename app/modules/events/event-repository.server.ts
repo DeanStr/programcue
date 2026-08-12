@@ -34,6 +34,9 @@ export type EventSetup = {
   city: string;
   publicSlug: string;
   brandAccent: string;
+  participantLogoUrl: string;
+  participantWelcomeText: string;
+  participantSupportUrl: string;
   description: string;
   repositoryProvider: "d1" | "airtable";
   repositoryLockedAt: number | null;
@@ -350,6 +353,9 @@ export class D1EventRepository implements EventRepository {
       city: event.city ?? "",
       publicSlug: event.slug,
       brandAccent: event.brandAccent,
+      participantLogoUrl: event.participantLogoUrl ?? "",
+      participantWelcomeText: event.participantWelcomeText ?? "",
+      participantSupportUrl: event.participantSupportUrl ?? "",
       description: event.description ?? "",
       repositoryProvider:
         event.repositoryProvider as EventSetup["repositoryProvider"],
@@ -622,7 +628,9 @@ export class D1EventRepository implements EventRepository {
         `
         UPDATE events
            SET name = ?, slug = ?, timezone = ?, starts_at = ?, ends_at = ?, venue_name = ?, city = ?,
-               description = ?, brand_accent = ?, session_formats_json = ?,
+               description = ?, brand_accent = ?, participant_logo_url = ?,
+               participant_welcome_text = ?, participant_support_url = ?,
+               session_formats_json = ?,
                repository_provider = ?, retention_months = ?,
                submission_access_mode = ?, allow_anonymous_drafts = ?, duplicate_person_warnings = ?,
                file_policy_json = ?,
@@ -714,6 +722,9 @@ export class D1EventRepository implements EventRepository {
         input.city || null,
         input.description || null,
         input.brandAccent.toLowerCase(),
+        input.participantLogoUrl || null,
+        input.participantWelcomeText || null,
+        input.participantSupportUrl || null,
         sessionFormatsJson,
         input.repositoryProvider,
         input.retentionMonths,

@@ -14,6 +14,7 @@ type LandingForm = {
   eventVenue: string | null;
   eventCity: string | null;
   eventDescription: string | null;
+  participantWelcomeText: string | null;
   closesAt: number | null;
   minSpeakers: number;
   maxSpeakers: number | null;
@@ -163,6 +164,13 @@ export function PublicApplicationLanding({
       </section>
 
       <main id="main" className="cfp-main">
+        {form.participantWelcomeText ? (
+          <section className="card pad participant-welcome cfp-wide-notice">
+            <span className="pc-page-eyebrow">From the event team</span>
+            <p>{form.participantWelcomeText}</p>
+          </section>
+        ) : null}
+
         {!accepting && availabilityReason ? (
           <div className="validation-item warn card pad cfp-wide-notice">
             <strong>Notice</strong>

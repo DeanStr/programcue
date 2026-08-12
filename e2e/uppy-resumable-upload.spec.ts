@@ -168,7 +168,7 @@ test("Uppy resumes an interrupted direct upload from R2's server-authoritative p
       sameSite: "Lax",
     },
   ]);
-  await page.goto("/speaker/files");
+  await page.goto("/participant/files");
   await page.locator("body[data-hydrated='true']").waitFor();
   const profileUploader = () =>
     page.locator("form.speaker-upload-form").filter({
@@ -339,7 +339,7 @@ test("a failed direct transfer remains resumable and cancellable in place", asyn
       sameSite: "Lax",
     },
   ]);
-  await page.goto("/speaker/files");
+  await page.goto("/participant/files");
   await page.locator("body[data-hydrated='true']").waitFor();
   const uploader = page.locator("form.speaker-upload-form").filter({
     has: page.locator('option[value="video"]'),

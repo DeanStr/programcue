@@ -25,6 +25,9 @@ export type FormSummary = {
   eventCity: string | null;
   eventDescription: string | null;
   brandAccent: string;
+  participantLogoUrl: string | null;
+  participantWelcomeText: string | null;
+  participantSupportUrl: string | null;
   filePolicy: EventFilePolicy;
   name: string;
   kind: "submission" | "direct_session";
@@ -196,6 +199,9 @@ export type FormRow = {
   eventCity: string | null;
   eventDescription: string | null;
   brandAccent: string;
+  participantLogoUrl: string | null;
+  participantWelcomeText: string | null;
+  participantSupportUrl: string | null;
   filePolicyJson: string;
   name: string;
   kind: FormSummary["kind"];
@@ -236,6 +242,9 @@ export function mapForm(row: FormRow): FormSummary {
     eventCity: row.eventCity,
     eventDescription: row.eventDescription,
     brandAccent: row.brandAccent,
+    participantLogoUrl: row.participantLogoUrl,
+    participantWelcomeText: row.participantWelcomeText,
+    participantSupportUrl: row.participantSupportUrl,
     filePolicy: parseEventFilePolicy(row.filePolicyJson),
     name: row.name,
     kind: row.kind,

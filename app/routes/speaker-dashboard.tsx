@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  ClipboardList,
   CheckSquare,
   FileStack,
   Mic2,
@@ -12,13 +13,17 @@ import { SpeakerDashboardOverview } from "~/components/speaker-dashboard-overvie
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { TaskService } from "~/modules/tasks/task-service.server";
+import { ParticipantApplicationSummaryService } from "~/modules/submissions/participant-application-summary.server";
 
-export const meta = () => [{ title: "Speaker Dashboard · Program Cue" }];
+export const meta = () => [{ title: "Participant Overview · Program Cue" }];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
-  const tasks = await new TaskService(env).listParticipantTasks(viewer);
-  return { tasks };
+  const [tasks, applications] = await Promise.all([
+    new TaskService(env).listParticipantTasks(viewer),
+    new ParticipantApplicationSummaryService(env).list(viewer),
+  ]);
+  return { tasks, applications };
 }
 
 export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
@@ -37,6 +42,12 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
 
   return (
     <>
+      {portal.event.participantWelcomeText ? (
+        <section className="card pad participant-welcome" aria-label="Welcome">
+          <span className="pc-page-eyebrow">From the event team</span>
+          <p>{portal.event.participantWelcomeText}</p>
+        </section>
+      ) : null}
       <SpeakerDashboardOverview
         portal={portal}
         next={next}
@@ -55,7 +66,18 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
         <div className="grid grid-2">
           <Link
             className="card pad speaker-session-card"
-            to="/speaker/sessions"
+            to="/participant/applications"
+          >
+            <ClipboardList aria-hidden className="subtle" />
+            <h3>Applications</h3>
+            <p className="subtle">
+              {loaderData.applications.length} application
+              {loaderData.applications.length === 1 ? "" : "s"}
+            </p>
+          </Link>
+          <Link
+            className="card pad speaker-session-card"
+            to="/participant/sessions"
           >
             <Mic2 aria-hidden className="subtle" />
             <h3>My sessions</h3>
@@ -64,14 +86,20 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
               {portal.sessions.length === 1 ? "" : "s"}
             </p>
           </Link>
-          <Link className="card pad speaker-session-card" to="/speaker/tasks">
+          <Link
+            className="card pad speaker-session-card"
+            to="/participant/tasks"
+          >
             <CheckSquare aria-hidden className="subtle" />
             <h3>Tasks</h3>
             <p className="subtle">
               {tasks.length - finished} outstanding · {finished} complete
             </p>
           </Link>
-          <Link className="card pad speaker-session-card" to="/speaker/files">
+          <Link
+            className="card pad speaker-session-card"
+            to="/participant/files"
+          >
             <FileStack aria-hidden className="subtle" />
             <h3>Files</h3>
             <p className="subtle">
@@ -79,7 +107,10 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
               {portal.files.length === 1 ? "" : "s"}
             </p>
           </Link>
-          <Link className="card pad speaker-session-card" to="/speaker/profile">
+          <Link
+            className="card pad speaker-session-card"
+            to="/participant/profile"
+          >
             <UserRound aria-hidden className="subtle" />
             <h3>Profile</h3>
             <p className="subtle">

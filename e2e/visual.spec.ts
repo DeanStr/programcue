@@ -57,16 +57,16 @@ const SURFACES: readonly Surface[] = [
   { name: "public-application", path: "/apply/form" },
   {
     name: "speaker-dashboard",
-    path: "/speaker/dashboard",
+    path: "/participant/dashboard",
     role: "speaker",
   },
-  { name: "speaker-sessions", path: "/speaker/sessions", role: "speaker" },
-  { name: "speaker-tasks", path: "/speaker/tasks", role: "speaker" },
-  { name: "speaker-files", path: "/speaker/files", role: "speaker" },
-  { name: "speaker-profile", path: "/speaker/profile", role: "speaker" },
+  { name: "speaker-sessions", path: "/participant/sessions", role: "speaker" },
+  { name: "speaker-tasks", path: "/participant/tasks", role: "speaker" },
+  { name: "speaker-files", path: "/participant/files", role: "speaker" },
+  { name: "speaker-profile", path: "/participant/profile", role: "speaker" },
   {
     name: "speaker-resources",
-    path: "/speaker/resources",
+    path: "/participant/resources",
     role: "speaker",
   },
 ];

@@ -59,7 +59,10 @@ export function SpeakerDashboardOverview({
               : "There are no outstanding requirements right now."}
           </p>
           {next ? (
-            <Link className="btn primary" to={`/speaker/tasks#task-${next.id}`}>
+            <Link
+              className="btn primary"
+              to={`/participant/tasks#task-${next.id}`}
+            >
               Open task
             </Link>
           ) : null}

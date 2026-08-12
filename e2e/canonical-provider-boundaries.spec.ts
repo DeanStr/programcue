@@ -183,7 +183,7 @@ test.describe.serial("canonical provider boundaries", () => {
     });
 
     await switchDemoRole(page, "speaker");
-    await waitForInterface(page, "/speaker/tasks");
+    await waitForInterface(page, "/participant/tasks");
     const uploadTask = page.locator("article.speaker-task").filter({
       hasText: "Upload presentation slides",
     });
@@ -210,7 +210,7 @@ test.describe.serial("canonical provider boundaries", () => {
 
     await waitForInterface(
       page,
-      "/speaker/resources?resource=speaker-handbook",
+      "/participant/resources?resource=speaker-handbook",
     );
     await page
       .getByLabel("I have read and understood this published resource")
@@ -223,7 +223,7 @@ test.describe.serial("canonical provider boundaries", () => {
     await expect(
       page.getByText("You acknowledged this exact published version."),
     ).toBeVisible();
-    await waitForInterface(page, "/speaker/tasks");
+    await waitForInterface(page, "/participant/tasks");
     const handbookTask = page.locator("article.speaker-task").filter({
       hasText: "Read the speaker handbook",
     });

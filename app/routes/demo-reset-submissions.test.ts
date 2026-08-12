@@ -595,6 +595,14 @@ describe("submission demo reset", () => {
         .first(),
     ).resolves.toEqual({ id: retainedTaskId });
     await expect(
+      env.DB.prepare(
+        `SELECT id FROM memberships
+          WHERE event_id = ? AND person_id = ? AND role = 'speaker'`,
+      )
+        .bind(EVENT_ID, sponsor.id)
+        .first(),
+    ).resolves.toBeNull();
+    await expect(
       env.DB.prepare("SELECT id FROM task_templates WHERE id = ?")
         .bind("resource-ack:resource-speaker-handbook")
         .first(),

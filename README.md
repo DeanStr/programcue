@@ -53,7 +53,7 @@ Useful routes:
 - Review administration: `http://127.0.0.1:5173/admin/review`
 - Schedule: `http://127.0.0.1:5173/admin/schedule`
 - Communications: `http://127.0.0.1:5173/admin/communications`
-- Speaker portal: `http://127.0.0.1:5173/speaker/dashboard`
+- Participant workspace: `http://127.0.0.1:5173/participant/dashboard`
 - Public programme: `http://127.0.0.1:5173/public/programme/future-of-events-2025`
 - Public application: `http://127.0.0.1:5173/apply/form`
 - API reference: `http://127.0.0.1:5173/api/docs`

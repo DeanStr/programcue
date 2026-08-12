@@ -509,6 +509,18 @@ describe("Submissions D1 vertical slice", () => {
         status: "unscheduled",
         sourceSubmissionId: null,
       });
+      await expect(
+        env.DB.prepare(
+          `SELECT membership.accepted_at IS NOT NULL AS accepted,
+                  membership.revoked_at AS revokedAt
+             FROM memberships membership
+             JOIN people person ON person.id = membership.person_id
+            WHERE membership.event_id = ? AND membership.role = 'speaker'
+              AND person.email = ? COLLATE NOCASE`,
+        )
+          .bind(viewer.eventId, "morgan-sponsor@example.com")
+          .first(),
+      ).resolves.toEqual({ accepted: 1, revokedAt: null });
       const audit = await env.DB.prepare(
         "SELECT action FROM audit_events WHERE entity_id = ?",
       )

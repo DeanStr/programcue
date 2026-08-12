@@ -18,6 +18,7 @@ describe("public application landing", () => {
           eventVenue: null,
           eventCity: null,
           eventDescription: null,
+          participantWelcomeText: "Welcome from the event team.",
           closesAt: null,
           minSpeakers: 1,
           maxSpeakers: 2,
@@ -35,5 +36,6 @@ describe("public application landing", () => {
 
     expect(markup).toContain("May 20, 2025 – May 22, 2025");
     expect(markup).not.toContain("May 19, 2025");
+    expect(markup).toContain("Welcome from the event team.");
   });
 });

@@ -77,7 +77,7 @@ const walkthrough = [
   [
     "Speaker readiness",
     "Complete the profile, resources and dependent task evidence.",
-    "/speaker/dashboard",
+    "/participant/dashboard",
     "speaker",
   ],
   [

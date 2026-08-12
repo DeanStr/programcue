@@ -51,6 +51,9 @@ function setupValues(event: EventSetup, tracks: unknown = event.tracks) {
     city: event.city,
     publicSlug: event.publicSlug,
     brandAccent: event.brandAccent,
+    participantLogoUrl: event.participantLogoUrl,
+    participantWelcomeText: event.participantWelcomeText,
+    participantSupportUrl: event.participantSupportUrl,
     description: event.description,
     repositoryProvider: event.repositoryProvider,
     retentionMonths: String(event.retentionMonths),
@@ -202,14 +205,16 @@ describe("Event Setup administrator scope route", () => {
       throw new Error("Organisation invitation returned a raw response.");
     expect(invited.data.intent).toBe("invite");
     expect(invited.data.ok || invited.data.committed).toBe(true);
-    const membership = await env.DB.prepare(`
+    const membership = await env.DB.prepare(
+      `
       SELECT membership.id, membership.event_id AS eventId
         FROM memberships membership
         JOIN people person ON person.id = membership.person_id
        WHERE membership.organisation_id = 'org-future-events'
          AND membership.role = 'administrator'
          AND person.email = 'route-org-admin@example.com' COLLATE NOCASE
-    `).first<{ id: string; eventId: string | null }>();
+    `,
+    ).first<{ id: string; eventId: string | null }>();
     expect(membership?.eventId).toBeNull();
 
     const setup = await loader({
@@ -261,13 +266,15 @@ describe("Event Setup administrator scope route", () => {
       throw new Error("Event invitation returned a raw response.");
     expect(eventInvite.data.intent).toBe("invite");
     expect(eventInvite.data.ok || eventInvite.data.committed).toBe(true);
-    const eventMembership = await env.DB.prepare(`
+    const eventMembership = await env.DB.prepare(
+      `
       SELECT membership.event_id AS eventId
         FROM memberships membership
         JOIN people person ON person.id = membership.person_id
        WHERE person.email = 'route-event-admin@example.com' COLLATE NOCASE
          AND membership.role = 'administrator'
-    `).first<{ eventId: string | null }>();
+    `,
+    ).first<{ eventId: string | null }>();
     expect(eventMembership?.eventId).toBe("evt-foe-2025");
 
     const forbidden = await action({
@@ -285,11 +292,13 @@ describe("Event Setup administrator scope route", () => {
     expect(forbidden.init?.status).toBe(403);
     expect(forbidden.data).toMatchObject({ ok: false, intent: "invite" });
     expect(
-      await env.DB.prepare(`
+      await env.DB.prepare(
+        `
         SELECT 1 FROM memberships membership
         JOIN people person ON person.id = membership.person_id
         WHERE person.email = 'forbidden-route-org-admin@example.com' COLLATE NOCASE
-      `).first(),
+      `,
+      ).first(),
     ).toBeNull();
   });
 

@@ -244,7 +244,7 @@ describe("event selector route", () => {
       params: {},
       context: context(),
     } as never);
-    expect(response.headers.get("location")).toBe("/speaker/dashboard");
+    expect(response.headers.get("location")).toBe("/participant/dashboard");
   });
 
   it("keeps a return path authorised by another accepted event role", async () => {

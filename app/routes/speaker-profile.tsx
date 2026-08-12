@@ -12,14 +12,14 @@ import {
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
-export const meta = () => [{ title: "Speaker Profile · Program Cue" }];
+export const meta = () => [{ title: "Participant Profile · Program Cue" }];
 
 export async function action({ request, context }: Route.ActionArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
   const form = await request.formData();
   if (form.get("intent") !== "save-profile") {
     return data(
-      { ok: false, message: "Unsupported speaker profile action." },
+      { ok: false, message: "Unsupported participant profile action." },
       { status: 400 },
     );
   }

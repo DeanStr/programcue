@@ -23,6 +23,9 @@ describe("Worker security headers", () => {
       "connect-src 'self' https://challenges.cloudflare.com https://*.r2.cloudflarestorage.com",
     );
     expect(production.get("content-security-policy")).toContain(
+      "img-src 'self' data: blob: https:",
+    );
+    expect(production.get("content-security-policy")).toContain(
       "frame-src 'self' https://challenges.cloudflare.com https://docs.google.com https://player.vimeo.com",
     );
     expect(production.get("content-security-policy")).not.toContain(

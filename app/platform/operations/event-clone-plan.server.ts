@@ -323,12 +323,16 @@ export function buildEventClonePlan(
     env.DB.prepare(
       `INSERT INTO events (
          id, organisation_id, name, slug, timezone, starts_at, ends_at,
-         venue_name, city, description, brand_accent, session_formats_json,
+         venue_name, city, description, brand_accent, participant_logo_url,
+         participant_welcome_text, participant_support_url, session_formats_json,
          repository_provider, activation_status,
          retention_months, submission_access_mode, allow_anonymous_drafts,
          duplicate_person_warnings, file_policy_json, revision, last_operation_id,
          last_updated_by_person_id, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, unixepoch(), unixepoch())`,
+       ) VALUES (
+         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+         1, ?, ?, unixepoch(), unixepoch()
+       )`,
     ).bind(
       eventId,
       viewer.organisationId,
@@ -341,6 +345,9 @@ export function buildEventClonePlan(
       source.city,
       source.description,
       source.brandAccent,
+      source.participantLogoUrl,
+      source.participantWelcomeText,
+      source.participantSupportUrl,
       sessionFormatsJson,
       input.repositoryProvider,
       pendingAirtable ? "provisioning" : "active",

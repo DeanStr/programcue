@@ -1107,7 +1107,7 @@ describe("evaluation vertical slice", () => {
       expect(callbackUrl.pathname).toBe("/events/select");
       expect(callbackUrl.searchParams.get("eventId")).toBe(admin.eventId);
       expect(callbackUrl.searchParams.get("returnTo")).toBe(
-        "/speaker/dashboard",
+        "/participant/dashboard",
       );
       expect(intent?.identifier).not.toContain("person-demo-submitter");
       expect(JSON.parse(intent!.value)).toEqual({

@@ -75,6 +75,7 @@ test("event cloning shows its copy boundary and records a clean event", async ({
 test("blank event creation keeps templates empty and makes repository authority explicit", async ({
   page,
 }) => {
+  const unique = Date.now();
   await page.context().addCookies([
     {
       name: "program_cue_demo_identity",
@@ -95,14 +96,26 @@ test("blank event creation keeps templates empty and makes repository authority 
   await expect(page.getByLabel("Personal access token")).toBeVisible();
   await expect(page.getByLabel("Base ID")).toBeVisible();
   await page.getByRole("radio", { name: /Cloudflare D1/ }).check();
-  await page.getByLabel("Event name").fill("Browser blank event");
-  await page.getByLabel("Public slug").fill("browser-blank-event");
+  await page.getByLabel("Event name").fill(`Browser blank event ${unique}`);
+  await page.getByLabel("Public slug").fill(`browser-blank-event-${unique}`);
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Create blank event" }).click();
   await expect(page.getByText("Event created", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "View creation operation" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Open new event" }).click();
+  await expect(page.locator(".event-switcher strong")).toHaveText(
+    `Browser blank event ${unique}`,
+  );
+  await waitForInterface(page, "/admin/command");
+  await expect(
+    page.getByRole("heading", { name: "Set up this event" }),
+  ).toBeVisible();
+  await expect(page.getByText("0 of 6 complete")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Publish an application form/ }),
+  ).toHaveAttribute("href", "/admin/submissions/form");
 });
 
 test("failed Airtable creation stays inaccessible until D1 is explicitly selected", async ({

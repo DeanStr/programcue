@@ -37,7 +37,8 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
   protected async listParticipantTasksD1(viewer: Viewer) {
     const tasks = await this.env.DB.prepare(
       `
-      SELECT ti.id, ti.template_id AS templateId, ti.target_type AS targetType, ti.target_id AS targetId,
+      SELECT ti.id, ti.template_id AS templateId, ti.target_type AS targetType,
+             ti.target_id AS targetId, target_session.title AS targetLabel,
              ti.owner_person_id AS ownerPersonId, p.display_name AS ownerName, ti.title, ti.description,
              ti.task_type AS taskType, ti.impact, ti.status, ti.readiness_state AS readinessState,
              ti.readiness_percent AS readinessPercent, ti.revision, ti.due_at AS dueAt,
@@ -49,6 +50,10 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
         FROM task_instances ti
         LEFT JOIN people p ON p.id = ti.owner_person_id
         LEFT JOIN task_templates tt ON tt.id = ti.template_id AND tt.event_id = ti.event_id
+        LEFT JOIN sessions target_session
+          ON ti.target_type = 'session'
+         AND target_session.id = ti.target_id
+         AND target_session.event_id = ti.event_id
        WHERE ti.event_id = ? AND ${this.taskAccessClause()}
        ORDER BY CASE ti.status WHEN 'overdue' THEN 0 WHEN 'blocked' THEN 1 WHEN 'not_started' THEN 2 WHEN 'in_progress' THEN 3 WHEN 'submitted' THEN 4 ELSE 5 END,
                 ti.due_at IS NULL, ti.due_at, ti.title
@@ -109,7 +114,8 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
   protected async participantTask(viewer: Viewer, taskId: string) {
     return this.env.DB.prepare(
       `
-      SELECT ti.id, ti.template_id AS templateId, ti.target_type AS targetType, ti.target_id AS targetId,
+      SELECT ti.id, ti.template_id AS templateId, ti.target_type AS targetType,
+             ti.target_id AS targetId, target_session.title AS targetLabel,
              ti.owner_person_id AS ownerPersonId, p.display_name AS ownerName, ti.title, ti.description,
              ti.task_type AS taskType, ti.impact, ti.status, ti.readiness_state AS readinessState,
              ti.readiness_percent AS readinessPercent, ti.revision, ti.due_at AS dueAt,
@@ -122,6 +128,10 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
         FROM task_instances ti
         LEFT JOIN people p ON p.id = ti.owner_person_id
         LEFT JOIN task_templates tt ON tt.id = ti.template_id
+        LEFT JOIN sessions target_session
+          ON ti.target_type = 'session'
+         AND target_session.id = ti.target_id
+         AND target_session.event_id = ti.event_id
        WHERE ti.id = ? AND ti.event_id = ? AND ${this.taskAccessClause()}
     `,
     )

@@ -186,6 +186,36 @@ async function createDependencyPair(
 
 describe("onboarding task service", () => {
   describe("participant workflows", () => {
+    it("labels session-scoped deliverables with their session title", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const service = new TaskService(testEnv);
+      const templateId = await service.createTemplate(admin, {
+        name: "Upload session handout",
+        description: "Provide the handout for this session.",
+        targetType: "session",
+        taskType: "file_upload",
+        impact: "high",
+        evidenceMode: "file",
+        dueAnchor: "none",
+        dueOffsetDays: null,
+        fixedDueDate: null,
+        autoAssignOnAcceptance: false,
+        dependencyIds: [],
+      });
+      const { taskId } = await service.assignTemplate(
+        admin,
+        templateId,
+        "session-demo-speaker",
+      );
+
+      const tasks = await service.listParticipantTasks(speaker);
+      expect(tasks.find((task) => task.id === taskId)).toMatchObject({
+        targetType: "session",
+        targetLabel: "Designing inclusive event technology",
+      });
+    });
+
     it("rejects unsupported evidence combinations and persists an explicit supported scope", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);

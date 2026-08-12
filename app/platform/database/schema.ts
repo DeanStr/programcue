@@ -92,6 +92,9 @@ export const events = sqliteTable(
     city: text("city"),
     description: text("description"),
     brandAccent: text("brand_accent").notNull().default("#4f46e5"),
+    participantLogoUrl: text("participant_logo_url"),
+    participantWelcomeText: text("participant_welcome_text"),
+    participantSupportUrl: text("participant_support_url"),
     sessionFormatsJson: text("session_formats_json")
       .notNull()
       .default(

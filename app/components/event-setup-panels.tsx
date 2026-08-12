@@ -170,6 +170,49 @@ export function EventIdentityPanels({
             aria-label="Brand accent"
           />
         </label>
+        <div className="form-row mt">
+          <label className="label">
+            Participant logo URL
+            <input
+              className="field"
+              name="participantLogoUrl"
+              type="url"
+              inputMode="url"
+              placeholder="https://example.org/event-logo.svg"
+              defaultValue={event.participantLogoUrl}
+              maxLength={2048}
+            />
+            <span className="help">
+              Optional HTTPS image shown in the participant workspace and
+              application header.
+            </span>
+            <FieldError actionData={actionData} name="participantLogoUrl" />
+          </label>
+          <label className="label">
+            Participant support URL
+            <input
+              className="field"
+              name="participantSupportUrl"
+              type="url"
+              inputMode="url"
+              placeholder="https://example.org/help"
+              defaultValue={event.participantSupportUrl}
+              maxLength={2048}
+            />
+            <FieldError actionData={actionData} name="participantSupportUrl" />
+          </label>
+        </div>
+        <label className="label mt">
+          Participant welcome message
+          <textarea
+            className="textarea"
+            name="participantWelcomeText"
+            defaultValue={event.participantWelcomeText}
+            maxLength={500}
+            placeholder="Welcome. Use this workspace to manage your applications and event preparation."
+          />
+          <FieldError actionData={actionData} name="participantWelcomeText" />
+        </label>
         <label className="label mt">
           Programme description
           <textarea

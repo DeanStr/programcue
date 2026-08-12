@@ -1,9 +1,7 @@
 import type { RouterContextProvider } from "react-router";
 
-import {
-  ensureDemoSpeakerData,
-  requireSpeakerViewer,
-} from "~/modules/speakers/demo.server";
+import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { requireEventRole } from "~/platform/auth/authorize.server";
 import { resolveCurrentEventId } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
@@ -13,8 +11,14 @@ export async function requireSpeakerWorkspace(
 ) {
   const { env } = getCloudflareContext(context);
   await ensureDemoSpeakerData(env);
-  const eventId = await resolveCurrentEventId(request, env, ["speaker"]);
-  const viewer = await requireSpeakerViewer(request, env, eventId);
+  const eventId = await resolveCurrentEventId(request, env, [
+    "speaker",
+    "submitter",
+  ]);
+  const viewer = await requireEventRole(request, env, eventId, [
+    "speaker",
+    "submitter",
+  ]);
   return { env, viewer };
 }
 

@@ -53,6 +53,9 @@ function inputFrom(event: Awaited<ReturnType<EventService["getSetup"]>>) {
     city: event.city,
     publicSlug: event.publicSlug,
     brandAccent: event.brandAccent,
+    participantLogoUrl: event.participantLogoUrl,
+    participantWelcomeText: event.participantWelcomeText,
+    participantSupportUrl: event.participantSupportUrl,
     description: event.description,
     repositoryProvider: event.repositoryProvider,
     retentionMonths: event.retentionMonths,
@@ -94,6 +97,9 @@ describe("Event Setup D1 service", () => {
     await service.saveSetup(viewer, {
       ...inputFrom(original),
       venue: "Beanfield Centre",
+      participantLogoUrl: "https://cdn.example.com/program-cue-event.svg",
+      participantWelcomeText: "Welcome to the participant workspace.",
+      participantSupportUrl: "https://support.example.com/program-cue-event",
       filePolicy: {
         ...original.filePolicy,
         videoMaximumBytes: 512 * 1_048_576,
@@ -112,6 +118,15 @@ describe("Event Setup D1 service", () => {
 
     const saved = await service.getSetup(viewer);
     expect(saved.venue).toBe("Beanfield Centre");
+    expect(saved.participantLogoUrl).toBe(
+      "https://cdn.example.com/program-cue-event.svg",
+    );
+    expect(saved.participantWelcomeText).toBe(
+      "Welcome to the participant workspace.",
+    );
+    expect(saved.participantSupportUrl).toBe(
+      "https://support.example.com/program-cue-event",
+    );
     expect(saved.revision).toBe(original.revision + 1);
     expect(saved.filePolicy.videoMaximumBytes).toBe(512 * 1_048_576);
     expect(saved.rooms.at(-1)).toMatchObject({

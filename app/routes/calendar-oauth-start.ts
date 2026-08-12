@@ -29,7 +29,9 @@ export async function loader({
   const started = await new CalendarOAuthService(env).start(
     viewer,
     provider.data,
-    viewer.role === "speaker" ? "/speaker/dashboard" : "/admin/communications",
+    viewer.role === "speaker" || viewer.role === "submitter"
+      ? "/participant/dashboard"
+      : "/admin/communications",
   );
   const secure = String(env.APP_ENV) === "production" ? "; Secure" : "";
   return redirect(started.authorizationUrl, {

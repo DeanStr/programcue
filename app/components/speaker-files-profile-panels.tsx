@@ -83,7 +83,7 @@ export function SpeakerFilesPanel({
             {file.currentVersionId && file.downloadReleasedAt ? (
               <a
                 className="icon-btn"
-                href={`/speaker/files/${file.id}`}
+                href={`/participant/files/${file.id}`}
                 aria-label={`Download ${file.downloadFilename}`}
               >
                 <Download aria-hidden size={15} />
