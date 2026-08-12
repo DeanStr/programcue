@@ -1,6 +1,7 @@
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { AirtableProgrammeRepository } from "~/modules/airtable/airtable-programme-repository.server";
 import { eventBoundaryCalendarDate } from "~/modules/schedule/schedule-time";
+import { sortPublishedSpeakers } from "./programme-presentation";
 import {
   PublicItineraryService,
   type ItineraryIdentity,
@@ -62,6 +63,12 @@ export type PublishedSpeakerPreview = Pick<
   PublishedSpeaker,
   "id" | "displayName" | "imageUrl" | "organisationName" | "jobTitle"
 >;
+
+const DEMO_EVENT_ID = "evt-foe-2025";
+const DEMO_BUNDLED_HEADSHOTS: Record<string, string> = {
+  "person-demo-speaker": "/images/demo-speakers/priya-shah.webp",
+  "person-demo-submitter": "/images/demo-speakers/alex-morgan.webp",
+};
 
 export type PublishedProgramme = {
   event: {
@@ -288,14 +295,18 @@ async function publicContentRevision(
 async function withPublicContentRevision(
   programme: Omit<PublishedProgramme, "contentRevision">,
 ): Promise<PublishedProgramme> {
+  const sortedProgramme = {
+    ...programme,
+    speakers: sortPublishedSpeakers(programme.speakers),
+  };
   assertPublishedSpeakerGraphIntegrity(
-    programme.version.id,
-    programme.sessions,
-    programme.speakers,
+    sortedProgramme.version.id,
+    sortedProgramme.sessions,
+    sortedProgramme.speakers,
   );
   return {
-    ...programme,
-    contentRevision: await publicContentRevision(programme),
+    ...sortedProgramme,
+    contentRevision: await publicContentRevision(sortedProgramme),
   };
 }
 
@@ -333,7 +344,8 @@ export class PublicProgrammeService {
          AND version.event_id = asset.event_id
        WHERE published_version.id = ? AND published_version.event_id = ?
          AND published_version.status = 'published'
-         AND session.status = 'published' AND content.visibility = 'public'
+         AND session.status = 'published' AND session.visibility = 'public'
+         AND content.visibility = 'public'
          AND relation.visibility = 'public'
          AND person.profile_status = 'published'
          AND version.upload_status = 'uploaded'
@@ -350,20 +362,84 @@ export class PublicProgrammeService {
     return new Set(rows.results.map((row) => row.personId));
   }
 
+  private async currentPublicHeadshotPersonIds(
+    eventId: string,
+    versionId: string,
+    personIds: readonly string[],
+  ) {
+    const bundledHeadshotPersonIds =
+      String(this.env.DEMO_MODE) === "true" && eventId === DEMO_EVENT_ID
+        ? personIds.filter((personId) => DEMO_BUNDLED_HEADSHOTS[personId])
+        : [];
+    if (!bundledHeadshotPersonIds.length) return new Set<string>();
+    const placeholders = bundledHeadshotPersonIds.map(() => "?").join(", ");
+    const rows = await this.env.DB.prepare(
+      `
+      SELECT DISTINCT person.id AS personId
+        FROM schedule_versions published_version
+        JOIN schedule_entries entry
+          ON entry.schedule_version_id = published_version.id
+         AND entry.event_id = published_version.event_id
+        JOIN sessions session
+          ON session.id = entry.session_id AND session.event_id = entry.event_id
+        JOIN schedule_session_contents content
+          ON content.schedule_version_id = entry.schedule_version_id
+         AND content.event_id = entry.event_id
+         AND content.session_id = entry.session_id
+        JOIN session_speakers relation
+          ON relation.session_id = entry.session_id
+         AND relation.event_id = entry.event_id
+        JOIN people person ON person.id = relation.person_id
+        JOIN file_assets asset
+          ON asset.event_id = entry.event_id
+         AND asset.target_type = 'person'
+         AND asset.target_id = person.id
+         AND asset.asset_kind = 'headshot'
+         AND asset.status <> 'deleted'
+         AND asset.current_version_id IS NOT NULL
+       WHERE published_version.id = ? AND published_version.event_id = ?
+         AND published_version.status = 'published'
+         AND session.status = 'published' AND session.visibility = 'public'
+         AND content.visibility = 'public'
+         AND relation.visibility = 'public'
+         AND person.profile_status = 'published'
+         AND person.id IN (${placeholders})
+    `,
+    )
+      .bind(versionId, eventId, ...bundledHeadshotPersonIds)
+      .all<{ personId: string }>();
+    return new Set(rows.results.map((row) => row.personId));
+  }
+
+  private bundledDemoHeadshot(
+    event: Pick<PublishedProgramme["event"], "id">,
+    personId: string,
+  ) {
+    if (String(this.env.DEMO_MODE) !== "true" || event.id !== DEMO_EVENT_ID)
+      return null;
+    return DEMO_BUNDLED_HEADSHOTS[personId] ?? null;
+  }
+
   private async withPublishedHeadshotUrls(
     event: Pick<PublishedProgramme["event"], "id" | "slug">,
     version: Pick<PublishedProgramme["version"], "id">,
     speakers: PublishedSpeaker[],
   ) {
-    const personIds = await this.publishedHeadshotPersonIds(
-      event.id,
-      version.id,
-    );
+    const [personIds, assetPersonIds] = await Promise.all([
+      this.publishedHeadshotPersonIds(event.id, version.id),
+      this.currentPublicHeadshotPersonIds(
+        event.id,
+        version.id,
+        speakers.map((speaker) => speaker.id),
+      ),
+    ]);
     return speakers.map((speaker) => ({
       ...speaker,
       imageUrl: personIds.has(speaker.id)
         ? publishedHeadshotPath(event.slug, speaker.id)
-        : null,
+        : assetPersonIds.has(speaker.id)
+          ? null
+          : this.bundledDemoHeadshot(event, speaker.id),
     }));
   }
 
@@ -403,7 +479,8 @@ export class PublicProgrammeService {
          AND version.event_id = asset.event_id
        WHERE published_version.id = ? AND published_version.event_id = ?
          AND published_version.status = 'published'
-         AND session.status = 'published' AND content.visibility = 'public'
+         AND session.status = 'published' AND session.visibility = 'public'
+         AND content.visibility = 'public'
          AND relation.visibility = 'public'
          AND person.profile_status = 'published'
          AND version.upload_status = 'uploaded'
@@ -419,11 +496,18 @@ export class PublicProgrammeService {
       .bind(version.id, event.id, ...speakers.map((speaker) => speaker.id))
       .all<{ personId: string }>();
     const personIds = new Set(rows.results.map((row) => row.personId));
+    const assetPersonIds = await this.currentPublicHeadshotPersonIds(
+      event.id,
+      version.id,
+      speakers.map((speaker) => speaker.id),
+    );
     return speakers.map((speaker) => ({
       ...speaker,
       imageUrl: personIds.has(speaker.id)
         ? publishedHeadshotPath(event.slug, speaker.id)
-        : null,
+        : assetPersonIds.has(speaker.id)
+          ? null
+          : this.bundledDemoHeadshot(event, speaker.id),
     }));
   }
 
@@ -476,7 +560,8 @@ export class PublicProgrammeService {
        WHERE event.slug = ? AND event.activation_status = 'active'
          AND event.programme_published_at IS NOT NULL
          AND person.id = ? AND person.profile_status = 'published'
-         AND session.status = 'published' AND content.visibility = 'public'
+         AND session.status = 'published' AND session.visibility = 'public'
+         AND content.visibility = 'public'
          AND relation.visibility = 'public'
          AND version.upload_status = 'uploaded'
          AND version.signature_status = 'valid'
@@ -558,10 +643,16 @@ export class PublicProgrammeService {
              (
                SELECT COUNT(*)
                  FROM schedule_entries entry
+                 JOIN sessions session
+                   ON session.id = entry.session_id
+                  AND session.event_id = entry.event_id
+                  AND session.status = 'published'
+                  AND session.visibility = 'public'
                  LEFT JOIN schedule_session_contents content
                    ON content.schedule_version_id = entry.schedule_version_id
                   AND content.event_id = entry.event_id
                   AND content.session_id = entry.session_id
+                  AND content.visibility = 'public'
                 WHERE entry.event_id = event.id
                   AND entry.schedule_version_id = version.id
                   AND content.session_id IS NULL
@@ -578,7 +669,8 @@ export class PublicProgrammeService {
              LIMIT 1
           )
          AND version.event_id = event.id
-       WHERE event.slug = ? AND event.programme_published_at IS NOT NULL
+       WHERE event.slug = ? AND event.activation_status = 'active'
+         AND event.programme_published_at IS NOT NULL
     `,
     )
       .bind(slug)
@@ -639,7 +731,7 @@ export class PublicProgrammeService {
            AND content.event_id = entry.event_id
            AND content.session_id = entry.session_id
          WHERE entry.event_id = ? AND entry.schedule_version_id = ?
-           AND session.status = 'published'
+           AND session.status = 'published' AND session.visibility = 'public'
            AND content.visibility = 'public'
            AND relation.visibility = 'public'
            AND person.profile_status = 'published'
@@ -744,10 +836,16 @@ export class PublicProgrammeService {
     const snapshotIntegrityStatement = this.env.DB.prepare(
       `SELECT COUNT(*) AS missingContent
          FROM schedule_entries entry
+         JOIN sessions session
+           ON session.id = entry.session_id
+          AND session.event_id = entry.event_id
+          AND session.status = 'published'
+          AND session.visibility = 'public'
          LEFT JOIN schedule_session_contents content
            ON content.schedule_version_id = entry.schedule_version_id
           AND content.event_id = entry.event_id
           AND content.session_id = entry.session_id
+          AND content.visibility = 'public'
         WHERE entry.event_id = ? AND entry.schedule_version_id = ?
           AND content.session_id IS NULL`,
     ).bind(event.id, version.id);
@@ -793,8 +891,9 @@ export class PublicProgrammeService {
           ON t.id = content.track_id AND t.event_id = content.event_id
          AND t.is_public = 1
        WHERE se.event_id = ? AND se.schedule_version_id = ?
-         AND s.status = 'published' AND content.visibility = 'public'
-       ORDER BY se.starts_at, r.position, content.title
+         AND s.status = 'published' AND s.visibility = 'public'
+         AND content.visibility = 'public'
+       ORDER BY se.starts_at, r.position, content.title, s.id
     `,
     ).bind(event.id, version.id);
     const speakersStatement = this.env.DB.prepare(
@@ -814,7 +913,8 @@ export class PublicProgrammeService {
           ON content.schedule_version_id = se.schedule_version_id
          AND content.event_id = se.event_id AND content.session_id = s.id
        WHERE s.event_id = ? AND se.schedule_version_id = ?
-         AND s.status = 'published' AND content.visibility = 'public'
+         AND s.status = 'published' AND s.visibility = 'public'
+         AND content.visibility = 'public'
          AND ss.visibility = 'public' AND p.profile_status = 'published'
        GROUP BY p.id
        ORDER BY p.display_name COLLATE NOCASE, p.id

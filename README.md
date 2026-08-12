@@ -55,6 +55,10 @@ Useful routes:
 - Communications: `http://127.0.0.1:5173/admin/communications`
 - Participant workspace: `http://127.0.0.1:5173/participant/dashboard`
 - Public programme: `http://127.0.0.1:5173/public/programme/future-of-events-2025`
+- Public speakers: `http://127.0.0.1:5173/public/programme/future-of-events-2025/speakers`
+- Public agenda: `http://127.0.0.1:5173/public/programme/future-of-events-2025/agenda`
+- Public schedule itinerary: `http://127.0.0.1:5173/public/programme/future-of-events-2025/schedule`
+- Public Speaker Gallery: `http://127.0.0.1:5173/public/programme/future-of-events-2025/gallery`
 - Public application: `http://127.0.0.1:5173/apply/form`
 - API reference: `http://127.0.0.1:5173/api/docs`
 - Design system: `http://127.0.0.1:5173/design/system`

@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useLocation } from "react-router";
 
 import type { parseProgrammeEmbedSearchParameters } from "~/modules/programme/programme-embed-configuration";
+import {
+  sortPublishedSpeakers,
+  type PublicProgrammeSurface,
+} from "~/modules/programme/programme-presentation";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import type {
   PublishedProgramme,
@@ -10,6 +14,7 @@ import type {
 
 export type PublicProgrammeLoaderData = {
   programme: PublishedProgramme;
+  surface: PublicProgrammeSurface;
   itinerary: string[];
   embedded: boolean;
   embedOptions: ReturnType<typeof parseProgrammeEmbedSearchParameters>;
@@ -71,9 +76,35 @@ export function distinctSorted(values: Array<string | null>) {
 export function speakerAffiliation(
   speaker: Pick<PublishedSpeaker, "jobTitle" | "organisationName">,
 ) {
-  return [speaker.jobTitle, speaker.organisationName]
-    .filter(Boolean)
-    .join(" · ");
+  return [
+    speaker.jobTitle || "Job title not provided",
+    speaker.organisationName || "Company not provided",
+  ].join(" · ");
+}
+
+export function sessionSpeakerDetails(
+  session: PublishedProgramme["sessions"][number],
+  speakerById: ReadonlyMap<string, PublishedSpeaker>,
+) {
+  return session.speakerIds.map((speakerId, index) => {
+    const speaker = speakerById.get(speakerId);
+    if (!speaker) {
+      throw new Error(
+        `Published session ${session.id} has no speaker ${speakerId}.`,
+      );
+    }
+    const displayName = session.speakerNames[index];
+    if (displayName !== speaker.displayName) {
+      throw new Error(
+        `Published session ${session.id} has a missing or stale name for speaker ${speakerId}.`,
+      );
+    }
+    return {
+      ...speaker,
+      id: speakerId,
+      displayName,
+    };
+  });
 }
 
 export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
@@ -100,6 +131,8 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       : null;
   const saved = loaderData.itinerary;
   const [query, setQuery] = useState(embedOptions.query);
+  const [directoryQuery, setDirectoryQuery] = useState("");
+  const [galleryQuery, setGalleryQuery] = useState("");
   const days = useMemo(
     () => [
       ...new Set(
@@ -147,8 +180,14 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       ),
     [programme.speakers],
   );
+  const orderedSpeakers = useMemo(
+    () => sortPublishedSpeakers(programme.speakers),
+    [programme.speakers],
+  );
   const [selectedId, setSelectedId] = useState(programme.sessions[0]?.id ?? "");
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
+  const [expandedSpeakerBiography, setExpandedSpeakerBiography] =
+    useState(false);
   const speakerProfileRef = useRef<HTMLElement | null>(null);
   const speakerProfileReturnFocusRef = useRef<HTMLElement | null>(null);
   const visibleEmbedControls = new Set(embedOptions.controls);
@@ -240,7 +279,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const visibleSpeakerIds = new Set(
     visible.flatMap((session) => session.speakerIds),
   );
-  const visibleSpeakers = programme.speakers.filter((speaker) => {
+  const visibleSpeakers = orderedSpeakers.filter((speaker) => {
     const matchesFacets =
       (!embedded && !sessionFiltersActive) || facetSpeakerIds.has(speaker.id);
     const matchesQuery =
@@ -257,6 +296,26 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
         .includes(normalisedQuery);
     return matchesFacets && matchesQuery;
   });
+  const directorySpeakers = useMemo(() => {
+    const normalisedDirectoryQuery = directoryQuery.trim().toLocaleLowerCase();
+    return orderedSpeakers.filter(
+      (speaker) =>
+        !normalisedDirectoryQuery ||
+        speaker.displayName
+          .toLocaleLowerCase()
+          .includes(normalisedDirectoryQuery),
+    );
+  }, [directoryQuery, orderedSpeakers]);
+  const gallerySpeakers = useMemo(() => {
+    const normalisedGalleryQuery = galleryQuery.trim().toLocaleLowerCase();
+    return orderedSpeakers.filter(
+      (speaker) =>
+        !normalisedGalleryQuery ||
+        speaker.displayName
+          .toLocaleLowerCase()
+          .includes(normalisedGalleryQuery),
+    );
+  }, [galleryQuery, orderedSpeakers]);
   const selectedSpeaker =
     visibleSpeakers.find((speaker) => speaker.id === selectedSpeakerId) ?? null;
   const selectedSpeakerSessions = selectedSpeaker
@@ -264,6 +323,11 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
         (session) =>
           selectedSpeaker.sessionIds.includes(session.id) &&
           visibleSessionIds.has(session.id),
+      )
+    : [];
+  const selectedSpeakerAllSessions = selectedSpeaker
+    ? programme.sessions.filter((session) =>
+        selectedSpeaker.sessionIds.includes(session.id),
       )
     : [];
   const savedSessions = programme.sessions.filter((session) =>
@@ -292,6 +356,10 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     if (selectedSpeakerId) speakerProfileRef.current?.focus();
   }, [selectedSpeakerId]);
 
+  useEffect(() => {
+    setExpandedSpeakerBiography(false);
+  }, [selectedSpeakerId]);
+
   // Do not silently reopen a profile if later filter changes remove its
   // speaker from the result set and those filters are subsequently cleared.
   useEffect(() => {
@@ -308,14 +376,28 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
 
   function closeSpeakerProfile() {
     const returnFocus = speakerProfileReturnFocusRef.current;
-    const fallbackFocus = selectedSpeakerId
-      ? document.getElementById(`speaker-profile-link-${selectedSpeakerId}`)
-      : null;
+    const fallbackTargets = [
+      returnFocus,
+      selectedSpeakerId
+        ? document.getElementById(`speaker-gallery-card-${selectedSpeakerId}`)
+        : null,
+      selectedSpeakerId
+        ? document.getElementById(`public-speaker-card-${selectedSpeakerId}`)
+        : null,
+      selectedSpeakerId
+        ? document.getElementById(`speaker-profile-link-${selectedSpeakerId}`)
+        : null,
+      document.getElementById("speaker-gallery-search"),
+      document.getElementById("public-speaker-search"),
+    ];
+    const focusTarget =
+      fallbackTargets.find((element): element is HTMLElement =>
+        Boolean(element?.isConnected),
+      ) ?? null;
     setSelectedSpeakerId("");
     speakerProfileReturnFocusRef.current = null;
     requestAnimationFrame(() => {
-      if (returnFocus?.isConnected) returnFocus.focus();
-      else if (fallbackFocus?.isConnected) fallbackFocus.focus();
+      focusTarget?.focus();
     });
   }
 
@@ -325,6 +407,10 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
         ? current.filter((value) => value !== sessionId)
         : [...current, sessionId],
     );
+  }
+
+  function toggleSpeakerBiography() {
+    setExpandedSpeakerBiography((current) => !current);
   }
 
   function clearFilters() {
@@ -353,6 +439,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   }
   return {
     loaderData,
+    surface: loaderData.surface,
     programme,
     embedded,
     shared,
@@ -365,6 +452,12 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     saved,
     query,
     setQuery,
+    directoryQuery,
+    setDirectoryQuery,
+    directorySpeakers,
+    galleryQuery,
+    setGalleryQuery,
+    gallerySpeakers,
     days,
     day,
     setDay,
@@ -379,6 +472,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     formats,
     rooms,
     speakerById,
+    orderedSpeakers,
     selectedId,
     setSelectedId,
     speakerProfileRef,
@@ -391,13 +485,18 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     visibleSpeakers,
     selectedSpeaker,
     selectedSpeakerSessions,
+    selectedSpeakerAllSessions,
+    expandedSpeakerBiography,
     savedSessions,
     itineraryConflicts,
     openSpeakerProfile,
     closeSpeakerProfile,
     toggleDescription,
+    toggleSpeakerBiography,
     clearFilters,
     selectSavedSession,
     toggle,
   };
 }
+
+export type PublicProgrammeModel = ReturnType<typeof usePublicProgrammeModel>;

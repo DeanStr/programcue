@@ -55,6 +55,13 @@ placements atomically in D1 with durable idempotency, reports honest unplaced
 reasons and leaves the schedule unpublished. Focused unit, Worker and Chromium
 schedule tests verify this AIA-08 production slice.
 
+## Public programme gallery workstream evidence
+
+- **Production slice (EMB-01/04/09/12/13/14):** The anonymous public programme now exposes the published D1/Airtable snapshot through the existing service at the sessions overview, `/speakers`, `/agenda`, `/schedule` and `/gallery` surfaces. Sessions and chronological itinerary cards include complete public metadata; speakers are surname-ordered; gallery search and the keyboard-accessible detail panel use the same published speaker/session graph.
+- **Data boundary:** Public D1 reads require a published schedule version, public published session/content/relationships and published profiles. Headshot URLs still require the released clean current file-version predicates. Alex Morgan and Priya Shah use explicitly allowlisted bundled demo images only in `DEMO_MODE`; this is demonstration-only data and is not participant upload infrastructure or a production fallback.
+- **Accessibility evidence:** Description and biography expansion controls expose `aria-expanded`/`aria-controls`; the gallery card supports pointer and keyboard activation, has an explicit close control, preserves search state and returns focus to the opener. Focused unit, Worker and anonymous Chromium coverage verifies these behaviors.
+- **Scope boundary:** Organizer embed configuration, live edit propagation, iCal export and participant upload infrastructure remain outside this workstream. Point-in-time consistency benefits from the single published snapshot read but is not claimed as live propagation.
+
 ## Requirements traceability
 
 | Requirement IDs           | Verified status                                                                                                                                                                                                                                                                                                                                            |

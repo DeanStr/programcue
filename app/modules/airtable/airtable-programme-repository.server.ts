@@ -558,6 +558,7 @@ export class AirtableProgrammeRepository {
           WHERE entry.event_id = ? AND entry.schedule_version_id = ?
             AND content.visibility = 'public'
             AND session.status IN ('scheduled','published')
+            AND session.visibility = 'public'
           ORDER BY entry.starts_at, entry.id`,
       )
         .bind(eventId, versionId)
@@ -596,6 +597,7 @@ export class AirtableProgrammeRepository {
           WHERE content.event_id = ? AND entry.schedule_version_id = ?
             AND content.visibility = 'public'
             AND session.status IN ('scheduled','published')
+            AND session.visibility = 'public'
             AND relation.visibility = 'public'
             AND person.profile_status = 'published'
           GROUP BY person.id
@@ -1246,7 +1248,8 @@ export class AirtableProgrammeRepository {
       sessions: publishedSessions.sort(
         (left, right) =>
           left.startsAt - right.startsAt ||
-          left.title.localeCompare(right.title),
+          left.title.localeCompare(right.title) ||
+          left.id.localeCompare(right.id),
       ),
       speakers: speakers.sort((left, right) =>
         left.displayName.localeCompare(right.displayName),

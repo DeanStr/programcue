@@ -30,11 +30,75 @@
   padding-bottom: 8px;
 }
 @media (max-width: 1000px) {
+  .speaker-gallery-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   .programme-embed-builder-layout {
     grid-template-columns: 1fr;
   }
 }
+@media (max-width: 760px) {
+  .public-main,
+  .public-main.public-surface-main {
+    width: min(100% - 24px, 680px);
+    grid-template-columns: 1fr;
+  }
+  .public-surface-heading,
+  .public-surface-detail-heading {
+    flex-direction: column;
+  }
+  .agenda-board,
+  .speaker-gallery-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .public-itinerary-card {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .public-itinerary-time {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+  }
+  .public-speaker-detail-heading .public-speaker-photo {
+    width: 112px;
+    height: 112px;
+    flex-basis: 112px;
+  }
+}
 @media (max-width: 600px) {
+  .public-surface-heading h1 {
+    font-size: 26px;
+  }
+  .agenda-board,
+  .speaker-gallery-grid {
+    grid-template-columns: 1fr;
+  }
+  .agenda-card-header,
+  .public-itinerary-card {
+    padding: 14px;
+  }
+  .agenda-card-header {
+    padding-bottom: 0;
+  }
+  .agenda-card-title {
+    margin-right: 14px;
+    margin-left: 14px;
+  }
+  .agenda-card-description {
+    margin-right: 14px;
+    margin-left: 14px;
+  }
+  .public-speaker-detail-heading {
+    align-items: flex-start;
+  }
+  .public-speaker-detail-heading .public-speaker-photo {
+    width: 92px;
+    height: 92px;
+    flex-basis: 92px;
+  }
+  .programme-row-datetime {
+    max-width: 105px;
+  }
   .programme-embed-builder-title,
   .programme-embed-output > .card-title,
   .programme-embed-install .card-title,

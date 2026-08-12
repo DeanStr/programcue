@@ -200,6 +200,9 @@ export default [
   route("public/programme/:slug", "routes/public-programme.tsx", {
     id: "public-programme-by-slug",
   }),
+  route("public/programme/:slug/:surface", "routes/public-programme.tsx", {
+    id: "public-programme-surface",
+  }),
   route(
     "public/programme/:slug/speakers/:personId/headshot",
     "routes/public-headshot.ts",

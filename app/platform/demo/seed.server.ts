@@ -18,6 +18,19 @@ export {
 
 const DEMO_ADMIN_ID = DEMO_IDENTITY.personId;
 
+const DEMO_PUBLIC_SESSION_DESCRIPTIONS: Record<string, string> = {
+  "demo-session-1":
+    "A practical session about the future of attendee engagement. Explore inclusive registration, calm wayfinding and measurable moments that help people feel informed, welcomed and ready to participate from the first touchpoint through the closing conversation.",
+  "demo-session-2":
+    "A practical session about AI in event operations. Learn the concrete patterns, trade-offs and small operational choices that make a modern conference easier to navigate and more useful for every attendee.",
+  "demo-session-3":
+    "A practical session about designing inclusive hybrid experiences. Learn the concrete patterns, trade-offs and small operational choices that make a modern conference easier to navigate and more useful for every attendee.",
+  "demo-session-4":
+    "A practical session about community and connection. Learn the concrete patterns, trade-offs and small operational choices that make a modern conference easier to navigate and more useful for every attendee.",
+  "demo-session-5":
+    "A practical session about building better event data. Learn the concrete patterns, trade-offs and small operational choices that make a modern conference easier to navigate and more useful for every attendee.",
+};
+
 export async function ensureDemoData(env: CloudflareEnvironment) {
   if (String(env.DEMO_MODE) !== "true") return;
   if (!env.DB) throw new Error("Required Cloudflare binding DB is unavailable");
@@ -55,7 +68,7 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
       SBEK_SECOND_SPEAKER,
     ].map((identity) =>
       env.DB.prepare(
-          `
+        `
         INSERT OR IGNORE INTO people (
           id, email, display_name, email_verified, profile_status, created_at, updated_at
         ) VALUES (?, ?, ?, 1, ?, unixepoch(), unixepoch())
@@ -165,12 +178,59 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
 export async function ensureDemoProgramme(env: CloudflareEnvironment) {
   if (String(env.DEMO_MODE) !== "true") return;
   await ensureDemoData(env);
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE people
+          SET biography = CASE
+                WHEN biography IS NULL OR biography = '' THEN ?
+                ELSE biography
+              END,
+              organisation_name = COALESCE(NULLIF(organisation_name, ''), 'Northstar Events'),
+              job_title = COALESCE(NULLIF(job_title, ''), 'Product Strategy Lead'),
+              updated_at = unixepoch()
+        WHERE id = 'person-demo-submitter' AND profile_status = 'published'`,
+    ).bind(
+      "Alex Morgan designs data-informed attendee experiences and practical operating systems for teams running complex events.",
+    ),
+    env.DB.prepare(
+      `UPDATE people
+          SET biography = CASE
+                WHEN biography IS NULL OR biography = 'Priya helps event teams design useful, inclusive technology experiences.' THEN ?
+                ELSE biography
+              END,
+              pronunciation = COALESCE(pronunciation, 'PREE-yah SHAH'),
+              organisation_name = COALESCE(NULLIF(organisation_name, ''), 'EventLab'),
+              job_title = COALESCE(NULLIF(job_title, ''), 'Director of Experience Design'),
+              updated_at = unixepoch()
+        WHERE id = 'person-demo-speaker' AND profile_status = 'published'`,
+    ).bind(
+      "Priya Shah helps event teams design useful, inclusive technology experiences. Her work brings together service design, accessible interaction patterns and the practical details that help busy conferences feel calm, welcoming and easy to navigate for every attendee.",
+    ),
+  ]);
+  const updatePublishedDemoDescriptions = async () => {
+    await env.DB.batch(
+      Object.entries(DEMO_PUBLIC_SESSION_DESCRIPTIONS).map(
+        ([sessionId, description]) =>
+          env.DB.prepare(
+            `UPDATE schedule_session_contents
+                  SET description = ?, updated_at = unixepoch()
+                WHERE schedule_version_id = 'demo-schedule-published'
+                  AND event_id = ? AND session_id = ?
+                  AND visibility = 'public'
+                  AND (description IS NULL OR length(description) <= 180)`,
+          ).bind(description, DEMO_EVENT_ID, sessionId),
+      ),
+    );
+  };
   const published = await env.DB.prepare(
     "SELECT id FROM schedule_versions WHERE event_id = ? AND status = 'published'",
   )
     .bind(DEMO_EVENT_ID)
     .first();
-  if (published) return;
+  if (published) {
+    await updatePublishedDemoDescriptions();
+    return;
+  }
   const sessions = [
     [
       "demo-session-1",
@@ -336,4 +396,5 @@ export async function ensureDemoProgramme(env: CloudflareEnvironment) {
       "UPDATE events SET programme_published_at = COALESCE(programme_published_at, unixepoch()), updated_at = unixepoch() WHERE id = ?",
     ).bind(DEMO_EVENT_ID),
   ]);
+  await updatePublishedDemoDescriptions();
 }

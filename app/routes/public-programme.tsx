@@ -7,6 +7,10 @@ import {
 } from "~/modules/programme/programme-embed-configuration";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import {
+  PUBLIC_PROGRAMME_SURFACES,
+  type PublicProgrammeSurface,
+} from "~/modules/programme/programme-presentation";
+import {
   PublishedProgrammeItineraryExpiredError,
   PublishedProgrammeItineraryNotFoundError,
   PublishedProgrammeSessionNotFoundError,
@@ -29,6 +33,36 @@ import {
 } from "~/platform/api/api-public-programme.server";
 
 const ITINERARY_COOKIE = "program_cue_itinerary";
+
+function surfaceFromRequest(request: Request): PublicProgrammeSurface {
+  const segments = new URL(request.url).pathname
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    });
+  const publicIndex = segments.indexOf("public");
+  const candidate =
+    publicIndex >= 0 && segments[publicIndex + 1] === "programme"
+      ? segments[publicIndex + 3]
+      : undefined;
+  if (!candidate) return "overview";
+  if (
+    !PUBLIC_PROGRAMME_SURFACES.includes(
+      candidate as (typeof PUBLIC_PROGRAMME_SURFACES)[number],
+    ) ||
+    candidate === "overview"
+  ) {
+    throw new Response("Published programme surface not found", {
+      status: 404,
+    });
+  }
+  return candidate as Exclude<PublicProgrammeSurface, "overview">;
+}
 
 export function itineraryCookie(
   token: string,
@@ -74,6 +108,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!programme)
     throw new Response("Published event programme not found", { status: 404 });
   const embedded = new URL(request.url).pathname.startsWith("/embed/");
+  const surface = embedded ? "overview" : surfaceFromRequest(request);
   const url = new URL(request.url);
   let embedOptions;
   try {
@@ -183,6 +218,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return data(
     {
       programme,
+      surface,
       itinerary,
       embedded,
       embedOptions,

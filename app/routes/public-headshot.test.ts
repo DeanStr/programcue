@@ -115,7 +115,13 @@ async function createSecondPublishedEvent(personId: string) {
          id, event_id, schedule_version_id, session_id, room_id,
          starts_at, ends_at, created_at, updated_at
        ) VALUES (?, ?, ?, ?, ?, 4070912400, 4070914200, unixepoch(), unixepoch())`,
-    ).bind(`headshot-other-entry-${suffix}`, eventId, versionId, sessionId, roomId),
+    ).bind(
+      `headshot-other-entry-${suffix}`,
+      eventId,
+      versionId,
+      sessionId,
+      roomId,
+    ),
     env.DB.prepare(
       `INSERT INTO session_speakers (
          session_id, event_id, person_id, position, visibility
@@ -151,7 +157,7 @@ describe("published programme headshots", () => {
       (await service.getPublished("future-of-events-2025"))!.speakers.find(
         (candidate) => candidate.id === speaker.id,
       )?.imageUrl,
-    ).toBeNull();
+    ).toMatch(/^\/images\/demo-speakers\//u);
 
     const headshot = await createCleanHeadshot("evt-foe-2025", speaker.id);
     expect(
@@ -224,6 +230,29 @@ describe("published programme headshots", () => {
     );
   });
 
+  it("does not expose an infected or quarantined current headshot", async () => {
+    const service = new PublicProgrammeService(testEnv);
+    const programme = await service.getPublished("future-of-events-2025");
+    const personId = programme!.speakers[0].id;
+    const headshot = await createCleanHeadshot("evt-foe-2025", personId);
+    await env.DB.prepare(
+      `UPDATE file_versions
+          SET scan_status = 'infected', scan_error = 'quarantined', released_at = NULL
+        WHERE id = ? AND event_id = 'evt-foe-2025'`,
+    )
+      .bind(headshot.versionId)
+      .run();
+
+    expect(
+      (await service.getPublished("future-of-events-2025"))!.speakers.find(
+        (speaker) => speaker.id === personId,
+      )?.imageUrl,
+    ).toBeNull();
+    expect((await responseFor("future-of-events-2025", personId)).status).toBe(
+      404,
+    );
+  });
+
   it("does not expose a clean headshot for an inactive event", async () => {
     const service = new PublicProgrammeService(testEnv);
     const programme = await service.getPublished("future-of-events-2025");
@@ -258,8 +287,8 @@ describe("published programme headshots", () => {
       expect.objectContaining({ id: personId, imageUrl: null }),
     ]);
     expect((await responseFor(other.slug, personId)).status).toBe(404);
-    expect(
-      (await responseFor("future-of-events-2025", personId)).status,
-    ).toBe(200);
+    expect((await responseFor("future-of-events-2025", personId)).status).toBe(
+      200,
+    );
   });
 });

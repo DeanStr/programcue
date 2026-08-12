@@ -3,6 +3,7 @@ export const nodeOnlyTestFiles = [
   "e2e/support/reset-demo-submissions.unit.ts",
   "app/components/admin-shell-navigation.test.ts",
   "app/components/application-public-landing.test.tsx",
+  "app/components/public-programme-surfaces.test.tsx",
   "app/components/communications-centre-panels.test.tsx",
   "app/components/form-js-import-queue.test.ts",
   "app/components/sessionize-profile-import.test.ts",

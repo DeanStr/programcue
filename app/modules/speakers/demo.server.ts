@@ -87,13 +87,22 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
     env.DB.prepare(
       `
       UPDATE people
-         SET biography = COALESCE(biography, 'Priya helps event teams design useful, inclusive technology experiences.'),
+         SET biography = COALESCE(biography, 'Priya Shah helps event teams design useful, inclusive technology experiences. Her work brings together service design, accessible interaction patterns and the practical details that help busy conferences feel calm, welcoming and easy to navigate for every attendee.'),
              pronunciation = COALESCE(pronunciation, 'PREE-yah SHAH'),
-             organisation_name = COALESCE(organisation_name, 'EventLab'),
-             job_title = COALESCE(job_title, 'Director of Experience Design')
+             organisation_name = COALESCE(NULLIF(organisation_name, ''), 'EventLab'),
+             job_title = COALESCE(NULLIF(job_title, ''), 'Director of Experience Design')
        WHERE id = ?
     `,
     ).bind(SPEAKER_ID),
+    env.DB.prepare(
+      `
+      UPDATE people
+         SET biography = COALESCE(biography, 'Alex Morgan designs data-informed attendee experiences and practical operating systems for teams running complex events.'),
+             organisation_name = COALESCE(NULLIF(organisation_name, ''), 'Northstar Events'),
+             job_title = COALESCE(NULLIF(job_title, ''), 'Product Strategy Lead')
+       WHERE id = 'person-demo-submitter'
+    `,
+    ),
     env.DB.prepare(
       `
       INSERT OR IGNORE INTO sessions (

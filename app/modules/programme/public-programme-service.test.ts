@@ -20,6 +20,7 @@ import {
   PublishedProgrammeSpeakerInvariantError,
   readCookie,
 } from "./public-programme-service.server";
+import { sortPublishedSpeakers } from "./programme-presentation";
 
 describe("published programme and itinerary", () => {
   afterEach(() => {
@@ -167,6 +168,42 @@ describe("published programme and itinerary", () => {
       }),
     );
     expect(programme?.speakers[0]).not.toHaveProperty("email");
+    expect(programme?.speakers.map((speaker) => speaker.id)).toEqual(
+      sortPublishedSpeakers(programme!.speakers).map((speaker) => speaker.id),
+    );
+    expect(programme?.speakers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "person-demo-speaker",
+          displayName: "Priya Shah",
+          jobTitle: "Director of Experience Design",
+          organisationName: "EventLab",
+          imageUrl: "/images/demo-speakers/priya-shah.webp",
+        }),
+        expect.objectContaining({
+          id: "person-demo-submitter",
+          displayName: "Alex Morgan",
+          jobTitle: "Product Strategy Lead",
+          organisationName: "Northstar Events",
+          imageUrl: "/images/demo-speakers/alex-morgan.webp",
+        }),
+      ]),
+    );
+    const speakerById = new Map(
+      programme!.speakers.map((speaker) => [speaker.id, speaker]),
+    );
+    expect(
+      programme!.sessions.every((session) =>
+        session.speakerIds.every((speakerId) => {
+          const speaker = speakerById.get(speakerId);
+          return (
+            speaker?.sessionIds.includes(session.id) &&
+            speaker.jobTitle &&
+            speaker.organisationName
+          );
+        }),
+      ),
+    ).toBe(true);
     expect(
       programme?.sessions.every((session) => session.speakerNames.length > 0),
     ).toBe(true);
@@ -269,6 +306,72 @@ describe("published programme and itinerary", () => {
     ).toBe(false);
   });
 
+  it("loads a published programme with more than 98 speakers", async () => {
+    const service = new PublicProgrammeService({
+      ...(env as unknown as CloudflareEnvironment),
+      DEMO_MODE: "false",
+    } as CloudflareEnvironment);
+    const prefix = `many-speaker-${crypto.randomUUID().slice(0, 8)}-`;
+    const speakerIds = Array.from(
+      { length: 99 },
+      (_, index) => `${prefix}${index}`,
+    );
+    const cleanup = async () => {
+      await env.DB.batch([
+        env.DB.prepare(
+          `DELETE FROM session_speakers
+             WHERE person_id IN (
+               SELECT id FROM people WHERE display_name LIKE 'Large Programme Speaker %'
+             )`,
+        ),
+        env.DB.prepare(
+          "DELETE FROM people WHERE display_name LIKE 'Large Programme Speaker %'",
+        ),
+      ]);
+    };
+
+    try {
+      await cleanup();
+      await env.DB.batch([
+        ...speakerIds.map((speakerId, index) =>
+          env.DB.prepare(
+            `
+            INSERT INTO people (
+              id, email, display_name, email_verified, profile_status,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, 1, 'published', unixepoch(), unixepoch())
+          `,
+          ).bind(
+            speakerId,
+            `${speakerId}@example.com`,
+            `Large Programme Speaker ${String(index).padStart(3, "0")}`,
+          ),
+        ),
+        ...speakerIds.map((speakerId, index) =>
+          env.DB.prepare(
+            `
+            INSERT INTO session_speakers (
+              session_id, event_id, person_id, position, visibility
+            ) VALUES ('demo-session-1', 'evt-foe-2025', ?, ?, 'public')
+          `,
+          ).bind(speakerId, index + 1_000),
+        ),
+      ]);
+
+      const programme = await service.getPublished("future-of-events-2025");
+      expect(programme).not.toBeNull();
+      expect(programme!.speakers).toEqual(
+        expect.arrayContaining(
+          speakerIds.map((speakerId) =>
+            expect.objectContaining({ id: speakerId }),
+          ),
+        ),
+      );
+    } finally {
+      await cleanup();
+    }
+  });
+
   it("does not expose stale publication state for an inactive event", async () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
@@ -283,10 +386,65 @@ describe("published programme and itinerary", () => {
       await expect(
         service.getPublished("future-of-events-2025"),
       ).resolves.toBeNull();
+      await expect(
+        service.getPublishedLandingSummary("future-of-events-2025", 8),
+      ).resolves.toBeNull();
     } finally {
       await env.DB.prepare(
         `UPDATE events SET activation_status = 'active'
           WHERE id = 'evt-foe-2025'`,
+      ).run();
+    }
+  });
+
+  it("filters sessions whose published records are not public", async () => {
+    const service = new PublicProgrammeService(
+      env as unknown as CloudflareEnvironment,
+    );
+    await env.DB.prepare(
+      "UPDATE sessions SET visibility = 'private' WHERE id = 'demo-session-1'",
+    ).run();
+    try {
+      const programme = await service.getPublished("future-of-events-2025");
+      expect(
+        programme?.sessions.some((session) => session.id === "demo-session-1"),
+      ).toBe(false);
+      expect(
+        programme?.speakers.every((speaker) =>
+          speaker.sessionIds.every((sessionId) =>
+            programme.sessions.some((session) => session.id === sessionId),
+          ),
+        ),
+      ).toBe(true);
+    } finally {
+      await env.DB.prepare(
+        "UPDATE sessions SET visibility = 'public' WHERE id = 'demo-session-1'",
+      ).run();
+    }
+  });
+
+  it("fails closed when published session content is not public", async () => {
+    const service = new PublicProgrammeService(
+      env as unknown as CloudflareEnvironment,
+    );
+    await env.DB.prepare(
+      `UPDATE schedule_session_contents
+          SET visibility = 'private'
+        WHERE schedule_version_id = 'demo-schedule-published'
+          AND event_id = 'evt-foe-2025'
+          AND session_id = 'demo-session-1'`,
+    ).run();
+    try {
+      await expect(
+        service.getPublished("future-of-events-2025"),
+      ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
+    } finally {
+      await env.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET visibility = 'public'
+          WHERE schedule_version_id = 'demo-schedule-published'
+            AND event_id = 'evt-foe-2025'
+            AND session_id = 'demo-session-1'`,
       ).run();
     }
   });

@@ -51,6 +51,10 @@ const SURFACES: readonly Surface[] = [
     path: "/public/programme/future-of-events-2025",
   },
   {
+    name: "public-speaker-gallery",
+    path: "/public/programme/future-of-events-2025/gallery",
+  },
+  {
     name: "programme-embed",
     path: "/embed/future-of-events-2025",
   },
@@ -408,6 +412,19 @@ test.describe.serial(
         board.getByRole("heading", { name: "Identified", exact: true }),
       ).toBeInViewport();
       await captureLaptopViewport(page, "speaker-crm-pipeline");
+    });
+
+    test("Public Speaker Gallery keeps its visual grid legible", async ({
+      page,
+    }) => {
+      await openHydrated(
+        page,
+        "/public/programme/future-of-events-2025/gallery",
+      );
+      await expect(
+        page.getByRole("heading", { name: "Speaker Gallery", exact: true }),
+      ).toBeInViewport();
+      await captureLaptopViewport(page, "public-speaker-gallery-laptop");
     });
   },
 );
