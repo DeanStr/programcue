@@ -1,0 +1,210 @@
+/* Global overlays and interaction surfaces have one cascade owner. */
+body.portal-open {
+  overflow: hidden;
+}
+.toast-wrap {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 120;
+  display: grid;
+  gap: 8px;
+  max-width: min(390px, calc(100vw - 36px));
+}
+.toast {
+  min-width: 300px;
+  background: #fff;
+  color: white;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--green);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 11px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.toast.success {
+  border-left-color: #22c55e;
+}
+.toast.danger {
+  border-left-color: var(--red);
+}
+.toast.warning {
+  border-left-color: var(--amber);
+}
+.toast.info {
+  border-left-color: var(--blue);
+}
+.toast .close {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 18px;
+}
+.shortcut-list {
+  display: grid;
+  gap: 10px;
+}
+.shortcut-list > div {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.sidebar-is-collapsed {
+  --sidebar: 76px;
+}
+.sidebar-is-collapsed .brand > span:last-child,
+.sidebar-is-collapsed .nav-label,
+.sidebar-is-collapsed .demo-card {
+  display: none;
+}
+.sidebar-is-collapsed .brand,
+.sidebar-is-collapsed .nav a {
+  justify-content: center;
+}
+.sidebar-is-collapsed .sidebar-collapse {
+  text-align: center;
+}
+.schedule-drop.drop-target,
+.form-field-card.drop-target {
+  background: #eef2ff !important;
+  outline: 3px dashed var(--brand-500);
+  outline-offset: -4px;
+}
+.session-card:focus-visible {
+  z-index: 25;
+  outline: 3px solid var(--brand-400);
+}
+.itinerary-item {
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.programme-row {
+  cursor: pointer;
+}
+.programme-row:focus-visible {
+  position: relative;
+  z-index: 2;
+}
+.field-select {
+  border-color: var(--brand-400);
+}
+.form-field-actions {
+  display: flex;
+  gap: 4px;
+}
+.form-field-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+}
+.modal-overlay,
+.command-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.58);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  z-index: 110;
+}
+.command-overlay {
+  backdrop-filter: blur(4px);
+}
+.modal {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 30px 80px rgba(2, 6, 23, 0.32);
+  width: min(680px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+}
+.modal-head,
+.modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.modal-head h2 {
+  margin: 0;
+}
+.modal-head .icon-btn {
+  margin-left: auto;
+}
+.modal-body {
+  padding: 16px;
+}
+.modal-foot {
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  justify-content: flex-end;
+}
+.command-box {
+  width: min(720px, 100%);
+  max-height: min(680px, calc(100vh - 40px));
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 30px 80px rgba(2, 6, 23, 0.32);
+  overflow: hidden;
+}
+.command-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.command-input input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  font-size: 17px;
+}
+.command-results {
+  max-height: 520px;
+  overflow: auto;
+  padding: 8px;
+}
+.command-group-title {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 10px;
+}
+.command-item {
+  display: grid;
+  grid-template-columns: 110px 1fr 30px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 9px;
+}
+.command-item:hover,
+.command-item.selected {
+  background: #eef2ff;
+}
+.command-item .meta {
+  margin-left: auto;
+  color: var(--muted);
+  text-align: right;
+  font-size: 11px;
+}
+.command-footer {
+  display: flex;
+  gap: 16px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}

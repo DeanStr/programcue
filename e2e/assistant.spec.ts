@@ -86,7 +86,10 @@ test("assistant task preview requires confirmation and executes through the real
   await page.getByRole("link", { name: "Open created task" }).click();
   await expect(page).toHaveURL(/\/admin\/tasks\?task=/);
   await expect(
-    page.getByRole("row").filter({ hasText: fixtureData.taskTitle }),
+    page
+      .getByRole("table")
+      .getByRole("row")
+      .filter({ hasText: fixtureData.taskTitle }),
   ).toBeVisible();
 });
 

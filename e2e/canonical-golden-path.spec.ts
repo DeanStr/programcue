@@ -351,9 +351,11 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await expect(placement.getByLabel("Duration (minutes)")).toHaveValue("60");
 
     await placement.getByLabel("Duration (minutes)").fill("45");
+    const finalResizeRequest = waitForScheduleMutation(page);
     await placement
       .getByRole("button", { name: "Move or resize session" })
       .click();
+    expect((await finalResizeRequest).ok()).toBeTruthy();
     await expectStatus(page, "Session placed");
     await page.getByRole("button", { name: "Publish schedule" }).click();
     const publication = page.getByRole("dialog", { name: "Publish schedule" });

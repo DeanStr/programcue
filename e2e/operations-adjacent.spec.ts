@@ -41,13 +41,25 @@ test("event cloning shows its copy boundary and records a clean event", async ({
       sameSite: "Lax",
     },
   ]);
+  const unique = Date.now();
+  await waitForInterface(page, "/admin/events/new");
+  await page.getByLabel("Event name").fill(`Browser clone source ${unique}`);
+  await page.getByLabel("Public slug").fill(`browser-clone-source-${unique}`);
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Create blank event" }).click();
+  await expect(page.getByText("Event created", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Open new event" }).click();
+  await expect(page.locator(".event-switcher strong")).toHaveText(
+    `Browser clone source ${unique}`,
+  );
+
   await waitForInterface(page, "/admin/events/clone");
   await expect(
-    page.getByRole("heading", { name: /Clone Future of Events 2025/ }),
+    page.getByRole("heading", { name: /Clone Browser clone source/ }),
   ).toBeVisible();
   await expect(page.getByText("Intentionally excluded")).toBeVisible();
-  await page.getByLabel("Event name").fill("Browser clone event");
-  await page.getByLabel("Public slug").fill("browser-clone-event");
+  await page.getByLabel("Event name").fill(`Browser clone event ${unique}`);
+  await page.getByLabel("Public slug").fill(`browser-clone-event-${unique}`);
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Create clean clone" }).click();
   const cloneStatus = page

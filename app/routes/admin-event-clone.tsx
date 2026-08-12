@@ -9,6 +9,7 @@ import { EventRepositoryProvisioningError } from "~/modules/events/event-reposit
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
+  EventCloneConfigurationError,
   EventCloneService,
   EventCloneSlugConflictError,
 } from "~/platform/operations/event-clone-service.server";
@@ -67,6 +68,12 @@ export async function action({ request, context }: Route.ActionArgs) {
       result,
     });
   } catch (error) {
+    if (error instanceof EventCloneConfigurationError) {
+      return data(
+        { ok: false as const, message: error.message, result: null },
+        { status: 422 },
+      );
+    }
     if (error instanceof EventRepositoryProvisioningError) {
       return data(
         {

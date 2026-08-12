@@ -1,6 +1,16 @@
 @import url("/styles/base.css");
-@import url("/styles/workspaces.css");
+@import url("/styles/workspace-command.css");
+@import url("/styles/workspace-review.css");
+@import url("/styles/workspace-form-builder.css");
+@import url("/styles/workspace-schedule.css");
+@import url("/styles/workspace-communications.css");
+@import url("/styles/workspace-tasks.css");
+@import url("/styles/workspace-programme-admin.css");
+@import url("/styles/workspace-integrations.css");
+@import url("/styles/workspace-speaker.css");
+@import url("/styles/workspace-public-programme.css");
 @import url("/styles/responsive-refinements.css");
+@import url("/styles/interaction-surfaces.css");
 @import url("/styles/design-primitives.css");
 @import url("/styles/speaker-resources.css");
 @import url("/styles/schedule-operations.css");

@@ -1,0 +1,145 @@
+/* Schedule */
+.schedule-summary {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr) 1.8fr;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  margin: 12px 0;
+}
+.schedule-summary > div {
+  padding: 12px;
+  border-right: 1px solid var(--line);
+}
+.schedule-summary > div:last-child {
+  border-right: 0;
+}
+.schedule-summary strong,
+.schedule-summary small {
+  display: block;
+}
+.schedule-layout {
+  display: grid;
+  grid-template-columns: minmax(760px, 1fr) 340px;
+  gap: 12px;
+}
+.schedule-board {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+}
+.schedule-grid {
+  min-width: 920px;
+  display: grid;
+  grid-template-columns: 72px repeat(5, minmax(145px, 1fr));
+  grid-template-rows: 44px repeat(10, 70px);
+  position: relative;
+}
+.schedule-grid .cell {
+  border-right: 1px solid #e7ebf2;
+  border-bottom: 1px solid #edf1f6;
+  padding: 5px;
+  position: relative;
+}
+.schedule-grid .header {
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.schedule-grid .time {
+  font-size: 11px;
+  color: #475569;
+  font-weight: 650;
+  background: #fbfcfe;
+  position: sticky;
+  left: 0;
+  z-index: 4;
+}
+.session-card {
+  position: absolute;
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 7px;
+  font-size: 10px;
+  overflow: hidden;
+  z-index: 3;
+  cursor: grab;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.session-card strong {
+  font-size: 11px;
+  display: block;
+}
+.session-card.keynote {
+  background: #f5f3ff;
+  border-color: #c4b5fd;
+  color: #4c1d95;
+}
+.session-card.presentation {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e3a8a;
+}
+.session-card.panel {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+.session-card.workshop {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+.session-card.breakout {
+  background: #ecfeff;
+  border-color: #a5f3fc;
+  color: #155e75;
+}
+.session-card.conflict {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+  background: #fff5f5;
+  color: #991b1b;
+}
+.drop-target {
+  outline: 2px dashed #818cf8;
+  outline-offset: -4px;
+  background: #eef2ff !important;
+}
+.conflict-panel {
+  padding: 14px;
+}
+.validation-list {
+  display: grid;
+  gap: 7px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 10px;
+  border-radius: 9px;
+  color: #166534;
+  font-size: 12px;
+}
+.unscheduled {
+  display: flex;
+  gap: 8px;
+  overflow: auto;
+  padding-bottom: 4px;
+}
+.unscheduled-card {
+  min-width: 150px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px;
+  background: white;
+}
+.pending-change {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  border-radius: 10px;
+  padding: 10px;
+}

@@ -41,6 +41,39 @@ beforeEach(async () => {
 });
 
 describe("manual person creation warnings", () => {
+  it("rejects a missing speaker payload at the route boundary", async () => {
+    const title = `Missing speakers ${crypto.randomUUID()}`;
+    const result = await action({
+      request: adminRequest(
+        new URLSearchParams({
+          _intent: "create_direct_session",
+          idempotencyKey: crypto.randomUUID(),
+          title,
+          description: "This request is missing its speaker payload.",
+          format: "presentation",
+          trackId: "demo-track-ai",
+          durationMinutes: "45",
+        }),
+      ),
+      params: {},
+      context: context(),
+    } as never);
+
+    if (result instanceof Response) {
+      throw new Error("Missing speaker payload returned a raw response.");
+    }
+    expect(result.init?.status).toBe(400);
+    expect(result.data).toEqual({
+      ok: false,
+      message: "The speaker details are missing. Refresh and try again.",
+    });
+    await expect(
+      env.DB.prepare("SELECT 1 FROM sessions WHERE event_id = ? AND title = ?")
+        .bind("evt-foe-2025", title)
+        .first(),
+    ).resolves.toBeNull();
+  });
+
   it("blocks a direct session until an administrator reviews likely duplicates", async () => {
     const title = `Duplicate warning ${crypto.randomUUID()}`;
     const idempotencyKey = crypto.randomUUID();

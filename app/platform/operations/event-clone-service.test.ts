@@ -17,6 +17,7 @@ import { TaskService } from "~/modules/tasks/task-service.server";
 import type { PreparedAirtableRepositoryConnection } from "~/modules/airtable/airtable-room-repository.server";
 import { EventRepositoryProvisioningService } from "~/modules/events/event-repository-provisioning.server";
 import {
+  EventCloneConfigurationError,
   EventCloneService,
   EventCloneSlugConflictError,
 } from "~/platform/operations/event-clone-service.server";
@@ -58,6 +59,19 @@ describe("event cloning", () => {
   beforeEach(async () => {
     await ensureDemoData(env as unknown as CloudflareEnvironment);
     await env.DB.batch([
+      env.DB.prepare(
+        `DELETE FROM task_template_dependencies
+          WHERE template_id = 'resource-ack:source-page'
+             OR depends_on_template_id = 'resource-ack:source-page'`,
+      ),
+      env.DB.prepare(
+        `DELETE FROM task_templates
+          WHERE id = 'resource-ack:source-page' AND event_id = ?`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `UPDATE form_definitions SET confirmation_template_id = NULL
+          WHERE id = 'clone-form' AND event_id = ?`,
+      ).bind(viewer.eventId),
       env.DB.prepare(
         `INSERT OR IGNORE INTO memberships (
            id, organisation_id, event_id, person_id, role,
@@ -547,7 +561,7 @@ describe("event cloning", () => {
     ).resolves.toBeNull();
   });
 
-  it("clears event-owned form routes and excludes resource-generated tasks", async () => {
+  it("clears event-owned form routes before copying isolated configuration", async () => {
     await env.DB.batch([
       env.DB.prepare(
         `UPDATE form_versions
@@ -563,21 +577,6 @@ describe("event cloning", () => {
           passwordHash: "source-password-hash",
         }),
         viewer.eventId,
-      ),
-      env.DB.prepare(
-        `INSERT INTO task_templates (
-           id,event_id,name,description,target_type,task_type,impact,
-           evidence_mode,due_anchor,auto_assign_on_acceptance,
-           configuration_json,status
-         ) VALUES (
-           'resource-ack:source-page',?,'Read source guide','Read it',
-           'speaker','acknowledgement','medium','checkbox','none',0,?,'active'
-         )`,
-      ).bind(viewer.eventId, JSON.stringify({ resourcePageId: "source-page" })),
-      env.DB.prepare(
-        `INSERT INTO task_template_dependencies (
-           template_id,depends_on_template_id
-         ) VALUES ('clone-task-b','resource-ack:source-page')`,
       ),
     ]);
 
@@ -630,6 +629,74 @@ describe("event cloning", () => {
         .bind(cloned.eventId, cloned.eventId)
         .first(),
     ).toEqual({ count: 1 });
+  });
+
+  it("fails before cloning a resource-linked acknowledgement task", async () => {
+    await env.DB.prepare(
+      `INSERT INTO task_templates (
+         id,event_id,name,description,target_type,task_type,impact,
+         evidence_mode,due_anchor,auto_assign_on_acceptance,
+         configuration_json,status
+       ) VALUES (
+         'resource-ack:source-page',?,'Read source guide','Read it',
+         'speaker','acknowledgement','medium','checkbox','none',0,?,'active'
+       )`,
+    )
+      .bind(viewer.eventId, JSON.stringify({ resourcePageId: "source-page" }))
+      .run();
+    const slug = `resource-task-clone-${crypto.randomUUID()}`;
+
+    await expect(
+      new EventCloneService(env as unknown as CloudflareEnvironment).clone(
+        viewer,
+        {
+          name: "Resource task clone",
+          slug,
+          timezone: "UTC",
+          startDate: "2027-07-01",
+          endDate: "2027-07-02",
+          repositoryProvider: "d1",
+        },
+      ),
+    ).rejects.toThrow(
+      new EventCloneConfigurationError(
+        "Task template resource-ack:source-page configuration references a resource page, which event cloning does not copy. Remove or archive the generated acknowledgement task before cloning this event.",
+      ),
+    );
+    await expect(
+      env.DB.prepare("SELECT 1 FROM events WHERE slug = ?").bind(slug).first(),
+    ).resolves.toBeNull();
+  });
+
+  it("fails before detaching a form from a non-cloneable confirmation template", async () => {
+    await env.DB.prepare(
+      `UPDATE form_definitions SET confirmation_template_id = 'clone-archived-comm'
+        WHERE id = 'clone-form' AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const slug = `confirmation-template-clone-${crypto.randomUUID()}`;
+
+    await expect(
+      new EventCloneService(env as unknown as CloudflareEnvironment).clone(
+        viewer,
+        {
+          name: "Confirmation template clone",
+          slug,
+          timezone: "UTC",
+          startDate: "2027-07-01",
+          endDate: "2027-07-02",
+          repositoryProvider: "d1",
+        },
+      ),
+    ).rejects.toThrow(
+      new EventCloneConfigurationError(
+        "Form clone-form references confirmation template clone-archived-comm, which is not available to clone. Remove the reference or restore the template before cloning this event.",
+      ),
+    );
+    await expect(
+      env.DB.prepare("SELECT 1 FROM events WHERE slug = ?").bind(slug).first(),
+    ).resolves.toBeNull();
   });
 
   it("relies on an owner's organisation membership instead of creating persistent event access", async () => {

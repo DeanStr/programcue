@@ -1,0 +1,39 @@
+/* Tasks */
+.tasks-summary {
+  display: grid;
+  grid-template-columns: 1.25fr repeat(5, 0.7fr);
+  gap: 10px;
+}
+.tasks-layout {
+  display: grid;
+  grid-template-columns: minmax(760px, 1fr) 300px;
+  gap: 12px;
+}
+.tasks-side .field,
+.tasks-side .select,
+.tasks-side .textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.impact {
+  font-weight: 750;
+}
+.impact.critical {
+  color: #b91c1c;
+}
+.impact.high {
+  color: #c2410c;
+}
+.impact.medium {
+  color: #a16207;
+}
+.impact.low {
+  color: #15803d;
+}
+.task-bottom {
+  display: grid;
+  grid-template-columns: 0.75fr 0.75fr 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}

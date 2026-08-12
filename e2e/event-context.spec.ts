@@ -22,16 +22,16 @@ test("an event switch persists across reloads on the local HTTP Worker", async (
       sameSite: "Lax",
     },
   ]);
-  const cloneName = "Event context browser check";
-  await page.goto("/admin/events/clone");
-  await page.getByLabel("Event name").fill(cloneName);
+  const eventName = "Event context browser check";
+  await page.goto("/admin/events/new");
+  await page.getByLabel("Event name").fill(eventName);
   await page.getByLabel("Public slug").fill("event-context-browser-check");
   page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Create clean clone" }).click();
-  await expect(page.getByText("Clone complete", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Create blank event" }).click();
+  await expect(page.getByText("Event created", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Open cloned event" }).click();
-  await expect(page.locator(".event-switcher strong")).toHaveText(cloneName);
+  await page.getByRole("button", { name: "Open new event" }).click();
+  await expect(page.locator(".event-switcher strong")).toHaveText(eventName);
 
   const selectionCookie = (await context.cookies()).find(
     (cookie) => cookie.name === "program_cue_event",
@@ -43,7 +43,7 @@ test("an event switch persists across reloads on the local HTTP Worker", async (
   });
 
   await page.reload();
-  await expect(page.locator(".event-switcher strong")).toHaveText(cloneName);
+  await expect(page.locator(".event-switcher strong")).toHaveText(eventName);
   await page
     .getByLabel("Event name")
     .fill("Unsaved configuration from the previous event");
