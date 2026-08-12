@@ -290,9 +290,7 @@ a {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  /* A label that wraps mid-word at the moment of commitment reads as broken.
-     Buttons size to their label; rows wrap instead. */
-  white-space: nowrap;
+  max-width: 100%;
   transition:
     background-color var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
@@ -361,10 +359,19 @@ a {
   cursor: not-allowed;
   transform: none;
 }
-/* Action rows wrap as a group so individual labels never have to. */
+/* Action rows wrap as a group so individual labels never have to. Scoped to
+   rows: a standalone button with a long label must still wrap, or it forces
+   the page wider than the viewport. */
 .page-actions,
-.pc-page-header .page-actions {
+.pc-page-header .page-actions,
+.row-actions,
+.modal-foot {
   flex-wrap: wrap;
+}
+.page-actions > .btn,
+.row-actions > .btn,
+.modal-foot > .btn {
+  white-space: nowrap;
 }
 .avatar {
   width: 36px;
