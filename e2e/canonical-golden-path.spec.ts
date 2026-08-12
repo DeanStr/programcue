@@ -31,6 +31,14 @@ async function expectStatus(page: Page, text: string) {
   ).toBeVisible();
 }
 
+function waitForScheduleMutation(page: Page) {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/admin/schedule.data",
+  );
+}
+
 async function switchDemoRole(
   page: Page,
   role: "administrator" | "evaluator" | "speaker",
@@ -330,11 +338,15 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await expectStatus(page, "Session placed");
 
     await placement.getByLabel("Duration (minutes)").fill("45");
+    const resizeRequest = waitForScheduleMutation(page);
     await placement
       .getByRole("button", { name: "Move or resize session" })
       .click();
+    expect((await resizeRequest).ok()).toBeTruthy();
     await expectStatus(page, "Session placed");
+    const undoRequest = waitForScheduleMutation(page);
     await page.getByRole("button", { name: "Undo" }).click();
+    expect((await undoRequest).ok()).toBeTruthy();
     await expectStatus(page, "Schedule change undone");
     await expect(placement.getByLabel("Duration (minutes)")).toHaveValue("60");
 

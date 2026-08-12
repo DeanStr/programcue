@@ -67,14 +67,15 @@ Event slugs are globally unique. Public programme and calendar-session links alw
 npm run check
 ```
 
-This runs configuration contracts, TypeScript and React Router type generation, fast Node rule tests, isolated workerd/D1/R2/Agent integration tests, one production build, migration/recovery/OpenAPI validation, and Playwright behavior/accessibility/visual coverage against a freshly built local production Worker in Chromium plus Firefox/WebKit smoke coverage.
+This runs configuration contracts, TypeScript and React Router type generation, fast Node rule tests, isolated workerd/D1/R2/Agent integration tests, one production build, migration/recovery/OpenAPI validation, and Playwright behavior/accessibility/visual coverage against freshly migrated local production Workers in Chromium plus Firefox/WebKit smoke coverage. Independent core lanes run concurrently after type generation. The browser gate builds once, then distributes the unchanged suite across five isolated Worker/D1 shards and prints timing summaries for both phases.
 
-When another worktree already owns the default test port, set an isolated one for the complete browser-backed command, for example `PROGRAM_CUE_E2E_PORT=5174 npm run check`.
+The shards reserve five consecutive ports beginning at `5173`; their inspector ports are derived from the same base. When another worktree owns that range, choose another base, for example `PROGRAM_CUE_E2E_PORT=5180 npm run check`. Set `PROGRAM_CUE_E2E_SHARDS=1` to diagnose the complete suite serially, or use `npm run test:e2e:serial -- e2e/example.spec.ts` for a focused Playwright invocation. Successful local runs leave tracing off to avoid recording and discarding every browser interaction; set `PROGRAM_CUE_E2E_TRACE=1` when a diagnostic trace is worth the additional I/O. CI retains traces on failure.
 
 Use the smaller commands while developing:
 
 ```bash
 npm run check:core
+npm run check:quick
 npm run typecheck
 npm test
 npm run test:unit
@@ -85,7 +86,7 @@ npm run test:e2e
 npm run performance:local
 ```
 
-`test:unit` runs deterministic Node-compatible rules without starting Workerd or applying D1 migrations. `test:worker` runs the service, route and provider-boundary suites against the Cloudflare runtime. `npm test` runs both projects; neither focused command replaces the complete validation gate.
+`check:quick` runs the complete core gate plus sharded desktop Chromium behavior, excluding the full visual inventory and cross-browser smoke. It is an iteration aid, not a release or user-facing completion gate. `test:unit` runs deterministic Node-compatible rules without starting Workerd or applying D1 migrations. `test:worker` runs the service, route and provider-boundary suites against the Cloudflare runtime. `npm test` runs both projects; no focused or quick command replaces the complete validation gate.
 
 ## Production configuration
 

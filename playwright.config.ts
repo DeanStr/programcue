@@ -2,6 +2,19 @@ import { defineConfig, devices } from "@playwright/test";
 
 import { e2eOrigin } from "./e2e/support/e2e-origin";
 
+const trace = process.env.CI || process.env.PROGRAM_CUE_E2E_TRACE === "1"
+  ? "retain-on-failure"
+  : "off";
+
+export const desktopChromiumProject = {
+  name: "desktop-chromium",
+  testIgnore: /cross-browser-smoke\.spec\.ts/,
+  use: {
+    ...devices["Desktop Chrome"],
+    viewport: { width: 1440, height: 1000 },
+  },
+};
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -14,7 +27,7 @@ export default defineConfig({
     colorScheme: "light",
     locale: "en-US",
     timezoneId: "UTC",
-    trace: "retain-on-failure",
+    trace,
   },
   expect: {
     toHaveScreenshot: {
@@ -29,14 +42,7 @@ export default defineConfig({
     timeout: 120_000,
   },
   projects: [
-    {
-      name: "desktop-chromium",
-      testIgnore: /cross-browser-smoke\.spec\.ts/,
-      use: {
-        ...devices["Desktop Chrome"],
-        viewport: { width: 1440, height: 1000 },
-      },
-    },
+    desktopChromiumProject,
     {
       name: "mobile-chromium",
       use: { ...devices["Pixel 7"] },
