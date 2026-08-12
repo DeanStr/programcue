@@ -171,6 +171,22 @@ The common-laptop visual-coverage candidate passed `npm run check` on 12 August 
 
 The automated repository gate is complete for the deployed source revision. A real magic-link flow proves the authentication delivery boundary; it does not prove tracked communication/calendar delivery or other provider paths. The role matrix covers representative owner, administrator, chair, evaluator, submitter, speaker, pending/revoked/expired and cross-organisation states.
 
+### Design system overhaul evidence
+
+The `design-system-overhaul` branch passed `npm run check` on 12 August 2026 in its isolated worktree, with all 107 visual baselines re-recorded against the new visual language.
+
+Stylesheets moved from `public/styles/` to `app/styles/` and are bundled by Vite: one hashed, minified file replaces 32 render-blocking unminified requests totalling 128,235 bytes. `app/styles/tokens.css` is the sole declaration site for colour, space, type, radius, elevation and motion values; `scripts/check-css-hygiene.mjs` runs in the configuration-contracts lane and fails on a re-typed token value, an undefined `var()`, a font size below 12px, or raw px spacing outside the token layer. All four rules are positive-controlled and 33 stylesheets pass. Tailwind was removed: it emitted only incidental matches against hand-rolled class names and its `@theme` injected a colliding `--radius-sm`.
+
+Inter Variable is now self-hosted and preloaded; it was previously declared in `--font` with no `@font-face`, font file or link anywhere in the repository, so every tuned weight and tracking value rendered in a fallback face.
+
+Accessibility coverage widened from a single 1440 × 1000 viewport to phone (375), tablet (1024) and desktop (1440) across eleven surfaces, and `/admin/submissions` and `/admin/schedule` were added to the route list. That widening caught four real defects that the narrower suite could not see: three links and buttons losing their only label inside a breakpoint, a tab caption compositing to about 3:1, a collapsed brand link failing target-size, and a file input at the new 16px mobile size overflowing its form by 78px. All are fixed and all three viewports pass.
+
+The focus system is a single two-tone ring — `#312e81` at 10.5–11.4:1 on light grounds, a white halo at 6.3–18.4:1 on dark and saturated ones — replacing a 1.79–1.83:1 outline plus four weaker per-surface overrides and four rules that removed the indicator entirely. All 31 `window.confirm` call sites are replaced by an in-app `ConfirmDialog` that lists affected records, and the Playwright suite drives it through `e2e/support/confirm-dialog.ts` rather than native dialog handlers.
+
+Known unrelated flake: `e2e/evaluation.spec.ts:8` intermittently fails its `toBeFocused` assertion after a dialog closes. This reproduces on `main` with the same frequency and is not attributable to this branch.
+
+Dark mode is defined as a token override behind `data-theme="dark"` and is deliberately not wired to `prefers-color-scheme`; the 136 routes have not been verified in dark. It is **frontend foundation only** until that verification exists.
+
 ## Deployment evidence
 
 On 11 August 2026, Wrangler authentication was verified against the production Cloudflare account and the following real account resources were provisioned: D1 database `program-cue-db`, private R2 buckets `program-cue-files` and `program-cue-d1-backups`, Queue `program-cue-operations`, dead-letter Queue `program-cue-operations-dlq`, and a managed Turnstile widget restricted to `app.programcue.com`. The D1 baseline migration was applied remotely. Both R2 public development domains are disabled; the files bucket permits browser multipart `PUT` only from `https://app.programcue.com`, while the backup bucket has no browser CORS policy. Separate account-owned runtime tokens were created and live-verified: `program-cue-r2-files-runtime` has object read/write access only to `program-cue-files`, and `program-cue-d1-backup-runtime` has D1 read access for logical exports. The `programcue.com` zone is active and `app.programcue.com` is attached as the application Worker Custom Domain.
