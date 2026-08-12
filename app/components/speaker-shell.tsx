@@ -94,26 +94,28 @@ export function SpeakerShell({
         </div>
       </header>
       <div className="speaker-layout">
+        {/* The label spans are display:none at and below 1024px, which leaves
+            these links with no accessible name. */}
         <nav className="speaker-nav" aria-label="Participant workspace">
-          <NavLink to="/participant/dashboard">
+          <NavLink to="/participant/dashboard" aria-label="Overview">
             <Home aria-hidden size={17} /> <span>Overview</span>
           </NavLink>
-          <NavLink to="/participant/applications">
+          <NavLink to="/participant/applications" aria-label="Applications">
             <ClipboardList aria-hidden size={17} /> <span>Applications</span>
           </NavLink>
-          <NavLink to="/participant/sessions">
+          <NavLink to="/participant/sessions" aria-label="My sessions">
             <Mic2 aria-hidden size={17} /> <span>My sessions</span>
           </NavLink>
-          <NavLink to="/participant/tasks">
+          <NavLink to="/participant/tasks" aria-label="Tasks">
             <CheckSquare aria-hidden size={17} /> <span>Tasks</span>
           </NavLink>
-          <NavLink to="/participant/files">
+          <NavLink to="/participant/files" aria-label="Files">
             <FileStack aria-hidden size={17} /> <span>Files</span>
           </NavLink>
-          <NavLink to="/participant/resources">
+          <NavLink to="/participant/resources" aria-label="Resources">
             <BookOpen aria-hidden size={17} /> <span>Resources</span>
           </NavLink>
-          <NavLink to="/participant/profile">
+          <NavLink to="/participant/profile" aria-label="Profile">
             <UserRound aria-hidden size={17} /> <span>Profile</span>
           </NavLink>
         </nav>

@@ -1,4 +1,4 @@
-import { Outlet } from "react-router";
+import { isRouteErrorResponse, Link, Outlet, useRevalidator, useRouteError } from "react-router";
 
 import type { Route } from "./+types/admin-layout";
 import { AdminShell } from "~/components/admin-shell";
@@ -119,5 +119,48 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
     >
       <Outlet />
     </AdminShell>
+  );
+}
+
+/**
+ * A failure below this layout replaces the page, not the product. Without it
+ * any loader throw fell through to the root boundary, which discards the whole
+ * document — navigation, event context and all — for a recoverable error.
+ */
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const revalidator = useRevalidator();
+
+  const routeError = isRouteErrorResponse(error) ? error : null;
+  const title = routeError
+    ? routeError.status === 404
+      ? "Page not found"
+      : `${routeError.status} ${routeError.statusText}`
+    : "This page could not load";
+  const message =
+    routeError && routeError.status < 500 && typeof routeError.data === "string"
+      ? routeError.data
+      : routeError?.status === 404
+        ? "That page does not exist, or the link has changed."
+        : "The page failed to load. Your work has not been lost.";
+
+  return (
+    <section className="card pad" style={{ maxWidth: 620 }}>
+      <h1 style={{ fontSize: "var(--text-xl)", margin: 0 }}>{title}</h1>
+      <p className="subtle">{message}</p>
+      <div className="page-actions mt">
+        <button
+          className="btn primary"
+          disabled={revalidator.state === "loading"}
+          onClick={() => revalidator.revalidate()}
+          type="button"
+        >
+          {revalidator.state === "loading" ? "Retrying…" : "Try again"}
+        </button>
+        <Link className="btn" to="/admin/command">
+          Go to Command Centre
+        </Link>
+      </div>
+    </section>
   );
 }

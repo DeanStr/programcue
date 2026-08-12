@@ -12,6 +12,7 @@ import { Toaster } from "sonner";
 
 import type { Route } from "./+types/root";
 import { installDraftRecoverySignOutCleanup } from "~/platform/drafts/draft-recovery";
+import { RouteProgress } from "~/components/ui/route-progress";
 import "./styles/index.css";
 
 export const links: Route.LinksFunction = () => [
@@ -70,13 +71,16 @@ export default function App() {
   }, []);
   return (
     <>
+      <RouteProgress />
       <Outlet />
       <Toaster
         closeButton
         containerAriaLabel="Action status notifications"
         position="bottom-right"
-        richColors
-        toastOptions={{ closeButtonAriaLabel: "Dismiss notification" }}
+        toastOptions={{
+          closeButtonAriaLabel: "Dismiss notification",
+          classNames: { toast: "pc-toast" },
+        }}
         visibleToasts={3}
       />
     </>
@@ -86,14 +90,19 @@ export default function App() {
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let title = "Something went wrong";
   let message = "The request could not be completed.";
-  let returnHref = "/admin/event";
-  let returnLabel = "Return to Event Setup";
+  // Home, not Event Setup: an arbitrary failure is not evidence the user was
+  // setting up an event.
+  let returnHref = "/admin/command";
+  let returnLabel = "Go to Command Centre";
 
   if (isRouteErrorResponse(error)) {
     title =
       error.status === 404
         ? "Page not found"
         : `${error.status} ${error.statusText}`;
+    if (error.status === 404) {
+      message = "That page does not exist, or the link has changed.";
+    }
     if (error.status < 500 && typeof error.data === "string")
       message = error.data;
     if ([400, 403, 428].includes(error.status)) {
@@ -105,7 +114,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 
   return (
-    <main className="design-board" id="main">
+    <main className="design-board" id="main" tabIndex={-1}>
       <section
         className="card pad"
         style={{ maxWidth: 680, margin: "8vh auto" }}
@@ -113,9 +122,18 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         <span className="brand-mark">P</span>
         <h1>{title}</h1>
         <p className="subtle">{message}</p>
-        <Link className="btn primary" to={returnHref}>
-          {returnLabel}
-        </Link>
+        <div className="page-actions mt">
+          <button
+            className="btn"
+            onClick={() => window.location.reload()}
+            type="button"
+          >
+            Try again
+          </button>
+          <Link className="btn primary" to={returnHref}>
+            {returnLabel}
+          </Link>
+        </div>
       </section>
     </main>
   );

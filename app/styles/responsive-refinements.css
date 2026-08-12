@@ -467,3 +467,45 @@
     display: none;
   }
 }
+
+/* --- Mobile navigation ---------------------------------------------------
+   The sidebar is display:none below 760px. The trigger only exists there. */
+.pc-mobile-nav-trigger {
+  display: none;
+  flex: none;
+}
+@media (max-width: 760px) {
+  .pc-mobile-nav-trigger {
+    display: inline-flex;
+  }
+  .topbar {
+    grid-template-columns: 42px minmax(0, 1fr) 42px auto;
+  }
+}
+.pc-mobile-nav {
+  display: grid;
+  gap: var(--space-1);
+}
+.pc-mobile-nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+}
+.pc-mobile-nav a:hover {
+  background: var(--surface-sunken);
+}
+.pc-mobile-nav a.active {
+  background: var(--brand-50);
+  color: var(--brand-700);
+}
+.pc-mobile-nav .nav-icon {
+  color: var(--muted);
+}
+.pc-mobile-nav a.active .nav-icon {
+  color: var(--brand-600);
+}

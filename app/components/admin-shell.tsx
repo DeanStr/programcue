@@ -15,6 +15,7 @@ import {
   ListChecks,
   Activity,
   Mail,
+  Menu,
   PanelTop,
   Plus,
   Search,
@@ -44,6 +45,7 @@ import type {
 
 import { AdminAuxiliaryDialogs } from "./admin-shell-dialogs";
 import { AdminCommandDialog } from "./admin-shell-command-dialog";
+import { Dialog } from "./dialog";
 import { Button } from "./ui/button";
 
 export type AdminNavigationItem = readonly [string, LucideIcon, string];
@@ -257,6 +259,7 @@ export function AdminShell({
   const navigate = useNavigate();
   const submit = useSubmit();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [dialog, setDialog] = useState<AdminShellDialog>(null);
   const [commandQuery, setCommandQuery] = useState("");
   const [commandScope, setCommandScope] =
@@ -405,6 +408,9 @@ export function AdminShell({
               key={id}
               to={`/admin/${id}`}
               className={({ isActive }) => (isActive ? "active" : undefined)}
+              /* The label span is display:none at and below 1024px, which
+                 leaves the link with no accessible name at all. */
+              aria-label={label}
             >
               <span className="nav-icon">
                 <Icon aria-hidden size={16} strokeWidth={1.8} />
@@ -435,6 +441,7 @@ export function AdminShell({
             type="button"
             className="sidebar-collapse"
             aria-expanded={!collapsed}
+            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
             onClick={() => setCollapsed((value) => !value)}
           >
             {collapsed ? "›" : "‹"} <span className="nav-label">Collapse</span>
@@ -443,6 +450,16 @@ export function AdminShell({
       </aside>
 
       <header className="topbar">
+        {/* The sidebar is display:none below 760px. Without this the whole
+            admin product has no navigation at all on a phone. */}
+        <button
+          type="button"
+          className="icon-btn pc-mobile-nav-trigger"
+          aria-label="Open navigation"
+          onClick={() => setMobileNavOpen(true)}
+        >
+          <Menu aria-hidden size={18} />
+        </button>
         <button
           type="button"
           className="event-switcher"
@@ -496,6 +513,26 @@ export function AdminShell({
           </button>
         </div>
       </header>
+
+      {mobileNavOpen ? (
+        <Dialog title="Navigation" onClose={() => setMobileNavOpen(false)}>
+          <nav aria-label="Primary" className="pc-mobile-nav">
+            {navigationItems.map(([id, Icon, label]) => (
+              <NavLink
+                key={id}
+                to={`/admin/${id}`}
+                className={({ isActive }) => (isActive ? "active" : undefined)}
+                onClick={() => setMobileNavOpen(false)}
+              >
+                <span className="nav-icon">
+                  <Icon aria-hidden size={17} strokeWidth={1.8} />
+                </span>
+                {label}
+              </NavLink>
+            ))}
+          </nav>
+        </Dialog>
+      ) : null}
 
       <main id="main" className="main" tabIndex={-1}>
         <div className="pc-context-bar">

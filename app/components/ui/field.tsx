@@ -42,7 +42,12 @@ export function Field({ label, children, description, error, required = false, c
       </label>
       {description ? <p className="help pc-field-description" id={descriptionId}>{description}</p> : null}
       {control}
-      {error ? <p className="pc-field-error" id={errorId}>{error}</p> : null}
+      {/* role="alert" so a validation failure is announced, not just rendered. */}
+      {error ? (
+        <p className="pc-field-error" id={errorId} role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
