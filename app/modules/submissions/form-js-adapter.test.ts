@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   FormJsAdapterError,
-  fromFormJsSchema,
+  fromFormJsSchema as parseFormJsSchema,
   PROGRAM_CUE_FORM_JS_TYPES,
   toFormJsSchema,
 } from "./form-js-adapter";
-import type { SubmissionFormSchema } from "./submission-schema";
+import {
+  DEFAULT_FORM_PRESENTATION,
+  type SubmissionFormSchema,
+} from "./submission-schema";
 
 const form: SubmissionFormSchema = {
   introduction: "Bring a useful idea.",
+  presentation: DEFAULT_FORM_PRESENTATION,
   fields: [
     {
       id: "title",
@@ -17,6 +21,7 @@ const form: SubmissionFormSchema = {
       type: "short_text",
       required: true,
       help: "Keep it concise.",
+      example: "A concise example",
       options: [],
       reviewVisibility: "reviewers",
       condition: null,
@@ -27,6 +32,7 @@ const form: SubmissionFormSchema = {
       type: "multi_select",
       required: true,
       help: "",
+      example: "",
       options: ["Operations", 'People "and" culture'],
       reviewVisibility: "reviewers",
       condition: null,
@@ -37,6 +43,7 @@ const form: SubmissionFormSchema = {
       type: "select",
       required: true,
       help: "",
+      example: "",
       options: ["Presentation", "Workshop"],
       reviewVisibility: "reviewers",
       condition: null,
@@ -47,6 +54,7 @@ const form: SubmissionFormSchema = {
       type: "long_text",
       required: true,
       help: "Describe the room.",
+      example: "Round tables and a projector",
       options: [],
       reviewVisibility: "administrators_only",
       condition: { fieldId: "category", equals: 'People "and" culture' },
@@ -57,6 +65,7 @@ const form: SubmissionFormSchema = {
       type: "multi_select",
       required: false,
       help: "",
+      example: "",
       options: ["Projector", "Tables"],
       reviewVisibility: "administrators_only",
       condition: null,
@@ -67,6 +76,7 @@ const form: SubmissionFormSchema = {
       type: "url",
       required: false,
       help: "",
+      example: "",
       options: [],
       reviewVisibility: "reviewers",
       condition: null,
@@ -77,12 +87,17 @@ const form: SubmissionFormSchema = {
       type: "video",
       required: false,
       help: "",
+      example: "",
       options: [],
       reviewVisibility: "administrators_only",
       condition: null,
     },
   ],
 };
+
+function fromFormJsSchema(input: unknown) {
+  return parseFormJsSchema(input, form.presentation);
+}
 
 describe("Program Cue form-js adapter", () => {
   it("round-trips the normalized conference schema without losing semantics", () => {
@@ -104,6 +119,18 @@ describe("Program Cue form-js adapter", () => {
     expect(fromFormJsSchema(visual)).toEqual(form);
   });
 
+  it("requires the caller's current presentation settings when normalizing", () => {
+    const presentation = {
+      ...form.presentation,
+      organizerName: "Programme committee",
+      estimatedMinutes: 18,
+    };
+
+    expect(
+      parseFormJsSchema(toFormJsSchema(form), presentation).presentation,
+    ).toEqual(presentation);
+  });
+
   it("accepts a supported form-js field and applies Program Cue defaults", () => {
     const visual = toFormJsSchema(form);
     visual.components.push({
@@ -120,6 +147,7 @@ describe("Program Cue form-js adapter", () => {
       type: "short_text",
       required: false,
       help: "",
+      example: "",
       options: [],
       reviewVisibility: "administrators_only",
       condition: null,

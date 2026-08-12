@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  heroImagePathSchema,
   validateAnswerShapes,
   validateFinalAnswers,
   visibleFields,
@@ -20,6 +21,7 @@ function FieldPreview({
     return (
       <textarea
         className="textarea"
+        placeholder={field.example || undefined}
         maxLength={5_000}
         value={String(value ?? "")}
         onChange={(event) => onChange(event.target.value)}
@@ -65,6 +67,7 @@ function FieldPreview({
     <input
       className="field"
       type={field.type === "url" || field.type === "video" ? "url" : "text"}
+      placeholder={field.example || undefined}
       maxLength={field.id === "title" ? 180 : 5_000}
       value={String(value ?? "")}
       onChange={(event) => onChange(event.target.value)}
@@ -81,6 +84,12 @@ export function ApplicantPreviewPanel({
   brandAccent?: string;
   eventName?: string;
 }) {
+  const parsedHeroImagePath = heroImagePathSchema.safeParse(
+    input.schema.presentation.heroImagePath,
+  );
+  const heroImagePath = parsedHeroImagePath.success
+    ? parsedHeroImagePath.data
+    : "";
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [speakerCount, setSpeakerCount] = useState(input.minSpeakers);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
@@ -156,7 +165,9 @@ export function ApplicantPreviewPanel({
         <div
           className="phone-head"
           style={{
-            background: `linear-gradient(135deg,#111b3f,${brandAccent ?? "#4f46e5"})`,
+            background: heroImagePath
+              ? `linear-gradient(100deg,rgba(10,18,48,.94),rgba(10,18,48,.3)),url(${heroImagePath}) center/cover`
+              : `linear-gradient(135deg,#111b3f,${brandAccent ?? "#4f46e5"})`,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -165,6 +176,15 @@ export function ApplicantPreviewPanel({
           </div>
           <h3>{input.name}</h3>
           <small>{eventName ?? "Your event"}</small>
+          <small>
+            {input.schema.fields.length} questions · about{" "}
+            {input.schema.presentation.estimatedMinutes} minutes
+          </small>
+          {input.schema.presentation.organizerName ? (
+            <small>
+              Organised by {input.schema.presentation.organizerName}
+            </small>
+          ) : null}
         </div>
         <div className="phone-body">
           <p className="tiny subtle">{input.schema.introduction}</p>

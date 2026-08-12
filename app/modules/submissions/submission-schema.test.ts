@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_FORM_PRESENTATION,
   DEFAULT_FORM_SCHEMA,
+  formPresentationSchema,
   formSchemaSchema,
+  heroImagePathSchema,
   reviewerVisibleAnswers,
   saveFormSchema,
   visibleFields,
@@ -44,6 +47,53 @@ const chainedSchema = formSchemaSchema.parse({
 });
 
 describe("submission form rules", () => {
+  it("keeps public promotion opt-in and validates presentation links", () => {
+    expect(formPresentationSchema.parse({})).toMatchObject({
+      invitationHeading: "",
+      invitationText: "",
+      showFeaturedSpeakers: false,
+    });
+    expect(DEFAULT_FORM_PRESENTATION.showFeaturedSpeakers).toBe(false);
+    expect(DEFAULT_FORM_PRESENTATION.invitationHeading).toBe("");
+    expect(DEFAULT_FORM_PRESENTATION.invitationText).toBe("");
+    expect(
+      formPresentationSchema.safeParse({ invitationHeading: "x".repeat(161) })
+        .success,
+    ).toBe(false);
+    expect(
+      formPresentationSchema.safeParse({ invitationText: "x".repeat(2_001) })
+        .success,
+    ).toBe(false);
+    expect(
+      formPresentationSchema.safeParse({
+        eventWebsiteUrl: "https://events.example.com/cfp",
+      }).success,
+    ).toBe(true);
+    for (const eventWebsiteUrl of [
+      "https://",
+      "http://events.example.com",
+      "https://user:secret@events.example.com",
+    ]) {
+      expect(
+        formPresentationSchema.safeParse({ eventWebsiteUrl }).success,
+      ).toBe(false);
+    }
+    expect(
+      formPresentationSchema.safeParse({ organizerRole: "Programme chair" })
+        .success,
+    ).toBe(false);
+    expect(heroImagePathSchema.parse("/images/event-hero.webp")).toBe(
+      "/images/event-hero.webp",
+    );
+    for (const heroImagePath of [
+      "https://tracker.example/hero.webp",
+      "/images/../private.webp",
+      "/api/v1/health",
+    ]) {
+      expect(heroImagePathSchema.safeParse(heroImagePath).success).toBe(false);
+    }
+  });
+
   it("keeps chained fields hidden when their controlling field is hidden", () => {
     const answers = {
       title: "A title",

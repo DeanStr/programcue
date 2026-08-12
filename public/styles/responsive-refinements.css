@@ -19,7 +19,12 @@
     grid-template-columns: 200px minmax(330px, 1fr) 290px;
   }
   .builder-layout > .preview-panel {
+    position: static;
     grid-column: 1/-1;
+    grid-row: auto;
+  }
+  .builder-inspector-stack {
+    grid-column: auto;
   }
   .phone {
     max-width: 420px;
@@ -120,7 +125,7 @@
   .builder-layout {
     grid-template-columns: 1fr 1fr;
   }
-  .builder-layout > .settings-panel,
+  .builder-inspector-stack,
   .builder-layout > .preview-panel {
     grid-column: auto;
   }
@@ -313,7 +318,7 @@
   .builder-layout {
     grid-template-columns: 1fr;
   }
-  .builder-layout > .settings-panel,
+  .builder-inspector-stack,
   .builder-layout > .preview-panel {
     grid-column: auto;
   }

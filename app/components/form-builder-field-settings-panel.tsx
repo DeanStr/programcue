@@ -107,6 +107,22 @@ export function FieldSettingsPanel({
               value={selected.help}
               onChange={(event) => patchField({ help: event.target.value })}
             />
+            <span className="help">
+              Explain why the organiser asks for this information.
+            </span>
+          </label>
+          <label className="label mt">
+            Example answer
+            <textarea
+              className="textarea"
+              value={selected.example}
+              onChange={(event) => patchField({ example: event.target.value })}
+              placeholder="A concrete answer that shows the expected level of detail"
+            />
+            <span className="help">
+              Applicants see this as a prompt; it is never submitted as an
+              answer.
+            </span>
           </label>
           {(selected.type === "select" || selected.type === "multi_select") &&
           selected.id !== "category" ? (

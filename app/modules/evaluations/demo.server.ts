@@ -3,6 +3,7 @@ import type {
   FormRouting,
   SubmissionFormSchema,
 } from "~/modules/submissions/submission-schema";
+import { DEFAULT_FORM_PRESENTATION } from "~/modules/submissions/submission-schema";
 
 const DEMO_ORGANISATION_ID = "org-future-events";
 const DEMO_EVENT_ID = "evt-foe-2025";
@@ -16,6 +17,7 @@ const ROUND_ID = "demo-evaluation-round";
 
 const formSchema = {
   introduction: "These archived proposals provide stable, realistic evaluation examples in demo mode.",
+  presentation: DEFAULT_FORM_PRESENTATION,
   fields: [
     {
       id: "title",
@@ -23,6 +25,7 @@ const formSchema = {
       label: "Session title",
       required: true,
       help: "",
+      example: "",
       options: [],
       reviewVisibility: "reviewers",
       condition: null,
@@ -33,6 +36,7 @@ const formSchema = {
       label: "Category",
       required: true,
       help: "",
+      example: "",
       options: ["Event Operations", "Experience Design"],
       reviewVisibility: "reviewers",
       condition: null,
@@ -43,6 +47,7 @@ const formSchema = {
       label: "Format",
       required: true,
       help: "",
+      example: "",
       options: ["Workshop", "Presentation"],
       reviewVisibility: "reviewers",
       condition: null,
@@ -53,6 +58,7 @@ const formSchema = {
       label: "Session overview",
       required: true,
       help: "",
+      example: "",
       options: [],
       reviewVisibility: "reviewers",
       condition: null,
@@ -63,6 +69,7 @@ const formSchema = {
       label: "Audience takeaway",
       required: true,
       help: "",
+      example: "",
       options: [],
       reviewVisibility: "reviewers",
       condition: null,
@@ -73,6 +80,7 @@ const formSchema = {
       label: "Delivery approach",
       required: true,
       help: "",
+      example: "",
       options: [],
       reviewVisibility: "reviewers",
       condition: null,

@@ -291,6 +291,39 @@ describe("published programme and itinerary", () => {
     }
   });
 
+  it("returns a bounded CFP speaker preview without exposing programme internals", async () => {
+    const service = new PublicProgrammeService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const withoutSpeakers = await service.getPublishedLandingSummary(
+      "future-of-events-2025",
+      0,
+    );
+    expect(withoutSpeakers).toEqual({ speakers: [] });
+
+    const preview = await service.getPublishedLandingSummary(
+      "future-of-events-2025",
+      1,
+    );
+    expect(preview?.speakers).toHaveLength(1);
+    expect(preview?.speakers[0]).toMatchObject({
+      id: expect.any(String),
+      displayName: expect.any(String),
+    });
+    expect(Object.keys(preview!.speakers[0]!).sort()).toEqual([
+      "displayName",
+      "id",
+      "imageUrl",
+      "jobTitle",
+      "organisationName",
+    ]);
+    expect(preview?.speakers[0]).not.toHaveProperty("biography");
+    expect(preview?.speakers[0]).not.toHaveProperty("sessionIds");
+    await expect(
+      service.getPublishedLandingSummary("future-of-events-2025", 9),
+    ).rejects.toThrow(RangeError);
+  });
+
   it("does not fall back to D1 when the authoritative Airtable repository is unavailable", async () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
@@ -353,6 +386,9 @@ describe("published programme and itinerary", () => {
     try {
       await expect(
         service.getPublished("future-of-events-2025"),
+      ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
+      await expect(
+        service.getPublishedLandingSummary("future-of-events-2025", 8),
       ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
     } finally {
       await env.DB.prepare(

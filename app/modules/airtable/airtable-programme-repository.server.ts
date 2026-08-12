@@ -426,6 +426,41 @@ export class AirtableProgrammeRepository {
     }));
   }
 
+  async readPublishedSpeakerPreview(
+    organisationId: string,
+    eventId: string,
+    versionId: string,
+    limit: number,
+  ) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 8) {
+      throw new RangeError(
+        "Published speaker preview limit must be between 1 and 8.",
+      );
+    }
+    const connection = await this.rooms.getConnection(organisationId, eventId, {
+      requireConnected: true,
+    });
+    if (!connection)
+      throw new AirtableRepositoryReconciliationError(
+        "Airtable repository connection not found.",
+      );
+    const key = `${connection.id}:${connection.revision}:${eventId}:${versionId}`;
+    const cached = programmeCache.get(key);
+    if (cached && cached.cacheExpiresAt * 1_000 > this.now()) {
+      return this.cloneSpeakers(cached.speakers.slice(0, limit));
+    }
+
+    // A cache miss must validate the complete provider projection before any
+    // part of it is shown. This preserves the fail-closed Airtable drift
+    // boundary; subsequent landing requests clone only the bounded preview.
+    const snapshot = await this.readPublished(
+      organisationId,
+      eventId,
+      versionId,
+    );
+    return this.cloneSpeakers(snapshot.speakers.slice(0, limit));
+  }
+
   private publishedMappingStatement(
     connectionId: string,
     versionId: string,

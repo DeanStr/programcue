@@ -25,6 +25,9 @@ export class SubmissionFormRepository {
       `
       SELECT f.id, f.revision, f.event_id AS eventId, e.name AS eventName, e.slug AS eventSlug,
              e.timezone AS eventTimezone, e.allow_anonymous_drafts AS allowAnonymousDrafts,
+             e.starts_at AS eventStartsAt, e.ends_at AS eventEndsAt,
+             e.venue_name AS eventVenue, e.city AS eventCity,
+             e.description AS eventDescription,
              e.brand_accent AS brandAccent, e.file_policy_json AS filePolicyJson,
              f.name, f.kind, f.status,
              f.public_slug AS publicSlug, f.closes_at AS closesAt,
@@ -722,6 +725,9 @@ export class SubmissionFormRepository {
       `
       SELECT f.id, f.revision, f.event_id AS eventId, e.name AS eventName, e.slug AS eventSlug,
              e.timezone AS eventTimezone, e.allow_anonymous_drafts AS allowAnonymousDrafts,
+             e.starts_at AS eventStartsAt, e.ends_at AS eventEndsAt,
+             e.venue_name AS eventVenue, e.city AS eventCity,
+             e.description AS eventDescription,
              e.brand_accent AS brandAccent, e.file_policy_json AS filePolicyJson,
              f.name, f.kind, f.status,
              f.public_slug AS publicSlug, f.closes_at AS closesAt,

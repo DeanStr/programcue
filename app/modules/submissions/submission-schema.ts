@@ -18,6 +18,7 @@ export const formFieldSchema = z
     type: fieldTypeSchema,
     required: z.boolean().default(false),
     help: z.string().trim().max(300).default(""),
+    example: z.string().trim().max(300).default(""),
     options: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
     reviewVisibility: z.enum(["reviewers", "administrators_only"]).optional(),
     condition: z
@@ -50,9 +51,76 @@ export const formFieldSchema = z
 
 export type FormField = z.infer<typeof formFieldSchema>;
 
+const optionalHttpsUrl = z
+  .string()
+  .trim()
+  .max(2_048)
+  .refine((value) => {
+    if (value === "") return true;
+    try {
+      const url = new URL(value);
+      return (
+        url.protocol === "https:" &&
+        Boolean(url.hostname) &&
+        !url.username &&
+        !url.password
+      );
+    } catch {
+      return false;
+    }
+  }, "Use a complete HTTPS URL without embedded credentials");
+
+export const heroImagePathSchema = z
+  .string()
+  .trim()
+  .max(300)
+  .refine(
+    (value) =>
+      value === "" ||
+      (/^\/images\/[a-zA-Z0-9][a-zA-Z0-9._/-]*$/u.test(value) &&
+        !value.includes("..")),
+    "Use a same-origin path below /images/",
+  )
+  .default("");
+
+export const formPresentationSchema = z
+  .object({
+    heroImagePath: heroImagePathSchema,
+    invitationHeading: z.string().trim().max(160).default(""),
+    invitationText: z.string().trim().max(2_000).default(""),
+    organizerName: z.string().trim().max(120).default(""),
+    organizerRole: z.string().trim().max(180).default(""),
+    eventWebsiteUrl: optionalHttpsUrl.default(""),
+    estimatedMinutes: z.number().int().min(1).max(120).default(10),
+    showFeaturedSpeakers: z.boolean().default(false),
+  })
+  .superRefine((presentation, context) => {
+    if (presentation.organizerRole && !presentation.organizerName) {
+      context.addIssue({
+        code: "custom",
+        path: ["organizerName"],
+        message: "Add an organiser name before its role or context",
+      });
+    }
+  });
+
+export type FormPresentation = z.infer<typeof formPresentationSchema>;
+
+export const DEFAULT_FORM_PRESENTATION: FormPresentation = {
+  heroImagePath: "",
+  invitationHeading: "",
+  invitationText: "",
+  organizerName: "",
+  organizerRole: "",
+  eventWebsiteUrl: "",
+  estimatedMinutes: 10,
+  showFeaturedSpeakers: false,
+};
+
 export const formSchemaSchema = z
   .object({
     introduction: z.string().trim().max(2_000).default(""),
+    presentation: formPresentationSchema.default(DEFAULT_FORM_PRESENTATION),
     fields: z.array(formFieldSchema).min(1).max(50),
   })
   .superRefine((schema, context) => {
@@ -496,6 +564,7 @@ export function validateFinalAnswers(
 export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
   introduction:
     "Share a practical session that gives attendees something useful to take away.",
+  presentation: DEFAULT_FORM_PRESENTATION,
   fields: [
     {
       id: "title",
@@ -503,6 +572,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       type: "short_text",
       required: true,
       help: "Use a clear, attendee-focused title.",
+      example: "How a small programme team removed three weeks of manual work",
       options: [],
       reviewVisibility: "reviewers",
       condition: null,
@@ -513,6 +583,8 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       type: "long_text",
       required: true,
       help: "What will attendees learn?",
+      example:
+        "Describe the problem, what you tried, the outcome and what attendees can apply themselves.",
       options: [],
       reviewVisibility: "reviewers",
       condition: null,
@@ -523,6 +595,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       type: "multi_select",
       required: true,
       help: "Choose every programme track this proposal should be reviewed for.",
+      example: "",
       options: ["AI & Innovation", "Event Operations", "Experience Design"],
       reviewVisibility: "reviewers",
       condition: null,
@@ -533,6 +606,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       type: "select",
       required: true,
       help: "",
+      example: "",
       options: ["Workshop", "Presentation", "Panel", "Keynote"],
       reviewVisibility: "reviewers",
       condition: null,
@@ -543,6 +617,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       type: "long_text",
       required: true,
       help: "List any equipment or setup required.",
+      example: "Moveable tables, a projector and space for groups of six.",
       options: [],
       reviewVisibility: "reviewers",
       condition: { fieldId: "format", equals: "Workshop" },
@@ -553,6 +628,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       type: "video",
       required: false,
       help: "Upload an MP4/WebM file or link to a private or unlisted HTTPS video.",
+      example: "https://…",
       options: [],
       reviewVisibility: "reviewers",
       condition: null,

@@ -5,6 +5,7 @@ import {
   AbuseProtectionConfigurationError,
   AbuseRateLimitError,
   enforcePublicAbuseProtection,
+  enforcePublicRateLimit,
   publicAbuseClientConfiguration,
   TurnstileRejectedError,
   TurnstileUnavailableError,
@@ -156,6 +157,26 @@ describe("public abuse protection", () => {
     expect(
       rows.results.every((row) => /^[a-f0-9]{64}$/.test(row.scopeKey)),
     ).toBe(true);
+  });
+
+  it("rate-limits verified profile imports without invoking Turnstile", async () => {
+    const provider = vi.fn();
+    vi.stubGlobal("fetch", provider);
+    const unique = crypto.randomUUID();
+    const call = () =>
+      enforcePublicRateLimit({
+        env: productionEnvironment(),
+        request: protectedRequest("203.0.113.43"),
+        action: "application_profile_import",
+        tenantId: `event-${unique}`,
+        email: `applicant-${unique}@example.com`,
+      });
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      await expect(call()).resolves.toEqual({ mode: "protected" });
+    }
+    await expect(call()).rejects.toBeInstanceOf(AbuseRateLimitError);
+    expect(provider).not.toHaveBeenCalled();
   });
 
   it("binds successful Turnstile validation to the route action and hostname", async () => {

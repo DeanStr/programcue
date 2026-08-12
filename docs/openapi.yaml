@@ -3093,6 +3093,50 @@ components:
               default: ""
               type: string
               maxLength: 2000
+            presentation:
+              default:
+                heroImagePath: ""
+                invitationHeading: ""
+                invitationText: ""
+                organizerName: ""
+                organizerRole: ""
+                eventWebsiteUrl: ""
+                estimatedMinutes: 10
+                showFeaturedSpeakers: false
+              type: object
+              properties:
+                heroImagePath:
+                  default: ""
+                  type: string
+                  maxLength: 300
+                invitationHeading:
+                  default: ""
+                  type: string
+                  maxLength: 160
+                invitationText:
+                  default: ""
+                  type: string
+                  maxLength: 2000
+                organizerName:
+                  default: ""
+                  type: string
+                  maxLength: 120
+                organizerRole:
+                  default: ""
+                  type: string
+                  maxLength: 180
+                eventWebsiteUrl:
+                  default: ""
+                  type: string
+                  maxLength: 2048
+                estimatedMinutes:
+                  default: 10
+                  type: integer
+                  minimum: 1
+                  maximum: 120
+                showFeaturedSpeakers:
+                  default: false
+                  type: boolean
             fields:
               minItems: 1
               maxItems: 50
@@ -3119,6 +3163,10 @@ components:
                   required:
                     type: boolean
                   help:
+                    default: ""
+                    type: string
+                    maxLength: 300
+                  example:
                     default: ""
                     type: string
                     maxLength: 300

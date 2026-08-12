@@ -11,6 +11,7 @@ import {
 } from "~/components/draft-recovery-feedback";
 import type { ApplicantDraft } from "~/modules/submissions/submission-repository.server";
 import {
+  DEFAULT_FORM_PRESENTATION,
   visibleFields,
   type FormField,
 } from "~/modules/submissions/submission-schema";
@@ -18,6 +19,7 @@ import {
   clearDraftRecoveryScope,
   useDraftRecovery,
 } from "~/platform/drafts/draft-recovery";
+import { SessionizeProfileImport } from "~/components/sessionize-profile-import";
 
 function FieldControl({
   field,
@@ -49,6 +51,7 @@ function FieldControl({
       <textarea
         {...common}
         className="textarea"
+        placeholder={field.example || undefined}
         value={String(value ?? "")}
         onChange={(event) => onChange(event.target.value)}
         maxLength={5_000}
@@ -97,6 +100,7 @@ function FieldControl({
       {...common}
       className="field"
       type={field.type === "url" || field.type === "video" ? "url" : "text"}
+      placeholder={field.example || undefined}
       value={String(value ?? "")}
       onChange={(event) => onChange(event.target.value)}
       maxLength={field.id === "title" ? 180 : 5_000}
@@ -244,7 +248,14 @@ export function DraftEditor({
     if (!serverSaved && !readOnly) return;
     void clearDraftRecoveryScope(recoveryScope);
   }, [readOnly, recoveryScope, serverSaved]);
-  const fields = visibleFields({ introduction: "", fields: schema }, answers);
+  const fields = visibleFields(
+    {
+      introduction: "",
+      presentation: DEFAULT_FORM_PRESENTATION,
+      fields: schema,
+    },
+    answers,
+  );
 
   return (
     <Form method="post" className="stack" onChange={() => setDirty(true)}>
@@ -416,6 +427,31 @@ export function DraftEditor({
           The first speaker is primary. Additional speakers receive a pending
           claim relationship and an expiring invitation after final submission.
         </p>
+        {!readOnly && applicant.verified ? (
+          <SessionizeProfileImport
+            publicSlug={publicSlug}
+            disabled={readOnly}
+            onImport={(profile) => {
+              setSpeakers((current) => {
+                const primary = current[0] ?? {
+                  name: applicant.name,
+                  email: applicant.email,
+                  biography: "",
+                  invitationStatus: "pending",
+                };
+                return [
+                  {
+                    ...primary,
+                    name: profile.name,
+                    biography: profile.biography,
+                  },
+                  ...current.slice(1),
+                ];
+              });
+              setDirty(true);
+            }}
+          />
+        ) : null}
         {speakers.map((speaker, index) => (
           <div className="form-row mb" key={index}>
             <label className="label">

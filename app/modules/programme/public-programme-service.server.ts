@@ -58,6 +58,11 @@ export type PublishedSpeaker = {
   sessionIds: string[];
 };
 
+export type PublishedSpeakerPreview = Pick<
+  PublishedSpeaker,
+  "id" | "displayName" | "imageUrl" | "organisationName" | "jobTitle"
+>;
+
 export type PublishedProgramme = {
   event: {
     id: string;
@@ -362,6 +367,66 @@ export class PublicProgrammeService {
     }));
   }
 
+  private async withPublishedPreviewHeadshotUrls(
+    event: Pick<PublishedProgramme["event"], "id" | "slug">,
+    version: Pick<PublishedProgramme["version"], "id">,
+    speakers: PublishedSpeakerPreview[],
+  ) {
+    if (!speakers.length) return [];
+    const placeholders = speakers.map(() => "?").join(", ");
+    const rows = await this.env.DB.prepare(
+      `
+      SELECT DISTINCT person.id AS personId
+        FROM schedule_versions published_version
+        JOIN schedule_entries entry
+          ON entry.schedule_version_id = published_version.id
+         AND entry.event_id = published_version.event_id
+        JOIN sessions session
+          ON session.id = entry.session_id AND session.event_id = entry.event_id
+        JOIN schedule_session_contents content
+          ON content.schedule_version_id = entry.schedule_version_id
+         AND content.event_id = entry.event_id
+         AND content.session_id = entry.session_id
+        JOIN session_speakers relation
+          ON relation.session_id = entry.session_id
+         AND relation.event_id = entry.event_id
+        JOIN people person ON person.id = relation.person_id
+        JOIN file_assets asset
+          ON asset.event_id = entry.event_id
+         AND asset.target_type = 'person'
+         AND asset.target_id = person.id
+         AND asset.asset_kind = 'headshot'
+         AND asset.status = 'active'
+        JOIN file_versions version
+          ON version.id = asset.current_version_id
+         AND version.asset_id = asset.id
+         AND version.event_id = asset.event_id
+       WHERE published_version.id = ? AND published_version.event_id = ?
+         AND published_version.status = 'published'
+         AND session.status = 'published' AND content.visibility = 'public'
+         AND relation.visibility = 'public'
+         AND person.profile_status = 'published'
+         AND version.upload_status = 'uploaded'
+         AND version.signature_status = 'valid'
+         AND version.scan_status = 'clean'
+         AND version.released_at IS NOT NULL
+         AND version.replaced_at IS NULL AND version.deleted_at IS NULL
+         AND version.object_etag IS NOT NULL
+         AND version.detected_content_type IN ('image/jpeg', 'image/png', 'image/webp')
+         AND person.id IN (${placeholders})
+    `,
+    )
+      .bind(version.id, event.id, ...speakers.map((speaker) => speaker.id))
+      .all<{ personId: string }>();
+    const personIds = new Set(rows.results.map((row) => row.personId));
+    return speakers.map((speaker) => ({
+      ...speaker,
+      imageUrl: personIds.has(speaker.id)
+        ? publishedHeadshotPath(event.slug, speaker.id)
+        : null,
+    }));
+  }
+
   private async findPublishedHeadshot(
     slug: string,
     personId: string,
@@ -468,6 +533,136 @@ export class PublicProgrammeService {
         "x-content-type-options": "nosniff",
       },
     });
+  }
+
+  async getPublishedLandingSummary(
+    slug: string,
+    speakerLimit: number,
+  ): Promise<{ speakers: PublishedSpeakerPreview[] } | null> {
+    if (
+      !Number.isInteger(speakerLimit) ||
+      speakerLimit < 0 ||
+      speakerLimit > 8
+    ) {
+      throw new RangeError(
+        "Published landing speaker limit must be between 0 and 8.",
+      );
+    }
+    await ensureDemoProgramme(this.env);
+    const publication = await this.env.DB.prepare(
+      `
+      SELECT event.id AS eventId, event.slug,
+             event.organisation_id AS organisationId,
+             event.repository_provider AS repositoryProvider,
+             version.id AS versionId,
+             (
+               SELECT COUNT(*)
+                 FROM schedule_entries entry
+                 LEFT JOIN schedule_session_contents content
+                   ON content.schedule_version_id = entry.schedule_version_id
+                  AND content.event_id = entry.event_id
+                  AND content.session_id = entry.session_id
+                WHERE entry.event_id = event.id
+                  AND entry.schedule_version_id = version.id
+                  AND content.session_id IS NULL
+             ) AS missingContent
+        FROM events event
+        JOIN schedule_versions version
+          ON version.id = (
+            SELECT candidate.id
+              FROM schedule_versions candidate
+             WHERE candidate.event_id = event.id
+               AND candidate.status = 'published'
+             ORDER BY candidate.published_at DESC,
+                      candidate.version_number DESC
+             LIMIT 1
+          )
+         AND version.event_id = event.id
+       WHERE event.slug = ? AND event.programme_published_at IS NOT NULL
+    `,
+    )
+      .bind(slug)
+      .first<{
+        eventId: string;
+        slug: string;
+        organisationId: string;
+        repositoryProvider: "d1" | "airtable";
+        versionId: string;
+        missingContent: number;
+      }>();
+    if (!publication) return null;
+    if (
+      publication.repositoryProvider === "d1" &&
+      publication.missingContent > 0
+    ) {
+      throw new PublishedProgrammeSnapshotInvariantError(
+        publication.versionId,
+        publication.missingContent,
+      );
+    }
+    if (speakerLimit === 0) return { speakers: [] };
+
+    let speakers: PublishedSpeakerPreview[];
+    if (publication.repositoryProvider === "airtable") {
+      speakers = (
+        await new AirtableProgrammeRepository(
+          this.env,
+        ).readPublishedSpeakerPreview(
+          publication.organisationId,
+          publication.eventId,
+          publication.versionId,
+          speakerLimit,
+        )
+      ).map((speaker) => ({
+        id: speaker.id,
+        displayName: speaker.displayName,
+        imageUrl: null,
+        organisationName: speaker.organisationName,
+        jobTitle: speaker.jobTitle,
+      }));
+    } else {
+      const rows = await this.env.DB.prepare(
+        `
+        SELECT person.id, person.display_name AS displayName,
+               person.organisation_name AS organisationName,
+               person.job_title AS jobTitle
+          FROM people person
+          JOIN session_speakers relation ON relation.person_id = person.id
+          JOIN sessions session
+            ON session.id = relation.session_id
+           AND session.event_id = relation.event_id
+          JOIN schedule_entries entry
+            ON entry.session_id = session.id
+           AND entry.event_id = session.event_id
+          JOIN schedule_session_contents content
+            ON content.schedule_version_id = entry.schedule_version_id
+           AND content.event_id = entry.event_id
+           AND content.session_id = entry.session_id
+         WHERE entry.event_id = ? AND entry.schedule_version_id = ?
+           AND session.status = 'published'
+           AND content.visibility = 'public'
+           AND relation.visibility = 'public'
+           AND person.profile_status = 'published'
+         GROUP BY person.id
+         ORDER BY person.display_name COLLATE NOCASE, person.id
+         LIMIT ?
+      `,
+      )
+        .bind(publication.eventId, publication.versionId, speakerLimit)
+        .all<Omit<PublishedSpeakerPreview, "imageUrl">>();
+      speakers = rows.results.map((speaker) => ({
+        ...speaker,
+        imageUrl: null,
+      }));
+    }
+
+    return {
+      speakers: await this.withPublishedPreviewHeadshotUrls(
+        { id: publication.eventId, slug: publication.slug },
+        { id: publication.versionId },
+        speakers,
+      ),
+    };
   }
 
   async getPublished(slug: string): Promise<PublishedProgramme | null> {

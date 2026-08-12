@@ -6,7 +6,11 @@ import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions
 import { verifyApplicationNotice } from "~/modules/submissions/application-notice.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { action, claimApplicantVideoUploadOperation } from "./application-form";
+import {
+  action,
+  claimApplicantVideoUploadOperation,
+  loader,
+} from "./application-form";
 
 function context(
   environment: CloudflareEnvironment = env as unknown as CloudflareEnvironment,
@@ -30,6 +34,39 @@ beforeEach(async () => {
 });
 
 describe("public application mutations", () => {
+  it("keeps published programme navigation independent of the speaker showcase", async () => {
+    const publishedVersion = await env.DB.prepare(
+      `SELECT id, schema_json AS schemaJson
+         FROM form_versions
+        WHERE event_id = 'evt-foe-2025' AND status = 'published'
+        ORDER BY version_number DESC
+        LIMIT 1`,
+    ).first<{ id: string; schemaJson: string }>();
+    if (!publishedVersion) throw new Error("Published demo form is missing.");
+
+    const schema = JSON.parse(publishedVersion.schemaJson) as {
+      presentation: { showFeaturedSpeakers: boolean };
+    };
+    schema.presentation.showFeaturedSpeakers = false;
+    await env.DB.prepare(
+      `UPDATE form_versions SET schema_json = ? WHERE id = ?`,
+    )
+      .bind(JSON.stringify(schema), publishedVersion.id)
+      .run();
+
+    const result = await loader({
+      request: new Request("http://localhost/apply/form"),
+      params: { slug: "form" },
+      context: context(),
+    } as never);
+    if (result instanceof Response || "data" in result) {
+      throw new Error("Expected the public application landing payload.");
+    }
+
+    expect(result.programmeUrl).toBe("/public/programme/future-of-events-2025");
+    expect(result.featuredSpeakers).toEqual([]);
+  });
+
   it("admits one applicant video upload operation and blocks sessions awaiting cleanup", () => {
     const uploadOperation: { current: symbol | null } = { current: null };
     const cancellationOperation: { current: symbol | null } = {

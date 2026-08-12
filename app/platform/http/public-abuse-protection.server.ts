@@ -67,6 +67,21 @@ const policies = {
       blockSeconds: 3_600,
     },
   ],
+  application_profile_import: [
+    { dimension: "ip", limit: 30, windowSeconds: 3_600, blockSeconds: 3_600 },
+    {
+      dimension: "email",
+      limit: 10,
+      windowSeconds: 3_600,
+      blockSeconds: 3_600,
+    },
+    {
+      dimension: "ip_email",
+      limit: 8,
+      windowSeconds: 3_600,
+      blockSeconds: 3_600,
+    },
+  ],
   public_itinerary_create: [
     { dimension: "ip", limit: 10, windowSeconds: 3_600, blockSeconds: 3_600 },
   ],
@@ -115,6 +130,18 @@ function configuredValue(value: unknown, name: string) {
 }
 
 function productionConfiguration(env: AbuseEnvironment) {
+  const rateLimitPepper = rateLimitConfiguration(env);
+  return {
+    siteKey: configuredValue(env.TURNSTILE_SITE_KEY, "TURNSTILE_SITE_KEY"),
+    secretKey: configuredValue(
+      env.TURNSTILE_SECRET_KEY,
+      "TURNSTILE_SECRET_KEY",
+    ),
+    rateLimitPepper,
+  };
+}
+
+function rateLimitConfiguration(env: AbuseEnvironment) {
   const rateLimitPepper = configuredValue(
     env.BETTER_AUTH_SECRET,
     "BETTER_AUTH_SECRET",
@@ -124,14 +151,7 @@ function productionConfiguration(env: AbuseEnvironment) {
       "BETTER_AUTH_SECRET must contain at least 32 characters for public abuse protection.",
     );
   }
-  return {
-    siteKey: configuredValue(env.TURNSTILE_SITE_KEY, "TURNSTILE_SITE_KEY"),
-    secretKey: configuredValue(
-      env.TURNSTILE_SECRET_KEY,
-      "TURNSTILE_SECRET_KEY",
-    ),
-    rateLimitPepper,
-  };
+  return rateLimitPepper;
 }
 
 export function publicAbuseClientConfiguration(env: AbuseEnvironment) {
@@ -402,6 +422,45 @@ export async function enforcePublicAbuseProtection(input: {
         ip,
         email,
         pepper: configuration.rateLimitPepper,
+      }),
+      policy,
+      now,
+    );
+  }
+  return { mode: "protected" as const };
+}
+
+export async function enforcePublicRateLimit(input: {
+  env: AbuseEnvironment;
+  request: Request;
+  action: PublicAbuseAction;
+  tenantId: string;
+  email: string;
+}) {
+  if (!requiresProductionSecurity(input.env.APP_ENV)) {
+    return { mode: "demo" as const };
+  }
+  const rateLimitPepper = rateLimitConfiguration(input.env);
+  const ip = connectingIp(input.request);
+  const email = input.email.trim().toLowerCase();
+  const tenantId = input.tenantId.trim();
+  if (!tenantId) {
+    throw new AbuseProtectionConfigurationError(
+      "A tenant scope is required for public abuse protection.",
+    );
+  }
+
+  const now = Math.floor(Date.now() / 1_000);
+  for (const policy of policies[input.action]) {
+    await consumeRateLimit(
+      input.env.DB,
+      await scopeKey({
+        action: input.action,
+        tenantId,
+        dimension: policy.dimension,
+        ip,
+        email,
+        pepper: rateLimitPepper,
       }),
       policy,
       now,

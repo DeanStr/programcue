@@ -18,6 +18,7 @@ import {
   FieldSettingsPanel,
   FormStructurePanel,
   FormVersionHistory,
+  PresentationSettingsPanel,
 } from "~/components/form-builder-panels";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import type { SaveFormInput } from "~/modules/submissions/submission-schema";
@@ -583,17 +584,20 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           change={change}
           onSelect={setSelectedId}
         />
-        <FieldSettingsPanel
-          input={input}
-          selected={selected}
-          categoryField={categoryField}
-          change={change}
-          patchField={patchField}
-          moveField={moveField}
-          setSelectedId={setSelectedId}
-          routingTeams={loaderData.routingTeams}
-          routingTracks={loaderData.routingTracks}
-        />
+        <div className="builder-inspector-stack">
+          <FieldSettingsPanel
+            input={input}
+            selected={selected}
+            categoryField={categoryField}
+            change={change}
+            patchField={patchField}
+            moveField={moveField}
+            setSelectedId={setSelectedId}
+            routingTeams={loaderData.routingTeams}
+            routingTracks={loaderData.routingTracks}
+          />
+          <PresentationSettingsPanel input={input} change={change} />
+        </div>
         <ApplicantPreviewPanel
           input={input}
           brandAccent={loaderData.workspace?.brandAccent}

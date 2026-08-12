@@ -11,6 +11,35 @@
   padding: 13px;
   min-width: 0;
 }
+.builder-inspector-stack {
+  display: grid;
+  grid-column: 3;
+  gap: 12px;
+  min-width: 0;
+}
+.builder-layout > .preview-panel {
+  position: sticky;
+  top: 84px;
+  grid-column: 4;
+  grid-row: 1;
+}
+.presentation-settings-panel > summary {
+  cursor: pointer;
+}
+.presentation-settings-panel > summary span {
+  display: grid;
+  gap: 3px;
+  padding-inline-start: 4px;
+}
+.presentation-settings-panel > summary small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.presentation-settings-fields {
+  margin-top: 14px;
+}
 .form-js-editor-card {
   overflow: visible;
 }
@@ -169,6 +198,7 @@
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.2);
 }
 .builder-layout > .preview-panel.preview-desktop {
+  position: static;
   grid-column: 1 / -1;
 }
 .phone.preview-device-mobile {

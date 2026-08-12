@@ -45,6 +45,12 @@ test.describe.serial("submissions vertical slice", () => {
     await page
       .getByLabel("Label", { exact: true })
       .fill(`Attendee takeaway link ${unique}`);
+    const invitationHeading = `Bring your clearest idea ${unique}`;
+    const invitationText =
+      "Explain the practical lesson and what attendees will be able to use.";
+    await page.getByText("Public landing page", { exact: true }).click();
+    await page.getByLabel("Invitation heading").fill(invitationHeading);
+    await page.getByLabel("Invitation copy").fill(invitationText);
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect(
       page.locator(".validation-item.ok[role='status']").filter({
@@ -54,6 +60,14 @@ test.describe.serial("submissions vertical slice", () => {
     await expect(
       page.getByRole("button", { name: "Publish version" }),
     ).toBeEnabled();
+    await page.reload();
+    await page.getByText("Public landing page", { exact: true }).click();
+    await expect(page.getByLabel("Invitation heading")).toHaveValue(
+      invitationHeading,
+    );
+    await expect(page.getByLabel("Invitation copy")).toHaveValue(
+      invitationText,
+    );
     await page.getByRole("button", { name: "Publish version" }).click();
     await expect(
       page.getByRole("heading", {
@@ -70,6 +84,11 @@ test.describe.serial("submissions vertical slice", () => {
       }),
     ).toBeVisible();
     await expect(page.getByText("published").first()).toBeVisible();
+    await page.goto("/apply/form");
+    await expect(
+      page.getByRole("heading", { name: invitationHeading }),
+    ).toBeVisible();
+    await expect(page.getByText(invitationText)).toBeVisible();
   });
 
   test("visual form authoring maps through the Program Cue adapter before saving", async ({
@@ -118,6 +137,15 @@ test.describe.serial("submissions vertical slice", () => {
     const title = `Operational clarity ${unique}`;
 
     await page.goto("/apply/form");
+    await expect(
+      page.getByRole("heading", { name: "Future of Events 2025" }),
+    ).toBeVisible();
+    await expect(page.getByText("Preview the application")).toBeVisible();
+    await expect(page.getByText(/Up to \d+ proposal questions/)).toBeVisible();
+    await expect(page.getByText("about 12 minutes")).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Start application" }),
+    ).toBeVisible();
     await page.getByLabel("Email address").fill(email);
     await page.getByRole("button", { name: "Send verification code" }).click();
     await expect(page.getByText("No email was sent")).toBeVisible();
@@ -132,6 +160,29 @@ test.describe.serial("submissions vertical slice", () => {
     ).toBeVisible();
 
     await page.getByRole("button", { name: "Start application" }).click();
+    await page.route("**/apply/form/import/sessionize", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          profile: {
+            name: "Imported Speaker",
+            biography: "Imported public biography for review.",
+            tagline: "Practical systems speaker",
+            sourceUrl: "https://sessionize.com/imported-speaker/",
+          },
+        }),
+      });
+    });
+    await page.getByLabel("Sessionize public profile").fill("imported-speaker");
+    await page.getByRole("button", { name: "Import profile" }).click();
+    await expect(page.getByText("Imported for review")).toBeVisible();
+    await expect(page.getByLabel("Speaker 1 name")).toHaveValue(
+      "Imported Speaker",
+    );
+    await expect(page.getByLabel("Biography").last()).toHaveValue(
+      "Imported public biography for review.",
+    );
     await page.getByLabel("Session title *").fill(title);
     await page
       .getByLabel("Session description *")

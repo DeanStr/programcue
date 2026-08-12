@@ -237,7 +237,10 @@ export default function FormJsEditorClient({
     const handleChanged = () => {
       if (disposed || importingRef.current) return;
       try {
-        const next = fromFormJsSchema(editor.saveSchema());
+        const next = fromFormJsSchema(
+          editor.saveSchema(),
+          schemaRef.current.presentation,
+        );
         lastEmittedFingerprintRef.current = JSON.stringify(next);
         onChangeRef.current(next);
         onStatusRef.current({

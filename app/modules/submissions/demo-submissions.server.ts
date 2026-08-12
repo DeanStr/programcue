@@ -26,6 +26,20 @@ export async function ensureDemoSubmissionForm(env: CloudflareEnvironment) {
   const formId = await service.saveForm(DEMO_VIEWER, {
     ...input,
     publicSlug: "form",
+    schema: {
+      ...input.schema,
+      presentation: {
+        ...input.schema.presentation,
+        heroImagePath: "/images/demo-cfp-hero.webp",
+        invitationHeading: "Bring the session only you can give",
+        invitationText:
+          "We are looking for specific experience, honest lessons and useful ideas attendees can put into practice—not a polished sales pitch.",
+        organizerName: "Jordan Alvarez",
+        organizerRole: "Programme chair · Future Events Association",
+        estimatedMinutes: 12,
+        showFeaturedSpeakers: true,
+      },
+    },
   });
   const workspace = await service.getAdminWorkspace(DEMO_VIEWER, formId);
   if (!workspace) throw new Error("The demo submission form was not created.");

@@ -5,14 +5,33 @@ import type { Route } from "./+types/application-form";
 import type { action, loader, ActionResult } from "./application-form.server";
 import { claimApplicantVideoUploadOperation } from "~/components/applicant-video-upload";
 import { DraftEditor } from "~/components/application-draft-editor";
+import { PublicApplicationLanding } from "~/components/application-public-landing";
 import { TurnstileWidget } from "~/components/turnstile-widget";
 
 export { action, loader } from "./application-form.server";
 export { claimApplicantVideoUploadOperation };
 
-export const meta: Route.MetaFunction = () => [
-  { title: "Call for Speakers · Program Cue" },
-];
+export const meta: Route.MetaFunction = ({ loaderData }) => {
+  if (loaderData && "form" in loaderData) {
+    return [
+      { title: `${loaderData.form.name} · ${loaderData.form.eventName}` },
+      {
+        name: "description",
+        content: loaderData.form.version.schema.introduction,
+      },
+      { property: "og:type", content: "website" },
+      {
+        property: "og:title",
+        content: `${loaderData.form.eventName} — ${loaderData.form.name}`,
+      },
+      {
+        property: "og:description",
+        content: loaderData.form.version.schema.introduction,
+      },
+    ];
+  }
+  return [{ title: "Call for Speakers · Program Cue" }];
+};
 
 function AccessPanel({
   loaderData,
@@ -24,18 +43,21 @@ function AccessPanel({
   const form = loaderData.form;
   const navigation = useNavigation();
   const pending = navigation.state !== "idle";
+  const accepting = loaderData.availability.accepting;
   if (form.accessMode === "account_required") {
     const returnTo = `/apply/${encodeURIComponent(form.publicSlug)}`;
     return (
-      <section
-        className="card pad"
-        style={{ maxWidth: 560, margin: "48px auto" }}
-      >
-        <span className="status info">Account required</span>
-        <h1 className="mt">Sign in to apply</h1>
+      <section className="card cfp-access-card">
+        <span className={`status ${accepting ? "info" : "warning"}`}>
+          {accepting ? "Account required" : "Not accepting new applications"}
+        </span>
+        <h2>
+          {accepting ? "Sign in to apply" : "Sign in to view applications"}
+        </h2>
         <p className="subtle">
-          This organiser requires a verified Program Cue account before
-          applications can be created.
+          {accepting
+            ? "This organiser requires a verified Program Cue account before applications can be created."
+            : "New applications are unavailable. Signed-in applicants can still return to existing applications."}
         </p>
         <Link
           className="btn primary"
@@ -48,12 +70,9 @@ function AccessPanel({
   }
   if (actionData?.stage === "code") {
     return (
-      <section
-        className="card pad"
-        style={{ maxWidth: 560, margin: "48px auto" }}
-      >
+      <section className="card cfp-access-card">
         <span className="status success">Email accepted</span>
-        <h1 className="mt">Enter your verification code</h1>
+        <h2>Enter your verification code</h2>
         <p className="subtle">
           We use this to keep your drafts private and connect multiple
           applications to you.
@@ -99,17 +118,25 @@ function AccessPanel({
     );
   }
   return (
-    <section
-      className="card pad"
-      style={{ maxWidth: 560, margin: "48px auto" }}
-    >
-      <span className="status info">Private drafts</span>
-      <h1 className="mt">{form.name}</h1>
-      <p>{form.version.schema.introduction}</p>
+    <section className="card cfp-access-card">
+      <span className={`status ${accepting ? "info" : "warning"}`}>
+        {accepting
+          ? "Private, recoverable drafts"
+          : "Not accepting new applications"}
+      </span>
+      <h2>
+        {!accepting
+          ? "Already started?"
+          : form.allowAnonymousDrafts
+            ? "Ready to propose a session?"
+            : "Verify to begin"}
+      </h2>
       <p className="subtle">
-        {form.allowAnonymousDrafts
-          ? "Start a private draft now, then verify your email before final submission."
-          : "Verify your email before saving or submitting. Your code expires after ten minutes."}
+        {!accepting
+          ? "New applications are unavailable. Verify your email to recover an existing draft."
+          : form.allowAnonymousDrafts
+            ? "Begin now. We will ask you to verify an email only before final submission."
+            : "Verify your email before saving or submitting. Your code expires after ten minutes."}
       </p>
       {actionData && !actionData.ok ? (
         <div className="validation-item error mb" role="alert">
@@ -118,7 +145,7 @@ function AccessPanel({
         </div>
       ) : null}
       {form.allowAnonymousDrafts ? (
-        <Form method="post" className="stack mb">
+        <Form method="post" className="stack cfp-access-primary">
           <input type="hidden" name="_intent" value="start_anonymous" />
           <input
             type="hidden"
@@ -140,38 +167,64 @@ function AccessPanel({
             siteKey={loaderData.turnstileSiteKey}
             action="application_start_anonymous"
           />
-          <button className="btn primary" type="submit" disabled={pending}>
-            {pending ? "Starting…" : "Start a draft"}
+          <button
+            className="btn primary"
+            type="submit"
+            disabled={pending || !accepting}
+          >
+            {pending
+              ? "Starting…"
+              : accepting
+                ? "Start application"
+                : "Applications unavailable"}
           </button>
         </Form>
       ) : null}
-      <div className="divider" />
-      <Form method="post" className="stack mt">
-        <input type="hidden" name="_intent" value="request_code" />
-        <label className="label">
-          Email address
-          <input
-            className="field"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-          />
-        </label>
-        {form.accessMode === "password_protected" ? (
-          <label className="label">
-            Form password
-            <input className="field" name="password" type="password" required />
-          </label>
+      <div className={form.allowAnonymousDrafts ? "cfp-returning" : "mt"}>
+        {form.allowAnonymousDrafts ? (
+          <>
+            <h3>Already started?</h3>
+            <p className="help">
+              Recover verified drafts on this or another device.
+            </p>
+          </>
         ) : null}
-        <TurnstileWidget
-          siteKey={loaderData.turnstileSiteKey}
-          action="application_request_code"
-        />
-        <button className="btn primary" type="submit" disabled={pending}>
-          {pending ? "Requesting code…" : "Send verification code"}
-        </button>
-      </Form>
+        <Form method="post" className="stack">
+          <input type="hidden" name="_intent" value="request_code" />
+          <label className="label">
+            Email address
+            <input
+              className="field"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+            />
+          </label>
+          {form.accessMode === "password_protected" ? (
+            <label className="label">
+              Form password
+              <input
+                className="field"
+                name="password"
+                type="password"
+                required
+              />
+            </label>
+          ) : null}
+          <TurnstileWidget
+            siteKey={loaderData.turnstileSiteKey}
+            action="application_request_code"
+          />
+          <button
+            className={`btn${form.allowAnonymousDrafts ? "" : " primary"}`}
+            type="submit"
+            disabled={pending}
+          >
+            {pending ? "Requesting code…" : "Send verification code"}
+          </button>
+        </Form>
+      </div>
     </section>
   );
 }
@@ -413,7 +466,45 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
     availability,
     claim,
     claimRequested,
+    featuredSpeakers,
+    programmeUrl,
   } = loaderData;
+
+  if (!claimRequested && !applicant) {
+    return (
+      <div
+        className="public-shell event-branded"
+        style={{ "--event-accent": form.brandAccent } as CSSProperties}
+      >
+        <header className="public-top">
+          <Link
+            className="brand"
+            to={`/apply/${form.publicSlug}`}
+            style={{ color: "var(--ink)", padding: 0 }}
+          >
+            <span className="brand-mark">P</span>
+            <span>Program Cue</span>
+          </Link>
+          <span className="subtle">{form.eventName}</span>
+          {programmeUrl ? (
+            <Link className="btn right" to={programmeUrl}>
+              Programme
+            </Link>
+          ) : null}
+        </header>
+        <PublicApplicationLanding
+          form={form}
+          accepting={availability.accepting}
+          availabilityReason={availability.reason}
+          featuredSpeakers={featuredSpeakers}
+          programmeUrl={programmeUrl}
+          accessPanel={
+            <AccessPanel loaderData={loaderData} actionData={actionData} />
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -451,9 +542,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
       >
         {claimRequested ? (
           <ClaimPanel claim={claim} actionData={actionData} />
-        ) : !applicant ? (
-          <AccessPanel loaderData={loaderData} actionData={actionData} />
-        ) : (
+        ) : applicant ? (
           <>
             <section
               className="card pad mb"
@@ -721,7 +810,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
               </section>
             </div>
           </>
-        )}
+        ) : null}
       </main>
     </div>
   );

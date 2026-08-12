@@ -59,6 +59,7 @@ const programCueFieldMetadataSchema = z
       "video",
     ]),
     reviewVisibility: z.enum(["reviewers", "administrators_only"]),
+    example: z.string().max(300).optional(),
   })
   .strict();
 
@@ -283,13 +284,17 @@ export function toFormJsSchema(
         programCue: {
           fieldType: field.type,
           reviewVisibility: field.reviewVisibility ?? "administrators_only",
+          example: field.example || undefined,
         },
       })),
     ],
   };
 }
 
-export function fromFormJsSchema(input: unknown): SubmissionFormSchema {
+export function fromFormJsSchema(
+  input: unknown,
+  presentation: SubmissionFormSchema["presentation"],
+): SubmissionFormSchema {
   const parsed = formJsSchemaSchema.safeParse(input);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -334,6 +339,7 @@ export function fromFormJsSchema(input: unknown): SubmissionFormSchema {
         type,
         required: component.validate?.required ?? false,
         help: component.description ?? "",
+        example: component.programCue?.example ?? "",
         options: optionsFor(component, type),
         reviewVisibility:
           component.programCue?.reviewVisibility ?? "administrators_only",
@@ -345,6 +351,7 @@ export function fromFormJsSchema(input: unknown): SubmissionFormSchema {
 
   const normalized = formSchemaSchema.safeParse({
     introduction: introductionComponents[0]?.text ?? "",
+    presentation,
     fields,
   });
   if (!normalized.success) {

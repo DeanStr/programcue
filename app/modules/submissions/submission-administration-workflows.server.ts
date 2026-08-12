@@ -594,6 +594,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
     };
     const manualSchema = {
       introduction: "Entered manually by an administrator.",
+      presentation: DEFAULT_FORM_SCHEMA.presentation,
       fields: DEFAULT_FORM_SCHEMA.fields
         .filter((field) =>
           ["title", "description", "category", "format"].includes(field.id),

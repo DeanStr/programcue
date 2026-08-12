@@ -19,6 +19,11 @@ export type FormSummary = {
   eventName: string;
   eventSlug: string;
   eventTimezone: string;
+  eventStartsAt: number;
+  eventEndsAt: number;
+  eventVenue: string | null;
+  eventCity: string | null;
+  eventDescription: string | null;
   brandAccent: string;
   filePolicy: EventFilePolicy;
   name: string;
@@ -185,6 +190,11 @@ export type FormRow = {
   eventName: string;
   eventSlug: string;
   eventTimezone: string;
+  eventStartsAt: number;
+  eventEndsAt: number;
+  eventVenue: string | null;
+  eventCity: string | null;
+  eventDescription: string | null;
   brandAccent: string;
   filePolicyJson: string;
   name: string;
@@ -220,6 +230,11 @@ export function mapForm(row: FormRow): FormSummary {
     eventName: row.eventName,
     eventSlug: row.eventSlug,
     eventTimezone: row.eventTimezone,
+    eventStartsAt: row.eventStartsAt,
+    eventEndsAt: row.eventEndsAt,
+    eventVenue: row.eventVenue,
+    eventCity: row.eventCity,
+    eventDescription: row.eventDescription,
     brandAccent: row.brandAccent,
     filePolicy: parseEventFilePolicy(row.filePolicyJson),
     name: row.name,

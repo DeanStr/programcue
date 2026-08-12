@@ -27,6 +27,7 @@ import { signOutSession } from "~/platform/auth/auth.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import {
   AbuseProtectionConfigurationError,
   AbuseRateLimitError,
@@ -94,6 +95,13 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     );
     const claimToken = url.searchParams.get("claim");
     const claimSpeakerId = url.searchParams.get("speaker");
+    const showLanding = !portal.applicant && !claimToken && !claimSpeakerId;
+    const publishedProgramme = showLanding
+      ? await new PublicProgrammeService(env).getPublishedLandingSummary(
+          portal.form.eventSlug,
+          portal.form.version.schema.presentation.showFeaturedSpeakers ? 8 : 0,
+        )
+      : null;
     const claimRecord =
       claimToken && claimSpeakerId
         ? await service.getCoSpeakerClaim(
@@ -159,6 +167,20 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
                     : "";
     return {
       ...portal,
+      featuredSpeakers:
+        publishedProgramme &&
+        portal.form.version.schema.presentation.showFeaturedSpeakers
+          ? publishedProgramme.speakers.map((speaker) => ({
+              id: speaker.id,
+              displayName: speaker.displayName,
+              imageUrl: speaker.imageUrl,
+              organisationName: speaker.organisationName,
+              jobTitle: speaker.jobTitle,
+            }))
+          : [],
+      programmeUrl: publishedProgramme
+        ? `/public/programme/${encodeURIComponent(portal.form.eventSlug)}`
+        : null,
       claim,
       claimRequested: Boolean(claimToken || claimSpeakerId),
       turnstileSiteKey,

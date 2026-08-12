@@ -19,6 +19,7 @@ function newField(type: FormField["type"], index: number): FormField {
     type,
     required: false,
     help: "",
+    example: "",
     options:
       type === "select" || type === "multi_select"
         ? ["Option 1", "Option 2"]

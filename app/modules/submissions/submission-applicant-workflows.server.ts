@@ -24,6 +24,23 @@ import {
 } from "./submission-service-foundation.server";
 
 export abstract class SubmissionApplicantWorkflows extends SubmissionCoSpeakerWorkflows {
+  async authorizeApplicantProfileImport(request: Request, publicSlug: string) {
+    const form = await this.getPublicForm(publicSlug);
+    const applicant = await this.applicants.get(request, form);
+    if (!applicant?.verified) {
+      throw new Response(
+        "Verify your applicant email before importing a public profile.",
+        { status: 401 },
+      );
+    }
+    this.assertApplicationManagementAccess(applicant);
+    return {
+      eventId: form.eventId,
+      personId: applicant.personId,
+      email: applicant.email,
+    };
+  }
+
   async authorizeApplicantMultipartUpload(
     request: Request,
     publicSlug: string,
