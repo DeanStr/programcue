@@ -31,6 +31,7 @@ test("representative role surfaces have no detectable WCAG A/AA violations", asy
     { role: "speaker", path: "/speaker/tasks" },
     { role: "administrator", path: "/admin/communications/compose" },
     { role: "administrator", path: "/admin/speakers/person-demo-speaker" },
+    { role: "administrator", path: "/admin/crm" },
     {
       role: "administrator",
       path: "/public/programme/future-of-events-2025",

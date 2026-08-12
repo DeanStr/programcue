@@ -1,12 +1,19 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const projectRoot = process.cwd();
 const wrangler = resolve(projectRoot, "node_modules/.bin/wrangler");
-const migration = resolve(projectRoot, "migrations/0001_initial.sql");
+const migrationsDirectory = resolve(projectRoot, "migrations");
 const database = "program-cue-db";
 
 function fail(message) {
@@ -296,7 +303,13 @@ try {
     writeFile(sourceConfig, JSON.stringify(recoveryConfig)),
     writeFile(restoreConfig, JSON.stringify(recoveryConfig)),
   ]);
-  const migrationSql = await readFile(migration, "utf8");
+  const migrations = (await readdir(migrationsDirectory))
+    .filter((entry) => entry.endsWith(".sql"))
+    .sort()
+    .map((entry) => resolve(migrationsDirectory, entry));
+  const migrationSql = (
+    await Promise.all(migrations.map((migration) => readFile(migration, "utf8")))
+  ).join("\n");
   const tables = Array.from(
     migrationSql.matchAll(
       /^CREATE TABLE(?: IF NOT EXISTS)? ([a-z][a-z0-9_]*)/gmu,
@@ -308,14 +321,16 @@ try {
       "The baseline migration did not expose a unique application table inventory.",
     );
 
-  runWrangler(sourceCwd, sourceConfig, [
-    "d1",
-    "execute",
-    database,
-    "--file",
-    migration,
-    "--yes",
-  ]);
+  for (const migration of migrations) {
+    runWrangler(sourceCwd, sourceConfig, [
+      "d1",
+      "execute",
+      database,
+      "--file",
+      migration,
+      "--yes",
+    ]);
+  }
   runWrangler(sourceCwd, sourceConfig, [
     "d1",
     "execute",

@@ -1,0 +1,236 @@
+import { ArrowLeft, Network, UserPlus } from "lucide-react";
+import {
+  data,
+  Form,
+  Link,
+  redirect,
+  useActionData,
+  useNavigation,
+} from "react-router";
+import { ZodError } from "zod";
+
+import type { Route } from "./+types/admin-crm-pipeline";
+import { ensureDemoCrmData } from "~/modules/crm/demo.server";
+import { crmStages } from "~/modules/crm/crm-schema";
+import { CrmService, CrmStateError } from "~/modules/crm/crm-service.server";
+import { requireOrganisationAdministrator } from "~/platform/auth/organisation.server";
+import { getCloudflareContext } from "~/platform/cloudflare-context";
+
+export const meta = () => [
+  { title: "Speaker sourcing pipeline · Program Cue" },
+];
+type ActionResult = { ok: boolean; message: string };
+
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const { env } = getCloudflareContext(context);
+  await ensureDemoCrmData(env);
+  const viewer = await requireOrganisationAdministrator(request, env);
+  const service = new CrmService(env);
+  const [columns, directory] = await Promise.all([
+    service.listPipeline(viewer),
+    service.listDirectory(
+      viewer,
+      { query: "", company: "", jobTitle: "", tag: "" },
+      1,
+    ),
+  ]);
+  const enrolled = new Set(
+    columns.flatMap((column) => column.entries.map((entry) => entry.personId)),
+  );
+  return {
+    columns,
+    availableContacts: directory.contacts.filter(
+      (contact) => !enrolled.has(contact.personId),
+    ),
+  };
+}
+
+export async function action({ request, context }: Route.ActionArgs) {
+  const { env } = getCloudflareContext(context);
+  await ensureDemoCrmData(env);
+  const viewer = await requireOrganisationAdministrator(request, env);
+  const service = new CrmService(env);
+  const form = await request.formData();
+  try {
+    if (form.get("_intent") === "enroll") {
+      await service.enrollPipeline(viewer, {
+        personId: form.get("personId"),
+        stage: form.get("stage"),
+        score: form.get("score") ? form.get("score") : null,
+        rationale: form.get("rationale"),
+      });
+      return redirect("/admin/crm/pipeline?enrolled=yes");
+    }
+    if (form.get("_intent") === "move") {
+      await service.movePipelineEntry(viewer, {
+        entryId: form.get("entryId"),
+        stage: form.get("stage"),
+        revision: form.get("revision"),
+      });
+      return redirect("/admin/crm/pipeline?moved=yes");
+    }
+    return data<ActionResult>(
+      { ok: false, message: "Unsupported pipeline action." },
+      { status: 400 },
+    );
+  } catch (error) {
+    if (error instanceof ZodError || error instanceof CrmStateError)
+      return data<ActionResult>(
+        {
+          ok: false,
+          message:
+            error instanceof CrmStateError
+              ? error.message
+              : (error.issues[0]?.message ?? "Review the pipeline action."),
+        },
+        { status: error instanceof CrmStateError ? error.status : 422 },
+      );
+    if (error instanceof Response) throw error;
+    throw error;
+  }
+}
+
+export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
+  const actionData = useActionData<ActionResult>();
+  const navigation = useNavigation();
+  const busy = navigation.state !== "idle";
+  return (
+    <>
+      <div className="page-head pc-page-header">
+        <div>
+          <span className="pc-page-eyebrow">Organization Speaker CRM</span>
+          <h1>Speaker sourcing pipeline</h1>
+          <p>
+            Move reusable contacts from identification through confirmed or
+            declined outcomes. Every transition is timestamped.
+          </p>
+        </div>
+        <Link className="btn" to="/admin/crm">
+          <ArrowLeft aria-hidden size={15} /> CRM directory
+        </Link>
+      </div>
+      {actionData ? (
+        <div className="validation-item error card pad mb" role="alert">
+          <strong>△</strong>
+          <span>{actionData.message}</span>
+        </div>
+      ) : null}
+      <details className="card pad mb">
+        <summary>
+          <strong>
+            <UserPlus aria-hidden size={16} /> Enroll a contact
+          </strong>
+        </summary>
+        {loaderData.availableContacts.length ? (
+          <Form method="post" className="stack mt">
+            <input type="hidden" name="_intent" value="enroll" />
+            <label className="label">
+              Contact
+              <select className="select" name="personId">
+                {loaderData.availableContacts.map((contact) => (
+                  <option value={contact.personId} key={contact.personId}>
+                    {contact.name} · {contact.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="label">
+              Starting stage
+              <select className="select" name="stage">
+                {crmStages.map((stage) => (
+                  <option key={stage}>{stage}</option>
+                ))}
+              </select>
+            </label>
+            <div className="form-row">
+              <label className="label">
+                Score (optional)
+                <input
+                  className="field"
+                  name="score"
+                  type="number"
+                  min={0}
+                  max={100}
+                />
+              </label>
+              <label className="label">
+                Rationale
+                <input className="field" name="rationale" />
+              </label>
+            </div>
+            <button className="btn primary" disabled={busy}>
+              Enroll contact
+            </button>
+          </Form>
+        ) : (
+          <p className="subtle mt">
+            Every organization contact is already enrolled.
+          </p>
+        )}
+      </details>
+      <section
+        className="crm-pipeline-board"
+        aria-label="Speaker sourcing stages"
+      >
+        {loaderData.columns.map((column) => (
+          <div className="card pad crm-pipeline-column" key={column.stage}>
+            <div className="card-title">
+              <h2>{column.label}</h2>
+              <span className="status info">{column.entries.length}</span>
+            </div>
+            <div className="stack mt">
+              {column.entries.map((entry) => (
+                <article className="card pad" key={entry.id}>
+                  <Link
+                    to={`/admin/crm/contacts/${encodeURIComponent(entry.personId)}`}
+                  >
+                    <strong>{entry.name}</strong>
+                  </Link>
+                  <p className="subtle">
+                    {[entry.jobTitle, entry.organisationName]
+                      .filter(Boolean)
+                      .join(" · ") || entry.email}
+                  </p>
+                  {entry.score !== null ? (
+                    <span className="status info">Score {entry.score}</span>
+                  ) : null}
+                  {entry.rationale ? <p>{entry.rationale}</p> : null}
+                  <Form method="post" className="stack mt">
+                    <input type="hidden" name="_intent" value="move" />
+                    <input type="hidden" name="entryId" value={entry.id} />
+                    <input
+                      type="hidden"
+                      name="revision"
+                      value={entry.revision}
+                    />
+                    <label className="label">
+                      Move to
+                      <select
+                        className="select"
+                        name="stage"
+                        defaultValue={entry.stage}
+                      >
+                        {crmStages.map((stage) => (
+                          <option key={stage}>{stage}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button className="btn" disabled={busy}>
+                      Move card
+                    </button>
+                  </Form>
+                </article>
+              ))}
+              {!column.entries.length ? (
+                <div className="pc-empty-state">
+                  <Network aria-hidden className="pc-state-icon" />
+                  <p>No contacts</p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </section>
+    </>
+  );
+}

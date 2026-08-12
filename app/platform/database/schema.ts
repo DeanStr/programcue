@@ -191,6 +191,195 @@ export const memberships = sqliteTable(
   ],
 );
 
+export const organisationContacts = sqliteTable(
+  "organisation_contacts",
+  {
+    organisationId: text("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    source: text("source").notNull().$type<"event" | "import" | "manual">(),
+    status: text("status")
+      .notNull()
+      .default("active")
+      .$type<"active" | "merged">(),
+    mergedIntoPersonId: text("merged_into_person_id").references(
+      () => people.id,
+    ),
+    createdByPersonId: text("created_by_person_id").references(() => people.id),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    primaryKey({ columns: [table.organisationId, table.personId] }),
+    index("idx_organisation_contacts_status").on(
+      table.organisationId,
+      table.status,
+      desc(table.updatedAt),
+    ),
+  ],
+);
+
+export const organisationContactTags = sqliteTable(
+  "organisation_contact_tags",
+  {
+    organisationId: text("organisation_id").notNull(),
+    personId: text("person_id").notNull(),
+    tag: text("tag").notNull(),
+    createdByPersonId: text("created_by_person_id").references(() => people.id),
+    createdAt: integer("created_at").notNull().default(epochNow),
+  },
+  (table) => [
+    primaryKey({ columns: [table.organisationId, table.personId, table.tag] }),
+    foreignKey({
+      columns: [table.organisationId, table.personId],
+      foreignColumns: [
+        organisationContacts.organisationId,
+        organisationContacts.personId,
+      ],
+    }).onDelete("cascade"),
+    index("idx_organisation_contact_tags_tag").on(
+      table.organisationId,
+      table.tag,
+      table.personId,
+    ),
+  ],
+);
+
+export const organisationContactNotes = sqliteTable(
+  "organisation_contact_notes",
+  {
+    id: text("id").primaryKey(),
+    organisationId: text("organisation_id").notNull(),
+    personId: text("person_id").notNull(),
+    authorPersonId: text("author_person_id")
+      .notNull()
+      .references(() => people.id),
+    body: text("body").notNull(),
+    createdAt: integer("created_at").notNull().default(epochNow),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organisationId, table.personId],
+      foreignColumns: [
+        organisationContacts.organisationId,
+        organisationContacts.personId,
+      ],
+    }).onDelete("cascade"),
+    index("idx_organisation_contact_notes_person").on(
+      table.organisationId,
+      table.personId,
+      desc(table.createdAt),
+    ),
+  ],
+);
+
+export const crmSegments = sqliteTable(
+  "crm_segments",
+  {
+    id: text("id").primaryKey(),
+    organisationId: text("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    ownerPersonId: text("owner_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    filtersJson: text("filters_json").notNull(),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("crm_segments_name_unique").on(
+      table.organisationId,
+      table.ownerPersonId,
+      table.name,
+    ),
+    index("idx_crm_segments_owner").on(
+      table.organisationId,
+      table.ownerPersonId,
+      desc(table.updatedAt),
+    ),
+  ],
+);
+
+export const crmPipelineEntries = sqliteTable(
+  "crm_pipeline_entries",
+  {
+    id: text("id").primaryKey(),
+    organisationId: text("organisation_id").notNull(),
+    personId: text("person_id").notNull(),
+    stage: text("stage")
+      .notNull()
+      .$type<
+        "identified" | "contacted" | "interested" | "confirmed" | "declined"
+      >(),
+    score: integer("score"),
+    rationale: text("rationale"),
+    revision: integer("revision").notNull().default(1),
+    createdByPersonId: text("created_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("crm_pipeline_person_unique").on(
+      table.organisationId,
+      table.personId,
+    ),
+    uniqueIndex("crm_pipeline_id_org_unique").on(
+      table.id,
+      table.organisationId,
+    ),
+    foreignKey({
+      columns: [table.organisationId, table.personId],
+      foreignColumns: [
+        organisationContacts.organisationId,
+        organisationContacts.personId,
+      ],
+    }).onDelete("cascade"),
+    index("idx_crm_pipeline_stage").on(
+      table.organisationId,
+      table.stage,
+      desc(table.updatedAt),
+    ),
+  ],
+);
+
+export const crmPipelineActivity = sqliteTable(
+  "crm_pipeline_activity",
+  {
+    id: text("id").primaryKey(),
+    organisationId: text("organisation_id").notNull(),
+    pipelineEntryId: text("pipeline_entry_id").notNull(),
+    actorPersonId: text("actor_person_id")
+      .notNull()
+      .references(() => people.id),
+    kind: text("kind").notNull().$type<"note" | "stage_changed">(),
+    body: text("body"),
+    fromStage: text("from_stage"),
+    toStage: text("to_stage"),
+    createdAt: integer("created_at").notNull().default(epochNow),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.pipelineEntryId, table.organisationId],
+      foreignColumns: [
+        crmPipelineEntries.id,
+        crmPipelineEntries.organisationId,
+      ],
+    }).onDelete("cascade"),
+    index("idx_crm_pipeline_activity_entry").on(
+      table.organisationId,
+      table.pipelineEntryId,
+      desc(table.createdAt),
+    ),
+  ],
+);
+
 export const formDefinitions = sqliteTable(
   "form_definitions",
   {

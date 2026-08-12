@@ -496,7 +496,26 @@ export async function resetDemoEvent(
       DEMO_EVENT_ID,
     ),
   );
-  await env.DB.batch([...tokenStatements, ...cleanup]);
+  const organisationCrmCleanup = [
+    "crm_pipeline_activity",
+    "crm_pipeline_entries",
+    "organisation_contact_notes",
+    "organisation_contact_tags",
+    "crm_segments",
+    "organisation_contacts",
+  ].map((table) =>
+    env.DB.prepare(`DELETE FROM ${table} WHERE organisation_id = ?`).bind(
+      DEMO_ORGANISATION_ID,
+    ),
+  );
+  await env.DB.batch([
+    ...tokenStatements,
+    ...organisationCrmCleanup,
+    env.DB.prepare(
+      "DELETE FROM memberships WHERE id = 'membership-demo-admin-org'",
+    ),
+    ...cleanup,
+  ]);
 
   let objectCount = 0;
   let objectCleanupError: unknown = null;

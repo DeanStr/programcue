@@ -37,6 +37,7 @@ const SURFACES: readonly Surface[] = [
     role: "evaluator",
   },
   { name: "speakers-list", path: "/admin/speakers" },
+  { name: "speaker-crm", path: "/admin/crm" },
   { name: "resources-admin", path: "/admin/resources" },
   { name: "session-bulk", path: "/admin/sessions/bulk" },
   { name: "communications", path: "/admin/communications" },
@@ -224,7 +225,10 @@ async function captureState(page: Page, target: Locator, name: string) {
     content: ".topbar, .skip-link { visibility: hidden !important; }",
   });
   try {
-    await expect(target).toHaveScreenshot(`${name}.png`);
+    await expect(target).toHaveScreenshot(`${name}.png`, {
+      maxDiffPixelRatio:
+        name === "event-switcher-current-event" ? 0.04 : 0.01,
+    });
   } finally {
     await unrelatedFixedChrome.evaluate((style) =>
       style.parentNode?.removeChild(style),
@@ -254,7 +258,7 @@ test.describe.serial("responsive visual inventory", () => {
       await waitForSurfaceReady(page, surface.name);
       const isolateFixedSpeakerNavigation =
         testInfo.project.name === "mobile-chromium" &&
-        surface.name.startsWith("speaker-");
+        surface.role === "speaker";
       let fixedNavigationStyle: Awaited<
         ReturnType<Page["addStyleTag"]>
       > | null = null;

@@ -362,6 +362,10 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
               WHERE actor_person_id = ? AND (event_id IS NULL OR event_id <> ?)
            )
            OR EXISTS (
+             SELECT 1 FROM organisation_contacts
+              WHERE person_id = ? AND status = 'active'
+           )
+           OR EXISTS (
              SELECT 1 FROM calendar_connections
               WHERE person_id = ?
                 AND (event_id IS NULL OR event_id <> ? OR organisation_id <> ?)
@@ -377,6 +381,7 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
           candidate.id,
           viewer.eventId,
         ]).flat(),
+        candidate.id,
         candidate.id,
         viewer.eventId,
         viewer.organisationId,

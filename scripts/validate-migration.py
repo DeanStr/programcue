@@ -3,7 +3,8 @@ import re
 import sqlite3
 
 root = Path(__file__).resolve().parents[1]
-sql = root.joinpath("migrations/0001_initial.sql").read_text()
+migration_files = sorted(root.joinpath("migrations").glob("*.sql"))
+sql = "\n".join(path.read_text() for path in migration_files)
 schema_source = root.joinpath("app/platform/database/schema.ts").read_text()
 
 connection = sqlite3.connect(":memory:")
@@ -18,6 +19,8 @@ tables = {
 }
 required = {
     "organisations", "people", "organisation_ai_settings", "events", "memberships",
+    "organisation_contacts", "organisation_contact_tags", "organisation_contact_notes",
+    "crm_segments", "crm_pipeline_entries", "crm_pipeline_activity",
     "form_definitions", "form_versions", "submissions", "submission_revisions",
     "submission_track_selections", "submission_routing_teams",
     "submission_email_verifications", "submission_speakers",
@@ -64,6 +67,10 @@ def columns(table: str) -> set[str]:
 for table, expected in {
     "organisation_ai_settings": {"provider", "model", "revision", "last_updated_by_person_id", "last_operation_id"},
     "memberships": {"organisation_id", "event_id", "person_id", "role", "revoked_at"},
+    "organisation_contacts": {"organisation_id", "person_id", "source", "status", "merged_into_person_id"},
+    "organisation_contact_notes": {"organisation_id", "person_id", "author_person_id", "body"},
+    "crm_pipeline_entries": {"organisation_id", "person_id", "stage", "score", "rationale", "revision"},
+    "crm_pipeline_activity": {"organisation_id", "pipeline_entry_id", "kind", "from_stage", "to_stage"},
     "form_versions": {"event_id", "schema_json", "routing_json", "settings_snapshot_json", "revision"},
     "submissions": {"submitted_snapshot_json", "revision", "last_operation_id"},
     "submission_track_selections": {"submission_id", "event_id", "track_id", "track_name_snapshot", "position"},
@@ -127,6 +134,8 @@ required_indexes = {
     "idx_operation_jobs_event_status", "idx_operation_items_status",
     "idx_event_changes_cursor", "idx_webhook_deliveries_status",
     "idx_audit_event_created",
+    "idx_organisation_contacts_status", "idx_organisation_contact_tags_tag",
+    "idx_crm_pipeline_stage", "idx_crm_pipeline_activity_entry",
     "assistant_proposal_executions_claim_idx",
 }
 if required_indexes - indexes:

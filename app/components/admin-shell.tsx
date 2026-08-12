@@ -7,6 +7,7 @@ import {
   Cable,
   ChevronDown,
   ClipboardCopy,
+  ContactRound,
   Files,
   Grid3X3,
   LayoutDashboard,
@@ -48,6 +49,7 @@ export type AdminNavigationItem = readonly [string, LucideIcon, string];
 
 export const NAV_ITEMS = [
   ["command", LayoutDashboard, "Command Centre"],
+  ["crm", ContactRound, "Speaker CRM"],
   ["event", CalendarCog, "Event Setup"],
   ["submissions", Files, "Submissions"],
   ["review", Sparkles, "Review"],
@@ -179,9 +181,15 @@ export function adminPageBreadcrumbs(pathname: string) {
               ? "Data retention"
               : section === "submissions"
                 ? "Application detail"
-                : section === "speakers"
-                  ? "Speaker detail"
-                  : "Detail";
+                : section === "crm" && parts[2] === "pipeline"
+                  ? "Sourcing pipeline"
+                  : section === "crm" && parts[2] === "outreach"
+                    ? "Bulk outreach"
+                    : section === "crm" && parts[2] === "contacts"
+                      ? "Contact"
+                      : section === "speakers"
+                        ? "Speaker detail"
+                        : "Detail";
 
   return [
     { label: sectionLabel, href: sectionHref },
@@ -278,7 +286,9 @@ export function AdminShell({
   const navigationItems =
     viewer.role === "committee_chair"
       ? NAV_ITEMS.filter(([id]) => id === "review")
-      : NAV_ITEMS;
+      : NAV_ITEMS.filter(
+          ([id]) => id !== "crm" || viewer.canCreateEvents || viewer.demo,
+        );
   const demoRoleLabel = `${viewer.role.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase())} demo`;
   const viewArea = savedViewArea(location.pathname);
   const currentHref = `${location.pathname}${location.search}${location.hash}`;

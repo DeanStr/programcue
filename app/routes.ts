@@ -121,6 +121,10 @@ export default [
   route("admin/exports/:resource.csv", "routes/admin-data-export.ts"),
   layout("routes/admin-layout.tsx", [
     route("admin/command", "routes/command-centre.tsx"),
+    route("admin/crm", "routes/admin-crm.tsx"),
+    route("admin/crm/pipeline", "routes/admin-crm-pipeline.tsx"),
+    route("admin/crm/outreach", "routes/admin-crm-outreach.tsx"),
+    route("admin/crm/contacts/:personId", "routes/admin-crm-contact.tsx"),
     route("admin/assistant", "routes/assistant.tsx"),
     route("admin/events/clone", "routes/admin-event-clone.tsx"),
     route("admin/search", "routes/admin-command-search.ts"),

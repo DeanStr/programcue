@@ -71,11 +71,33 @@ export class CommunicationDraftService {
     this.delivery = new CommunicationDeliveryService(env);
   }
 
-  async create(viewer: Viewer, input: CommunicationDraftFields) {
+  async create(
+    viewer: Viewer,
+    input: CommunicationDraftFields,
+    operation?: { draftId: string; idempotencyKey: string },
+  ) {
     const fields = communicationDraftFieldsSchema.parse(input);
     await this.assertPublishedTemplate(viewer, fields.templateVersionId);
-    const id = crypto.randomUUID();
-    const idempotencyKey = `communication:draft:${id}`;
+    const id = operation?.draftId ?? crypto.randomUUID();
+    const idempotencyKey =
+      operation?.idempotencyKey ?? `communication:draft:${id}`;
+    const recover = async () => {
+      if (!operation) return null;
+      const existing = await this.env.DB.prepare(
+        `SELECT communication.id
+           FROM communications communication
+           JOIN events event
+             ON event.id = communication.event_id AND event.organisation_id = ?
+          WHERE communication.id = ? AND communication.event_id = ?
+            AND communication.idempotency_key = ?
+            AND communication.status = 'draft'`,
+      )
+        .bind(viewer.organisationId, id, viewer.eventId, idempotencyKey)
+        .first<{ id: string }>();
+      return existing ? this.get(viewer, existing.id) : null;
+    };
+    const replay = await recover();
+    if (replay) return replay;
     const result = await this.env.DB.prepare(
       `INSERT INTO communications (
          id, event_id, template_version_id, idempotency_key, kind, channel,
@@ -110,6 +132,8 @@ export class CommunicationDraftService {
       )
       .run();
     if ((result.meta.changes ?? 0) !== 1) {
+      const recovered = await recover();
+      if (recovered) return recovered;
       throw new CommunicationStateError(
         "The communication draft could not be created in the authorised event.",
       );

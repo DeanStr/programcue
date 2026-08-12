@@ -1,0 +1,197 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { expect, test } from "@playwright/test";
+
+import { resetDemoEvent } from "./support/reset-demo-event";
+
+const fixture = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "fixtures",
+  "speakers.csv",
+);
+
+test.beforeAll(async ({ request }) => {
+  await resetDemoEvent(request);
+});
+
+test.setTimeout(120_000);
+
+test("organization CRM covers directory, relationship, pipeline, handoff and outreach workflows", async ({
+  page,
+}) => {
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/admin/crm");
+  await expect(
+    page.getByText("Organization workspace · all events"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Speaker CRM", level: 1 }),
+  ).toBeVisible();
+
+  await page.getByText("Import contacts from CSV").click();
+  await page.getByLabel("CSV file").setInputFiles(fixture);
+  await page.getByRole("button", { name: "Preview import" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Column mapping" }),
+  ).toBeVisible();
+  await expect(page.getByText("company → organisationName")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Priya Raman" })).toBeVisible();
+  await page.getByRole("button", { name: "Confirm import" }).click();
+  await expect(page.getByRole("link", { name: "Priya Raman" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Marcus Okafor" })).toBeVisible();
+
+  await page.getByLabel("Search contacts").fill("Priya");
+  await page.getByRole("button", { name: "Apply filters" }).click();
+  await expect(page.getByRole("link", { name: "Priya Raman" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Marcus Okafor" })).toHaveCount(
+    0,
+  );
+  await page.getByRole("link", { name: "Clear filters" }).click();
+  await page
+    .locator('select[name="company"]')
+    .selectOption({ label: "Latticework Systems" });
+  await page.getByRole("button", { name: "Apply filters" }).click();
+  await expect(page.getByLabel("Active CRM filters")).toContainText(
+    "Latticework Systems",
+  );
+  await page.getByRole("link", { name: "Priya Raman" }).click();
+
+  await page
+    .getByLabel("New internal note")
+    .fill("Met at DevFlow 2026 - strong on CI topics; shortlist for keynote.");
+  await page.getByRole("button", { name: "Save note" }).click();
+  await expect(page).toHaveURL(/saved=note/u);
+  await expect(page.getByText(/shortlist for keynote/)).toBeVisible();
+  await page.getByLabel("Add tag").fill("AI");
+  await page.getByRole("button", { name: "Add tag" }).click();
+  await expect(
+    page.getByRole("button", { name: "Remove AI tag" }),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "CRM directory" }).click();
+  await expect(page).toHaveURL(/\/admin\/crm$/u);
+  await page.locator('select[name="tag"]').selectOption("AI");
+  await page.getByRole("button", { name: "Apply filters" }).click();
+  await page.getByLabel("Segment name").fill("AI Experts");
+  await page.getByRole("button", { name: "Save dynamic segment" }).click();
+  await page.getByRole("link", { name: "AI Experts" }).click();
+  await expect(
+    page.getByRole("heading", { name: "AI Experts segment" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Priya Raman" })).toBeVisible();
+
+  await page.getByText("Add contact manually").click();
+  await page.getByLabel("Name", { exact: true }).fill("Priya Raman");
+  await page
+    .getByLabel("Email", { exact: true })
+    .fill("priya.raman.alt@sbek-test.example.com");
+  await page.getByRole("button", { name: "Create contact" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Possible duplicate contacts" }),
+  ).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("button", {
+      name: "Keep priya.speaker@sbek-test.example.com as primary",
+    })
+    .click();
+  await expect(page).toHaveURL(/merged=yes/u);
+
+  await page.getByRole("link", { name: "Pipeline" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Speaker sourcing pipeline", level: 1 }),
+  ).toBeVisible();
+  await page.getByText("Enroll a contact").click();
+  await page.locator('select[name="personId"]').selectOption({
+    label: "Marcus Okafor · marcus.speaker@sbek-test.example.com",
+  });
+  await page.getByLabel("Score (optional)").fill("85");
+  await page
+    .getByLabel("Rationale")
+    .fill(
+      "Strong platform-engineering track record; ideal for Platform & Infra track.",
+    );
+  await page.getByRole("button", { name: "Enroll contact" }).click();
+  const identified = page
+    .getByRole("heading", { name: "Identified" })
+    .locator("..")
+    .locator("..");
+  await expect(
+    identified.getByRole("link", { name: "Marcus Okafor" }),
+  ).toBeVisible();
+  await identified.getByLabel("Move to").selectOption("contacted");
+  await identified.getByRole("button", { name: "Move card" }).click();
+  const contacted = page
+    .getByRole("heading", { name: "Contacted" })
+    .locator("..")
+    .locator("..");
+  await contacted.getByLabel("Move to").selectOption("interested");
+  await contacted.getByRole("button", { name: "Move card" }).click();
+  const interested = page
+    .getByRole("heading", { name: "Interested" })
+    .locator("..")
+    .locator("..");
+  await expect(
+    interested.getByRole("link", { name: "Marcus Okafor" }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    interested.getByRole("link", { name: "Marcus Okafor" }),
+  ).toBeVisible();
+  await interested.getByRole("link", { name: "Marcus Okafor" }).click();
+  await page
+    .getByLabel("Pipeline note")
+    .fill("Left voicemail 2027-01-15; follow up next week.");
+  await page.getByRole("button", { name: "Save pipeline note" }).click();
+  await expect(page).toHaveURL(/saved=pipeline-note/u);
+  await expect(page.getByText(/Left voicemail/)).toBeVisible();
+  await expect(page.getByText("contacted → interested")).toBeVisible();
+
+  await page.getByLabel("Target event").selectOption("evt-foe-2025");
+  await page
+    .getByRole("button", { name: "Add to event and open speaker" })
+    .click();
+  await expect(page).toHaveURL(/\/admin\/speakers\?person=/u);
+  await expect(page.getByRole("link", { name: "Marcus Okafor" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Speaker CRM" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Top companies" }),
+  ).toBeVisible();
+  await page.getByLabel("Select Priya Raman").check();
+  await page.getByLabel("Select Marcus Okafor").check();
+  await page.getByRole("button", { name: "Email selected contacts" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Bulk speaker outreach" }),
+  ).toBeVisible();
+  await page.getByLabel("Subject").fill("Speak at DevFlow Conf 2027?");
+  await page
+    .getByLabel("Email footer physical address")
+    .fill("100 Programme Way, Toronto");
+  await page
+    .getByRole("button", { name: "Create draft and preview recipients" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Compose communication" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Generate current preview" }).click();
+  await expect(
+    page.getByText("All selected recipients are deliverable."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("table", { name: "Deliverable recipient sample" }),
+  ).toContainText("Priya Raman");
+  await expect(
+    page.getByRole("table", { name: "Deliverable recipient sample" }),
+  ).toContainText("Marcus Okafor");
+});
