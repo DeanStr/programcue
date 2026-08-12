@@ -115,6 +115,7 @@ export class ApiParticipantResourceReader {
                     submission.public_reference AS publicReference,
                     form.id AS formId, form.name AS formName,
                     form.public_slug AS formSlug, form.kind AS formKind,
+                    form.status AS formStatus, version.schema_json AS schemaJson,
                     submission.title, submission.category, submission.format,
                     submission.status, submission.revision,
                     submission.answers_json AS answersJson,
@@ -322,6 +323,10 @@ export class ApiParticipantResourceReader {
     }
     if (resource === "submissions") {
       result.primarySubmitter = Boolean(result.primarySubmitter);
+      result.schema = parseJson(
+        result.schemaJson,
+        `Submission ${String(result.id)} form schema`,
+      );
       result.answers = parseJson(
         result.answersJson,
         `Submission ${String(result.id)} answers`,
@@ -331,6 +336,7 @@ export class ApiParticipantResourceReader {
         `Submission ${String(result.id)} submitted snapshot`,
       );
       delete result.answersJson;
+      delete result.schemaJson;
       delete result.submittedSnapshotJson;
     }
     if (resource === "tasks") {

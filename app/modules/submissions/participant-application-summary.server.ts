@@ -2,6 +2,11 @@ import { z } from "zod";
 
 import { ApiParticipantService } from "~/platform/api/api-participant-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  draftPayloadSchema,
+  formSchemaSchema,
+  submittedSnapshotSchema,
+} from "./submission-schema";
 
 const participantApplicationSummarySchema = z
   .object({
@@ -10,6 +15,7 @@ const participantApplicationSummarySchema = z
     formName: z.string().min(1),
     formSlug: z.string().min(1),
     formKind: z.enum(["submission", "direct_session"]),
+    formStatus: z.enum(["draft", "published", "closed", "archived"]),
     title: z.string().min(1),
     status: z.enum([
       "draft",
@@ -24,6 +30,9 @@ const participantApplicationSummarySchema = z
     ]),
     revision: z.number().int().positive(),
     primarySubmitter: z.boolean(),
+    schema: formSchemaSchema,
+    answers: draftPayloadSchema.shape.answers,
+    submittedSnapshot: submittedSnapshotSchema.nullable(),
     submittedAt: z.iso.datetime({ offset: true }).nullable(),
     updatedAt: z.iso.datetime({ offset: true }),
   })
@@ -61,8 +70,27 @@ export class ParticipantApplicationSummaryService {
     return applications;
   }
 
-  async getWorkspace(viewer: Viewer) {
+  async getWorkspace(viewer: Viewer, selectedApplicationId?: string | null) {
     const applications = await this.list(viewer);
+    let selectedApplication: ParticipantApplicationSummary | null = null;
+    if (selectedApplicationId !== null && selectedApplicationId !== undefined) {
+      const parsedId = z
+        .string()
+        .min(1)
+        .max(160)
+        .safeParse(selectedApplicationId);
+      if (!parsedId.success) {
+        throw new Response("The requested application identifier is invalid.", {
+          status: 400,
+        });
+      }
+      selectedApplication =
+        applications.find((application) => application.id === parsedId.data) ??
+        null;
+      if (!selectedApplication) {
+        throw new Response("Application not found.", { status: 404 });
+      }
+    }
     const availableForms = await this.env.DB.prepare(
       `SELECT form.id, form.name, form.public_slug AS publicSlug,
                 form.kind, form.closes_at AS closesAt
@@ -94,6 +122,10 @@ export class ParticipantApplicationSummaryService {
     )
       .bind(viewer.organisationId, viewer.eventId)
       .all<ParticipantAvailableForm>();
-    return { applications, availableForms: availableForms.results };
+    return {
+      applications,
+      availableForms: availableForms.results,
+      selectedApplication,
+    };
   }
 }

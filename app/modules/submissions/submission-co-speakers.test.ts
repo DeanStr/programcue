@@ -367,6 +367,15 @@ describe("Submissions D1 vertical slice", () => {
         roleLabel: "Co-speaker",
         visibility: "public",
       });
+      await expect(
+        env.DB.prepare(
+          `SELECT role FROM memberships
+            WHERE event_id = ? AND person_id = ? AND role = 'submitter'
+              AND accepted_at IS NOT NULL AND revoked_at IS NULL`,
+        )
+          .bind(viewer.eventId, coSpeaker.personId)
+          .first(),
+      ).resolves.toEqual({ role: "submitter" });
 
       const lockedSpeakerId = crypto.randomUUID();
       const lockedSpeakerEmail = `locked-speaker-${crypto.randomUUID()}@example.com`;

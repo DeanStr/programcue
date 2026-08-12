@@ -312,6 +312,39 @@ export class SubmissionApplicantRepository {
         ),
         this.env.DB.prepare(
           `
+        INSERT INTO memberships (
+          id, organisation_id, event_id, person_id, role,
+          invited_at, invitation_expires_at, accepted_at, revoked_at,
+          last_operation_id, created_at
+        )
+        SELECT ?, ?, ?, ?, 'submitter', unixepoch(), NULL, unixepoch(), NULL,
+               ?, unixepoch()
+         WHERE ? IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM submissions
+              WHERE id = ? AND event_id = ? AND submitter_person_id = ?
+           )
+        ON CONFLICT(event_id, person_id, role) WHERE event_id IS NOT NULL
+        DO UPDATE SET invited_at = unixepoch(), invitation_expires_at = NULL,
+                      accepted_at = unixepoch(), revoked_at = NULL,
+                      last_operation_id = excluded.last_operation_id
+         WHERE memberships.organisation_id = excluded.organisation_id
+           AND (memberships.revoked_at IS NOT NULL
+                OR memberships.accepted_at IS NULL)
+      `,
+        ).bind(
+          crypto.randomUUID(),
+          event.organisationId,
+          form.eventId,
+          applicant.personId,
+          event.auditEventId,
+          applicant.personId,
+          id,
+          form.eventId,
+          applicant.personId,
+        ),
+        this.env.DB.prepare(
+          `
         INSERT INTO submission_revisions (
           id, event_id, submission_id, form_version_id, revision_number, answers_json,
           speaker_snapshot_json, save_kind, saved_by_person_id, created_at

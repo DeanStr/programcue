@@ -34,7 +34,7 @@ function request(
   body: BodyInit | null,
   options: {
     method?: string;
-    role?: "administrator" | "speaker";
+    role?: "administrator" | "speaker" | "submitter";
     selectedEventId?: string;
     contentType?: string;
   } = {},
@@ -114,7 +114,7 @@ describe("task-evidence attachment resource", () => {
     expect(putResponse.headers.get("allow")).toBe("POST");
   });
 
-  it("requires the speaker role and isolates mutations to the selected event", async () => {
+  it("requires a participant role and isolates mutations to the selected event", async () => {
     const denied = await invoke(
       jsonRequest(
         { taskId: "task", assetId: "asset", versionId: "version" },
@@ -122,6 +122,14 @@ describe("task-evidence attachment resource", () => {
       ),
     );
     expect(denied.status).toBe(403);
+
+    const submitter = await invoke(
+      jsonRequest(
+        { taskId: "", assetId: "asset", versionId: "version" },
+        { role: "submitter" },
+      ),
+    );
+    expect(submitter.status).toBe(422);
 
     const isolatedEventId = `evt-task-evidence-${crypto.randomUUID()}`;
     await workerEnv.DB.batch([

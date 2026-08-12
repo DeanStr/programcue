@@ -134,7 +134,7 @@ export class ApplicantSessionService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
   async get(request: Request, form: PublicForm): Promise<Applicant | null> {
-    if (form.accessMode === "account_required") {
+    if (form.accessMode !== "password_protected") {
       const session = await createAuth(this.env).api.getSession({
         headers: request.headers,
       });
@@ -600,6 +600,39 @@ export class ApplicantSessionService {
         anonymousDraftId,
         form.eventId,
         person.email,
+        sessionId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role,
+           invited_at, invitation_expires_at, accepted_at, revoked_at,
+           last_operation_id, created_at
+         )
+         SELECT ?, event.organisation_id, event.id, ?, 'submitter',
+                unixepoch(), NULL, unixepoch(), NULL, ?, unixepoch()
+           FROM events event
+          WHERE event.id = ? AND ? IS NOT NULL
+            AND EXISTS (
+              SELECT 1 FROM submissions submission
+               WHERE submission.id = ? AND submission.event_id = event.id
+                 AND submission.submitter_person_id = ?
+            )
+            AND EXISTS (SELECT 1 FROM verification_tokens WHERE id = ?)
+         ON CONFLICT(event_id, person_id, role) WHERE event_id IS NOT NULL
+         DO UPDATE SET invited_at = unixepoch(), invitation_expires_at = NULL,
+                       accepted_at = unixepoch(), revoked_at = NULL,
+                       last_operation_id = excluded.last_operation_id
+          WHERE memberships.organisation_id = excluded.organisation_id
+            AND (memberships.revoked_at IS NOT NULL
+                 OR memberships.accepted_at IS NULL)`,
+      ).bind(
+        crypto.randomUUID(),
+        person.personId,
+        sessionId,
+        form.eventId,
+        anonymousDraftId,
+        anonymousDraftId,
+        person.personId,
         sessionId,
       ),
       this.env.DB.prepare(

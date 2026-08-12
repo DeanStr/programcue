@@ -4,17 +4,112 @@ import { Link } from "react-router";
 import type { Route } from "./+types/participant-applications";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { ParticipantApplicationSummaryService } from "~/modules/submissions/participant-application-summary.server";
+import { visibleFields } from "~/modules/submissions/submission-schema";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 
 export const meta = () => [{ title: "Applications · Program Cue" }];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
+  const selectedApplicationId = new URL(request.url).searchParams.get(
+    "application",
+  );
   return {
     ...(await new ParticipantApplicationSummaryService(env).getWorkspace(
       viewer,
+      selectedApplicationId,
     )),
   };
+}
+
+function ApplicationDetail({
+  application,
+}: {
+  application: NonNullable<
+    Route.ComponentProps["loaderData"]["selectedApplication"]
+  >;
+}) {
+  const snapshot = application.submittedSnapshot;
+  const schema = snapshot?.schema ?? application.schema;
+  const answers = snapshot?.answers ?? application.answers;
+  const answerRows = visibleFields(schema, answers).flatMap((field) => {
+    const value = answers[field.id];
+    if (value === undefined || value === "" || value.length === 0) return [];
+    return [{ id: field.id, label: field.label, value }];
+  });
+  const canOpenForm =
+    application.primarySubmitter && application.formStatus === "published";
+
+  return (
+    <section
+      className="card pad mt"
+      id="participant-application-detail"
+      aria-labelledby="participant-application-detail-heading"
+    >
+      <div className="card-title">
+        <div>
+          <span className="pc-section-kicker">Application detail</span>
+          <h2 id="participant-application-detail-heading">
+            {application.title}
+          </h2>
+          <p className="subtle">
+            {application.formName} · {application.publicReference}
+          </p>
+        </div>
+        <DomainStatusBadge domain="submission" status={application.status} />
+      </div>
+      {answerRows.length ? (
+        <dl className="stack mt">
+          {answerRows.map((answer) => (
+            <div className="card inset pad" key={answer.id}>
+              <dt className="tiny subtle">{answer.label}</dt>
+              <dd style={{ margin: "4px 0 0" }}>
+                {Array.isArray(answer.value)
+                  ? answer.value.join(", ")
+                  : answer.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="subtle mt">No application answers have been saved yet.</p>
+      )}
+      {snapshot?.speakers.length ? (
+        <div className="mt">
+          <h3>Speakers</h3>
+          <ul>
+            {snapshot.speakers.map((speaker) => (
+              <li key={speaker.email}>
+                {speaker.name} · {speaker.email}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="page-actions mt">
+        {canOpenForm ? (
+          <Link
+            className="btn primary"
+            to={`/apply/${encodeURIComponent(application.formSlug)}?${new URLSearchParams({ draft: application.id })}`}
+          >
+            {application.status === "draft"
+              ? "Continue application"
+              : "Open application workflow"}{" "}
+            <ExternalLink aria-hidden size={14} />
+          </Link>
+        ) : null}
+        <Link className="btn" to="/participant/applications">
+          Close detail
+        </Link>
+      </div>
+      {!canOpenForm && application.primarySubmitter ? (
+        <p className="help mt">
+          This form is no longer published. The saved application remains
+          available here as a read-only record.
+        </p>
+      ) : null}
+    </section>
+  );
 }
 
 export default function ParticipantApplications({
@@ -56,6 +151,9 @@ export default function ParticipantApplications({
           </div>
         </section>
       ) : null}
+      {loaderData.selectedApplication ? (
+        <ApplicationDetail application={loaderData.selectedApplication} />
+      ) : null}
       <section
         className="mt"
         aria-labelledby="participant-applications-heading"
@@ -90,17 +188,12 @@ export default function ParticipantApplications({
                     dateStyle: "medium",
                   }).format(new Date(application.updatedAt))}
                 </p>
-                {application.primarySubmitter ? (
-                  <Link
-                    className="btn small"
-                    to={`/apply/${encodeURIComponent(application.formSlug)}?${new URLSearchParams({ draft: application.id })}`}
-                  >
-                    {application.status === "draft"
-                      ? "Continue application"
-                      : "View application"}{" "}
-                    <ExternalLink aria-hidden size={14} />
-                  </Link>
-                ) : null}
+                <Link
+                  className="btn small"
+                  to={`?${new URLSearchParams({ application: application.id })}#participant-application-detail`}
+                >
+                  View application
+                </Link>
               </article>
             ))}
           </div>

@@ -33,6 +33,15 @@ const speaker: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+const submitter: Viewer = {
+  personId: "person-demo-submitter",
+  name: "Alex Morgan",
+  email: "alex.submitter@example.com",
+  role: "submitter",
+  organisationId: "org-future-events",
+  eventId: "evt-foe-2025",
+  demo: true,
+};
 
 async function createFileTask(testEnv: CloudflareEnvironment, name: string) {
   const tasks = new TaskService(testEnv);
@@ -186,6 +195,31 @@ async function createDependencyPair(
 
 describe("onboarding task service", () => {
   describe("participant workflows", () => {
+    it("prevents submitters from commenting on another participant's task", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const taskId = await createChecklistTask(
+        testEnv,
+        `Submitter comment boundary ${crypto.randomUUID()}`,
+      );
+      const service = new TaskService(testEnv);
+
+      await expect(
+        service.addComment(
+          submitter,
+          taskId,
+          "This task belongs to another participant.",
+        ),
+      ).rejects.toThrow("not accessible to this participant");
+      await expect(
+        testEnv.DB.prepare(
+          "SELECT COUNT(*) AS count FROM task_comments WHERE task_id = ? AND author_person_id = ?",
+        )
+          .bind(taskId, submitter.personId)
+          .first(),
+      ).resolves.toEqual({ count: 0 });
+    });
+
     it("labels session-scoped deliverables with their session title", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);

@@ -48,6 +48,12 @@ const speaker: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+const submitterOnly: Viewer = {
+  ...speaker,
+  personId: "resource-submit-only-person",
+  email: "resource-submit-only@example.com",
+  role: "submitter",
+};
 
 describe("resource Airtable authority", () => {
   it("routes publication and acknowledgement task changes through the provider boundary", async () => {
@@ -161,6 +167,29 @@ describe("speaker resource service", () => {
       name: "ResourceRevisionConflictError",
       message: "This published resource does not require acknowledgement.",
     });
+  });
+
+  it("keeps speaker-wide resources private from a submitter without a session", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new ResourceService(testEnv);
+    const pageId = await service.save(admin, {
+      title: "Speaker-only preparation guide",
+      slug: `speaker-only-${crypto.randomUUID()}`,
+      category: "Preparation",
+      audienceScope: "all_speakers",
+      acknowledgementRequired: false,
+      document: { type: "doc", content: [{ type: "paragraph" }] },
+      embedUrls: [],
+    });
+    const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
+    await service.publish(admin, pageId, draft.revision);
+
+    const workspace = await service.getParticipantWorkspace(submitterOnly);
+    expect(workspace.pages.some((page) => page.id === pageId)).toBe(false);
+    await expect(
+      service.acknowledge(submitterOnly, pageId, draft.versionId!, "vitest"),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it("rejects publication when a custom-audience person stops being a speaker during commit", async () => {
@@ -1520,9 +1549,9 @@ describe("speaker resource service", () => {
       ),
     ).toThrow(ResourceEmbedUrlError);
 
-    expect(() =>
-      parseResourceEmbedOrigins("https://example.com,"),
-    ).toThrow(ResourceEmbedConfigurationError);
+    expect(() => parseResourceEmbedOrigins("https://example.com,")).toThrow(
+      ResourceEmbedConfigurationError,
+    );
 
     await ensureDemoSpeakerData(env as unknown as CloudflareEnvironment);
     await expect(

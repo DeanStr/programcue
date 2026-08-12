@@ -21,6 +21,7 @@ export async function loader({
   const viewer = await requireCurrentEventRole(request, env, [
     "owner",
     "administrator",
+    "submitter",
     "speaker",
   ]);
   const provider = providerSchema.safeParse(params.provider);

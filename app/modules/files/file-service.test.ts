@@ -40,6 +40,12 @@ const admin: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+const submitterOnly: Viewer = {
+  ...speaker,
+  personId: "file-submit-only-person",
+  email: "file-submit-only@example.com",
+  role: "submitter",
+};
 
 function routeContext() {
   const context = new RouterContextProvider();
@@ -401,6 +407,9 @@ describe("private R2 file lifecycle", () => {
       (await service.participantResourceDownload(speaker, resource.assetId))
         .status,
     ).toBe(200);
+    await expect(
+      service.participantResourceDownload(submitterOnly, resource.assetId),
+    ).rejects.toThrow(/outside your audience/u);
     await overwrite(resource.objectKey, "resource");
     await expect(
       service.participantResourceDownload(speaker, resource.assetId),

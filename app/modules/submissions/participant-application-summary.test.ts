@@ -6,6 +6,7 @@ import { DEMO_IDENTITIES, ensureDemoData } from "~/platform/demo/seed.server";
 import { ensureDemoSubmissionForm } from "./demo-submissions.server";
 import { ParticipantApplicationSummaryService } from "./participant-application-summary.server";
 import type { Applicant } from "./submission-repository.server";
+import { submittedSnapshotSchema } from "./submission-schema";
 import { SubmissionService } from "./submission-service.server";
 
 const testEnv = env as unknown as CloudflareEnvironment;
@@ -70,13 +71,34 @@ describe("participant application summary", () => {
       "form",
       applicant,
     );
+    const version = await testEnv.DB.prepare(
+      `SELECT version.id, version.version_number AS versionNumber,
+              version.schema_json AS schemaJson
+         FROM submissions submission
+         JOIN form_versions version
+           ON version.id = submission.form_version_id
+          AND version.event_id = submission.event_id
+        WHERE submission.id = ? AND submission.event_id = ?`,
+    )
+      .bind(submissionId, viewer.eventId)
+      .first<{ id: string; versionNumber: number; schemaJson: string }>();
+    if (!version)
+      throw new Error("The test application version was not found.");
+    const submittedSnapshot = submittedSnapshotSchema.parse({
+      formVersionId: version.id,
+      versionNumber: version.versionNumber,
+      schema: JSON.parse(version.schemaJson),
+      answers: {},
+      speakers: [{ name: viewer.name, email: viewer.email, biography: "" }],
+      uploads: {},
+    });
     await testEnv.DB.batch([
       testEnv.DB.prepare(
         `UPDATE submissions
             SET status = 'submitted', submitted_at = unixepoch(),
-                submitted_snapshot_json = '{}', updated_at = unixepoch()
+                submitted_snapshot_json = ?, updated_at = unixepoch()
           WHERE id = ? AND event_id = ?`,
-      ).bind(submissionId, viewer.eventId),
+      ).bind(JSON.stringify(submittedSnapshot), submissionId, viewer.eventId),
       testEnv.DB.prepare(
         `UPDATE form_definitions
             SET submission_limit = 1
@@ -87,5 +109,24 @@ describe("participant application summary", () => {
     await expect(service.getWorkspace(viewer)).resolves.toMatchObject({
       availableForms: [],
     });
+
+    await testEnv.DB.prepare(
+      `UPDATE form_definitions SET status = 'closed'
+        WHERE event_id = ? AND public_slug = 'form'`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    await expect(
+      service.getWorkspace(viewer, submissionId),
+    ).resolves.toMatchObject({
+      selectedApplication: {
+        id: submissionId,
+        formStatus: "closed",
+        primarySubmitter: true,
+      },
+    });
+    await expect(
+      service.getWorkspace(viewer, `missing-${crypto.randomUUID()}`),
+    ).rejects.toMatchObject({ status: 404 });
   });
 });

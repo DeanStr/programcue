@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test";
+import { serializeSignedCookie } from "better-call";
 import { describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -109,6 +110,22 @@ async function verifiedApplicant(
   const applicant = await service.applicants.get(request, form);
   expect(applicant?.email).toBe(email);
   return applicant!;
+}
+
+async function authenticatedSessionCookie(personId: string) {
+  const token = `session-${crypto.randomUUID()}`;
+  await env.DB.prepare(
+    `INSERT INTO auth_sessions (
+       id, person_id, token, expires_at, created_at, updated_at
+     ) VALUES (?, ?, ?, unixepoch() + 3600, unixepoch(), unixepoch())`,
+  )
+    .bind(crypto.randomUUID(), personId, token)
+    .run();
+  return serializeSignedCookie(
+    "better-auth.session_token",
+    token,
+    String((env as unknown as CloudflareEnvironment).BETTER_AUTH_SECRET),
+  );
 }
 
 const validAnswers = {
@@ -280,6 +297,24 @@ describe("Submissions D1 vertical slice", () => {
       ).resolves.toMatchObject({ selected: { status: "draft" } });
     });
 
+    it("opens an owned email-verified draft from an authenticated Program Cue session", async () => {
+      const { service, slug } = await publishedForm();
+      const applicant = await verifiedApplicant(service, slug);
+      const submissionId = await service.createDraft(slug, applicant);
+      const cookie = await authenticatedSessionCookie(applicant.personId!);
+      const request = new Request(
+        `https://example.com/apply/${slug}?draft=${submissionId}`,
+        { headers: { cookie } },
+      );
+
+      await expect(
+        service.getApplicantPortal(slug, request, submissionId),
+      ).resolves.toMatchObject({
+        applicant: { personId: applicant.personId, verified: true },
+        selected: { id: submissionId, status: "draft" },
+      });
+    });
+
     it("replays one authenticated draft for the same D1 intent", async () => {
       const { service, id, slug, testEnv } = await publishedForm();
       const applicant = await verifiedApplicant(service, slug);
@@ -305,7 +340,10 @@ describe("Submissions D1 vertical slice", () => {
                WHERE submission_id = ? AND revision_number = 1) AS revisionCount,
              (SELECT COUNT(*) FROM audit_events
                WHERE event_id = ? AND entity_id = ?
-                 AND action = 'submission.draft.created') AS auditCount`,
+                 AND action = 'submission.draft.created') AS auditCount,
+             (SELECT COUNT(*) FROM memberships
+               WHERE event_id = ? AND person_id = ? AND role = 'submitter'
+                 AND accepted_at IS NOT NULL AND revoked_at IS NULL) AS membershipCount`,
         )
           .bind(
             first,
@@ -315,12 +353,15 @@ describe("Submissions D1 vertical slice", () => {
             first,
             viewer.eventId,
             first,
+            viewer.eventId,
+            applicant.personId,
           )
           .first(),
       ).resolves.toEqual({
         submissionCount: 1,
         revisionCount: 1,
         auditCount: 1,
+        membershipCount: 1,
       });
     });
 
@@ -1079,6 +1120,15 @@ describe("Submissions D1 vertical slice", () => {
           .bind(started.draftId, form.eventId)
           .first(),
       ).toEqual({ personId: verified!.personId, email });
+      expect(
+        await env.DB.prepare(
+          `SELECT role FROM memberships
+            WHERE event_id = ? AND person_id = ? AND role = 'submitter'
+              AND accepted_at IS NOT NULL AND revoked_at IS NULL`,
+        )
+          .bind(form.eventId, verified!.personId)
+          .first(),
+      ).toEqual({ role: "submitter" });
       expect(
         await env.DB.prepare(
           `SELECT owner_person_id AS ownerPersonId

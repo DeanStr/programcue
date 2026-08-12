@@ -172,6 +172,44 @@ export class SubmissionCoSpeakerRepository {
       ),
       this.env.DB.prepare(
         `
+        INSERT INTO memberships (
+          id, organisation_id, event_id, person_id, role,
+          invited_at, invitation_expires_at, accepted_at, revoked_at,
+          last_operation_id, created_at
+        )
+        SELECT ?, event.organisation_id, speaker.event_id, ?, 'submitter',
+               unixepoch(), NULL, unixepoch(), NULL, ?, unixepoch()
+          FROM submission_speakers speaker
+          JOIN events event ON event.id = speaker.event_id
+         WHERE speaker.id = ? AND speaker.person_id = ?
+           AND speaker.invitation_status = 'claimed'
+           AND event.last_operation_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM memberships membership
+              WHERE membership.event_id = speaker.event_id
+                AND membership.person_id = speaker.person_id
+                AND membership.role = 'speaker'
+                AND membership.accepted_at IS NOT NULL
+                AND membership.revoked_at IS NULL
+           )
+        ON CONFLICT(event_id, person_id, role) WHERE event_id IS NOT NULL
+        DO UPDATE SET invited_at = unixepoch(), invitation_expires_at = NULL,
+                      accepted_at = unixepoch(), revoked_at = NULL,
+                      last_operation_id = excluded.last_operation_id
+         WHERE memberships.organisation_id = excluded.organisation_id
+           AND (memberships.revoked_at IS NOT NULL
+                OR memberships.accepted_at IS NULL)
+      `,
+      ).bind(
+        crypto.randomUUID(),
+        applicant.personId,
+        operationId,
+        invitationId,
+        applicant.personId,
+        operationId,
+      ),
+      this.env.DB.prepare(
+        `
         INSERT INTO session_speakers (
           session_id, event_id, person_id, position, role_label, visibility
         )

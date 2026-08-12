@@ -37,6 +37,7 @@ export async function loader({
   const viewer = await requireCurrentEventRole(request, env, [
     "owner",
     "administrator",
+    "submitter",
     "speaker",
   ]);
   const url = new URL(request.url);

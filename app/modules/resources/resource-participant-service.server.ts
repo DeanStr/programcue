@@ -6,8 +6,15 @@ import {
 import { ResourceServiceBase } from "./resource-service-base.server";
 import {
   participantAudienceSql,
+  participantSpeakerAccessSql,
   ResourceRevisionConflictError,
 } from "./resource-service-shared";
+
+const participantResourceAudienceSql = participantAudienceSql(
+  "participant.person_id",
+  "rv",
+  participantSpeakerAccessSql("participant.person_id", "participant.role"),
+);
 
 export class ResourceParticipantService extends ResourceServiceBase {
   private readonly airtable: AirtableProviderBoundary;
@@ -30,19 +37,14 @@ export class ResourceParticipantService extends ResourceServiceBase {
              rv.published_at AS publishedAt,
              CASE WHEN ack.id IS NULL THEN 0 ELSE 1 END AS acknowledged
         FROM resource_pages rp
+        CROSS JOIN (SELECT ? AS person_id, ? AS role) participant
         JOIN resource_page_versions rv ON rv.resource_page_id = rp.id AND rv.event_id = rp.event_id AND rv.status = 'published'
-        LEFT JOIN resource_acknowledgements ack ON ack.resource_page_version_id = rv.id AND ack.person_id = ?
-       WHERE rp.event_id = ? AND rp.status = 'published' AND ${participantAudienceSql()}
+        LEFT JOIN resource_acknowledgements ack ON ack.resource_page_version_id = rv.id AND ack.person_id = participant.person_id
+       WHERE rp.event_id = ? AND rp.status = 'published' AND ${participantResourceAudienceSql}
        ORDER BY rv.category, rv.title
     `,
     )
-      .bind(
-        viewer.personId,
-        viewer.eventId,
-        viewer.personId,
-        viewer.personId,
-        viewer.personId,
-      )
+      .bind(viewer.personId, viewer.role, viewer.eventId)
       .all<{
         id: string;
         title: string;
@@ -122,19 +124,14 @@ export class ResourceParticipantService extends ResourceServiceBase {
     const available = await this.env.DB.prepare(
       `
       SELECT rp.id, rv.acknowledgement_required AS required
-        FROM resource_pages rp JOIN resource_page_versions rv ON rv.resource_page_id = rp.id AND rv.event_id = rp.event_id
+        FROM resource_pages rp
+        CROSS JOIN (SELECT ? AS person_id, ? AS role) participant
+        JOIN resource_page_versions rv ON rv.resource_page_id = rp.id AND rv.event_id = rp.event_id
        WHERE rp.id = ? AND rp.event_id = ? AND rp.status = 'published' AND rv.id = ? AND rv.status = 'published'
-         AND ${participantAudienceSql()}
+         AND ${participantResourceAudienceSql}
     `,
     )
-      .bind(
-        pageId,
-        viewer.eventId,
-        versionId,
-        viewer.personId,
-        viewer.personId,
-        viewer.personId,
-      )
+      .bind(viewer.personId, viewer.role, pageId, viewer.eventId, versionId)
       .first<{ id: string; required: number }>();
     if (!available) throw new Response("Resource not found.", { status: 404 });
     if (!available.required)
@@ -154,25 +151,24 @@ export class ResourceParticipantService extends ResourceServiceBase {
         INSERT OR IGNORE INTO resource_acknowledgements (
           id, event_id, resource_page_id, resource_page_version_id, person_id, acknowledged_at, user_agent
         )
-        SELECT ?, rp.event_id, rp.id, rv.id, ?, unixepoch(), ?
+        SELECT ?, rp.event_id, rp.id, rv.id, participant.person_id, unixepoch(), ?
           FROM resource_pages rp
+          CROSS JOIN (SELECT ? AS person_id, ? AS role) participant
           JOIN resource_page_versions rv
             ON rv.resource_page_id = rp.id AND rv.event_id = rp.event_id
          WHERE rp.id = ? AND rp.event_id = ? AND rp.status = 'published'
            AND rv.id = ? AND rv.status = 'published'
            AND rv.acknowledgement_required = 1
-           AND ${participantAudienceSql()}
+           AND ${participantResourceAudienceSql}
       `,
       ).bind(
         acknowledgementId,
-        viewer.personId,
         userAgent?.slice(0, 500) ?? null,
+        viewer.personId,
+        viewer.role,
         pageId,
         viewer.eventId,
         versionId,
-        viewer.personId,
-        viewer.personId,
-        viewer.personId,
       ),
       this.env.DB.prepare(
         `

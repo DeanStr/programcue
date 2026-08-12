@@ -1,10 +1,7 @@
 import { z, ZodError } from "zod";
 
 import type { Route } from "./+types/task-evidence-attachment";
-import {
-  ensureDemoSpeakerData,
-  requireSpeakerViewer,
-} from "~/modules/speakers/demo.server";
+import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
   TaskEvidenceAttachmentConflictError,
   TaskService,
@@ -14,7 +11,7 @@ import {
   FileDiscardIncompleteError,
   FileService,
 } from "~/modules/files/file-service.server";
-import { resolveCurrentEventId } from "~/platform/auth/current-event.server";
+import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
   readBoundedText,
@@ -45,8 +42,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   const { env } = getCloudflareContext(context);
   try {
     await ensureDemoSpeakerData(env);
-    const eventId = await resolveCurrentEventId(request, env, ["speaker"]);
-    const viewer = await requireSpeakerViewer(request, env, eventId);
+    const viewer = await requireCurrentEventRole(
+      request,
+      env,
+      ["speaker", "submitter"],
+      "response",
+    );
     const raw = await readBoundedText(request, 16_000);
     let body: unknown;
     try {

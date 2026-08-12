@@ -28,6 +28,16 @@ const speaker: Viewer = {
   demo: true,
 };
 
+const submitter: Viewer = {
+  personId: "person-demo-submitter",
+  name: "Alex Morgan",
+  email: "alex.submitter@example.com",
+  role: "submitter",
+  organisationId: "org-future-events",
+  eventId: "evt-foe-2025",
+  demo: true,
+};
+
 const admin: Viewer = {
   personId: "person-demo-admin",
   name: "Olivia Bennett",
@@ -145,6 +155,32 @@ describe("speaker profile service", () => {
       .bind(speaker.eventId, speaker.personId)
       .first<{ count: number }>();
     expect(auditCountAfterStale?.count).toBe(auditCountBeforeStale?.count);
+  });
+
+  it("updates a profile through an accepted submitter membership", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    const portal = await service.getPortal(submitter);
+
+    await service.updateProfile(submitter, {
+      revision: portal.profile.revision,
+      name: "Alex Morgan",
+      biography:
+        "Alex develops practical event proposals and collaborates with programme teams worldwide.",
+      pronunciation: "AL-ex MOR-gan",
+      organisationName: "Morgan Events",
+      jobTitle: "Programme Lead",
+      publish: true,
+    });
+
+    await expect(service.getPortal(submitter)).resolves.toMatchObject({
+      profile: {
+        name: "Alex Morgan",
+        jobTitle: "Programme Lead",
+        revision: portal.profile.revision + 1,
+      },
+    });
   });
 
   it("rejects a person without a current speaker membership", async () => {

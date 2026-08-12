@@ -1014,11 +1014,11 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
     visibility: "participant" | "administrator",
   ) {
     const clean = z.string().trim().min(1).max(2_000).parse(body);
-    if (viewer.role === "speaker") {
+    if (viewer.role === "speaker" || viewer.role === "submitter") {
       const task = await this.participantTask(viewer, taskId);
       if (!task)
         throw new TaskStateError(
-          "Task not found or not owned by this speaker.",
+          "Task not found or not accessible to this participant.",
         );
       visibility = "participant";
     } else {

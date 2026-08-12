@@ -237,7 +237,8 @@ export class SpeakerPortalService {
          WHERE id = ? AND profile_revision = ?
            AND EXISTS (
              SELECT 1 FROM memberships
-              WHERE event_id = ? AND person_id = people.id AND role = 'speaker'
+              WHERE event_id = ? AND person_id = people.id
+                AND role IN ('speaker', 'submitter')
                 AND accepted_at IS NOT NULL AND revoked_at IS NULL
            )
       `,

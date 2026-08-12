@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  participantAudienceSql,
+  participantSpeakerAccessSql,
+} from "~/modules/resources/resource-service-shared";
 import { assetKindSchema, safeDownloadName } from "./file-policy";
 import {
   FileLifecycleService,
@@ -611,6 +615,11 @@ export class FileService {
   }
 
   async participantResourceDownload(viewer: Viewer, assetId: string) {
+    const audienceSql = participantAudienceSql(
+      "participant.person_id",
+      "rv",
+      participantSpeakerAccessSql("participant.person_id", "participant.role"),
+    );
     const version = await this.env.DB.prepare(
       `
       SELECT fv.object_key AS objectKey, fv.original_filename AS filename,
@@ -619,40 +628,18 @@ export class FileService {
         FROM resource_attachments ra
         JOIN resource_page_versions rv ON rv.id = ra.resource_page_version_id AND rv.event_id = ra.event_id AND rv.status = 'published'
         JOIN resource_pages rp ON rp.id = rv.resource_page_id AND rp.event_id = rv.event_id AND rp.status = 'published'
+        CROSS JOIN (SELECT ? AS person_id, ? AS role) participant
         JOIN file_assets fa ON fa.id = ra.file_asset_id AND fa.event_id = ra.event_id AND fa.status = 'active'
         JOIN file_versions fv ON fv.id = fa.current_version_id
          AND fv.event_id = fa.event_id AND fv.asset_id = fa.id
        WHERE fa.id = ? AND fa.event_id = ?
          AND fv.upload_status = 'uploaded' AND fv.signature_status = 'valid'
          AND fv.scan_status = 'clean' AND fv.released_at IS NOT NULL AND fv.deleted_at IS NULL
-         AND (
-           rv.audience_scope = 'all_speakers'
-           OR (rv.audience_scope = 'accepted_speakers' AND EXISTS (
-             SELECT 1 FROM session_speakers ss WHERE ss.event_id = rp.event_id AND ss.person_id = ?
-           ))
-           OR (rv.audience_scope = 'custom' AND EXISTS (
-             SELECT 1 FROM resource_audiences audience
-              WHERE audience.resource_page_version_id = rv.id AND audience.event_id = rp.event_id
-                AND (
-                  (audience.target_type = 'person' AND audience.target_id = ?)
-                  OR (audience.target_type = 'role' AND audience.target_id = 'speaker')
-                  OR (audience.target_type = 'session' AND EXISTS (
-                    SELECT 1 FROM session_speakers ss
-                     WHERE ss.event_id = rp.event_id AND ss.session_id = audience.target_id AND ss.person_id = ?
-                  ))
-                )
-           ))
-         )
+         AND ${audienceSql}
        LIMIT 1
     `,
     )
-      .bind(
-        assetId,
-        viewer.eventId,
-        viewer.personId,
-        viewer.personId,
-        viewer.personId,
-      )
+      .bind(viewer.personId, viewer.role, assetId, viewer.eventId)
       .first<{
         objectKey: string;
         objectEtag: string | null;

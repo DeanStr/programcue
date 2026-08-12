@@ -129,8 +129,14 @@ export const successfulResourcePublishAttemptSql = `EXISTS (
      AND publishing_page.last_operation_id = ?
 )`;
 
-export function participantAudienceSql(personIdSql = "?", versionAlias = "rv") {
+export function participantAudienceSql(
+  personIdSql = "?",
+  versionAlias = "rv",
+  speakerAccessSql = "1",
+) {
   return `(
+    (${speakerAccessSql})
+    AND (
     ${versionAlias}.audience_scope = 'all_speakers'
     OR (${versionAlias}.audience_scope = 'accepted_speakers' AND EXISTS (
       SELECT 1 FROM session_speakers ss WHERE ss.event_id = rp.event_id AND ss.person_id = ${personIdSql}
@@ -147,6 +153,21 @@ export function participantAudienceSql(personIdSql = "?", versionAlias = "rv") {
            ))
          )
     ))
+    )
+  )`;
+}
+
+export function participantSpeakerAccessSql(
+  personIdSql: string,
+  roleSql: string,
+) {
+  return `(
+    ${roleSql} = 'speaker'
+    OR EXISTS (
+      SELECT 1 FROM session_speakers entitled_speaker
+       WHERE entitled_speaker.event_id = rp.event_id
+         AND entitled_speaker.person_id = ${personIdSql}
+    )
   )`;
 }
 

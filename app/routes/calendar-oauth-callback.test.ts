@@ -1,15 +1,86 @@
 import { env } from "cloudflare:test";
+import { RouterContextProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   CalendarOAuthUnexpectedError,
   CalendarProviderRequestError,
 } from "~/modules/calendars/calendar-providers.server";
-import { calendarOAuthCallbackFailure } from "~/modules/calendars/calendar-oauth-callback.server";
+import {
+  CALENDAR_OAUTH_COOKIE,
+  calendarOAuthCallbackFailure,
+} from "~/modules/calendars/calendar-oauth-callback.server";
+import { CalendarOAuthService } from "~/modules/calendars/calendar-oauth.server";
+import { cloudflareContext } from "~/platform/cloudflare-context";
+import { ensureDemoData } from "~/platform/demo/seed.server";
+import { loader as callbackLoader } from "./calendar-oauth-callback";
+import { loader as startLoader } from "./calendar-oauth-start";
+
+const workerEnv = env as unknown as CloudflareEnvironment;
+
+function context() {
+  const value = new RouterContextProvider();
+  value.set(cloudflareContext, {
+    env: workerEnv,
+    ctx: {} as ExecutionContext,
+  });
+  return value;
+}
+
+const submitterCookie =
+  "program_cue_demo_identity=submitter; program_cue_event=evt-foe-2025";
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("calendar OAuth callback failures", () => {
+  it("allows a submitter through calendar OAuth start and callback", async () => {
+    await ensureDemoData(workerEnv);
+    const start = vi
+      .spyOn(CalendarOAuthService.prototype, "start")
+      .mockResolvedValue({
+        authorizationUrl: "https://accounts.example.com/authorize",
+        nonce: "submitter-calendar-nonce",
+        expiresAt: Math.floor(Date.now() / 1_000) + 600,
+      });
+    const started = await startLoader({
+      request: new Request("http://localhost/oauth/calendar/google", {
+        headers: { cookie: submitterCookie },
+      }),
+      params: { provider: "google" },
+      context: context(),
+    });
+    expect(started.status).toBe(302);
+    expect(started.headers.get("location")).toBe(
+      "https://accounts.example.com/authorize",
+    );
+    expect(start).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "submitter" }),
+      "google",
+      "/participant/dashboard",
+    );
+
+    vi.spyOn(CalendarOAuthService.prototype, "callback").mockResolvedValue({
+      provider: "google",
+      account: "submitter@example.com",
+      returnTo: "/participant/dashboard",
+    });
+    const callback = await callbackLoader({
+      request: new Request(
+        "http://localhost/oauth/calendar/callback?state=state&code=code",
+        {
+          headers: {
+            cookie: `${submitterCookie}; ${CALENDAR_OAUTH_COOKIE}=submitter-calendar-nonce`,
+          },
+        },
+      ),
+      context: context(),
+    });
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("location")).toBe(
+      "/participant/dashboard?calendarConnected=google&account=submitter%40example.com",
+    );
+  });
+
   it.each(["google", "microsoft"] as const)(
     "logs bounded %s identity without logging the raw provider error",
     async (provider) => {
