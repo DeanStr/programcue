@@ -194,6 +194,46 @@ describe("sign-in abuse boundary", () => {
     await expect(response.text()).resolves.toContain("protected sign-in form");
   });
 
+  it("does not create Microsoft link state without an authenticated session", async () => {
+    const before = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM verification_tokens",
+    ).first<{ count: number }>();
+    const result = await signInAction({
+      request: new Request("http://localhost/sign-in", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin: "http://localhost",
+        },
+        body: new URLSearchParams({
+          _intent: "link_social_account",
+          provider: "microsoft",
+          returnTo: "/admin/crm",
+        }),
+      }),
+      params: {},
+      context: context(
+        productionEnvironment({
+          MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+          MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+        }),
+      ),
+    } as never);
+    if (result instanceof Response) {
+      throw new Error("Missing-session account linking returned raw HTTP.");
+    }
+    expect(result.init?.status).toBe(401);
+    expect(result.data).toMatchObject({
+      ok: false,
+      message: "Verify your invited email before linking Microsoft.",
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM verification_tokens",
+      ).first<{ count: number }>(),
+    ).toEqual(before);
+  });
+
   it("protects application email delivery and anonymous draft creation at the route boundary", async () => {
     vi.stubGlobal(
       "fetch",

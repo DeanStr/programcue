@@ -28,6 +28,7 @@ import { requestCorrelationId } from "~/platform/observability/request-correlati
 import { sourceRevisionForLog } from "~/platform/observability/source-revision.server";
 
 const ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,63}$/u;
+const MICROSOFT_ACCOUNT_NOT_LINKED = "account_not_linked";
 
 function logAuthenticationFailure(
   env: CloudflareEnvironment,
@@ -60,6 +61,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   if (String(env.DEMO_MODE) === "true") return redirect("/admin/event");
   const url = new URL(request.url);
   const returnTo = safeReturnTo(url.searchParams.get("returnTo"));
+  const oauthProvider =
+    url.searchParams.get("provider") === "microsoft" ? "microsoft" : null;
+  const oauthError = url.searchParams.get("error");
+  const requestedLinkProvider =
+    url.searchParams.get("linkProvider") === "microsoft" ? "microsoft" : null;
   let participantOAuth: ReturnType<typeof participantOAuthConfiguration>;
   try {
     participantOAuth = participantOAuthConfiguration(env);
@@ -84,10 +90,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const session = await createAuth(env).api.getSession({
     headers: request.headers,
   });
-  if (session?.user) return redirect(returnTo);
+  if (session?.user && !requestedLinkProvider) return redirect(returnTo);
   return {
     returnTo,
-    oauthError: url.searchParams.has("error"),
+    oauthError: oauthError !== null,
+    microsoftNeedsEmailProof:
+      oauthProvider === "microsoft" &&
+      oauthError === MICROSOFT_ACCOUNT_NOT_LINKED,
+    linkRequest:
+      session?.user && requestedLinkProvider === "microsoft"
+        ? {
+            provider: "microsoft" as const,
+            email: session.user.email,
+            failed: url.searchParams.has("linkError"),
+          }
+        : null,
     socialProviders: {
       google: participantOAuth.google !== null,
       microsoft: participantOAuth.microsoft !== null,
@@ -136,7 +153,10 @@ async function beginSocialSignIn(
       email: `provider:${parsed.data.provider}`,
       turnstileToken: String(formData.get("turnstile-token") ?? ""),
     });
-    const errorCallbackURL = `/sign-in?returnTo=${encodeURIComponent(parsed.data.returnTo)}`;
+    const errorCallbackURL = `/sign-in?${new URLSearchParams({
+      returnTo: parsed.data.returnTo,
+      provider: parsed.data.provider,
+    })}`;
     const { headers, response } = await createAuth(env).api.signInSocial({
       body: {
         provider: parsed.data.provider,
@@ -190,6 +210,81 @@ async function beginSocialSignIn(
   }
 }
 
+async function beginSocialLink(
+  env: CloudflareEnvironment,
+  request: Request,
+  formData: FormData,
+) {
+  const parsed = z
+    .object({ provider: z.literal("microsoft"), returnTo: z.string() })
+    .safeParse({
+      provider: formData.get("provider"),
+      returnTo: safeReturnTo(formData.get("returnTo")),
+    });
+  if (!parsed.success) {
+    return data(
+      { ok: false, message: "Choose a valid account to link." },
+      { status: 422 },
+    );
+  }
+  const configured = participantOAuthConfiguration(env);
+  if (!configured.microsoft) {
+    return data(
+      { ok: false, message: "Microsoft sign-in is not configured." },
+      { status: 503 },
+    );
+  }
+  const auth = createAuth(env);
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session?.user) {
+    return data(
+      {
+        ok: false,
+        message: "Verify your invited email before linking Microsoft.",
+      },
+      { status: 401 },
+    );
+  }
+
+  try {
+    const callbackURL = parsed.data.returnTo;
+    const errorCallbackURL = `/sign-in?${new URLSearchParams({
+      returnTo: callbackURL,
+      linkProvider: "microsoft",
+      linkError: "true",
+    })}`;
+    const { headers, response } = await auth.api.linkSocialAccount({
+      body: {
+        provider: "microsoft",
+        callbackURL,
+        errorCallbackURL,
+      },
+      headers: request.headers,
+      returnHeaders: true,
+    });
+    if (!response.redirect || !response.url) {
+      throw new Error("Microsoft did not return an account-link redirect.");
+    }
+    headers.set("location", response.url);
+    return new Response(null, { status: 302, headers });
+  } catch (error) {
+    if (error instanceof Response) throw error;
+    logAuthenticationFailure(
+      env,
+      request,
+      "social-account-link-start-failed",
+      error,
+    );
+    return data(
+      {
+        ok: false,
+        message: "Microsoft linking could not be started. Please try again.",
+      },
+      { status: 503 },
+    );
+  }
+}
+
 export async function action({ request, context }: Route.ActionArgs) {
   if (request.method !== "POST") {
     return new Response("Method not allowed", {
@@ -202,6 +297,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   const intent = formData.get("_intent");
   if (intent === "social_sign_in") {
     return beginSocialSignIn(env, request, formData);
+  }
+  if (intent === "link_social_account") {
+    return beginSocialLink(env, request, formData);
   }
   if (intent !== "email_magic_link") {
     return data(
@@ -230,8 +328,18 @@ export async function action({ request, context }: Route.ActionArgs) {
       email: result.data.email,
       turnstileToken: String(formData.get("turnstile-token") ?? ""),
     });
+    const linkProviderAfterEmail =
+      formData.get("linkProviderAfterEmail") === "microsoft"
+        ? "microsoft"
+        : null;
+    const callbackURL = linkProviderAfterEmail
+      ? `/sign-in?${new URLSearchParams({
+          returnTo: result.data.returnTo,
+          linkProvider: linkProviderAfterEmail,
+        })}`
+      : result.data.returnTo;
     await createAuth(env).api.signInMagicLink({
-      body: { email: result.data.email, callbackURL: result.data.returnTo },
+      body: { email: result.data.email, callbackURL },
       headers: request.headers,
     });
     return data({
@@ -291,6 +399,68 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
   const submitting = navigation.state === "submitting";
   const hasSocialProvider =
     loaderData.socialProviders.google || loaderData.socialProviders.microsoft;
+  if (loaderData.linkRequest) {
+    return (
+      <main
+        className="design-board"
+        id="main"
+        style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}
+      >
+        <section
+          className="card pad"
+          style={{ width: "min(460px, calc(100vw - 32px))" }}
+        >
+          <div className="brand" style={{ color: "var(--ink)", padding: 0 }}>
+            <span className="brand-mark">P</span>
+            <span>Program Cue</span>
+          </div>
+          <h1>Link Microsoft</h1>
+          <p className="validation-item ok" role="status">
+            Email verified as {loaderData.linkRequest.email}.
+          </p>
+          <p className="subtle">
+            Continue to Microsoft once to link this invited identity. Future
+            Microsoft sign-ins will complete directly.
+          </p>
+          {loaderData.linkRequest.failed ? (
+            <p className="validation-item error" role="alert">
+              Microsoft linking did not complete. No account was linked.
+            </p>
+          ) : null}
+          {actionData ? (
+            <p
+              className={`validation-item ${actionData.ok ? "ok" : "error"}`}
+              role={actionData.ok ? "status" : "alert"}
+            >
+              {actionData.message}
+            </p>
+          ) : null}
+          <Form method="post">
+            <input type="hidden" name="_intent" value="link_social_account" />
+            <input type="hidden" name="provider" value="microsoft" />
+            <input type="hidden" name="returnTo" value={loaderData.returnTo} />
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={submitting}
+              style={{ width: "100%" }}
+            >
+              {submitting
+                ? "Opening Microsoft…"
+                : "Link Microsoft and continue"}
+            </button>
+          </Form>
+          <a
+            className="btn mt"
+            href={loaderData.returnTo}
+            style={{ width: "100%" }}
+          >
+            Continue without Microsoft
+          </a>
+        </section>
+      </main>
+    );
+  }
   return (
     <main
       className="design-board"
@@ -317,7 +487,13 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
             {actionData.message}
           </p>
         ) : null}
-        {!actionData && loaderData.oauthError ? (
+        {!actionData && loaderData.microsoftNeedsEmailProof ? (
+          <p className="validation-item error" role="alert">
+            Microsoft needs a one-time email check before it can be linked.
+            Enter your invited email below; after opening the link, you will
+            return here to finish Microsoft setup.
+          </p>
+        ) : !actionData && loaderData.oauthError ? (
           <p className="validation-item error" role="alert">
             Social sign-in did not complete. Try again or use an email link.
           </p>
@@ -384,6 +560,13 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
         <Form method="post">
           <input type="hidden" name="_intent" value="email_magic_link" />
           <input type="hidden" name="returnTo" value={loaderData.returnTo} />
+          {loaderData.microsoftNeedsEmailProof ? (
+            <input
+              type="hidden"
+              name="linkProviderAfterEmail"
+              value="microsoft"
+            />
+          ) : null}
           <label className="label">
             Email address
             <input

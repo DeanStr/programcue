@@ -24,6 +24,17 @@ type ParticipantOAuthCredentials = {
 };
 
 const ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,63}$/u;
+const OAUTH_STATE_PATTERN = /^[A-Za-z0-9_-]{20,256}$/u;
+const MICROSOFT_CALLBACK_PATH = "/api/auth/callback/microsoft";
+
+type StoredOAuthLinkState = {
+  expiresAt?: unknown;
+  oauthState?: unknown;
+  link?: {
+    email?: unknown;
+    userId?: unknown;
+  };
+};
 
 function boundedErrorName(values: ReadonlyArray<unknown>) {
   const error = values.find((value) => value instanceof Error);
@@ -128,6 +139,58 @@ export function participantOAuthProviderOptions(
   };
 }
 
+/**
+ * Microsoft does not normally assert `email_verified`, so an ordinary social
+ * sign-in must never treat its email claim as sufficient account-link proof.
+ * Better Auth's explicit link endpoint is session-protected and persists the
+ * authenticated person's ID/email inside short-lived, signed OAuth state. Only
+ * that state-backed callback may treat Microsoft as trusted; Better Auth still
+ * requires the returned provider email to exactly match the session email.
+ */
+export async function trustedParticipantOAuthProviders(
+  environment: CloudflareEnvironment,
+  request?: Request,
+) {
+  if (!request || request.method !== "GET") return [];
+  const url = new URL(request.url);
+  if (url.pathname !== MICROSOFT_CALLBACK_PATH) return [];
+  const state = url.searchParams.get("state") ?? "";
+  if (!OAUTH_STATE_PATTERN.test(state)) return [];
+
+  const stored = await environment.DB.prepare(
+    `
+      SELECT value
+        FROM verification_tokens
+       WHERE identifier = ?
+         AND expires_at > unixepoch()
+       ORDER BY expires_at DESC
+       LIMIT 1
+    `,
+  )
+    .bind(state)
+    .first<{ value: string }>();
+  if (!stored) return [];
+
+  let payload: StoredOAuthLinkState;
+  try {
+    payload = JSON.parse(stored.value) as StoredOAuthLinkState;
+  } catch {
+    return [];
+  }
+  if (
+    payload.oauthState !== state ||
+    typeof payload.expiresAt !== "number" ||
+    payload.expiresAt <= Date.now() ||
+    typeof payload.link?.userId !== "string" ||
+    payload.link.userId.length === 0 ||
+    typeof payload.link.email !== "string" ||
+    payload.link.email.length === 0
+  ) {
+    return [];
+  }
+  return ["microsoft"];
+}
+
 function requireAuthConfiguration(env: CloudflareEnvironment) {
   if (!env.BETTER_AUTH_SECRET || env.BETTER_AUTH_SECRET.length < 32) {
     throw new Response("Authentication server configuration is incomplete.", {
@@ -191,6 +254,8 @@ export function createAuth(env: CloudflareEnvironment) {
         // Invitation rows have no local credential and start unverified. The
         // provider must still assert a verified matching email before linking.
         requireLocalEmailVerified: false,
+        trustedProviders: (request) =>
+          trustedParticipantOAuthProviders(env, request),
       },
     },
     verification: { modelName: "verification" },

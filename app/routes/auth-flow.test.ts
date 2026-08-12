@@ -9,6 +9,7 @@ import {
   ParticipantOAuthConfigurationError,
   participantOAuthConfiguration,
   participantOAuthProviderOptions,
+  trustedParticipantOAuthProviders,
 } from "~/platform/auth/auth.server";
 import {
   currentEventCookie,
@@ -89,6 +90,15 @@ function formRequest(
     },
     body: new URLSearchParams(values),
   });
+}
+
+function unsignedIdToken(payload: Record<string, unknown>) {
+  const encode = (value: Record<string, unknown>) =>
+    btoa(JSON.stringify(value))
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replace(/=+$/u, "");
+  return `${encode({ alg: "none", typ: "JWT" })}.${encode(payload)}.signature`;
 }
 
 beforeEach(async () => {
@@ -182,6 +192,71 @@ describe("production authentication routes", () => {
       );
     },
   );
+
+  it("trusts Microsoft only for state created by an authenticated explicit link", async () => {
+    const testEnv = {
+      ...productionEnv(),
+      MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+      MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+    } as unknown as CloudflareEnvironment;
+    const { cookie } = await sessionCookie("person-demo-admin");
+    const response = await signInAction({
+      request: formRequest(
+        "http://localhost/sign-in?linkProvider=microsoft",
+        {
+          _intent: "link_social_account",
+          provider: "microsoft",
+          returnTo: "/admin/crm",
+        },
+        { cookie },
+      ),
+      params: {},
+      context: context(testEnv),
+    } as never);
+
+    expect(response).toBeInstanceOf(Response);
+    const redirectResponse = response as Response;
+    expect(redirectResponse.status).toBe(302);
+    const destination = new URL(redirectResponse.headers.get("location")!);
+    expect(destination.hostname).toBe("login.microsoftonline.com");
+    const state = destination.searchParams.get("state");
+    expect(state).toMatch(/^[A-Za-z0-9_-]{20,256}$/u);
+
+    const stored = await env.DB.prepare(
+      "SELECT value FROM verification_tokens WHERE identifier = ?",
+    )
+      .bind(state)
+      .first<{ value: string }>();
+    const payload = JSON.parse(stored?.value ?? "null") as {
+      link?: { email?: string; userId?: string };
+    };
+    expect(payload.link).toMatchObject({
+      email: "olivia@example.com",
+      userId: "person-demo-admin",
+    });
+    await expect(
+      trustedParticipantOAuthProviders(
+        testEnv,
+        new Request(
+          `http://localhost/api/auth/callback/microsoft?state=${state}`,
+        ),
+      ),
+    ).resolves.toEqual(["microsoft"]);
+    await expect(
+      trustedParticipantOAuthProviders(
+        testEnv,
+        new Request(`http://localhost/api/auth/callback/google?state=${state}`),
+      ),
+    ).resolves.toEqual([]);
+    await expect(
+      trustedParticipantOAuthProviders(
+        testEnv,
+        new Request(
+          "http://localhost/api/auth/callback/microsoft?state=caller-selected-state",
+        ),
+      ),
+    ).resolves.toEqual([]);
+  });
 
   it("keeps partial OAuth credential details out of the public sign-in response", async () => {
     const logging = vi
@@ -301,8 +376,137 @@ describe("production authentication routes", () => {
         "better-auth.state",
       );
       expect(tokenValidation).toHaveBeenCalledOnce();
+      if (provider === "microsoft") {
+        await expect(
+          trustedParticipantOAuthProviders(
+            { ...productionEnv(), ...override } as CloudflareEnvironment,
+            new Request(
+              `http://localhost/api/auth/callback/microsoft?state=${destination.searchParams.get("state")}`,
+            ),
+          ),
+        ).resolves.toEqual([]);
+      }
     },
   );
+
+  it("links an unverified Microsoft email only after authenticated email proof", async () => {
+    const testEnv = {
+      ...productionEnv(),
+      MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+      MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+    } as unknown as CloudflareEnvironment;
+    const { cookie } = await sessionCookie("person-demo-admin");
+    const started = await signInAction({
+      request: formRequest(
+        "http://localhost/sign-in?linkProvider=microsoft",
+        {
+          _intent: "link_social_account",
+          provider: "microsoft",
+          returnTo: "/admin/crm",
+        },
+        { cookie },
+      ),
+      params: {},
+      context: context(testEnv),
+    } as never);
+    expect(started).toBeInstanceOf(Response);
+    const startedResponse = started as Response;
+    const destination = new URL(startedResponse.headers.get("location")!);
+    const state = destination.searchParams.get("state");
+    const stateCookie =
+      startedResponse.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+    expect(state).toBeTruthy();
+    expect(stateCookie).toContain("better-auth.state");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.includes("/oauth2/v2.0/token")) {
+          return Response.json({
+            access_token: "microsoft-access-token",
+            token_type: "Bearer",
+            expires_in: 3600,
+            scope: "openid email profile",
+            id_token: unsignedIdToken({
+              sub: "microsoft-person-123",
+              name: "Olivia Chen",
+              email: "olivia@example.com",
+            }),
+          });
+        }
+        if (url.includes("graph.microsoft.com")) {
+          return new Response(null, { status: 404 });
+        }
+        if (url.includes("challenges.cloudflare.com")) {
+          return Response.json({
+            success: true,
+            hostname: "localhost",
+            action: "social_sign_in",
+          });
+        }
+        throw new Error(`Unexpected Microsoft callback request to ${url}`);
+      }),
+    );
+    const callback = await authApiLoader({
+      request: new Request(
+        `http://localhost/api/auth/callback/microsoft?state=${state}&code=valid-code`,
+        { headers: { cookie: `${cookie}; ${stateCookie}` } },
+      ),
+      params: { "*": "callback/microsoft" },
+      context: context(testEnv),
+    } as never);
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("location")).toBe("/admin/crm");
+    expect(
+      await env.DB.prepare(
+        `
+          SELECT person_id AS personId, account_id AS accountId
+            FROM auth_accounts
+           WHERE provider_id = 'microsoft'
+             AND account_id = 'microsoft-person-123'
+        `,
+      ).first<{ personId: string; accountId: string }>(),
+    ).toEqual({
+      personId: "person-demo-admin",
+      accountId: "microsoft-person-123",
+    });
+
+    const futureStarted = await signInAction({
+      request: formRequest(
+        "http://localhost/sign-in",
+        {
+          _intent: "social_sign_in",
+          provider: "microsoft",
+          returnTo: "/admin/crm",
+          "turnstile-token": "future-microsoft-turnstile",
+        },
+        { "cf-connecting-ip": "203.0.113.15" },
+      ),
+      params: {},
+      context: context(testEnv),
+    } as never);
+    expect(futureStarted).toBeInstanceOf(Response);
+    const futureStartedResponse = futureStarted as Response;
+    const futureDestination = new URL(
+      futureStartedResponse.headers.get("location")!,
+    );
+    const futureStateCookie =
+      futureStartedResponse.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+    const futureCallback = await authApiLoader({
+      request: new Request(
+        `http://localhost/api/auth/callback/microsoft?state=${futureDestination.searchParams.get("state")}&code=future-valid-code`,
+        { headers: { cookie: futureStateCookie } },
+      ),
+      params: { "*": "callback/microsoft" },
+      context: context(testEnv),
+    } as never);
+    expect(futureCallback.status).toBe(302);
+    expect(futureCallback.headers.get("location")).toBe("/admin/crm");
+    expect(futureCallback.headers.get("set-cookie")).toContain(
+      "better-auth.session_token",
+    );
+  });
 
   it("redacts OAuth state details reported by the authentication library", async () => {
     const logging = vi
@@ -350,6 +554,107 @@ describe("production authentication routes", () => {
     expect(loaded.socialProviders).toEqual({
       google: true,
       microsoft: false,
+    });
+  });
+
+  it("turns Microsoft's unverified-email failure into an email-proof handoff", async () => {
+    const testEnv = {
+      ...productionEnv(),
+      MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+      MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+    } as unknown as CloudflareEnvironment;
+    const loaded = await signInLoader({
+      request: new Request(
+        "http://localhost/sign-in?returnTo=%2Fadmin%2Fcrm&provider=microsoft&error=account_not_linked",
+      ),
+      params: {},
+      context: context(testEnv),
+    } as never);
+    if (loaded instanceof Response) {
+      throw new Error("The Microsoft handoff unexpectedly redirected.");
+    }
+    expect(loaded.microsoftNeedsEmailProof).toBe(true);
+    expect(loaded.linkRequest).toBeNull();
+
+    const delivery = vi.fn(
+      async (input: RequestInfo | URL) =>
+        new Response(
+          JSON.stringify(
+            String(input).includes("siteverify")
+              ? { success: true, hostname: "localhost", action: "sign_in" }
+              : { id: "microsoft-proof-email" },
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    vi.stubGlobal("fetch", delivery);
+    const result = await signInAction({
+      request: formRequest(
+        "http://localhost/sign-in",
+        {
+          _intent: "email_magic_link",
+          email: "olivia@example.com",
+          returnTo: "/admin/crm",
+          linkProviderAfterEmail: "microsoft",
+          "turnstile-token": "turnstile-token",
+        },
+        { "cf-connecting-ip": "203.0.113.14" },
+      ),
+      params: {},
+      context: context(testEnv),
+    } as never);
+    if (result instanceof Response) {
+      throw new Error(
+        "The Microsoft proof email unexpectedly returned raw HTTP.",
+      );
+    }
+    expect(result.data).toMatchObject({ ok: true });
+    const emailCall = (
+      delivery.mock.calls as unknown as Array<[string, RequestInit]>
+    ).find(([url]) => !String(url).includes("siteverify"));
+    const delivered = JSON.parse(String(emailCall?.[1].body)) as {
+      text: string;
+    };
+    const link = new URL(delivered.text.match(/https?:\/\/\S+/u)?.[0] ?? "");
+    expect(link.searchParams.get("callbackURL")).toBe(
+      "/sign-in?returnTo=%2Fadmin%2Fcrm&linkProvider=microsoft",
+    );
+  });
+
+  it("shows the explicit Microsoft link step only to an authenticated person", async () => {
+    const testEnv = {
+      ...productionEnv(),
+      MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+      MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+    } as unknown as CloudflareEnvironment;
+    const anonymous = await signInLoader({
+      request: new Request(
+        "http://localhost/sign-in?returnTo=%2Fadmin%2Fcrm&linkProvider=microsoft",
+      ),
+      params: {},
+      context: context(testEnv),
+    } as never);
+    if (anonymous instanceof Response) {
+      throw new Error("The anonymous link page unexpectedly redirected.");
+    }
+    expect(anonymous.linkRequest).toBeNull();
+
+    const { cookie } = await sessionCookie("person-demo-admin");
+    const authenticated = await signInLoader({
+      request: new Request(
+        "http://localhost/sign-in?returnTo=%2Fadmin%2Fcrm&linkProvider=microsoft",
+        { headers: { cookie } },
+      ),
+      params: {},
+      context: context(testEnv),
+    } as never);
+    if (authenticated instanceof Response) {
+      throw new Error("The authenticated link page unexpectedly redirected.");
+    }
+    expect(authenticated.linkRequest).toEqual({
+      provider: "microsoft",
+      email: "olivia@example.com",
+      failed: false,
     });
   });
 
