@@ -5,7 +5,7 @@ import { resetDemoEvent } from "./support/reset-demo-event";
 
 const TEAM_NAME = "Golden path review team";
 const SUBMISSION_TITLE = "Operational handoffs without guesswork";
-const APPLICANT_EMAIL = "golden-path-applicant@example.com";
+const APPLICANT_EMAIL = "sbek-speaker@example.com";
 const SPEAKER_NAME = "Riley Golden";
 const REVIEW_TARGETS = [
   {

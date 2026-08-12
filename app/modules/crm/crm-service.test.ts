@@ -484,7 +484,11 @@ describe("organisation speaker CRM", () => {
         administrator.currentEventId,
         `crm-event-${crypto.randomUUID()}`,
       ),
-    ).resolves.toEqual({ eventId: administrator.currentEventId });
+    ).resolves.toEqual({
+      eventId: administrator.currentEventId,
+      personId: first.personId,
+      accepted: false,
+    });
     const membership = await testEnv.DB.prepare(
       `SELECT role FROM memberships
         WHERE event_id = ? AND person_id = ? AND revoked_at IS NULL`,

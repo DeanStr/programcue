@@ -107,7 +107,7 @@ export class CrmOutreachService {
       .first();
     if (!event) throw new Response("Target event not found.", { status: 404 });
     const contact = await this.getContact(viewer, personId);
-    await new SpeakerService(this.env).createManualSpeaker(
+    const invitation = await new SpeakerService(this.env).createManualSpeaker(
       eventViewer(viewer, targetEventId),
       {
         idempotencyKey: z
@@ -117,12 +117,13 @@ export class CrmOutreachService {
           .parse(rawIdempotencyKey),
         name: contact.name,
         email: contact.email,
-        biography: contact.biography ?? "",
-        organisationName: contact.organisationName ?? "",
-        jobTitle: contact.jobTitle ?? "",
       },
     );
-    return { eventId: targetEventId };
+    return {
+      eventId: targetEventId,
+      personId: invitation.personId,
+      accepted: invitation.accepted,
+    };
   }
 
   async createDraft(viewer: OrganisationAdministrator, rawInput: unknown) {

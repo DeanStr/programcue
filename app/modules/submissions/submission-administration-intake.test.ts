@@ -42,6 +42,29 @@ const viewer: Viewer = {
   demo: true,
 };
 
+async function acceptedParticipant(email: string, name: string) {
+  const personId = `accepted-person-${crypto.randomUUID()}`;
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO people (
+         id, email, display_name, email_verified, profile_status
+       ) VALUES (?, ?, ?, 1, 'draft')`,
+    ).bind(personId, email, name),
+    env.DB.prepare(
+      `INSERT INTO memberships (
+         id, organisation_id, event_id, person_id, role, invited_at,
+         accepted_at, created_at
+       ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch(), unixepoch())`,
+    ).bind(
+      `accepted-membership-${crypto.randomUUID()}`,
+      viewer.organisationId,
+      viewer.eventId,
+      personId,
+    ),
+  ]);
+  return personId;
+}
+
 async function publishedForm(overrides: Record<string, unknown> = {}) {
   const queued: unknown[] = [];
   const testEnv = {
@@ -201,6 +224,12 @@ describe("Submissions D1 vertical slice", () => {
       const teamName = `Manual ${crypto.randomUUID()}`;
       const planId = `plan-manual-${crypto.randomUUID()}`;
       const roundId = `round-manual-${crypto.randomUUID()}`;
+      const submitterEmail = `partner-${crypto.randomUUID()}@example.com`;
+      const speakerEmail = `guaranteed-${crypto.randomUUID()}@example.com`;
+      await Promise.all([
+        acceptedParticipant(submitterEmail, "Partner Coordinator"),
+        acceptedParticipant(speakerEmail, "Guaranteed Speaker"),
+      ]);
       await env.DB.batch([
         env.DB.prepare(
           `INSERT INTO evaluation_plans (id, event_id, name, status)
@@ -228,12 +257,12 @@ describe("Submissions D1 vertical slice", () => {
         trackIds: ["demo-track-ai", "demo-track-operations"],
         format: "presentation",
         submitterName: "Partner Coordinator",
-        submitterEmail: `partner-${crypto.randomUUID()}@example.com`,
+        submitterEmail,
         routedTeamIds: [teamId],
         speakers: [
           {
             name: "Guaranteed Speaker",
-            email: `guaranteed-${crypto.randomUUID()}@example.com`,
+            email: speakerEmail,
             biography: "Manually recorded speaker biography.",
           },
         ],
@@ -340,6 +369,24 @@ describe("Submissions D1 vertical slice", () => {
         ).bind(planId, viewer.eventId),
       ]);
     });
+
+    it("refuses to claim an unaccepted identity for a manual application", async () => {
+      const { service } = await publishedForm();
+      const email = `unaccepted-manual-${crypto.randomUUID()}@example.com`;
+      await expect(
+        service.createManualApplication(viewer, {
+          idempotencyKey: `unaccepted:${crypto.randomUUID()}`,
+          title: "Unaccepted manual proposal",
+          description: "This must wait for participant acceptance.",
+          trackIds: ["demo-track-ai"],
+          format: "presentation",
+          submitterName: "Unaccepted participant",
+          submitterEmail: email,
+          routedTeamIds: [],
+          speakers: [{ name: "Unaccepted participant", email }],
+        }),
+      ).rejects.toThrow(/invite.*wait for acceptance/i);
+    });
   });
 
   describe("administration intake workflows", () => {
@@ -361,13 +408,21 @@ describe("Submissions D1 vertical slice", () => {
           },
         ],
       };
-      const firstSessionId = await service.createDirectSession(
+      const firstSession = await service.createDirectSession(
         viewer,
         directInput,
       );
+      expect(firstSession.invitationDeliveries).toEqual(["demo_not_sent"]);
       await expect(
         service.createDirectSession(viewer, directInput),
-      ).resolves.toBe(firstSessionId);
+      ).resolves.toMatchObject({
+        sessionId: firstSession.sessionId,
+        replayed: true,
+        invitationDeliveries: firstSession.invitationDeliveries,
+        invitationWarning: firstSession.invitationWarning,
+        webhookDeliveries: firstSession.webhookDeliveries,
+        webhookWarning: firstSession.webhookWarning,
+      });
       await expect(
         service.createDirectSession(viewer, {
           ...directInput,
@@ -379,7 +434,7 @@ describe("Submissions D1 vertical slice", () => {
           `SELECT COUNT(*) AS count FROM sessions
             WHERE id = ? AND event_id = ?`,
         )
-          .bind(firstSessionId, viewer.eventId)
+          .bind(firstSession.sessionId, viewer.eventId)
           .first(),
       ).resolves.toEqual({ count: 1 });
 
@@ -400,6 +455,16 @@ describe("Submissions D1 vertical slice", () => {
           },
         ],
       };
+      await Promise.all([
+        acceptedParticipant(
+          manualInput.submitterEmail,
+          manualInput.submitterName,
+        ),
+        acceptedParticipant(
+          manualInput.speakers[0]!.email,
+          manualInput.speakers[0]!.name,
+        ),
+      ]);
       const firstSubmissionId = await service.createManualApplication(
         viewer,
         manualInput,
@@ -485,7 +550,7 @@ describe("Submissions D1 vertical slice", () => {
       ).selected!;
       await resourceService.publish(viewer, resourceId, resourceDraft.revision);
 
-      const sessionId = await service.createDirectSession(viewer, {
+      const created = await service.createDirectSession(viewer, {
         idempotencyKey: `direct-${crypto.randomUUID()}`,
         title: "Sponsor perspective",
         description: "Guaranteed programme contribution.",
@@ -503,7 +568,7 @@ describe("Submissions D1 vertical slice", () => {
       const session = await env.DB.prepare(
         "SELECT status, source_submission_id AS sourceSubmissionId FROM sessions WHERE id = ?",
       )
-        .bind(sessionId)
+        .bind(created.sessionId)
         .first<{ status: string; sourceSubmissionId: string | null }>();
       expect(session).toEqual({
         status: "unscheduled",
@@ -520,11 +585,11 @@ describe("Submissions D1 vertical slice", () => {
         )
           .bind(viewer.eventId, "morgan-sponsor@example.com")
           .first(),
-      ).resolves.toEqual({ accepted: 1, revokedAt: null });
+      ).resolves.toEqual({ accepted: 0, revokedAt: null });
       const audit = await env.DB.prepare(
         "SELECT action FROM audit_events WHERE entity_id = ?",
       )
-        .bind(sessionId)
+        .bind(created.sessionId)
         .first<{ action: string }>();
       expect(audit?.action).toBe("session.direct.created");
       const acknowledgementTask = await env.DB.prepare(

@@ -317,6 +317,34 @@ describe("participant API resources", () => {
 
   it("updates an own profile once and rejects cross-origin browser mutation", async () => {
     await ensureDemoSpeakerData(testEnv);
+    const submissionId = `profile-name-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, submitter_person_id, submitter_email,
+           public_reference, title, status
+         ) VALUES (?, ?, ?, ?, ?, 'Profile name synchronization', 'draft')`,
+      ).bind(
+        submissionId,
+        eventId,
+        DEMO_IDENTITIES.speaker.personId,
+        DEMO_IDENTITIES.speaker.email,
+        submissionId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO submission_speakers (
+           id, event_id, submission_id, person_id, email, display_name,
+           position, invitation_status, is_primary, claimed_at
+         ) VALUES (?, ?, ?, ?, ?, 'Stale claimed name', 0, 'claimed', 1,
+                   unixepoch())`,
+      ).bind(
+        `profile-speaker-${submissionId}`,
+        eventId,
+        submissionId,
+        DEMO_IDENTITIES.speaker.personId,
+        DEMO_IDENTITIES.speaker.email,
+      ),
+    ]);
     const profileRow = await testEnv.DB.prepare(
       "SELECT profile_revision AS revision FROM people WHERE id = ?",
     )
@@ -367,11 +395,33 @@ describe("participant API resources", () => {
         .bind(eventId, DEMO_IDENTITIES.speaker.personId)
         .first<{ count: number }>(),
     ).resolves.toEqual({ count: 1 });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT display_name AS displayName
+           FROM submission_speakers WHERE submission_id = ?`,
+      )
+        .bind(submissionId)
+        .first(),
+    ).resolves.toEqual({ displayName: body.name });
   });
 
   it("projects participant profile updates through the selected repository authority", async () => {
     await ensureDemoSpeakerData(testEnv);
     const viewer = participantViewer("speaker");
+    const endpoint = await new WebhookService(testEnv).create(
+      {
+        ...DEMO_IDENTITIES.administrator,
+        role: "administrator",
+        organisationId,
+        eventId,
+        demo: true,
+      },
+      {
+        name: `Participant profile ${crypto.randomUUID()}`,
+        url: "https://hooks.example.com/participant-profile",
+        eventTypes: ["speaker.updated"],
+      },
+    );
     const current = await testEnv.DB.prepare(
       "SELECT profile_revision AS revision FROM people WHERE id = ?",
     )
@@ -413,6 +463,31 @@ describe("participant API resources", () => {
         eventId: viewer.eventId,
       },
     ]);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM audit_events
+          WHERE id = ? AND action = 'participant.profile.updated'`,
+      )
+        .bind(`participant-profile:${operationId}`)
+        .first(),
+    ).resolves.toEqual({ count: 1 });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM event_changes
+          WHERE event_id = ? AND entity_type = 'person' AND entity_id = ?
+            AND change_type = 'updated' AND correlation_id = ?`,
+      )
+        .bind(eventId, viewer.personId, operationId)
+        .first(),
+    ).resolves.toEqual({ count: 1 });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT event_type AS eventType FROM webhook_deliveries
+          WHERE endpoint_id = ? AND entity_id = ?`,
+      )
+        .bind(endpoint.id, viewer.personId)
+        .first(),
+    ).resolves.toEqual({ eventType: "speaker.updated" });
   });
 
   it("converges concurrent profile retries without a second revision or audit", async () => {
@@ -553,6 +628,20 @@ describe("participant API resources", () => {
   it("recovers a profile commit left between the domain batch and response persistence", async () => {
     await ensureDemoSpeakerData(testEnv);
     const viewer = participantViewer("speaker");
+    const endpoint = await new WebhookService(testEnv).create(
+      {
+        ...DEMO_IDENTITIES.administrator,
+        role: "administrator",
+        organisationId,
+        eventId,
+        demo: true,
+      },
+      {
+        name: `Profile recovery ${crypto.randomUUID()}`,
+        url: "https://hooks.example.com/profile-recovery",
+        eventTypes: ["speaker.updated"],
+      },
+    );
     const current = await testEnv.DB.prepare(
       "SELECT profile_revision AS revision FROM people WHERE id = ?",
     )
@@ -579,6 +668,40 @@ describe("participant API resources", () => {
       "profile-crash-window",
       operationId,
     );
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE operation_jobs
+            SET status = 'queue_failed', dispatched_at = NULL
+          WHERE event_id = ? AND type = 'webhook.deliver'
+            AND id IN (
+              SELECT item.operation_id FROM operation_items item
+              JOIN webhook_deliveries delivery
+                ON delivery.id = item.entity_id
+               AND item.entity_type = 'webhook_delivery'
+             WHERE delivery.event_type = 'speaker.updated'
+               AND delivery.entity_id = ?
+               AND delivery.idempotency_key =
+                   'webhook:' || delivery.endpoint_id || ':' || ?
+            )`,
+      ).bind(
+        viewer.eventId,
+        viewer.personId,
+        `speaker.updated:${viewer.personId}:${operationId}`,
+      ),
+      testEnv.DB.prepare(
+        `UPDATE webhook_deliveries
+            SET status = 'failed'
+          WHERE event_type = 'speaker.updated' AND entity_id = ?
+            AND idempotency_key =
+                'webhook:' || endpoint_id || ':' || ?`,
+      ).bind(
+        viewer.personId,
+        `speaker.updated:${viewer.personId}:${operationId}`,
+      ),
+      testEnv.DB.prepare(
+        `UPDATE webhook_endpoints SET status = 'disabled' WHERE id = ?`,
+      ).bind(endpoint.id),
+    ]);
 
     const recovered = await participantResourceAction({
       request: new Request(
@@ -600,6 +723,8 @@ describe("participant API resources", () => {
     await expect(recovered.json()).resolves.toMatchObject({
       replayed: true,
       profile: { name: input.name, revision: input.revision + 1 },
+      webhookWarning:
+        "The profile was saved, but one or more outbound webhooks need a queue retry.",
     });
     await expect(
       testEnv.DB.prepare(
@@ -617,5 +742,43 @@ describe("participant API resources", () => {
         .bind(`participant-profile:${operationId}`)
         .first<{ count: number }>(),
     ).resolves.toEqual({ count: 1 });
+  });
+
+  it("fails fast when a committed profile mutation is missing its atomic change cursor", async () => {
+    await ensureDemoSpeakerData(testEnv);
+    const viewer = participantViewer("speaker");
+    const current = await testEnv.DB.prepare(
+      "SELECT profile_revision AS revision FROM people WHERE id = ?",
+    )
+      .bind(viewer.personId)
+      .first<{ revision: number }>();
+    const input = participantProfilePatchSchema.parse({
+      revision: current!.revision,
+      name: `Integrity ${crypto.randomUUID().slice(0, 8)}`,
+      biography:
+        "This profile mutation deliberately loses its required event cursor for an integrity test.",
+    });
+    const operationId = crypto.randomUUID();
+    await new ApiParticipantService(testEnv).updateProfile(
+      viewer,
+      input,
+      operationId,
+      operationId,
+    );
+    await testEnv.DB.prepare(
+      `DELETE FROM event_changes
+        WHERE event_id = ? AND entity_type = 'person' AND entity_id = ?
+          AND correlation_id = ?`,
+    )
+      .bind(viewer.eventId, viewer.personId, operationId)
+      .run();
+
+    await expect(
+      new ApiParticipantService(testEnv).recoverProfileUpdate(
+        viewer,
+        input,
+        operationId,
+      ),
+    ).rejects.toThrow(/missing its required event change cursor/i);
   });
 });

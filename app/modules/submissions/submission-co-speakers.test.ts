@@ -647,10 +647,10 @@ describe("Submissions D1 vertical slice", () => {
           .bind(result.directSessionId)
           .first(),
       ).toEqual({
-        sourceSubmissionId: null,
+        sourceSubmissionId: submissionId,
         trackId: "demo-track-ai",
         durationMinutes: 45,
-        speakerCount: 2,
+        speakerCount: 1,
       });
       await expect(
         env.DB.prepare(
@@ -666,7 +666,7 @@ describe("Submissions D1 vertical slice", () => {
         )
           .bind(result.directSessionId)
           .first(),
-      ).resolves.toEqual({ count: 2 });
+      ).resolves.toEqual({ count: 1 });
 
       const invitation = await env.DB.prepare(
         `SELECT speaker.id, speaker.claim_token_hash AS tokenHash,
@@ -754,6 +754,21 @@ describe("Submissions D1 vertical slice", () => {
       expect(claimed.applicant.biography).toBe(
         "Biography proposed by the submitter.",
       );
+      await expect(
+        env.DB.prepare(
+          `SELECT COUNT(*) AS count
+             FROM memberships membership
+             JOIN session_speakers relationship
+               ON relationship.person_id = membership.person_id
+              AND relationship.event_id = membership.event_id
+            WHERE relationship.session_id = ?
+              AND membership.role = 'speaker'
+              AND membership.accepted_at IS NOT NULL
+              AND membership.revoked_at IS NULL`,
+        )
+          .bind(result.directSessionId)
+          .first(),
+      ).resolves.toEqual({ count: 2 });
       await expect(
         service.applicants.get(
           new Request(`https://example.com/apply/${slug}`, {

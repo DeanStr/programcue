@@ -1,17 +1,6 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
-import { speakerProfileSchema } from "./speaker-schema";
-
-export class SpeakerProfileConflictError extends Error {
-  constructor(
-    message = "Your profile changed after this page loaded. Refresh before saving again.",
-  ) {
-    super(message);
-    this.name = "SpeakerProfileConflictError";
-  }
-}
 
 export type ProfileRow = {
   id: string;
@@ -203,94 +192,6 @@ export class SpeakerPortalService {
           (version) => version.assetId === file.id,
         ),
       })),
-    };
-  }
-
-  async updateProfile(viewer: Viewer, rawInput: unknown) {
-    await this.assertParticipant(viewer);
-    const input = speakerProfileSchema.parse(rawInput);
-    const operationId = crypto.randomUUID();
-    const auditEventId = crypto.randomUUID();
-    const webhookService = new WebhookService(this.env);
-    const webhook = await webhookService.prepareEventForAudit(
-      viewer,
-      {
-        eventType: "speaker.updated",
-        entityType: "speaker",
-        entityId: viewer.personId,
-        idempotencyKey: `speaker.updated:${viewer.personId}:${operationId}`,
-        correlationId: operationId,
-        data: {
-          revision: input.revision + 1,
-          status: input.publish ? "published" : "draft",
-        },
-      },
-      auditEventId,
-    );
-    const [updated] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `
-        UPDATE people
-           SET display_name = ?, biography = ?, pronunciation = ?, organisation_name = ?, job_title = ?,
-               profile_status = ?, profile_revision = profile_revision + 1,
-               last_operation_id = ?, updated_at = unixepoch()
-         WHERE id = ? AND profile_revision = ?
-           AND EXISTS (
-             SELECT 1 FROM memberships
-              WHERE event_id = ? AND person_id = people.id
-                AND role IN ('speaker', 'submitter')
-                AND accepted_at IS NOT NULL AND revoked_at IS NULL
-           )
-      `,
-      ).bind(
-        input.name,
-        input.biography,
-        input.pronunciation || null,
-        input.organisationName || null,
-        input.jobTitle || null,
-        input.publish ? "published" : "draft",
-        operationId,
-        viewer.personId,
-        input.revision,
-        viewer.eventId,
-      ),
-      this.env.DB.prepare(
-        `
-        INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'speaker.profile.updated', 'person', ?, ?, ?, unixepoch()
-           WHERE EXISTS (
-             SELECT 1 FROM people
-              WHERE id = ? AND profile_revision = ? AND last_operation_id = ?
-           )
-      `,
-      ).bind(
-        auditEventId,
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        viewer.personId,
-        operationId,
-        JSON.stringify({
-          published: input.publish,
-          revision: input.revision + 1,
-        }),
-        viewer.personId,
-        input.revision + 1,
-        operationId,
-      ),
-      ...webhook.statements,
-    ]);
-    if ((updated.meta.changes ?? 0) !== 1)
-      throw new SpeakerProfileConflictError();
-
-    const deliveries = await webhookService.dispatchPreparedEvent(webhook);
-    return {
-      webhookWarning: deliveries.some(
-        (delivery) => delivery.status === "queue_failed",
-      )
-        ? "The profile was saved, but one or more outbound webhooks need a queue retry."
-        : null,
     };
   }
 }

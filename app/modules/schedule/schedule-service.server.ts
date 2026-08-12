@@ -415,6 +415,38 @@ export class ScheduleService {
     };
   }
 
+  private async findUnacceptedScheduledSpeaker(
+    viewer: ScheduleEventScope,
+    scheduleVersionId: string,
+  ) {
+    return this.env.DB.prepare(
+      `SELECT session.title
+         FROM schedule_entries entry
+         JOIN sessions session
+           ON session.id = entry.session_id AND session.event_id = entry.event_id
+        WHERE entry.schedule_version_id = ? AND entry.event_id = ?
+          AND (
+            EXISTS (
+              SELECT 1 FROM session_speakers relationship
+               WHERE relationship.session_id = session.id
+                 AND relationship.event_id = session.event_id
+                 AND NOT EXISTS (
+                   SELECT 1 FROM memberships membership
+                    WHERE membership.event_id = relationship.event_id
+                      AND membership.person_id = relationship.person_id
+                      AND membership.role = 'speaker'
+                      AND membership.accepted_at IS NOT NULL
+                      AND membership.revoked_at IS NULL
+                 )
+            )
+          )
+        ORDER BY session.title COLLATE NOCASE, session.id
+        LIMIT 1`,
+    )
+      .bind(scheduleVersionId, viewer.eventId)
+      .first<{ title: string }>();
+  }
+
   async getWorkspace(viewer: ScheduleEventScope): Promise<ScheduleWorkspace> {
     if (this.projectionDepth === 0) await this.airtable.assertReadable(viewer);
     return loadScheduleWorkspaceD1(this.env, viewer);
@@ -948,6 +980,17 @@ export class ScheduleService {
         "Place at least one session before publishing.",
       );
 
+    const unacceptedSpeaker = await this.findUnacceptedScheduledSpeaker(
+      viewer,
+      parsed.scheduleVersionId,
+    );
+    if (unacceptedSpeaker) {
+      throw new SchedulePublicationBlockedError(
+        [],
+        `Every scheduled speaker must accept or claim their invitation before publication. “${unacceptedSpeaker.title}” still has an unaccepted speaker.`,
+      );
+    }
+
     const detectedConflicts = detectWorkspaceConflicts(workspace);
     const allConflicts = detectedConflicts.map(({ conflict }) => conflict);
     const blockingConflicts = allConflicts.filter(
@@ -1031,6 +1074,17 @@ export class ScheduleService {
       if (command) {
         const replay = await this.replayPublication(viewer, command);
         if (replay) return replay;
+      }
+      const newlyUnacceptedSpeaker =
+        await this.findUnacceptedScheduledSpeaker(
+          viewer,
+          parsed.scheduleVersionId,
+        );
+      if (newlyUnacceptedSpeaker) {
+        throw new SchedulePublicationBlockedError(
+          [],
+          `Every scheduled speaker must accept or claim their invitation before publication. “${newlyUnacceptedSpeaker.title}” still has an unaccepted speaker.`,
+        );
       }
       throw new ScheduleRevisionConflictError();
     }

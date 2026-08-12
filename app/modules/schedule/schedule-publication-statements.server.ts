@@ -119,6 +119,29 @@ export function buildSchedulePublicationStatements(input: {
               WHERE entry.schedule_version_id = ? AND entry.event_id = ?
                 AND content.session_id IS NULL
            )
+           AND NOT EXISTS (
+             SELECT 1
+               FROM schedule_entries entry
+               JOIN sessions session
+                 ON session.id = entry.session_id
+                AND session.event_id = entry.event_id
+              WHERE entry.schedule_version_id = ? AND entry.event_id = ?
+                AND (
+                  EXISTS (
+                    SELECT 1 FROM session_speakers relationship
+                     WHERE relationship.session_id = session.id
+                       AND relationship.event_id = session.event_id
+                       AND NOT EXISTS (
+                         SELECT 1 FROM memberships membership
+                          WHERE membership.event_id = relationship.event_id
+                            AND membership.person_id = relationship.person_id
+                            AND membership.role = 'speaker'
+                            AND membership.accepted_at IS NOT NULL
+                            AND membership.revoked_at IS NULL
+                       )
+                  )
+                )
+           )
            ${commandGuard}
       `,
     ).bind(
@@ -129,6 +152,8 @@ export function buildSchedulePublicationStatements(input: {
       viewer.eventId,
       viewer.organisationId,
       workspace.event.revision,
+      parsed.scheduleVersionId,
+      viewer.eventId,
       parsed.scheduleVersionId,
       viewer.eventId,
       ...commandGuardBindings,

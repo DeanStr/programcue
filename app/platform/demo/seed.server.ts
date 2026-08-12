@@ -134,6 +134,17 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
         identity.role,
       );
     }),
+    env.DB.prepare(
+      `
+      INSERT OR IGNORE INTO memberships (
+        id, organisation_id, event_id, person_id, role, invited_at, accepted_at, created_at
+      ) VALUES ('membership-demo-submitter-speaker', ?, ?, ?, 'speaker', unixepoch(), unixepoch(), unixepoch())
+    `,
+    ).bind(
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.submitter.personId,
+    ),
     ...[
       ["main", "Main Stage", 1200],
       ["301a", "Room 301A", 300],

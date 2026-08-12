@@ -7,6 +7,12 @@ import {
 import type { Applicant } from "~/modules/submissions/submission-repository.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
+import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  ParticipantProfileConflictError,
+  ParticipantProfileIntegrityError,
+  ParticipantProfileService,
+} from "~/modules/speakers/participant-profile-service.server";
 import { isoTimestamp, parseStrictQuery } from "./api-pagination.server";
 import { ApiError } from "./api.server";
 
@@ -204,108 +210,41 @@ export class ApiParticipantService {
       operationId,
       input,
     );
-    return this.airtable.executeIdempotent(viewer, command, () =>
-      this.updateProfileD1(viewer, input, correlationId, operationId),
-    );
-  }
-
-  private async updateProfileD1(
-    viewer: Viewer,
-    input: z.infer<typeof participantProfilePatchSchema>,
-    correlationId: string,
-    operationId: string,
-  ) {
-    const [updated] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `UPDATE people
-            SET display_name = ?, biography = ?,
-                profile_revision = profile_revision + 1,
-                last_operation_id = ?, updated_at = unixepoch()
-          WHERE id = ? AND profile_revision = ? AND email_verified = 1
-            AND EXISTS (
-              SELECT 1 FROM events event
-               WHERE event.id = ? AND event.organisation_id = ?
-                 AND (
-                   EXISTS (
-                     SELECT 1 FROM memberships membership
-                      WHERE membership.event_id = event.id
-                        AND membership.person_id = people.id
-                        AND membership.role IN ('speaker','submitter')
-                        AND membership.accepted_at IS NOT NULL
-                        AND membership.revoked_at IS NULL
-                   )
-                   OR EXISTS (
-                     SELECT 1 FROM submission_speakers speaker
-                      WHERE speaker.event_id = event.id
-                        AND speaker.person_id = people.id
-                        AND speaker.invitation_status = 'claimed'
-                   )
-                 )
-            )`,
-      ).bind(
-        input.name,
-        input.biography,
-        operationId,
-        viewer.personId,
-        input.revision,
-        viewer.eventId,
-        viewer.organisationId,
-      ),
-      this.env.DB.prepare(
-        `UPDATE submission_speakers
-            SET display_name = ?, updated_at = unixepoch()
-          WHERE event_id = ? AND person_id = ?
-            AND invitation_status = 'claimed'
-            AND EXISTS (
-              SELECT 1 FROM people
-               WHERE id = ? AND last_operation_id = ?
-            )`,
-      ).bind(
-        input.name,
-        viewer.eventId,
-        viewer.personId,
-        viewer.personId,
-        operationId,
-      ),
-      this.env.DB.prepare(
-        `INSERT OR IGNORE INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
-           entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'participant.profile.updated', 'person', ?, ?, ?,
-                  unixepoch()
-            WHERE EXISTS (
-              SELECT 1 FROM people
-               WHERE id = ? AND last_operation_id = ?
-            )`,
-      ).bind(
-        `participant-profile:${operationId}`,
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        viewer.personId,
-        correlationId,
-        JSON.stringify({ revision: input.revision + 1 }),
-        viewer.personId,
-        operationId,
-      ),
-    ]);
-    if ((updated.meta.changes ?? 0) !== 1) {
-      throw new ApiError(
-        409,
-        "PARTICIPANT_REVISION_CONFLICT",
-        "The participant profile changed; refresh before saving again",
+    try {
+      const mutation = await this.airtable.executeIdempotent(
+        viewer,
+        command,
+        () =>
+          new ParticipantProfileService(this.env).update(viewer, input, {
+            correlationId,
+            operationId,
+          }),
       );
+      return {
+        profile: await this.profileD1(viewer),
+        changeCursor: mutation.changeCursor,
+        realtimeWarning: mutation.realtimeWarning,
+        webhookWarning: mutation.webhookWarning,
+      };
+    } catch (error) {
+      if (error instanceof ParticipantProfileConflictError) {
+        throw new ApiError(
+          409,
+          "PARTICIPANT_REVISION_CONFLICT",
+          "The participant profile changed; refresh before saving again",
+        );
+      }
+      throw error;
     }
-    return { profile: await this.profileD1(viewer) };
   }
 
   async recoverProfileUpdate(
     viewer: Viewer,
     input: z.infer<typeof participantProfilePatchSchema>,
     operationId: string,
-  ): Promise<ParticipantCommandRecovery<{ profile: Record<string, unknown> }>> {
+  ) {
     const committed = await this.env.DB.prepare(
-      `SELECT id FROM people
+      `SELECT id, profile_status AS profileStatus FROM people
         WHERE id = ? AND profile_revision = ? AND last_operation_id = ?
           AND EXISTS (
             SELECT 1 FROM events
@@ -319,15 +258,63 @@ export class ApiParticipantService {
         viewer.eventId,
         viewer.organisationId,
       )
-      .first();
-    return committed
-      ? {
-          response: {
-            profile: (await this.profile(viewer)) as Record<string, unknown>,
-          },
-          progressed: true,
-        }
-      : { response: null, progressed: false };
+      .first<{ id: string; profileStatus: string }>();
+    if (!committed) return { response: null, progressed: false };
+    const change = await this.env.DB.prepare(
+      `SELECT sequence FROM event_changes
+        WHERE event_id = ? AND entity_type = 'person' AND entity_id = ?
+          AND change_type = 'updated' AND correlation_id = ?
+        ORDER BY sequence LIMIT 1`,
+    )
+      .bind(viewer.eventId, viewer.personId, operationId)
+      .first<{ sequence: number }>();
+    if (!change) {
+      throw new ParticipantProfileIntegrityError(
+        "The committed participant profile update is missing its required event change cursor.",
+      );
+    }
+    const webhookDeliveries = await new WebhookService(
+      this.env,
+    ).resumePreparedEventForAudit(
+      viewer,
+      {
+        eventType: "speaker.updated",
+        entityType: "speaker",
+        entityId: viewer.personId,
+        idempotencyKey: `speaker.updated:${viewer.personId}:${operationId}`,
+        correlationId: operationId,
+        data: {
+          revision: input.revision + 1,
+          status: committed.profileStatus,
+        },
+      },
+      `participant-profile:${operationId}`,
+    );
+    let realtimeWarning: string | null = null;
+    try {
+      await new EventRealtimeService(this.env).notifyCommittedChange(
+        viewer,
+        Number(change.sequence),
+      );
+    } catch {
+      realtimeWarning =
+        "The profile was saved, but live updates could not be broadcast. Refresh other open views before continuing.";
+    }
+    return {
+      response: {
+        profile: await this.profile(viewer),
+        changeCursor: Number(change.sequence),
+        realtimeWarning,
+        webhookWarning: webhookDeliveries.some((delivery) =>
+          ["queue_failed", "partially_failed", "failed"].includes(
+            delivery.status,
+          ),
+        )
+          ? "The profile was saved, but one or more outbound webhooks need a queue retry."
+          : null,
+      },
+      progressed: true,
+    };
   }
 
   async recoverTaskCompletion(

@@ -328,7 +328,8 @@ export function ManualEntryPanels({
         <summary>
           <strong>Enter an application manually</strong>{" "}
           <span className="subtle">
-            preserve an administrator-entered abstract and speaker snapshot
+            preserve an abstract for participants who already accepted their
+            event invitations
           </span>
         </summary>
         <Form method="post" className="stack mt">

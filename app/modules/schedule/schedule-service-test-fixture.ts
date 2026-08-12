@@ -75,5 +75,21 @@ export async function prepareScheduleServiceTest() {
     env.DB.prepare(
       "INSERT OR IGNORE INTO session_speakers (session_id, event_id, person_id, position, role_label, visibility) VALUES ('schedule-test-two', ?, 'person-demo-submitter', 0, 'Speaker', 'public')",
     ).bind(scheduleTestViewer.eventId),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO memberships (
+         id, organisation_id, event_id, person_id, role, invited_at,
+         accepted_at, created_at
+       ) VALUES (
+         'schedule-test-submitter-speaker', ?, ?, 'person-demo-submitter',
+         'speaker', unixepoch(), unixepoch(), unixepoch()
+       )`,
+    ).bind(scheduleTestViewer.organisationId, scheduleTestViewer.eventId),
+    env.DB.prepare(
+      `UPDATE memberships
+          SET accepted_at = unixepoch(), invitation_expires_at = NULL,
+              revoked_at = NULL
+        WHERE event_id = ? AND person_id = 'person-demo-submitter'
+          AND role = 'speaker'`,
+    ).bind(scheduleTestViewer.eventId),
   ]);
 }

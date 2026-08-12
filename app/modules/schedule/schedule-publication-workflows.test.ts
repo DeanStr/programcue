@@ -191,6 +191,189 @@ describe("schedule publication workflows", () => {
     });
   });
 
+  it("blocks publication while a scheduled speaker invitation is pending", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await env.DB.prepare(
+      `UPDATE memberships
+          SET accepted_at = NULL, invitation_expires_at = unixepoch() + 3600
+        WHERE event_id = ? AND role = 'speaker'
+          AND person_id IN (
+            SELECT person_id FROM session_speakers
+             WHERE event_id = ? AND session_id = 'schedule-test-one'
+          )`,
+    )
+      .bind(viewer.eventId, viewer.eventId)
+      .run();
+    workspace = await service.getWorkspace(viewer);
+
+    await expect(
+      service.publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toThrow(/must accept or claim.*unaccepted speaker/i);
+    await expect(
+      env.DB.prepare(
+        `SELECT status FROM schedule_versions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(versionId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ status: "draft" });
+    await env.DB.prepare(
+      `UPDATE memberships
+          SET accepted_at = unixepoch(), invitation_expires_at = NULL
+        WHERE event_id = ? AND role = 'speaker'
+          AND person_id IN (
+            SELECT person_id FROM session_speakers
+             WHERE event_id = ? AND session_id = 'schedule-test-one'
+          )`,
+    )
+      .bind(viewer.eventId, viewer.eventId)
+      .run();
+  });
+
+  it("ignores unclaimed applicants who are not linked to the scheduled session", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    const submissionId = `schedule-source-${crypto.randomUUID()}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, submitter_person_id, submitter_email, public_reference,
+           title, status, submitted_snapshot_json, submitted_at
+         ) VALUES (?, ?, 'person-demo-speaker', 'priya.speaker@example.com', ?,
+                   'Accepted source application', 'accepted', '{}', unixepoch())`,
+      ).bind(submissionId, viewer.eventId, submissionId),
+      env.DB.prepare(
+        `UPDATE sessions SET source_submission_id = ?
+          WHERE id = 'schedule-test-one' AND event_id = ?`,
+      ).bind(submissionId, viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO submission_speakers (
+           id, event_id, submission_id, email, display_name, position,
+           invitation_status, is_primary
+         ) VALUES (?, ?, ?, ?, 'Unclaimed applicant', 1, 'pending', 0)`,
+      ).bind(
+        `schedule-unclaimed-${crypto.randomUUID()}`,
+        viewer.eventId,
+        submissionId,
+        `unclaimed-${crypto.randomUUID()}@example.com`,
+      ),
+    ]);
+    workspace = await service.getWorkspace(viewer);
+
+    await expect(
+      service.publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).resolves.toMatchObject({ published: true });
+  });
+
+  it("rechecks speaker acceptance in the atomic publication write", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+
+    let raced = false;
+    const racingDb = new Proxy(env.DB, {
+      get(target, property, receiver) {
+        if (property !== "batch") return Reflect.get(target, property, receiver);
+        return async (statements: D1PreparedStatement[]) => {
+          raced = true;
+          await target
+            .prepare(
+              `UPDATE memberships
+                  SET accepted_at = NULL, invitation_expires_at = unixepoch() + 3600
+                WHERE event_id = ? AND role = 'speaker'
+                  AND person_id IN (
+                    SELECT person_id FROM session_speakers
+                     WHERE event_id = ? AND session_id = 'schedule-test-one'
+                  )`,
+            )
+            .bind(viewer.eventId, viewer.eventId)
+            .run();
+          return target.batch(statements);
+        };
+      },
+    });
+    const racingEnv = new Proxy(scheduleTestEnv, {
+      get(target, property, receiver) {
+        if (property === "DB") return racingDb;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    await expect(
+      new ScheduleService(racingEnv).publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toThrow(/must accept or claim.*unaccepted speaker/i);
+    expect(raced).toBe(true);
+    await expect(
+      env.DB.prepare(
+        `SELECT status FROM schedule_versions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(versionId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ status: "draft" });
+    await env.DB.prepare(
+      `UPDATE memberships
+          SET accepted_at = unixepoch(), invitation_expires_at = NULL
+        WHERE event_id = ? AND role = 'speaker'
+          AND person_id IN (
+            SELECT person_id FROM session_speakers
+             WHERE event_id = ? AND session_id = 'schedule-test-one'
+          )`,
+    )
+      .bind(viewer.eventId, viewer.eventId)
+      .run();
+  });
+
   it("fails before publication when the required operations Queue binding is absent", async () => {
     const service = new ScheduleService(
       env as unknown as CloudflareEnvironment,

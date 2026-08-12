@@ -239,6 +239,43 @@ export class SubmissionCoSpeakerRepository {
            )
       `,
       ).bind(invitationId, applicant.personId, operationId),
+      this.env.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role,
+           invited_at, invitation_expires_at, accepted_at, revoked_at,
+           last_operation_id, created_at
+         )
+         SELECT ?, event.organisation_id, speaker.event_id, speaker.person_id,
+                'speaker', unixepoch(), NULL, unixepoch(), NULL, ?, unixepoch()
+           FROM submission_speakers speaker
+           JOIN events event ON event.id = speaker.event_id
+          WHERE speaker.id = ? AND speaker.person_id = ?
+            AND speaker.invitation_status = 'claimed'
+            AND event.last_operation_id = ?
+            AND EXISTS (
+              SELECT 1 FROM sessions session
+              JOIN session_speakers relationship
+                ON relationship.session_id = session.id
+               AND relationship.event_id = session.event_id
+               AND relationship.person_id = speaker.person_id
+             WHERE session.source_submission_id = speaker.submission_id
+               AND session.event_id = speaker.event_id
+               AND session.status <> 'published'
+            )
+         ON CONFLICT(event_id, person_id, role) WHERE event_id IS NOT NULL
+         DO UPDATE SET invited_at = unixepoch(), invitation_expires_at = NULL,
+                       accepted_at = unixepoch(), revoked_at = NULL,
+                       last_operation_id = excluded.last_operation_id
+          WHERE memberships.organisation_id = excluded.organisation_id
+            AND (memberships.revoked_at IS NOT NULL
+                 OR memberships.accepted_at IS NULL)`,
+      ).bind(
+        crypto.randomUUID(),
+        operationId,
+        invitationId,
+        applicant.personId,
+        operationId,
+      ),
       ...materializePublishedResourceAcknowledgementsForClaimedSpeaker(
         this.env,
         invitation.eventId,

@@ -19,7 +19,6 @@ import {
 } from "~/platform/api/api.server";
 import { recordIdempotentApiChange } from "~/platform/api/api-realtime.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
 
 const speakerSchema = z
   .object({
@@ -110,41 +109,17 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         correlationId: `api-direct-session:${sessionId}`,
       },
     );
-    let webhookDeliveries: Awaited<ReturnType<WebhookService["queueEvent"]>> =
-      [];
-    let webhookWarning: string | null = null;
-    try {
-      webhookDeliveries = await new WebhookService(env).queueEvent(actor, {
-        eventType: "session.created",
-        entityType: "session",
-        entityId: sessionId,
-        idempotencyKey: `session.created:${sessionId}`,
-        correlationId: requestCorrelationId,
-        data: { source: "api_direct_entry" },
-      });
-      if (
-        webhookDeliveries.some((delivery) => delivery.status === "queue_failed")
-      ) {
-        webhookWarning =
-          "The session was created, but one or more outbound webhook deliveries require retry.";
-      }
-    } catch (error) {
-      console.error("Failed to record direct-session API webhook", {
-        errorName: error instanceof Error ? error.name : "UnknownError",
-      });
-      webhookWarning =
-        "The session was created, but its outbound webhook event could not be recorded.";
-    }
     return apiSuccess(
       {
         session: { id: sessionId, status: "unscheduled" },
         replayed: created.replayed,
         changeCursor: realtime.changeCursor,
         realtimeWarning: realtime.realtimeWarning,
-        webhookDeliveries: webhookDeliveries.map(
+        invitationWarning: created.invitationWarning,
+        webhookDeliveries: created.webhookDeliveries.map(
           ({ duplicate: _duplicate, ...delivery }) => delivery,
         ),
-        webhookWarning,
+        webhookWarning: created.webhookWarning,
         correlationId: requestCorrelationId,
       },
       201,

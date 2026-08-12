@@ -23,6 +23,7 @@ import { ensureDemoCrmData } from "~/modules/crm/demo.server";
 import { crmStages } from "~/modules/crm/crm-schema";
 import { CrmService, CrmStateError } from "~/modules/crm/crm-service.server";
 import { SpeakerAdminStateError } from "~/modules/speakers/speaker-service.server";
+import { SpeakerInvitationDeliveryError } from "~/modules/speakers/speaker-invitation.server";
 import { currentEventCookie } from "~/platform/auth/current-event.server";
 import { requireOrganisationAdministrator } from "~/platform/auth/organisation.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -111,7 +112,9 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         form.get("idempotencyKey"),
       );
       return redirect(
-        `/admin/speakers?person=${encodeURIComponent(params.personId ?? "")}`,
+        added.accepted
+          ? `/admin/speakers?person=${encodeURIComponent(added.personId)}`
+          : "/admin/speakers",
         {
           headers: { "set-cookie": currentEventCookie(added.eventId, env) },
         },
@@ -122,6 +125,12 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       { status: 400 },
     );
   } catch (error) {
+    if (error instanceof SpeakerInvitationDeliveryError) {
+      return data<ActionResult>(
+        { ok: false, message: error.message },
+        { status: 207 },
+      );
+    }
     if (
       error instanceof ZodError ||
       error instanceof CrmStateError ||

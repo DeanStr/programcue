@@ -153,7 +153,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           { status: 409 },
         );
       }
-      const sessionId = await service.createDirectSession(viewer, {
+      const created = await service.createDirectSession(viewer, {
         idempotencyKey: formData.get("idempotencyKey"),
         title: formData.get("title"),
         description: formData.get("description"),
@@ -162,20 +162,16 @@ export async function action({ request, context }: Route.ActionArgs) {
         durationMinutes: formData.get("durationMinutes"),
         speakers,
       });
-      const warning = await queueAdminWebhook(env, viewer, {
-        eventType: "session.created",
-        entityType: "session",
-        entityId: sessionId,
-        idempotencyKey: `session.created:${sessionId}`,
-        data: { source: "administrator_direct_entry" },
-      });
+      const warning = [created.invitationWarning, created.webhookWarning]
+        .filter(Boolean)
+        .join(" ");
       return data<SubmissionsAdminActionResult>(
         {
           ok: !warning,
           partial: Boolean(warning),
           message: warning
-            ? `Direct session created in the unscheduled programme. ${warning}`
-            : "Direct session created in the unscheduled programme.",
+            ? `Direct session created in the unscheduled programme. Any newly invited speakers must accept before publication. ${warning}`
+            : "Direct session created in the unscheduled programme. Any newly invited speakers must accept before publication.",
         },
         { status: warning ? 207 : 200 },
       );

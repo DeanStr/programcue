@@ -149,7 +149,7 @@ export function SpeakerProfilePanel({
       <div className="card-title">
         <div>
           <span className="pc-section-kicker">Public identity</span>
-          <h2>Speaker profile</h2>
+          <h2>Profile</h2>
         </div>
         <UserRound aria-hidden className="subtle" />
       </div>

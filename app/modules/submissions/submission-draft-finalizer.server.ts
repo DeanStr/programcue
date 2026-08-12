@@ -531,37 +531,12 @@ export class SubmissionDraftFinalizer {
           "The direct-session format configuration was not resolved.",
         );
       }
-      for (const speaker of payload.speakers) {
-        const personId = crypto.randomUUID();
-        finalStatements.push(
-          this.env.DB.prepare(
-            `INSERT INTO people (
-               id, email, display_name, email_verified, biography, profile_status,
-               created_at, updated_at
-             ) SELECT ?, ?, ?, 0, ?, 'draft', unixepoch(), unixepoch()
-                WHERE EXISTS (
-                  SELECT 1 FROM submissions
-                   WHERE id = ? AND event_id = ? AND last_operation_id = ?
-                     AND status = 'accepted'
-                )
-             ON CONFLICT(email) DO NOTHING`,
-          ).bind(
-            personId,
-            speaker.email,
-            speaker.name,
-            speaker.biography || null,
-            payload.submissionId,
-            form.eventId,
-            operationId,
-          ),
-        );
-      }
       finalStatements.push(
         this.env.DB.prepare(
           `INSERT INTO sessions (
              id, event_id, source_submission_id, track_id, title, slug, description, format,
              duration_minutes, status, visibility, created_at, updated_at
-           ) SELECT ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'unscheduled', 'public', unixepoch(), unixepoch()
+           ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unscheduled', 'public', unixepoch(), unixepoch()
                WHERE EXISTS (
                  SELECT 1 FROM submissions
                   WHERE id = ? AND event_id = ? AND last_operation_id = ?
@@ -570,6 +545,7 @@ export class SubmissionDraftFinalizer {
         ).bind(
           directSessionId,
           form.eventId,
+          payload.submissionId,
           options.trackSelections[0]!.trackId,
           title,
           directSessionSlug(title, directSessionId),
@@ -581,46 +557,31 @@ export class SubmissionDraftFinalizer {
           operationId,
         ),
       );
-      payload.speakers.forEach((speaker, position) => {
-        finalStatements.push(
-          this.env.DB.prepare(
-            `UPDATE submission_speakers
-                SET person_id = (SELECT id FROM people WHERE email = ? COLLATE NOCASE),
-                    updated_at = unixepoch()
-              WHERE submission_id = ? AND event_id = ? AND email = ? COLLATE NOCASE
+      finalStatements.push(
+        this.env.DB.prepare(
+          `INSERT INTO session_speakers (
+             session_id, event_id, person_id, position, role_label, visibility
+           ) SELECT ?, speaker.event_id, speaker.person_id, speaker.position,
+                    CASE WHEN speaker.is_primary = 1
+                         THEN 'Primary speaker' ELSE 'Co-speaker' END,
+                    'public'
+               FROM submission_speakers speaker
+              WHERE speaker.submission_id = ? AND speaker.event_id = ?
+                AND speaker.person_id IS NOT NULL
+                AND speaker.invitation_status = 'claimed'
                 AND EXISTS (
                   SELECT 1 FROM sessions
-                   WHERE id = ? AND event_id = ? AND source_submission_id IS NULL
+                   WHERE id = ? AND event_id = ? AND source_submission_id = ?
                 )`,
-          ).bind(
-            speaker.email,
-            payload.submissionId,
-            form.eventId,
-            speaker.email,
-            directSessionId,
-            form.eventId,
-          ),
-          this.env.DB.prepare(
-            `INSERT INTO session_speakers (
-               session_id, event_id, person_id, position, role_label, visibility
-             ) SELECT ?, ?, person.id, ?, ?, 'public'
-                 FROM people person
-                WHERE person.email = ? COLLATE NOCASE
-                  AND EXISTS (
-                    SELECT 1 FROM sessions
-                     WHERE id = ? AND event_id = ? AND source_submission_id IS NULL
-                  )`,
-          ).bind(
-            directSessionId,
-            form.eventId,
-            position,
-            position === 0 ? "Primary speaker" : "Co-speaker",
-            speaker.email,
-            directSessionId,
-            form.eventId,
-          ),
-        );
-      });
+        ).bind(
+          directSessionId,
+          payload.submissionId,
+          form.eventId,
+          directSessionId,
+          form.eventId,
+          payload.submissionId,
+        ),
+      );
       for (const speaker of payload.speakers) {
         finalStatements.push(
           this.env.DB.prepare(
@@ -632,11 +593,18 @@ export class SubmissionDraftFinalizer {
              SELECT ?, ?, ?, person.id, 'speaker', unixepoch(), NULL,
                     unixepoch(), NULL, ?, unixepoch()
                FROM people person
-               JOIN session_speakers relationship
-                 ON relationship.person_id = person.id
-                AND relationship.event_id = ?
-                AND relationship.session_id = ?
+               JOIN submission_speakers claimed
+                 ON claimed.person_id = person.id
+                AND claimed.event_id = ?
+                AND claimed.submission_id = ?
+                AND claimed.invitation_status = 'claimed'
               WHERE person.email = ? COLLATE NOCASE
+                AND EXISTS (
+                  SELECT 1 FROM session_speakers relationship
+                   WHERE relationship.person_id = person.id
+                     AND relationship.event_id = ?
+                     AND relationship.session_id = ?
+                )
              ON CONFLICT(event_id, person_id, role) WHERE event_id IS NOT NULL
              DO UPDATE SET invited_at = unixepoch(), invitation_expires_at = NULL,
                            accepted_at = unixepoch(), revoked_at = NULL,
@@ -650,8 +618,10 @@ export class SubmissionDraftFinalizer {
             form.eventId,
             operationId,
             form.eventId,
-            directSessionId,
+            payload.submissionId,
             speaker.email,
+            form.eventId,
+            directSessionId,
           ),
         );
       }
@@ -669,7 +639,7 @@ export class SubmissionDraftFinalizer {
                     ?, ?, ?, unixepoch()
                WHERE EXISTS (
                  SELECT 1 FROM sessions
-                  WHERE id = ? AND event_id = ? AND source_submission_id IS NULL
+                  WHERE id = ? AND event_id = ? AND source_submission_id = ?
                )`,
         ).bind(
           directSessionAuditEventId,
@@ -684,6 +654,7 @@ export class SubmissionDraftFinalizer {
           }),
           directSessionId,
           form.eventId,
+          payload.submissionId,
         ),
       );
     }

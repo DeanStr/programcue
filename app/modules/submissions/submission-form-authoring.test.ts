@@ -1061,7 +1061,7 @@ describe("Submissions D1 vertical slice", () => {
         .run();
 
       const suffix = crypto.randomUUID();
-      const sessionId = await service.createDirectSession(viewer, {
+      const created = await service.createDirectSession(viewer, {
         idempotencyKey: `configured-format-${suffix}`,
         title: "Configured roundtable",
         description: "Uses the event-owned duration default.",
@@ -1079,7 +1079,7 @@ describe("Submissions D1 vertical slice", () => {
         env.DB.prepare(
           "SELECT format, duration_minutes AS durationMinutes FROM sessions WHERE id = ? AND event_id = ?",
         )
-          .bind(sessionId, viewer.eventId)
+          .bind(created.sessionId, viewer.eventId)
           .first(),
       ).resolves.toEqual({ format: "roundtable", durationMinutes: 75 });
 

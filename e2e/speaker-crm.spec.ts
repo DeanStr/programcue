@@ -161,8 +161,16 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
   await page
     .getByRole("button", { name: "Add to event and open speaker" })
     .click();
-  await expect(page).toHaveURL(/\/admin\/speakers\?person=/u);
-  await expect(page.getByRole("link", { name: "Marcus Okafor" })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/speakers$/u);
+  const pendingInvitations = page.locator("section").filter({
+    has: page.getByRole("heading", {
+      name: "Speaker invitations awaiting acceptance",
+    }),
+  });
+  await expect(pendingInvitations).toContainText(
+    "marcus.speaker@sbek-test.example.com",
+  );
+  await expect(pendingInvitations).toContainText("Pending acceptance");
 
   await page.getByRole("link", { name: "Speaker Network" }).click();
   await expect(

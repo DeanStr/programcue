@@ -26,6 +26,17 @@ Status terms:
 
 The old static browser application, legacy JavaScript Worker delegation and `src/domain` compatibility path have been removed. All HTTP and Queue entry points use the current TypeScript Worker.
 
+Participant invitation boundaries now keep administrator-created speaker
+memberships pending and expiring until acceptance, prevent unrelated identities
+from being attached to direct sessions, defer public co-speaker materialisation
+until claim, and block schedule publication on unaccepted or unclaimed
+speakers. Manual and direct-session invitation delivery intent is persisted
+atomically and replays report its durable status; missing delivery configuration
+fails before the participant mutation. Participant UI and REST profile writes now converge on one
+compare-and-set mutation with shared validation, audit, webhook, realtime and
+Airtable-authority behavior. Focused Worker and browser coverage verifies these
+boundaries.
+
 ## Capability status
 
 | Capability                             | Status                                                     | Verified implementation and boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |

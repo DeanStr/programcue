@@ -3857,6 +3857,9 @@
         "required": [
           "profile",
           "replayed",
+          "changeCursor",
+          "realtimeWarning",
+          "webhookWarning",
           "correlationId"
         ],
         "properties": {
@@ -3865,6 +3868,22 @@
           },
           "replayed": {
             "type": "boolean"
+          },
+          "changeCursor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "realtimeWarning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "webhookWarning": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "correlationId": {
             "type": "string"
@@ -4258,6 +4277,7 @@
           "replayed",
           "changeCursor",
           "realtimeWarning",
+          "invitationWarning",
           "webhookDeliveries",
           "webhookWarning",
           "correlationId"
@@ -4291,6 +4311,12 @@
             "minimum": 1
           },
           "realtimeWarning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "invitationWarning": {
             "type": [
               "string",
               "null"

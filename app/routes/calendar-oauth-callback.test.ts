@@ -33,7 +33,7 @@ const submitterCookie =
 afterEach(() => vi.restoreAllMocks());
 
 describe("calendar OAuth callback failures", () => {
-  it("allows a submitter through calendar OAuth start and callback", async () => {
+  it("allows an accepted participant through calendar OAuth start and callback", async () => {
     await ensureDemoData(workerEnv);
     const start = vi
       .spyOn(CalendarOAuthService.prototype, "start")
@@ -54,7 +54,7 @@ describe("calendar OAuth callback failures", () => {
       "https://accounts.example.com/authorize",
     );
     expect(start).toHaveBeenCalledWith(
-      expect.objectContaining({ role: "submitter" }),
+      expect.objectContaining({ personId: "person-demo-submitter" }),
       "google",
       "/participant/dashboard",
     );

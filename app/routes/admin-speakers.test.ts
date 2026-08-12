@@ -49,9 +49,6 @@ describe("manual speaker identity checks", () => {
       idempotencyKey: `manual-speaker-${suffix}`,
       name: "Priya Shah",
       email,
-      biography: "A deliberately distinct speaker identity.",
-      organisationName: "Program Cue Labs",
-      jobTitle: "Producer",
     };
 
     const warning = await action({
@@ -115,7 +112,7 @@ describe("manual speaker identity checks", () => {
          (SELECT COUNT(*)
             FROM audit_events audit
             JOIN people person ON person.id = audit.entity_id
-           WHERE audit.event_id = ? AND audit.action = 'speaker.admin.created'
+           WHERE audit.event_id = ? AND audit.action = 'speaker.admin.invited'
              AND person.email = ?) AS auditCount`,
     )
       .bind(email, "evt-foe-2025", email, "evt-foe-2025", email)

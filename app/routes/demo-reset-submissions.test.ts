@@ -173,7 +173,7 @@ describe("submission demo reset", () => {
 
     const token = crypto.randomUUID();
     const sponsorEmail = `sponsor-${token}@example.com`;
-    const directSessionId = await new SubmissionService(
+    const directSession = await new SubmissionService(
       testEnvironment,
     ).createDirectSession(
       {
@@ -200,6 +200,7 @@ describe("submission demo reset", () => {
         ],
       },
     );
+    const directSessionId = directSession.sessionId;
     const sponsor = await env.DB.prepare(
       "SELECT id FROM people WHERE email = ? COLLATE NOCASE",
     )

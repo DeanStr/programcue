@@ -558,6 +558,106 @@ export class WebhookService {
     return this.dispatchPreparedEvent(prepared);
   }
 
+  /**
+   * Resumes only deliveries already persisted with an audited mutation. New
+   * endpoints must not receive historical events merely because they were
+   * registered during a response-persistence recovery window.
+   */
+  async resumePreparedEventForAudit(
+    viewer: WebhookEventActor,
+    rawInput: unknown,
+    auditEventId: string,
+  ) {
+    const input = queueEventSchema.parse(rawInput);
+    const requestHash = await webhookRequestHash(input);
+    const persisted = await this.env.DB.prepare(
+      `SELECT endpoint.id AS endpointId, delivery.id AS deliveryId,
+              delivery.request_hash AS requestHash,
+              delivery.idempotency_key AS endpointIdempotencyKey,
+              operation.id AS operationId, operation.status,
+              operation.payload_json AS payloadJson,
+              operation.dispatched_at AS dispatchedAt
+         FROM webhook_deliveries delivery
+         JOIN webhook_endpoints endpoint ON endpoint.id = delivery.endpoint_id
+         JOIN operation_items item
+           ON item.entity_type = 'webhook_delivery'
+          AND item.entity_id = delivery.id
+         JOIN operation_jobs operation ON operation.id = item.operation_id
+        WHERE endpoint.organisation_id = ? AND endpoint.event_id = ?
+          AND operation.organisation_id = ? AND operation.event_id = ?
+          AND delivery.event_type = ? AND delivery.entity_type = ?
+          AND delivery.entity_id = ?
+          AND delivery.idempotency_key =
+              'webhook:' || endpoint.id || ':' || ?
+          AND EXISTS (
+            SELECT 1 FROM audit_events audited
+             WHERE audited.id = ? AND audited.organisation_id = ?
+               AND audited.event_id = ?
+          )
+        ORDER BY endpoint.id`,
+    )
+      .bind(
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.organisationId,
+        viewer.eventId,
+        input.eventType,
+        input.entityType,
+        input.entityId,
+        input.idempotencyKey,
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+      )
+      .all<{
+        endpointId: string;
+        deliveryId: string;
+        requestHash: string;
+        endpointIdempotencyKey: string;
+        operationId: string;
+        status: string;
+        payloadJson: string;
+        dispatchedAt: number | null;
+      }>();
+    const existingResults: WebhookEventResult[] = [];
+    const candidates: PreparedWebhookCandidate[] = [];
+    for (const row of persisted.results) {
+      if (row.requestHash !== requestHash) {
+        throw new WebhookEventIdempotencyConflictError(row.operationId);
+      }
+      if (
+        webhookReplayStatus(row.status) === "queued" &&
+        !row.dispatchedAt
+      ) {
+        candidates.push({
+          endpointId: row.endpointId,
+          endpointIdempotencyKey: row.endpointIdempotencyKey,
+          deliveryId: row.deliveryId,
+          operationId: row.operationId,
+          requestHash,
+          message: webhookDeliveryMessageSchema.parse(
+            JSON.parse(row.payloadJson),
+          ),
+          duplicate: true,
+        });
+      } else {
+        existingResults.push({
+          endpointId: row.endpointId,
+          deliveryId: row.deliveryId,
+          operationId: row.operationId,
+          status: webhookReplayStatus(row.status),
+          duplicate: true,
+        });
+      }
+    }
+    return this.dispatchPreparedEvent({
+      eventId: viewer.eventId,
+      statements: [],
+      existingResults,
+      candidates,
+    });
+  }
+
   async dispatchPendingEvents(limit = 50) {
     const queue = this.env.OPERATIONS_QUEUE;
     if (!queue) throw new WebhookQueueConfigurationError();

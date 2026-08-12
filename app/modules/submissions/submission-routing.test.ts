@@ -599,7 +599,41 @@ describe("Submissions D1 vertical slice", () => {
       const roundId = `round-manual-race-${token}`;
       const submitterEmail = `manual-race-submitter-${token}@example.com`;
       const speakerEmail = `manual-race-speaker-${token}@example.com`;
+      const submitterPersonId = `manual-race-submitter-${token}`;
+      const speakerPersonId = `manual-race-speaker-${token}`;
       await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO people (
+             id, email, display_name, email_verified, profile_status
+           ) VALUES (?, ?, 'Manual race submitter', 1, 'draft')`,
+        ).bind(submitterPersonId, submitterEmail),
+        testEnv.DB.prepare(
+          `INSERT INTO people (
+             id, email, display_name, email_verified, profile_status
+           ) VALUES (?, ?, 'Manual race speaker', 1, 'draft')`,
+        ).bind(speakerPersonId, speakerEmail),
+        testEnv.DB.prepare(
+          `INSERT INTO memberships (
+             id, organisation_id, event_id, person_id, role, invited_at,
+             accepted_at, created_at
+           ) VALUES (?, ?, ?, ?, 'submitter', unixepoch(), unixepoch(), unixepoch())`,
+        ).bind(
+          `manual-race-submitter-membership-${token}`,
+          viewer.organisationId,
+          viewer.eventId,
+          submitterPersonId,
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO memberships (
+             id, organisation_id, event_id, person_id, role, invited_at,
+             accepted_at, created_at
+           ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch(), unixepoch())`,
+        ).bind(
+          `manual-race-speaker-membership-${token}`,
+          viewer.organisationId,
+          viewer.eventId,
+          speakerPersonId,
+        ),
         testEnv.DB.prepare(
           `INSERT INTO evaluation_plans (id, event_id, name, status)
            VALUES (?, ?, 'Manual race review', 'active')`,
@@ -657,7 +691,7 @@ describe("Submissions D1 vertical slice", () => {
         )
           .bind(viewer.eventId, submitterEmail, submitterEmail, speakerEmail)
           .first(),
-      ).resolves.toEqual({ submissionCount: 0, personCount: 0 });
+      ).resolves.toEqual({ submissionCount: 0, personCount: 2 });
 
       await testEnv.DB.batch([
         testEnv.DB.prepare(

@@ -9,15 +9,25 @@ import {
 import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
 import { ApiError } from "~/platform/api/api.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  dispatchSpeakerInvitationsForCommand,
+  prepareSpeakerInvitations,
+  SpeakerInvitationDeliveryError,
+  type SpeakerInvitationDelivery,
+} from "./speaker-invitation.server";
+import { speakerProfileSchema } from "./speaker-schema";
 
 import {
   SpeakerPortalService,
-  SpeakerProfileConflictError,
   type FileRow,
   type ProfileRow,
   type SessionRow,
 } from "./speaker-portal-service.server";
-export { SpeakerProfileConflictError } from "./speaker-portal-service.server";
+import {
+  ParticipantProfileConflictError,
+  ParticipantProfileService,
+} from "./participant-profile-service.server";
+export { ParticipantProfileConflictError as SpeakerProfileConflictError } from "./participant-profile-service.server";
 
 export class SpeakerAdminStateError extends Error {
   readonly status: number;
@@ -48,17 +58,16 @@ const adminSpeakerProfileSchema = z.object({
   }),
 });
 
-const manualSpeakerSchema = z.object({
-  idempotencyKey: z
-    .string()
-    .trim()
-    .regex(/^[A-Za-z0-9._:-]{8,128}$/, "Refresh before adding this speaker."),
-  name: z.string().trim().min(1).max(120),
-  email: z.string().trim().toLowerCase().email().max(254),
-  biography: z.string().trim().max(5_000).default(""),
-  organisationName: z.string().trim().max(160).default(""),
-  jobTitle: z.string().trim().max(160).default(""),
-});
+const manualSpeakerSchema = z
+  .object({
+    idempotencyKey: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9._:-]{8,128}$/, "Refresh before adding this speaker."),
+    name: z.string().trim().min(1).max(120),
+    email: z.string().trim().toLowerCase().email().max(254),
+  })
+  .strict();
 
 export type AdminSpeakerFilters = {
   personId?: string;
@@ -111,15 +120,16 @@ export class SpeakerService {
   }
 
   async updateProfile(viewer: Viewer, rawInput: unknown) {
+    const input = speakerProfileSchema.parse(rawInput);
     const idempotencyKey = await airtableCommandKey(
-      "speaker.profile.update",
+      "participant.profile.update",
       viewer,
-      rawInput,
+      input,
     );
     return this.airtable.executeIdempotent(
       viewer,
-      { idempotencyKey, operation: "speaker.profile.update" },
-      () => this.portal.updateProfile(viewer, rawInput),
+      { idempotencyKey, operation: "participant.profile.update" },
+      () => new ParticipantProfileService(this.env).update(viewer, input),
     );
   }
 
@@ -132,25 +142,54 @@ export class SpeakerService {
       idempotencyKey,
       input,
     );
-    return this.airtable.executeIdempotent(viewer, command, async () => {
-      try {
-        const { result } = await new ApiPersonIdempotencyService(this.env).run({
-          viewer,
-          scope: "speaker.admin.create",
-          idempotencyKey,
-          input,
-          execute: (commandId) =>
-            this.createManualSpeakerD1(viewer, input, commandId),
-          recover: (commandId) => this.recoverManualSpeaker(viewer, commandId),
-        });
-        return result;
-      } catch (error) {
-        if (error instanceof ApiError) {
-          throw new SpeakerAdminStateError(error.message, error.status);
+    const result = await this.airtable.executeIdempotent(
+      viewer,
+      command,
+      async () => {
+        try {
+          const { result } = await new ApiPersonIdempotencyService(
+            this.env,
+          ).run({
+            viewer,
+            scope: "speaker.admin.create",
+            idempotencyKey,
+            input,
+            execute: (commandId) =>
+              this.createManualSpeakerD1(viewer, input, commandId),
+            recover: (commandId) =>
+              this.recoverManualSpeaker(viewer, commandId),
+          });
+          return result;
+        } catch (error) {
+          if (error instanceof ApiError) {
+            throw new SpeakerAdminStateError(error.message, error.status);
+          }
+          throw error;
         }
-        throw error;
-      }
+      },
+    );
+    const invitationOutcomes = await dispatchSpeakerInvitationsForCommand({
+      env: this.env,
+      organisationId: viewer.organisationId,
+      eventId: viewer.eventId,
+      commandId: result.commandId,
     });
+    const invitationOutcome = invitationOutcomes[0];
+    const accepted =
+      result.accepted || invitationOutcome?.status === "not_required";
+    const delivery: SpeakerInvitationDelivery = accepted
+      ? "not_required"
+      : (invitationOutcome?.status ?? "not_required");
+    if (!accepted && delivery === "not_required") {
+      throw new Error(
+        "The pending speaker invitation is missing its delivery outcome.",
+      );
+    }
+    if (["queue_failed", "failed", "cancelled"].includes(delivery)) {
+      throw new SpeakerInvitationDeliveryError(result.membershipId);
+    }
+    const { commandId: _commandId, ...publicResult } = result;
+    return { ...publicResult, accepted, delivery };
   }
 
   private async createManualSpeakerD1(
@@ -167,29 +206,33 @@ export class SpeakerService {
 
     const personId = crypto.randomUUID();
     const membershipId = crypto.randomUUID();
+    const invitationPlans = await prepareSpeakerInvitations({
+      env: this.env,
+      actor: {
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        personId: viewer.personId,
+      },
+      commandId,
+      source: "manual_speaker",
+      emails: [input.email],
+    });
     await this.env.DB.batch([
       this.env.DB.prepare(
         `INSERT INTO people (
-           id, email, display_name, email_verified, biography,
-           organisation_name, job_title, profile_status, created_at, updated_at
-         ) VALUES (?, ?, ?, 0, ?, ?, ?, 'draft', unixepoch(), unixepoch())
+           id, email, display_name, email_verified, profile_status,
+           last_operation_id, created_at, updated_at
+         ) VALUES (?, ?, ?, 0, 'draft', ?, unixepoch(), unixepoch())
          ON CONFLICT(email) DO NOTHING`,
-      ).bind(
-        personId,
-        input.email,
-        input.name,
-        input.biography || null,
-        input.organisationName || null,
-        input.jobTitle || null,
-      ),
+      ).bind(personId, input.email, input.name, commandId),
       this.env.DB.prepare(
         `INSERT INTO memberships (
            id, organisation_id, event_id, person_id, role,
            invited_at, invitation_expires_at, accepted_at, revoked_at,
            last_operation_id, created_at
          )
-         SELECT ?, ?, ?, person.id, 'speaker', unixepoch(), NULL, unixepoch(),
-                NULL, ?, unixepoch()
+         SELECT ?, ?, ?, person.id, 'speaker', unixepoch(),
+                unixepoch() + 604800, NULL, NULL, ?, unixepoch()
            FROM people person
           WHERE person.email = ? COLLATE NOCASE
             AND EXISTS (
@@ -197,12 +240,23 @@ export class SpeakerService {
                WHERE id = ? AND organisation_id = ?
             )
          ON CONFLICT(event_id, person_id, role) WHERE event_id IS NOT NULL
-         DO UPDATE SET invited_at = unixepoch(), invitation_expires_at = NULL,
-                       accepted_at = unixepoch(), revoked_at = NULL,
+         DO UPDATE SET
+                       invited_at = CASE
+                         WHEN memberships.accepted_at IS NOT NULL
+                          AND memberships.revoked_at IS NULL
+                         THEN memberships.invited_at ELSE unixepoch() END,
+                       invitation_expires_at = CASE
+                         WHEN memberships.accepted_at IS NOT NULL
+                          AND memberships.revoked_at IS NULL
+                         THEN memberships.invitation_expires_at
+                         ELSE unixepoch() + 604800 END,
+                       accepted_at = CASE
+                         WHEN memberships.accepted_at IS NOT NULL
+                          AND memberships.revoked_at IS NULL
+                         THEN memberships.accepted_at ELSE NULL END,
+                       revoked_at = NULL,
                        last_operation_id = excluded.last_operation_id
-          WHERE memberships.organisation_id = excluded.organisation_id
-            AND (memberships.revoked_at IS NOT NULL
-                 OR memberships.accepted_at IS NULL)`,
+          WHERE memberships.organisation_id = excluded.organisation_id`,
       ).bind(
         membershipId,
         viewer.organisationId,
@@ -217,29 +271,36 @@ export class SpeakerService {
            id, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'speaker.admin.created', 'person', person.id, ?, ?, unixepoch()
+         SELECT ?, ?, ?, ?,
+                CASE WHEN membership.accepted_at IS NULL
+                     THEN 'speaker.admin.invited'
+                     ELSE 'speaker.admin.reused' END,
+                'person', person.id, ?,
+                json_object('enteredEmail', ?, 'createdIdentity',
+                            person.last_operation_id = ?), unixepoch()
            FROM people person
+          JOIN memberships membership
+            ON membership.organisation_id = ?
+           AND membership.event_id = ?
+           AND membership.person_id = person.id
+           AND membership.role = 'speaker'
+           AND membership.last_operation_id = ?
           WHERE person.email = ? COLLATE NOCASE
-            AND EXISTS (
-              SELECT 1 FROM memberships membership
-               WHERE membership.organisation_id = ?
-                 AND membership.event_id = ?
-                 AND membership.person_id = person.id
-                 AND membership.role = 'speaker'
-                 AND membership.accepted_at IS NOT NULL
-                 AND membership.revoked_at IS NULL
-            )`,
+            AND membership.revoked_at IS NULL`,
       ).bind(
         crypto.randomUUID(),
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
         commandId,
-        JSON.stringify({ enteredEmail: input.email }),
         input.email,
+        commandId,
         viewer.organisationId,
         viewer.eventId,
+        commandId,
+        input.email,
       ),
+      ...invitationPlans.flatMap((plan) => plan.statements),
     ]);
     const created = await this.recoverManualSpeaker(viewer, commandId);
     if (!created) {
@@ -252,24 +313,45 @@ export class SpeakerService {
 
   private async recoverManualSpeaker(viewer: Viewer, commandId: string) {
     return this.env.DB.prepare(
-      `SELECT audit.entity_id AS personId
+      `SELECT audit.entity_id AS personId, person.email,
+              membership.id AS membershipId,
+              membership.accepted_at IS NOT NULL AS accepted,
+              membership.invitation_expires_at AS invitationExpiresAt,
+              json_extract(audit.metadata_json, '$.createdIdentity') AS createdIdentity
          FROM audit_events audit
+         JOIN people person ON person.id = audit.entity_id
          JOIN memberships membership
            ON membership.person_id = audit.entity_id
           AND membership.organisation_id = audit.organisation_id
           AND membership.event_id = audit.event_id
           AND membership.role = 'speaker'
-          AND membership.accepted_at IS NOT NULL
           AND membership.revoked_at IS NULL
         WHERE audit.organisation_id = ? AND audit.event_id = ?
           AND audit.actor_person_id = ?
-          AND audit.action = 'speaker.admin.created'
+          AND audit.action IN ('speaker.admin.invited','speaker.admin.reused')
           AND audit.entity_type = 'person'
           AND audit.correlation_id = ?
         LIMIT 1`,
     )
       .bind(viewer.organisationId, viewer.eventId, viewer.personId, commandId)
-      .first<{ personId: string }>();
+      .first<{
+        personId: string;
+        email: string;
+        membershipId: string;
+        accepted: number;
+        invitationExpiresAt: number | null;
+        createdIdentity: number;
+      }>()
+      .then((row) =>
+        row
+          ? {
+              ...row,
+              commandId,
+              accepted: Boolean(row.accepted),
+              createdIdentity: Boolean(row.createdIdentity),
+            }
+          : null,
+      );
   }
 
   private adminSpeakerScopeSql(alias = "person.id") {
@@ -650,7 +732,7 @@ export class SpeakerService {
       ...webhook.statements,
     ]);
     if ((updated.meta.changes ?? 0) !== 1)
-      throw new SpeakerProfileConflictError(
+      throw new ParticipantProfileConflictError(
         "This speaker profile changed after the page loaded. Refresh before saving again.",
       );
     const deliveries = await webhookService.dispatchPreparedEvent(webhook);
@@ -701,10 +783,10 @@ export class SpeakerService {
       throw new Response("Invalid speaker readiness filter", { status: 400 });
     }
     const event = await this.env.DB.prepare(
-      "SELECT 1 FROM events WHERE id = ? AND organisation_id = ?",
+      "SELECT timezone FROM events WHERE id = ? AND organisation_id = ?",
     )
       .bind(viewer.eventId, viewer.organisationId)
-      .first();
+      .first<{ timezone: string }>();
     if (!event) throw new Response("Event not found.", { status: 404 });
     const pageSize = 50;
     const query = `%${queryValue}%`;
@@ -834,8 +916,9 @@ export class SpeakerService {
         viewer.eventId,
       )
       .all<AdminSpeakerListItem>();
-    const summary = await this.env.DB.prepare(
-      `
+    const [summary, pendingInvitations] = await Promise.all([
+      this.env.DB.prepare(
+        `
       WITH event_speaker_ids(person_id) AS (
         SELECT person_id FROM session_speakers WHERE event_id = ?
         UNION
@@ -882,28 +965,64 @@ export class SpeakerService {
                  AND version.scan_status = 'pending') AS quarantinedFiles
         FROM event_speaker_ids speaker
     `,
-    )
-      .bind(
-        viewer.eventId,
-        viewer.eventId,
-        viewer.eventId,
-        viewer.eventId,
-        viewer.eventId,
-        viewer.eventId,
       )
-      .first<{
-        knownSpeakers: number;
-        readySpeakers: number;
-        outstandingTasks: number;
-        quarantinedFiles: number;
-      }>();
+        .bind(
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+        )
+        .first<{
+          knownSpeakers: number;
+          readySpeakers: number;
+          outstandingTasks: number;
+          quarantinedFiles: number;
+        }>(),
+      this.env.DB.prepare(
+        `SELECT membership.id, person.email,
+                membership.invited_at AS invitedAt,
+                membership.invitation_expires_at AS expiresAt,
+                membership.invitation_expires_at <= unixepoch() AS expired
+           FROM memberships membership
+           JOIN people person ON person.id = membership.person_id
+          WHERE membership.organisation_id = ? AND membership.event_id = ?
+            AND membership.role = 'speaker'
+            AND membership.accepted_at IS NULL
+            AND membership.revoked_at IS NULL
+          ORDER BY membership.invited_at DESC, membership.id`,
+      )
+        .bind(viewer.organisationId, viewer.eventId)
+        .all<{
+          id: string;
+          email: string;
+          invitedAt: number;
+          expiresAt: number | null;
+          expired: number;
+        }>(),
+    ]);
     if (!summary) {
       throw new Error("Speaker readiness summary could not be read.");
     }
+    const malformedInvitation = pendingInvitations.results.find(
+      (invitation) => invitation.expiresAt === null,
+    );
+    if (malformedInvitation) {
+      throw new Error(
+        `Pending speaker invitation ${malformedInvitation.id} is missing its required expiry.`,
+      );
+    }
     return {
       speakers: speakers.results.slice(0, pageSize),
+      eventTimezone: event.timezone,
       page,
       hasNext: speakers.results.length > pageSize,
+      pendingInvitations: pendingInvitations.results.map((invitation) => ({
+        ...invitation,
+        expiresAt: invitation.expiresAt!,
+        expired: Boolean(invitation.expired),
+      })),
       summary: {
         knownSpeakers: Number(summary.knownSpeakers),
         readySpeakers: Number(summary.readySpeakers),

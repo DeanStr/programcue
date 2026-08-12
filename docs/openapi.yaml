@@ -1858,10 +1858,21 @@ components:
     ParticipantProfileCommandResponse:
       type: object
       additionalProperties: false
-      required: [profile, replayed, correlationId]
+      required:
+        [
+          profile,
+          replayed,
+          changeCursor,
+          realtimeWarning,
+          webhookWarning,
+          correlationId,
+        ]
       properties:
         profile: { $ref: "#/components/schemas/ParticipantProfile" }
         replayed: { type: boolean }
+        changeCursor: { type: integer, minimum: 1 }
+        realtimeWarning: { type: [string, "null"] }
+        webhookWarning: { type: [string, "null"] }
         correlationId: { type: string }
     ParticipantSpeakerInput:
       type: object
@@ -2025,6 +2036,7 @@ components:
           replayed,
           changeCursor,
           realtimeWarning,
+          invitationWarning,
           webhookDeliveries,
           webhookWarning,
           correlationId,
@@ -2040,6 +2052,7 @@ components:
         replayed: { type: boolean }
         changeCursor: { type: [integer, "null"], minimum: 1 }
         realtimeWarning: { type: [string, "null"] }
+        invitationWarning: { type: [string, "null"] }
         webhookDeliveries:
           type: array
           items: { $ref: "#/components/schemas/WebhookDeliverySummary" }

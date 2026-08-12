@@ -53,6 +53,178 @@ const webhookCredentialKey = btoa(
 );
 
 describe("speaker profile service", () => {
+  it("persists and replays one durable invitation delivery operation", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const suffix = crypto.randomUUID();
+    const email = `durable-invitation-${suffix}@example.com`;
+    const queued: unknown[] = [];
+    await testEnv.DB.prepare(
+      `INSERT INTO sender_profiles (
+         id, event_id, name, from_name, from_email, reply_to_email,
+         provider, status, created_at, updated_at
+       ) VALUES (?, ?, ?, 'Program Cue', 'speakers@example.com',
+                 'speakers@example.com', 'resend', 'verified',
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(
+        `durable-speaker-sender-${suffix}`,
+        admin.eventId,
+        `Durable speaker sender ${suffix}`,
+      )
+      .run();
+    const productionEnv = {
+      ...testEnv,
+      APP_ENV: "production",
+      DEMO_MODE: "false",
+      BETTER_AUTH_URL: "https://programcue.test",
+      BETTER_AUTH_SECRET: "a".repeat(32),
+      EMAIL_PROVIDER: "resend",
+      RESEND_API_KEY: "test-provider-key",
+      OPERATIONS_QUEUE: {
+        send: async (message: unknown) => queued.push(message),
+      },
+    } as unknown as CloudflareEnvironment;
+    const input = {
+      idempotencyKey: `durable-invitation:${suffix}`,
+      name: "Durable Invitee",
+      email,
+    };
+    const service = new SpeakerService(productionEnv);
+
+    const created = await service.createManualSpeaker(admin, input);
+    expect(created.delivery).toBe("queued");
+    expect(queued).toHaveLength(1);
+    await expect(service.createManualSpeaker(admin, input)).resolves.toEqual(
+      created,
+    );
+    expect(queued).toHaveLength(1);
+    await testEnv.DB.prepare(
+      `UPDATE memberships SET accepted_at = unixepoch()
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(created.membershipId, admin.eventId)
+      .run();
+    await expect(service.createManualSpeaker(admin, input)).resolves.toEqual({
+      ...created,
+      accepted: true,
+      delivery: "not_required",
+    });
+    expect(queued).toHaveLength(1);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT operation.status, operation.dispatched_at IS NOT NULL AS dispatched,
+                communication.status AS communicationStatus,
+                delivery.status AS deliveryStatus
+           FROM operation_jobs operation
+           JOIN communications communication
+             ON communication.operation_id = operation.id
+           JOIN communication_deliveries delivery
+             ON delivery.communication_id = communication.id
+          WHERE operation.event_id = ?
+            AND json_extract(communication.audience_json, '$.email') = ?`,
+      )
+        .bind(admin.eventId, email)
+        .first(),
+    ).resolves.toEqual({
+      status: "queued",
+      dispatched: 1,
+      communicationStatus: "queued",
+      deliveryStatus: "queued",
+    });
+  });
+
+  it("records a successful dispatch after a fast Queue consumer advances the job", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const suffix = crypto.randomUUID();
+    const email = `fast-consumer-${suffix}@example.com`;
+    await testEnv.DB.prepare(
+      `INSERT INTO sender_profiles (
+         id, event_id, name, from_name, from_email, reply_to_email,
+         provider, status, created_at, updated_at
+       ) VALUES (?, ?, ?, 'Program Cue', 'speakers@example.com',
+                 'speakers@example.com', 'resend', 'verified',
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(
+        `fast-consumer-sender-${suffix}`,
+        admin.eventId,
+        `Fast consumer sender ${suffix}`,
+      )
+      .run();
+    const productionEnv = {
+      ...testEnv,
+      APP_ENV: "production",
+      DEMO_MODE: "false",
+      BETTER_AUTH_URL: "https://programcue.test",
+      BETTER_AUTH_SECRET: "a".repeat(32),
+      EMAIL_PROVIDER: "resend",
+      RESEND_API_KEY: "test-provider-key",
+      OPERATIONS_QUEUE: {
+        send: async (message: unknown) => {
+          const operationId = (message as { operationId: string }).operationId;
+          await testEnv.DB.prepare(
+            `UPDATE operation_jobs SET status = 'running'
+              WHERE id = ? AND event_id = ? AND status = 'queued'`,
+          )
+            .bind(operationId, admin.eventId)
+            .run();
+        },
+      },
+    } as unknown as CloudflareEnvironment;
+
+    const created = await new SpeakerService(productionEnv).createManualSpeaker(
+      admin,
+      {
+        idempotencyKey: `fast-consumer:${suffix}`,
+        name: "Fast Queue Consumer",
+        email,
+      },
+    );
+
+    expect(created.delivery).toBe("queued");
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT operation.status,
+                operation.dispatched_at IS NOT NULL AS dispatched
+           FROM operation_jobs operation
+           JOIN communications communication
+             ON communication.operation_id = operation.id
+            AND communication.event_id = operation.event_id
+          WHERE operation.event_id = ?
+            AND json_extract(communication.audience_json, '$.email') = ?`,
+      )
+        .bind(admin.eventId, email)
+        .first(),
+    ).resolves.toEqual({ status: "running", dispatched: 1 });
+  });
+
+  it("fails before saving an invitation when durable delivery is unavailable", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const email = `missing-queue-${crypto.randomUUID()}@example.com`;
+    const productionWithoutQueue = {
+      ...testEnv,
+      APP_ENV: "production",
+      DEMO_MODE: "false",
+      OPERATIONS_QUEUE: undefined,
+    } as unknown as CloudflareEnvironment;
+
+    await expect(
+      new SpeakerService(productionWithoutQueue).createManualSpeaker(admin, {
+        idempotencyKey: `missing-queue:${crypto.randomUUID()}`,
+        name: "Missing Queue",
+        email,
+      }),
+    ).rejects.toThrow(/OPERATIONS_QUEUE.*no speaker invitation was saved/i);
+    await expect(
+      testEnv.DB.prepare("SELECT id FROM people WHERE email = ?")
+        .bind(email)
+        .first(),
+    ).resolves.toBeNull();
+  });
+
   it("reactivates the existing event membership when an administrator re-adds a revoked speaker", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
@@ -79,11 +251,15 @@ describe("speaker profile service", () => {
         idempotencyKey: `reactivate:${suffix}`,
         name: "Revoked Speaker",
         email,
-        biography: "",
-        organisationName: "",
-        jobTitle: "",
       }),
-    ).resolves.toEqual({ personId });
+    ).resolves.toMatchObject({
+      personId,
+      membershipId,
+      email,
+      accepted: false,
+      delivery: "demo_not_sent",
+      invitationExpiresAt: expect.any(Number),
+    });
 
     await expect(
       testEnv.DB.prepare(
@@ -96,10 +272,99 @@ describe("speaker profile service", () => {
         .first(),
     ).resolves.toEqual({
       id: membershipId,
-      acceptedAt: expect.any(Number),
+      acceptedAt: null,
       revokedAt: null,
-      invitationExpiresAt: null,
+      invitationExpiresAt: expect.any(Number),
     });
+  });
+
+  it("keeps an identity from another organisation pending until that person accepts", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const suffix = crypto.randomUUID();
+    const otherOrganisationId = `other-org-${suffix}`;
+    const personId = `other-person-${suffix}`;
+    const email = `other-person-${suffix}@example.com`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO organisations (id, name, slug)
+         VALUES (?, 'Other organisation', ?)`,
+      ).bind(otherOrganisationId, otherOrganisationId),
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, biography, profile_status
+         ) VALUES (?, ?, 'Person-owned name', 1, 'Person-owned biography', 'published')`,
+      ).bind(personId, email),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, invited_at,
+           accepted_at, created_at
+         ) VALUES (?, ?, NULL, ?, 'owner', unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(`other-membership-${suffix}`, otherOrganisationId, personId),
+    ]);
+
+    const result = await new SpeakerService(testEnv).createManualSpeaker(
+      admin,
+      {
+        idempotencyKey: `cross-org:${suffix}`,
+        name: "Administrator supplied name",
+        email,
+      },
+    );
+    expect(result).toMatchObject({ personId, accepted: false });
+    await expect(
+      new SpeakerService(testEnv).getAdminSpeakerDetail(admin, personId),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      new SpeakerService(testEnv).getPortal({
+        ...speaker,
+        personId,
+        email,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT display_name AS name, biography
+           FROM people WHERE id = ?`,
+      )
+        .bind(personId)
+        .first(),
+    ).resolves.toEqual({
+      name: "Person-owned name",
+      biography: "Person-owned biography",
+    });
+  });
+
+  it("fails closed when a pending speaker invitation has no expiry", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const suffix = crypto.randomUUID();
+    const created = await new SpeakerService(testEnv).createManualSpeaker(
+      admin,
+      {
+        idempotencyKey: `missing-expiry:${suffix}`,
+        name: "Missing Expiry",
+        email: `missing-expiry-${suffix}@example.com`,
+      },
+    );
+    await testEnv.DB.prepare(
+      "UPDATE memberships SET invitation_expires_at = NULL WHERE id = ?",
+    )
+      .bind(created.membershipId)
+      .run();
+
+    await expect(
+      new SpeakerService(testEnv).listAdminSpeakerPage(
+        admin,
+        { personId: "", query: "", profileStatus: "", readiness: "" },
+        1,
+      ),
+    ).rejects.toThrow(/missing its required expiry/i);
+    await testEnv.DB.prepare(
+      "UPDATE memberships SET invitation_expires_at = unixepoch() + 604800 WHERE id = ?",
+    )
+      .bind(created.membershipId)
+      .run();
   });
 
   it("loads only the authenticated speaker workspace and protects revision updates", async () => {
@@ -129,7 +394,7 @@ describe("speaker profile service", () => {
     const auditCountBeforeStale = await testEnv.DB.prepare(
       `SELECT COUNT(*) AS count
          FROM audit_events
-        WHERE event_id = ? AND entity_id = ? AND action = 'speaker.profile.updated'`,
+        WHERE event_id = ? AND entity_id = ? AND action = 'participant.profile.updated'`,
     )
       .bind(speaker.eventId, speaker.personId)
       .first<{ count: number }>();
@@ -150,11 +415,12 @@ describe("speaker profile service", () => {
     const auditCountAfterStale = await testEnv.DB.prepare(
       `SELECT COUNT(*) AS count
          FROM audit_events
-        WHERE event_id = ? AND entity_id = ? AND action = 'speaker.profile.updated'`,
+        WHERE event_id = ? AND entity_id = ? AND action = 'participant.profile.updated'`,
     )
       .bind(speaker.eventId, speaker.personId)
       .first<{ count: number }>();
     expect(auditCountAfterStale?.count).toBe(auditCountBeforeStale?.count);
+    expect(auditCountAfterStale?.count).toBe(1);
   });
 
   it("updates a profile through an accepted submitter membership", async () => {

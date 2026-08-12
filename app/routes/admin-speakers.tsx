@@ -13,6 +13,7 @@ import { ZodError } from "zod";
 import type { Route } from "./+types/admin-speakers";
 import { PersonDuplicateWarning } from "~/components/person-duplicate-warning";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EventDateTime } from "~/components/ui/event-date-time";
 import { PersonDuplicateService } from "~/modules/people/person-duplicate-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
@@ -20,6 +21,7 @@ import {
   SpeakerService,
   type AdminSpeakerFilters,
 } from "~/modules/speakers/speaker-service.server";
+import { SpeakerInvitationDeliveryError } from "~/modules/speakers/speaker-invitation.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
@@ -104,9 +106,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     idempotencyKey: form.get("idempotencyKey"),
     name: form.get("name"),
     email: form.get("email"),
-    biography: form.get("biography"),
-    organisationName: form.get("organisationName"),
-    jobTitle: form.get("jobTitle"),
   };
   try {
     const duplicateCheck = await new PersonDuplicateService(
@@ -129,10 +128,19 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 409 },
       );
     }
-    await new SpeakerService(env).createManualSpeaker(viewer, input);
+    const result = await new SpeakerService(env).createManualSpeaker(
+      viewer,
+      input,
+    );
     return data<ActionResult>({
       ok: true,
-      message: "The speaker identity is now available in this event.",
+      message: result.accepted
+        ? "This speaker already has accepted access to the event."
+        : result.delivery === "demo_not_sent"
+          ? "The pending speaker invitation was saved. Demonstration mode does not send its sign-in email."
+          : result.createdIdentity
+            ? "The pending speaker invitation and its durable email operation were saved. The participant can complete their profile after accepting."
+            : "The pending speaker invitation and its durable email operation were saved. The existing participant-owned profile was left unchanged.",
     });
   } catch (error) {
     if (error instanceof ZodError) {
@@ -148,6 +156,12 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data<ActionResult>(
         { ok: false, message: error.message },
         { status: error.status },
+      );
+    }
+    if (error instanceof SpeakerInvitationDeliveryError) {
+      return data<ActionResult>(
+        { ok: false, message: error.message },
+        { status: 207 },
       );
     }
     if (error instanceof Response) throw error;
@@ -166,7 +180,20 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
     target?.focus({ preventScroll: true });
     target?.scrollIntoView({ block: "center" });
   }, [loaderData.focusedPersonId]);
-  const { speakers, summary, filters, page, hasNext } = loaderData;
+  const {
+    speakers,
+    summary,
+    filters,
+    page,
+    hasNext,
+    pendingInvitations,
+    eventTimezone,
+  } = loaderData;
+  const activePendingInvitationCount = pendingInvitations.filter(
+    (invitation) => !invitation.expired,
+  ).length;
+  const expiredInvitationCount =
+    pendingInvitations.length - activePendingInvitationCount;
   const queryParams = (targetPage: number) =>
     new URLSearchParams({
       query: filters.query,
@@ -235,9 +262,9 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
       ) : null}
       <details className="card pad mb">
         <summary>
-          <strong>Add a speaker manually</strong>{" "}
+          <strong>Invite a speaker</strong>{" "}
           <span className="subtle">
-            verify likely identities before creating or linking access
+            access stays pending until the person explicitly accepts
           </span>
         </summary>
         <Form method="post" className="stack mt">
@@ -248,10 +275,20 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
             value={loaderData.manualSpeakerIdempotencyKey}
           />
           <div className="form-row">
-            <label className="label">
-              Name
-              <input className="field" name="name" required maxLength={120} />
-            </label>
+            <div className="label">
+              <label htmlFor="manual-speaker-name">Name</label>
+              <input
+                aria-describedby="manual-speaker-name-help"
+                className="field"
+                id="manual-speaker-name"
+                name="name"
+                required
+                maxLength={120}
+              />
+              <small className="subtle" id="manual-speaker-name-help">
+                Existing participant-owned profiles are never overwritten.
+              </small>
+            </div>
             <label className="label">
               Email
               <input
@@ -263,24 +300,6 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
               />
             </label>
           </div>
-          <div className="form-row">
-            <label className="label">
-              Job title (optional)
-              <input className="field" name="jobTitle" maxLength={160} />
-            </label>
-            <label className="label">
-              Organisation (optional)
-              <input
-                className="field"
-                name="organisationName"
-                maxLength={160}
-              />
-            </label>
-          </div>
-          <label className="label">
-            Biography (optional)
-            <textarea className="textarea" name="biography" maxLength={5_000} />
-          </label>
           {actionData?.duplicateCheck ? (
             <PersonDuplicateWarning
               id="manual-speaker-duplicate"
@@ -294,11 +313,56 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
             disabled={navigation.state !== "idle"}
           >
             {navigation.formData?.get("_intent") === "create_manual_speaker"
-              ? "Adding…"
-              : "Add speaker"}
+              ? "Inviting…"
+              : "Send invitation"}
           </button>
         </Form>
       </details>
+      {pendingInvitations.length ? (
+        <section
+          className="card pad mb"
+          aria-labelledby="pending-speakers-title"
+        >
+          <div className="card-title">
+            <div>
+              <h2 id="pending-speakers-title">
+                Speaker invitations awaiting acceptance
+              </h2>
+              <p className="subtle">
+                Access remains unavailable until each person signs in and
+                explicitly accepts an unexpired event invitation.
+              </p>
+            </div>
+            <span className="pill">
+              {activePendingInvitationCount} pending
+              {expiredInvitationCount
+                ? ` · ${expiredInvitationCount} expired`
+                : ""}
+            </span>
+          </div>
+          <div className="stack">
+            {pendingInvitations.map((invitation) => (
+              <div className="list-row" key={invitation.id}>
+                <div>
+                  <strong>{invitation.email}</strong>
+                  <small className="subtle">
+                    {invitation.expired ? "Expired " : "Expires "}
+                    <EventDateTime
+                      epochSeconds={invitation.expiresAt}
+                      timeZone={eventTimezone}
+                    />
+                  </small>
+                </div>
+                <span
+                  className={`status ${invitation.expired ? "danger" : "warning"}`}
+                >
+                  {invitation.expired ? "Expired" : "Pending acceptance"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <section className="card pad mb">
         <form method="get" className="form-row" role="search">
           <label className="label">

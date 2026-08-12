@@ -10,7 +10,6 @@ import {
   SpeakerService,
 } from "~/modules/speakers/speaker-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
-import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
 export const meta = () => [{ title: "Participant Profile · Program Cue" }];
 
@@ -33,12 +32,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       jobTitle: form.get("jobTitle"),
       publish: form.get("publish") ? "true" : "false",
     });
-    const realtimeFailure = await recordRouteChange(env, viewer, {
-      entityType: "person",
-      entityId: viewer.personId,
-      changeType: "updated",
-    });
-    const warning = [result.webhookWarning, realtimeFailure?.message]
+    const warning = [result.webhookWarning, result.realtimeWarning]
       .filter(Boolean)
       .join(" ");
     if (warning) {
@@ -75,8 +69,11 @@ export default function SpeakerProfile(_props: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <span className="pc-page-eyebrow">Public identity</span>
-          <h1>Speaker profile</h1>
-          <p>Review the identity and biography used across the programme.</p>
+          <h1>Profile</h1>
+          <p>
+            Manage the identity and biography used for your applications and
+            published sessions.
+          </p>
         </div>
       </div>
       <SpeakerActionNotice notice={actionData} />

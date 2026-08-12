@@ -1,4 +1,12 @@
 import { materializePublishedResourceAcknowledgementsForSession } from "~/modules/resources/resource-service.server";
+import {
+  dispatchSpeakerInvitationsForCommand,
+  existingPersonOrganisationRelationshipSql,
+  organisationRelationshipBindings,
+  prepareSpeakerInvitations,
+  unacceptedEventParticipantEmails,
+  unavailableDirectSessionSpeakerEmails,
+} from "~/modules/speakers/speaker-invitation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { hashApplicantToken } from "./applicant-session.server";
@@ -110,7 +118,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         "A completed submission administration idempotency record is missing its entity ID.",
       );
     }
-    return row.entityId;
+    return { entityId: row.entityId, recordId: row.id };
   }
 
   protected async prepareAdminMutation(
@@ -202,7 +210,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
           "A completed submission administration idempotency record is missing its entity ID.",
         );
       }
-      return row.entityId;
+      return { entityId: row.entityId, recordId: row.id };
     }
     if (row.id !== command.recordId) {
       throw new SubmissionStateError(
@@ -225,8 +233,86 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
   }
 
   async createDirectSession(viewer: Viewer, rawInput: unknown) {
-    const result = await this.executeDirectSession(viewer, rawInput);
-    return result.sessionId;
+    return this.executeDirectSession(viewer, rawInput);
+  }
+
+  private async resumeDirectSessionSideEffects(
+    actor: SubmissionAdminActor,
+    sessionId: string,
+    commandId: string,
+    replayed: boolean,
+  ) {
+    const committed = await this.env.DB.prepare(
+      `SELECT session.track_id AS trackId, audit.id AS auditEventId
+         FROM sessions session
+         JOIN events event
+           ON event.id = session.event_id AND event.organisation_id = ?
+         JOIN audit_events audit
+           ON audit.organisation_id = event.organisation_id
+          AND audit.event_id = session.event_id
+          AND audit.action = 'session.direct.created'
+          AND audit.entity_type = 'session' AND audit.entity_id = session.id
+          AND audit.correlation_id = ?
+        WHERE session.id = ? AND session.event_id = ?
+        LIMIT 1`,
+    )
+      .bind(actor.organisationId, commandId, sessionId, actor.eventId)
+      .first<{ trackId: string; auditEventId: string }>();
+    if (!committed) {
+      throw new Error(
+        "The committed direct session is missing its audited side-effect boundary.",
+      );
+    }
+    const webhookDeliveries = await new WebhookService(
+      this.env,
+    ).resumePreparedEventForAudit(
+      {
+        organisationId: actor.organisationId,
+        eventId: actor.eventId,
+        personId: isSubmissionApiActor(actor) ? null : actor.personId,
+        actorId: isSubmissionApiActor(actor) ? actor.actorId : undefined,
+      },
+      {
+        eventType: "session.created",
+        entityType: "session",
+        entityId: sessionId,
+        idempotencyKey: `session.created:${sessionId}`,
+        correlationId: commandId,
+        data: {
+          source: isSubmissionApiActor(actor)
+            ? "api_direct_entry"
+            : "administrator_direct_entry",
+          trackId: committed.trackId,
+        },
+      },
+      committed.auditEventId,
+    );
+    const invitationOutcomes = await dispatchSpeakerInvitationsForCommand({
+      env: this.env,
+      organisationId: actor.organisationId,
+      eventId: actor.eventId,
+      commandId,
+    });
+    const invitationNeedsAttention = invitationOutcomes.some((outcome) =>
+      ["queue_failed", "failed", "cancelled"].includes(outcome.status),
+    );
+    const webhookNeedsAttention = webhookDeliveries.some((delivery) =>
+      ["queue_failed", "partially_failed", "failed", "cancelled"].includes(
+        delivery.status,
+      ),
+    );
+    return {
+      sessionId,
+      replayed,
+      invitationDeliveries: invitationOutcomes.map((outcome) => outcome.status),
+      invitationWarning: invitationNeedsAttention
+        ? "The session was created, but one or more durable speaker invitation operations need attention before publication."
+        : null,
+      webhookDeliveries,
+      webhookWarning: webhookNeedsAttention
+        ? "The session was created, but one or more outbound webhook deliveries require retry."
+        : null,
+    };
   }
 
   createDirectSessionForApi(actor: SubmissionApiActor, rawInput: unknown) {
@@ -258,7 +344,12 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       inputWithoutDuration,
     );
     if (prepared.replay) {
-      return { sessionId: prepared.replay, replayed: true };
+      return this.resumeDirectSessionSideEffects(
+        actor,
+        prepared.replay.entityId,
+        prepared.replay.recordId,
+        true,
+      );
     }
     const formatSnapshot =
       await this.getConfiguredSessionFormatSnapshotD1(actor);
@@ -285,6 +376,16 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       durationMinutes:
         parsed.durationMinutes ?? configuredFormat.defaultDurationMinutes,
     };
+    const unavailableEmails = await unavailableDirectSessionSpeakerEmails({
+      env: this.env,
+      organisationId: actor.organisationId,
+      emails: input.speakers.map((speaker) => speaker.email),
+    });
+    if (unavailableEmails.length) {
+      throw new SubmissionStateError(
+        `Invite ${unavailableEmails.join(", ")} to the event and wait for acceptance before attaching that existing identity to a direct session.`,
+      );
+    }
     const command = prepared.command!;
     const sessionId = crypto.randomUUID();
     const slug = `${slugify(input.title)}-${sessionId.slice(0, 6)}`;
@@ -312,6 +413,18 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       },
       auditEventId,
     );
+    const invitationPlans = await prepareSpeakerInvitations({
+      env: this.env,
+      actor: {
+        organisationId: actor.organisationId,
+        eventId: actor.eventId,
+        personId: isSubmissionApiActor(actor) ? null : actor.personId,
+        actorId: isSubmissionApiActor(actor) ? actor.actorId : undefined,
+      },
+      commandId: command.recordId,
+      source: "direct_session",
+      emails: input.speakers.map((speaker) => speaker.email),
+    });
     const statements: D1PreparedStatement[] = [
       ...this.adminMutationClaimStatements(command),
     ];
@@ -331,6 +444,13 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
             AND EXISTS (
               SELECT 1 FROM tracks
                WHERE id = ? AND event_id = ?
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM json_each(?) requested_speaker
+              JOIN people person
+                ON lower(person.email) =
+                   lower(json_extract(requested_speaker.value, '$.email'))
+             WHERE NOT ${existingPersonOrganisationRelationshipSql}
             )
             AND EXISTS (
               SELECT 1 FROM idempotency_records command
@@ -353,6 +473,8 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         formatSnapshot.serialized,
         track.id,
         actor.eventId,
+        JSON.stringify(input.speakers),
+        ...organisationRelationshipBindings(actor.organisationId),
         command.recordId,
         command.organisationId,
         command.eventId,
@@ -361,6 +483,9 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         command.idempotencyKey,
         command.requestHash,
       ),
+    );
+    const proposedPersonIds = new Map(
+      input.speakers.map((speaker) => [speaker.email, crypto.randomUUID()]),
     );
     for (const speaker of input.speakers) {
       statements.push(
@@ -376,7 +501,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
           ON CONFLICT(email) DO NOTHING
         `,
         ).bind(
-          crypto.randomUUID(),
+          proposedPersonIds.get(speaker.email),
           speaker.email,
           speaker.name,
           speaker.biography || null,
@@ -391,20 +516,21 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
           `
           INSERT INTO session_speakers (
             session_id, event_id, person_id, position, role_label
-          ) SELECT ?, ?, id, ?, ? FROM people
-             WHERE email = ? COLLATE NOCASE
-               AND EXISTS (
-                 SELECT 1 FROM sessions WHERE id = ? AND event_id = ?
-               )
+          )
+          SELECT session.id, session.event_id, person.id, ?, ?
+            FROM sessions session
+            JOIN people person ON person.email = ? COLLATE NOCASE
+           WHERE session.id = ? AND session.event_id = ?
+             AND (person.id = ? OR ${existingPersonOrganisationRelationshipSql})
         `,
         ).bind(
-          sessionId,
-          actor.eventId,
           position,
           position === 0 ? "Primary speaker" : "Co-speaker",
           speaker.email,
           sessionId,
           actor.eventId,
+          proposedPersonIds.get(speaker.email),
+          ...organisationRelationshipBindings(actor.organisationId),
         ),
       );
     });
@@ -416,8 +542,8 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
              invited_at, invitation_expires_at, accepted_at, revoked_at,
              last_operation_id, created_at
            )
-           SELECT ?, ?, ?, person.id, 'speaker', unixepoch(), NULL,
-                  unixepoch(), NULL, ?, unixepoch()
+           SELECT ?, ?, ?, person.id, 'speaker', unixepoch(),
+                  unixepoch() + 604800, NULL, NULL, ?, unixepoch()
              FROM people person
              JOIN session_speakers relationship
                ON relationship.person_id = person.id
@@ -425,12 +551,23 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
               AND relationship.session_id = ?
             WHERE person.email = ? COLLATE NOCASE
            ON CONFLICT(event_id, person_id, role) WHERE event_id IS NOT NULL
-           DO UPDATE SET invited_at = unixepoch(), invitation_expires_at = NULL,
-                         accepted_at = unixepoch(), revoked_at = NULL,
+           DO UPDATE SET
+                         invited_at = CASE
+                           WHEN memberships.accepted_at IS NOT NULL
+                            AND memberships.revoked_at IS NULL
+                           THEN memberships.invited_at ELSE unixepoch() END,
+                         invitation_expires_at = CASE
+                           WHEN memberships.accepted_at IS NOT NULL
+                            AND memberships.revoked_at IS NULL
+                           THEN memberships.invitation_expires_at
+                           ELSE unixepoch() + 604800 END,
+                         accepted_at = CASE
+                           WHEN memberships.accepted_at IS NOT NULL
+                            AND memberships.revoked_at IS NULL
+                           THEN memberships.accepted_at ELSE NULL END,
+                         revoked_at = NULL,
                          last_operation_id = excluded.last_operation_id
-            WHERE memberships.organisation_id = excluded.organisation_id
-              AND (memberships.revoked_at IS NOT NULL
-                   OR memberships.accepted_at IS NULL)`,
+            WHERE memberships.organisation_id = excluded.organisation_id`,
         ).bind(
           crypto.randomUUID(),
           actor.organisationId,
@@ -452,8 +589,8 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         `
         INSERT INTO audit_events (
           id, organisation_id, event_id, actor_person_id, actor_id, action,
-          entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, ?, 'session.direct.created', 'session', ?, ?, unixepoch()
+          entity_type, entity_id, correlation_id, metadata_json, created_at
+        ) SELECT ?, ?, ?, ?, ?, 'session.direct.created', 'session', ?, ?, ?, unixepoch()
             WHERE EXISTS (
               SELECT 1 FROM sessions WHERE id = ? AND event_id = ?
             )
@@ -465,6 +602,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         isSubmissionApiActor(actor) ? null : actor.personId,
         isSubmissionApiActor(actor) ? actor.actorId : null,
         sessionId,
+        command.recordId,
         JSON.stringify({
           title: input.title,
           trackId: track.id,
@@ -499,17 +637,31 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         actor.eventId,
       ),
     );
-    statements.push(...preparedWebhook.statements);
+    statements.push(
+      ...preparedWebhook.statements,
+      ...invitationPlans.flatMap((plan) => plan.statements),
+    );
     const results = await this.env.DB.batch(statements);
     if ((results[sessionInsertIndex]?.meta.changes ?? 0) !== 1) {
       const replay = await this.resolveAdminMutationRace(command);
-      if (replay) return { sessionId: replay, replayed: true };
+      if (replay) {
+        return this.resumeDirectSessionSideEffects(
+          actor,
+          replay.entityId,
+          replay.recordId,
+          true,
+        );
+      }
       throw new SubmissionStateError(
         "The event changed before the direct session was created. Refresh and try again.",
       );
     }
-    await webhookService.dispatchPreparedEvent(preparedWebhook);
-    return { sessionId, replayed: false };
+    return this.resumeDirectSessionSideEffects(
+      actor,
+      sessionId,
+      command.recordId,
+      false,
+    );
   }
 
   async createManualApplication(viewer: Viewer, rawInput: unknown) {
@@ -530,7 +682,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       idempotencyKey,
       input,
     );
-    if (prepared.replay) return prepared.replay;
+    if (prepared.replay) return prepared.replay.entityId;
     const command = prepared.command!;
     const event = await this.env.DB.prepare(
       `SELECT id FROM events WHERE id = ? AND organisation_id = ?`,
@@ -538,6 +690,19 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ id: string }>();
     if (!event) throw new Response("Event not found", { status: 404 });
+    const unacceptedParticipants = await unacceptedEventParticipantEmails({
+      env: this.env,
+      eventId: viewer.eventId,
+      emails: [
+        input.submitterEmail,
+        ...input.speakers.map((speaker) => speaker.email),
+      ],
+    });
+    if (unacceptedParticipants.length) {
+      throw new SubmissionStateError(
+        `Invite these participants and wait for acceptance before entering an application for them: ${unacceptedParticipants.join(", ")}.`,
+      );
+    }
     const uniqueTrackIds = [...new Set(input.trackIds)];
     const tracksResult = await this.env.DB.prepare(
       `SELECT track.id, track.name
@@ -700,6 +865,20 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
                       AND team.event_id = ? AND team.status = 'active'
                  )
               )
+              AND NOT EXISTS (
+                SELECT 1 FROM json_each(?) requested_participant
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM people person
+                   JOIN memberships membership
+                     ON membership.person_id = person.id
+                    AND membership.event_id = ?
+                    AND membership.role IN ('speaker', 'submitter')
+                    AND membership.accepted_at IS NOT NULL
+                    AND membership.revoked_at IS NULL
+                    WHERE lower(person.email) =
+                          lower(CAST(requested_participant.value AS TEXT))
+                 )
+              )
               AND EXISTS (
                 SELECT 1 FROM idempotency_records command
                  WHERE command.id = ? AND command.organisation_id = ?
@@ -724,6 +903,11 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         JSON.stringify(uniqueTrackIds),
         viewer.eventId,
         JSON.stringify(uniqueTeamIds),
+        viewer.eventId,
+        JSON.stringify([
+          input.submitterEmail,
+          ...input.speakers.map((speaker) => speaker.email),
+        ]),
         viewer.eventId,
         command.recordId,
         command.organisationId,
@@ -780,66 +964,38 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         ),
       );
     });
-    statements.push(
-      this.env.DB.prepare(
-        `INSERT INTO people (
-           id, email, display_name, email_verified, profile_status, created_at, updated_at
-         ) SELECT ?, ?, ?, 0, 'draft', unixepoch(), unixepoch()
-            WHERE EXISTS (
-              SELECT 1 FROM submissions
-               WHERE id = ? AND event_id = ? AND last_operation_id = ?
-            )
-         ON CONFLICT(email) DO NOTHING`,
-      ).bind(
-        crypto.randomUUID(),
-        input.submitterEmail,
-        input.submitterName,
-        submissionId,
-        viewer.eventId,
-        operationId,
-      ),
-    );
-    for (const speaker of input.speakers) {
-      statements.push(
-        this.env.DB.prepare(
-          `INSERT INTO people (
-             id, email, display_name, email_verified, biography, profile_status,
-             created_at, updated_at
-           ) SELECT ?, ?, ?, 0, ?, 'draft', unixepoch(), unixepoch()
-              WHERE EXISTS (
-                SELECT 1 FROM submissions
-                 WHERE id = ? AND event_id = ? AND last_operation_id = ?
-              )
-           ON CONFLICT(email) DO NOTHING`,
-        ).bind(
-          crypto.randomUUID(),
-          speaker.email,
-          speaker.name,
-          speaker.biography || null,
-          submissionId,
-          viewer.eventId,
-          operationId,
-        ),
-      );
-    }
     const submitterLinkedIndex = statements.length;
     statements.push(
       this.env.DB.prepare(
         `UPDATE submissions
             SET submitter_person_id = (
               SELECT person.id FROM people person
+              JOIN memberships membership
+                ON membership.person_id = person.id
+               AND membership.event_id = ?
+               AND membership.role IN ('speaker', 'submitter')
+               AND membership.accepted_at IS NOT NULL
+               AND membership.revoked_at IS NULL
                WHERE person.email = ? COLLATE NOCASE
             ), updated_at = unixepoch()
           WHERE id = ? AND event_id = ? AND last_operation_id = ?
             AND EXISTS (
               SELECT 1 FROM people person
+              JOIN memberships membership
+                ON membership.person_id = person.id
+               AND membership.event_id = ?
+               AND membership.role IN ('speaker', 'submitter')
+               AND membership.accepted_at IS NOT NULL
+               AND membership.revoked_at IS NULL
                WHERE person.email = ? COLLATE NOCASE
             )`,
       ).bind(
+        viewer.eventId,
         input.submitterEmail,
         submissionId,
         viewer.eventId,
         operationId,
+        viewer.eventId,
         input.submitterEmail,
       ),
     );
@@ -851,6 +1007,12 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
              position, invitation_status, is_primary, claimed_at, created_at, updated_at
            ) SELECT ?, ?, ?, person.id, ?, ?, ?, 'claimed', ?, unixepoch(), unixepoch(), unixepoch()
                FROM people person
+               JOIN memberships membership
+                 ON membership.person_id = person.id
+                AND membership.event_id = ?
+                AND membership.role IN ('speaker', 'submitter')
+                AND membership.accepted_at IS NOT NULL
+                AND membership.revoked_at IS NULL
               WHERE person.email = ? COLLATE NOCASE
                 AND EXISTS (
                   SELECT 1 FROM submissions
@@ -864,6 +1026,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
           speaker.name,
           position,
           position === 0 ? 1 : 0,
+          viewer.eventId,
           speaker.email,
           submissionId,
           viewer.eventId,
@@ -933,9 +1096,9 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       (results[submitterLinkedIndex]?.meta.changes ?? 0) !== 1
     ) {
       const replay = await this.resolveAdminMutationRace(command);
-      if (replay) return replay;
+      if (replay) return replay.entityId;
       throw new SubmissionStateError(
-        "The event tracks, review teams, or session formats changed before the manual application was created. Refresh and try again.",
+        "The event tracks, review teams, session formats, or participant acceptances changed before the manual application was created. Refresh and try again.",
       );
     }
     await Promise.all(

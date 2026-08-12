@@ -910,8 +910,8 @@ describe("speaker resource service", () => {
     const firstDraft = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
     expect(firstDraft.publicationImpact).toMatchObject({
-      eligibleSpeakerCount: 2,
-      tasksCreatedOrReset: 2,
+      eligibleSpeakerCount: 3,
+      tasksCreatedOrReset: 3,
       tasksWaived: 0,
     });
     await service.publish(admin, pageId, firstDraft.revision);
@@ -963,7 +963,7 @@ describe("speaker resource service", () => {
     expect(customImpact.publicationImpact).toEqual({
       eligibleSpeakerCount: 1,
       tasksCreatedOrReset: 1,
-      tasksWaived: 1,
+      tasksWaived: 2,
       blockingDependentTasks: 0,
       templateDependenciesRemoved: 0,
     });

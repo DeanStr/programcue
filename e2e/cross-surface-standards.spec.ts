@@ -135,9 +135,9 @@ test.describe.serial("cross-surface interaction standards", () => {
       })
       .click();
     await expect(
-      page.getByText("Direct session created in the unscheduled programme.", {
-        exact: true,
-      }),
+      page.getByText(
+        /Direct session created in the unscheduled programme\. Any newly invited speakers must accept before publication\./,
+      ),
     ).toBeVisible();
   });
 
@@ -145,12 +145,21 @@ test.describe.serial("cross-surface interaction standards", () => {
     page,
   }) => {
     await page.goto("/admin/speakers");
-    await page.getByText("Add a speaker manually").click();
-    await page.getByLabel("Name", { exact: true }).fill("Priya Shah");
-    await page
+    await page.locator("body[data-hydrated='true']").waitFor();
+    const invitationDisclosure = page.locator("details").filter({
+      has: page.getByText("Invite a speaker", { exact: true }),
+    });
+    await invitationDisclosure.locator("summary").click();
+    await expect(invitationDisclosure).toHaveAttribute("open", "");
+    await invitationDisclosure
+      .getByLabel("Name", { exact: true })
+      .fill("Priya Shah");
+    await invitationDisclosure
       .getByLabel("Email", { exact: true })
       .fill("priya.speaker@example.com");
-    await page.getByRole("button", { name: "Add speaker" }).click();
+    await invitationDisclosure
+      .getByRole("button", { name: "Send invitation" })
+      .click();
 
     await expect(
       page.getByRole("heading", { name: "Likely existing person" }),
