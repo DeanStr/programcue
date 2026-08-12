@@ -11,6 +11,7 @@ import {
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 
 import type { Route } from "./+types/demo-guide";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { PageHeader } from "~/components/ui/page-header";
 import { StatusBadge } from "~/components/ui/status-badge";
 import { AiProviderSettingsService } from "~/modules/ai/ai-provider.server";
@@ -379,6 +380,7 @@ function providerState(configured: boolean, configuredCopy: string) {
 export default function DemoGuide({ loaderData }: Route.ComponentProps) {
   const result = useActionData<typeof action>();
   const navigation = useNavigation();
+  const { confirm, dialog } = useConfirm();
   const busy = navigation.state !== "idle";
   const activeTotal = Object.values(loaderData.activeWork).reduce(
     (sum, count) => sum + count,
@@ -425,6 +427,7 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
 
   return (
     <main id="main" className="design-board pc-design-board">
+      {dialog}
       <PageHeader
         eyebrow="Environment-gated evaluator mode"
         title="Try the complete conference workflow"
@@ -490,10 +493,10 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
           <table className="data-table pc-responsive-table">
             <thead>
               <tr>
-                <th>Purpose</th>
-                <th>Identity</th>
-                <th>Email</th>
-                <th>Entry point</th>
+                <th scope="col">Purpose</th>
+                <th scope="col">Identity</th>
+                <th scope="col">Email</th>
+                <th scope="col">Entry point</th>
               </tr>
             </thead>
             <tbody>
@@ -678,16 +681,7 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
             ) : null}
             {selectedIdentity?.role === "owner" ||
             selectedIdentity?.role === "administrator" ? (
-              <Form
-                method="post"
-                className="stack"
-                onSubmit={(event) => {
-                  if (
-                    !window.confirm("Reset the complete evaluator event now?")
-                  )
-                    event.preventDefault();
-                }}
-              >
+              <Form method="post" className="stack">
                 <input type="hidden" name="intent" value="reset" />
                 <label className="label">
                   Type <strong>{DEMO_RESET_CONFIRMATION}</strong> to confirm
@@ -700,8 +694,20 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
                 </label>
                 <button
                   className="btn danger"
-                  type="submit"
+                  type="button"
                   disabled={busy || activeTotal > 0}
+                  onClick={(event) => {
+                    const form = event.currentTarget.form;
+                    if (!form?.reportValidity()) return;
+                    confirm(
+                      {
+                        title: "Reset the complete evaluator event?",
+                        description: `Event-scoped D1 work and everything under private/events/${DEMO_EVENT_ID}/ in R2 are removed, then the judged baseline is reseeded. Append-only audit history is preserved.`,
+                        confirmLabel: "Reset demo event",
+                      },
+                      () => form.requestSubmit(),
+                    );
+                  }}
                 >
                   <RefreshCcw aria-hidden size={14} />{" "}
                   {busy ? "Restoring demo…" : "Reset complete demo event"}

@@ -45,7 +45,7 @@ a {
   left: 12px;
   top: -50px;
   z-index: 9999;
-  background: white;
+  background: var(--surface);
   color: var(--ink);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-sm);
@@ -192,7 +192,7 @@ a {
   right: 0;
   top: 0;
   height: var(--topbar);
-  background: #fff;
+  background: var(--surface);
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
@@ -208,7 +208,7 @@ a {
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--surface);
 }
 .event-thumb {
   width: 36px;
@@ -264,7 +264,7 @@ a {
 }
 .command-trigger kbd {
   margin-left: auto;
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-bottom-width: 2px;
   border-radius: var(--radius-xs);

@@ -1,5 +1,6 @@
 import { Form } from "react-router";
 
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { communicationScheduledLocalValue } from "~/modules/communications/communication-time";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
@@ -73,7 +74,7 @@ export function RubricFields({
     },
   ];
   return (
-    <fieldset className="stack">
+    <fieldset className="stack pc-plain-fieldset">
       <legend className="label">Rubric criteria</legend>
       <p className="help">
         Scored 1–5 and 1–10 criteria must total 100%. Yes/no, dropdown and
@@ -186,8 +187,10 @@ export function EvaluationMetrics() {
 export function EvaluationTeamsPanel() {
   const { loaderData, navigation, invitationRole, setInvitationRole } =
     useEvaluationAdminModel();
+  const { confirm, dialog } = useConfirm();
   return (
     <section className="card pad mb">
+      {dialog}
       <div className="card-title">
         <div>
           <h2>Evaluation teams</h2>
@@ -198,7 +201,7 @@ export function EvaluationTeamsPanel() {
         </div>
         <span className="status info right">{loaderData.teams.length}</span>
       </div>
-      <details className="card pad mb">
+      <details className="card pad mb pc-disclosure">
         <summary>Manage evaluation access</summary>
         <div className="stack mt">
           <p className="help">
@@ -297,55 +300,70 @@ export function EvaluationTeamsPanel() {
             <div>
               <strong>Active evaluation participants</strong>
               <ul className="list-clean mt">
-                {loaderData.evaluators.map((evaluator) => (
-                  <li key={evaluator.id}>
-                    <span>
-                      <strong>{evaluator.name}</strong>
-                      <small className="subtle">
-                        {evaluator.email} ·{" "}
-                        {evaluator.role.replaceAll("_", " ")}
-                      </small>
-                    </span>
-                    <Form
-                      method="post"
-                      onSubmit={(event) => {
-                        const effect =
-                          evaluator.role === "committee_chair"
-                            ? "Revoke committee-chair access and clear their named team-chair positions?"
-                            : "Promote this evaluator to committee chair immediately?";
-                        if (!window.confirm(effect)) event.preventDefault();
-                      }}
-                    >
-                      <input
-                        type="hidden"
-                        name="intent"
-                        value="change-chair-access"
-                      />
-                      <input
-                        type="hidden"
-                        name="personId"
-                        value={evaluator.id}
-                      />
-                      <input type="hidden" name="confirmed" value="true" />
-                      <button
-                        className={`btn small ${
-                          evaluator.role === "committee_chair" ? "danger" : ""
-                        }`}
-                        name="operation"
-                        value={
-                          evaluator.role === "committee_chair"
-                            ? "revoke"
-                            : "promote"
-                        }
-                        disabled={navigation.state !== "idle"}
-                      >
-                        {evaluator.role === "committee_chair"
-                          ? "Revoke chair"
-                          : "Promote to chair"}
-                      </button>
-                    </Form>
-                  </li>
-                ))}
+                {loaderData.evaluators.map((evaluator) => {
+                  const isChair = evaluator.role === "committee_chair";
+                  const chairedTeams = loaderData.teams
+                    .filter((team) => team.chairPersonId === evaluator.id)
+                    .map((team) => team.name);
+                  return (
+                    <li key={evaluator.id}>
+                      <span>
+                        <strong>{evaluator.name}</strong>
+                        <small className="subtle">
+                          {evaluator.email} ·{" "}
+                          {evaluator.role.replaceAll("_", " ")}
+                        </small>
+                      </span>
+                      <Form method="post">
+                        <input
+                          type="hidden"
+                          name="intent"
+                          value="change-chair-access"
+                        />
+                        <input
+                          type="hidden"
+                          name="personId"
+                          value={evaluator.id}
+                        />
+                        <input type="hidden" name="confirmed" value="true" />
+                        <input
+                          type="hidden"
+                          name="operation"
+                          value={isChair ? "revoke" : "promote"}
+                        />
+                        <button
+                          type="button"
+                          className={`btn small ${isChair ? "danger" : ""}`}
+                          disabled={navigation.state !== "idle"}
+                          onClick={(event) => {
+                            const form = event.currentTarget.form;
+                            confirm(
+                              isChair
+                                ? {
+                                    title: "Revoke committee-chair access?",
+                                    description: `${evaluator.name} drops back to evaluator access immediately and is cleared from every named team-chair position.`,
+                                    records: chairedTeams.length
+                                      ? chairedTeams
+                                      : undefined,
+                                    confirmLabel: "Revoke chair",
+                                    tone: "danger",
+                                  }
+                                : {
+                                    title: "Promote to committee chair?",
+                                    description: `${evaluator.name} gains committee-chair access immediately, including any decision authority the plan grants to chairs.`,
+                                    confirmLabel: "Promote to chair",
+                                    tone: "primary",
+                                  },
+                              () => form?.requestSubmit(),
+                            );
+                          }}
+                        >
+                          {isChair ? "Revoke chair" : "Promote to chair"}
+                        </button>
+                      </Form>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ) : null}
@@ -441,7 +459,7 @@ export function EvaluationTeamsPanel() {
                 </button>
               </Form>
             ) : null}
-            <details className="mt">
+            <details className="mt pc-disclosure">
               <summary>Edit team</summary>
               <Form method="post" className="stack mt">
                 <input type="hidden" name="intent" value="save-team" />
@@ -501,7 +519,7 @@ export function EvaluationTeamsPanel() {
           </article>
         ))}
       </div>
-      <details>
+      <details className="pc-disclosure">
         <summary>Create evaluation team</summary>
         <Form method="post" className="stack mt">
           <input type="hidden" name="intent" value="save-team" />
@@ -608,7 +626,7 @@ export function EvaluationRoundsPanel() {
             </div>
           ))}
           {round.status === "draft" ? (
-            <details className="mt">
+            <details className="mt pc-disclosure">
               <summary>Edit draft round and rubric</summary>
               <Form method="post" className="stack mt">
                 <input type="hidden" name="intent" value="update-draft-round" />

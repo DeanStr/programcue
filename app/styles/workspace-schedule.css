@@ -4,7 +4,7 @@
   grid-template-columns: repeat(5, 1fr) 1.8fr;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: white;
+  background: var(--surface);
   margin: var(--space-3) 0;
 }
 .schedule-summary > div {
@@ -27,7 +27,7 @@
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: white;
+  background: var(--surface);
 }
 .schedule-grid {
   min-width: 920px;
@@ -135,7 +135,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: var(--space-2);
-  background: white;
+  background: var(--surface);
 }
 .pending-change {
   border: 1px solid #fde68a;

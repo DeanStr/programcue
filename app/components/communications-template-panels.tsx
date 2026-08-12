@@ -1,5 +1,6 @@
 import { Form, Link } from "react-router";
 import { DraftRecoveryStatus } from "~/components/draft-recovery-feedback";
+import { EmptyState } from "~/components/ui/states";
 import type { DraftRecoveryState } from "~/platform/drafts/draft-recovery";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
@@ -51,9 +52,10 @@ export function TemplateVersionList({
             </Link>
           ))
         ) : (
-          <div className="empty compact">
-            <p>Create the first versioned email template.</p>
-          </div>
+          <EmptyState
+            title="No templates yet"
+            description="Create the first versioned email template with the editor beside this list."
+          />
         )}
       </div>
     </aside>

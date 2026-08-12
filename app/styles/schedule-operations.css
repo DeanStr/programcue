@@ -27,7 +27,7 @@
   text-align: left;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   cursor: grab;
 }
@@ -314,7 +314,7 @@
   padding: var(--space-3);
   border: 1px solid #bbf7d0;
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--surface);
   overflow: auto;
 }
 .api-secret code {
@@ -353,7 +353,7 @@
   min-height: 100vh;
   box-sizing: border-box;
   padding-top: var(--space-10);
-  background: #fff;
+  background: var(--surface);
 }
 .api-reference-back {
   position: absolute;

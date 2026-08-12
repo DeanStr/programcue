@@ -364,7 +364,7 @@
     border-top: 1px solid var(--line);
     border-right: 0;
     padding: 7px 7px calc(7px + env(safe-area-inset-bottom));
-    background: white;
+    background: var(--surface);
   }
   .speaker-main {
     padding: 14px 14px calc(104px + env(safe-area-inset-bottom));
@@ -427,7 +427,7 @@
   }
   .public-filters {
     position: static;
-    background: white;
+    background: var(--surface);
     padding: var(--space-2) 0;
   }
   .programme-entry:not(.active) .programme-entry-description {

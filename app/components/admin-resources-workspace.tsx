@@ -17,6 +17,7 @@ import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { RichResourceEditor } from "./rich-resource-editor";
 import {
@@ -726,8 +727,10 @@ function ResourceDraftRecoveryNotice() {
 function ResourceDraftConflictNotice() {
   const { actionData, slug, recoveryPayload, recovery } =
     useResourceAdminModel();
+  const { confirm, dialog } = useConfirm();
   return actionData && "conflict" in actionData && actionData.conflict ? (
     <div className="validation-item error card pad mb" role="alert">
+      {dialog}
       <strong>Draft conflict</strong>
       <span>
         The editor and browser recovery copy remain intact. Export them or
@@ -754,15 +757,19 @@ function ResourceDraftConflictNotice() {
         <button
           className="btn small"
           type="button"
-          onClick={() => {
-            if (
-              window.confirm(
-                "Discard the current editor contents and load the latest server version?",
-              )
-            ) {
-              void recovery.clear().then(() => window.location.reload());
-            }
-          }}
+          onClick={() =>
+            confirm(
+              {
+                title: "Load the latest server version?",
+                description:
+                  "The unsaved editor contents and the browser recovery copy are discarded, then this page reloads the latest draft version from D1. Export your local edits first if you still need them.",
+                confirmLabel: "Discard and reload",
+              },
+              () => {
+                void recovery.clear().then(() => window.location.reload());
+              },
+            )
+          }
         >
           Load server version
         </button>

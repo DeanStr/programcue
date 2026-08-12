@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { expect, test } from "@playwright/test";
 
+import { acceptConfirm } from "./support/confirm-dialog";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 const fixture = path.join(
@@ -99,12 +100,12 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
   await expect(
     page.getByRole("heading", { name: "Possible duplicate contacts" }),
   ).toBeVisible();
-  page.once("dialog", (dialog) => dialog.accept());
   await page
     .getByRole("button", {
       name: "Keep priya.speaker@sbek-test.example.com as primary",
     })
     .click();
+  await acceptConfirm(page);
   await expect(page).toHaveURL(/merged=yes/u);
 
   await page.getByRole("link", { name: "Pipeline" }).click();

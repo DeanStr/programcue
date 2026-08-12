@@ -211,3 +211,97 @@
     animation-iteration-count: infinite !important;
   }
 }
+
+/* --- Dark theme ------------------------------------------------------------
+   Opt-in via <html data-theme="dark">, not prefers-color-scheme. The token
+   layer makes the swap cheap, but 136 routes have not been verified in dark
+   yet, so this does not auto-apply to every viewer with a dark OS. Prove it on
+   /design/system, then add the media query and a toggle.
+
+   Only tokens are redefined here. Nothing below this block styles a component,
+   which is what keeps the swap to one place. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface: #151b24;
+  --surface-raised: #1c232e;
+  --surface-sunken: #10161e;
+  --surface-canvas: #0b1018;
+  --canvas: #0b1018;
+  --soft: #10161e;
+
+  --ink: #e6eaf0;
+  --text-primary: #e6eaf0;
+  --text-secondary: #aab6c6;
+  --text-tertiary: #94a1b2;
+  --text-inverse: #0b1018;
+  --text-accent: var(--brand-300);
+  --muted: #a3b0c0;
+  --muted-on-surface: #aab6c6;
+  --muted-2: #8f9db0;
+
+  --line: #262f3c;
+  --border: #262f3c;
+  --border-strong: #3a4553;
+  --border-accent: var(--brand-700);
+  --track: #232c39;
+
+  /* Inverted: the light ring now carries contrast on dark grounds and the
+     dark halo separates it from raised surfaces. */
+  --focus-ring: var(--brand-200);
+  --focus-halo: #0b1018;
+
+  --state-good-text: #6ee7a5;
+  --state-good-surface: #10291d;
+  --state-warn-text: #f0b95f;
+  --state-warn-surface: #2c2110;
+  --state-bad-text: #f79389;
+  --state-bad-surface: #2e1614;
+  --state-info-text: var(--brand-300);
+  --state-info-surface: #1a1f3d;
+
+  /* Shadows read as noise on dark grounds; separation comes from the surface
+     ladder instead. */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --elev-2: 0 2px 6px rgba(0, 0, 0, 0.45);
+  --elev-3: 0 8px 20px rgba(0, 0, 0, 0.5);
+  --elev-4: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* --- Forced colours --------------------------------------------------------
+   In High Contrast Mode the UA repaints border-color and background but not
+   box-shadow, so the focus halo and every shadow-based affordance disappear.
+   Borders and outlines are re-asserted in system colours. */
+@media (forced-colors: active) {
+  :root {
+    --focus-ring: Highlight;
+    --focus-halo: Canvas;
+  }
+  .card,
+  .btn,
+  .icon-btn,
+  .field,
+  .select,
+  .textarea,
+  .table-wrap {
+    border: 1px solid CanvasText;
+  }
+  .status,
+  .pill {
+    border: 1px solid CanvasText;
+    forced-color-adjust: none;
+  }
+  .progress {
+    border: 1px solid CanvasText;
+  }
+  .progress > span {
+    background: Highlight;
+  }
+  .rail-top,
+  .rail-left,
+  .metric.alert-red,
+  .metric.alert-amber,
+  .metric.alert-purple {
+    border-color: CanvasText;
+  }
+}

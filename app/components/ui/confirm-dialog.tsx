@@ -42,12 +42,19 @@ export function ConfirmDialog({
       onClose={onCancel}
       footer={
         <>
-          <button className="btn" onClick={onCancel} type="button" disabled={busy}>
+          <button
+            className="btn"
+            data-pc-confirm="cancel"
+            disabled={busy}
+            onClick={onCancel}
+            type="button"
+          >
             {cancelLabel}
           </button>
           <button
             className={tone === "danger" ? "btn danger" : "btn primary"}
             data-dialog-autofocus
+            data-pc-confirm="accept"
             disabled={busy}
             onClick={onConfirm}
             type="button"

@@ -20,6 +20,7 @@ import {
   FormVersionHistory,
   PresentationSettingsPanel,
 } from "~/components/form-builder-panels";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import type { SaveFormInput } from "~/modules/submissions/submission-schema";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
@@ -232,6 +233,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
     setSelectedId,
     submitBuilder,
   } = useFormBuilderController(loaderData, actionData);
+  const { confirm, dialog } = useConfirm();
   const publicUrl = "/apply/" + input.publicSlug;
   const eventTimezone = loaderData.workspace?.eventTimezone ?? "UTC";
   return (
@@ -376,6 +378,8 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
         </Dialog>
       ) : null}
 
+      {dialog}
+
       <DraftRecoveryFeedback recovery={recovery} />
 
       {clientValidationMessage ? (
@@ -425,15 +429,19 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             <button
               className="btn small"
               type="button"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Discard the current editor contents and load the latest server version?",
-                  )
-                ) {
-                  void recovery.clear().then(() => window.location.reload());
-                }
-              }}
+              onClick={() =>
+                confirm(
+                  {
+                    title: "Load the latest server version?",
+                    description:
+                      "The editor contents and the browser recovery draft for this form are discarded and replaced by the newer server revision. Export your local edits first if you have not already.",
+                    confirmLabel: "Discard and load server version",
+                  },
+                  () => {
+                    void recovery.clear().then(() => window.location.reload());
+                  },
+                )
+              }
             >
               Load server version
             </button>

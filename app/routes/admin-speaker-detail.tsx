@@ -13,6 +13,7 @@ import { ZodError } from "zod";
 import type { Route } from "./+types/admin-speaker-detail";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EmptyState } from "~/components/ui/states";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
   SpeakerAdminStateError,
@@ -442,13 +443,11 @@ export default function AdminSpeakerDetail({
             </table>
           </div>
         ) : (
-          <div className="pc-empty-state">
-            <CalendarClock aria-hidden className="pc-state-icon" />
-            <h3>No linked sessions</h3>
-            <p className="subtle">
-              Link this speaker from a session in the schedule planner.
-            </p>
-          </div>
+          <EmptyState
+            icon={CalendarClock}
+            title="No linked sessions"
+            description="Link this speaker from a session in the schedule planner."
+          />
         )}
       </section>
       <section className="card pad mt" id="files">
@@ -497,7 +496,7 @@ export default function AdminSpeakerDetail({
                   </span>
                 )}
                 {file.versions.length ? (
-                  <details className="file-history">
+                  <details className="file-history pc-disclosure">
                     <summary>
                       {file.versions.length} version
                       {file.versions.length === 1 ? "" : "s"}
@@ -518,14 +517,16 @@ export default function AdminSpeakerDetail({
             ))}
           </div>
         ) : (
-          <div className="pc-empty-state">
-            <FileCheck2 aria-hidden className="pc-state-icon" />
-            <h3>No uploaded files</h3>
-            <p className="subtle">
-              Assign an upload task so this speaker can share headshots or
-              slides.
-            </p>
-          </div>
+          <EmptyState
+            icon={FileCheck2}
+            title="No uploaded files"
+            description="Assign an upload task so this speaker can share headshots or slides."
+            action={
+              <Link className="btn primary" to="/admin/tasks">
+                <ListChecks aria-hidden size={15} /> Manage tasks
+              </Link>
+            }
+          />
         )}
       </section>
     </>

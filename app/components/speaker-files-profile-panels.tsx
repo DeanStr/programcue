@@ -5,10 +5,11 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { Form } from "react-router";
+import { Form, useSubmit } from "react-router";
 
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import type { SpeakerPortal } from "~/components/speaker-dashboard-panel-shared";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 
@@ -19,8 +20,11 @@ export function SpeakerFilesPanel({
   portal: SpeakerPortal;
   busy: boolean;
 }) {
+  const submit = useSubmit();
+  const { confirm, dialog } = useConfirm();
   return (
     <section className="card pad mt" id="files">
+      {dialog}
       <div className="card-title">
         <div>
           <span className="pc-section-kicker">Private R2 files</span>
@@ -98,13 +102,20 @@ export function SpeakerFilesPanel({
             <Form
               method="post"
               onSubmit={(event) => {
-                if (
-                  !window.confirm(
-                    `Permanently erase ${file.filename} and all ${file.versions.length} stored version${file.versions.length === 1 ? "" : "s"}? This cannot be undone.`,
-                  )
-                ) {
-                  event.preventDefault();
-                }
+                event.preventDefault();
+                const form = event.currentTarget;
+                confirm(
+                  {
+                    title: `Permanently erase ${file.filename}?`,
+                    description: `Every stored version of this ${file.kind.replaceAll("_", " ")} is erased from private storage. This cannot be undone.`,
+                    records: file.versions.map(
+                      (version) =>
+                        `v${version.versionNumber} · ${version.filename}`,
+                    ),
+                    confirmLabel: "Erase all versions",
+                  },
+                  () => submit(form),
+                );
               }}
             >
               <input type="hidden" name="intent" value="delete-file" />
@@ -120,7 +131,7 @@ export function SpeakerFilesPanel({
               </button>
             </Form>
             {file.versions.length > 1 ? (
-              <details className="file-history">
+              <details className="file-history pc-disclosure">
                 <summary>{file.versions.length} versions</summary>
                 {file.versions.map((version) => (
                   <small key={version.id}>

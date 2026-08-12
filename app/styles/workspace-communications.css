@@ -22,7 +22,7 @@
 }
 .channel-tab {
   border: 1px solid var(--line);
-  background: white;
+  background: var(--surface);
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
   font-weight: var(--weight-bold);

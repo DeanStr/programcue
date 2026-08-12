@@ -1,6 +1,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Link } from "react-router";
+import { EmptyState } from "~/components/ui/states";
 import { SessionCopyAction } from "~/modules/ai/contextual-ai-actions";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
 import type {
@@ -120,7 +121,7 @@ export function ScheduleSourcePanel({
       {placementAvailable &&
       workspace.sessions.length &&
       workspace.rooms.length ? (
-        <details className="mb">
+        <details className="mb pc-disclosure">
           <summary>
             <strong>Place or move with form</strong>
             <span className="help">
@@ -237,7 +238,10 @@ export function ScheduleSourcePanel({
         />
       ) : null}
       {placementAvailable && quickSession ? (
-        <details className="mb" key={`resources-${quickSession.id}`}>
+        <details
+          className="mb pc-disclosure"
+          key={`resources-${quickSession.id}`}
+        >
           <summary>
             <strong>Session required resources</strong>
             <span className="help"> · {quickSession.title}</span>
@@ -305,7 +309,7 @@ export function ScheduleSourcePanel({
           </fetcher.Form>
         </details>
       ) : null}
-      <details className="mb">
+      <details className="mb pc-disclosure">
         <summary>
           <strong>Create break</strong>
         </summary>
@@ -334,7 +338,7 @@ export function ScheduleSourcePanel({
             />
           </label>
           {resourceInventory.length ? (
-            <fieldset className="stack">
+            <fieldset className="stack pc-plain-fieldset">
               <legend className="label">Exclusive resources</legend>
               {resourceInventory.map((resource) => (
                 <label className="toggle" key={resource}>
@@ -368,13 +372,18 @@ export function ScheduleSourcePanel({
           />
         ))}
         {visibleSessions.length === 0 ? (
-          <div className="empty">
-            <p>
-              {workspace.activeFilter
+          <EmptyState
+            title={
+              workspace.activeFilter
+                ? "No matching sessions"
+                : "No sessions yet"
+            }
+            description={
+              workspace.activeFilter
                 ? "No sessions match this operational filter."
-                : "Accepted and direct sessions will appear here."}
-            </p>
-          </div>
+                : "Accepted and direct sessions will appear here."
+            }
+          />
         ) : null}
       </div>
     </aside>

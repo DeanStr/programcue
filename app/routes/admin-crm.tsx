@@ -20,6 +20,7 @@ import {
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-crm";
+import { EmptyState } from "~/components/ui/states";
 import { ensureDemoCrmData } from "~/modules/crm/demo.server";
 import {
   CrmService,
@@ -249,9 +250,11 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
             ))}
           </div>
         ) : (
-          <p className="subtle">
-            Company analytics appear as profiles are completed.
-          </p>
+          <EmptyState
+            icon={BarChart3}
+            title="No company analytics yet"
+            description="Companies are counted once contacts record an employer on their profile."
+          />
         )}
       </section>
 
@@ -356,8 +359,8 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
         ) : null}
 
         <Form method="get" action="/admin/crm/outreach" className="mt">
-          <div className="table-scroll">
-            <table>
+          <div className="table-wrap">
+            <table className="data-table">
               <thead>
                 <tr>
                   <th scope="col">
@@ -424,11 +427,19 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
               <Mail aria-hidden size={15} /> Email selected contacts
             </button>
           ) : (
-            <div className="pc-empty-state mt">
-              <UsersRound aria-hidden className="pc-state-icon" />
-              <h3>No matching contacts</h3>
-              <p>Clear filters or add a reusable speaker contact.</p>
-            </div>
+            <EmptyState
+              className="mt"
+              icon={UsersRound}
+              title="No matching contacts"
+              description="Clear the filters or add a reusable speaker contact below."
+              action={
+                filtersActive ? (
+                  <Link className="btn" to="/admin/crm">
+                    <FilterX aria-hidden size={15} /> Clear filters
+                  </Link>
+                ) : undefined
+              }
+            />
           )}
         </Form>
         <p className="help mt" role="status">
@@ -469,7 +480,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
       </section>
 
       <div className="grid grid-2 mb">
-        <details className="card pad">
+        <details className="card pad pc-disclosure">
           <summary>
             <strong>
               <UserPlus aria-hidden size={16} /> Add speaker contact manually
@@ -506,7 +517,10 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
             </button>
           </Form>
         </details>
-        <details className="card pad" open={Boolean(actionData?.importPreview)}>
+        <details
+          className="card pad pc-disclosure"
+          open={Boolean(actionData?.importPreview)}
+        >
           <summary>
             <strong>
               <Upload aria-hidden size={16} /> Import speaker contacts from CSV
@@ -548,15 +562,15 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                   ),
                 )}
               </div>
-              <div className="table-scroll">
-                <table>
+              <div className="table-wrap">
+                <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Row</th>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Company</th>
-                      <th>Validation</th>
+                      <th scope="col">Row</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">Company</th>
+                      <th scope="col">Validation</th>
                     </tr>
                   </thead>
                   <tbody>

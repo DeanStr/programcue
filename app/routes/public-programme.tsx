@@ -78,7 +78,35 @@ export function itineraryCookie(
   return `${ITINERARY_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${lifetime}${secure}`;
 }
 
-export const meta = () => [{ title: "Event programme · Program Cue" }];
+/**
+ * Every unfurl of a customer's public programme previously carried the vendor
+ * name and internal copy, because this returned a static title and nothing
+ * else. The event owns this page; the platform does not appear.
+ */
+export const meta: Route.MetaFunction = ({ loaderData }) => {
+  if (!loaderData || !("programme" in loaderData) || !loaderData.programme) {
+    return [{ title: "Event programme" }];
+  }
+  const { event, sessions, speakers } = loaderData.programme;
+  const place = [event.venue, event.city].filter(Boolean).join(", ");
+  const description =
+    event.description ??
+    `${sessions.length} sessions and ${speakers.length} speakers${place ? ` at ${place}` : ""}.`;
+  const title = `Programme · ${event.name}`;
+
+  return [
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:site_name", content: event.name },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "theme-color", content: event.brandAccent },
+  ];
+};
 
 export function headers({
   loaderHeaders,

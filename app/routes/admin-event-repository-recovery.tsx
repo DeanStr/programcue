@@ -3,6 +3,7 @@ import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-event-repository-recovery";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   EventRepositoryRecoveryService,
   EventRepositoryRecoveryStateError,
@@ -134,6 +135,7 @@ export default function AdminEventRepositoryRecovery({
 }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const { confirm, dialog } = useConfirm();
   const busy = navigation.state !== "idle";
   const pendingRecovery = Boolean(
     actionData &&
@@ -153,6 +155,7 @@ export default function AdminEventRepositoryRecovery({
     loaderData.operationLeaseExpired === 1;
   return (
     <>
+      {dialog}
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">Repository recovery</span>
@@ -241,19 +244,26 @@ export default function AdminEventRepositoryRecovery({
             event to explicit recovery before retrying Airtable, choosing D1 or
             discarding it. This action does not contact Airtable.
           </p>
-          <Form
-            method="post"
-            onSubmit={(event) => {
-              if (
-                !window.confirm(
-                  "Move this stalled creation into repository recovery? The expired operation cannot resume after this change.",
-                )
-              )
-                event.preventDefault();
-            }}
-          >
+          <Form method="post">
             <input type="hidden" name="intent" value="fail_stalled_creation" />
-            <button className="btn danger" type="submit" disabled={busy}>
+            <button
+              className="btn danger"
+              type="button"
+              disabled={busy}
+              onClick={(event) => {
+                const form = event.currentTarget.form;
+                confirm(
+                  {
+                    title: "Move this stalled creation to recovery?",
+                    description:
+                      "The expired operation cannot resume after this change, and you then choose between retrying Airtable, keeping D1 or discarding the event. Airtable is not contacted.",
+                    records: [`${loaderData.name} · ${loaderData.slug}`],
+                    confirmLabel: "Move to recovery",
+                  },
+                  () => form?.requestSubmit(),
+                );
+              }}
+            >
               Move stalled creation to recovery
             </button>
           </Form>
@@ -318,17 +328,27 @@ export default function AdminEventRepositoryRecovery({
               <h2>Choose another outcome</h2>
               <Database aria-hidden size={19} />
             </div>
-            <Form
-              method="post"
-              onSubmit={(event) => {
-                if (
-                  !window.confirm("Keep this incomplete event on D1 instead?")
-                )
-                  event.preventDefault();
-              }}
-            >
+            <Form method="post">
               <input type="hidden" name="intent" value="keep_d1" />
-              <button className="btn" type="submit" disabled={busy}>
+              <button
+                className="btn"
+                type="button"
+                disabled={busy}
+                onClick={(event) => {
+                  const form = event.currentTarget.form;
+                  confirm(
+                    {
+                      title: "Keep this event on D1?",
+                      description:
+                        "The D1 projection is activated as the explicit authority and the incomplete Airtable connection is disconnected. Airtable can no longer be retried for this event.",
+                      records: [`${loaderData.name} · ${loaderData.slug}`],
+                      confirmLabel: "Keep on D1",
+                      tone: "primary",
+                    },
+                    () => form?.requestSubmit(),
+                  );
+                }}
+              >
                 Explicitly keep on D1
               </button>
             </Form>
@@ -336,19 +356,26 @@ export default function AdminEventRepositoryRecovery({
               This activates the D1 projection only after your explicit choice
               and disconnects the incomplete Airtable connection.
             </p>
-            <Form
-              method="post"
-              onSubmit={(event) => {
-                if (
-                  !window.confirm(
-                    "Discard this incomplete event? Its Program Cue data will remain as an audit tombstone and provider-side artifacts may remain.",
-                  )
-                )
-                  event.preventDefault();
-              }}
-            >
+            <Form method="post">
               <input type="hidden" name="intent" value="discard" />
-              <button className="btn danger" type="submit" disabled={busy}>
+              <button
+                className="btn danger"
+                type="button"
+                disabled={busy}
+                onClick={(event) => {
+                  const form = event.currentTarget.form;
+                  confirm(
+                    {
+                      title: "Discard this incomplete event?",
+                      description:
+                        "Its Program Cue data remains only as an inaccessible audit tombstone and the public slug is released. Provider-side schema or partial records are not deleted.",
+                      records: [`${loaderData.name} · ${loaderData.slug}`],
+                      confirmLabel: "Discard event",
+                    },
+                    () => form?.requestSubmit(),
+                  );
+                }}
+              >
                 <Trash2 aria-hidden size={16} /> Discard incomplete event
               </button>
             </Form>

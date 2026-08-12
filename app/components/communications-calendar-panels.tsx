@@ -1,4 +1,6 @@
-import { Form, Link } from "react-router";
+import { Form, Link, useSubmit } from "react-router";
+import { useConfirm } from "~/components/ui/confirm-dialog";
+import { EmptyState } from "~/components/ui/states";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
   communicationCategoryLabel as categoryLabel,
@@ -81,8 +83,11 @@ export function CalendarAdministration({
   working: boolean;
   pendingIntent: PendingIntent;
 }) {
+  const submit = useSubmit();
+  const { confirm, dialog } = useConfirm();
   return (
     <section className="card pad mt">
+      {dialog}
       <div className="card-title">
         <h2>Calendar administration</h2>
         <span className="help right">Google, Microsoft 365 and email ICS</span>
@@ -100,10 +105,10 @@ export function CalendarAdministration({
           <table className="data-table">
             <thead>
               <tr>
-                <th>Participant</th>
-                <th>Provider</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th scope="col">Participant</th>
+                <th scope="col">Provider</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -162,12 +167,21 @@ export function CalendarAdministration({
                         <Form
                           method="post"
                           onSubmit={(event) => {
-                            if (
-                              !window.confirm(
-                                "Disconnect this calendar account? Active direct invitations must be cancelled first.",
-                              )
-                            )
-                              event.preventDefault();
+                            event.preventDefault();
+                            const form = event.currentTarget;
+                            confirm(
+                              {
+                                title: "Disconnect this calendar account?",
+                                description:
+                                  "Program Cue stops sending and updating invitations through this account. Active direct invitations must be cancelled first.",
+                                records: [
+                                  `${connection.personName} · ${categoryLabel(connection.provider)} · ${connection.email}`,
+                                ],
+                                confirmLabel: "Disconnect account",
+                                cancelLabel: "Keep connected",
+                              },
+                              () => submit(form),
+                            );
                           }}
                         >
                           <input
@@ -193,7 +207,11 @@ export function CalendarAdministration({
           </table>
         </div>
       ) : (
-        <p className="help mb">No direct calendar account is connected.</p>
+        <EmptyState
+          className="mb"
+          title="No calendar account is connected"
+          description="Connect Google or Microsoft 365 above to send invitations directly from a participant's own calendar. Email ICS invitations work without a connection."
+        />
       )}
       <h3>Published-session invitations</h3>
       {loaderData.calendarTargets.length ? (
@@ -201,10 +219,10 @@ export function CalendarAdministration({
           <table className="data-table pc-responsive-table">
             <thead>
               <tr>
-                <th>Session</th>
-                <th>Speaker</th>
-                <th>Current state</th>
-                <th>Explicit lifecycle actions</th>
+                <th scope="col">Session</th>
+                <th scope="col">Speaker</th>
+                <th scope="col">Current state</th>
+                <th scope="col">Explicit lifecycle actions</th>
               </tr>
             </thead>
             <tbody>
@@ -302,11 +320,11 @@ export function CalendarAdministration({
           </table>
         </div>
       ) : (
-        <div className="empty compact">
-          <p>
-            Publish a scheduled speaker session to administer its invitation.
-          </p>
-        </div>
+        <EmptyState
+          headingLevel={4}
+          title="No session invitations to administer"
+          description="Publish a scheduled speaker session to administer its invitation."
+        />
       )}
     </section>
   );
@@ -330,10 +348,10 @@ export function CalendarLifecycleTable({
           <table className="data-table">
             <thead>
               <tr>
-                <th>Session</th>
-                <th>Speaker</th>
-                <th>Provider</th>
-                <th>Lifecycle</th>
+                <th scope="col">Session</th>
+                <th scope="col">Speaker</th>
+                <th scope="col">Provider</th>
+                <th scope="col">Lifecycle</th>
               </tr>
             </thead>
             <tbody>
@@ -366,12 +384,10 @@ export function CalendarLifecycleTable({
           </table>
         </div>
       ) : (
-        <div className="empty compact">
-          <p>
-            Published schedule updates will create stable-UID calendar
-            operations here.
-          </p>
-        </div>
+        <EmptyState
+          title="No calendar operations yet"
+          description="Published schedule updates will create stable-UID calendar operations here."
+        />
       )}
     </section>
   );

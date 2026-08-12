@@ -7,11 +7,14 @@ import {
   redirect,
   useActionData,
   useNavigation,
+  useSubmit,
 } from "react-router";
 import { z, ZodError, type ZodType } from "zod";
 
 import type { Route } from "./+types/communication-composer";
 import { CommunicationDraftPreview } from "~/components/communication-draft-preview";
+import { useConfirm } from "~/components/ui/confirm-dialog";
+import { EmptyState } from "~/components/ui/states";
 import {
   audienceTypeSchema,
   communicationCategorySchema,
@@ -353,6 +356,8 @@ export default function CommunicationComposer({
   const actionData = useActionData<typeof action>() as
     ComposerActionResult | undefined;
   const navigation = useNavigation();
+  const submit = useSubmit();
+  const { confirm, dialog } = useConfirm();
   const working = navigation.state !== "idle";
   const pendingIntent = navigation.formData?.get("intent");
   const [configurationDirty, setConfigurationDirty] = useState(false);
@@ -371,6 +376,7 @@ export default function CommunicationComposer({
 
   return (
     <>
+      {dialog}
       <div className="page-head">
         <div>
           <span className="pc-page-eyebrow">
@@ -447,15 +453,15 @@ export default function CommunicationComposer({
               </button>
             </Form>
           ) : (
-            <div className="pc-empty-state">
-              <h2>No published templates</h2>
-              <p>
-                Publish a template version before composing a communication.
-              </p>
-              <Link className="btn" to="/admin/communications">
-                Manage templates
-              </Link>
-            </div>
+            <EmptyState
+              title="No published templates"
+              description="Publish a template version before composing a communication."
+              action={
+                <Link className="btn primary" to="/admin/communications">
+                  Manage templates
+                </Link>
+              }
+            />
           )}
         </section>
       ) : (
@@ -540,12 +546,17 @@ export default function CommunicationComposer({
           <Form
             method="post"
             onSubmit={(event) => {
-              if (
-                !window.confirm(
-                  "Discard this communication draft? It will remain in communication history as cancelled.",
-                )
-              )
-                event.preventDefault();
+              event.preventDefault();
+              const form = event.currentTarget;
+              confirm(
+                {
+                  title: "Discard this communication draft?",
+                  description: `Revision ${draft.revision} stops being editable and remains in communication history as cancelled. Nothing has been queued, so no recipient is affected.`,
+                  confirmLabel: "Discard draft",
+                  cancelLabel: "Keep editing",
+                },
+                () => submit(form),
+              );
             }}
           >
             <input type="hidden" name="intent" value="discard-draft" />

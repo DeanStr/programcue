@@ -1,6 +1,7 @@
 import { Form } from "react-router";
 
 import { EventDateTime } from "~/components/ui/event-date-time";
+import { EmptyState } from "~/components/ui/states";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { encodeScorecardSelection } from "~/modules/evaluations/evaluation-scorecard-selection";
 
@@ -322,10 +323,10 @@ export function EvaluationSubmissionQueue() {
           </table>
         </div>
       ) : (
-        <div className="empty">
-          <h2>No submitted proposals</h2>
-          <p>Published form submissions will appear here.</p>
-        </div>
+        <EmptyState
+          title="No submitted proposals"
+          description="Published form submissions will appear here."
+        />
       )}
     </section>
   );
@@ -541,10 +542,10 @@ export function EvaluationSessionQueue() {
           </table>
         </div>
       ) : (
-        <div className="empty">
-          <h2>No direct sessions</h2>
-          <p>Create a session before assigning it for review.</p>
-        </div>
+        <EmptyState
+          title="No direct sessions"
+          description="Create a session before assigning it for review."
+        />
       )}
       {sessionReviewAssignments.length ? (
         <div className="stack mt">
@@ -618,7 +619,7 @@ export function EvaluationModerationPanel() {
           );
           if (assignments.length === 0) return null;
           return (
-            <details className="card pad" key={submission.id}>
+            <details className="card pad pc-disclosure" key={submission.id}>
               <summary>
                 <strong>{submission.title}</strong> · {completed.length}/
                 {assignments.length} submitted

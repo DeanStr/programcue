@@ -4,6 +4,7 @@ import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-event-new";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   EventCreationInProgressError,
   EventCreationIntentConflictError,
@@ -138,11 +139,13 @@ export const meta = () => [{ title: "New event · Program Cue" }];
 export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const { confirm, dialog } = useConfirm();
   const [repositoryProvider, setRepositoryProvider] = useState<
     "d1" | "airtable"
   >("d1");
   return (
     <>
+      {dialog}
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">Blank event workspace</span>
@@ -232,18 +235,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
             <h2>Event identity</h2>
             <Plus aria-hidden size={19} />
           </div>
-          <Form
-            method="post"
-            className="stack"
-            onSubmit={(event) => {
-              if (
-                !window.confirm(
-                  `Create this blank event using ${repositoryProvider === "airtable" ? "Airtable" : "D1"}?`,
-                )
-              )
-                event.preventDefault();
-            }}
-          >
+          <Form method="post" className="stack">
             <input type="hidden" name="intent" value="create" />
             <input
               type="hidden"
@@ -373,8 +365,21 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
             )}
             <button
               className="btn primary"
-              type="submit"
+              type="button"
               disabled={navigation.state !== "idle"}
+              onClick={(event) => {
+                const form = event.currentTarget.form;
+                if (!form?.reportValidity()) return;
+                confirm(
+                  {
+                    title: "Create this blank event?",
+                    description: `The event is created with ${repositoryProvider === "airtable" ? "Airtable" : "D1"} as its event-data authority. Changing that later requires the full preview, reconciliation and confirmation workflow.`,
+                    confirmLabel: "Create blank event",
+                    tone: "primary",
+                  },
+                  () => form.requestSubmit(),
+                );
+              }}
             >
               <Plus aria-hidden size={14} /> Create blank event
             </button>

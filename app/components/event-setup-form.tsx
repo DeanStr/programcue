@@ -16,6 +16,7 @@ import {
   EventRoomsPanel,
 } from "~/components/event-setup-panels";
 import { EventScheduleConfigurationPanels } from "~/components/event-schedule-configuration-panel";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import type { EventSetup } from "~/modules/events/event-repository.server";
 import type { IncompleteEventSummary } from "~/modules/events/event-repository-recovery.server";
 import type { action, ActionResponse } from "~/routes/event-setup";
@@ -39,6 +40,7 @@ export function EventSetupForm({
   const repositoryFetcher = useFetcher<typeof action>();
   const navigate = useNavigate();
   const navigation = useNavigation();
+  const { confirm, dialog } = useConfirm();
   const [rooms, setRooms] = useState(event.rooms);
   const [tracks, setTracks] = useState(event.tracks);
   const [sessionFormats, setSessionFormats] = useState(event.sessionFormats);
@@ -133,16 +135,25 @@ export function EventSetupForm({
       scope === "organisation"
         ? "every event in this organisation"
         : "this event";
-    if (!window.confirm(`Revoke ${name}'s administrator access to ${impact}?`))
-      return;
-    void inviteFetcher.submit(
-      { _intent: "revoke_administrator", membershipId },
-      { method: "post" },
+    confirm(
+      {
+        title: "Revoke administrator access?",
+        description: `${name} immediately loses administrator access to ${impact}. Nothing they created is removed, and they can be invited again later.`,
+        records: [name],
+        confirmLabel: "Revoke access",
+      },
+      () => {
+        void inviteFetcher.submit(
+          { _intent: "revoke_administrator", membershipId },
+          { method: "post" },
+        );
+      },
     );
   }
 
   return (
     <>
+      {dialog}
       <Form method="post">
         <input type="hidden" name="_intent" value="save" />
         <input type="hidden" name="revision" value={event.revision} />
@@ -500,11 +511,11 @@ export function EventSetupForm({
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Type</th>
-                      <th>Record</th>
-                      <th>Action</th>
-                      <th>Before</th>
-                      <th>After</th>
+                      <th scope="col">Type</th>
+                      <th scope="col">Record</th>
+                      <th scope="col">Action</th>
+                      <th scope="col">Before</th>
+                      <th scope="col">After</th>
                     </tr>
                   </thead>
                   <tbody>

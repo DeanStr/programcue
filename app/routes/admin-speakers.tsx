@@ -260,7 +260,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           <span>{actionData.message}</span>
         </div>
       ) : null}
-      <details className="card pad mb">
+      <details className="card pad mb pc-disclosure">
         <summary>
           <strong>Invite a speaker</strong>{" "}
           <span className="subtle">

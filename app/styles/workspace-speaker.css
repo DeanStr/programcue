@@ -5,7 +5,7 @@
 }
 .speaker-top {
   height: 72px;
-  background: white;
+  background: var(--surface);
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
@@ -49,7 +49,7 @@
   min-height: calc(100vh - 72px);
 }
 .speaker-nav {
-  background: #fff;
+  background: var(--surface);
   border-right: 1px solid var(--line);
   padding: var(--space-5) var(--space-3);
   display: flex;
@@ -87,7 +87,7 @@
   height: 145px;
   border: 1px dashed var(--brand-300);
   border-radius: var(--radius);
-  background: white;
+  background: var(--surface);
   display: grid;
   place-items: center;
   color: var(--brand-600);
@@ -128,7 +128,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: white;
+  background: var(--surface);
   border: 2px solid var(--border-strong);
   margin: 0 auto var(--space-1);
   display: grid;

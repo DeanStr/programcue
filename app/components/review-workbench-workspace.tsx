@@ -12,6 +12,8 @@ import {
   type ReviewWorkbenchWorkspaceProps,
 } from "~/components/review-workbench-model";
 import { ReviewerShell } from "~/components/reviewer-shell";
+import { useConfirm } from "~/components/ui/confirm-dialog";
+import { EmptyState } from "~/components/ui/states";
 import { ReviewAidAction } from "~/modules/ai/contextual-ai-actions";
 
 export {
@@ -461,10 +463,11 @@ function ReviewWorkspaceState() {
   const { workspace } = useReviewWorkbenchModel();
   return !workspace.selected || !workspace.submission ? (
     <section className="card pad">
-      <div className="empty">
-        <h2>No assigned reviews</h2>
-        <p>Your active assignments will appear here.</p>
-      </div>
+      <EmptyState
+        title="No assigned reviews"
+        description="Your active assignments will appear here."
+        headingLevel={2}
+      />
     </section>
   ) : (
     <div className="review-layout">
@@ -585,48 +588,58 @@ function ReviewSubmitDialog() {
 function ReviewDraftConflictNotice() {
   const { assignmentKey, fetcher, recoveryPayload, recovery } =
     useReviewWorkbenchModel();
+  const { confirm, dialog } = useConfirm();
   return fetcher.data && "conflict" in fetcher.data && fetcher.data.conflict ? (
-    <div className="validation-item error mb" role="alert">
-      <strong>Draft conflict</strong>
-      <span>
-        Your browser recovery copy remains intact. Export it or explicitly load
-        the newer server revision; Program Cue will not overwrite it.
-      </span>
-      <span className="row-actions right">
-        <button
-          className="btn small"
-          type="button"
-          onClick={() => {
-            const blob = new Blob([JSON.stringify(recoveryPayload, null, 2)], {
-              type: "application/json",
-            });
-            const href = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = href;
-            link.download = `${assignmentKey}-review-recovery.json`;
-            link.click();
-            URL.revokeObjectURL(href);
-          }}
-        >
-          Export local edits
-        </button>
-        <button
-          className="btn small"
-          type="button"
-          onClick={() => {
-            if (
-              window.confirm(
-                "Discard the current editor contents and load the latest server review?",
+    <>
+      {dialog}
+      <div className="validation-item error mb" role="alert">
+        <strong>Draft conflict</strong>
+        <span>
+          Your browser recovery copy remains intact. Export it or explicitly
+          load the newer server revision; Program Cue will not overwrite it.
+        </span>
+        <span className="row-actions right">
+          <button
+            className="btn small"
+            type="button"
+            onClick={() => {
+              const blob = new Blob(
+                [JSON.stringify(recoveryPayload, null, 2)],
+                { type: "application/json" },
+              );
+              const href = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = href;
+              link.download = `${assignmentKey}-review-recovery.json`;
+              link.click();
+              URL.revokeObjectURL(href);
+            }}
+          >
+            Export local edits
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            onClick={() =>
+              confirm(
+                {
+                  title: "Load the latest server review?",
+                  description:
+                    "The editor contents in this browser are discarded, the recovery copy is cleared and the page reloads with the newest server revision. Export your local edits first if you still need them.",
+                  confirmLabel: "Discard and load server version",
+                  tone: "danger",
+                },
+                () => {
+                  void recovery.clear().then(() => window.location.reload());
+                },
               )
-            ) {
-              void recovery.clear().then(() => window.location.reload());
             }
-          }}
-        >
-          Load server version
-        </button>
-      </span>
-    </div>
+          >
+            Load server version
+          </button>
+        </span>
+      </div>
+    </>
   ) : null;
 }
 

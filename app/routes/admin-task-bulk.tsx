@@ -7,11 +7,14 @@ import {
   redirect,
   useActionData,
   useNavigation,
+  useSubmit,
 } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-task-bulk";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EmptyState } from "~/components/ui/states";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
   TaskBulkService,
@@ -153,6 +156,8 @@ function actionDescription(action: TaskBulkAction) {
 export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const submit = useSubmit();
+  const { confirm, dialog } = useConfirm();
   const [bulkAction, setBulkAction] =
     useState<TaskBulkAction>("assign_template");
   const operation = loaderData.operation;
@@ -263,7 +268,7 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
               </label>
             ) : null}
           </div>
-          <fieldset className="stack">
+          <fieldset className="stack pc-plain-fieldset">
             <legend>
               Select {bulkAction === "assign_template" ? "speakers" : "tasks"}
             </legend>
@@ -278,9 +283,19 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
                 </label>
               ))}
               {!candidates.length ? (
-                <p className="subtle">
-                  No eligible records are currently visible.
-                </p>
+                <EmptyState
+                  title="No eligible records"
+                  description={
+                    bulkAction === "assign_template"
+                      ? "Speakers appear here once they are visible in this event."
+                      : "Tasks appear here once they are in a state this action can change."
+                  }
+                  action={
+                    <Link className="btn" to="/admin/tasks">
+                      Tasks &amp; readiness
+                    </Link>
+                  }
+                />
               ) : null}
             </div>
           </fieldset>
@@ -427,13 +442,24 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
                 <Form
                   method="post"
                   onSubmit={(event) => {
-                    if (
-                      !window.confirm(
-                        `Apply ${operation.summary.changeCount} reviewed task change${operation.summary.changeCount === 1 ? "" : "s"}?`,
-                      )
-                    ) {
-                      event.preventDefault();
-                    }
+                    event.preventDefault();
+                    const form = event.currentTarget;
+                    confirm(
+                      {
+                        title: `Apply ${operation.summary.changeCount} reviewed task change${operation.summary.changeCount === 1 ? "" : "s"}?`,
+                        description:
+                          "Each record commits through the normal task rules, including any additional prerequisites listed in the preview.",
+                        records: operation.items
+                          .filter((item) => item.status === "pending")
+                          .map(
+                            (item) =>
+                              `${item.result.label}: ${(item.result.beforeStatus ?? "—").replaceAll("_", " ")} → ${item.result.afterStatus.replaceAll("_", " ")}`,
+                          ),
+                        confirmLabel: "Confirm reviewed changes",
+                        tone: "primary",
+                      },
+                      () => submit(form),
+                    );
                   }}
                 >
                   <input type="hidden" name="intent" value="confirm" />
@@ -472,6 +498,7 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
           ) : null}
         </section>
       ) : null}
+      {dialog}
     </>
   );
 }

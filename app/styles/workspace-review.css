@@ -18,7 +18,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   margin-bottom: var(--space-2);
-  background: white;
+  background: var(--surface);
 }
 .queue-card.active {
   border-color: var(--brand-400);
@@ -76,7 +76,7 @@
 .sticky-actions {
   position: sticky;
   bottom: 0;
-  background: white;
+  background: var(--surface);
   border-top: 1px solid var(--line);
   padding: var(--space-3) var(--space-5);
   display: flex;

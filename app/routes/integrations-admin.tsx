@@ -10,6 +10,7 @@ import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/integrations-admin";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { EmptyState } from "~/components/ui/states";
 import { AcceleventsProviderError } from "~/modules/integrations/accelevents-provider.server";
 import { isAcceleventsTerminalRunStatus } from "~/modules/integrations/accelevents-run-contract";
@@ -176,9 +177,11 @@ export default function IntegrationsAdmin({
 }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const { confirm, dialog } = useConfirm();
   const busy = navigation.state !== "idle";
   return (
     <>
+      {dialog}
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">External provider boundaries</span>
@@ -375,11 +378,11 @@ export default function IntegrationsAdmin({
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Record</th>
-                    <th>Type</th>
-                    <th>Change</th>
-                    <th>Diff</th>
-                    <th>External ID</th>
+                    <th scope="col">Record</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Change</th>
+                    <th scope="col">Diff</th>
+                    <th scope="col">External ID</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -407,7 +410,7 @@ export default function IntegrationsAdmin({
                       </td>
                       <td>
                         {item.changes.length ? (
-                          <details>
+                          <details className="pc-disclosure">
                             <summary>
                               {item.changes.length} field
                               {item.changes.length === 1 ? "" : "s"}
@@ -470,18 +473,9 @@ export default function IntegrationsAdmin({
                 Record dry run
               </button>
             </Form>
-            <Form
-              method="post"
-              onSubmit={(event) => {
-                if (
-                  !window.confirm(
-                    `Export the displayed speaker, track, session and association changes to Accelevents? This external effect cannot be undone in Program Cue.${loaderData.preview?.summary.blocked ? ` ${loaderData.preview.summary.blocked} displayed item(s) have no documented provider write and will fail explicitly without a fabricated success.` : ""}`,
-                  )
-                )
-                  event.preventDefault();
-              }}
-            >
+            <Form method="post">
               <input type="hidden" name="intent" value="run" />
+              <input type="hidden" name="mode" value="live" />
               <input
                 type="hidden"
                 name="connectionId"
@@ -499,38 +493,58 @@ export default function IntegrationsAdmin({
               />
               <button
                 className="btn primary"
-                type="submit"
-                name="mode"
-                value="live"
+                type="button"
                 disabled={
                   busy ||
                   loaderData.preview.items.length === 0 ||
                   loaderData.preview.connection.demoNoWriteFixture
                 }
+                onClick={(event) => {
+                  const form = event.currentTarget.form;
+                  const blocked = loaderData.preview?.summary.blocked ?? 0;
+                  confirm(
+                    {
+                      title: "Queue a live export to Accelevents?",
+                      description: `The displayed speaker, track, session and association changes are written to Accelevents. This external effect cannot be undone in Program Cue.${blocked ? ` ${blocked} displayed item(s) have no documented provider write and will fail explicitly without a fabricated success.` : ""}`,
+                      records:
+                        loaderData.preview?.items
+                          .filter((item) => item.action !== "noop")
+                          .map((item) => `${item.label} · ${item.action}`) ?? [],
+                      confirmLabel: "Queue live export",
+                    },
+                    () => form?.requestSubmit(),
+                  );
+                }}
               >
                 {loaderData.preview.connection.demoNoWriteFixture
                   ? "Live export unavailable in demo"
                   : "Queue live export"}
               </button>
             </Form>
-            <Form
-              method="post"
-              onSubmit={(event) => {
-                if (
-                  !window.confirm(
-                    "Disconnect and delete the stored Accelevents credential?",
-                  )
-                )
-                  event.preventDefault();
-              }}
-            >
+            <Form method="post">
               <input type="hidden" name="intent" value="disconnect" />
               <input
                 type="hidden"
                 name="connectionId"
                 value={loaderData.selected.id}
               />
-              <button className="btn danger" type="submit" disabled={busy}>
+              <button
+                className="btn danger"
+                type="button"
+                disabled={busy}
+                onClick={(event) => {
+                  const form = event.currentTarget.form;
+                  confirm(
+                    {
+                      title: "Disconnect Accelevents?",
+                      description:
+                        "The stored credential is deleted and the connection is disabled. Mapping previews and exports stop until it is configured again. Records already written to Accelevents are not removed.",
+                      confirmLabel: "Disconnect",
+                    },
+                    () => form?.requestSubmit(),
+                  );
+                }}
+              >
                 Disconnect
               </button>
             </Form>
@@ -547,12 +561,12 @@ export default function IntegrationsAdmin({
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Provider</th>
-                  <th>Mode</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th>Operation</th>
-                  <th>Report</th>
+                  <th scope="col">Provider</th>
+                  <th scope="col">Mode</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Created</th>
+                  <th scope="col">Operation</th>
+                  <th scope="col">Report</th>
                 </tr>
               </thead>
               <tbody>
@@ -591,7 +605,11 @@ export default function IntegrationsAdmin({
             </table>
           </div>
         ) : (
-          <p className="empty">No integration runs have been recorded.</p>
+          <EmptyState
+            title="No integration runs"
+            description="Dry runs and live exports appear here with their operation and reconciliation report."
+            icon={RefreshCw}
+          />
         )}
       </section>
     </>

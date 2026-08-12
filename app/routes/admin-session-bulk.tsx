@@ -6,12 +6,15 @@ import {
   redirect,
   useActionData,
   useNavigation,
+  useSubmit,
 } from "react-router";
 import { useState } from "react";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-session-bulk";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EmptyState } from "~/components/ui/states";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
@@ -158,6 +161,8 @@ function itemChange(
 export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const submit = useSubmit();
+  const { confirm, dialog } = useConfirm();
   const [bulkAction, setBulkAction] = useState<SessionBulkAction>("add_tag");
   const [tagChoice, setTagChoice] = useState("");
   const operation = loaderData.operation;
@@ -308,12 +313,12 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
             >
               <thead>
                 <tr>
-                  <th>
+                  <th scope="col">
                     <span className="sr-only">Select</span>
                   </th>
-                  <th>Session</th>
-                  <th>Status</th>
-                  <th>Tags</th>
+                  <th scope="col">Session</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Tags</th>
                 </tr>
               </thead>
               <tbody>
@@ -349,10 +354,15 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
             </table>
           </div>
           {!loaderData.workspace.sessions.length ? (
-            <div className="empty">
-              <h3>No sessions to update</h3>
-              <p>Accepted or directly created sessions will appear here.</p>
-            </div>
+            <EmptyState
+              title="No sessions to update"
+              description="Accepted or directly created sessions will appear here."
+              action={
+                <Link className="btn primary" to="/admin/schedule">
+                  Open schedule
+                </Link>
+              }
+            />
           ) : null}
           <button
             className="btn primary"
@@ -404,9 +414,9 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
             >
               <thead>
                 <tr>
-                  <th>Session</th>
-                  <th>Preview status</th>
-                  <th>Before → after</th>
+                  <th scope="col">Session</th>
+                  <th scope="col">Preview status</th>
+                  <th scope="col">Before → after</th>
                 </tr>
               </thead>
               <tbody>
@@ -434,13 +444,24 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
               <Form
                 method="post"
                 onSubmit={(event) => {
-                  if (
-                    !window.confirm(
-                      `Apply ${operation.summary.changeCount} reviewed session changes?`,
-                    )
-                  ) {
-                    event.preventDefault();
-                  }
+                  event.preventDefault();
+                  const form = event.currentTarget;
+                  confirm(
+                    {
+                      title: `Apply ${operation.summary.changeCount} reviewed session change${operation.summary.changeCount === 1 ? "" : "s"}?`,
+                      description:
+                        "Only the records listed here change. The operation and its inverse stay in event history.",
+                      records: operation.items
+                        .filter((item) => item.status === "pending")
+                        .map(
+                          (item) =>
+                            `${item.result.title} · ${itemChange(item)}`,
+                        ),
+                      confirmLabel: "Confirm exact changes",
+                      tone: "primary",
+                    },
+                    () => submit(form),
+                  );
                 }}
               >
                 <input type="hidden" name="intent" value="confirm" />
@@ -461,12 +482,17 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
               <Form
                 method="post"
                 onSubmit={(event) => {
-                  if (
-                    !window.confirm(
-                      "Cancel this preview without changing sessions?",
-                    )
-                  )
-                    event.preventDefault();
+                  event.preventDefault();
+                  const form = event.currentTarget;
+                  confirm(
+                    {
+                      title: "Cancel this preview?",
+                      description:
+                        "No session changes are applied and the preview cannot be confirmed afterwards. You can build a fresh preview at any time.",
+                      confirmLabel: "Cancel preview",
+                    },
+                    () => submit(form),
+                  );
                 }}
               >
                 <input type="hidden" name="intent" value="cancel" />
@@ -491,12 +517,18 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
               method="post"
               className="mt"
               onSubmit={(event) => {
-                if (
-                  !window.confirm(
-                    "Prepare the exact inverse changes? You will review them before they are applied.",
-                  )
-                )
-                  event.preventDefault();
+                event.preventDefault();
+                const form = event.currentTarget;
+                confirm(
+                  {
+                    title: "Prepare the exact inverse changes?",
+                    description:
+                      "This builds a second preview that reverses this operation. Nothing changes until you review and confirm it.",
+                    confirmLabel: "Prepare undo",
+                    tone: "primary",
+                  },
+                  () => submit(form),
+                );
               }}
             >
               <input type="hidden" name="intent" value="prepare-undo" />
@@ -532,6 +564,7 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
           </p>
         </section>
       ) : null}
+      {dialog}
     </>
   );
 }

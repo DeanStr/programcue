@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { acceptConfirm } from "./support/confirm-dialog";
 import { e2eOrigin } from "./support/e2e-origin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
@@ -328,10 +329,10 @@ test.describe.serial("canonical provider boundaries", () => {
     await expect(failedItem).toContainText(
       "Demo no-write fixture: no Accelevents request was made.",
     );
-    page.once("dialog", (dialog) => dialog.accept());
     await failedItem
       .getByRole("button", { name: "Retry demo-session-2", exact: true })
       .click();
+    await acceptConfirm(page);
     await expect(
       page.getByRole("status").filter({
         hasText:

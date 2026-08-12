@@ -1,5 +1,7 @@
-import { Form, Link } from "react-router";
+import { Form, Link, useSubmit } from "react-router";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EmptyState } from "~/components/ui/states";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
   formatCommunicationDate as formatDate,
@@ -15,8 +17,11 @@ export function RecentCommunications({
   working: boolean;
   pendingIntent: PendingIntent;
 }) {
+  const submit = useSubmit();
+  const { confirm, dialog } = useConfirm();
   return (
     <section className="card pad">
+      {dialog}
       <div className="card-title">
         <h2>Recent communications</h2>
         <span className="status info right">
@@ -28,10 +33,10 @@ export function RecentCommunications({
           <table className="data-table">
             <thead>
               <tr>
-                <th>Created ({loaderData.eventTimezone})</th>
-                <th>Status</th>
-                <th>Progress</th>
-                <th>Actions</th>
+                <th scope="col">Created ({loaderData.eventTimezone})</th>
+                <th scope="col">Status</th>
+                <th scope="col">Progress</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -71,12 +76,18 @@ export function RecentCommunications({
                       <Form
                         method="post"
                         onSubmit={(event) => {
-                          if (
-                            !window.confirm(
-                              `Cancel communication ${item.id}? Unsent deliveries will not be sent.`,
-                            )
-                          )
-                            event.preventDefault();
+                          event.preventDefault();
+                          const form = event.currentTarget;
+                          confirm(
+                            {
+                              title: "Cancel this communication?",
+                              description: `${item.recipientCount - item.sentCount} of ${item.recipientCount} deliveries have not been sent and never will be. Deliveries already sent cannot be recalled.`,
+                              records: [item.id],
+                              confirmLabel: "Cancel communication",
+                              cancelLabel: "Keep communication",
+                            },
+                            () => submit(form),
+                          );
                         }}
                       >
                         <input type="hidden" name="intent" value="cancel" />
@@ -103,9 +114,15 @@ export function RecentCommunications({
           </table>
         </div>
       ) : (
-        <div className="empty compact">
-          <p>No sends have been confirmed.</p>
-        </div>
+        <EmptyState
+          title="No sends have been confirmed"
+          description="Confirmed and scheduled communications appear here with their delivery progress."
+          action={
+            <Link className="btn primary" to="/admin/communications/compose">
+              Compose a communication
+            </Link>
+          }
+        />
       )}
     </section>
   );

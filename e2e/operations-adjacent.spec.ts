@@ -3,6 +3,11 @@ import { expect, test } from "@playwright/test";
 import { e2eOrigin } from "./support/e2e-origin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 import { resetDemoSubmissions } from "./support/reset-demo-submissions";
+import {
+  acceptConfirm,
+  confirmDialog,
+  dismissConfirm,
+} from "./support/confirm-dialog";
 
 const FIXTURE_CONFIRMATION = "seed-golden-path-browser-fixture";
 
@@ -45,8 +50,8 @@ test("event cloning shows its copy boundary and records a clean event", async ({
   await waitForInterface(page, "/admin/events/new");
   await page.getByLabel("Event name").fill(`Browser clone source ${unique}`);
   await page.getByLabel("Public slug").fill(`browser-clone-source-${unique}`);
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Create blank event" }).click();
+  await acceptConfirm(page);
   await expect(page.getByText("Event created", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Open new event" }).click();
   await expect(page.locator(".event-switcher strong")).toHaveText(
@@ -60,8 +65,8 @@ test("event cloning shows its copy boundary and records a clean event", async ({
   await expect(page.getByText("Intentionally excluded")).toBeVisible();
   await page.getByLabel("Event name").fill(`Browser clone event ${unique}`);
   await page.getByLabel("Public slug").fill(`browser-clone-event-${unique}`);
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Create clean clone" }).click();
+  await acceptConfirm(page);
   const cloneStatus = page
     .getByRole("main")
     .getByRole("status")
@@ -98,8 +103,8 @@ test("blank event creation keeps templates empty and makes repository authority 
   await page.getByRole("radio", { name: /Cloudflare D1/ }).check();
   await page.getByLabel("Event name").fill(`Browser blank event ${unique}`);
   await page.getByLabel("Public slug").fill(`browser-blank-event-${unique}`);
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Create blank event" }).click();
+  await acceptConfirm(page);
   await expect(page.getByText("Event created", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "View creation operation" }),
@@ -171,8 +176,8 @@ test("failed Airtable creation stays inaccessible until D1 is explicitly selecte
   await expect(page.getByLabel("Base ID")).toHaveValue("");
   await expect(page.getByLabel("Rooms table")).toHaveValue("");
 
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Explicitly keep on D1" }).click();
+  await acceptConfirm(page);
   await expect(
     page.getByText("Recovery complete", { exact: true }),
   ).toBeVisible();
@@ -223,8 +228,8 @@ test("CSV import exposes a durable preview before confirming", async ({
     page.getByRole("heading", { name: "Record-level results" }),
   ).toBeVisible();
 
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Confirm import" }).click();
+  await acceptConfirm(page);
   const importStatus = page
     .getByRole("main")
     .getByRole("status")
@@ -285,11 +290,11 @@ test("task import previews disclose every lifecycle transition before confirmati
     }),
   ).toBeVisible();
 
-  page.once("dialog", async (dialog) => {
-    expect(dialog.message()).toContain("1 listed task lifecycle change");
-    await dialog.dismiss();
-  });
   await page.getByRole("button", { name: "Confirm import" }).click();
+  await expect(confirmDialog(page)).toContainText(
+    "1 listed task lifecycle change",
+  );
+  await dismissConfirm(page);
   await expect(page.getByText("Preview ready to commit")).toBeVisible();
 
   const operationsTable = page.getByRole("table").filter({
@@ -298,8 +303,8 @@ test("task import previews disclose every lifecycle transition before confirmati
   const operationRow = operationsTable
     .getByRole("row")
     .filter({ hasText: operationId! });
-  page.once("dialog", (dialog) => dialog.accept());
   await operationRow.getByRole("button", { name: "Cancel" }).click();
+  await acceptConfirm(page);
   await expect(
     page
       .getByRole("main")
@@ -358,23 +363,23 @@ test("session tags and archive state use preview, confirmation and real undo", a
       page.getByRole("heading", { name: "2. Review and confirm" }),
     ).toBeVisible();
     await expect(page.getByText(/No tags → Browser tag/)).toBeVisible();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Confirm exact changes" }).click();
+    await acceptConfirm(page);
     const main = page.getByRole("main");
     await expect(
       main
         .getByRole("status")
         .filter({ hasText: "confirmed changes were applied" }),
     ).toBeVisible();
-    page.once("dialog", (dialog) => dialog.accept());
     await page
       .getByRole("button", { name: "Prepare five-minute undo" })
       .click();
+    await acceptConfirm(page);
     await expect(
       main.getByRole("status").filter({ hasText: "inverse changes are ready" }),
     ).toBeVisible();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Confirm exact changes" }).click();
+    await acceptConfirm(page);
     await expect(
       main
         .getByRole("status")
@@ -391,20 +396,20 @@ test("session tags and archive state use preview, confirmation and real undo", a
       .getByRole("button", { name: "Preview affected records" })
       .click();
     await expect(page.getByText("unscheduled → archived")).toBeVisible();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Confirm exact changes" }).click();
+    await acceptConfirm(page);
     await expect(
       main
         .getByRole("status")
         .filter({ hasText: "confirmed changes were applied" }),
     ).toBeVisible();
-    page.once("dialog", (dialog) => dialog.accept());
     await page
       .getByRole("button", { name: "Prepare five-minute undo" })
       .click();
+    await acceptConfirm(page);
     await expect(page.getByText("archived → unscheduled")).toBeVisible();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Confirm exact changes" }).click();
+    await acceptConfirm(page);
     await expect(
       main
         .getByRole("status")

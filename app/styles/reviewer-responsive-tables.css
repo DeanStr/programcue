@@ -437,7 +437,7 @@
     overflow: hidden;
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    background: #fff;
+    background: var(--surface);
     box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
   }
   .pc-responsive-table td {
@@ -460,7 +460,7 @@
     text-transform: uppercase;
   }
   .pc-responsive-table tr:hover td {
-    background: #fff;
+    background: var(--surface);
   }
   .pc-responsive-table.pc-data-grid tr.is-selected td,
   .pc-responsive-table.pc-data-grid tr.is-selected:hover td {

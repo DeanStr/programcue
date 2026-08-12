@@ -138,18 +138,18 @@ export function ProposalApproval({
       </div>
       <p>{proposal.summary}</p>
       <div className="table-wrap">
-        <table>
+        <table className="data-table">
           <thead>
             <tr>
-              <th>Change</th>
-              <th>Current</th>
-              <th>After approval</th>
+              <th scope="col">Change</th>
+              <th scope="col">Current</th>
+              <th scope="col">After approval</th>
             </tr>
           </thead>
           <tbody>
             {proposal.changes.map((change) => (
               <tr key={change.field}>
-                <th>{change.field}</th>
+                <th scope="row">{change.field}</th>
                 <td>{change.before ?? "Not created"}</td>
                 <td>{change.after}</td>
               </tr>
@@ -159,7 +159,7 @@ export function ProposalApproval({
       </div>
       <p className="help">{proposal.consequence}</p>
       {proposal.affectedRecords?.length ? (
-        <details>
+        <details className="pc-disclosure">
           <summary>
             Review all {proposal.affectedRecords.length} affected records
           </summary>
@@ -255,17 +255,17 @@ export function ProposalApproval({
             </div>
           )}
 
-          <details>
+          <details className="pc-disclosure">
             <summary>
               Review all {reminder.recipients.selected} selected recipients
             </summary>
             <div className="table-wrap">
-              <table>
+              <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Delivery state</th>
-                    <th>Recipient</th>
-                    <th>Address</th>
+                    <th scope="col">Delivery state</th>
+                    <th scope="col">Recipient</th>
+                    <th scope="col">Address</th>
                   </tr>
                 </thead>
                 <tbody>

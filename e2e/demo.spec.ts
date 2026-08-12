@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { acceptConfirm } from "./support/confirm-dialog";
 
 const resetConfirmation = "Future of Events 2025";
 
@@ -73,8 +74,8 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
   await page
     .getByLabel(/Type Future of Events 2025 to confirm/)
     .fill(resetConfirmation);
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Reset complete demo event" }).click();
+  await acceptConfirm(page);
   await expect(page.getByText("Demo restored", { exact: true })).toBeVisible();
   await expect(page.getByText("2", { exact: true }).first()).toBeVisible();
 

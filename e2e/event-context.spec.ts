@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { acceptConfirm } from "./support/confirm-dialog";
 
 test("an event switch persists across reloads on the local HTTP Worker", async ({
   context,
@@ -26,8 +27,8 @@ test("an event switch persists across reloads on the local HTTP Worker", async (
   await page.goto("/admin/events/new");
   await page.getByLabel("Event name").fill(eventName);
   await page.getByLabel("Public slug").fill("event-context-browser-check");
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Create blank event" }).click();
+  await acceptConfirm(page);
   await expect(page.getByText("Event created", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Open new event" }).click();

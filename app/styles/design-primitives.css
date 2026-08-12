@@ -154,7 +154,7 @@
   padding: var(--space-5);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--surface);
 }
 .pc-pending-label {
   display: flex;
@@ -312,7 +312,7 @@
   padding: var(--space-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--surface);
 }
 .pc-swatch-colour {
   height: 58px;
@@ -348,7 +348,7 @@
   padding: var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--surface);
 }
 .pc-workflow-steps li > span {
   width: 27px;

@@ -13,6 +13,8 @@ import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/api-settings";
+import { useConfirm } from "~/components/ui/confirm-dialog";
+import { EmptyState } from "~/components/ui/states";
 import { apiKeyLifecycleState } from "~/platform/api/api-key-state";
 import {
   API_KEY_SCOPES,
@@ -205,6 +207,7 @@ function epochLabel(epoch: number | null) {
 export default function ApiSettings({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const { confirm, dialog } = useConfirm();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
@@ -234,6 +237,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
   ).length;
   return (
     <>
+      {dialog}
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">Developer access</span>
@@ -340,7 +344,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                 maxLength={80}
               />
             </label>
-            <fieldset>
+            <fieldset className="pc-plain-fieldset">
               <legend className="label">Scopes</legend>
               <div className="api-scope-list">
                 {loaderData.scopes.map((scope) => (
@@ -378,10 +382,10 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Prefix and scopes</th>
-                    <th>Activity</th>
-                    <th>Actions</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Prefix and scopes</th>
+                    <th scope="col">Activity</th>
+                    <th scope="col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -422,17 +426,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                         </td>
                         <td>
                           {!key.revokedAt ? (
-                            <Form
-                              method="post"
-                              onSubmit={(event) => {
-                                if (
-                                  !window.confirm(
-                                    `Revoke ${key.name}? Existing integrations using this key will stop working.`,
-                                  )
-                                )
-                                  event.preventDefault();
-                              }}
-                            >
+                            <Form method="post">
                               <input
                                 type="hidden"
                                 name="intent"
@@ -446,7 +440,23 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                               <button
                                 className="btn small danger"
                                 aria-label={`Revoke ${key.name}`}
+                                type="button"
                                 disabled={navigation.state !== "idle"}
+                                onClick={(event) => {
+                                  const form = event.currentTarget.form;
+                                  confirm(
+                                    {
+                                      title: `Revoke ${key.name}?`,
+                                      description:
+                                        "Every integration authenticating with this key stops working immediately. Revocation cannot be undone; issue a replacement key instead.",
+                                      records: [
+                                        `${key.name} · ${key.prefix}… · ${key.scopes.join(", ")}`,
+                                      ],
+                                      confirmLabel: "Revoke key",
+                                    },
+                                    () => form?.requestSubmit(),
+                                  );
+                                }}
                               >
                                 <Trash2 aria-hidden size={13} /> Revoke
                               </button>
@@ -460,11 +470,11 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
               </table>
             </div>
           ) : (
-            <div className="empty">
-              <KeyRound aria-hidden size={28} />
-              <h2>No API keys</h2>
-              <p>Create a narrowly scoped key for a trusted integration.</p>
-            </div>
+            <EmptyState
+              title="No API keys"
+              description="Create a narrowly scoped key for a trusted integration."
+              icon={KeyRound}
+            />
           )}
         </section>
       </div>
@@ -501,7 +511,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                 required
               />
             </label>
-            <fieldset>
+            <fieldset className="pc-plain-fieldset">
               <legend className="label">Event types</legend>
               <div className="api-scope-list">
                 {loaderData.webhookEventTypes.map((eventType) => (
@@ -558,11 +568,11 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Endpoint</th>
-                  <th>Events</th>
-                  <th>Status</th>
-                  <th>Latest delivery</th>
-                  <th>Actions</th>
+                  <th scope="col">Endpoint</th>
+                  <th scope="col">Events</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Latest delivery</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -616,17 +626,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                     <td>
                       <div className="page-actions">
                         {endpoint.status !== "disabled" ? (
-                          <Form
-                            method="post"
-                            onSubmit={(event) => {
-                              if (
-                                !window.confirm(
-                                  `Send a signed test event to ${endpoint.url}?`,
-                                )
-                              )
-                                event.preventDefault();
-                            }}
-                          >
+                          <Form method="post">
                             <input
                               type="hidden"
                               name="intent"
@@ -639,8 +639,20 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                             />
                             <button
                               className="btn small"
-                              type="submit"
+                              type="button"
                               disabled={navigation.state !== "idle"}
+                              onClick={(event) => {
+                                const form = event.currentTarget.form;
+                                confirm(
+                                  {
+                                    title: `Send a signed test event to ${endpoint.name}?`,
+                                    description: `Program Cue makes a real signed HTTPS request to ${endpoint.url}. Follow the result in the Operation Centre.`,
+                                    confirmLabel: "Send test event",
+                                    tone: "primary",
+                                  },
+                                  () => form?.requestSubmit(),
+                                );
+                              }}
                             >
                               <Send aria-hidden size={13} /> Test
                             </button>
@@ -679,10 +691,11 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
             </table>
           </div>
         ) : (
-          <div className="empty">
-            <h3>No outbound webhooks</h3>
-            <p>Create an endpoint to deliver signed event notifications.</p>
-          </div>
+          <EmptyState
+            title="No outbound webhooks"
+            description="Create an endpoint to deliver signed event notifications."
+            icon={Webhook}
+          />
         )}
       </section>
     </>

@@ -128,7 +128,7 @@
   padding: var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: white;
+  background: var(--surface);
 }
 .bulk-record-picker .speaker-confirm span {
   display: grid;
@@ -265,7 +265,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  background: #fff;
+  background: var(--surface);
 }
 .resource-editor-toolbar {
   display: flex;
@@ -341,7 +341,7 @@
   border: 1px solid var(--line);
   border-top: 4px solid var(--event-accent);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
 .resource-preview-device.is-mobile {
@@ -376,7 +376,7 @@
   padding: var(--space-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
 .task-dependency-list {

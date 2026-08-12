@@ -1,7 +1,7 @@
 /* Public */
 .public-shell {
   min-height: 100vh;
-  background: white;
+  background: var(--surface);
 }
 .public-top {
   height: 66px;
@@ -45,7 +45,7 @@
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: white;
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
 .public-mobile-nav:not([open]) > nav {
@@ -224,7 +224,7 @@
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
 }
 .agenda-card-header {
@@ -289,7 +289,7 @@
   padding: var(--space-5);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--surface);
 }
 .public-itinerary-time {
   display: grid;
@@ -447,7 +447,7 @@
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   text-align: left;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
@@ -500,7 +500,7 @@
    background and separator rather than the button alone. */
 .programme-entry {
   border-bottom: 1px solid var(--line);
-  background: white;
+  background: var(--surface);
 }
 .programme-entry.active {
   background: #f7f7ff;
@@ -657,7 +657,7 @@
   min-height: 400px;
   border: 0;
   border-radius: var(--radius-sm);
-  background: white;
+  background: var(--surface);
   transition: width 160ms ease;
 }
 .programme-embed-preview.mobile iframe {
@@ -692,8 +692,13 @@
 .programme-row.active {
   background: #f7f7ff;
 }
+/* Editorial ground. This is the page attendees read on a phone in a hallway,
+   not an operator grid: the session title is the most important thing in the
+   row and was set two steps below body. */
 .programme-row h3 {
-  font-size: var(--text-xs);
+  font-size: var(--text-base);
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-snug);
   margin: 0;
 }
 .programme-row .subtle,
@@ -701,7 +706,44 @@
   color: var(--muted-on-surface);
 }
 .programme-row .speaker {
+  font-size: var(--text-xs);
+}
+.programme-row .time,
+.programme-row time {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* Day divider. Without one, consecutive days run together in a single list —
+   May 20 and May 21 were indistinguishable. */
+.programme-day-divider {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: var(--space-6) 0 0;
+  padding: var(--space-3) var(--space-3);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border-strong);
   font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.programme-day-divider:first-child {
+  margin-top: 0;
+}
+.programme-day-divider span {
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: var(--weight-normal);
+  color: var(--muted);
 }
 .itinerary {
   padding: var(--space-4);

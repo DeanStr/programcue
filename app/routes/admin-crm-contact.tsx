@@ -8,6 +8,7 @@ import {
   Tag,
   UserRound,
 } from "lucide-react";
+import type { FormEvent } from "react";
 import {
   data,
   Form,
@@ -15,10 +16,13 @@ import {
   redirect,
   useActionData,
   useNavigation,
+  useSubmit,
 } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-crm-contact";
+import { useConfirm } from "~/components/ui/confirm-dialog";
+import { EmptyState } from "~/components/ui/states";
 import { ensureDemoCrmData } from "~/modules/crm/demo.server";
 import { crmStages } from "~/modules/crm/crm-schema";
 import { CrmService, CrmStateError } from "~/modules/crm/crm-service.server";
@@ -169,9 +173,29 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
   const { contact, events, addToEventIdempotencyKey } = loaderData;
   const actionData = useActionData<ActionResult>();
   const navigation = useNavigation();
+  const submit = useSubmit();
+  const { confirm, dialog } = useConfirm();
   const busy = navigation.state !== "idle";
+  const confirmMerge = (
+    event: FormEvent<HTMLFormElement>,
+    keptEmail: string,
+    mergedEmail: string,
+  ) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    confirm(
+      {
+        title: "Merge these Speaker Network contacts?",
+        description: `${keptEmail} stays in the organization directory. Notes, tags and pipeline history move across, and the secondary contact stops appearing.`,
+        records: [mergedEmail],
+        confirmLabel: `Keep ${keptEmail}`,
+      },
+      () => submit(form),
+    );
+  };
   return (
     <>
+      {dialog}
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">Organization Speaker Network</span>
@@ -226,14 +250,9 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                 <div className="row-actions">
                   <Form
                     method="post"
-                    onSubmit={(event) => {
-                      if (
-                        !window.confirm(
-                          "Merge these Speaker Network contacts? The secondary contact will no longer appear in the organization directory.",
-                        )
-                      )
-                        event.preventDefault();
-                    }}
+                    onSubmit={(event) =>
+                      confirmMerge(event, contact.email, duplicate.email)
+                    }
                   >
                     <input type="hidden" name="_intent" value="merge" />
                     <input
@@ -252,14 +271,9 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                   </Form>
                   <Form
                     method="post"
-                    onSubmit={(event) => {
-                      if (
-                        !window.confirm(
-                          "Merge these Speaker Network contacts? The secondary contact will no longer appear in the organization directory.",
-                        )
-                      )
-                        event.preventDefault();
-                    }}
+                    onSubmit={(event) =>
+                      confirmMerge(event, duplicate.email, contact.email)
+                    }
                   >
                     <input type="hidden" name="_intent" value="merge" />
                     <input
@@ -381,7 +395,11 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
             </article>
           ))}
           {!contact.notes.length ? (
-            <p className="subtle">No internal notes have been recorded.</p>
+            <EmptyState
+              icon={MessageSquarePlus}
+              title="No internal notes"
+              description="Notes stay private to organisers and are never shown to the contact."
+            />
           ) : null}
         </div>
       </section>
@@ -395,13 +413,13 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
           <History aria-hidden className="subtle" />
         </div>
         {contact.connections.length ? (
-          <div className="table-scroll mt">
-            <table>
+          <div className="table-wrap mt">
+            <table className="data-table">
               <thead>
                 <tr>
-                  <th>Event</th>
-                  <th>Sessions</th>
-                  <th>Example session</th>
+                  <th scope="col">Event</th>
+                  <th scope="col">Sessions</th>
+                  <th scope="col">Example session</th>
                 </tr>
               </thead>
               <tbody>
@@ -418,9 +436,11 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
             </table>
           </div>
         ) : (
-          <p className="subtle">
-            No event connections yet. Add this contact to an event below.
-          </p>
+          <EmptyState
+            icon={History}
+            title="No event history yet"
+            description="Sessions appear here once this contact is added to an event below."
+          />
         )}
       </section>
 

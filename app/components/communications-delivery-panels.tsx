@@ -1,4 +1,5 @@
 import { Form } from "react-router";
+import { EmptyState } from "~/components/ui/states";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
   communicationCategoryLabel as categoryLabel,
@@ -71,9 +72,9 @@ export function DeliveryConfiguration({
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Sender</th>
-                    <th>Status</th>
-                    <th>Actions</th>
+                    <th scope="col">Sender</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -132,7 +133,7 @@ export function DeliveryConfiguration({
                                 : "Disable"}
                             </button>
                           </Form>
-                          <details>
+                          <details className="pc-disclosure">
                             <summary className="btn small">Edit</summary>
                             <Form method="post" className="stack mt">
                               <input
@@ -195,7 +196,11 @@ export function DeliveryConfiguration({
               </table>
             </div>
           ) : (
-            <p className="help">No sender profile has been configured.</p>
+            <EmptyState
+              headingLevel={4}
+              title="No sender profile yet"
+              description={`Add a ${emailProviderLabel} sender profile above before any communication can be sent.`}
+            />
           )}
         </div>
         <div className="stack">
@@ -356,10 +361,10 @@ export function CommunicationAutomation({
           <table className="data-table">
             <thead>
               <tr>
-                <th>Template</th>
-                <th>Rule</th>
-                <th>Last run</th>
-                <th>Action</th>
+                <th scope="col">Template</th>
+                <th scope="col">Rule</th>
+                <th scope="col">Last run</th>
+                <th scope="col">Action</th>
               </tr>
             </thead>
             <tbody>

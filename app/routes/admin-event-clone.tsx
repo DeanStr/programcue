@@ -4,6 +4,7 @@ import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-event-clone";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { isAirtableRepositoryError } from "~/modules/airtable/airtable-room-repository.server";
 import { EventRepositoryProvisioningError } from "~/modules/events/event-repository-provisioning.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
@@ -120,11 +121,13 @@ export const meta = () => [{ title: "Clone event · Program Cue" }];
 export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const { confirm, dialog } = useConfirm();
   const [repositoryProvider, setRepositoryProvider] = useState<
     "d1" | "airtable"
   >("d1");
   return (
     <>
+      {dialog}
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">Reusable event template</span>
@@ -194,18 +197,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
             <h2>New event identity</h2>
             <Copy aria-hidden size={19} />
           </div>
-          <Form
-            method="post"
-            className="stack"
-            onSubmit={(event) => {
-              if (
-                !window.confirm(
-                  `Create this clean event from the current configuration and templates using ${repositoryProvider === "airtable" ? "Airtable" : "D1"}?`,
-                )
-              )
-                event.preventDefault();
-            }}
-          >
+          <Form method="post" className="stack">
             <input type="hidden" name="intent" value="clone" />
             <label className="label">
               Event name
@@ -337,8 +329,21 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
             )}
             <button
               className="btn primary"
-              type="submit"
+              type="button"
               disabled={navigation.state !== "idle"}
+              onClick={(event) => {
+                const form = event.currentTarget.form;
+                if (!form?.reportValidity()) return;
+                confirm(
+                  {
+                    title: "Create this clean clone?",
+                    description: `A new event is created from ${loaderData.source.name} with ${repositoryProvider === "airtable" ? "Airtable" : "D1"} as its event-data authority. Branding, rooms, tracks, policies and reusable templates are copied; people, submissions, schedules, credentials and publication state are not.`,
+                    confirmLabel: "Create clean clone",
+                    tone: "primary",
+                  },
+                  () => form.requestSubmit(),
+                );
+              }}
             >
               <Copy aria-hidden size={14} /> Create clean clone
             </button>

@@ -1,5 +1,7 @@
-import { Form, Link, useNavigation } from "react-router";
+import { Form, Link, useNavigation, useSubmit } from "react-router";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EmptyState } from "~/components/ui/states";
 import {
   metadataOperationId,
   OperationDateTime,
@@ -136,10 +138,10 @@ export function ActivityTimelinePanel({
           })}
         </ol>
       ) : (
-        <div className="empty">
-          <h3>No matching activity</h3>
-          <p>Adjust the activity filters or start work in this event.</p>
-        </div>
+        <EmptyState
+          title="No matching activity"
+          description="Adjust the activity filters or start work in this event."
+        />
       )}
     </section>
   ) : null;
@@ -151,6 +153,8 @@ export function OperationsListPanel({
   loaderData: OperationCentreData;
 }) {
   const navigation = useNavigation();
+  const submit = useSubmit();
+  const { confirm, dialog } = useConfirm();
   return (
     <section className="card pad">
       <div className="card-title">
@@ -164,13 +168,13 @@ export function OperationsListPanel({
           <table className="data-table">
             <thead>
               <tr>
-                <th>Operation</th>
-                <th>Status</th>
-                <th>Progress</th>
-                <th>Initiator / scope</th>
-                <th>Started (UTC)</th>
-                <th>Result</th>
-                <th>Actions</th>
+                <th scope="col">Operation</th>
+                <th scope="col">Status</th>
+                <th scope="col">Progress</th>
+                <th scope="col">Initiator / scope</th>
+                <th scope="col">Started (UTC)</th>
+                <th scope="col">Result</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -228,13 +232,21 @@ export function OperationsListPanel({
                         <Form
                           method="post"
                           onSubmit={(event) => {
-                            if (
-                              !window.confirm(
-                                `Retry ${operation.type} operation ${operation.id}? This may repeat external provider work that did not previously complete.`,
-                              )
-                            ) {
-                              event.preventDefault();
-                            }
+                            event.preventDefault();
+                            const form = event.currentTarget;
+                            confirm(
+                              {
+                                title: "Retry this operation?",
+                                description:
+                                  "This may repeat external provider work that did not previously complete.",
+                                records: [
+                                  `${operation.type} · ${operation.id}`,
+                                ],
+                                confirmLabel: "Retry operation",
+                                tone: "primary",
+                              },
+                              () => submit(form),
+                            );
                           }}
                         >
                           <input type="hidden" name="intent" value="retry" />
@@ -263,12 +275,20 @@ export function OperationsListPanel({
                         <Form
                           method="post"
                           onSubmit={(event) => {
-                            if (
-                              !window.confirm(
-                                `Cancel ${operation.type} operation ${operation.id}? Only work that has not reached an external provider can be cancelled.`,
-                              )
-                            )
-                              event.preventDefault();
+                            event.preventDefault();
+                            const form = event.currentTarget;
+                            confirm(
+                              {
+                                title: "Cancel this operation?",
+                                description:
+                                  "Only work that has not reached an external provider can be cancelled. Anything already sent stays in place.",
+                                records: [
+                                  `${operation.type} · ${operation.id}`,
+                                ],
+                                confirmLabel: "Cancel operation",
+                              },
+                              () => submit(form),
+                            );
                           }}
                         >
                           <input type="hidden" name="intent" value="cancel" />
@@ -293,13 +313,12 @@ export function OperationsListPanel({
           </table>
         </div>
       ) : (
-        <div className="empty">
-          <h2>No background operations yet</h2>
-          <p>
-            Imports, sends, calendar updates and publications will appear here.
-          </p>
-        </div>
+        <EmptyState
+          title="No background operations yet"
+          description="Imports, sends, calendar updates and publications will appear here."
+        />
       )}
+      {dialog}
     </section>
   );
 }
@@ -310,6 +329,8 @@ export function OperationDetailPanel({
   loaderData: OperationCentreData;
 }) {
   const navigation = useNavigation();
+  const submit = useSubmit();
+  const { confirm, dialog } = useConfirm();
   return loaderData.operationDetail ? (
     <div className="grid grid-2 mt">
       <section
@@ -342,11 +363,11 @@ export function OperationDetailPanel({
               <table className="data-table pc-responsive-table operation-record-results-table">
                 <thead>
                   <tr>
-                    <th>Record</th>
-                    <th>Status</th>
-                    <th>Attempts</th>
-                    <th>Result</th>
-                    <th>Actions</th>
+                    <th scope="col">Record</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Attempts</th>
+                    <th scope="col">Result</th>
+                    <th scope="col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -407,12 +428,19 @@ export function OperationDetailPanel({
                               <Form
                                 method="post"
                                 onSubmit={(event) => {
-                                  if (
-                                    !window.confirm(
-                                      `Retry only ${label}? Successful Accelevents records and other failed records will not be resent.`,
-                                    )
-                                  )
-                                    event.preventDefault();
+                                  event.preventDefault();
+                                  const form = event.currentTarget;
+                                  confirm(
+                                    {
+                                      title: "Retry only this record?",
+                                      description:
+                                        "Successful Accelevents records and other failed records will not be resent.",
+                                      records: [label],
+                                      confirmLabel: "Retry item",
+                                      tone: "primary",
+                                    },
+                                    () => submit(form),
+                                  );
                                 }}
                               >
                                 <input
@@ -442,12 +470,18 @@ export function OperationDetailPanel({
                                 method="post"
                                 className="stack"
                                 onSubmit={(event) => {
-                                  if (
-                                    !window.confirm(
-                                      `Skip ${label}? This records an explicit omission and does not call Accelevents.`,
-                                    )
-                                  )
-                                    event.preventDefault();
+                                  event.preventDefault();
+                                  const form = event.currentTarget;
+                                  confirm(
+                                    {
+                                      title: "Skip this record?",
+                                      description:
+                                        "This records an explicit omission with your reason and does not call Accelevents.",
+                                      records: [label],
+                                      confirmLabel: "Skip item",
+                                    },
+                                    () => submit(form),
+                                  );
                                 }}
                               >
                                 <input
@@ -496,10 +530,10 @@ export function OperationDetailPanel({
             </div>
           </>
         ) : (
-          <div className="empty">
-            <h3>No record-level items</h3>
-            <p>This operation reports progress only at job level.</p>
-          </div>
+          <EmptyState
+            title="No record-level items"
+            description="This operation reports progress only at job level."
+          />
         )}
       </section>
       <section
@@ -531,12 +565,13 @@ export function OperationDetailPanel({
             ))}
           </ol>
         ) : (
-          <div className="empty">
-            <h3>No linked audit events</h3>
-            <p>Events linked to this operation will appear here.</p>
-          </div>
+          <EmptyState
+            title="No linked audit events"
+            description="Events linked to this operation will appear here."
+          />
         )}
       </section>
+      {dialog}
     </div>
   ) : null;
 }

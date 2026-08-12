@@ -1,4 +1,5 @@
-import { Form, Link, useNavigation } from "react-router";
+import { Form, Link, useNavigation, useSubmit } from "react-router";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   operationStatusLabel as statusLabel,
   taskImportTransitionSummary,
@@ -180,6 +181,8 @@ export function DataImportPanel({
   loaderData: OperationCentreData;
 }) {
   const navigation = useNavigation();
+  const submit = useSubmit();
+  const { confirm, dialog } = useConfirm();
   const previewedTaskTransitions =
     loaderData.selectedOperation?.type === "data.import"
       ? (loaderData.operationDetail?.items.flatMap((item) => {
@@ -238,7 +241,7 @@ export function DataImportPanel({
         preview; submitted status still requires the participant evidence
         workflow.
       </p>
-      <details className="mt">
+      <details className="pc-disclosure mt">
         <summary>Required CSV columns</summary>
         <dl>
           <div>
@@ -326,14 +329,27 @@ export function DataImportPanel({
             <Form
               method="post"
               onSubmit={(event) => {
-                if (
-                  !window.confirm(
-                    previewedTaskTransitions.length
-                      ? `Commit every create, update and membership link shown in this import preview, including ${previewedTaskTransitions.length} listed task lifecycle change${previewedTaskTransitions.length === 1 ? "" : "s"}?`
-                      : "Commit every create, update and membership link shown in this import preview?",
-                  )
-                )
-                  event.preventDefault();
+                event.preventDefault();
+                const form = event.currentTarget;
+                confirm(
+                  {
+                    title: "Commit this import preview?",
+                    description: previewedTaskTransitions.length
+                      ? `Every create, update and membership link shown in the preview is applied, including ${previewedTaskTransitions.length} listed task lifecycle change${previewedTaskTransitions.length === 1 ? "" : "s"}.`
+                      : "Every create, update and membership link shown in the preview is applied.",
+                    records: previewedTaskTransitions.length
+                      ? previewedTaskTransitions.map(
+                          (transition) =>
+                            `${transition.title} (${transition.taskId}): ${statusLabel(transition.beforeStatus)} → ${statusLabel(transition.afterStatus)}`,
+                        )
+                      : loaderData.operationDetail?.items.map(
+                          (item) => item.entityId ?? item.itemKey,
+                        ),
+                    confirmLabel: "Commit import",
+                    tone: "primary",
+                  },
+                  () => submit(form),
+                );
               }}
             >
               <input type="hidden" name="intent" value="confirm-import" />
@@ -353,6 +369,7 @@ export function DataImportPanel({
           ) : null}
         </div>
       ) : null}
+      {dialog}
     </section>
   ) : null;
 }

@@ -9,6 +9,7 @@ import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import type { ApplicantDraft } from "~/modules/submissions/submission-repository.server";
 import {
   DEFAULT_FORM_PRESENTATION,
@@ -142,6 +143,7 @@ export function DraftEditor({
   timezone: string;
 }) {
   const navigation = useNavigation();
+  const { confirm, dialog } = useConfirm();
   const [answers, setAnswers] = useState(draft.answers);
   const [speakers, setSpeakers] = useState(
     draft.speakers.length
@@ -259,6 +261,7 @@ export function DraftEditor({
 
   return (
     <Form method="post" className="stack" onChange={() => setDirty(true)}>
+      {dialog}
       <input type="hidden" name="submissionId" value={draft.id} />
       <input type="hidden" name="revision" value={draft.revision} />
       <input type="hidden" name="answers" value={JSON.stringify(answers)} />
@@ -647,17 +650,22 @@ export function DraftEditor({
                 <button
                   className="btn small"
                   type="button"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Discard the current editor contents and load the latest server application?",
-                      )
-                    ) {
-                      void recovery
-                        .clear()
-                        .then(() => window.location.reload());
-                    }
-                  }}
+                  onClick={() =>
+                    confirm(
+                      {
+                        title: "Load the latest server application?",
+                        description:
+                          "The unsaved editor contents and the browser recovery copy are discarded, then this page reloads the newer server revision. Export your local edits first if you still need them.",
+                        records: [draft.title],
+                        confirmLabel: "Discard and reload",
+                      },
+                      () => {
+                        void recovery
+                          .clear()
+                          .then(() => window.location.reload());
+                      },
+                    )
+                  }
                 >
                   Load server version
                 </button>
@@ -690,7 +698,7 @@ export function DraftEditor({
             </span>
           </div>
           {draft.status === "submitted" || draft.status === "assigned" ? (
-            <details className="card pad">
+            <details className="card pad pc-disclosure">
               <summary>
                 <strong>Withdraw application</strong>
               </summary>
