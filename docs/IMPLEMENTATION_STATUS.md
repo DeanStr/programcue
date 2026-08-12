@@ -26,6 +26,14 @@ Status terms:
 
 The old static browser application, legacy JavaScript Worker delegation and `src/domain` compatibility path have been removed. All HTTP and Queue entry points use the current TypeScript Worker.
 
+Open identity creation is now connected through email magic links, Google and
+Microsoft without changing authorisation. A brand-new identity is redirected to
+a neutral no-access page; signup creates no organisation, event, membership or
+participant relationship, and an unrelated authenticated identity remains
+forbidden from private event routes. Focused Worker coverage consumes a real
+hashed magic link for a previously unknown email, verifies the resulting person
+and proves the no-membership boundary. Live production acceptance is pending.
+
 Participant invitation boundaries now keep administrator-created speaker
 memberships pending and expiring until acceptance, prevent unrelated identities
 from being attached to direct sessions, defer public co-speaker materialisation

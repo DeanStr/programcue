@@ -8,6 +8,17 @@ secret exposes only the fixed, confirmed fixture reset; all browsing,
 authentication, authorisation, providers and human evaluation use normal
 production behavior. Removing that secret makes the operator route absent.
 
+## Identity creation and access
+
+Email magic links, Google and Microsoft may create an authenticated Program Cue
+identity. Identity creation alone creates no organisation, event, membership or
+participant relationship and therefore grants no private workspace access; a
+signed-in unrelated identity receives a neutral no-access page. Organiser and
+reviewer permissions still require an accepted membership, participant access
+still requires a verified application, accepted relationship or invitation,
+and invitation acceptance remains explicit. Published programme, gallery,
+embed, API and calendar-feed surfaces remain anonymous.
+
 ## Abstract management decisions
 
 Blind review fails closed: only submitted fields explicitly marked with

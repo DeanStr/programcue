@@ -292,7 +292,7 @@ describe("production authentication routes", () => {
     expect(logEntry).not.toContain("GOOGLE_AUTH_CLIENT");
   });
 
-  it("configures optional social providers for invited-user sign-in only", () => {
+  it("allows social identity creation without granting workspace access", () => {
     expect(participantOAuthProviderOptions(productionEnv())).toEqual({});
     const providers = participantOAuthProviderOptions({
       ...productionEnv(),
@@ -302,18 +302,18 @@ describe("production authentication routes", () => {
       MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
     } as unknown as CloudflareEnvironment);
     expect(providers.google).toMatchObject({
-      disableSignUp: true,
       disableIdTokenSignIn: true,
       disableDefaultScope: true,
       scope: ["openid", "email", "profile"],
     });
+    expect(providers.google).not.toHaveProperty("disableSignUp");
     expect(providers.microsoft).toMatchObject({
-      disableSignUp: true,
       disableIdTokenSignIn: true,
       disableDefaultScope: true,
       responseMode: "form_post",
       scope: ["openid", "email", "profile"],
     });
+    expect(providers.microsoft).not.toHaveProperty("disableSignUp");
   });
 
   it.each([
@@ -802,6 +802,7 @@ describe("production authentication routes", () => {
     expect(link.searchParams.get("callbackURL")).toBe(
       "/sign-in?returnTo=%2Fadmin%2Fcrm&linkProvider=microsoft",
     );
+    expect(link.searchParams.get("newUserCallbackURL")).toBe("/");
   });
 
   it("shows the explicit Microsoft link step only to an authenticated person", async () => {
@@ -921,6 +922,7 @@ describe("production authentication routes", () => {
     );
     vi.stubGlobal("fetch", delivery);
     const testContext = context(productionEnv());
+    const unknownEmail = `unknown-${crypto.randomUUID()}@example.com`;
 
     const eligible = await signInAction({
       request: formRequest(
@@ -941,7 +943,7 @@ describe("production authentication routes", () => {
         "http://localhost/sign-in",
         {
           _intent: "email_magic_link",
-          email: `unknown-${crypto.randomUUID()}@example.com`,
+          email: unknownEmail,
           returnTo: "/participant/dashboard?tab=files",
           "turnstile-token": "turnstile-token",
         },
@@ -959,8 +961,7 @@ describe("production authentication routes", () => {
     expect(eligible.data).toEqual(unknown.data);
     expect(eligible.data).toEqual({
       ok: true,
-      message:
-        "If this address is eligible, a one-time sign-in link will arrive shortly.",
+      message: "A one-time sign-in link will arrive shortly.",
     });
     const emailCalls = (
       delivery.mock.calls as unknown as Array<[string, RequestInit]>
@@ -972,7 +973,26 @@ describe("production authentication routes", () => {
       expect(new URL(link!).searchParams.get("callbackURL")).toBe(
         "/participant/dashboard?tab=files",
       );
+      expect(new URL(link!).searchParams.get("newUserCallbackURL")).toBe("/");
     }
+    const unknownDelivery = JSON.parse(String(emailCalls[1]![1].body)) as {
+      text: string;
+    };
+    const unknownLink = unknownDelivery.text.match(/https?:\/\/\S+/u)?.[0];
+    const verified = await authApiLoader({
+      request: new Request(unknownLink!),
+      params: { "*": "magic-link/verify" },
+      context: testContext,
+    } as never);
+    expect(verified.status).toBe(302);
+    expect(new URL(verified.headers.get("location")!).pathname).toBe("/");
+    await expect(
+      env.DB.prepare(
+        "SELECT email_verified AS emailVerified FROM people WHERE email = ?",
+      )
+        .bind(unknownEmail)
+        .first<{ emailVerified: number }>(),
+    ).resolves.toEqual({ emailVerified: 1 });
   });
 
   it("does not disclose provider errors and rejects non-POST sign-in requests", async () => {
@@ -1063,9 +1083,38 @@ describe("production authentication routes", () => {
         params: {},
         context: context(testEnv),
       } as never);
-      expect(response.status).toBe(302);
-      expect(response.headers.get("location")).toBe(expected);
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(302);
+      expect((response as Response).headers.get("location")).toBe(expected);
     }
+  });
+
+  it("keeps an authenticated identity without memberships outside private workspaces", async () => {
+    const personId = `person-no-access-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      `INSERT INTO people (
+         id, email, display_name, email_verified, profile_status
+       ) VALUES (?, ?, 'No access', 1, 'draft')`,
+    )
+      .bind(personId, `${personId}@example.com`)
+      .run();
+    const { cookie } = await sessionCookie(personId);
+    const request = new Request("http://localhost/", { headers: { cookie } });
+
+    await expect(
+      homeLoader({
+        request,
+        params: {},
+        context: context(validatedProductionEnv()),
+      } as never),
+    ).resolves.toEqual({ hasWorkspaceAccess: false });
+    await expect(
+      resolveCurrentEventId(
+        new Request("http://localhost/admin/event", { headers: { cookie } }),
+        validatedProductionEnv(),
+        ["owner", "administrator"],
+      ),
+    ).rejects.toMatchObject({ status: 403 });
   });
 
   it("establishes an initial event only on safe navigation and never during a mutation", async () => {

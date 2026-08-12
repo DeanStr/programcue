@@ -161,6 +161,7 @@ async function beginSocialSignIn(
       body: {
         provider: parsed.data.provider,
         callbackURL: parsed.data.returnTo,
+        newUserCallbackURL: "/",
         errorCallbackURL,
       },
       headers: request.headers,
@@ -339,13 +340,16 @@ export async function action({ request, context }: Route.ActionArgs) {
         })}`
       : result.data.returnTo;
     await createAuth(env).api.signInMagicLink({
-      body: { email: result.data.email, callbackURL },
+      body: {
+        email: result.data.email,
+        callbackURL,
+        newUserCallbackURL: "/",
+      },
       headers: request.headers,
     });
     return data({
       ok: true,
-      message:
-        "If this address is eligible, a one-time sign-in link will arrive shortly.",
+      message: "A one-time sign-in link will arrive shortly.",
     });
   } catch (error) {
     if (error instanceof AbuseRateLimitError) {
@@ -477,7 +481,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
         </div>
         <h1>Sign in</h1>
         <p className="subtle">
-          Use your invited identity. Email links expire after five minutes.
+          Sign in or create an account. Email links expire after five minutes.
         </p>
         {actionData ? (
           <p
@@ -545,8 +549,8 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
               className="subtle"
               style={{ margin: "2px 0 0", textAlign: "center" }}
             >
-              Social sign-in requires the provider to confirm your invited email
-              address.
+              Signing in creates an identity only. Private workspace access is
+              granted separately.
             </p>
             <p
               className="subtle"

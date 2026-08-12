@@ -1,8 +1,11 @@
-import { redirect } from "react-router";
+import { Form, redirect } from "react-router";
 
 import type { Route } from "./+types/home";
 import type { ViewerRole } from "~/platform/auth/authorize.server";
-import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
+import {
+  listAuthorisedEvents,
+  requireCurrentEventRole,
+} from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
 const landingPage: Record<ViewerRole, string> = {
@@ -16,6 +19,8 @@ const landingPage: Record<ViewerRole, string> = {
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
+  const events = await listAuthorisedEvents(request, env);
+  if (events.length === 0) return { hasWorkspaceAccess: false as const };
   const viewer = await requireCurrentEventRole(request, env, [
     "owner",
     "administrator",
@@ -27,6 +32,43 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return redirect(landingPage[viewer.role]);
 }
 
-export default function Home() {
-  return null;
+export const headers: Route.HeadersFunction = () => ({
+  "cache-control": "private, no-store",
+});
+
+export default function Home({ loaderData }: Route.ComponentProps) {
+  if (loaderData.hasWorkspaceAccess) return null;
+  return (
+    <main
+      className="design-board"
+      id="main"
+      style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}
+    >
+      <section
+        className="card pad"
+        style={{ width: "min(520px, calc(100vw - 32px))" }}
+      >
+        <div className="brand" style={{ color: "var(--ink)", padding: 0 }}>
+          <span className="brand-mark">P</span>
+          <span>Program Cue</span>
+        </div>
+        <span className="pc-page-eyebrow">Account ready</span>
+        <h1>No workspace access yet</h1>
+        <p>
+          Your account is signed in, but it has not been granted access to an
+          organisation or event.
+        </p>
+        <p className="subtle">
+          Open an event invitation or a published application link to join the
+          relevant workspace. Signing up alone never grants private access.
+        </p>
+        <Form method="post" action="/sign-out">
+          <input type="hidden" name="returnTo" value="/" />
+          <button className="btn" type="submit">
+            Sign out
+          </button>
+        </Form>
+      </section>
+    </main>
+  );
 }

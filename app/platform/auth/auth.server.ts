@@ -121,7 +121,6 @@ export function participantOAuthProviderOptions(
             accessType: "online" as const,
             disableDefaultScope: true,
             disableIdTokenSignIn: true,
-            disableSignUp: true,
             scope: ["openid", "email", "profile"],
           },
         }
@@ -133,7 +132,6 @@ export function participantOAuthProviderOptions(
             disableDefaultScope: true,
             disableIdTokenSignIn: true,
             disableProfilePhoto: true,
-            disableSignUp: true,
             responseMode: "form_post" as const,
             scope: ["openid", "email", "profile"],
             tenantId: "common",
@@ -266,7 +264,6 @@ export function createAuth(env: CloudflareEnvironment) {
     socialProviders: participantOAuthProviderOptions(env),
     plugins: [
       magicLink({
-        disableSignUp: true,
         expiresIn: 300,
         storeToken: "hashed",
         sendMagicLink: async ({ email, url }) => sendMagicLink(env, email, url),
