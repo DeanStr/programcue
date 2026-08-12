@@ -362,6 +362,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
               <TurnstileWidget
                 siteKey={loaderData.turnstileSiteKey}
                 action="social_sign_in"
+                appearance="interaction-only"
               />
             </Form>
             <p
@@ -397,6 +398,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
           <TurnstileWidget
             siteKey={loaderData.turnstileSiteKey}
             action="sign_in"
+            appearance="interaction-only"
           />
           <button
             className="btn primary mt"
