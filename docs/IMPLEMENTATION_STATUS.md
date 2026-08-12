@@ -175,7 +175,11 @@ The automated repository gate is complete for the deployed source revision. A re
 
 The `design-system-overhaul` branch passed `npm run check` on 12 August 2026 in its isolated worktree, with all 107 visual baselines re-recorded against the new visual language.
 
-Stylesheets moved from `public/styles/` to `app/styles/` and are bundled by Vite: one hashed, minified file replaces 32 render-blocking unminified requests totalling 128,235 bytes. `app/styles/tokens.css` is the sole declaration site for colour, space, type, radius, elevation and motion values; `scripts/check-css-hygiene.mjs` runs in the configuration-contracts lane and fails on a re-typed token value, an undefined `var()`, a font size below 12px, or raw px spacing outside the token layer. All four rules are positive-controlled and 33 stylesheets pass. Tailwind was removed: it emitted only incidental matches against hand-rolled class names and its `@theme` injected a colliding `--radius-sm`.
+Stylesheets moved from `public/styles/` to `app/styles/` and are bundled by Vite: one hashed, minified file replaces 32 render-blocking unminified requests totalling 128,235 bytes. Tailwind was removed: it emitted only incidental matches against hand-rolled class names and its `@theme` injected a colliding `--radius-sm`.
+
+`scripts/check-css-hygiene.mjs` runs in the configuration-contracts lane and fails on a re-typed token value, a hex not recorded in `scripts/css-literal-baseline.json`, an undefined `var()`, a font size below 12px, or raw px spacing outside `app/styles/tokens.css`. All five rules are positive-controlled and 33 stylesheets pass.
+
+The migration is a ratchet, not a completed state: **159 colour literals and 32 non-tokenised `box-shadow` declarations remain** outside the token layer, recorded in the baseline so they can only decrease. Elevation values are not yet gated. Describing the token layer as the sole declaration site would overstate what is enforced.
 
 Inter Variable is now self-hosted and preloaded; it was previously declared in `--font` with no `@font-face`, font file or link anywhere in the repository, so every tuned weight and tracking value rendered in a fallback face.
 
@@ -185,7 +189,7 @@ The focus system is a single two-tone ring — `#312e81` at 10.5–11.4:1 on lig
 
 Known unrelated flake: `e2e/evaluation.spec.ts:8` intermittently fails its `toBeFocused` assertion after a dialog closes. This reproduces on `main` with the same frequency and is not attributable to this branch.
 
-Dark mode is defined as a token override behind `data-theme="dark"` and is deliberately not wired to `prefers-color-scheme`; the 136 routes have not been verified in dark. It is **frontend foundation only** until that verification exists.
+Dark mode is **not implemented**. A token override was written during this work and removed on review: with 159 literals and 32 shadows still outside the token layer, a theme swap would leave hard-coded light surfaces behind lightened text, and no current requirement calls for it.
 
 ## Deployment evidence
 

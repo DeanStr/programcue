@@ -128,10 +128,15 @@
   border-radius: var(--radius);
   background: linear-gradient(180deg, #fff, var(--soft));
 }
-.pc-empty-state h2 {
+/* Styled by class, not by element: the heading level varies with the
+   surrounding outline, so keying appearance to h2 left every empty state at
+   the default level rendering with browser margins. */
+.pc-empty-state-title {
   margin: var(--space-2) 0 3px;
   color: var(--ink);
   font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-snug);
 }
 .pc-empty-state p {
   max-width: 340px;

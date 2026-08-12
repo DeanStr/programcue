@@ -1,0 +1,183 @@
+{
+  "note": "Hex literals outside app/styles/tokens.css that predate the token layer. This is a ceiling: removing literals passes, introducing one fails. Regenerate with: node scripts/check-css-hygiene.mjs --update-baseline",
+  "total": 159,
+  "literals": {
+    "admin-chrome.css": {
+      "#0b172b": 1,
+      "#1e293b": 1,
+      "#263750": 3,
+      "#334155": 2,
+      "#a9b8cc": 1,
+      "#b8c5d8": 1
+    },
+    "base.css": {
+      "#0a1830": 1,
+      "#0b1d38": 1,
+      "#0ea5e9": 1,
+      "#111b3f": 2,
+      "#1e40af": 1,
+      "#5b21b6": 1,
+      "#8b5cf6": 1,
+      "#94a3b8": 1,
+      "#d9e2f2": 1,
+      "#dbeafe": 1,
+      "#ede9fe": 1,
+      "#f1f5f9": 1,
+      "#f5d0fe": 1,
+      "#f8faff": 1,
+      "#fde68a": 2,
+      "#fecaca": 3,
+      "#fff5f5": 1,
+      "#fffbeb": 1
+    },
+    "data-grid.css": {
+      "#edf1f6": 2,
+      "#fbfcff": 1
+    },
+    "design-primitives.css": {
+      "#0b1428": 1,
+      "#172554": 1,
+      "#1e3a8a": 1,
+      "#b91c1c": 1,
+      "#bbf7d0": 2,
+      "#bfdbfe": 1,
+      "#edf1f6": 2,
+      "#ef4444": 1,
+      "#f7fef9": 2,
+      "#f8fbff": 1,
+      "#fde68a": 1,
+      "#fecaca": 2,
+      "#fef2f2": 1,
+      "#fff7f7": 1,
+      "#fff8f8": 1,
+      "#fffafa": 1,
+      "#fffdf5": 1
+    },
+    "form-controls.css": {
+      "#0f766e": 1,
+      "#6d28d9": 1,
+      "#ecfeff": 1,
+      "#f1f5f9": 1,
+      "#f5f3ff": 1
+    },
+    "responsive-speaker-resources.css": {
+      "#f5f3ff": 1
+    },
+    "reviewer-responsive-tables.css": {
+      "#edf1f6": 1,
+      "#f8faff": 2
+    },
+    "schedule-format-tokens.css": {
+      "#155e75": 1,
+      "#1e40af": 1,
+      "#5b21b6": 1,
+      "#9a3412": 1,
+      "#cffafe": 1,
+      "#dbeafe": 1,
+      "#ede9fe": 1,
+      "#ffedd5": 1
+    },
+    "schedule-operations.css": {
+      "#1e293b": 1,
+      "#86efac": 1,
+      "#bbf7d0": 1,
+      "#f0fdf4": 1,
+      "#f5f5f8": 1,
+      "#f8faff": 2
+    },
+    "speaker-resources.css": {
+      "#22c55e": 1,
+      "#bbf7d0": 1,
+      "#f0fdf4": 1,
+      "#f8faff": 1,
+      "#fafaff": 1
+    },
+    "workspace-command.css": {
+      "#ddd6fe": 1,
+      "#f8faff": 1,
+      "#faf8ff": 1
+    },
+    "workspace-communications.css": {
+      "#f7f7ff": 1,
+      "#fafcff": 1,
+      "#fef2f2": 1,
+      "#fffbeb": 1
+    },
+    "workspace-form-builder.css": {
+      "#111827": 1,
+      "#111b3f": 1,
+      "#6d28d9": 1,
+      "#94a3b8": 1,
+      "#dbe2ee": 1,
+      "#ede9fe": 1,
+      "#f8faff": 1,
+      "#fbfaff": 1
+    },
+    "workspace-integrations.css": {
+      "#f8faff": 1
+    },
+    "workspace-public-application.css": {
+      "#081126": 1,
+      "#162452": 1,
+      "#182033": 1,
+      "#3c4658": 1,
+      "#455064": 1,
+      "#4f5a6d": 1,
+      "#5d677a": 1,
+      "#5ee6a8": 1,
+      "#5f697d": 3,
+      "#606a7b": 1,
+      "#8991a0": 1,
+      "#dbe3f0": 1,
+      "#dedbd5": 4,
+      "#f7f5f1": 1,
+      "#fbbf24": 1
+    },
+    "workspace-public-programme.css": {
+      "#1d4ed8": 1,
+      "#94a3b8": 1,
+      "#f5d0fe": 1,
+      "#f7f7ff": 2,
+      "#f8faff": 1,
+      "#f97316": 1
+    },
+    "workspace-review.css": {
+      "#f7f7ff": 1,
+      "#f8faff": 1,
+      "#fecaca": 1,
+      "#fff7f7": 1
+    },
+    "workspace-schedule.css": {
+      "#155e75": 1,
+      "#1e3a8a": 1,
+      "#4c1d95": 1,
+      "#9a3412": 1,
+      "#a5f3fc": 1,
+      "#bbf7d0": 2,
+      "#bfdbfe": 1,
+      "#c4b5fd": 1,
+      "#e7ebf2": 1,
+      "#ecfeff": 1,
+      "#edf1f6": 1,
+      "#ef4444": 1,
+      "#eff6ff": 1,
+      "#f0fdf4": 2,
+      "#f5f3ff": 1,
+      "#fbfcfe": 1,
+      "#fde68a": 1,
+      "#fed7aa": 1,
+      "#fff5f5": 1,
+      "#fff7ed": 1,
+      "#fffbeb": 1
+    },
+    "workspace-speaker.css": {
+      "#f6f8fc": 1,
+      "#fbfaff": 1
+    },
+    "workspace-tasks.css": {
+      "#a16207": 1,
+      "#b91c1c": 1,
+      "#c2410c": 1
+    }
+  }
+}

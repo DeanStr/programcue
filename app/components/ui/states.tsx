@@ -34,7 +34,7 @@ export function EmptyState({
       <span className="pc-state-icon">
         <Glyph aria-hidden size={22} />
       </span>
-      <Heading>{title}</Heading>
+      <Heading className="pc-empty-state-title">{title}</Heading>
       <p>{description}</p>
       {action ? <div className="pc-state-action">{action}</div> : null}
     </section>

@@ -12,7 +12,7 @@
  *
  * base.css is the token layer and is exempt from 1, 3 and 4 by design.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { repositoryRoot } from "./e2e-runtime.mjs";
@@ -20,6 +20,8 @@ import { repositoryRoot } from "./e2e-runtime.mjs";
 const STYLE_DIR = join(repositoryRoot, "app/styles");
 const TOKEN_FILE = "tokens.css";
 const MIN_FONT_PX = 12;
+const BASELINE_PATH = join(repositoryRoot, "scripts/css-literal-baseline.json");
+const UPDATE_BASELINE = process.argv.includes("--update-baseline");
 
 /* Values that are legitimately not tokens. */
 const ALLOWED_HEX = new Set(["#fff", "#ffffff", "#000", "#000000"]);
@@ -58,6 +60,16 @@ const failures = [];
 const record = (file, line, rule, detail) =>
   failures.push({ file, line, rule, detail });
 
+/* Every hex literal seen outside the token layer, and where it appeared. */
+const observed = {};
+const literalLines = [];
+let baseline = {};
+try {
+  baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8")).literals ?? {};
+} catch {
+  baseline = {};
+}
+
 for (const [file, source] of sources) {
   const isTokenFile = file === TOKEN_FILE;
   const lines = source.split("\n");
@@ -76,10 +88,15 @@ for (const [file, source] of sources) {
 
     if (isTokenFile) return;
 
-    /* 1. hex literals that duplicate a token */
+    /* 1. hex literals that duplicate a token, and any literal not already
+       recorded in the baseline. The baseline is a ceiling: removing literals
+       never fails, introducing one always does. */
     for (const [, hex] of code.matchAll(/(#[0-9a-f]{3,8})\b/gi)) {
       const value = hex.toLowerCase();
       if (ALLOWED_HEX.has(value)) continue;
+      observed[file] ??= {};
+      observed[file][value] = (observed[file][value] ?? 0) + 1;
+      literalLines.push({ file, line, value });
       const token = tokenValues.get(value);
       if (token) {
         record(file, line, "retyped-token", `${hex} is var(${token})`);
@@ -107,6 +124,59 @@ for (const [file, source] of sources) {
       }
     }
   });
+}
+
+if (UPDATE_BASELINE) {
+  const sorted = {};
+  for (const file of Object.keys(observed).sort()) {
+    sorted[file] = Object.fromEntries(
+      Object.entries(observed[file]).sort(([a], [b]) => a.localeCompare(b)),
+    );
+  }
+  const total = Object.values(observed).reduce(
+    (sum, values) => sum + Object.values(values).reduce((a, b) => a + b, 0),
+    0,
+  );
+  writeFileSync(
+    BASELINE_PATH,
+    `${JSON.stringify(
+      {
+        note: "Hex literals outside app/styles/tokens.css that predate the token layer. This is a ceiling: removing literals passes, introducing one fails. Regenerate with: node scripts/check-css-hygiene.mjs --update-baseline",
+        total,
+        literals: sorted,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  console.log(`CSS hygiene: baseline written with ${total} recorded literals.`);
+  process.exit(0);
+}
+
+/* Any literal beyond what the baseline records is new and must be a token. */
+for (const { file, line, value } of literalLines) {
+  const allowed = baseline[file]?.[value] ?? 0;
+  if (allowed === 0) {
+    record(
+      file,
+      line,
+      "new-literal",
+      `${value} is not a token; declare it in ${TOKEN_FILE}`,
+    );
+  }
+}
+for (const [file, values] of Object.entries(observed)) {
+  for (const [value, count] of Object.entries(values)) {
+    const allowed = baseline[file]?.[value] ?? 0;
+    if (allowed > 0 && count > allowed) {
+      record(
+        file,
+        0,
+        "new-literal",
+        `${value} appears ${count} times, baseline allows ${allowed}`,
+      );
+    }
+  }
 }
 
 if (failures.length > 0) {
