@@ -1,0 +1,4 @@
+.wysiwyg-editor[contenteditable="true"]:empty::before {
+  content: "Write the message body…";
+  color: var(--muted-2);
+}

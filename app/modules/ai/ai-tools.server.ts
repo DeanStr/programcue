@@ -2,6 +2,7 @@ import { AiProposalToolExecutor } from "./ai-proposal-tool-executor.server";
 export { prepareReminderSendProposal } from "./ai-proposal-tool-executor.server";
 import {
   AiToolPermissionError,
+  AiToolValidationError,
   type AiToolExecution,
 } from "./ai-tool-execution";
 import type { OpenAiFunctionTool } from "./openai-responses-provider.server";
@@ -31,7 +32,9 @@ export type { AiToolExecution } from "./ai-tool-execution";
 
 export function availableAiTools(viewer: Viewer): OpenAiFunctionTool[] {
   if (!adminRoles.has(viewer.role)) return [];
-  return AI_TOOLS.map(({ class: _class, ...tool }) => tool);
+  return AI_TOOLS.map(
+    ({ class: _class, argumentsSchema: _argumentsSchema, ...tool }) => tool,
+  );
 }
 
 export class AiToolExecutor {
@@ -59,6 +62,18 @@ export class AiToolExecutor {
     if (!definition) {
       throw new AiToolPermissionError(
         `The selected AI provider requested the non-allow-listed tool ${name}.`,
+      );
+    }
+    const decodedArguments = (() => {
+      try {
+        return JSON.parse(encodedArguments);
+      } catch {
+        return null;
+      }
+    })();
+    if (!definition.argumentsSchema.safeParse(decodedArguments).success) {
+      throw new AiToolValidationError(
+        `The selected AI provider supplied invalid arguments for ${name}.`,
       );
     }
     await this.airtable.assertReadable(this.viewer);

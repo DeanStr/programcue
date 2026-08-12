@@ -1051,13 +1051,17 @@ describe("speaker resource service", () => {
     });
     const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
 
-    const internalService = service as unknown as {
-      getDraftForPublish: (
-        currentViewer: Viewer,
-        currentPageId: string,
-      ) => Promise<unknown>;
-    };
-    const readDraft = internalService.getDraftForPublish.bind(service);
+    const internalService = (
+      service as unknown as {
+        publication: {
+          getDraftForPublish: (
+            currentViewer: Viewer,
+            currentPageId: string,
+          ) => Promise<unknown>;
+        };
+      }
+    ).publication;
+    const readDraft = internalService.getDraftForPublish.bind(internalService);
     let releaseBothReads!: () => void;
     const bothReadsComplete = new Promise<void>((resolve) => {
       releaseBothReads = resolve;
@@ -1270,17 +1274,21 @@ describe("speaker resource service", () => {
       }),
     );
     const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
-    const internal = resources as unknown as {
-      insertDraftAttachment: (
-        currentViewer: Viewer,
-        currentPageId: string,
-        currentVersionId: string,
-        currentRevision: number,
-        assetId: string,
-        fileVersionId: string,
-      ) => Promise<D1Result<unknown>>;
-    };
-    const insert = internal.insertDraftAttachment.bind(resources);
+    const internal = (
+      resources as unknown as {
+        attachments: {
+          insertDraftAttachment: (
+            currentViewer: Viewer,
+            currentPageId: string,
+            currentVersionId: string,
+            currentRevision: number,
+            assetId: string,
+            fileVersionId: string,
+          ) => Promise<D1Result<unknown>>;
+        };
+      }
+    ).attachments;
+    const insert = internal.insertDraftAttachment.bind(internal);
     let raced = false;
     internal.insertDraftAttachment = async (...args) => {
       if (!raced) {

@@ -1,0 +1,26 @@
+/* Design system */
+.design-board {
+  padding: 24px;
+  background: #f8fafc;
+}
+.design-section {
+  padding: 15px;
+}
+.swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.swatch {
+  width: 88px;
+}
+.swatch-color {
+  height: 48px;
+  border-radius: 9px;
+}
+.component-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}

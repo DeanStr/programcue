@@ -1,0 +1,20 @@
+/* final layout refinements */
+@media (min-width: 1351px) {
+  .command-grid {
+    grid-template-columns: minmax(370px, 1.6fr) repeat(4, minmax(155px, 0.7fr));
+  }
+  .readiness-card {
+    grid-template-columns: 130px 1fr;
+  }
+  .readiness-card .gauge {
+    width: 120px;
+    height: 120px;
+  }
+  .readiness-card .gauge::before {
+    width: 88px;
+    height: 88px;
+  }
+  .readiness-card .gauge strong {
+    font-size: 29px;
+  }
+}

@@ -1,0 +1,44 @@
+.application-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 16px;
+}
+.application-drafts {
+  align-self: start;
+  position: sticky;
+  top: 82px;
+}
+.application-drafts .queue-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+.application-drafts .queue-card h3 {
+  margin: 8px 0 4px;
+}
+.field-error {
+  display: block;
+  color: var(--red);
+  font-size: 11px;
+  margin-top: 4px;
+}
+@media (max-width: 1024px) {
+  .public-top .brand span {
+    display: inline-flex;
+  }
+}
+@media (max-width: 760px) {
+  .application-layout {
+    grid-template-columns: 1fr;
+  }
+  .application-drafts {
+    position: static;
+  }
+  .application-drafts .stack {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(220px, 80%);
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+}

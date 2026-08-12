@@ -31,6 +31,17 @@ import {
   type FileScanQueueMessage,
 } from "./file-scan-dispatch.server";
 import { requireR2S3Configuration } from "./r2-s3-signing.server";
+import {
+  MultipartUploadAccessRepository,
+  isApplicantActor,
+  multipartIdempotencyKey,
+} from "./multipart-upload-access.server";
+import type {
+  MultipartActor,
+  MultipartRow,
+} from "./multipart-upload-contracts";
+
+export type { ApplicantMultipartActor } from "./multipart-upload-contracts";
 
 const MULTIPART_EXPIRY_SECONDS = 24 * 60 * 60;
 const REQUEST_CLAIM_SECONDS = 60;
@@ -84,65 +95,6 @@ export {
   FileMultipartStateError,
 } from "./multipart-upload-errors";
 
-type MultipartRow = {
-  versionId: string;
-  eventId: string;
-  organisationId: string;
-  assetId: string;
-  assetKind: string;
-  targetType: string;
-  targetId: string;
-  ownerPersonId: string | null;
-  assetStatus: string;
-  erasureRequested: number;
-  createdByPersonId: string | null;
-  objectKey: string;
-  filename: string;
-  contentType: string;
-  detectedContentType: string | null;
-  sizeBytes: number;
-  objectEtag: string | null;
-  uploadStatus: string;
-  signatureStatus: string;
-  scanStatus: string;
-  versionDeletedAt: number | null;
-  uploadId: string | null;
-  idempotencyKey: string;
-  status: string;
-  partSizeBytes: number;
-  manifestJson: string | null;
-  manifestHash: string | null;
-  lastError: string | null;
-  expiresAt: number;
-  createdAt: number;
-  updatedAt: number;
-  filePolicyJson: string;
-};
-
-export type ApplicantMultipartActor = {
-  kind: "applicant";
-  organisationId: string;
-  eventId: string;
-  personId: string | null;
-  submissionId: string;
-  fieldId: string;
-};
-
-type MultipartActor = Viewer | ApplicantMultipartActor;
-
-function isApplicantActor(
-  actor: MultipartActor,
-): actor is ApplicantMultipartActor {
-  return "kind" in actor && actor.kind === "applicant";
-}
-
-function multipartIdempotencyKey(actor: MultipartActor, key: string) {
-  const identity = isApplicantActor(actor)
-    ? `applicant:${actor.submissionId}`
-    : actor.personId;
-  return `${identity}:${key}`;
-}
-
 function expectedPartCount(
   row: Pick<MultipartRow, "sizeBytes" | "partSizeBytes">,
 ) {
@@ -188,12 +140,14 @@ function normalizedManifest(
 
 export class MultipartUploadService {
   private readonly provider: MultipartR2Provider;
+  private readonly access: MultipartUploadAccessRepository;
 
   constructor(
     private readonly env: CloudflareEnvironment,
     dependencies?: { fetch?: typeof fetch },
   ) {
     this.provider = new MultipartR2Provider(env, dependencies);
+    this.access = new MultipartUploadAccessRepository(env);
   }
 
   private requireBucket() {
@@ -246,158 +200,6 @@ export class MultipartUploadService {
     } else {
       await files.assertParticipantTarget(actor, target);
     }
-  }
-
-  private async loadEventFilePolicy(actor: MultipartActor) {
-    const event = await this.env.DB.prepare(
-      `SELECT file_policy_json AS filePolicyJson
-         FROM events WHERE id = ? AND organisation_id = ?`,
-    )
-      .bind(actor.eventId, actor.organisationId)
-      .first<{ filePolicyJson: string }>();
-    if (!event) throw new FileAccessError("Event file policy not found.");
-    return parseEventFilePolicy(event.filePolicyJson);
-  }
-
-  private async loadByIdempotency(
-    actor: MultipartActor,
-    idempotencyKey: string,
-  ) {
-    const row = await this.env.DB.prepare(
-      `
-      SELECT upload.version_id AS versionId, upload.event_id AS eventId,
-             event.organisation_id AS organisationId,
-             upload.asset_id AS assetId, asset.asset_kind AS assetKind,
-             asset.target_type AS targetType, asset.target_id AS targetId,
-             asset.owner_person_id AS ownerPersonId,
-             asset.status AS assetStatus,
-             EXISTS (
-               SELECT 1 FROM audit_events audit
-                WHERE audit.id = 'file-erasure:' || asset.id
-             ) AS erasureRequested,
-             version.created_by_person_id AS createdByPersonId,
-             version.object_key AS objectKey,
-             version.original_filename AS filename,
-             version.declared_content_type AS contentType,
-             version.detected_content_type AS detectedContentType,
-             version.size_bytes AS sizeBytes, version.object_etag AS objectEtag,
-             version.upload_status AS uploadStatus,
-             version.signature_status AS signatureStatus,
-             version.scan_status AS scanStatus,
-             version.deleted_at AS versionDeletedAt,
-             upload.upload_id AS uploadId,
-             upload.idempotency_key AS idempotencyKey,
-             upload.status, upload.part_size_bytes AS partSizeBytes,
-             upload.manifest_json AS manifestJson,
-             upload.manifest_hash AS manifestHash,
-             upload.last_error AS lastError,
-             upload.expires_at AS expiresAt, upload.created_at AS createdAt,
-             upload.updated_at AS updatedAt,
-             event.file_policy_json AS filePolicyJson
-        FROM file_multipart_uploads upload
-        JOIN file_versions version
-          ON version.id = upload.version_id AND version.event_id = upload.event_id
-        JOIN file_assets asset
-          ON asset.id = upload.asset_id AND asset.event_id = upload.event_id
-        JOIN events event ON event.id = upload.event_id
-       WHERE upload.event_id = ? AND upload.idempotency_key = ?
-         AND event.organisation_id = ?
-    `,
-    )
-      .bind(actor.eventId, idempotencyKey, actor.organisationId)
-      .first<MultipartRow>();
-    if (row) this.assertRowAccess(actor, row);
-    return row;
-  }
-
-  private async loadByVersion(actor: MultipartActor, versionId: string) {
-    const row = await this.env.DB.prepare(
-      `
-      SELECT upload.version_id AS versionId, upload.event_id AS eventId,
-             event.organisation_id AS organisationId,
-             upload.asset_id AS assetId, asset.asset_kind AS assetKind,
-             asset.target_type AS targetType, asset.target_id AS targetId,
-             asset.owner_person_id AS ownerPersonId,
-             asset.status AS assetStatus,
-             EXISTS (
-               SELECT 1 FROM audit_events audit
-                WHERE audit.id = 'file-erasure:' || asset.id
-             ) AS erasureRequested,
-             version.created_by_person_id AS createdByPersonId,
-             version.object_key AS objectKey,
-             version.original_filename AS filename,
-             version.declared_content_type AS contentType,
-             version.detected_content_type AS detectedContentType,
-             version.size_bytes AS sizeBytes, version.object_etag AS objectEtag,
-             version.upload_status AS uploadStatus,
-             version.signature_status AS signatureStatus,
-             version.scan_status AS scanStatus,
-             version.deleted_at AS versionDeletedAt,
-             upload.upload_id AS uploadId,
-             upload.idempotency_key AS idempotencyKey,
-             upload.status, upload.part_size_bytes AS partSizeBytes,
-             upload.manifest_json AS manifestJson,
-             upload.manifest_hash AS manifestHash,
-             upload.last_error AS lastError,
-             upload.expires_at AS expiresAt, upload.created_at AS createdAt,
-             upload.updated_at AS updatedAt,
-             event.file_policy_json AS filePolicyJson
-        FROM file_multipart_uploads upload
-        JOIN file_versions version
-          ON version.id = upload.version_id AND version.event_id = upload.event_id
-        JOIN file_assets asset
-          ON asset.id = upload.asset_id AND asset.event_id = upload.event_id
-        JOIN events event ON event.id = upload.event_id
-       WHERE upload.version_id = ? AND upload.event_id = ?
-         AND event.organisation_id = ?
-    `,
-    )
-      .bind(versionId, actor.eventId, actor.organisationId)
-      .first<MultipartRow>();
-    if (!row)
-      throw new FileAccessError("Multipart upload not found in this event.");
-    this.assertRowAccess(actor, row);
-    return row;
-  }
-
-  private assertRowAccess(actor: MultipartActor, row: MultipartRow) {
-    if (
-      row.eventId !== actor.eventId ||
-      row.organisationId !== actor.organisationId
-    )
-      throw new FileAccessError("Multipart upload not found in this event.");
-    if (
-      row.assetStatus === "deleted" ||
-      row.versionDeletedAt !== null ||
-      row.erasureRequested === 1
-    )
-      throw new FileMultipartStateError(
-        "This multipart upload was revoked by permanent file erasure.",
-      );
-    if (isApplicantActor(actor)) {
-      const ownedByApplicant = actor.personId
-        ? row.ownerPersonId === actor.personId &&
-          row.createdByPersonId === actor.personId
-        : row.ownerPersonId === null && row.createdByPersonId === null;
-      if (
-        row.targetType !== "submission" ||
-        row.targetId !== actor.submissionId ||
-        row.assetKind !== "video" ||
-        !ownedByApplicant
-      )
-        throw new FileAccessError(
-          "This multipart upload belongs to another application draft.",
-        );
-      return;
-    }
-    if (
-      !["owner", "administrator"].includes(actor.role) &&
-      row.createdByPersonId !== actor.personId &&
-      row.ownerPersonId !== actor.personId
-    )
-      throw new FileAccessError(
-        "This multipart upload belongs to another person.",
-      );
   }
 
   private assertSameRequest(
@@ -642,7 +444,7 @@ export class MultipartUploadService {
       throw new Error(
         "The multipart file version could not be allocated atomically.",
       );
-    const row = await this.loadByVersion(actor, versionId);
+    const row = await this.access.loadByVersion(actor, versionId);
     return row;
   }
 
@@ -779,7 +581,7 @@ export class MultipartUploadService {
         },
       );
     }
-    return this.loadByVersion(actor, row.versionId);
+    return this.access.loadByVersion(actor, row.versionId);
   }
 
   async initiate(actor: MultipartActor, rawInput: unknown) {
@@ -796,10 +598,10 @@ export class MultipartUploadService {
     validateDirectFileDeclaration(
       input.target.assetKind,
       declaration,
-      await this.loadEventFilePolicy(actor),
+      await this.access.loadEventFilePolicy(actor),
     );
     const storedKey = multipartIdempotencyKey(actor, input.idempotencyKey);
-    let row = await this.loadByIdempotency(actor, storedKey);
+    let row = await this.access.loadByIdempotency(actor, storedKey);
     if (row) {
       this.assertSameRequest(row, input);
       if (row.status === "initiated") return this.response(row, true);
@@ -823,7 +625,7 @@ export class MultipartUploadService {
       try {
         row = await this.allocateIntent(actor, input, storedKey);
       } catch (error) {
-        row = await this.loadByIdempotency(actor, storedKey);
+        row = await this.access.loadByIdempotency(actor, storedKey);
         if (!row) throw error;
         this.assertSameRequest(row, input);
         if (row.status === "initiated") return this.response(row, true);
@@ -847,9 +649,9 @@ export class MultipartUploadService {
         type: input.contentType,
         size: input.sizeBytes,
       },
-      await this.loadEventFilePolicy(actor),
+      await this.access.loadEventFilePolicy(actor),
     );
-    const row = await this.loadByIdempotency(
+    const row = await this.access.loadByIdempotency(
       actor,
       multipartIdempotencyKey(actor, input.idempotencyKey),
     );
@@ -862,7 +664,7 @@ export class MultipartUploadService {
     requireR2S3Configuration(this.env);
     this.requireBucket();
     const input = multipartListPartsSchema.parse(rawInput);
-    const row = await this.loadByVersion(actor, input.versionId);
+    const row = await this.access.loadByVersion(actor, input.versionId);
     if (["completing", "completed"].includes(row.status)) {
       if (!row.manifestJson)
         throw new FileMultipartStateError(
@@ -918,7 +720,7 @@ export class MultipartUploadService {
     requireR2S3Configuration(this.env);
     this.requireBucket();
     const input = multipartPartUrlSchema.parse(rawInput);
-    const row = await this.loadByVersion(actor, input.versionId);
+    const row = await this.access.loadByVersion(actor, input.versionId);
     if (row.status !== "initiated" || !row.uploadId)
       throw new FileMultipartStateError(
         `Multipart upload is ${row.status}; no more part URLs can be issued.`,
@@ -1094,7 +896,7 @@ export class MultipartUploadService {
         ),
       ]);
       if ((revoked.meta.changes ?? 0) !== 1) {
-        const current = await this.loadByVersion(actor, row.versionId);
+        const current = await this.access.loadByVersion(actor, row.versionId);
         if (
           current.status !== "failed" ||
           current.lastError !== REVOKED_COMPLETION_REASON
@@ -1138,7 +940,7 @@ export class MultipartUploadService {
     this.requireBucket();
     const input = multipartCompleteSchema.parse(rawInput);
     assertFileScanDispatchConfigured(this.env);
-    let row = await this.loadByVersion(actor, input.versionId);
+    let row = await this.access.loadByVersion(actor, input.versionId);
     const parts = normalizedManifest(input.parts, expectedPartCount(row));
     const manifestJson = JSON.stringify(parts);
     const manifestHash = await sha256(manifestJson);
@@ -1221,7 +1023,7 @@ export class MultipartUploadService {
         .bind(manifestJson, manifestHash, row.versionId, actor.eventId)
         .run();
       if ((started.meta.changes ?? 0) !== 1)
-        row = await this.loadByVersion(actor, row.versionId);
+        row = await this.access.loadByVersion(actor, row.versionId);
       else row = { ...row, status: "completing", manifestJson, manifestHash };
     }
     if (row.status !== "completing" || !row.uploadId)
@@ -1509,7 +1311,7 @@ export class MultipartUploadService {
           : undefined,
       );
     }
-    row = await this.loadByVersion(actor, row.versionId);
+    row = await this.access.loadByVersion(actor, row.versionId);
     if (
       row.status !== "completed" ||
       row.uploadStatus !== "uploaded" ||
@@ -1525,7 +1327,7 @@ export class MultipartUploadService {
 
   async abort(actor: MultipartActor, rawInput: unknown) {
     const input = multipartAbortSchema.parse(rawInput);
-    let row = await this.loadByVersion(actor, input.versionId);
+    let row = await this.access.loadByVersion(actor, input.versionId);
     if (row.status === "completed" || row.status === "completing")
       throw new FileMultipartStateError(
         "A completing or completed upload cannot be aborted.",

@@ -1,0 +1,61 @@
+.public-shell.embedded .public-top {
+  position: static;
+}
+.public-shell.embedded .hero {
+  margin-top: 12px;
+  min-height: 170px;
+}
+.public-shell.embedded .public-main {
+  width: min(1180px, calc(100% - 24px));
+  grid-template-columns: 1fr;
+}
+.public-shell.embedded .public-main > aside {
+  display: none;
+}
+.public-shell.embedded.embed-compact .hero {
+  min-height: 118px;
+  padding: 20px 24px;
+}
+.public-shell.embedded.embed-compact .hero h1 {
+  margin: 8px 0 6px;
+  font-size: 30px;
+}
+.public-shell.embedded.embed-compact .public-filters {
+  margin-bottom: 6px;
+}
+.public-shell.embedded.embed-compact .programme-row {
+  padding-block: 8px;
+}
+.public-shell.embedded.embed-compact .programme-entry-description {
+  padding-bottom: 8px;
+}
+@media (max-width: 1000px) {
+  .programme-embed-builder-layout {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .programme-embed-builder-title,
+  .programme-embed-output > .card-title,
+  .programme-embed-install .card-title,
+  .programme-embed-copy-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .programme-embed-control-grid,
+  .programme-embed-appearance-grid {
+    grid-template-columns: 1fr;
+  }
+  .programme-embed-output .segmented,
+  .programme-embed-output .segmented .btn,
+  .programme-embed-copy-row .btn {
+    width: 100%;
+  }
+  .programme-embed-preview {
+    min-height: 340px;
+    padding: 6px;
+  }
+  .programme-embed-preview iframe {
+    min-height: 328px;
+  }
+}

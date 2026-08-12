@@ -1,0 +1,69 @@
+/* Final review: allow the schedule work area to contain horizontal scrolling at laptop widths. */
+.schedule-layout > * {
+  min-width: 0;
+}
+.schedule-board {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Alternate schedule views share the room-grid data without introducing a second scheduling model. */
+.schedule-view-tabs {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.schedule-alt {
+  min-width: 0;
+}
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.week-day {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+.week-day > .card {
+  box-shadow: none;
+}
+.track-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.track-column {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  min-width: 0;
+}
+.track-column > button {
+  text-align: left;
+  width: 100%;
+}
+@media (max-width: 1024px) {
+  .week-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .week-grid {
+    grid-template-columns: 1fr;
+  }
+  .schedule-view-tabs {
+    width: 100%;
+    margin-left: 0;
+  }
+  .schedule-view-tabs .btn {
+    flex: 1;
+  }
+}

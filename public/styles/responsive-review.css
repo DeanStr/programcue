@@ -1,0 +1,16 @@
+/* Final review refinements */
+@media (min-width: 1351px) {
+  .review-score {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 145px);
+    overflow: auto;
+    scroll-padding-bottom: 86px;
+  }
+  .review-score > .pad {
+    flex: 1 0 auto;
+  }
+  .review-score .sticky-actions {
+    margin-top: auto;
+  }
+}
