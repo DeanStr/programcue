@@ -72,6 +72,8 @@ export abstract class ScheduleSessionResourcesWorkflow extends ScheduleContentWo
 
     const operationId = crypto.randomUUID();
     const nextSessionRevision = session.revision + 1;
+    const nextContentRevision = session.contentRevision + 1;
+    const historyRevisionId = crypto.randomUUID();
     const auditEventId = crypto.randomUUID();
     const webhookService = new WebhookService(this.env);
     const preparedWebhook = await webhookService.prepareEventForAudit(
@@ -153,9 +155,13 @@ export abstract class ScheduleSessionResourcesWorkflow extends ScheduleContentWo
       ),
       this.env.DB.prepare(
         `UPDATE schedule_session_contents
-            SET required_resources_json = ?, last_operation_id = ?,
+            SET required_resources_json = ?, content_status = 'draft',
+                content_revision = content_revision + 1,
+                last_edited_by_person_id = ?, approved_by_person_id = NULL,
+                approved_at = NULL, last_operation_id = ?,
                 updated_at = unixepoch()
           WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?
+            AND content_revision = ?
             AND EXISTS (
               SELECT 1 FROM schedule_versions
                WHERE id = schedule_session_contents.schedule_version_id
@@ -164,11 +170,39 @@ export abstract class ScheduleSessionResourcesWorkflow extends ScheduleContentWo
             )`,
       ).bind(
         JSON.stringify(parsed.requiredResources),
+        viewer.personId,
         operationId,
         parsed.scheduleVersionId,
         viewer.eventId,
         session.id,
+        session.contentRevision,
         operationId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO session_content_revisions (
+           id, event_id, schedule_version_id, session_id, revision_number,
+           title, slug, description, track_id, format, duration_minutes,
+           required_resources_json, visibility, content_status, change_kind,
+           restored_from_revision_id, created_by_person_id, created_at
+         )
+         SELECT ?, content.event_id, content.schedule_version_id,
+                content.session_id, content.content_revision, content.title,
+                content.slug, content.description, content.track_id,
+                content.format, content.duration_minutes,
+                content.required_resources_json, content.visibility,
+                content.content_status, 'edit', NULL, ?, unixepoch()
+           FROM schedule_session_contents content
+          WHERE content.schedule_version_id = ? AND content.event_id = ?
+            AND content.session_id = ? AND content.last_operation_id = ?
+            AND content.content_revision = ?`,
+      ).bind(
+        historyRevisionId,
+        viewer.personId,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        session.id,
+        operationId,
+        nextContentRevision,
       ),
       this.env.DB.prepare(
         `DELETE FROM schedule_conflicts
@@ -212,6 +246,8 @@ export abstract class ScheduleSessionResourcesWorkflow extends ScheduleContentWo
         JSON.stringify({
           requiredResources: parsed.requiredResources,
           revision: nextSessionRevision,
+          contentRevision: nextContentRevision,
+          contentStatus: "draft",
         }),
         parsed.scheduleVersionId,
         viewer.eventId,
@@ -221,14 +257,20 @@ export abstract class ScheduleSessionResourcesWorkflow extends ScheduleContentWo
     const auditIndex = statements.length - 1;
     statements.push(...preparedWebhook.statements);
     const results = await this.env.DB.batch(statements);
-    const [eventUpdated, versionUpdated, sessionUpdated, snapshotUpdated] =
-      results;
+    const [
+      eventUpdated,
+      versionUpdated,
+      sessionUpdated,
+      snapshotUpdated,
+      historyInserted,
+    ] = results;
     const audit = results[auditIndex]!;
     if (
       (eventUpdated.meta.changes ?? 0) !== 1 ||
       (versionUpdated.meta.changes ?? 0) !== 1 ||
       (sessionUpdated.meta.changes ?? 0) !== 1 ||
       (snapshotUpdated.meta.changes ?? 0) !== 1 ||
+      (historyInserted.meta.changes ?? 0) !== 1 ||
       (audit.meta.changes ?? 0) !== 1
     ) {
       throw new ScheduleRevisionConflictError();
@@ -237,6 +279,8 @@ export abstract class ScheduleSessionResourcesWorkflow extends ScheduleContentWo
     return {
       sessionId: session.id,
       revision: nextSessionRevision,
+      contentRevision: nextContentRevision,
+      contentStatus: "draft" as const,
       warnings: conflicts
         .filter(
           ({ entryId, conflict }) =>

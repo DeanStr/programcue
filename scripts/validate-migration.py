@@ -29,7 +29,7 @@ required = {
     "review_revisions", "review_moderations", "submission_decisions",
     "tracks", "rooms", "schedule_policies", "sessions", "session_speakers",
     "tags", "session_tags", "session_archives",
-    "schedule_versions", "schedule_session_contents", "schedule_entries", "schedule_conflicts",
+    "schedule_versions", "schedule_session_contents", "session_content_revisions", "schedule_entries", "schedule_conflicts",
     "public_itineraries", "public_itinerary_items",
     "task_templates", "task_template_dependencies", "task_instances",
     "task_instance_dependencies", "task_comments", "task_evidence",
@@ -93,7 +93,8 @@ for table, expected in {
     "tags": {"event_id", "name", "colour_token"},
     "session_archives": {"event_id", "previous_status", "archive_operation_id"},
     "schedule_versions": {"status", "revision", "notes"},
-    "schedule_session_contents": {"schedule_version_id", "event_id", "session_id", "title", "slug", "description", "track_id", "format", "duration_minutes", "required_resources_json", "visibility", "last_operation_id"},
+    "schedule_session_contents": {"schedule_version_id", "event_id", "session_id", "title", "slug", "description", "track_id", "format", "duration_minutes", "required_resources_json", "visibility", "content_status", "content_revision", "last_edited_by_person_id", "approved_by_person_id", "approved_at", "last_operation_id"},
+    "session_content_revisions": {"event_id", "schedule_version_id", "session_id", "revision_number", "title", "description", "content_status", "change_kind", "restored_from_revision_id", "created_by_person_id"},
     "communications": {"idempotency_key", "content_snapshot_json", "recipient_count", "operation_id", "revision"},
     "calendar_invitations": {"ical_uid", "sequence_number", "method", "provider_event_id", "status"},
     "operation_jobs": {"correlation_id", "progress_total", "progress_completed", "progress_failed", "result_json", "claim_token", "claim_expires_at"},
@@ -130,7 +131,7 @@ if missing_drizzle_indexes:
 
 required_indexes = {
     "idx_submissions_event_status", "idx_assignments_evaluator_status",
-    "idx_schedule_session_contents_event", "idx_schedule_entries_room_time", "idx_schedule_conflicts_open", "ux_tags_event_name",
+    "idx_schedule_session_contents_event", "idx_session_content_revisions_history", "idx_schedule_entries_room_time", "idx_schedule_conflicts_open", "ux_tags_event_name",
     "idx_tasks_event_status_due", "ux_task_instances_template_target", "ux_file_assets_logical_active", "idx_file_versions_release", "idx_file_multipart_status_expiry",
     "idx_deliveries_communication_status", "idx_calendar_invitation_status",
     "idx_operation_jobs_event_status", "idx_operation_items_status",

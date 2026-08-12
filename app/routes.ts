@@ -162,6 +162,15 @@ export default [
     ),
     route("admin/tasks", "routes/admin-tasks.tsx"),
     route("admin/tasks/bulk", "routes/admin-task-bulk.tsx"),
+    route("admin/content", "routes/admin-content.tsx"),
+    route(
+      "admin/content/sessions/:sessionId",
+      "routes/admin-content-session.tsx",
+    ),
+    route(
+      "admin/content/files/:assetId",
+      "routes/admin-content-file-download.ts",
+    ),
     route("admin/files/retention", "routes/admin-file-retention.tsx"),
     route("admin/resources", "routes/admin-resources.tsx"),
     route("admin/settings", "routes/api-settings.tsx"),

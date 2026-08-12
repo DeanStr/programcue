@@ -117,7 +117,10 @@ export function buildSchedulePublicationStatements(input: {
                 AND content.event_id = entry.event_id
                 AND content.session_id = entry.session_id
               WHERE entry.schedule_version_id = ? AND entry.event_id = ?
-                AND content.session_id IS NULL
+                AND (
+                  content.session_id IS NULL
+                  OR content.content_status <> 'approved'
+                )
            )
            AND NOT EXISTS (
              SELECT 1

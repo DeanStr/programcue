@@ -701,6 +701,7 @@ export class CalendarLifecycleService {
         JOIN schedule_session_contents content
           ON content.schedule_version_id = sv.id AND content.event_id = sv.event_id
          AND content.session_id = s.id
+         AND content.content_status = 'approved'
         JOIN rooms r ON r.id = se.room_id AND r.event_id = s.event_id
        WHERE s.id = ? AND s.event_id = ?
        LIMIT 1

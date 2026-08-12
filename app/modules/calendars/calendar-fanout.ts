@@ -108,6 +108,11 @@ export function scheduleCalendarFanoutSnapshotStatements(
           FROM schedule_entries se
           JOIN schedule_versions sv
             ON sv.id = se.schedule_version_id AND sv.event_id = se.event_id
+          JOIN schedule_session_contents content
+            ON content.schedule_version_id = se.schedule_version_id
+           AND content.event_id = se.event_id
+           AND content.session_id = se.session_id
+           AND content.content_status = 'approved'
           JOIN session_speakers ss
             ON ss.session_id = se.session_id AND ss.event_id = se.event_id
           LEFT JOIN calendar_invitations ci
@@ -172,6 +177,11 @@ export function scheduleCalendarFanoutSnapshotStatements(
                FROM schedule_entries se
                JOIN schedule_versions sv
                  ON sv.id = se.schedule_version_id AND sv.event_id = se.event_id
+               JOIN schedule_session_contents content
+                 ON content.schedule_version_id = se.schedule_version_id
+                AND content.event_id = se.event_id
+                AND content.session_id = se.session_id
+                AND content.content_status = 'approved'
                JOIN session_speakers ss
                  ON ss.session_id = se.session_id AND ss.event_id = se.event_id
               WHERE sv.id = ? AND sv.status = 'published'

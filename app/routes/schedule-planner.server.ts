@@ -415,6 +415,8 @@ export async function action({ request, context }: Route.ActionArgs) {
             sessionId: result.sessionId,
             revision: result.revision,
             scheduleRevision: result.scheduleRevision,
+            contentRevision: result.contentRevision,
+            contentStatus: result.contentStatus,
             warning: result.webhookWarning ?? realtimeFailure?.message ?? null,
           },
           { status: realtimeFailure || result.webhookWarning ? 207 : 200 },

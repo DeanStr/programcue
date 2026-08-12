@@ -1533,6 +1533,18 @@ export const scheduleSessionContents = sqliteTable(
     visibility: text("visibility")
       .notNull()
       .$type<"public" | "private" | "hidden">(),
+    contentStatus: text("content_status")
+      .notNull()
+      .default("draft")
+      .$type<"draft" | "in_review" | "approved" | "changes_requested">(),
+    contentRevision: integer("content_revision").notNull().default(1),
+    lastEditedByPersonId: text("last_edited_by_person_id").references(
+      () => people.id,
+    ),
+    approvedByPersonId: text("approved_by_person_id").references(
+      () => people.id,
+    ),
+    approvedAt: integer("approved_at"),
     lastOperationId: text("last_operation_id"),
     createdAt: integer("created_at").notNull().default(epochNow),
     updatedAt: integer("updated_at").notNull().default(epochNow),
@@ -1556,6 +1568,61 @@ export const scheduleSessionContents = sqliteTable(
       table.sessionId,
       table.scheduleVersionId,
     ),
+  ],
+);
+
+export const sessionContentRevisions = sqliteTable(
+  "session_content_revisions",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id").notNull(),
+    scheduleVersionId: text("schedule_version_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    revisionNumber: integer("revision_number").notNull(),
+    title: text("title").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    trackId: text("track_id"),
+    format: text("format").notNull(),
+    durationMinutes: integer("duration_minutes").notNull(),
+    requiredResourcesJson: text("required_resources_json").notNull(),
+    visibility: text("visibility")
+      .notNull()
+      .$type<"public" | "private" | "hidden">(),
+    contentStatus: text("content_status")
+      .notNull()
+      .$type<"draft" | "in_review" | "approved" | "changes_requested">(),
+    changeKind: text("change_kind")
+      .notNull()
+      .$type<"baseline" | "edit" | "status" | "restore">(),
+    restoredFromRevisionId: text("restored_from_revision_id"),
+    createdByPersonId: text("created_by_person_id").references(() => people.id),
+    createdAt: integer("created_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("session_content_revisions_number_unique").on(
+      table.scheduleVersionId,
+      table.sessionId,
+      table.revisionNumber,
+    ),
+    index("idx_session_content_revisions_history").on(
+      table.eventId,
+      table.sessionId,
+      table.scheduleVersionId,
+      desc(table.revisionNumber),
+    ),
+    foreignKey({
+      columns: [table.scheduleVersionId, table.sessionId, table.eventId],
+      foreignColumns: [
+        scheduleSessionContents.scheduleVersionId,
+        scheduleSessionContents.sessionId,
+        scheduleSessionContents.eventId,
+      ],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.trackId, table.eventId],
+      foreignColumns: [tracks.id, tracks.eventId],
+    }),
   ],
 );
 

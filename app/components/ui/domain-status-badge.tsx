@@ -122,6 +122,9 @@ export const STATUS_PRESENTATIONS = {
   },
   content: {
     draft: { label: "Draft", tone: "neutral" },
+    in_review: { label: "In review", tone: "info" },
+    approved: { label: "Approved", tone: "success" },
+    changes_requested: { label: "Changes requested", tone: "warning" },
     active: { label: "Active", tone: "success" },
     published: { label: "Published", tone: "success" },
     closed: { label: "Closed", tone: "neutral" },

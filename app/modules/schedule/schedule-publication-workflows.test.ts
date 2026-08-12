@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
+import { ContentManagementService } from "~/modules/content/content-management-service.server";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { processScheduleCalendarFanout } from "../../../workers/communications-queue";
 import { ScheduleService } from "./schedule-service.server";
 import { eventLocalTimeEpoch } from "./schedule-time";
 import {
+  approveScheduledTestContent,
   prepareScheduleServiceTest,
   scheduleTestEnv,
   scheduleTestViewer as viewer,
@@ -45,6 +47,15 @@ describe("schedule publication workflows", () => {
         "UPDATE events SET programme_published_at = unixepoch() WHERE id = ? AND organisation_id = ?",
       ).bind(viewer.eventId, viewer.organisationId),
     ]);
+    await env.DB.prepare(
+      `UPDATE schedule_session_contents
+          SET content_status = 'approved', approved_by_person_id = ?,
+              approved_at = unixepoch()
+        WHERE schedule_version_id = 'schedule-test-published'
+          AND event_id = ? AND session_id = 'schedule-test-one'`,
+    )
+      .bind(viewer.personId, viewer.eventId)
+      .run();
     const liveBefore = await publicProgramme.getPublished(
       "future-of-events-2025",
     );
@@ -108,7 +119,7 @@ describe("schedule publication workflows", () => {
       visibility: draftSession.visibility,
       requiredResources: draftSession.requiredResources,
     });
-    const [contentDraft, liveWhileContentDraft] = await Promise.all([
+    let [contentDraft, liveWhileContentDraft] = await Promise.all([
       schedule.getWorkspace(viewer),
       publicProgramme.getPublished("future-of-events-2025"),
     ]);
@@ -117,6 +128,19 @@ describe("schedule publication workflows", () => {
         (session) => session.id === "schedule-test-one",
       ),
     ).toEqual(sessionBefore);
+
+    const contentReview = await new ContentManagementService(
+      scheduleTestEnv,
+    ).getSession(viewer, draftSession.id);
+    await new ContentManagementService(scheduleTestEnv).changeStatus(viewer, {
+      scheduleVersionId: versionId,
+      sessionId: draftSession.id,
+      scheduleRevision: contentReview.current.scheduleRevision,
+      contentRevision: contentReview.current.contentRevision,
+      status: "approved",
+      confirmed: true,
+    });
+    contentDraft = await schedule.getWorkspace(viewer);
 
     await schedule.publish(viewer, {
       scheduleVersionId: versionId,
@@ -158,6 +182,14 @@ describe("schedule publication workflows", () => {
       startsAt,
       endsAt: startsAt + 3_600,
     });
+    workspace = await service.getWorkspace(viewer);
+    await expect(
+      service.publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toThrow(/approve content for .+ before publishing/i);
+    await approveScheduledTestContent(versionId);
     workspace = await service.getWorkspace(viewer);
     const publication = await service.publish(viewer, {
       scheduleVersionId: versionId,
@@ -264,6 +296,7 @@ describe("schedule publication workflows", () => {
       startsAt,
       endsAt: startsAt + 3_600,
     });
+    await approveScheduledTestContent(versionId);
     const submissionId = `schedule-source-${crypto.randomUUID()}`;
     await env.DB.batch([
       env.DB.prepare(
@@ -316,6 +349,7 @@ describe("schedule publication workflows", () => {
       startsAt,
       endsAt: startsAt + 3_600,
     });
+    await approveScheduledTestContent(versionId);
     workspace = await service.getWorkspace(viewer);
 
     let raced = false;
@@ -439,6 +473,7 @@ describe("schedule publication workflows", () => {
       endsAt: startsAt + 3_600,
     });
     workspace = await service.getWorkspace(viewer);
+    await approveScheduledTestContent(versionId);
 
     const result = await service.publish(viewer, {
       scheduleVersionId: versionId,
@@ -506,6 +541,7 @@ describe("schedule publication workflows", () => {
       endsAt: startsAt + 3_600,
     });
     workspace = await service.getWorkspace(airtableViewer);
+    await approveScheduledTestContent(versionId, airtableViewer);
     await env.DB.prepare(
       "UPDATE events SET repository_provider = 'airtable' WHERE id = ? AND organisation_id = ?",
     )
@@ -561,6 +597,7 @@ describe("schedule publication workflows", () => {
     )
       .bind(expiredId, viewer.organisationId, viewer.eventId, actorId, key)
       .run();
+    await approveScheduledTestContent(versionId);
 
     await expect(
       service.publish(
@@ -624,6 +661,7 @@ describe("schedule publication workflows", () => {
       }
     }
     const racing = new RacingScheduleService(scheduleTestEnv);
+    await approveScheduledTestContent(versionId);
     const input = {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,
@@ -658,6 +696,57 @@ describe("schedule publication workflows", () => {
         .bind(viewer.eventId, idempotencyKey)
         .first<{ count: number }>(),
     ).toEqual({ count: 0 });
+  });
+
+  it("rechecks content approval inside the publication transaction", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await approveScheduledTestContent(versionId);
+    workspace = await service.getWorkspace(viewer);
+
+    class ApprovalRacingScheduleService extends ScheduleService {
+      override async getWorkspace(
+        scope: Pick<Viewer, "organisationId" | "eventId">,
+      ) {
+        const loaded = await super.getWorkspace(scope);
+        await env.DB.prepare(
+          `UPDATE schedule_session_contents
+              SET content_status = 'draft', approved_by_person_id = NULL,
+                  approved_at = NULL
+            WHERE schedule_version_id = ? AND event_id = ?
+              AND session_id = 'schedule-test-one'`,
+        )
+          .bind(versionId, scope.eventId)
+          .run();
+        return loaded;
+      }
+    }
+
+    await expect(
+      new ApprovalRacingScheduleService(scheduleTestEnv).publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toThrow(/schedule changed/i);
+    await expect(
+      env.DB.prepare("SELECT status FROM schedule_versions WHERE id = ?")
+        .bind(versionId)
+        .first(),
+    ).resolves.toEqual({ status: "draft" });
   });
 
   it("durably queues calendar fan-out and materialises lifecycle operations in the worker", async () => {
@@ -698,6 +787,15 @@ describe("schedule publication workflows", () => {
       startsAt,
       endsAt: startsAt + 3_600,
     });
+    await env.DB.prepare(
+      `UPDATE schedule_session_contents
+          SET content_status = 'approved', approved_by_person_id = ?,
+              approved_at = unixepoch()
+        WHERE schedule_version_id = ? AND event_id = ?
+          AND session_id = 'schedule-test-one'`,
+    )
+      .bind(viewer.personId, versionId, viewer.eventId)
+      .run();
     workspace = await service.getWorkspace(viewer);
     const publication = await service.publish(viewer, {
       scheduleVersionId: versionId,

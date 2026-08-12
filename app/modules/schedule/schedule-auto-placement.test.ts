@@ -36,6 +36,8 @@ function session(
     expectedAttendance: null,
     requiredResources: [],
     visibility: "public",
+    contentStatus: "draft",
+    contentRevision: 1,
     speakerIds: [],
     speakerNames: [],
     status: "unscheduled",

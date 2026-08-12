@@ -111,6 +111,17 @@ export function buildParticipantRetentionFinalisationStatements(
       viewer.eventId,
     ),
     guarded(
+      `UPDATE session_content_revisions
+          SET description = NULL
+        WHERE event_id = ?
+          AND session_id IN (
+            SELECT id FROM sessions
+             WHERE event_id = session_content_revisions.event_id
+               AND source_submission_id IS NOT NULL
+          )`,
+      viewer.eventId,
+    ),
+    guarded(
       `UPDATE schedule_conflicts
           SET details_json = ?, resolution_json = CASE WHEN resolution_json IS NULL THEN NULL ELSE ? END
         WHERE event_id = ?`,

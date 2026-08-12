@@ -105,6 +105,29 @@ export async function scheduledSpeakerEnvironment() {
       endsAt,
     ),
   ]);
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE schedule_session_contents
+          SET content_status = 'approved', approved_by_person_id = ?,
+              approved_at = unixepoch()
+        WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+    ).bind(
+      calendarTestViewer.personId,
+      scheduleVersionId,
+      calendarTestViewer.eventId,
+      sessionId,
+    ),
+    env.DB.prepare(
+      `UPDATE session_content_revisions
+          SET content_status = 'approved', created_by_person_id = ?
+        WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+    ).bind(
+      calendarTestViewer.personId,
+      scheduleVersionId,
+      calendarTestViewer.eventId,
+      sessionId,
+    ),
+  ]);
   return {
     testEnv,
     queued,

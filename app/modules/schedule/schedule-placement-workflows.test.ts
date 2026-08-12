@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { ContentManagementService } from "~/modules/content/content-management-service.server";
 
 import {
   ScheduleConfigurationError,
@@ -12,6 +13,7 @@ import {
 } from "./schedule-service.server";
 import { eventLocalTimeEpoch } from "./schedule-time";
 import {
+  approveScheduledTestContent,
   prepareScheduleServiceTest,
   scheduleTestEnv,
   scheduleTestViewer as viewer,
@@ -185,6 +187,7 @@ describe("schedule placement workflows", () => {
         "UPDATE rooms SET capacity = 1 WHERE id = 'main' AND event_id = ?",
       ).bind(viewer.eventId),
     ]);
+    await approveScheduledTestContent(versionId);
 
     try {
       workspace = await service.getWorkspace(viewer);
@@ -509,11 +512,34 @@ describe("schedule placement workflows", () => {
     )
       .bind(viewer.eventId)
       .run();
+    await env.DB.prepare(
+      `UPDATE sessions
+          SET description = 'Approved scheduling-requirements test content.'
+        WHERE id = 'schedule-test-one' AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
     const versionId = await service.createDraft(viewer);
     let workspace = await service.getWorkspace(viewer);
+    const content = new ContentManagementService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const contentDetail = await content.getSession(viewer, "schedule-test-one");
+    await content.changeStatus(viewer, {
+      scheduleVersionId: versionId,
+      sessionId: "schedule-test-one",
+      scheduleRevision: contentDetail.current.scheduleRevision,
+      contentRevision: contentDetail.current.contentRevision,
+      status: "approved",
+      confirmed: true,
+    });
+    workspace = await service.getWorkspace(viewer);
     const firstSessionRevision = workspace.sessions.find(
       (session) => session.id === "schedule-test-one",
     )!.revision;
+    const firstContentRevision = workspace.sessions.find(
+      (session) => session.id === "schedule-test-one",
+    )!.contentRevision;
 
     const updated = await service.updateSessionResources(viewer, {
       scheduleVersionId: versionId,
@@ -525,6 +551,8 @@ describe("schedule placement workflows", () => {
     expect(updated).toMatchObject({
       sessionId: "schedule-test-one",
       revision: firstSessionRevision + 1,
+      contentRevision: firstContentRevision + 1,
+      contentStatus: "draft",
       warnings: [],
     });
     workspace = await service.getWorkspace(viewer);
@@ -533,6 +561,24 @@ describe("schedule placement workflows", () => {
     ).toMatchObject({
       revision: firstSessionRevision + 1,
       requiredResources: ["livestream crew"],
+      contentRevision: firstContentRevision + 1,
+      contentStatus: "draft",
+    });
+    await expect(
+      env.DB.prepare(
+        `SELECT required_resources_json AS requiredResourcesJson,
+                content_status AS contentStatus,
+                created_by_person_id AS createdByPersonId
+           FROM session_content_revisions
+          WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?
+          ORDER BY revision_number DESC LIMIT 1`,
+      )
+        .bind(versionId, viewer.eventId, "schedule-test-one")
+        .first(),
+    ).resolves.toEqual({
+      requiredResourcesJson: '["livestream crew"]',
+      contentStatus: "draft",
+      createdByPersonId: viewer.personId,
     });
     await expect(
       service.updateSessionResources(viewer, {

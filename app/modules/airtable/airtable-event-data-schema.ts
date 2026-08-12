@@ -771,7 +771,9 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
     entityType: "schedule_session_content",
     query: `SELECT schedule_version_id, event_id, session_id, title, slug,
                    description, track_id, format, duration_minutes,
-                   required_resources_json, visibility, created_at, updated_at
+                   required_resources_json, visibility, content_status,
+                   content_revision, last_edited_by_person_id,
+                   approved_by_person_id, approved_at, created_at, updated_at
               FROM schedule_session_contents
              WHERE event_id = ?
              ORDER BY schedule_version_id, session_id`,
@@ -788,12 +790,22 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
         duration_minutes: integer.positive(),
         required_resources_json: jsonText,
         visibility: z.enum(["public", "private", "hidden"]),
+        content_status: z.enum([
+          "draft",
+          "in_review",
+          "approved",
+          "changes_requested",
+        ]),
+        content_revision: integer.positive(),
+        last_edited_by_person_id: nullableText,
+        approved_by_person_id: nullableText,
+        approved_at: nullableInteger,
         ...timestamps,
       })
       .strict(),
     entityId: (row) =>
       `${String(row.schedule_version_id)}:${String(row.session_id)}`,
-    revision: () => 1,
+    revision: (row) => Number(row.content_revision),
   },
   {
     key: "scheduleEntries",

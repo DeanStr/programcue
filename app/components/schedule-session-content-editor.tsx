@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useFetcher } from "react-router";
+import { Link, useFetcher } from "react-router";
 
 import {
   DraftRecoveryFeedback,
@@ -392,6 +392,16 @@ function SessionContentFieldsPanel() {
           <h2 id="session-content-title">Session editor</h2>
         </div>
         <span className="row-actions right">
+          <span className="pill">
+            {session.contentStatus.replaceAll("_", " ")} · revision{" "}
+            {session.contentRevision}
+          </span>
+          <Link
+            className="btn small"
+            to={`/admin/content/sessions/${encodeURIComponent(session.id)}`}
+          >
+            Review history
+          </Link>
           {status ? <PersistenceStatus {...status} /> : null}
           <DraftRecoveryStatus state={recovery.state} />
         </span>

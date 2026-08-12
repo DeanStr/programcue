@@ -124,16 +124,25 @@ describe("participant retention", () => {
     expect(
       await seeded.testEnv.DB.prepare(
         `SELECT session.description AS sessionDescription,
-                content.description AS snapshotDescription
+                content.description AS snapshotDescription,
+                revision.description AS revisionDescription
            FROM sessions session
            JOIN schedule_session_contents content
              ON content.session_id = session.id
             AND content.event_id = session.event_id
+           JOIN session_content_revisions revision
+             ON revision.session_id = session.id
+            AND revision.event_id = session.event_id
+            AND revision.schedule_version_id = content.schedule_version_id
           WHERE session.id = ? AND content.schedule_version_id = ?`,
       )
         .bind(seeded.sessionId, seeded.scheduleVersionId)
         .first(),
-    ).toEqual({ sessionDescription: null, snapshotDescription: null });
+    ).toEqual({
+      sessionDescription: null,
+      snapshotDescription: null,
+      revisionDescription: null,
+    });
     expect(
       await seeded.testEnv.DB.prepare(
         `SELECT task.owner_person_id AS ownerPersonId, task.description,

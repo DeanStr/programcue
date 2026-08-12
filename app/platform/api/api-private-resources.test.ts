@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { ContentManagementService } from "~/modules/content/content-management-service.server";
 import {
   ScheduleIdempotencyConflictError,
   ScheduleRevisionConflictError,
@@ -556,10 +557,11 @@ describe("schedule publication API actor", () => {
       env.DB.prepare(
         `
         INSERT OR IGNORE INTO sessions (
-          id, event_id, track_id, title, slug, format, duration_minutes,
+          id, event_id, track_id, title, slug, description, format, duration_minutes,
           expected_attendance, status, visibility, revision, created_at, updated_at
         ) VALUES ('api-schedule-session', ?, 'api-schedule-track', 'API session',
-          'api-session', 'presentation', 60, 50, 'unscheduled', 'public', 1, unixepoch(), unixepoch())
+          'api-session', 'API-managed session content.', 'presentation', 60, 50,
+          'unscheduled', 'public', 1, unixepoch(), unixepoch())
       `,
       ).bind(eventId),
     ]);
@@ -590,6 +592,19 @@ describe("schedule publication API actor", () => {
       roomId: "main",
       startsAt,
       endsAt: startsAt + 3_600,
+    });
+    const content = new ContentManagementService(scheduleEnv);
+    const contentDetail = await content.getSession(
+      personViewer,
+      "api-schedule-session",
+    );
+    await content.changeStatus(personViewer, {
+      scheduleVersionId: versionId,
+      sessionId: "api-schedule-session",
+      scheduleRevision: contentDetail.current.scheduleRevision,
+      contentRevision: contentDetail.current.contentRevision,
+      status: "approved",
+      confirmed: true,
     });
     workspace = await service.getWorkspace(principal);
 

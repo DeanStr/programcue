@@ -128,6 +128,13 @@ async function createSecondPublishedEvent(personId: string) {
        ) VALUES (?, ?, ?, 0, 'public')`,
     ).bind(sessionId, eventId, personId),
   ]);
+  await env.DB.prepare(
+    `UPDATE schedule_session_contents
+        SET content_status = 'approved', approved_at = unixepoch()
+      WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+  )
+    .bind(versionId, eventId, sessionId)
+    .run();
   return { eventId, slug };
 }
 

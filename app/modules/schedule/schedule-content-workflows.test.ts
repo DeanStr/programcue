@@ -8,6 +8,7 @@ import {
 } from "./schedule-service.server";
 import { eventLocalTimeEpoch } from "./schedule-time";
 import {
+  approveScheduledTestContent,
   prepareScheduleServiceTest,
   scheduleTestEnv,
   scheduleTestViewer as viewer,
@@ -16,6 +17,22 @@ import {
 beforeEach(prepareScheduleServiceTest);
 
 describe("schedule content and draft workflows", () => {
+  it("rejects an active draft with any missing content snapshot", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    await env.DB.prepare(
+      `DELETE FROM schedule_session_contents
+        WHERE schedule_version_id = ? AND event_id = ?
+          AND session_id = 'schedule-test-two'`,
+    )
+      .bind(versionId, viewer.eventId)
+      .run();
+
+    await expect(service.getWorkspace(viewer)).rejects.toThrow(
+      /missing one or more required frozen session-content snapshots/i,
+    );
+  });
+
   it("autosaves revisioned session content once and replays the exact idempotent result", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);
@@ -74,7 +91,9 @@ describe("schedule content and draft workflows", () => {
     expect(
       await env.DB.prepare(
         `SELECT title, description, duration_minutes AS durationMinutes,
-                  last_operation_id AS lastOperationId
+                  last_operation_id AS lastOperationId,
+                  content_status AS contentStatus,
+                  content_revision AS contentRevision
              FROM schedule_session_contents
             WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
       )
@@ -85,7 +104,18 @@ describe("schedule content and draft workflows", () => {
       description: input.description,
       durationMinutes: 45,
       lastOperationId: expect.any(String),
+      contentStatus: "draft",
+      contentRevision: 2,
     });
+    expect(first).toMatchObject({ contentStatus: "draft", contentRevision: 2 });
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM session_content_revisions
+          WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+      )
+        .bind(versionId, viewer.eventId, session.id)
+        .first(),
+    ).toEqual({ count: 2 });
     expect(
       await env.DB.prepare(
         `SELECT COUNT(*) AS count FROM audit_events
@@ -173,6 +203,7 @@ describe("schedule content and draft workflows", () => {
       endsAt: startsAt + 3_600,
     });
     workspace = await service.getWorkspace(viewer);
+    await approveScheduledTestContent(versionId);
     await service.publish(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,
@@ -331,6 +362,7 @@ describe("schedule content and draft workflows", () => {
       });
       workspace = await service.getWorkspace(viewer);
     }
+    await approveScheduledTestContent(versionId);
     await service.publish(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,
@@ -476,6 +508,7 @@ describe("schedule content and draft workflows", () => {
       expect.objectContaining({ type: "capacity", severity: "warning" }),
     ]);
 
+    await approveScheduledTestContent(draftId);
     await service.publish(viewer, {
       scheduleVersionId: draftId,
       scheduleRevision: draft.version!.revision,

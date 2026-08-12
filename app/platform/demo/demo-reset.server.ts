@@ -117,6 +117,7 @@ export const DEMO_RESET_EVENT_TABLES = [
   "public_itineraries",
   "schedule_conflicts",
   "schedule_entries",
+  "session_content_revisions",
   "schedule_session_contents",
   "schedule_versions",
   "session_tags",

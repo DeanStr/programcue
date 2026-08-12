@@ -138,6 +138,8 @@ export async function loadScheduleWorkspaceD1(
                s.expected_attendance AS expectedAttendance,
                COALESCE(content.required_resources_json, s.required_resources_json) AS requiredResourcesJson,
                COALESCE(content.visibility, s.visibility) AS visibility,
+               COALESCE(content.content_status, 'draft') AS contentStatus,
+               COALESCE(content.content_revision, 1) AS contentRevision,
                content.session_id AS snapshotSessionId, s.status,
                s.revision,
                GROUP_CONCAT(ss.person_id, '||') AS speakerIds,
@@ -242,11 +244,13 @@ export async function loadScheduleWorkspaceD1(
     currentVersion &&
     sessions.results.some(
       (session) =>
-        scheduledSessionIds.has(session.id) && !session.snapshotSessionId,
+        !session.snapshotSessionId &&
+        (currentVersion.status === "draft" ||
+          scheduledSessionIds.has(session.id)),
     )
   ) {
     throw new ScheduleConfigurationError(
-      "The active schedule version is missing one or more frozen session-content snapshots.",
+      "The active schedule version is missing one or more required frozen session-content snapshots.",
     );
   }
 

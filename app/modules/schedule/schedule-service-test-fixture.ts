@@ -93,3 +93,26 @@ export async function prepareScheduleServiceTest() {
     ).bind(scheduleTestViewer.eventId),
   ]);
 }
+
+export async function approveScheduledTestContent(
+  versionId: string,
+  scope: Pick<Viewer, "eventId" | "personId"> = scheduleTestViewer,
+) {
+  const result = await env.DB.prepare(
+    `UPDATE schedule_session_contents
+        SET content_status = 'approved',
+            approved_by_person_id = ?, approved_at = unixepoch()
+      WHERE event_id = ? AND schedule_version_id = ?
+        AND session_id IN (
+          SELECT session_id FROM schedule_entries
+           WHERE event_id = ? AND schedule_version_id = ?
+        )`,
+  )
+    .bind(scope.personId, scope.eventId, versionId, scope.eventId, versionId)
+    .run();
+  if ((result.meta.changes ?? 0) === 0) {
+    throw new Error(
+      "The publication test has no scheduled content to approve.",
+    );
+  }
+}

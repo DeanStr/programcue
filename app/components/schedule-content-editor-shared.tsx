@@ -33,6 +33,8 @@ export type EditorActionData = {
   retryable?: boolean;
   revision?: number;
   scheduleRevision?: number;
+  contentRevision?: number;
+  contentStatus?: ScheduleSession["contentStatus"];
   sessionId?: string;
   scheduleVersionId?: string;
   currentSession?: ScheduleSession | null;

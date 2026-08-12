@@ -368,6 +368,20 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       .click();
     expect((await finalResizeRequest).ok()).toBeTruthy();
     await expectStatus(page, "Session placed");
+
+    await waitForInterface(page, "/admin/content");
+    const contentRow = page.locator("article.list-row", {
+      hasText: SUBMISSION_TITLE,
+    });
+    await contentRow.getByRole("link", { name: "Review history" }).click();
+    await page.getByLabel("Next status").selectOption("approved");
+    await page
+      .getByRole("checkbox", { name: /apply this exact status/i })
+      .check();
+    await page.getByRole("button", { name: "Change status" }).click();
+    await expect(page.getByLabel("Approved status").first()).toBeVisible();
+
+    await waitForInterface(page, "/admin/schedule");
     await page.getByRole("button", { name: "Publish schedule" }).click();
     const publication = page.getByRole("dialog", { name: "Publish schedule" });
     await expect(publication).toContainText("revalidated before publication");

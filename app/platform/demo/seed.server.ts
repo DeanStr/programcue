@@ -224,14 +224,33 @@ export async function ensureDemoProgramme(env: CloudflareEnvironment) {
         ([sessionId, description]) =>
           env.DB.prepare(
             `UPDATE schedule_session_contents
-                  SET description = ?, updated_at = unixepoch()
+                  SET description = ?, content_status = 'approved',
+                      approved_by_person_id = ?,
+                      approved_at = COALESCE(approved_at, unixepoch()),
+                      updated_at = unixepoch()
                 WHERE schedule_version_id = 'demo-schedule-published'
                   AND event_id = ? AND session_id = ?
                   AND visibility = 'public'
                   AND (description IS NULL OR length(description) <= 180)`,
-          ).bind(description, DEMO_EVENT_ID, sessionId),
+          ).bind(description, DEMO_ADMIN_ID, DEMO_EVENT_ID, sessionId),
       ),
     );
+    await env.DB.prepare(
+      `UPDATE session_content_revisions
+          SET description = (
+                SELECT content.description
+                  FROM schedule_session_contents content
+                 WHERE content.schedule_version_id = session_content_revisions.schedule_version_id
+                   AND content.event_id = session_content_revisions.event_id
+                   AND content.session_id = session_content_revisions.session_id
+              ),
+              content_status = 'approved',
+              created_by_person_id = COALESCE(created_by_person_id, ?)
+        WHERE schedule_version_id = 'demo-schedule-published'
+          AND event_id = ? AND revision_number = 1`,
+    )
+      .bind(DEMO_ADMIN_ID, DEMO_EVENT_ID)
+      .run();
   };
   const published = await env.DB.prepare(
     "SELECT id FROM schedule_versions WHERE event_id = ? AND status = 'published'",

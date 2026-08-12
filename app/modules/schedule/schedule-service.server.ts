@@ -65,6 +65,8 @@ export type ScheduleSession = {
   expectedAttendance: number | null;
   requiredResources: string[];
   visibility: "public" | "private" | "hidden";
+  contentStatus: "draft" | "in_review" | "approved" | "changes_requested";
+  contentRevision: number;
   speakerIds: string[];
   speakerNames: string[];
   status: string;
@@ -818,7 +820,14 @@ export class ScheduleService {
     };
   }
 
-  async updateSessionContent(viewer: Viewer, input: unknown) {
+  private async commitSessionContent(
+    viewer: Viewer,
+    input: unknown,
+    history: {
+      changeKind: "edit" | "restore";
+      restoredFromRevisionId: string | null;
+    },
+  ) {
     const parsed = scheduleSessionContentSchema.parse(input);
     const requestHash = await airtableCommandKey(
       "schedule.session_content.save.request",
@@ -838,6 +847,7 @@ export class ScheduleService {
           viewer,
           parsed,
           requestHash,
+          history,
         ),
       { idempotencyKey: projectionKey, requestHash },
     );
@@ -863,6 +873,29 @@ export class ScheduleService {
       webhookDeliveries: webhook.deliveries,
       webhookWarning: webhook.warning,
     };
+  }
+
+  async updateSessionContent(viewer: Viewer, input: unknown) {
+    return this.commitSessionContent(viewer, input, {
+      changeKind: "edit",
+      restoredFromRevisionId: null,
+    });
+  }
+
+  async restoreSessionContent(
+    viewer: Viewer,
+    input: unknown,
+    restoredFromRevisionId: string,
+  ) {
+    if (!restoredFromRevisionId.trim()) {
+      throw new ScheduleConfigurationError(
+        "A content revision is required for restoration.",
+      );
+    }
+    return this.commitSessionContent(viewer, input, {
+      changeKind: "restore",
+      restoredFromRevisionId,
+    });
   }
 
   async updateScheduleNotes(viewer: Viewer, input: unknown) {
@@ -988,6 +1021,27 @@ export class ScheduleService {
       throw new SchedulePublicationBlockedError(
         [],
         `Every scheduled speaker must accept or claim their invitation before publication. “${unacceptedSpeaker.title}” still has an unaccepted speaker.`,
+      );
+    }
+
+    const sessionsById = new Map(
+      workspace.sessions.map((session) => [session.id, session]),
+    );
+    const unapprovedSessions = workspace.entries
+      .map((entry) => {
+        const session = sessionsById.get(entry.sessionId);
+        if (!session) {
+          throw new ScheduleConfigurationError(
+            `Scheduled session ${entry.sessionId} is unavailable from the authoritative workspace.`,
+          );
+        }
+        return session;
+      })
+      .filter((session) => session.contentStatus !== "approved");
+    if (unapprovedSessions.length > 0) {
+      throw new SchedulePublicationBlockedError(
+        [],
+        `Approve content for ${unapprovedSessions.map((session) => session.title).join(", ")} before publishing.`,
       );
     }
 

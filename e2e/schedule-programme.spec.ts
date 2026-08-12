@@ -483,6 +483,65 @@ test.describe("mutable schedule authoring", () => {
     ).toHaveValue(title);
   });
 
+  test("reviews, approves and restores attributed session content", async ({
+    page,
+  }) => {
+    test.slow();
+    const approvedTitle = `Approved content ${crypto.randomUUID().slice(0, 8)}`;
+    await waitForInterface(page, "/admin/schedule?session=demo-session-1");
+    await page.getByRole("button", { name: "Create next draft" }).click();
+    const editor = page.getByTestId("session-content-editor");
+    await editor.getByLabel("Title").fill(approvedTitle);
+    await editor
+      .getByLabel("Public description")
+      .fill("An exact description that is ready for programme approval.");
+    await expect(editor.getByText("Saved", { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
+
+    await editor.getByRole("link", { name: "Review history" }).click();
+    await expect(
+      page.getByRole("heading", { name: approvedTitle }),
+    ).toBeVisible();
+    await page.getByLabel("Next status").selectOption("approved");
+    await page
+      .getByRole("checkbox", { name: /apply this exact status/i })
+      .check();
+    await page.getByRole("button", { name: "Change status" }).click();
+    await expect(
+      page.getByText("Content updated", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Approved status").first()).toBeVisible();
+
+    await page.getByRole("link", { name: "Edit current content" }).click();
+    await editor.getByLabel("Title").fill("Edited content requires approval");
+    await expect(editor.getByText("Saved", { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
+    await editor.getByRole("link", { name: "Review history" }).click();
+    await expect(page.getByLabel("Draft status").first()).toBeVisible();
+
+    const approvedRevision = page
+      .locator("li.card", { hasText: approvedTitle })
+      .filter({ has: page.getByLabel("Approved status") });
+    await approvedRevision.getByText("Restore this revision").click();
+    await approvedRevision
+      .getByRole("checkbox", { name: /restore exactly this title/i })
+      .check();
+    await approvedRevision
+      .getByRole("button", { name: "Restore as new draft" })
+      .click();
+    await expect(
+      page.getByText(
+        "The selected revision was restored as a new draft revision.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: approvedTitle }),
+    ).toBeVisible();
+  });
+
   test("configures resources and commits a pointer resize through the authoritative schedule", async ({
     page,
   }) => {

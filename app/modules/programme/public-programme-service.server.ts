@@ -346,6 +346,7 @@ export class PublicProgrammeService {
          AND published_version.status = 'published'
          AND session.status = 'published' AND session.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
          AND relation.visibility = 'public'
          AND person.profile_status = 'published'
          AND version.upload_status = 'uploaded'
@@ -401,6 +402,7 @@ export class PublicProgrammeService {
          AND published_version.status = 'published'
          AND session.status = 'published' AND session.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
          AND relation.visibility = 'public'
          AND person.profile_status = 'published'
          AND person.id IN (${placeholders})
@@ -481,6 +483,7 @@ export class PublicProgrammeService {
          AND published_version.status = 'published'
          AND session.status = 'published' AND session.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
          AND relation.visibility = 'public'
          AND person.profile_status = 'published'
          AND version.upload_status = 'uploaded'
@@ -562,6 +565,7 @@ export class PublicProgrammeService {
          AND person.id = ? AND person.profile_status = 'published'
          AND session.status = 'published' AND session.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
          AND relation.visibility = 'public'
          AND version.upload_status = 'uploaded'
          AND version.signature_status = 'valid'
@@ -733,6 +737,7 @@ export class PublicProgrammeService {
          WHERE entry.event_id = ? AND entry.schedule_version_id = ?
            AND session.status = 'published' AND session.visibility = 'public'
            AND content.visibility = 'public'
+           AND content.content_status = 'approved'
            AND relation.visibility = 'public'
            AND person.profile_status = 'published'
          GROUP BY person.id
@@ -893,6 +898,7 @@ export class PublicProgrammeService {
        WHERE se.event_id = ? AND se.schedule_version_id = ?
          AND s.status = 'published' AND s.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
        ORDER BY se.starts_at, r.position, content.title, s.id
     `,
     ).bind(event.id, version.id);
@@ -915,6 +921,7 @@ export class PublicProgrammeService {
        WHERE s.event_id = ? AND se.schedule_version_id = ?
          AND s.status = 'published' AND s.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
          AND ss.visibility = 'public' AND p.profile_status = 'published'
        GROUP BY p.id
        ORDER BY p.display_name COLLATE NOCASE, p.id

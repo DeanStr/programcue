@@ -123,6 +123,11 @@ export class PublishedScheduleCalendarService {
                ORDER BY CASE cc.provider WHEN 'google' THEN 0 ELSE 1 END, cc.updated_at DESC LIMIT 1) AS activeProvider
         FROM schedule_entries se
         JOIN schedule_versions sv ON sv.id = se.schedule_version_id AND sv.event_id = se.event_id
+        JOIN schedule_session_contents content
+          ON content.schedule_version_id = se.schedule_version_id
+         AND content.event_id = se.event_id
+         AND content.session_id = se.session_id
+         AND content.content_status = 'approved'
         JOIN session_speakers ss ON ss.session_id = se.session_id AND ss.event_id = se.event_id
         LEFT JOIN calendar_invitations ci
           ON ci.event_id = se.event_id AND ci.session_id = se.session_id AND ci.person_id = ss.person_id
@@ -173,6 +178,11 @@ export class PublishedScheduleCalendarService {
            SELECT 1
              FROM schedule_entries se
              JOIN schedule_versions sv ON sv.id = se.schedule_version_id AND sv.event_id = se.event_id
+             JOIN schedule_session_contents content
+               ON content.schedule_version_id = se.schedule_version_id
+              AND content.event_id = se.event_id
+              AND content.session_id = se.session_id
+              AND content.content_status = 'approved'
              JOIN session_speakers ss ON ss.session_id = se.session_id AND ss.event_id = se.event_id
             WHERE sv.id = ? AND sv.status = 'published'
               AND se.session_id = ci.session_id AND ss.person_id = ci.person_id

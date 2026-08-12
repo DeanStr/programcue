@@ -127,6 +127,13 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
              WHERE record.event_id IN locked
                AND session.source_submission_id IS NOT NULL
                AND record.description IS NOT NULL)
+          + (SELECT COUNT(*) FROM session_content_revisions record
+              JOIN sessions session
+                ON session.id = record.session_id
+               AND session.event_id = record.event_id
+             WHERE record.event_id IN locked
+               AND session.source_submission_id IS NOT NULL
+               AND record.description IS NOT NULL)
           + (SELECT COUNT(*) FROM public_itineraries record WHERE record.event_id IN locked)
           + (SELECT COUNT(*) FROM task_instances record WHERE record.event_id IN locked
             AND record.target_type = 'speaker'

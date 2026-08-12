@@ -20,11 +20,17 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
     viewer: Viewer,
     parsed: ReturnType<typeof scheduleSessionContentSchema.parse>,
     requestHash: string,
+    history: {
+      changeKind: "edit" | "restore";
+      restoredFromRevisionId: string | null;
+    },
   ) {
     type Result = {
       sessionId: string;
       revision: number;
       scheduleRevision: number;
+      contentRevision: number;
+      contentStatus: "draft";
       warnings: ScheduleConflict[];
     };
     const parseResult = (value: unknown): Result => {
@@ -35,6 +41,8 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
         typeof result.sessionId !== "string" ||
         !Number.isSafeInteger(result.revision) ||
         !Number.isSafeInteger(result.scheduleRevision) ||
+        !Number.isSafeInteger(result.contentRevision) ||
+        result.contentStatus !== "draft" ||
         !Array.isArray(result.warnings)
       ) {
         throw new Error("The saved session-content response is invalid.");
@@ -145,13 +153,17 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
     const commandId = crypto.randomUUID();
     const nextRevision = session.revision + 1;
     const nextScheduleRevision = workspace.version.revision + 1;
+    const nextContentRevision = session.contentRevision + 1;
     const result: Result = {
       sessionId: session.id,
       revision: nextRevision,
       scheduleRevision: nextScheduleRevision,
+      contentRevision: nextContentRevision,
+      contentStatus: "draft",
       warnings,
     };
     const auditEventId = crypto.randomUUID();
+    const historyRevisionId = crypto.randomUUID();
     const webhookService = new WebhookService(this.env);
     const preparedWebhook = await webhookService.prepareEventForAudit(
       viewer,
@@ -291,8 +303,13 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
         `UPDATE schedule_session_contents
             SET title = ?, description = ?, track_id = ?, format = ?,
                 duration_minutes = ?, required_resources_json = ?,
-                visibility = ?, last_operation_id = ?, updated_at = unixepoch()
+                visibility = ?, content_status = 'draft',
+                content_revision = content_revision + 1,
+                last_edited_by_person_id = ?, approved_by_person_id = NULL,
+                approved_at = NULL, last_operation_id = ?,
+                updated_at = unixepoch()
           WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?
+            AND content_revision = ?
             AND EXISTS (
               SELECT 1 FROM schedule_versions
                WHERE id = schedule_session_contents.schedule_version_id
@@ -307,11 +324,41 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
         parsed.durationMinutes,
         JSON.stringify(parsed.requiredResources),
         parsed.visibility,
+        viewer.personId,
         commandId,
         parsed.scheduleVersionId,
         viewer.eventId,
         session.id,
+        session.contentRevision,
         commandId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO session_content_revisions (
+           id, event_id, schedule_version_id, session_id, revision_number,
+           title, slug, description, track_id, format, duration_minutes,
+           required_resources_json, visibility, content_status, change_kind,
+           restored_from_revision_id, created_by_person_id, created_at
+         )
+         SELECT ?, content.event_id, content.schedule_version_id,
+                content.session_id, content.content_revision, content.title,
+                content.slug, content.description, content.track_id,
+                content.format, content.duration_minutes,
+                content.required_resources_json, content.visibility,
+                content.content_status, ?, ?, ?, unixepoch()
+           FROM schedule_session_contents content
+          WHERE content.schedule_version_id = ? AND content.event_id = ?
+            AND content.session_id = ? AND content.last_operation_id = ?
+            AND content.content_revision = ?`,
+      ).bind(
+        historyRevisionId,
+        history.changeKind,
+        history.restoredFromRevisionId,
+        viewer.personId,
+        parsed.scheduleVersionId,
+        viewer.eventId,
+        session.id,
+        commandId,
+        nextContentRevision,
       ),
       ...(scheduledEntry
         ? [
@@ -380,6 +427,8 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
         JSON.stringify({
           revision: nextRevision,
           scheduleRevision: nextScheduleRevision,
+          contentRevision: nextContentRevision,
+          contentStatus: "draft",
           visibility: parsed.visibility,
         }),
         parsed.scheduleVersionId,
@@ -446,12 +495,14 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
     const versionUpdated = results[3]!;
     const sessionUpdated = results[4]!;
     const snapshotUpdated = results[5]!;
-    const entryUpdated = scheduledEntry ? results[6]! : null;
+    const historyInserted = results[6]!;
+    const entryUpdated = scheduledEntry ? results[7]! : null;
     if (
       (eventUpdated.meta.changes ?? 0) !== 1 ||
       (versionUpdated.meta.changes ?? 0) !== 1 ||
       (sessionUpdated.meta.changes ?? 0) !== 1 ||
       (snapshotUpdated.meta.changes ?? 0) !== 1 ||
+      (historyInserted.meta.changes ?? 0) !== 1 ||
       (entryUpdated && (entryUpdated.meta.changes ?? 0) !== 1) ||
       (results[auditIndex]?.meta.changes ?? 0) !== 1
     ) {
