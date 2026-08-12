@@ -1,7 +1,7 @@
 /* Command centre */
 .command-setup-guide {
   margin-bottom: 12px;
-  border-top: 3px solid var(--indigo);
+  border-top: 3px solid var(--brand-600);
 }
 .command-setup-steps {
   display: grid;

@@ -20,40 +20,59 @@ async function selectDemoRole(page: Page, role: string) {
   ]);
 }
 
-test("representative role surfaces have no detectable WCAG A/AA violations", async ({
-  page,
-}) => {
-  const surfaces = [
-    { role: "administrator", path: "/admin/command" },
-    { role: "evaluator", path: "/review/workbench" },
-    { role: "submitter", path: "/apply/form" },
-    { role: "speaker", path: "/participant/dashboard" },
-    { role: "speaker", path: "/participant/tasks" },
-    { role: "administrator", path: "/admin/communications/compose" },
-    { role: "administrator", path: "/admin/speakers/person-demo-speaker" },
-    { role: "administrator", path: "/admin/crm" },
-    {
-      role: "administrator",
-      path: "/public/programme/future-of-events-2025",
-    },
-  ] as const;
+const SURFACES = [
+  { role: "administrator", path: "/admin/command" },
+  { role: "administrator", path: "/admin/submissions" },
+  { role: "administrator", path: "/admin/schedule" },
+  { role: "evaluator", path: "/review/workbench" },
+  { role: "submitter", path: "/apply/form" },
+  { role: "speaker", path: "/participant/dashboard" },
+  { role: "speaker", path: "/participant/tasks" },
+  { role: "administrator", path: "/admin/communications/compose" },
+  { role: "administrator", path: "/admin/speakers/person-demo-speaker" },
+  { role: "administrator", path: "/admin/crm" },
+  { role: "administrator", path: "/public/programme/future-of-events-2025" },
+] as const;
 
-  for (const surface of surfaces) {
-    await selectDemoRole(page, surface.role);
-    await openHydrated(page, surface.path);
-    const result = await new AxeBuilder({ page })
-      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-      .analyze();
-    expect(
-      result.violations,
-      `${surface.path} accessibility violations:\n${result.violations
-        .map(
-          (violation) =>
-            `${violation.id}: ${violation.help} (${violation.nodes
-              .map((node) => node.target.join(" "))
-              .join(", ")})`,
-        )
-        .join("\n")}`,
-    ).toEqual([]);
-  }
-});
+/* The suite previously ran only at 1440x1000, so rules that fire inside a
+   breakpoint — notably nav labels hidden with display:none, which strips the
+   accessible name from a link — were never evaluated. Narrow viewports are
+   where the responsive layer actually changes the accessibility tree. */
+const VIEWPORTS = [
+  { label: "phone", width: 375, height: 800 },
+  { label: "tablet", width: 1024, height: 900 },
+  { label: "desktop", width: 1440, height: 1000 },
+] as const;
+
+async function expectNoViolations(page: Page, label: string) {
+  const result = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(
+    result.violations,
+    `${label} accessibility violations:\n${result.violations
+      .map(
+        (violation) =>
+          `${violation.id}: ${violation.help} (${violation.nodes
+            .map((node) => node.target.join(" "))
+            .join(", ")})`,
+      )
+      .join("\n")}`,
+  ).toEqual([]);
+}
+
+for (const viewport of VIEWPORTS) {
+  test(`representative role surfaces have no detectable WCAG A/AA violations at ${viewport.label}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({
+      width: viewport.width,
+      height: viewport.height,
+    });
+    for (const surface of SURFACES) {
+      await selectDemoRole(page, surface.role);
+      await openHydrated(page, surface.path);
+      await expectNoViolations(page, `${surface.path} @ ${viewport.label}`);
+    }
+  });
+}

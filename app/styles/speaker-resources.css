@@ -296,11 +296,7 @@
 .resource-editor .tiptap {
   min-height: 330px;
   padding: 16px;
-  outline: 0;
   line-height: 1.65;
-}
-.resource-editor .tiptap:focus {
-  box-shadow: inset 0 0 0 2px var(--brand-300);
 }
 .resource-editor .tiptap p:first-child {
   margin-top: 0;
@@ -391,11 +387,6 @@
   padding: 9px;
   border: 1px solid var(--line);
   border-radius: 10px;
-}
-.btn.small {
-  min-height: 30px;
-  padding: 5px 8px;
-  font-size: 11px;
 }
 @media (max-width: 1050px) {
   .speaker-task {

@@ -1,0 +1,55 @@
+/*
+ * Program Cue stylesheet entry.
+ *
+ * Bundled, minified and content-hashed by Vite via the import in app/root.tsx.
+ *
+ * Import order is the cascade contract: later sheets override earlier ones at
+ * equal specificity, and a handful of rules in this product rely on that. The
+ * order below is deliberate and load-bearing — do not sort it.
+ *
+ *   base.css                  tokens, document, app shell. Always first.
+ *   <workspace-*.css>         one sheet per surface, owning that surface's classes.
+ *   <responsive-*.css>        breakpoint refinements for the sheets above.
+ *   interaction-surfaces.css  overlays and command palette.
+ *   design-primitives.css     shared pc-* primitives. Deliberately late: it wins
+ *                             .command-item over interaction-surfaces.css.
+ *   speaker-resources.css     participant resource surfaces.
+ *   schedule-operations.css   planner internals.
+ *   reviewer-responsive-tables.css  table collapse. Deliberately last.
+ *
+ * A selector should have exactly one owning file. When two files style the same
+ * selector, position alone decides the winner, which is fragile — move the rule
+ * into its owner rather than adding another override.
+ */
+
+@import "./base.css";
+@import "./data-grid.css";
+@import "./form-controls.css";
+@import "./workspace-crm.css";
+@import "./design-system-reference.css";
+@import "./workspace-command.css";
+@import "./workspace-review.css";
+@import "./workspace-form-builder.css";
+@import "./workspace-schedule.css";
+@import "./workspace-communications.css";
+@import "./workspace-tasks.css";
+@import "./workspace-programme-admin.css";
+@import "./workspace-integrations.css";
+@import "./workspace-speaker.css";
+@import "./workspace-public-programme.css";
+@import "./workspace-public-application.css";
+@import "./responsive-refinements.css";
+@import "./responsive-command.css";
+@import "./schedule-format-tokens.css";
+@import "./admin-chrome.css";
+@import "./responsive-review.css";
+@import "./responsive-communications.css";
+@import "./responsive-schedule.css";
+@import "./responsive-public-programme.css";
+@import "./responsive-application.css";
+@import "./responsive-speaker-resources.css";
+@import "./interaction-surfaces.css";
+@import "./design-primitives.css";
+@import "./speaker-resources.css";
+@import "./schedule-operations.css";
+@import "./reviewer-responsive-tables.css";

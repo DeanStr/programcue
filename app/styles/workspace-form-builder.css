@@ -89,10 +89,6 @@
   scrollbar-gutter: stable;
   touch-action: pan-x pan-y;
 }
-.schedule-standard-scroll-frame:focus-visible {
-  outline: 3px solid var(--brand-300);
-  outline-offset: 2px;
-}
 .schedule-standard-calendar-width-week {
   width: 1200px;
   min-width: 1200px;
@@ -276,5 +272,4 @@
 .wysiwyg-editor {
   min-height: 180px;
   padding: 12px;
-  outline: 0;
 }

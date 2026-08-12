@@ -76,9 +76,10 @@ body.portal-open {
   outline: 3px dashed var(--brand-500);
   outline-offset: -4px;
 }
+/* Raised so the global focus ring is not clipped by neighbouring cards.
+   The ring itself comes from :focus-visible in base.css. */
 .session-card:focus-visible {
   z-index: 25;
-  outline: 3px solid var(--brand-400);
 }
 .itinerary-item {
   border: 0;
@@ -165,7 +166,7 @@ body.portal-open {
 .command-input input {
   flex: 1;
   border: 0;
-  outline: 0;
+  background: transparent;
   font-size: 17px;
 }
 .command-results {
