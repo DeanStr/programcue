@@ -130,6 +130,75 @@ describe("sign-in abuse boundary", () => {
     await expect(response.text()).resolves.toContain("protected sign-in form");
   });
 
+  it.each([
+    [
+      "a missing state",
+      {
+        code: "microsoft-authorization-code-123",
+      },
+    ],
+    [
+      "both a code and an error",
+      {
+        state: "microsoft-callback-state-123456",
+        code: "microsoft-authorization-code-123",
+        error: "access_denied",
+      },
+    ],
+    [
+      "an unknown state",
+      {
+        state: "unknown-microsoft-state-123456",
+        code: "microsoft-authorization-code-123",
+      },
+    ],
+    [
+      "an oversized response",
+      {
+        state: "microsoft-callback-state-123456",
+        code: "x".repeat(9000),
+      },
+    ],
+  ])("rejects a Microsoft form-post callback with %s", async (_name, body) => {
+    const before = await env.DB.prepare(
+      `
+        SELECT COUNT(*) AS count
+          FROM verification_tokens
+         WHERE identifier LIKE 'microsoft-auth-callback-relay:%'
+      `,
+    ).first<{ count: number }>();
+    const response = await authApiAction({
+      request: new Request("http://localhost/api/auth/callback/microsoft", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin: "https://login.microsoftonline.com",
+        },
+        body: new URLSearchParams(body),
+      }),
+      params: { "*": "callback/microsoft" },
+      context: context(
+        productionEnvironment({
+          MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+          MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+        }),
+      ),
+    } as never);
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.text()).resolves.toContain("invalid or expired");
+    expect(
+      await env.DB.prepare(
+        `
+          SELECT COUNT(*) AS count
+            FROM verification_tokens
+           WHERE identifier LIKE 'microsoft-auth-callback-relay:%'
+        `,
+      ).first<{ count: number }>(),
+    ).toEqual(before);
+  });
+
   it("rejects social sign-in before Better Auth creates state when the challenge is missing", async () => {
     const testEnvironment = productionEnvironment({
       GOOGLE_AUTH_CLIENT_ID: "google-auth-client",

@@ -9,6 +9,10 @@ import {
 } from "~/modules/communications/email-provider.server";
 import { createDatabase } from "~/platform/database/db.server";
 import { authSchema } from "~/platform/database/schema";
+import {
+  MICROSOFT_AUTH_CALLBACK_PATH,
+  microsoftFormPostPlugin,
+} from "~/platform/auth/microsoft-auth-callback.server";
 import { sourceRevisionForLog } from "~/platform/observability/source-revision.server";
 
 type ParticipantOAuthEnvironment = CloudflareEnvironment & {
@@ -25,7 +29,6 @@ type ParticipantOAuthCredentials = {
 
 const ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,63}$/u;
 const OAUTH_STATE_PATTERN = /^[A-Za-z0-9_-]{20,256}$/u;
-const MICROSOFT_CALLBACK_PATH = "/api/auth/callback/microsoft";
 
 type StoredOAuthLinkState = {
   expiresAt?: unknown;
@@ -131,6 +134,7 @@ export function participantOAuthProviderOptions(
             disableIdTokenSignIn: true,
             disableProfilePhoto: true,
             disableSignUp: true,
+            responseMode: "form_post" as const,
             scope: ["openid", "email", "profile"],
             tenantId: "common",
           },
@@ -153,7 +157,7 @@ export async function trustedParticipantOAuthProviders(
 ) {
   if (!request || request.method !== "GET") return [];
   const url = new URL(request.url);
-  if (url.pathname !== MICROSOFT_CALLBACK_PATH) return [];
+  if (url.pathname !== MICROSOFT_AUTH_CALLBACK_PATH) return [];
   const state = url.searchParams.get("state") ?? "";
   if (!OAUTH_STATE_PATTERN.test(state)) return [];
 
@@ -267,6 +271,7 @@ export function createAuth(env: CloudflareEnvironment) {
         storeToken: "hashed",
         sendMagicLink: async ({ email, url }) => sendMagicLink(env, email, url),
       }),
+      microsoftFormPostPlugin,
     ],
   });
 }

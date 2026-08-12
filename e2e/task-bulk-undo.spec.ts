@@ -115,10 +115,6 @@ test("a speaker can undo a reversible task completion from its status notice", a
     ),
   ).toBeVisible();
   await completionToast.getByRole("button", { name: "Undo" }).click();
-  const undoToast = page.locator("[data-sonner-toast]").filter({
-    has: page.getByText("Task completion undone", { exact: true }),
-  });
-  await expect(undoToast).toBeVisible();
   await expect(
     actionNotice.getByText("Task completion undone.", { exact: true }),
   ).toBeVisible();

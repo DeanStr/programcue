@@ -334,7 +334,17 @@ test.describe.serial("responsive visual inventory", () => {
     expect(statusBox!.x + statusBox!.width).toBeLessThanOrEqual(
       eventBox!.x + eventBox!.width,
     );
-    await captureState(page, currentEvent, "event-switcher-current-event");
+    const isolatedCurrentEvent = await page.addStyleTag({
+      content:
+        ".event-switcher-option:not(.is-current) { display: none !important; }",
+    });
+    try {
+      await captureState(page, currentEvent, "event-switcher-current-event");
+    } finally {
+      await isolatedCurrentEvent.evaluate((style) =>
+        style.parentNode?.removeChild(style),
+      );
+    }
 
     const box = await dialog.boundingBox();
     const viewport = page.viewportSize();

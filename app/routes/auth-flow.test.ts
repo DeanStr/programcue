@@ -19,7 +19,7 @@ import { safeReturnTo } from "~/platform/auth/return-to";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { action as applicationAction } from "./application-form";
-import { loader as authApiLoader } from "./auth-api";
+import { action as authApiAction, loader as authApiLoader } from "./auth-api";
 import { loader as homeLoader } from "./home";
 import { action as signInAction, loader as signInLoader } from "./sign-in";
 import { action as signOutAction } from "./sign-out";
@@ -219,6 +219,7 @@ describe("production authentication routes", () => {
     expect(redirectResponse.status).toBe(302);
     const destination = new URL(redirectResponse.headers.get("location")!);
     expect(destination.hostname).toBe("login.microsoftonline.com");
+    expect(destination.searchParams.get("response_mode")).toBe("form_post");
     const state = destination.searchParams.get("state");
     expect(state).toMatch(/^[A-Za-z0-9_-]{20,256}$/u);
 
@@ -310,6 +311,7 @@ describe("production authentication routes", () => {
       disableSignUp: true,
       disableIdTokenSignIn: true,
       disableDefaultScope: true,
+      responseMode: "form_post",
       scope: ["openid", "email", "profile"],
     });
   });
@@ -377,6 +379,7 @@ describe("production authentication routes", () => {
       );
       expect(tokenValidation).toHaveBeenCalledOnce();
       if (provider === "microsoft") {
+        expect(destination.searchParams.get("response_mode")).toBe("form_post");
         await expect(
           trustedParticipantOAuthProviders(
             { ...productionEnv(), ...override } as CloudflareEnvironment,
@@ -417,6 +420,7 @@ describe("production authentication routes", () => {
       startedResponse.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
     expect(state).toBeTruthy();
     expect(stateCookie).toContain("better-auth.state");
+    expect(destination.searchParams.get("response_mode")).toBe("form_post");
 
     vi.stubGlobal(
       "fetch",
@@ -448,11 +452,45 @@ describe("production authentication routes", () => {
         throw new Error(`Unexpected Microsoft callback request to ${url}`);
       }),
     );
-    const callback = await authApiLoader({
-      request: new Request(
-        `http://localhost/api/auth/callback/microsoft?state=${state}&code=valid-code`,
-        { headers: { cookie: `${cookie}; ${stateCookie}` } },
+    const postedCallback = await authApiAction({
+      request: formRequest(
+        "http://localhost/api/auth/callback/microsoft",
+        {
+          state: state!,
+          code: "microsoft-valid-code-123",
+        },
+        { origin: "https://login.microsoftonline.com" },
       ),
+      params: { "*": "callback/microsoft" },
+      context: context(testEnv),
+    } as never);
+    expect(postedCallback.status).toBe(303);
+    expect(postedCallback.headers.get("cache-control")).toBe("no-store");
+    expect(postedCallback.headers.get("referrer-policy")).toBe("no-referrer");
+    const cleanCallbackURL = new URL(
+      postedCallback.headers.get("location")!,
+      "http://localhost",
+    );
+    expect(cleanCallbackURL.pathname).toBe("/api/auth/callback/microsoft");
+    expect(cleanCallbackURL.searchParams.get("relay")).toMatch(
+      /^[A-Za-z0-9_-]{32,64}$/u,
+    );
+    expect(cleanCallbackURL.searchParams.has("code")).toBe(false);
+    expect(cleanCallbackURL.searchParams.has("state")).toBe(false);
+    const encryptedRelay = await env.DB.prepare(
+      "SELECT value FROM verification_tokens WHERE identifier = ?",
+    )
+      .bind(
+        `microsoft-auth-callback-relay:${cleanCallbackURL.searchParams.get("relay")}`,
+      )
+      .first<{ value: string }>();
+    expect(encryptedRelay?.value).not.toContain("microsoft-valid-code-123");
+    expect(encryptedRelay?.value).not.toContain(state);
+
+    const callback = await authApiLoader({
+      request: new Request(cleanCallbackURL, {
+        headers: { cookie: `${cookie}; ${stateCookie}` },
+      }),
       params: { "*": "callback/microsoft" },
       context: context(testEnv),
     } as never);
@@ -493,11 +531,44 @@ describe("production authentication routes", () => {
     );
     const futureStateCookie =
       futureStartedResponse.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
-    const futureCallback = await authApiLoader({
-      request: new Request(
-        `http://localhost/api/auth/callback/microsoft?state=${futureDestination.searchParams.get("state")}&code=future-valid-code`,
-        { headers: { cookie: futureStateCookie } },
+    expect(futureDestination.searchParams.get("response_mode")).toBe(
+      "form_post",
+    );
+    const futurePostedCallback = await authApiAction({
+      request: formRequest(
+        "http://localhost/api/auth/callback/microsoft",
+        {
+          state: futureDestination.searchParams.get("state")!,
+          code: "future-microsoft-valid-code-123",
+        },
+        { origin: "https://login.microsoftonline.com" },
       ),
+      params: { "*": "callback/microsoft" },
+      context: context(testEnv),
+    } as never);
+    expect(futurePostedCallback.status).toBe(303);
+    const futureCleanCallbackURL = new URL(
+      futurePostedCallback.headers.get("location")!,
+      "http://localhost",
+    );
+    const duplicateRelayCallback = new URL(futureCleanCallbackURL);
+    duplicateRelayCallback.searchParams.append(
+      "relay",
+      futureCleanCallbackURL.searchParams.get("relay")!,
+    );
+    const rejectedDuplicateRelay = await authApiLoader({
+      request: new Request(duplicateRelayCallback, {
+        headers: { cookie: futureStateCookie },
+      }),
+      params: { "*": "callback/microsoft" },
+      context: context(testEnv),
+    } as never);
+    expect(rejectedDuplicateRelay.status).toBe(400);
+
+    const futureCallback = await authApiLoader({
+      request: new Request(futureCleanCallbackURL, {
+        headers: { cookie: futureStateCookie },
+      }),
       params: { "*": "callback/microsoft" },
       context: context(testEnv),
     } as never);
@@ -506,6 +577,118 @@ describe("production authentication routes", () => {
     expect(futureCallback.headers.get("set-cookie")).toContain(
       "better-auth.session_token",
     );
+
+    const replayedCallback = await authApiLoader({
+      request: new Request(
+        new URL(
+          futurePostedCallback.headers.get("location")!,
+          "http://localhost",
+        ),
+        { headers: { cookie: futureStateCookie } },
+      ),
+      params: { "*": "callback/microsoft" },
+      context: context(testEnv),
+    } as never);
+    expect(replayedCallback.status).toBe(400);
+    await expect(replayedCallback.text()).resolves.toContain(
+      "invalid or expired",
+    );
+  });
+
+  it("rejects Microsoft authorization codes delivered in the browser URL", async () => {
+    const tokenExchange = vi.fn();
+    vi.stubGlobal("fetch", tokenExchange);
+    const response = await authApiLoader({
+      request: new Request(
+        "http://localhost/api/auth/callback/microsoft?state=browser-state-value-123456&code=browser-visible-authorization-code",
+      ),
+      params: { "*": "callback/microsoft" },
+      context: context({
+        ...productionEnv(),
+        MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+        MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+      } as unknown as CloudflareEnvironment),
+    } as never);
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.text()).resolves.toContain("invalid or expired");
+    expect(tokenExchange).not.toHaveBeenCalled();
+  });
+
+  it("relays a Microsoft denial without putting error state in the browser URL", async () => {
+    const providerRequests = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("challenges.cloudflare.com")) {
+        return Response.json({
+          success: true,
+          hostname: "localhost",
+          action: "social_sign_in",
+        });
+      }
+      throw new Error(`Unexpected provider request to ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", providerRequests);
+    const testEnv = {
+      ...productionEnv(),
+      MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+      MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+    } as unknown as CloudflareEnvironment;
+    const started = await signInAction({
+      request: formRequest(
+        "http://localhost/sign-in",
+        {
+          _intent: "social_sign_in",
+          provider: "microsoft",
+          returnTo: "/admin/crm",
+          "turnstile-token": "microsoft-denial-turnstile",
+        },
+        { "cf-connecting-ip": "203.0.113.16" },
+      ),
+      params: {},
+      context: context(testEnv),
+    } as never);
+    expect(started).toBeInstanceOf(Response);
+    const startedResponse = started as Response;
+    const authorizationURL = new URL(startedResponse.headers.get("location")!);
+    const stateCookie =
+      startedResponse.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+
+    const posted = await authApiAction({
+      request: formRequest(
+        "http://localhost/api/auth/callback/microsoft",
+        {
+          state: authorizationURL.searchParams.get("state")!,
+          error: "access_denied",
+          error_description: "The user cancelled Microsoft sign-in.",
+        },
+        { origin: "https://login.microsoftonline.com" },
+      ),
+      params: { "*": "callback/microsoft" },
+      context: context(testEnv),
+    } as never);
+    expect(posted.status).toBe(303);
+    const cleanCallbackURL = new URL(
+      posted.headers.get("location")!,
+      "http://localhost",
+    );
+    expect(Array.from(cleanCallbackURL.searchParams.keys())).toEqual(["relay"]);
+
+    const completed = await authApiLoader({
+      request: new Request(cleanCallbackURL, {
+        headers: { cookie: stateCookie },
+      }),
+      params: { "*": "callback/microsoft" },
+      context: context(testEnv),
+    } as never);
+    expect(completed.status).toBe(302);
+    const failureURL = new URL(
+      completed.headers.get("location")!,
+      "http://localhost",
+    );
+    expect(failureURL.pathname).toBe("/sign-in");
+    expect(failureURL.searchParams.get("provider")).toBe("microsoft");
+    expect(failureURL.searchParams.get("error")).toBe("access_denied");
+    expect(providerRequests).toHaveBeenCalledOnce();
   });
 
   it("redacts OAuth state details reported by the authentication library", async () => {
