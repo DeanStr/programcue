@@ -6,6 +6,8 @@ import { readBoundedResponseJson } from "~/platform/http/read-response";
 import {
   CalendarProviderConfigurationError,
   CalendarProviderRequestError,
+  CalendarOAuthUnexpectedError,
+  type CalendarOAuthCallbackPhase,
   decryptCalendarCredentials,
   encryptCalendarCredentials,
   type CalendarCredentials,
@@ -281,6 +283,35 @@ function parseMicrosoftAccount(profileBody: unknown) {
   return { reference: parsed.data.id, email: email.data };
 }
 
+function parseGoogleAccount(profileBody: unknown) {
+  const parsed = googleProfileSchema.safeParse(profileBody);
+  if (!parsed.success)
+    throw new CalendarProviderRequestError(
+      "google",
+      200,
+      "Google account lookup did not return a stable account identifier and email address.",
+    );
+  return { reference: parsed.data.sub, email: parsed.data.email };
+}
+
+async function callbackPhase<T>(
+  provider: DirectCalendarProviderName,
+  phase: CalendarOAuthCallbackPhase,
+  operation: () => T | Promise<T>,
+) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (
+      error instanceof CalendarProviderConfigurationError ||
+      error instanceof CalendarProviderRequestError ||
+      error instanceof CalendarOAuthUnexpectedError
+    )
+      throw error;
+    throw new CalendarOAuthUnexpectedError(provider, phase, error);
+  }
+}
+
 export type CalendarOAuthStart = {
   authorizationUrl: string;
   nonce: string;
@@ -347,77 +378,99 @@ export class CalendarOAuthService {
   ) {
     const state = await this.validateState(viewer, input);
     const configuration = oauthConfiguration(this.oauthEnv, state.provider);
-    const token = await parseTokenResponse(
+    const token = await callbackPhase(
       state.provider,
-      await this.fetcher(configuration.tokenUrl, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code: input.code,
-          client_id: configuration.clientId,
-          client_secret: configuration.clientSecret,
-          redirect_uri: callbackUrl(this.oauthEnv),
-          code_verifier: state.verifier,
-        }),
-      }),
+      "token-exchange",
+      async () =>
+        parseTokenResponse(
+          state.provider,
+          await this.fetcher(configuration.tokenUrl, {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
+            body: new URLSearchParams({
+              grant_type: "authorization_code",
+              code: input.code,
+              client_id: configuration.clientId,
+              client_secret: configuration.clientSecret,
+              redirect_uri: callbackUrl(this.oauthEnv),
+              code_verifier: state.verifier,
+            }),
+          }),
+        ),
     );
     if (!token.refresh_token)
       throw new CalendarProviderConfigurationError(
         `${state.provider} OAuth did not return a refresh token. Revoke the existing provider grant and consent again.`,
       );
-    const profileResponse = await this.fetcher(configuration.profileUrl, {
-      headers: { authorization: `Bearer ${token.access_token}` },
-      signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
-    });
-    if (!profileResponse.ok)
-      throw new CalendarProviderRequestError(
-        state.provider,
-        profileResponse.status,
-        `${state.provider} account lookup returned HTTP ${profileResponse.status}.`,
-      );
-    const profileBody = await readBoundedResponseJson(
-      profileResponse,
-      PROVIDER_RESPONSE_MAX_BYTES,
-    ).catch(() => null);
-    const account =
-      state.provider === "google"
-        ? (() => {
-            const parsed = googleProfileSchema.parse(profileBody);
-            return { reference: parsed.sub, email: parsed.email };
-          })()
-        : (() => {
-            return parseMicrosoftAccount(profileBody);
-          })();
-    const expiresAt = Math.floor(Date.now() / 1_000) + token.expires_in;
-    const encrypted = await encryptCalendarCredentials(
-      {
-        accessToken: token.access_token,
-        refreshToken: token.refresh_token,
-        accessTokenExpiresAt: expiresAt,
-        tokenType: token.token_type,
-        ...(state.provider === "google" ? { calendarId: "primary" } : {}),
+    const refreshToken = token.refresh_token;
+    const profileBody = await callbackPhase(
+      state.provider,
+      "profile-request",
+      async () => {
+        const response = await this.fetcher(configuration.profileUrl, {
+          headers: { authorization: `Bearer ${token.access_token}` },
+          signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
+        });
+        if (!response.ok)
+          throw new CalendarProviderRequestError(
+            state.provider,
+            response.status,
+            `${state.provider} account lookup returned HTTP ${response.status}.`,
+          );
+        return readBoundedResponseJson(
+          response,
+          PROVIDER_RESPONSE_MAX_BYTES,
+        ).catch(() => null);
       },
-      this.env.CALENDAR_CREDENTIALS_KEY,
     );
-    const existing = await this.env.DB.prepare(
-      `SELECT cc.id, cc.organisation_id AS organisationId
+    const account = await callbackPhase(state.provider, "profile-parse", () =>
+      state.provider === "google"
+        ? parseGoogleAccount(profileBody)
+        : parseMicrosoftAccount(profileBody),
+    );
+    const expiresAt = Math.floor(Date.now() / 1_000) + token.expires_in;
+    const encrypted = await callbackPhase(
+      state.provider,
+      "credential-encryption",
+      () =>
+        encryptCalendarCredentials(
+          {
+            accessToken: token.access_token,
+            refreshToken,
+            accessTokenExpiresAt: expiresAt,
+            tokenType: token.token_type,
+            ...(state.provider === "google" ? { calendarId: "primary" } : {}),
+          },
+          this.env.CALENDAR_CREDENTIALS_KEY,
+        ),
+    );
+    const existing = await callbackPhase(
+      state.provider,
+      "connection-lookup",
+      () =>
+        this.env.DB.prepare(
+          `SELECT cc.id, cc.organisation_id AS organisationId
          FROM calendar_connections cc
         WHERE cc.person_id = ? AND cc.provider = ?
           AND cc.account_reference = ?`,
-    )
-      .bind(viewer.personId, state.provider, account.reference)
-      .first<{ id: string; organisationId: string }>();
+        )
+          .bind(viewer.personId, state.provider, account.reference)
+          .first<{ id: string; organisationId: string }>(),
+    );
     if (existing && existing.organisationId !== viewer.organisationId)
       throw new CalendarProviderConfigurationError(
         "This calendar account is already connected for the participant in another organisation.",
       );
     const id = existing?.id ?? crypto.randomUUID();
     const scopes = configuration.scope.split(" ");
-    const results = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `INSERT INTO calendar_connections (
+    const results = await callbackPhase(
+      state.provider,
+      "connection-persistence",
+      () =>
+        this.env.DB.batch([
+          this.env.DB.prepare(
+            `INSERT INTO calendar_connections (
          id, organisation_id, event_id, person_id, provider, account_reference,
            encrypted_credentials, scopes_json, status, expires_at, created_at, updated_at
          )
@@ -434,35 +487,39 @@ export class CalendarOAuthService {
            expires_at = excluded.expires_at,
            updated_at = unixepoch()
          WHERE calendar_connections.organisation_id = excluded.organisation_id`,
-      ).bind(
-        id,
-        viewer.organisationId,
-        viewer.personId,
-        state.provider,
-        account.reference,
-        encrypted,
-        JSON.stringify(scopes),
-        expiresAt,
-        viewer.eventId,
-        viewer.organisationId,
-      ),
-      this.env.DB.prepare(
-        `INSERT INTO audit_events (
+          ).bind(
+            id,
+            viewer.organisationId,
+            viewer.personId,
+            state.provider,
+            account.reference,
+            encrypted,
+            JSON.stringify(scopes),
+            expiresAt,
+            viewer.eventId,
+            viewer.organisationId,
+          ),
+          this.env.DB.prepare(
+            `INSERT INTO audit_events (
            id, organisation_id, event_id, actor_person_id, action, entity_type,
            entity_id, metadata_json, created_at
          )
          SELECT ?, ?, ?, ?, 'calendar.connection.connected',
                 'calendar_connection', ?, ?, unixepoch()
           WHERE changes() = 1`,
-      ).bind(
-        crypto.randomUUID(),
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        id,
-        JSON.stringify({ provider: state.provider, account: account.email }),
-      ),
-    ]);
+          ).bind(
+            crypto.randomUUID(),
+            viewer.organisationId,
+            viewer.eventId,
+            viewer.personId,
+            id,
+            JSON.stringify({
+              provider: state.provider,
+              account: account.email,
+            }),
+          ),
+        ]),
+    );
     if ((results[0].meta.changes ?? 0) !== 1)
       throw new CalendarProviderConfigurationError(
         "Calendar connection could not be stored in the authorised event.",

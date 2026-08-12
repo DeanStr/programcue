@@ -53,6 +53,25 @@ export class CalendarProviderRequestError extends Error {
   }
 }
 
+export type CalendarOAuthCallbackPhase =
+  | "token-exchange"
+  | "profile-request"
+  | "profile-parse"
+  | "credential-encryption"
+  | "connection-lookup"
+  | "connection-persistence";
+
+export class CalendarOAuthUnexpectedError extends Error {
+  constructor(
+    readonly provider: "google" | "microsoft",
+    readonly phase: CalendarOAuthCallbackPhase,
+    cause: unknown,
+  ) {
+    super("The calendar OAuth callback failed unexpectedly.", { cause });
+    this.name = "CalendarOAuthUnexpectedError";
+  }
+}
+
 const providerEventIdSchema = z.string().min(1).max(512);
 const providerResponseSchema = z
   .object({ id: providerEventIdSchema })
@@ -102,10 +121,9 @@ async function parseProviderResponse(
   if (response.status === 204 && existingId)
     return { providerEventId: existingId };
   const parsed = providerResponseSchema.safeParse(
-    await readBoundedResponseJson(
-      response,
-      PROVIDER_RESPONSE_MAX_BYTES,
-    ).catch(() => null),
+    await readBoundedResponseJson(response, PROVIDER_RESPONSE_MAX_BYTES).catch(
+      () => null,
+    ),
   );
   if (!parsed.success)
     throw new CalendarProviderRequestError(

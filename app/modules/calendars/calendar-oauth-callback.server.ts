@@ -1,4 +1,5 @@
 import {
+  CalendarOAuthUnexpectedError,
   CalendarProviderConfigurationError,
   CalendarProviderRequestError,
 } from "~/modules/calendars/calendar-providers.server";
@@ -23,13 +24,19 @@ export function calendarOAuthCallbackFailure(
       event: "callback-failed",
       eventId,
       provider:
-        error instanceof CalendarProviderRequestError &&
+        (error instanceof CalendarProviderRequestError ||
+          error instanceof CalendarOAuthUnexpectedError) &&
         (error.provider === "google" || error.provider === "microsoft")
           ? error.provider
           : "calendar",
+      phase:
+        error instanceof CalendarOAuthUnexpectedError
+          ? error.phase
+          : "classified",
       errorName:
         error instanceof CalendarProviderConfigurationError ||
-        error instanceof CalendarProviderRequestError
+        error instanceof CalendarProviderRequestError ||
+        error instanceof CalendarOAuthUnexpectedError
           ? error.name
           : "UnknownError",
       message: "The calendar OAuth callback failed.",

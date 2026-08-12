@@ -257,6 +257,43 @@ describe("direct-calendar OAuth", () => {
     });
   });
 
+  it("classifies an unexpected production connection lookup without exposing its cause", async () => {
+    const { service, testEnv } = await oauthEnvironment(async (input) => {
+      if (String(input).includes("oauth2.googleapis.com/token"))
+        return Response.json({
+          access_token: "google-access-token",
+          refresh_token: "google-refresh-token",
+          expires_in: 3_600,
+          token_type: "Bearer",
+        });
+      return Response.json({
+        sub: "google-account-lookup-failure",
+        email: "calendar-owner@example.com",
+      });
+    });
+    const started = await service.start(viewer, "google");
+    Object.assign(testEnv, {
+      DB: {
+        prepare() {
+          throw new Error("sensitive production database detail");
+        },
+      } as unknown as D1Database,
+    });
+
+    await expect(
+      service.callback(viewer, {
+        state: new URL(started.authorizationUrl).searchParams.get("state")!,
+        code: "google-provider-code",
+        nonce: started.nonce,
+      }),
+    ).rejects.toMatchObject({
+      name: "CalendarOAuthUnexpectedError",
+      provider: "google",
+      phase: "connection-lookup",
+      message: "The calendar OAuth callback failed unexpectedly.",
+    });
+  });
+
   it("rejects a callback from a different browser nonce before token exchange", async () => {
     let providerCalls = 0;
     const { service } = await oauthEnvironment(async () => {
