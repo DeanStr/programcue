@@ -160,6 +160,103 @@ describe("direct-calendar OAuth", () => {
     ).resolves.toEqual({ status: "connected", hasCredentials: 1 });
   });
 
+  it("uses Microsoft's mail address when a guest principal name is not an email", async () => {
+    const requests: Array<{ url: string; body: string }> = [];
+    const { service, testEnv } = await oauthEnvironment(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, body: String(init?.body ?? "") });
+      if (url.includes("/oauth2/v2.0/token"))
+        return Response.json({
+          access_token: "microsoft-calendar-access-token",
+          refresh_token: "microsoft-calendar-refresh-token",
+          expires_in: 3_600,
+          token_type: "Bearer",
+        });
+      if (url.includes("graph.microsoft.com"))
+        return Response.json({
+          id: "microsoft-calendar-account-1",
+          mail: "calendar-owner@example.com",
+          userPrincipalName:
+            "calendar-owner_example.com#EXT#@tenant.onmicrosoft.com",
+        });
+      return new Response("unexpected request", { status: 500 });
+    });
+    const started = await service.start(viewer, "microsoft");
+    const authorization = new URL(started.authorizationUrl);
+    expect(authorization.searchParams.get("scope")).toContain(
+      "Calendars.ReadWrite",
+    );
+
+    await expect(
+      service.callback(viewer, {
+        state: authorization.searchParams.get("state")!,
+        code: "microsoft-provider-code",
+        nonce: started.nonce,
+      }),
+    ).resolves.toEqual({
+      provider: "microsoft",
+      account: "calendar-owner@example.com",
+      returnTo: "/admin/communications",
+    });
+    const connection = await testEnv.DB.prepare(
+      `SELECT encrypted_credentials AS encryptedCredentials, status
+         FROM calendar_connections
+        WHERE organisation_id = ? AND person_id = ? AND provider = 'microsoft'
+          AND account_reference = ?`,
+    )
+      .bind(
+        viewer.organisationId,
+        viewer.personId,
+        "microsoft-calendar-account-1",
+      )
+      .first<{ encryptedCredentials: string; status: string }>();
+    expect(connection?.status).toBe("connected");
+    expect(connection?.encryptedCredentials).not.toContain(
+      "microsoft-calendar-refresh-token",
+    );
+    await expect(
+      decryptCalendarCredentials(
+        connection!.encryptedCredentials,
+        credentialKey,
+      ),
+    ).resolves.toMatchObject({
+      accessToken: "microsoft-calendar-access-token",
+      refreshToken: "microsoft-calendar-refresh-token",
+    });
+    expect(requests[0]?.body).toContain("code_verifier=");
+  });
+
+  it("fails Microsoft account lookup explicitly when no usable email is returned", async () => {
+    const { service } = await oauthEnvironment(async (input) => {
+      if (String(input).includes("/oauth2/v2.0/token"))
+        return Response.json({
+          access_token: "microsoft-calendar-access-token",
+          refresh_token: "microsoft-calendar-refresh-token",
+          expires_in: 3_600,
+          token_type: "Bearer",
+        });
+      return Response.json({
+        id: "microsoft-calendar-account-without-email",
+        mail: null,
+        userPrincipalName:
+          "calendar-owner_example.com#EXT#@tenant.onmicrosoft.com",
+      });
+    });
+    const started = await service.start(viewer, "microsoft");
+
+    await expect(
+      service.callback(viewer, {
+        state: new URL(started.authorizationUrl).searchParams.get("state")!,
+        code: "microsoft-provider-code",
+        nonce: started.nonce,
+      }),
+    ).rejects.toMatchObject({
+      name: "CalendarProviderRequestError",
+      provider: "microsoft",
+      status: 200,
+    });
+  });
+
   it("rejects a callback from a different browser nonce before token exchange", async () => {
     let providerCalls = 0;
     const { service } = await oauthEnvironment(async () => {

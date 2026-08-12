@@ -39,10 +39,12 @@ const googleProfileSchema = z.object({
   email: z.email().max(320),
 });
 
+const calendarAccountEmailSchema = z.email().max(320);
+
 const microsoftProfileSchema = z.object({
   id: z.string().min(1).max(512),
-  mail: z.email().max(320).nullable().optional(),
-  userPrincipalName: z.email().max(320),
+  mail: z.string().max(320).nullable().optional(),
+  userPrincipalName: z.string().max(320).nullable().optional(),
 });
 
 const statePayloadSchema = z.object({
@@ -223,9 +225,7 @@ function callbackUrl(env: OAuthEnvironment) {
       "BETTER_AUTH_URL must be an absolute HTTP(S) URL without embedded credentials.",
     );
   if (origin.protocol !== "https:") {
-    const local = ["localhost", "127.0.0.1", "[::1]"].includes(
-      origin.hostname,
-    );
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
     if (String(env.APP_ENV) === "production" || !local)
       throw new CalendarProviderConfigurationError(
         "BETTER_AUTH_URL must use HTTPS outside local development.",
@@ -259,6 +259,26 @@ async function parseTokenResponse(provider: string, response: Response) {
       `${provider} OAuth did not return valid access-token data.`,
     );
   return parsed.data;
+}
+
+function parseMicrosoftAccount(profileBody: unknown) {
+  const parsed = microsoftProfileSchema.safeParse(profileBody);
+  if (!parsed.success)
+    throw new CalendarProviderRequestError(
+      "microsoft",
+      200,
+      "Microsoft account lookup did not return a stable account identifier.",
+    );
+  const email = [parsed.data.mail, parsed.data.userPrincipalName]
+    .map((candidate) => calendarAccountEmailSchema.safeParse(candidate))
+    .find((candidate) => candidate.success);
+  if (!email?.success)
+    throw new CalendarProviderRequestError(
+      "microsoft",
+      200,
+      "Microsoft account lookup did not return a usable email address.",
+    );
+  return { reference: parsed.data.id, email: email.data };
 }
 
 export type CalendarOAuthStart = {
@@ -368,11 +388,7 @@ export class CalendarOAuthService {
             return { reference: parsed.sub, email: parsed.email };
           })()
         : (() => {
-            const parsed = microsoftProfileSchema.parse(profileBody);
-            return {
-              reference: parsed.id,
-              email: parsed.mail ?? parsed.userPrincipalName,
-            };
+            return parseMicrosoftAccount(profileBody);
           })();
     const expiresAt = Math.floor(Date.now() / 1_000) + token.expires_in;
     const encrypted = await encryptCalendarCredentials(
