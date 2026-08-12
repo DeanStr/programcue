@@ -83,10 +83,14 @@
   .sidebar-bottom {
     display: none;
   }
+  /* Collapsed to an icon, the brand link needs its own target and real
+     clearance from the first nav item rather than shared padding. */
   .brand {
     justify-content: center;
-    padding-left: 0;
-    padding-right: 0;
+    align-items: center;
+    min-height: 44px;
+    padding: 0;
+    margin-bottom: var(--space-3);
   }
   .nav a {
     justify-content: center;

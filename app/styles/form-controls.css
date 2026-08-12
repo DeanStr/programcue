@@ -240,6 +240,14 @@ input[type="radio"] {
 .textarea {
   max-width: 100%;
 }
+/* A file input's intrinsic width is its button plus the file-name label, which
+   min-width alone cannot shrink — it needs an explicit width to be containable. */
 input[type="file"].field {
+  min-width: 0;
+  width: 100%;
+}
+/* .label is a grid; its items default to min-width:auto and so refuse to
+   shrink below their content. */
+.label > * {
   min-width: 0;
 }

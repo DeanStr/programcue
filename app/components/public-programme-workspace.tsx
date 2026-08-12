@@ -96,6 +96,7 @@ export function PublicProgrammeWorkspace({
       {!embedded ? (
         <header className="public-top">
           <Link
+            aria-label={`${programme.event.name} programme`}
             className="brand"
             to={`/public/programme/${programme.event.slug}`}
             style={{ color: "var(--ink)", padding: 0 }}

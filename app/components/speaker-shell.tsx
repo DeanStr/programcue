@@ -43,6 +43,7 @@ export function SpeakerShell({
     >
       <header className="speaker-top">
         <NavLink
+          aria-label={`${event.name} participant workspace`}
           className="brand"
           to="/participant/dashboard"
           style={{ color: "var(--ink)", padding: 0 }}
