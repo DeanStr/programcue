@@ -40,7 +40,11 @@ export class ResendEmailProvider implements EmailProvider {
 
   async send(input: SendEmailInput) {
     if (!this.apiKey?.trim()) throw new ResendConfigurationError();
-    const response = await this.fetcher(this.endpoint, {
+    // Cloudflare runtime functions reject calls made with an arbitrary object
+    // as their `this` receiver. Copy the injected fetch function before calling
+    // it so a default global fetch is invoked with normal function semantics.
+    const fetcher = this.fetcher;
+    const response = await fetcher(this.endpoint, {
       method: "POST",
       headers: {
         authorization: `Bearer ${this.apiKey}`,
