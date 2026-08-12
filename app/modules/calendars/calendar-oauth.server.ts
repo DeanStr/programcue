@@ -320,12 +320,14 @@ export type CalendarOAuthStart = {
 
 export class CalendarOAuthService {
   private readonly oauthEnv: OAuthEnvironment;
+  private readonly fetcher: typeof fetch;
 
   constructor(
     private readonly env: CloudflareEnvironment,
-    private readonly fetcher: typeof fetch = fetch,
+    fetcher: typeof fetch = fetch,
   ) {
     this.oauthEnv = env as OAuthEnvironment;
+    this.fetcher = (input, init) => fetcher(input, init);
   }
 
   async start(

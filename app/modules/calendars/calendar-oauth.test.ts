@@ -51,7 +51,9 @@ async function oauthEnvironment(fetcher: typeof fetch) {
 describe("direct-calendar OAuth", () => {
   it("uses PKCE and stores encrypted Google refresh credentials after callback", async () => {
     const requests: Array<{ url: string; body: string }> = [];
-    const { service, testEnv } = await oauthEnvironment(async (input, init) => {
+    const fetcher = async function (this: unknown, input, init) {
+      if (this !== undefined)
+        throw new TypeError("fetch received an invalid this reference");
       const url = String(input);
       requests.push({ url, body: String(init?.body ?? "") });
       if (url.includes("oauth2.googleapis.com/token"))
@@ -67,7 +69,8 @@ describe("direct-calendar OAuth", () => {
           email: "calendar-owner@example.com",
         });
       return new Response("unexpected request", { status: 500 });
-    });
+    } as typeof fetch;
+    const { service, testEnv } = await oauthEnvironment(fetcher);
     const started = await service.start(viewer, "google");
     const authorization = new URL(started.authorizationUrl);
     expect(authorization.searchParams.get("code_challenge_method")).toBe(

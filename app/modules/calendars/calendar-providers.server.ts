@@ -179,13 +179,16 @@ function microsoftLocalDateTime(instant: string, timeZone: string) {
 
 export class GoogleCalendarProvider implements DirectCalendarProvider {
   readonly name = "google" as const;
+  private readonly fetcher: typeof fetch;
 
   constructor(
     private readonly accessToken: string | undefined,
     private readonly calendarId = "primary",
-    private readonly fetcher: typeof fetch = fetch,
+    fetcher: typeof fetch = fetch,
     private readonly baseUrl = "https://www.googleapis.com/calendar/v3",
-  ) {}
+  ) {
+    this.fetcher = (input, init) => fetcher(input, init);
+  }
 
   async apply(input: CalendarProviderMutation) {
     if (!this.accessToken?.trim())
@@ -345,12 +348,15 @@ export class GoogleCalendarProvider implements DirectCalendarProvider {
 
 export class MicrosoftCalendarProvider implements DirectCalendarProvider {
   readonly name = "microsoft" as const;
+  private readonly fetcher: typeof fetch;
 
   constructor(
     private readonly accessToken: string | undefined,
-    private readonly fetcher: typeof fetch = fetch,
+    fetcher: typeof fetch = fetch,
     private readonly baseUrl = "https://graph.microsoft.com/v1.0/me/events",
-  ) {}
+  ) {
+    this.fetcher = (input, init) => fetcher(input, init);
+  }
 
   async apply(input: CalendarProviderMutation) {
     if (!this.accessToken?.trim())
