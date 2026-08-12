@@ -86,7 +86,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           result: {
             eventId: error.eventId,
             operationId: error.operationId,
-            repositoryProvider: "d1",
+            repositoryProvider: "airtable",
           },
         },
         { status: error.failureKind === "provider" ? 502 : 500 },
@@ -149,7 +149,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
               {actionData.ok
                 ? "Event created"
                 : actionData.committed
-                  ? "Event created with provider setup incomplete"
+                  ? "Airtable provisioning failed"
                   : "Event creation blocked"}
             </strong>
             <div>{actionData.message}</div>
@@ -158,32 +158,47 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                 <p>
                   <code>{actionData.result.eventId}</code>
                 </p>
-                <Form method="post" action="/events/select">
-                  <input
-                    type="hidden"
-                    name="eventId"
-                    value={actionData.result.eventId}
-                  />
-                  <input
-                    type="hidden"
-                    name="returnTo"
-                    value={`/admin/operations?operation=${encodeURIComponent(actionData.result.operationId)}`}
-                  />
-                  <button className="btn small" type="submit">
-                    View creation operation
-                  </button>
-                </Form>
-                <Form method="post" action="/events/select">
-                  <input
-                    type="hidden"
-                    name="eventId"
-                    value={actionData.result.eventId}
-                  />
-                  <input type="hidden" name="returnTo" value="/admin/event" />
-                  <button className="btn small" type="submit">
-                    Open new event
-                  </button>
-                </Form>
+                {actionData.ok ? (
+                  <>
+                    <Form method="post" action="/events/select">
+                      <input
+                        type="hidden"
+                        name="eventId"
+                        value={actionData.result.eventId}
+                      />
+                      <input
+                        type="hidden"
+                        name="returnTo"
+                        value={`/admin/operations?operation=${encodeURIComponent(actionData.result.operationId)}`}
+                      />
+                      <button className="btn small" type="submit">
+                        View creation operation
+                      </button>
+                    </Form>
+                    <Form method="post" action="/events/select">
+                      <input
+                        type="hidden"
+                        name="eventId"
+                        value={actionData.result.eventId}
+                      />
+                      <input
+                        type="hidden"
+                        name="returnTo"
+                        value="/admin/event"
+                      />
+                      <button className="btn small" type="submit">
+                        Open new event
+                      </button>
+                    </Form>
+                  </>
+                ) : (
+                  <Link
+                    className="btn small"
+                    to={`/admin/events/${encodeURIComponent(actionData.result.eventId)}/repository-recovery`}
+                  >
+                    Recover incomplete event
+                  </Link>
+                )}
               </>
             ) : null}
           </div>

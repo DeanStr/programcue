@@ -83,7 +83,9 @@ export class ApiKeyService {
 
   private async assertEvent(viewer: Viewer) {
     const event = await this.env.DB.prepare(
-      "SELECT id FROM events WHERE id = ? AND organisation_id = ?",
+      `SELECT id FROM events
+        WHERE id = ? AND organisation_id = ?
+          AND activation_status = 'active'`,
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first();
@@ -143,8 +145,9 @@ export class ApiKeyService {
           scopes_json, expires_at, created_by_person_id, created_at
         )
         SELECT ?, e.organisation_id, e.id, ?, ?, ?, ?, ?, ?, unixepoch()
-          FROM events e
+         FROM events e
          WHERE e.id = ? AND e.organisation_id = ?
+           AND e.activation_status = 'active'
         `,
         ).bind(
           id,

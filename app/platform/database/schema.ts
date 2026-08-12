@@ -101,6 +101,9 @@ export const events = sqliteTable(
       .notNull()
       .default("d1")
       .$type<"d1" | "airtable">(),
+    activationStatus: text("activation_status")
+      .notNull()
+      .$type<"provisioning" | "active" | "provisioning_failed" | "discarded">(),
     repositoryLockedAt: integer("repository_locked_at"),
     retentionMonths: integer("retention_months")
       .notNull()

@@ -458,6 +458,7 @@ export class AirtableRoomRepository {
     viewer: Viewer,
     eventId: string,
     raw: unknown,
+    options: { connectionId?: string } = {},
   ): Promise<PreparedAirtableRepositoryConnection> {
     assertAdministrator(viewer);
     const authorised = await this.env.DB.prepare(
@@ -481,7 +482,9 @@ export class AirtableRoomRepository {
         { status: 403 },
       );
     const input = airtableConnectionInputSchema.parse(raw);
-    return this.provisionConnection(eventId, input);
+    return this.provisionConnection(eventId, input, {
+      connectionId: options.connectionId,
+    });
   }
 
   async configure(viewer: Viewer, raw: unknown) {

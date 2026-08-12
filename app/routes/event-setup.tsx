@@ -27,6 +27,7 @@ import {
   EventAdministratorAlreadyActiveError,
   EventAdministratorNotFoundError,
 } from "~/modules/events/event-repository.server";
+import { EventRepositoryRecoveryService } from "~/modules/events/event-repository-recovery.server";
 import {
   EventAdministratorPermissionError,
   EventAirtableProjectionCommitError,
@@ -82,7 +83,10 @@ async function getViewer(
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   const viewer = await getViewer(request, context);
-  const event = await new EventService(env).getSetup(viewer);
+  const [event, incompleteEvents] = await Promise.all([
+    new EventService(env).getSetup(viewer),
+    new EventRepositoryRecoveryService(env).listIncomplete(viewer),
+  ]);
   const search = new URL(request.url).searchParams;
   const roomId = search.get("room");
   const trackId = search.get("track");
@@ -94,6 +98,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     throw new Response("Track not found.", { status: 404 });
   return {
     event,
+    incompleteEvents,
     focusedRecord: roomId
       ? ({ kind: "room", id: roomId } as const)
       : trackId
@@ -435,6 +440,7 @@ export default function EventSetupRoute({ loaderData }: Route.ComponentProps) {
     <EventSetupForm
       key={loaderData.event.revision}
       event={loaderData.event}
+      incompleteEvents={loaderData.incompleteEvents}
       focusedRecord={loaderData.focusedRecord}
       canManageFileRetention={loaderData.canManageFileRetention}
       canManageOrganisationAdministrators={

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Form,
+  Link,
   useActionData,
   useFetcher,
   useNavigate,
@@ -16,15 +17,18 @@ import {
 } from "~/components/event-setup-panels";
 import { EventScheduleConfigurationPanels } from "~/components/event-schedule-configuration-panel";
 import type { EventSetup } from "~/modules/events/event-repository.server";
+import type { IncompleteEventSummary } from "~/modules/events/event-repository-recovery.server";
 import type { action, ActionResponse } from "~/routes/event-setup";
 
 export function EventSetupForm({
   event,
+  incompleteEvents,
   focusedRecord,
   canManageFileRetention,
   canManageOrganisationAdministrators,
 }: {
   event: EventSetup;
+  incompleteEvents: IncompleteEventSummary[];
   focusedRecord: { kind: "room" | "track"; id: string } | null;
   canManageFileRetention: boolean;
   canManageOrganisationAdministrators: boolean;
@@ -172,6 +176,47 @@ export function EventSetupForm({
             </button>
           </div>
         </div>
+
+        {incompleteEvents.length ? (
+          <section
+            className="card pad mb"
+            aria-labelledby="incomplete-events-title"
+          >
+            <div className="card-title">
+              <h2 id="incomplete-events-title">Incomplete events</h2>
+              <span className="status warning">Recovery required</span>
+            </div>
+            <p className="help">
+              These Airtable events are isolated from ordinary event access
+              until provisioning succeeds or an organisation administrator
+              explicitly chooses another recovery outcome.
+            </p>
+            <div className="stack-list mt">
+              {incompleteEvents.map((incompleteEvent) => (
+                <div className="validation-item" key={incompleteEvent.id}>
+                  <div>
+                    <strong>{incompleteEvent.name}</strong>
+                    <div className="help">
+                      {incompleteEvent.activationStatus.replaceAll("_", " ")}
+                      {incompleteEvent.operationStatus
+                        ? ` · ${incompleteEvent.operationStatus}`
+                        : ""}
+                    </div>
+                    {incompleteEvent.lastError ? (
+                      <div className="help">{incompleteEvent.lastError}</div>
+                    ) : null}
+                  </div>
+                  <Link
+                    className="btn small right"
+                    to={`/admin/events/${encodeURIComponent(incompleteEvent.id)}/repository-recovery`}
+                  >
+                    Recover {incompleteEvent.name}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {actionData ? (
           <div

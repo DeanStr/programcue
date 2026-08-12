@@ -76,7 +76,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           result: {
             eventId: error.eventId,
             operationId: error.operationId,
-            repositoryProvider: "d1" as const,
+            repositoryProvider: "airtable" as const,
           },
         },
         { status: error.failureKind === "provider" ? 502 : 500 },
@@ -142,7 +142,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
               {actionData.ok
                 ? "Clone complete"
                 : actionData.result
-                  ? "Clone created with provider setup incomplete"
+                  ? "Airtable provisioning failed"
                   : "Clone blocked"}
             </strong>
             <div>{actionData.message}</div>
@@ -156,17 +156,26 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                     view clone audit
                   </Link>
                 </p>
-                <Form method="post" action="/events/select">
-                  <input
-                    type="hidden"
-                    name="eventId"
-                    value={actionData.result.eventId}
-                  />
-                  <input type="hidden" name="returnTo" value="/admin/event" />
-                  <button className="btn small" type="submit">
-                    Open cloned event
-                  </button>
-                </Form>
+                {actionData.ok ? (
+                  <Form method="post" action="/events/select">
+                    <input
+                      type="hidden"
+                      name="eventId"
+                      value={actionData.result.eventId}
+                    />
+                    <input type="hidden" name="returnTo" value="/admin/event" />
+                    <button className="btn small" type="submit">
+                      Open cloned event
+                    </button>
+                  </Form>
+                ) : (
+                  <Link
+                    className="btn small"
+                    to={`/admin/events/${encodeURIComponent(actionData.result.eventId)}/repository-recovery`}
+                  >
+                    Recover incomplete event
+                  </Link>
+                )}
               </>
             ) : null}
           </div>

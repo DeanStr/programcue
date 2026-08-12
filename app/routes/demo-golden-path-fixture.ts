@@ -5,6 +5,7 @@ import {
 } from "react-router";
 
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import {
   DEMO_EVENT_ID,
   DEMO_IDENTITIES,
@@ -19,6 +20,9 @@ const ACCELEVENTS_OPERATION_ID = "demo-accelevents-failed-operation";
 const ACCELEVENTS_RUN_ID = "demo-accelevents-failed-run";
 const ACCELEVENTS_RUN_ITEM_ID = "demo-accelevents-failed-run-item";
 const ACCELEVENTS_OPERATION_ITEM_ID = "demo-accelevents-failed-operation-item";
+const REPOSITORY_RECOVERY_EVENT_ID = "demo-airtable-recovery-event";
+const REPOSITORY_RECOVERY_OPERATION_ID =
+  "demo-airtable-recovery-failed-operation";
 
 function requireDemo(env: CloudflareEnvironment) {
   if (
@@ -274,6 +278,62 @@ async function seedAcceleventsNoWriteFixture(env: CloudflareEnvironment) {
   };
 }
 
+async function seedEventRepositoryRecovery(env: CloudflareEnvironment) {
+  await ensureDemoProgramme(env);
+  await env.DB.prepare("DELETE FROM events WHERE id = ?")
+    .bind(REPOSITORY_RECOVERY_EVENT_ID)
+    .run();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO events (
+         id, organisation_id, name, slug, timezone, starts_at, ends_at,
+         repository_provider, activation_status, file_policy_json,
+         last_operation_id, last_updated_by_person_id
+       ) VALUES (?, ?, 'Airtable recovery browser fixture',
+                 'airtable-recovery-browser-fixture', 'America/Toronto',
+                 1800000000, 1800086400, 'airtable',
+                 'provisioning_failed', ?, ?, ?)`,
+    ).bind(
+      REPOSITORY_RECOVERY_EVENT_ID,
+      DEMO_ORGANISATION_ID,
+      CANONICAL_EVENT_FILE_POLICY_JSON,
+      REPOSITORY_RECOVERY_OPERATION_ID,
+      DEMO_IDENTITIES.administrator.personId,
+    ),
+    env.DB.prepare(
+      `INSERT INTO operation_jobs (
+         id, organisation_id, event_id, requested_by_person_id, type,
+         idempotency_key, correlation_id, status, payload_json,
+         progress_total, progress_completed, progress_failed, cancellable,
+         last_error, started_at, completed_at, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, 'event.create',
+                 'demo-airtable-recovery-failed', ?, 'failed', ?,
+                 1, 0, 1, 0, 'Demo fixture: Airtable provisioning failed; no provider request was made.',
+                 unixepoch(), unixepoch(), unixepoch(), unixepoch())`,
+    ).bind(
+      REPOSITORY_RECOVERY_OPERATION_ID,
+      DEMO_ORGANISATION_ID,
+      REPOSITORY_RECOVERY_EVENT_ID,
+      DEMO_IDENTITIES.administrator.personId,
+      "demo-airtable-recovery-failed-correlation",
+      JSON.stringify({
+        type: "event.create",
+        targetEventId: REPOSITORY_RECOVERY_EVENT_ID,
+        requestedRepositoryProvider: "airtable",
+        demonstrationOnly: true,
+        providerCalled: false,
+      }),
+    ),
+  ]);
+  return {
+    eventId: REPOSITORY_RECOVERY_EVENT_ID,
+    operationId: REPOSITORY_RECOVERY_OPERATION_ID,
+    recoveryPath: `/admin/events/${REPOSITORY_RECOVERY_EVENT_ID}/repository-recovery`,
+    providerBoundary: "airtable",
+    providerCalled: false,
+  };
+}
+
 export async function action({ request, context }: ActionFunctionArgs) {
   const { env } = getCloudflareContext(context);
   requireDemo(env);
@@ -290,7 +350,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
       ? await seedTaskEvidence(env)
       : intent === "seed_accelevents_no_write"
         ? await seedAcceleventsNoWriteFixture(env)
-        : null;
+        : intent === "seed_event_repository_recovery"
+          ? await seedEventRepositoryRecovery(env)
+          : null;
   if (!result)
     throw new Response("Unsupported demo fixture action", { status: 400 });
   return data(

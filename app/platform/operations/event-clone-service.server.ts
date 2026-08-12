@@ -634,11 +634,11 @@ export class EventCloneService {
         `INSERT INTO events (
            id, organisation_id, name, slug, timezone, starts_at, ends_at,
            venue_name, city, description, brand_accent, session_formats_json,
-           repository_provider,
+           repository_provider, activation_status,
            retention_months, submission_access_mode, allow_anonymous_drafts,
            duplicate_person_warnings, file_policy_json, revision, last_operation_id,
            last_updated_by_person_id, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'd1', ?, ?, ?, ?, ?, 1, ?, ?, unixepoch(), unixepoch())`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, unixepoch(), unixepoch())`,
       ).bind(
         eventId,
         viewer.organisationId,
@@ -652,6 +652,8 @@ export class EventCloneService {
         source.description,
         source.brandAccent,
         sessionFormatsJson,
+        input.repositoryProvider,
+        pendingAirtable ? "provisioning" : "active",
         source.retentionMonths,
         source.submissionAccessMode,
         source.allowAnonymousDrafts,

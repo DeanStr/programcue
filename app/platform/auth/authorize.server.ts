@@ -128,6 +128,7 @@ async function resolveEventRole(
       FROM memberships m
       JOIN events e ON e.organisation_id = m.organisation_id
      WHERE e.id = ?
+       AND e.activation_status = 'active'
        AND m.person_id = ?
        AND (m.event_id = e.id OR (m.event_id IS NULL AND m.role IN ('owner', 'administrator')))
        AND m.role IN (${rolePlaceholders})
@@ -161,6 +162,7 @@ async function resolveEventRole(
         FROM memberships m
         JOIN events e ON e.organisation_id = m.organisation_id
        WHERE e.id = ?
+         AND e.activation_status = 'active'
          AND m.person_id = ?
          AND (m.event_id = e.id OR (m.event_id IS NULL AND m.role IN ('owner', 'administrator')))
          AND m.role IN (${rolePlaceholders})
@@ -229,6 +231,7 @@ async function resolveEventRole(
             FROM memberships m
             JOIN events e ON e.organisation_id = m.organisation_id
            WHERE m.id = ? AND e.id = ? AND m.person_id = ?
+             AND e.activation_status = 'active'
              AND (m.event_id = e.id
                   OR (m.event_id IS NULL
                       AND m.role IN ('owner', 'administrator')))

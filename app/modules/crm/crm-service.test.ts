@@ -384,6 +384,64 @@ describe("organisation speaker CRM", () => {
     expect(Number(duplicateCount?.count)).toBe(1);
   });
 
+  it("excludes inactive events from CRM selection and event mutations", async () => {
+    const { testEnv, crm } = await service();
+    const token = crypto.randomUUID();
+    const eventId = `crm-inactive-${token}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO events (
+         id, organisation_id, name, slug, timezone, starts_at, ends_at,
+         brand_accent, session_formats_json, repository_provider,
+         activation_status, retention_months, submission_access_mode,
+         allow_anonymous_drafts, duplicate_person_warnings, file_policy_json,
+         revision, last_updated_by_person_id, created_at, updated_at
+       )
+       SELECT ?, organisation_id, 'Inactive CRM event', ?, timezone,
+              starts_at, ends_at, brand_accent, session_formats_json,
+              'airtable', 'provisioning_failed', retention_months,
+              submission_access_mode, allow_anonymous_drafts,
+              duplicate_person_warnings, file_policy_json, 1,
+              last_updated_by_person_id, unixepoch(), unixepoch()
+         FROM events WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(
+        eventId,
+        `inactive-crm-${token}`,
+        administrator.currentEventId,
+        administrator.organisationId,
+      )
+      .run();
+    const contact = await crm.createContact(administrator, {
+      name: "Inactive Event Contact",
+      email: `inactive-event-${token}@example.com`,
+      jobTitle: "",
+      organisationName: "",
+      biography: "",
+    });
+
+    await expect(crm.listEvents(administrator)).resolves.not.toContainEqual(
+      expect.objectContaining({ id: eventId }),
+    );
+    await expect(
+      crm.addContactToEvent(
+        administrator,
+        contact.personId,
+        eventId,
+        `crm-inactive-${token}`,
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      crm.createOutreachDraft(administrator, {
+        personIds: [contact.personId, "person-demo-speaker"],
+        eventId,
+        idempotencyKey: `crm-inactive-outreach-${token}`,
+        subject: "Unavailable event",
+        body: "This should not be created.",
+        physicalAddress: "100 Programme Way, Toronto",
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
   it("does not expose contacts belonging only to another organisation", async () => {
     const { testEnv, crm } = await service();
     const suffix = crypto.randomUUID();

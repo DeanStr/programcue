@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 
@@ -344,6 +345,44 @@ describe("command palette record search", () => {
       query: `room ${token}`,
       scope: "event",
     });
+
+    expect(records).not.toContainEqual(expect.objectContaining({ id: roomId }));
+  });
+
+  it("excludes inactive events from organisation-wide provider checks and results", async () => {
+    const token = crypto.randomUUID();
+    const eventId = `command-inactive-event-${token}`;
+    const roomId = `command-inactive-room-${token}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           repository_provider, activation_status, file_policy_json
+         ) VALUES (?, ?, 'Inactive command event', ?, 'UTC', 1800000000,
+                   1800086400, 'airtable', 'provisioning_failed', ?)`,
+      ).bind(
+        eventId,
+        viewer.organisationId,
+        `inactive-command-${token}`,
+        CANONICAL_EVENT_FILE_POLICY_JSON,
+      ),
+      env.DB.prepare(
+        `INSERT INTO rooms (
+           id, event_id, name, capacity, resources_json, position, status
+         ) VALUES (?, ?, ?, 20, '[]', 1, 'active')`,
+      ).bind(roomId, eventId, `Hidden recovery room ${token}`),
+    ]);
+
+    const records = await new CommandPaletteService(
+      env as unknown as CloudflareEnvironment,
+    ).search(
+      {
+        ...viewer,
+        personId: "person-demo-owner",
+        role: "owner",
+      },
+      { query: `room ${token}`, scope: "organisation" },
+    );
 
     expect(records).not.toContainEqual(expect.objectContaining({ id: roomId }));
   });

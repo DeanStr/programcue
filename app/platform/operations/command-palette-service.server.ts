@@ -223,7 +223,9 @@ export class CommandPaletteService {
       return;
     }
     const events = await this.env.DB.prepare(
-      "SELECT id FROM events WHERE organisation_id = ? ORDER BY id",
+      `SELECT id FROM events
+        WHERE organisation_id = ? AND activation_status = 'active'
+        ORDER BY id`,
     )
       .bind(viewer.organisationId)
       .all<{ id: string }>();
@@ -390,7 +392,9 @@ export class CommandPaletteService {
     const recordQuery = parseRecordQuery(input.query);
     const searchTerm = recordQuery.query;
     const eventPredicate =
-      input.scope === "event" ? "AND e.id = ?" : "AND e.organisation_id = ?";
+      input.scope === "event"
+        ? "AND e.activation_status = 'active' AND e.id = ?"
+        : "AND e.activation_status = 'active' AND e.organisation_id = ?";
     const scopeBinding =
       input.scope === "event" ? viewer.eventId : viewer.organisationId;
 
@@ -467,7 +471,8 @@ export class CommandPaletteService {
                  e.id AS eventId, e.name AS eventName
            FROM submissions s
             JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
-           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+           WHERE e.activation_status = 'active'
+             AND ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
              AND (
                instr(lower(s.title), lower(?)) > 0
                OR instr(lower(s.public_reference), lower(?)) > 0
@@ -488,7 +493,8 @@ export class CommandPaletteService {
                  e.id AS eventId, e.name AS eventName
             FROM sessions s
             JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
-           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+           WHERE e.activation_status = 'active'
+             AND ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
              AND (instr(lower(s.title), lower(?)) > 0 OR instr(lower(s.slug), lower(?)) > 0 OR instr(lower(COALESCE(s.description, '')), lower(?)) > 0)
           UNION ALL
           SELECT ti.id, 'task' AS kind, ti.title AS label,
@@ -496,7 +502,8 @@ export class CommandPaletteService {
                  e.id AS eventId, e.name AS eventName
             FROM task_instances ti
             JOIN events e ON e.id = ti.event_id AND e.organisation_id = ?
-           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+           WHERE e.activation_status = 'active'
+             AND ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
              AND (instr(lower(ti.title), lower(?)) > 0 OR instr(lower(COALESCE(ti.description, '')), lower(?)) > 0)
         ) records
         WHERE (? IS NULL OR kind = ?)
@@ -545,7 +552,8 @@ export class CommandPaletteService {
                  e.id AS eventId, e.name AS eventName
            FROM rooms room
             JOIN events e ON e.id = room.event_id AND e.organisation_id = ?
-           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+           WHERE e.activation_status = 'active'
+             AND ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
              AND room.status = 'active'
              AND (instr(lower(room.name), lower(?)) > 0 OR instr(lower(COALESCE(room.building, '')), lower(?)) > 0 OR instr(lower(COALESCE(room.level, '')), lower(?)) > 0)
           UNION ALL
@@ -555,7 +563,8 @@ export class CommandPaletteService {
                  e.id AS eventId, e.name AS eventName
             FROM tracks track
             JOIN events e ON e.id = track.event_id AND e.organisation_id = ?
-           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+           WHERE e.activation_status = 'active'
+             AND ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
              AND (instr(lower(track.name), lower(?)) > 0 OR instr(lower(track.slug), lower(?)) > 0)
           UNION ALL
           SELECT resource.id, 'resource' AS kind, resource.title AS label,
@@ -563,7 +572,8 @@ export class CommandPaletteService {
                  e.id AS eventId, e.name AS eventName
             FROM resource_pages resource
             JOIN events e ON e.id = resource.event_id AND e.organisation_id = ?
-           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+           WHERE e.activation_status = 'active'
+             AND ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
              AND (instr(lower(resource.title), lower(?)) > 0 OR instr(lower(resource.slug), lower(?)) > 0 OR instr(lower(COALESCE(resource.category, '')), lower(?)) > 0)
           UNION ALL
           SELECT operation.id, 'operation' AS kind,
@@ -585,7 +595,8 @@ export class CommandPaletteService {
               ON connection.id = integration_run.connection_id
              AND connection.organisation_id = operation.organisation_id
              AND (connection.event_id IS NULL OR connection.event_id = operation.event_id)
-           WHERE ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
+           WHERE e.activation_status = 'active'
+             AND ${input.scope === "event" ? "e.id = ?" : "e.organisation_id = ?"}
              AND (
                ? IS NULL
                OR (

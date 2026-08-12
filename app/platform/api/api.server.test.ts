@@ -96,6 +96,27 @@ describe("scoped API keys", () => {
       status: 403,
       code: "EVENT_FORBIDDEN",
     } satisfies Partial<ApiError>);
+
+    await env.DB.prepare(
+      `UPDATE events SET activation_status = 'provisioning_failed'
+        WHERE id = ?`,
+    )
+      .bind(eventId)
+      .run();
+    try {
+      await expect(
+        requireApiKey(request, testEnv, "operations:read", eventId),
+      ).rejects.toMatchObject({
+        status: 404,
+        code: "EVENT_NOT_FOUND",
+      } satisfies Partial<ApiError>);
+    } finally {
+      await env.DB.prepare(
+        "UPDATE events SET activation_status = 'active' WHERE id = ?",
+      )
+        .bind(eventId)
+        .run();
+    }
   });
 
   it("fails closed when a stored key claims an unsupported wildcard scope", async () => {

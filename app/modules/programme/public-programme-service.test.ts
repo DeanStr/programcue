@@ -281,13 +281,19 @@ describe("published programme and itinerary", () => {
       env.DB.prepare(
         `INSERT INTO events (
            id, organisation_id, name, slug, timezone, starts_at, ends_at,
-           repository_provider, programme_published_at, revision,
+           repository_provider, activation_status, programme_published_at, revision,
            file_policy_json, created_at, updated_at
          ) VALUES (?, 'org-future-events', 'Airtable public test', ?, 'UTC',
-                   4070908800, 4070995200, 'airtable', unixepoch(), 1,
+                   4070908800, 4070995200, 'airtable', 'provisioning',
+                   unixepoch(), 1,
                    '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}',
                    unixepoch(), unixepoch())`,
       ).bind(eventId, eventId),
+      env.DB.prepare(
+        `UPDATE events
+            SET activation_status = 'active', repository_locked_at = unixepoch()
+          WHERE id = ? AND activation_status = 'provisioning'`,
+      ).bind(eventId),
       env.DB.prepare(
         `INSERT INTO schedule_versions (
            id, event_id, version_number, status, revision, created_at,

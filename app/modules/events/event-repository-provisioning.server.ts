@@ -73,7 +73,21 @@ export class EventRepositoryProvisioningService {
          revision, last_operation_id, created_at, updated_at
        ) VALUES (?, ?, ?, ?, 'connected', 'bidirectional',
                  'single_authority_no_dual_write', ?, ?, 1, ?,
-                 unixepoch(), unixepoch())`,
+                 unixepoch(), unixepoch())
+       ON CONFLICT(id) DO UPDATE SET
+         status = 'connected', direction = 'bidirectional',
+         conflict_policy = 'single_authority_no_dual_write',
+         encrypted_credentials = excluded.encrypted_credentials,
+         configuration_json = excluded.configuration_json,
+         revision = integration_connections.revision + 1,
+         last_operation_id = excluded.last_operation_id,
+         updated_at = unixepoch()
+       WHERE integration_connections.organisation_id = excluded.organisation_id
+         AND integration_connections.event_id = excluded.event_id
+         AND integration_connections.provider = excluded.provider
+         AND integration_connections.status IN (
+           'needs_attention','failed','disconnected'
+         )`,
     ).bind(
       prepared.connectionId,
       viewer.organisationId,
@@ -95,8 +109,14 @@ export class EventRepositoryProvisioningService {
       `INSERT INTO audit_events (
          id, organisation_id, event_id, actor_person_id, action,
          entity_type, entity_id, correlation_id, metadata_json, created_at
-       ) VALUES (?, ?, ?, ?, 'airtable.repository.configured',
-                 'integration_connection', ?, ?, ?, unixepoch())`,
+       ) SELECT ?, ?, ?, ?, 'airtable.repository.configured',
+                  'integration_connection', ?, ?, ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM integration_connections
+             WHERE id = ? AND organisation_id = ? AND event_id = ?
+               AND provider = ? AND status = 'connected'
+               AND last_operation_id = ?
+          )`,
     ).bind(
       crypto.randomUUID(),
       viewer.organisationId,
@@ -110,6 +130,11 @@ export class EventRepositoryProvisioningService {
         schemaVersion: prepared.configuration.schemaVersion,
         authoritativeEntities: prepared.configuration.authoritativeEntities,
       }),
+      prepared.connectionId,
+      viewer.organisationId,
+      eventId,
+      AIRTABLE_REPOSITORY_PROVIDER,
+      operationId,
     );
   }
 
@@ -117,16 +142,49 @@ export class EventRepositoryProvisioningService {
     viewer: Viewer,
     eventId: string,
     operationId: string,
-    workflow: "blank_event_creation" | "event_clone",
+    workflow: "blank_event_creation" | "event_clone" | "repository_recovery",
     rawConnection: unknown,
     rooms: AirtableProvisioningRoom[],
     result: Record<string, unknown> = {},
   ) {
+    const current = await this.env.DB.prepare(
+      `SELECT 1
+         FROM events event
+         JOIN operation_jobs operation ON operation.id = ?
+        WHERE event.id = ? AND event.organisation_id = ?
+          AND event.repository_provider = 'airtable'
+          AND event.activation_status = 'provisioning'
+          AND event.last_operation_id = operation.id
+          AND operation.organisation_id = event.organisation_id
+          AND operation.status = 'running'
+          AND operation.type IN (
+            'event.create','event.clone','event.repository.provision'
+          )
+          AND json_extract(operation.payload_json, '$.targetEventId') = event.id`,
+    )
+      .bind(operationId, eventId, viewer.organisationId)
+      .first();
+    if (!current)
+      throw new EventRepositoryProvisioningError(
+        "Airtable provisioning is no longer the current event operation. No provider request was made.",
+        eventId,
+        operationId,
+        "internal",
+      );
+
     try {
+      const existing = await this.env.DB.prepare(
+        `SELECT id FROM integration_connections
+          WHERE organisation_id = ? AND event_id = ? AND provider = ?
+            AND status IN ('needs_attention','failed','disconnected')`,
+      )
+        .bind(viewer.organisationId, eventId, AIRTABLE_REPOSITORY_PROVIDER)
+        .first<{ id: string }>();
       const prepared = await this.rooms.provisionForEvent(
         viewer,
         eventId,
         rawConnection,
+        { connectionId: existing?.id },
       );
       const connectionResults = await this.env.DB.batch([
         this.connectionInsert(viewer, eventId, operationId, prepared),
@@ -155,18 +213,23 @@ export class EventRepositoryProvisioningService {
       const statements: D1PreparedStatement[] = [
         this.env.DB.prepare(
           `UPDATE events
-              SET repository_provider = 'airtable',
-                  repository_locked_at = COALESCE(repository_locked_at, unixepoch()),
+              SET activation_status = 'active',
+                  repository_locked_at = unixepoch(),
                   revision = revision + 1, last_operation_id = ?,
                   last_updated_by_person_id = ?, updated_at = unixepoch()
             WHERE id = ? AND organisation_id = ?
-              AND repository_provider = 'd1' AND last_operation_id = ?
+              AND repository_provider = 'airtable'
+              AND activation_status = 'provisioning'
+              AND repository_locked_at IS NULL
+              AND last_operation_id = ?
               AND EXISTS (
                 SELECT 1 FROM operation_jobs operation
                  WHERE operation.id = ?
                    AND operation.organisation_id = ?
                    AND operation.status = 'running'
-                   AND operation.type IN ('event.create','event.clone')
+                   AND operation.type IN (
+                     'event.create','event.clone','event.repository.provision'
+                   )
                    AND json_extract(operation.payload_json, '$.targetEventId') = ?
               )`,
         ).bind(
@@ -185,12 +248,15 @@ export class EventRepositoryProvisioningService {
                   result_json = ?, completed_at = unixepoch(), updated_at = unixepoch()
             WHERE id = ? AND organisation_id = ?
               AND status = 'running'
-              AND type IN ('event.create','event.clone')
+              AND type IN (
+                'event.create','event.clone','event.repository.provision'
+              )
               AND json_extract(payload_json, '$.targetEventId') = ?
               AND EXISTS (
                 SELECT 1 FROM events event
                  WHERE event.id = ? AND event.organisation_id = ?
                    AND event.repository_provider = 'airtable'
+                   AND event.activation_status = 'active'
                    AND event.last_operation_id = ?
               )`,
         ).bind(
@@ -222,7 +288,9 @@ export class EventRepositoryProvisioningService {
                    AND event.last_operation_id = ?
                    AND operation.organisation_id = ?
                    AND operation.status = 'completed'
-                   AND operation.type IN ('event.create','event.clone')
+                   AND operation.type IN (
+                     'event.create','event.clone','event.repository.provision'
+                   )
                    AND json_extract(operation.payload_json, '$.targetEventId') = ?
               )`,
         ).bind(
@@ -257,17 +325,30 @@ export class EventRepositoryProvisioningService {
         : "internal";
       await this.env.DB.batch([
         this.env.DB.prepare(
+          `UPDATE events
+              SET activation_status = 'provisioning_failed',
+                  revision = revision + 1,
+                  updated_at = unixepoch()
+            WHERE id = ? AND organisation_id = ?
+              AND repository_provider = 'airtable'
+              AND activation_status = 'provisioning'
+              AND last_operation_id = ?`,
+        ).bind(eventId, viewer.organisationId, operationId),
+        this.env.DB.prepare(
           `UPDATE operation_jobs
               SET status = 'failed', progress_failed = progress_total,
                   last_error = ?, completed_at = unixepoch(), updated_at = unixepoch()
             WHERE id = ? AND organisation_id = ?
               AND status = 'running'
-              AND type IN ('event.create','event.clone')
+              AND type IN (
+                'event.create','event.clone','event.repository.provision'
+              )
               AND json_extract(payload_json, '$.targetEventId') = ?`,
         ).bind(message, operationId, viewer.organisationId, eventId),
         this.env.DB.prepare(
           `UPDATE integration_connections
-              SET status = 'needs_attention', updated_at = unixepoch()
+              SET status = 'needs_attention', revision = revision + 1,
+                  updated_at = unixepoch()
             WHERE organisation_id = ? AND event_id = ?
               AND provider = ? AND last_operation_id = ?
               AND status = 'connected'`,
@@ -284,10 +365,19 @@ export class EventRepositoryProvisioningService {
            ) SELECT ?, ?, ?, ?, 'event.repository.provisioning_failed',
                     'event', ?, ?, ?, unixepoch()
               WHERE EXISTS (
-                SELECT 1 FROM operation_jobs
-                 WHERE id = ? AND organisation_id = ? AND status = 'failed'
-                   AND type IN ('event.create','event.clone')
-                   AND json_extract(payload_json, '$.targetEventId') = ?
+                SELECT 1
+                  FROM operation_jobs operation
+                  JOIN events event ON event.id = ?
+                 WHERE operation.id = ?
+                   AND operation.organisation_id = ?
+                   AND operation.status = 'failed'
+                   AND operation.type IN (
+                     'event.create','event.clone','event.repository.provision'
+                   )
+                   AND json_extract(operation.payload_json, '$.targetEventId') = event.id
+                   AND event.organisation_id = operation.organisation_id
+                   AND event.activation_status = 'provisioning_failed'
+                   AND event.last_operation_id = operation.id
               )`,
         ).bind(
           crypto.randomUUID(),
@@ -302,15 +392,15 @@ export class EventRepositoryProvisioningService {
             failureKind,
             errorName: error instanceof Error ? error.name : "UnknownError",
           }),
+          eventId,
           operationId,
           viewer.organisationId,
-          eventId,
         ),
       ]);
       throw new EventRepositoryProvisioningError(
         failureKind === "provider"
-          ? "The event was saved with D1 authority, but Airtable provisioning did not complete. Review the failed operation, then reconfigure and migrate the repository from Event Setup."
-          : "The event was saved with D1 authority, but repository finalization failed unexpectedly. Review the failed operation before continuing from Event Setup.",
+          ? "Airtable provisioning did not complete. The incomplete event is unavailable until you retry Airtable, explicitly keep it on D1, or discard it."
+          : "Repository finalization failed unexpectedly. The incomplete event is unavailable until you recover or discard it.",
         eventId,
         operationId,
         failureKind,

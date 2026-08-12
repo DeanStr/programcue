@@ -703,13 +703,16 @@ export class CommunicationAutomationService {
     const scopes = await this.env.DB.prepare(
       `SELECT event.id AS eventId, event.organisation_id AS organisationId
          FROM events event
-        WHERE event.repository_provider = 'airtable'
-           OR EXISTS (
-             SELECT 1 FROM task_instances task
-              WHERE task.event_id = event.id
-                AND task.due_at IS NOT NULL AND task.due_at < ?
-                AND task.status NOT IN ('submitted','completed','waived','overdue')
-           )
+        WHERE event.activation_status = 'active'
+          AND (
+            event.repository_provider = 'airtable'
+            OR EXISTS (
+              SELECT 1 FROM task_instances task
+               WHERE task.event_id = event.id
+                 AND task.due_at IS NOT NULL AND task.due_at < ?
+                 AND task.status NOT IN ('submitted','completed','waived','overdue')
+            )
+          )
         ORDER BY event.id`,
     )
       .bind(now)

@@ -88,6 +88,7 @@ describe("blank event creation", () => {
     expect(result.repositoryProvider).toBe("d1");
     const event = await env.DB.prepare(
       `SELECT name, slug, timezone, repository_provider AS repositoryProvider,
+              activation_status AS activationStatus,
               session_formats_json AS sessionFormatsJson,
               file_policy_json AS filePolicyJson
          FROM events WHERE id = ? AND organisation_id = ?`,
@@ -98,6 +99,7 @@ describe("blank event creation", () => {
         slug: string;
         timezone: string;
         repositoryProvider: string;
+        activationStatus: string;
         sessionFormatsJson: string;
         filePolicyJson: string;
       }>();
@@ -106,6 +108,7 @@ describe("blank event creation", () => {
       slug: `blank-event-${token}`,
       timezone: "Australia/Sydney",
       repositoryProvider: "d1",
+      activationStatus: "active",
     });
     expect(
       parseSessionFormatsConfiguration(event!.sessionFormatsJson),
@@ -183,6 +186,27 @@ describe("blank event creation", () => {
     ).toBeNull();
   });
 
+  it("rejects a direct Airtable insert that omits the provisioning lifecycle", async () => {
+    const token = crypto.randomUUID();
+    await expect(
+      env.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           repository_provider, file_policy_json
+         ) SELECT ?, organisation_id, 'Direct Airtable event', ?, timezone,
+                  starts_at, ends_at, 'airtable', file_policy_json
+             FROM events WHERE id = ? AND organisation_id = ?`,
+      )
+        .bind(
+          `direct-airtable-${token}`,
+          `direct-airtable-${token}`,
+          viewer.eventId,
+          viewer.organisationId,
+        )
+        .run(),
+    ).rejects.toThrow(/must enter provisioning before activation/i);
+  });
+
   it("activates Airtable only after the initial projection reconciles", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     const prepared = preparedConnection();
@@ -223,11 +247,13 @@ describe("blank event creation", () => {
     expect(result.repositoryProvider).toBe("airtable");
     expect(
       await env.DB.prepare(
-        "SELECT repository_provider AS provider FROM events WHERE id = ?",
+        `SELECT repository_provider AS provider,
+                activation_status AS activationStatus
+           FROM events WHERE id = ?`,
       )
         .bind(result.eventId)
         .first(),
-    ).toEqual({ provider: "airtable" });
+    ).toEqual({ provider: "airtable", activationStatus: "active" });
     expect(
       await env.DB.prepare("SELECT status FROM operation_jobs WHERE id = ?")
         .bind(result.operationId)
@@ -235,7 +261,7 @@ describe("blank event creation", () => {
     ).toEqual({ status: "completed" });
   });
 
-  it("leaves an honestly failed D1 event when Airtable reconciliation fails after commit", async () => {
+  it("keeps a failed Airtable event inactive when reconciliation fails after commit", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     const prepared = preparedConnection();
     const provisioning = new EventRepositoryProvisioningService(testEnv, {
@@ -275,11 +301,16 @@ describe("blank event creation", () => {
     expect(failure!.failureKind).toBe("provider");
     expect(
       await env.DB.prepare(
-        "SELECT repository_provider AS provider FROM events WHERE id = ?",
+        `SELECT repository_provider AS provider,
+                activation_status AS activationStatus
+           FROM events WHERE id = ?`,
       )
         .bind(failure!.eventId)
         .first(),
-    ).toEqual({ provider: "d1" });
+    ).toEqual({
+      provider: "airtable",
+      activationStatus: "provisioning_failed",
+    });
     expect(
       await env.DB.prepare(
         "SELECT status, last_error AS lastError FROM operation_jobs WHERE id = ?",
@@ -306,6 +337,55 @@ describe("blank event creation", () => {
         .bind(failure!.eventId)
         .first(),
     ).toEqual({ action: "event.created" });
+  });
+
+  it("fails activation when a provisioning event is already repository-locked", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const prepared = preparedConnection();
+    const provisioning = new EventRepositoryProvisioningService(testEnv, {
+      rooms: {
+        provisionForEvent: async () => prepared,
+        replaceRooms: async () => ({ rooms: [] }) as never,
+      },
+      eventData: {
+        synchronizeFromD1: async (scope) => {
+          await testEnv.DB.prepare(
+            "UPDATE events SET repository_locked_at = unixepoch() WHERE id = ?",
+          )
+            .bind(scope.eventId)
+            .run();
+          return { runId: "unexpected-prelocked-sync", idempotent: false };
+        },
+      },
+    });
+    let failure: EventRepositoryProvisioningError | null = null;
+
+    try {
+      await new EventCreationService(testEnv, { provisioning }).create(viewer, {
+        name: "Prelocked Airtable event",
+        slug: `airtable-prelocked-${crypto.randomUUID().slice(0, 8)}`,
+        timezone: "UTC",
+        startDate: "2027-04-10",
+        endDate: "2027-04-11",
+        repositoryProvider: "airtable",
+        personalAccessToken: "pat-test-token-at-least-twenty",
+        baseId: "app12345678901234",
+        tableName: "Program Cue Rooms",
+      });
+    } catch (error) {
+      if (error instanceof EventRepositoryProvisioningError) failure = error;
+      else throw error;
+    }
+
+    expect(failure).toMatchObject({ failureKind: "internal" });
+    expect(
+      await env.DB.prepare(
+        `SELECT activation_status AS activationStatus
+           FROM events WHERE id = ?`,
+      )
+        .bind(failure!.eventId)
+        .first(),
+    ).toEqual({ activationStatus: "provisioning_failed" });
   });
 
   it("records the event and failed operation before Airtable validation begins", async () => {
@@ -350,7 +430,8 @@ describe("blank event creation", () => {
     expect(failure!.failureKind).toBe("provider");
     expect(
       await env.DB.prepare(
-        `SELECT event.repository_provider AS provider, operation.status,
+        `SELECT event.repository_provider AS provider,
+                event.activation_status AS activationStatus, operation.status,
                 operation.last_error AS lastError
            FROM events event
            JOIN operation_jobs operation ON operation.id = event.last_operation_id
@@ -359,13 +440,14 @@ describe("blank event creation", () => {
         .bind(failure!.eventId, slug)
         .first(),
     ).toEqual({
-      provider: "d1",
+      provider: "airtable",
+      activationStatus: "provisioning_failed",
       status: "failed",
       lastError: "simulated Airtable credential rejection",
     });
   });
 
-  it("does not switch authority when the event changes before Airtable finalization", async () => {
+  it("does not overwrite a newer provisioning owner during Airtable finalization", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     const prepared = preparedConnection();
     const provisioning = new EventRepositoryProvisioningService(testEnv, {
@@ -407,11 +489,16 @@ describe("blank event creation", () => {
     expect(failure!.failureKind).toBe("internal");
     expect(
       await env.DB.prepare(
-        "SELECT repository_provider AS provider FROM events WHERE id = ?",
+        `SELECT repository_provider AS provider,
+                activation_status AS activationStatus
+           FROM events WHERE id = ?`,
       )
         .bind(failure!.eventId)
         .first(),
-    ).toEqual({ provider: "d1" });
+    ).toEqual({
+      provider: "airtable",
+      activationStatus: "provisioning",
+    });
     expect(
       await env.DB.prepare("SELECT status FROM operation_jobs WHERE id = ?")
         .bind(failure!.operationId)
@@ -421,6 +508,15 @@ describe("blank event creation", () => {
       await env.DB.prepare(
         `SELECT COUNT(*) AS count FROM audit_events
           WHERE event_id = ? AND action = 'event.repository.selected'`,
+      )
+        .bind(failure!.eventId)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM audit_events
+          WHERE event_id = ?
+            AND action = 'event.repository.provisioning_failed'`,
       )
         .bind(failure!.eventId)
         .first(),

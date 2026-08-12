@@ -564,6 +564,68 @@ describe("communication scheduling and reminder automation", () => {
     ).resolves.toEqual({ status: "overdue" });
   });
 
+  it("does not discover inactive events for overdue automation", async () => {
+    const { testEnv } = await environment();
+    const now = Math.floor(Date.now() / 1_000);
+    const eventId = `inactive-overdue-${crypto.randomUUID()}`;
+    const taskId = `inactive-overdue-task-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           brand_accent, session_formats_json, repository_provider,
+           activation_status, retention_months, submission_access_mode,
+           allow_anonymous_drafts, duplicate_person_warnings, file_policy_json,
+           revision, last_updated_by_person_id, created_at, updated_at
+         )
+         SELECT ?, organisation_id, 'Inactive automation event', ?, timezone,
+                starts_at, ends_at, brand_accent, session_formats_json,
+                'airtable', 'provisioning_failed', retention_months,
+                submission_access_mode, allow_anonymous_drafts,
+                duplicate_person_warnings, file_policy_json, 1,
+                last_updated_by_person_id, unixepoch(), unixepoch()
+           FROM events WHERE id = ? AND organisation_id = ?`,
+      ).bind(
+        eventId,
+        `inactive-automation-${crypto.randomUUID()}`,
+        viewer.eventId,
+        viewer.organisationId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, task_type, impact,
+           status, readiness_state, readiness_percent, revision, due_at,
+           created_at, updated_at
+         ) VALUES (?, ?, 'event', ?, 'Inactive event task', 'checklist',
+                   'high', 'in_progress', 'at_risk', 40, 1, ?,
+                   unixepoch(), unixepoch())`,
+      ).bind(taskId, eventId, eventId, now - 60),
+    ]);
+    const checkedEvents: string[] = [];
+    const airtable = {
+      assertReadable: async (scope: { eventId: string }) => {
+        checkedEvents.push(scope.eventId);
+        return null;
+      },
+      executeIdempotent: async <T>(
+        _scope: { eventId: string },
+        _command: { operation: string },
+        execute: () => Promise<T>,
+      ) => execute(),
+    } as unknown as AirtableProviderBoundary;
+
+    await new CommunicationAutomationService(testEnv, {
+      airtable,
+    }).markOverdueTasks(now);
+
+    expect(checkedEvents).not.toContain(eventId);
+    await expect(
+      testEnv.DB.prepare("SELECT status FROM task_instances WHERE id = ?")
+        .bind(taskId)
+        .first(),
+    ).resolves.toEqual({ status: "in_progress" });
+  });
+
   it("continues overdue processing after one event authority check fails", async () => {
     const { testEnv } = await environment();
     const now = Math.floor(Date.now() / 1_000);
@@ -575,13 +637,13 @@ describe("communication scheduling and reminder automation", () => {
         `INSERT INTO events (
            id, organisation_id, name, slug, timezone, starts_at, ends_at,
            brand_accent, session_formats_json, repository_provider,
-           retention_months, submission_access_mode, allow_anonymous_drafts,
+           activation_status, retention_months, submission_access_mode, allow_anonymous_drafts,
            duplicate_person_warnings, file_policy_json, revision,
            last_updated_by_person_id, created_at, updated_at
          )
          SELECT ?, organisation_id, 'Blocked automation event', ?, timezone,
                 starts_at, ends_at, brand_accent, session_formats_json,
-                'airtable', retention_months, submission_access_mode,
+                'airtable', 'provisioning', retention_months, submission_access_mode,
                 allow_anonymous_drafts, duplicate_person_warnings,
                 file_policy_json, 1, last_updated_by_person_id,
                 unixepoch(), unixepoch()
@@ -592,6 +654,11 @@ describe("communication scheduling and reminder automation", () => {
         viewer.eventId,
         viewer.organisationId,
       ),
+      testEnv.DB.prepare(
+        `UPDATE events
+            SET activation_status = 'active', repository_locked_at = unixepoch()
+          WHERE id = ? AND activation_status = 'provisioning'`,
+      ).bind(blockedEventId),
       testEnv.DB.prepare(
         `INSERT INTO task_instances (
            id, event_id, target_type, target_id, title, task_type, impact,

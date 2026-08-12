@@ -1,0 +1,285 @@
+import { AlertTriangle, Database, RotateCcw, Trash2 } from "lucide-react";
+import { data, Form, Link, useActionData, useNavigation } from "react-router";
+import { ZodError } from "zod";
+
+import type { Route } from "./+types/admin-event-repository-recovery";
+import {
+  EventRepositoryRecoveryService,
+  EventRepositoryRecoveryStateError,
+} from "~/modules/events/event-repository-recovery.server";
+import { EventRepositoryProvisioningError } from "~/modules/events/event-repository-provisioning.server";
+import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
+import { getCloudflareContext } from "~/platform/cloudflare-context";
+
+async function organisationAdministrator(
+  request: Request,
+  context: Route.LoaderArgs["context"],
+) {
+  const { env } = getCloudflareContext(context);
+  const viewer = await requireCurrentEventRole(request, env, [
+    "owner",
+    "administrator",
+  ]);
+  return { env, viewer };
+}
+
+export async function loader({ request, context, params }: Route.LoaderArgs) {
+  const { env, viewer } = await organisationAdministrator(request, context);
+  return new EventRepositoryRecoveryService(env).inspect(
+    viewer,
+    params.eventId,
+  );
+}
+
+export async function action({ request, context, params }: Route.ActionArgs) {
+  if (request.method !== "POST")
+    throw new Response("Method not allowed", {
+      status: 405,
+      headers: { allow: "POST" },
+    });
+  const { env, viewer } = await organisationAdministrator(request, context);
+  const form = await request.formData();
+  const service = new EventRepositoryRecoveryService(env);
+  try {
+    switch (form.get("intent")) {
+      case "retry_airtable": {
+        const result = await service.retryAirtable(viewer, params.eventId, {
+          personalAccessToken: form.get("personalAccessToken"),
+          baseId: form.get("baseId"),
+          tableName: form.get("tableName"),
+        });
+        return data({
+          ok: true as const,
+          message:
+            "Airtable provisioning completed and the event is now active.",
+          result,
+        });
+      }
+      case "keep_d1": {
+        const result = await service.keepOnD1(viewer, params.eventId);
+        return data({
+          ok: true as const,
+          message: "The event is now active with D1 as its explicit authority.",
+          result,
+        });
+      }
+      case "discard": {
+        const result = await service.discard(viewer, params.eventId);
+        return data({
+          ok: true as const,
+          message:
+            "The incomplete event was discarded and its public slug was released. Program Cue did not claim deletion of any provider-side schema or partial records.",
+          result,
+        });
+      }
+      default:
+        return data(
+          {
+            ok: false as const,
+            message: "Unsupported recovery action.",
+            result: null,
+          },
+          { status: 400 },
+        );
+    }
+  } catch (error) {
+    if (error instanceof EventRepositoryProvisioningError)
+      return data(
+        {
+          ok: false as const,
+          message: error.message,
+          result: {
+            eventId: error.eventId,
+            operationId: error.operationId,
+            activationStatus: "provisioning_failed" as const,
+          },
+        },
+        { status: error.failureKind === "provider" ? 502 : 500 },
+      );
+    if (error instanceof EventRepositoryRecoveryStateError)
+      return data(
+        { ok: false as const, message: error.message, result: null },
+        { status: 409 },
+      );
+    if (error instanceof ZodError)
+      return data(
+        {
+          ok: false as const,
+          message: error.issues[0]?.message ?? "Review the Airtable settings.",
+          result: null,
+        },
+        { status: 422 },
+      );
+    throw error;
+  }
+}
+
+export const meta = () => [{ title: "Recover event repository · Program Cue" }];
+
+export default function AdminEventRepositoryRecovery({
+  loaderData,
+}: Route.ComponentProps) {
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const busy = navigation.state !== "idle";
+  const active = loaderData.activationStatus === "active";
+  const discarded = loaderData.activationStatus === "discarded";
+  const failed = loaderData.activationStatus === "provisioning_failed";
+  return (
+    <>
+      <div className="page-head pc-page-header">
+        <div>
+          <span className="pc-page-eyebrow">Repository recovery</span>
+          <h1>{loaderData.name}</h1>
+          <p>
+            {active
+              ? "Repository recovery is complete and this event is available for normal use."
+              : discarded
+                ? "This discarded control-plane record remains only as an inaccessible audit tombstone."
+                : "This control-plane record is isolated from normal event access until its selected repository is established or you explicitly choose D1."}
+          </p>
+        </div>
+        <Link className="btn" to="/admin/event">
+          Back to Event Setup
+        </Link>
+      </div>
+
+      {actionData ? (
+        <div
+          className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
+          role={actionData.ok ? "status" : "alert"}
+        >
+          <AlertTriangle aria-hidden size={18} />
+          <div className="pc-status-notice-copy">
+            <strong>
+              {actionData.ok ? "Recovery complete" : "Recovery failed"}
+            </strong>
+            <div>{actionData.message}</div>
+            {actionData.result?.activationStatus === "active" ? (
+              <Form method="post" action="/events/select">
+                <input
+                  type="hidden"
+                  name="eventId"
+                  value={actionData.result.eventId}
+                />
+                <input type="hidden" name="returnTo" value="/admin/event" />
+                <button className="btn small" type="submit">
+                  Open recovered event
+                </button>
+              </Form>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <section className="card pad stack">
+        <div>
+          <strong>Current authority</strong>
+          <div>
+            {loaderData.repositoryProvider === "airtable" ? "Airtable" : "D1"}
+          </div>
+        </div>
+        <div>
+          <strong>Activation state</strong>
+          <div>{loaderData.activationStatus.replaceAll("_", " ")}</div>
+        </div>
+        <div>
+          <strong>Last operation</strong>
+          <div>
+            <code>{loaderData.lastOperationId ?? "Unavailable"}</code>
+            {loaderData.operationStatus
+              ? ` · ${loaderData.operationStatus}`
+              : ""}
+          </div>
+        </div>
+        {loaderData.lastError ? (
+          <div>
+            <strong>Provider error</strong>
+            <div>{loaderData.lastError}</div>
+          </div>
+        ) : null}
+      </section>
+
+      {failed ? (
+        <div className="grid grid-2 mt">
+          <section className="card pad">
+            <div className="card-title">
+              <h2>Retry Airtable</h2>
+              <RotateCcw aria-hidden size={19} />
+            </div>
+            <p>
+              Credentials and repository identifiers are required again. Program
+              Cue does not substitute a stored, stale, or different repository
+              configuration.
+            </p>
+            <Form method="post" className="stack">
+              <input type="hidden" name="intent" value="retry_airtable" />
+              <label className="label">
+                Personal access token
+                <input
+                  className="field"
+                  type="password"
+                  name="personalAccessToken"
+                  autoComplete="off"
+                  required
+                />
+              </label>
+              <label className="label">
+                Base ID
+                <input className="field" name="baseId" required />
+              </label>
+              <label className="label">
+                Rooms table
+                <input className="field" name="tableName" required />
+              </label>
+              <button className="btn primary" type="submit" disabled={busy}>
+                Retry Airtable
+              </button>
+            </Form>
+          </section>
+
+          <section className="card pad stack">
+            <div className="card-title">
+              <h2>Choose another outcome</h2>
+              <Database aria-hidden size={19} />
+            </div>
+            <Form
+              method="post"
+              onSubmit={(event) => {
+                if (
+                  !window.confirm("Keep this incomplete event on D1 instead?")
+                )
+                  event.preventDefault();
+              }}
+            >
+              <input type="hidden" name="intent" value="keep_d1" />
+              <button className="btn" type="submit" disabled={busy}>
+                Explicitly keep on D1
+              </button>
+            </Form>
+            <p>
+              This activates the D1 projection only after your explicit choice
+              and disconnects the incomplete Airtable connection.
+            </p>
+            <Form
+              method="post"
+              onSubmit={(event) => {
+                if (
+                  !window.confirm(
+                    "Discard this incomplete event? Its Program Cue data will remain as an audit tombstone and provider-side artifacts may remain.",
+                  )
+                )
+                  event.preventDefault();
+              }}
+            >
+              <input type="hidden" name="intent" value="discard" />
+              <button className="btn danger" type="submit" disabled={busy}>
+                <Trash2 aria-hidden size={16} /> Discard incomplete event
+              </button>
+            </Form>
+          </section>
+        </div>
+      ) : null}
+    </>
+  );
+}

@@ -166,10 +166,11 @@ export class EventCreationService {
       this.env.DB.prepare(
         `INSERT INTO events (
            id, organisation_id, name, slug, timezone, starts_at, ends_at,
-           session_formats_json, repository_provider, file_policy_json,
+           session_formats_json, repository_provider, activation_status,
+           file_policy_json,
            revision, last_operation_id, last_updated_by_person_id,
            created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'd1', ?, 1, ?, ?,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?,
                    unixepoch(), unixepoch())`,
       ).bind(
         eventId,
@@ -180,6 +181,8 @@ export class EventCreationService {
         startEpoch(input.startDate),
         endEpoch(input.endDate),
         INITIAL_EVENT_SESSION_FORMATS_JSON,
+        input.repositoryProvider,
+        pendingAirtable ? "provisioning" : "active",
         CANONICAL_EVENT_FILE_POLICY_JSON,
         operationId,
         viewer.personId,
@@ -231,7 +234,8 @@ export class EventCreationService {
           operationId,
           name: input.name,
           slug: input.slug,
-          repositoryProvider: "d1",
+          repositoryProvider: input.repositoryProvider,
+          activationStatus: pendingAirtable ? "provisioning" : "active",
           requestedRepositoryProvider: input.repositoryProvider,
         }),
       ),

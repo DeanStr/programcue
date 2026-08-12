@@ -138,6 +138,7 @@ export async function listAuthorisedEvents(
             OR (membership.event_id IS NULL
                 AND membership.role IN ('owner', 'administrator')))
      WHERE membership.person_id = ?
+       AND e.activation_status = 'active'
        AND membership.role IN (${placeholders})
        AND membership.revoked_at IS NULL
        AND (
@@ -208,6 +209,7 @@ export async function listAcceptedEventRoles(
             OR (membership.event_id IS NULL
                 AND membership.role IN ('owner', 'administrator')))
      WHERE event.id = ?
+       AND event.activation_status = 'active'
        AND membership.person_id = ?
        AND membership.accepted_at IS NOT NULL
        AND membership.revoked_at IS NULL
@@ -320,6 +322,7 @@ export async function recordEventContextSwitch(
            'event.context.switched', 'event', event.id, ?, unixepoch()
       FROM events event
      WHERE event.id = ? AND event.organisation_id = ?
+       AND event.activation_status = 'active'
   `,
   )
     .bind(
@@ -370,6 +373,7 @@ export async function loadCurrentEventAdminShellContext(
         SELECT id, organisation_id
           FROM events
          WHERE id = ? AND organisation_id = ?
+           AND activation_status = 'active'
       )
       SELECT
         EXISTS(SELECT 1 FROM current_event) AS eventExists,

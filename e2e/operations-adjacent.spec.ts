@@ -4,6 +4,8 @@ import { e2eOrigin } from "./support/e2e-origin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 import { resetDemoSubmissions } from "./support/reset-demo-submissions";
 
+const FIXTURE_CONFIRMATION = "seed-golden-path-browser-fixture";
+
 test.beforeEach(async ({ context }) => {
   await context.addCookies([
     {
@@ -88,6 +90,71 @@ test("blank event creation keeps templates empty and makes repository authority 
   await expect(page.getByText("Event created", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "View creation operation" }),
+  ).toBeVisible();
+});
+
+test("failed Airtable creation stays inaccessible until D1 is explicitly selected", async ({
+  page,
+  request,
+}) => {
+  await page.context().addCookies([
+    {
+      name: "program_cue_demo_role",
+      value: "owner",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  const fixture = await request.post("/demo/fixtures/golden-path", {
+    form: {
+      intent: "seed_event_repository_recovery",
+      confirm: FIXTURE_CONFIRMATION,
+    },
+    headers: { origin: e2eOrigin },
+  });
+  const fixtureText = await fixture.text();
+  expect(fixture.ok(), fixtureText).toBeTruthy();
+  const seeded = JSON.parse(fixtureText) as {
+    eventId: string;
+    recoveryPath: string;
+    providerCalled: boolean;
+  };
+  expect(seeded.providerCalled).toBe(false);
+
+  await waitForInterface(page, "/events/select");
+  await expect(
+    page.getByText("Airtable recovery browser fixture", { exact: true }),
+  ).toHaveCount(0);
+
+  await waitForInterface(page, "/admin/event");
+  await expect(
+    page.getByRole("heading", { name: "Incomplete events" }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Recover Airtable recovery browser fixture" })
+    .click();
+  await expect(page).toHaveURL(seeded.recoveryPath);
+  await expect(
+    page.getByRole("heading", { name: "Airtable recovery browser fixture" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("provisioning failed", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/no provider request was made/)).toBeVisible();
+  await expect(page.getByLabel("Base ID")).toHaveValue("");
+  await expect(page.getByLabel("Rooms table")).toHaveValue("");
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Explicitly keep on D1" }).click();
+  await expect(
+    page.getByText("Recovery complete", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Open recovered event" }).click();
+  await expect(page).toHaveURL(/\/admin\/event$/);
+  await expect(
+    page.getByRole("heading", { name: "Event Setup" }),
   ).toBeVisible();
 });
 

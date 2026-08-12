@@ -26,18 +26,22 @@ const contactScopeCte = `WITH candidate_contact_ids(person_id) AS (
   UNION
   SELECT membership.person_id
     FROM memberships membership
+    JOIN events event ON event.id = membership.event_id
    WHERE membership.organisation_id = ? AND membership.role = 'speaker'
+     AND event.organisation_id = membership.organisation_id
+     AND event.activation_status = 'active'
      AND membership.accepted_at IS NOT NULL AND membership.revoked_at IS NULL
   UNION
   SELECT speaker.person_id
     FROM session_speakers speaker
     JOIN events event ON event.id = speaker.event_id
-   WHERE event.organisation_id = ?
+   WHERE event.organisation_id = ? AND event.activation_status = 'active'
   UNION
   SELECT speaker.person_id
     FROM submission_speakers speaker
     JOIN events event ON event.id = speaker.event_id
-   WHERE event.organisation_id = ? AND speaker.person_id IS NOT NULL
+   WHERE event.organisation_id = ? AND event.activation_status = 'active'
+     AND speaker.person_id IS NOT NULL
 ), organisation_contact_ids(person_id) AS (
   SELECT candidate.person_id
     FROM candidate_contact_ids candidate
@@ -234,7 +238,8 @@ export class CrmService {
     const summary = await this.env.DB.prepare(
       `${contactScopeCte}
        SELECT (SELECT COUNT(*) FROM organisation_contact_ids) AS totalContacts,
-              (SELECT COUNT(*) FROM events WHERE organisation_id = ?) AS eventCount,
+              (SELECT COUNT(*) FROM events
+                WHERE organisation_id = ? AND activation_status = 'active') AS eventCount,
               (SELECT COUNT(*) FROM (
                 SELECT contact.person_id
                   FROM organisation_contact_ids contact
@@ -243,6 +248,7 @@ export class CrmService {
                       FROM session_speakers speaker
                       JOIN events event ON event.id = speaker.event_id
                      WHERE event.organisation_id = ?
+                       AND event.activation_status = 'active'
                      GROUP BY speaker.person_id
                   ) history ON history.person_id = contact.person_id
                  WHERE history.eventCount > 1
@@ -408,6 +414,7 @@ export class CrmService {
            LEFT JOIN sessions session
              ON session.id = speaker.session_id AND session.event_id = speaker.event_id
           WHERE event.organisation_id = ?
+            AND event.activation_status = 'active'
             AND (speaker.person_id IS NOT NULL OR EXISTS (
               SELECT 1 FROM memberships membership
                WHERE membership.organisation_id = event.organisation_id
@@ -1339,7 +1346,8 @@ export class CrmService {
   async listEvents(viewer: OrganisationAdministrator) {
     const rows = await this.env.DB.prepare(
       `SELECT id, name, starts_at AS startsAt, ends_at AS endsAt
-         FROM events WHERE organisation_id = ?
+         FROM events
+        WHERE organisation_id = ? AND activation_status = 'active'
         ORDER BY starts_at DESC, name COLLATE NOCASE`,
     )
       .bind(viewer.organisationId)
@@ -1371,7 +1379,9 @@ export class CrmService {
     const personId = crmPersonIdSchema.parse(rawPersonId);
     const eventId = z.string().trim().min(1).max(128).parse(rawEventId);
     const event = await this.env.DB.prepare(
-      "SELECT id FROM events WHERE id = ? AND organisation_id = ?",
+      `SELECT id FROM events
+        WHERE id = ? AND organisation_id = ?
+          AND activation_status = 'active'`,
     )
       .bind(eventId, viewer.organisationId)
       .first();
@@ -1421,7 +1431,8 @@ export class CrmService {
     }
     const event = await this.env.DB.prepare(
       `SELECT name, venue_name AS venueName, city FROM events
-        WHERE id = ? AND organisation_id = ?`,
+        WHERE id = ? AND organisation_id = ?
+          AND activation_status = 'active'`,
     )
       .bind(input.eventId, viewer.organisationId)
       .first<{ name: string; venueName: string | null; city: string | null }>();

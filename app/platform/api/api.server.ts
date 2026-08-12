@@ -202,7 +202,9 @@ export async function requireApiKey(
       );
     }
     const event = await env.DB.prepare(
-      "SELECT id FROM events WHERE id = ? AND organisation_id = ?",
+      `SELECT id FROM events
+        WHERE id = ? AND organisation_id = ?
+          AND activation_status = 'active'`,
     )
       .bind(requestedEventId, key.organisationId)
       .first();

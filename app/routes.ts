@@ -128,6 +128,10 @@ export default [
     route("admin/assistant", "routes/assistant.tsx"),
     route("admin/events/new", "routes/admin-event-new.tsx"),
     route("admin/events/clone", "routes/admin-event-clone.tsx"),
+    route(
+      "admin/events/:eventId/repository-recovery",
+      "routes/admin-event-repository-recovery.tsx",
+    ),
     route("admin/search", "routes/admin-command-search.ts"),
     route("admin/views", "routes/admin-saved-views.ts"),
     route("admin/event", "routes/event-setup.tsx"),

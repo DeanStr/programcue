@@ -39,6 +39,8 @@ beforeEach(async () => {
         timezone = excluded.timezone,
         starts_at = excluded.starts_at,
         ends_at = excluded.ends_at,
+        repository_provider = 'd1',
+        activation_status = 'active',
         file_policy_json = excluded.file_policy_json
     `),
     env.DB.prepare(`
@@ -145,6 +147,31 @@ describe("current event context", () => {
       organisationId: "org-future-events",
       role: "administrator",
     });
+  });
+
+  it("omits inactive events and rejects a stale selection for one", async () => {
+    await env.DB.prepare(
+      `UPDATE events
+          SET repository_provider = 'airtable',
+              activation_status = 'provisioning_failed'
+        WHERE id = 'evt-current-context-two'`,
+    ).run();
+
+    const events = await listAuthorisedEvents(demoRequest(), workerEnv, [
+      "administrator",
+    ]);
+    expect(
+      events.some((event) => event.eventId === "evt-current-context-two"),
+    ).toBe(false);
+    await expect(
+      requireCurrentEventRole(
+        demoRequest(
+          "program_cue_demo_role=administrator; program_cue_event=evt-current-context-two",
+        ),
+        workerEnv,
+        ["administrator"],
+      ),
+    ).rejects.toMatchObject({ status: 403 });
   });
 
   it("omits pending invitations without a finite future expiry", async () => {

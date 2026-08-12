@@ -188,6 +188,12 @@ must_fail(
     "A duplicate event slug was accepted across organisations",
 )
 must_fail(
+    "INSERT INTO events "
+    "(id,organisation_id,name,slug,timezone,starts_at,ends_at,repository_provider,file_policy_json) "
+    "VALUES ('event-airtable-active','org-a','Bad Airtable event','bad-airtable-event','UTC',100,200,'airtable','{}')",
+    "An Airtable event was allowed to activate without provisioning",
+)
+must_fail(
     "INSERT INTO memberships (id,organisation_id,event_id,person_id,role) "
     "VALUES ('cross-tenant','org-b','event-a','person-a','speaker')",
     "Cross-tenant membership was accepted",
@@ -290,6 +296,7 @@ required_triggers = {
     "audit_events_no_update",
     "audit_events_no_delete",
     "events_create_schedule_policy",
+    "events_airtable_insert_requires_provisioning",
     "schedule_versions_seed_session_content",
     "sessions_seed_draft_schedule_content",
     "events_participant_retention_tombstone_immutable",
