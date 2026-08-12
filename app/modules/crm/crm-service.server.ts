@@ -149,6 +149,9 @@ export class CrmService {
                     WHERE membership.person_id = person.id
                       AND membership.organisation_id = ?
                       AND membership.event_id IS NOT NULL
+                      AND membership.role = 'speaker'
+                      AND membership.accepted_at IS NOT NULL
+                      AND membership.revoked_at IS NULL
                    UNION
                    SELECT speaker.event_id
                      FROM session_speakers speaker
@@ -880,13 +883,26 @@ export class CrmService {
          EXISTS(SELECT 1 FROM submissions WHERE submitter_person_id = ?) OR
          EXISTS(SELECT 1 FROM submission_speakers WHERE person_id = ?) OR
          EXISTS(SELECT 1 FROM session_speakers WHERE person_id = ?) OR
-         EXISTS(SELECT 1 FROM auth_accounts WHERE person_id = ?) AS linked`,
+         EXISTS(SELECT 1 FROM auth_accounts WHERE person_id = ?) OR
+         EXISTS(SELECT 1 FROM auth_sessions WHERE person_id = ?) OR
+         EXISTS(SELECT 1 FROM organisation_contacts
+                  WHERE person_id = ? AND organisation_id <> ?
+                    AND status = 'active') AS linked`,
     )
-      .bind(secondaryId, secondaryId, secondaryId, secondaryId, secondaryId)
+      .bind(
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        viewer.organisationId,
+      )
       .first<{ linked: number }>();
     if (linked?.linked) {
       throw new CrmStateError(
-        "The secondary identity is already linked to access, submissions, or sessions and cannot be safely merged.",
+        "The secondary identity is already linked to access, submissions, sessions, or another organisation and cannot be safely merged.",
       );
     }
     await this.ensureExplicitContact(viewer, primaryId);
@@ -895,19 +911,117 @@ export class CrmService {
       this.env.DB.prepare(
         `UPDATE organisation_contacts
             SET status = 'merged', merged_into_person_id = ?, updated_at = unixepoch()
-          WHERE organisation_id = ? AND person_id = ? AND status = 'active'`,
-      ).bind(primaryId, viewer.organisationId, secondaryId),
+          WHERE organisation_id = ? AND person_id = ? AND status = 'active'
+            AND NOT EXISTS (SELECT 1 FROM memberships WHERE person_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM submissions WHERE submitter_person_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM submission_speakers WHERE person_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM session_speakers WHERE person_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM auth_accounts WHERE person_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM auth_sessions WHERE person_id = ?)
+            AND NOT EXISTS (
+              SELECT 1 FROM organisation_contacts shared
+               WHERE shared.person_id = ? AND shared.organisation_id <> ?
+                 AND shared.status = 'active'
+            )`,
+      ).bind(
+        primaryId,
+        viewer.organisationId,
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        viewer.organisationId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE people
+            SET biography = CASE
+                  WHEN biography IS NULL OR trim(biography) = ''
+                  THEN (SELECT secondary.biography FROM people secondary WHERE secondary.id = ?)
+                  ELSE biography
+                END,
+                organisation_name = CASE
+                  WHEN organisation_name IS NULL OR trim(organisation_name) = ''
+                  THEN (SELECT secondary.organisation_name FROM people secondary WHERE secondary.id = ?)
+                  ELSE organisation_name
+                END,
+                job_title = CASE
+                  WHEN job_title IS NULL OR trim(job_title) = ''
+                  THEN (SELECT secondary.job_title FROM people secondary WHERE secondary.id = ?)
+                  ELSE job_title
+                END,
+                updated_at = unixepoch()
+          WHERE id = ?
+            AND EXISTS (
+              SELECT 1 FROM organisation_contacts merged
+               WHERE merged.organisation_id = ? AND merged.person_id = ?
+                 AND merged.status = 'merged'
+                 AND merged.merged_into_person_id = ?
+            )
+            AND NOT EXISTS (SELECT 1 FROM memberships WHERE person_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM submissions WHERE submitter_person_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM submission_speakers WHERE person_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM session_speakers WHERE person_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM auth_accounts WHERE person_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM auth_sessions WHERE person_id = ?)
+            AND NOT EXISTS (
+              SELECT 1 FROM organisation_contacts shared
+               WHERE shared.person_id = ? AND shared.organisation_id <> ?
+                 AND shared.status = 'active'
+            )`,
+      ).bind(
+        secondaryId,
+        secondaryId,
+        secondaryId,
+        primaryId,
+        viewer.organisationId,
+        secondaryId,
+        primaryId,
+        primaryId,
+        primaryId,
+        primaryId,
+        primaryId,
+        primaryId,
+        primaryId,
+        primaryId,
+        viewer.organisationId,
+      ),
       this.env.DB.prepare(
         `INSERT OR IGNORE INTO organisation_contact_tags (
            organisation_id, person_id, tag, created_by_person_id, created_at
          ) SELECT organisation_id, ?, tag, created_by_person_id, created_at
              FROM organisation_contact_tags
-            WHERE organisation_id = ? AND person_id = ?`,
-      ).bind(primaryId, viewer.organisationId, secondaryId),
+            WHERE organisation_id = ? AND person_id = ?
+              AND EXISTS (SELECT 1 FROM organisation_contacts merged
+                WHERE merged.organisation_id = ? AND merged.person_id = ?
+                  AND merged.status = 'merged'
+                  AND merged.merged_into_person_id = ?)`,
+      ).bind(
+        primaryId,
+        viewer.organisationId,
+        secondaryId,
+        viewer.organisationId,
+        secondaryId,
+        primaryId,
+      ),
       this.env.DB.prepare(
         `UPDATE organisation_contact_notes SET person_id = ?
-          WHERE organisation_id = ? AND person_id = ?`,
-      ).bind(primaryId, viewer.organisationId, secondaryId),
+          WHERE organisation_id = ? AND person_id = ?
+            AND EXISTS (SELECT 1 FROM organisation_contacts merged
+              WHERE merged.organisation_id = ? AND merged.person_id = ?
+                AND merged.status = 'merged'
+                AND merged.merged_into_person_id = ?)`,
+      ).bind(
+        primaryId,
+        viewer.organisationId,
+        secondaryId,
+        viewer.organisationId,
+        secondaryId,
+        primaryId,
+      ),
       this.env.DB.prepare(
         `UPDATE crm_pipeline_activity
             SET pipeline_entry_id = (
@@ -925,6 +1039,12 @@ export class CrmService {
               SELECT 1 FROM crm_pipeline_entries primary_entry
                WHERE primary_entry.organisation_id = ?
                  AND primary_entry.person_id = ?
+            )
+            AND EXISTS (
+              SELECT 1 FROM organisation_contacts merged
+               WHERE merged.organisation_id = ? AND merged.person_id = ?
+                 AND merged.status = 'merged'
+                 AND merged.merged_into_person_id = ?
             )`,
       ).bind(
         viewer.organisationId,
@@ -933,6 +1053,9 @@ export class CrmService {
         viewer.organisationId,
         secondaryId,
         viewer.organisationId,
+        primaryId,
+        viewer.organisationId,
+        secondaryId,
         primaryId,
       ),
       this.env.DB.prepare(
@@ -942,11 +1065,20 @@ export class CrmService {
               SELECT 1 FROM crm_pipeline_entries primary_entry
                WHERE primary_entry.organisation_id = ?
                  AND primary_entry.person_id = ?
+            )
+            AND EXISTS (
+              SELECT 1 FROM organisation_contacts merged
+               WHERE merged.organisation_id = ? AND merged.person_id = ?
+                 AND merged.status = 'merged'
+                 AND merged.merged_into_person_id = ?
             )`,
       ).bind(
         viewer.organisationId,
         secondaryId,
         viewer.organisationId,
+        primaryId,
+        viewer.organisationId,
+        secondaryId,
         primaryId,
       ),
       this.env.DB.prepare(
@@ -954,12 +1086,21 @@ export class CrmService {
                 updated_at = unixepoch()
           WHERE organisation_id = ? AND person_id = ?
             AND NOT EXISTS (SELECT 1 FROM crm_pipeline_entries primary_entry
-              WHERE primary_entry.organisation_id = ? AND primary_entry.person_id = ?)`,
+              WHERE primary_entry.organisation_id = ? AND primary_entry.person_id = ?)
+            AND EXISTS (
+              SELECT 1 FROM organisation_contacts merged
+               WHERE merged.organisation_id = ? AND merged.person_id = ?
+                 AND merged.status = 'merged'
+                 AND merged.merged_into_person_id = ?
+            )`,
       ).bind(
         primaryId,
         viewer.organisationId,
         secondaryId,
         viewer.organisationId,
+        primaryId,
+        viewer.organisationId,
+        secondaryId,
         primaryId,
       ),
       this.env.DB.prepare(

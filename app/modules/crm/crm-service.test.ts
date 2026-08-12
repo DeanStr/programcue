@@ -69,6 +69,7 @@ describe("organisation speaker CRM", () => {
     });
     const personId = directory.contacts[0]!.personId;
     await crm.addTag(administrator, personId, "AI");
+    await crm.addTag(administrator, personId, "ai");
     await crm.addNote(
       administrator,
       personId,
@@ -157,9 +158,9 @@ describe("organisation speaker CRM", () => {
     ).rejects.toMatchObject({ status: 404 });
     const merged = await crm.getContact(administrator, primary.personId);
     expect(merged).toMatchObject({
-      biography: null,
-      organisationName: null,
-      jobTitle: null,
+      biography: "Secondary biography",
+      organisationName: "Secondary Co",
+      jobTitle: "Engineer",
     });
     expect(merged.pipeline?.activity).toEqual(
       expect.arrayContaining([
@@ -193,6 +194,88 @@ describe("organisation speaker CRM", () => {
     ).rejects.toMatchObject({
       message: expect.stringContaining("belongs to a merged contact"),
       status: 422,
+    });
+  });
+
+  it("does not rewrite a linked primary identity while merging its CRM-only duplicate", async () => {
+    const { testEnv, crm } = await service();
+    const suffix = crypto.randomUUID();
+    const primary = await crm.createContact(administrator, {
+      name: "Linked Primary Speaker",
+      email: `linked-primary-${suffix}@example.com`,
+      jobTitle: "",
+      organisationName: "",
+      biography: "",
+    });
+    const secondary = await crm.createContact(administrator, {
+      name: "Linked Primary Speaker",
+      email: `linked-secondary-${suffix}@example.com`,
+      jobTitle: "Secondary title",
+      organisationName: "Secondary company",
+      biography: "Secondary biography",
+    });
+    await testEnv.DB.prepare(
+      `INSERT INTO memberships (
+         id, organisation_id, event_id, person_id, role,
+         invited_at, accepted_at, created_at
+       ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch(), unixepoch())`,
+    )
+      .bind(
+        `linked-primary-membership-${suffix}`,
+        administrator.organisationId,
+        administrator.currentEventId,
+        primary.personId,
+      )
+      .run();
+
+    await crm.mergeContacts(
+      administrator,
+      primary.personId,
+      secondary.personId,
+    );
+
+    await expect(
+      crm.getContact(administrator, primary.personId),
+    ).resolves.toMatchObject({
+      biography: null,
+      organisationName: null,
+      jobTitle: null,
+    });
+  });
+
+  it("refuses to merge a secondary identity active in another organisation", async () => {
+    const { testEnv, crm } = await service();
+    const suffix = crypto.randomUUID();
+    const primary = await crm.createContact(administrator, {
+      name: "Shared CRM Contact",
+      email: `shared-primary-${suffix}@example.com`,
+      jobTitle: "",
+      organisationName: "",
+      biography: "",
+    });
+    const secondary = await crm.createContact(administrator, {
+      name: "Shared CRM Contact",
+      email: `shared-secondary-${suffix}@example.com`,
+      jobTitle: "",
+      organisationName: "",
+      biography: "",
+    });
+    const otherOrganisationId = `shared-contact-org-${suffix}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "INSERT INTO organisations (id, name, slug) VALUES (?, 'Shared Contact Org', ?)",
+      ).bind(otherOrganisationId, otherOrganisationId),
+      testEnv.DB.prepare(
+        `INSERT INTO organisation_contacts (
+           organisation_id, person_id, source, status, created_at, updated_at
+         ) VALUES (?, ?, 'manual', 'active', unixepoch(), unixepoch())`,
+      ).bind(otherOrganisationId, secondary.personId),
+    ]);
+
+    await expect(
+      crm.mergeContacts(administrator, primary.personId, secondary.personId),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("another organisation"),
     });
   });
 
@@ -354,6 +437,64 @@ describe("organisation speaker CRM", () => {
       1,
     );
     expect(directory.contacts).toEqual([]);
+  });
+
+  it("counts only accepted active speaker memberships in contact history", async () => {
+    const { testEnv, crm } = await service();
+    const suffix = crypto.randomUUID();
+    const contact = await crm.createContact(administrator, {
+      name: "Membership History Speaker",
+      email: `membership-history-${suffix}@example.com`,
+      jobTitle: "Engineer",
+      organisationName: "History Co",
+      biography: "",
+    });
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, invited_at,
+           invitation_expires_at, accepted_at, revoked_at, created_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch() + 3600,
+                   NULL, NULL, unixepoch())`,
+      ).bind(
+        `pending-history-${suffix}`,
+        administrator.organisationId,
+        administrator.currentEventId,
+        contact.personId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, invited_at,
+           invitation_expires_at, accepted_at, revoked_at, created_at
+         ) VALUES (?, ?, NULL, ?, 'administrator', unixepoch(), NULL,
+                   unixepoch(), NULL, unixepoch())`,
+      ).bind(
+        `organisation-history-${suffix}`,
+        administrator.organisationId,
+        contact.personId,
+      ),
+    ]);
+
+    let directory = await crm.listDirectory(
+      administrator,
+      { ...emptyFilters, query: "Membership History Speaker" },
+      1,
+    );
+    expect(directory.contacts[0]?.eventCount).toBe(0);
+
+    await testEnv.DB.prepare(
+      `UPDATE memberships SET accepted_at = unixepoch(),
+              invitation_expires_at = NULL
+        WHERE id = ?`,
+    )
+      .bind(`pending-history-${suffix}`)
+      .run();
+    directory = await crm.listDirectory(
+      administrator,
+      { ...emptyFilters, query: "Membership History Speaker" },
+      1,
+    );
+    expect(directory.contacts[0]?.eventCount).toBe(1);
   });
 
   it("links an existing identity without overwriting profile data from another organisation", async () => {

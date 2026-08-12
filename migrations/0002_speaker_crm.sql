@@ -18,7 +18,7 @@ CREATE TABLE organisation_contacts (
 CREATE TABLE organisation_contact_tags (
   organisation_id TEXT NOT NULL,
   person_id TEXT NOT NULL,
-  tag TEXT NOT NULL CHECK (length(trim(tag)) BETWEEN 1 AND 40),
+  tag TEXT NOT NULL COLLATE NOCASE CHECK (length(trim(tag)) BETWEEN 1 AND 40),
   created_by_person_id TEXT REFERENCES people(id),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   PRIMARY KEY (organisation_id, person_id, tag),
