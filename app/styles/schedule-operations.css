@@ -175,10 +175,12 @@
   min-width: max-content;
   gap: 2px;
 }
+/* Opacity over --muted composited to #8793a5, about 3:1 on white. Tone comes
+   from the colour token so it stays measurable. */
 .schedule-day-tabs .tab small {
   font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
-  opacity: 0.76;
+  color: var(--muted);
 }
 .schedule-room-scroll {
   max-height: 65vh;

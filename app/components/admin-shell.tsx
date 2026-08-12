@@ -488,7 +488,13 @@ export function AdminShell({
         </button>
         <div className="top-actions">
           {viewer.role !== "committee_chair" ? (
-            <Button variant="primary" onClick={() => setDialog("new")}>
+            <Button
+              /* The label span is display:none below 760px, which leaves the
+                 only filled primary in the global chrome with no name. */
+              aria-label="New"
+              variant="primary"
+              onClick={() => setDialog("new")}
+            >
               <Plus aria-hidden size={15} />
               <span>New</span>
             </Button>

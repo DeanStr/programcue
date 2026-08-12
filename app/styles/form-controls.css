@@ -231,3 +231,15 @@ input[type="radio"] {
     height: 20px;
   }
 }
+
+/* Controls never exceed their container. A file input in particular has a wide
+   intrinsic width that grows with font-size, which pushed the participant
+   upload form past the viewport at 412px. */
+.field,
+.select,
+.textarea {
+  max-width: 100%;
+}
+input[type="file"].field {
+  min-width: 0;
+}
