@@ -1,4 +1,4 @@
-import { isRouteErrorResponse, Link, Outlet, useRevalidator, useRouteError } from "react-router";
+import { isRouteErrorResponse, Link, Outlet, useRevalidator } from "react-router";
 
 import type { Route } from "./+types/admin-layout";
 import { AdminShell } from "~/components/admin-shell";
@@ -127,8 +127,10 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
  * any loader throw fell through to the root boundary, which discards the whole
  * document — navigation, event context and all — for a recoverable error.
  */
-export function ErrorBoundary() {
-  const error = useRouteError();
+export function ErrorBoundary({
+  error,
+  loaderData,
+}: Route.ErrorBoundaryProps) {
   const revalidator = useRevalidator();
 
   const routeError = isRouteErrorResponse(error) ? error : null;
@@ -144,7 +146,7 @@ export function ErrorBoundary() {
         ? "That page does not exist, or the link has changed."
         : "The page failed to load. Your work has not been lost.";
 
-  return (
+  const errorContent = (
     <section className="card pad" style={{ maxWidth: 620 }}>
       <h1 style={{ fontSize: "var(--text-xl)", margin: 0 }}>{title}</h1>
       <p className="subtle">{message}</p>
@@ -162,5 +164,19 @@ export function ErrorBoundary() {
         </Link>
       </div>
     </section>
+  );
+
+  if (!loaderData) return errorContent;
+
+  return (
+    <AdminShell
+      event={loaderData.event}
+      eventOptions={loaderData.eventOptions}
+      viewer={loaderData.viewer}
+      notifications={loaderData.notifications}
+      commandPalette={loaderData.commandPalette}
+    >
+      {errorContent}
+    </AdminShell>
   );
 }

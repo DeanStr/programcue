@@ -88,6 +88,24 @@ test("route announcements describe page changes but ignore same-page actions", a
   await expect(announcement).toHaveText(await page.title());
 });
 
+test("admin child-route errors preserve navigation and event context", async ({
+  page,
+}) => {
+  const response = await page.goto("/admin/speakers/not-a-speaker");
+  expect(response?.status()).toBe(404);
+  await page.locator("body[data-hydrated='true']").waitFor();
+
+  await expect(
+    page.getByRole("heading", { name: "Page not found", level: 1 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "Primary navigation" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Switch event" })).toContainText(
+    "Future of Events 2025",
+  );
+});
+
 test("shared form errors connect labels, help and corrective links", async ({
   page,
 }) => {

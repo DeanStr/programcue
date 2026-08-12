@@ -71,10 +71,9 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
   ).toBeVisible();
 
   await waitForInterface(page, "/demo");
-  await page
-    .getByLabel(/Type Future of Events 2025 to confirm/)
-    .fill(resetConfirmation);
-  await page.getByRole("button", { name: "Reset complete demo event" }).click();
+  const resetInput = page.getByLabel(/Type Future of Events 2025 to confirm/);
+  await resetInput.fill(resetConfirmation);
+  await resetInput.press("Enter");
   await acceptConfirm(page);
   await expect(page.getByText("Demo restored", { exact: true })).toBeVisible();
   await expect(page.getByText("2", { exact: true }).first()).toBeVisible();

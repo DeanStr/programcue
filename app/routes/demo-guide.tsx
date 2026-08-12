@@ -8,7 +8,14 @@ import {
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
-import { data, Form, Link, useActionData, useNavigation } from "react-router";
+import {
+  data,
+  Form,
+  Link,
+  useActionData,
+  useNavigation,
+  useSubmit,
+} from "react-router";
 
 import type { Route } from "./+types/demo-guide";
 import { useConfirm } from "~/components/ui/confirm-dialog";
@@ -380,6 +387,7 @@ function providerState(configured: boolean, configuredCopy: string) {
 export default function DemoGuide({ loaderData }: Route.ComponentProps) {
   const result = useActionData<typeof action>();
   const navigation = useNavigation();
+  const submit = useSubmit();
   const { confirm, dialog } = useConfirm();
   const busy = navigation.state !== "idle";
   const activeTotal = Object.values(loaderData.activeWork).reduce(
@@ -681,7 +689,23 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
             ) : null}
             {selectedIdentity?.role === "owner" ||
             selectedIdentity?.role === "administrator" ? (
-              <Form method="post" className="stack">
+              <Form
+                method="post"
+                className="stack"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (busy || activeTotal > 0) return;
+                  const form = event.currentTarget;
+                  confirm(
+                    {
+                      title: "Reset the complete evaluator event?",
+                      description: `Event-scoped D1 work and everything under private/events/${DEMO_EVENT_ID}/ in R2 are removed, then the judged baseline is reseeded. Append-only audit history is preserved.`,
+                      confirmLabel: "Reset demo event",
+                    },
+                    () => submit(form),
+                  );
+                }}
+              >
                 <input type="hidden" name="intent" value="reset" />
                 <label className="label">
                   Type <strong>{DEMO_RESET_CONFIRMATION}</strong> to confirm
@@ -694,20 +718,8 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
                 </label>
                 <button
                   className="btn danger"
-                  type="button"
+                  type="submit"
                   disabled={busy || activeTotal > 0}
-                  onClick={(event) => {
-                    const form = event.currentTarget.form;
-                    if (!form?.reportValidity()) return;
-                    confirm(
-                      {
-                        title: "Reset the complete evaluator event?",
-                        description: `Event-scoped D1 work and everything under private/events/${DEMO_EVENT_ID}/ in R2 are removed, then the judged baseline is reseeded. Append-only audit history is preserved.`,
-                        confirmLabel: "Reset demo event",
-                      },
-                      () => form.requestSubmit(),
-                    );
-                  }}
                 >
                   <RefreshCcw aria-hidden size={14} />{" "}
                   {busy ? "Restoring demo…" : "Reset complete demo event"}
