@@ -173,7 +173,7 @@ The automated repository gate is complete for the deployed source revision. A re
 
 ### Design system overhaul evidence
 
-The `design-system-overhaul` branch passed `npm run check` on 12 August 2026 in its isolated worktree, with all 107 visual baselines re-recorded against the new visual language.
+The `design-system-overhaul` branch passed `npm run check` on 12 August 2026 in its isolated worktree, with all 107 visual baselines re-recorded against the new visual language. After merging current `main`, the final branch passed the complete gate again in 299.3 seconds: 43 Node files with 213 tests; 134 Worker files with 995 tests; the Agents Durable Object test; 4 scanner tests; production client/SSR builds; migration parity at 92 application tables, 102 indexes and 77 triggers; a 124,196-byte recovery drill; OpenAPI synchronization at 33 paths and 454 internal references; and 175/178 Playwright tests across desktop/mobile/laptop Chromium plus Firefox/WebKit smoke coverage. The three skips remain intentional. The merged evaluation administration, form builder, integrations, session-content, Speakers and session-bulk baselines were re-recorded and visually reviewed.
 
 Stylesheets moved from `public/styles/` to `app/styles/` and are bundled by Vite: one hashed, minified file replaces 32 render-blocking unminified requests totalling 128,235 bytes. Tailwind was removed: it emitted only incidental matches against hand-rolled class names and its `@theme` injected a colliding `--radius-sm`.
 
