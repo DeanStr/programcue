@@ -627,6 +627,13 @@ a {
   display: grid;
   gap: var(--space-2);
 }
+/* Grid and flex items default to min-width:auto and refuse to shrink below
+   their content, which is how a single long string widens the whole page.
+   .grid already carried this; .stack and .card-title did not. */
+.stack > *,
+.card-title > * {
+  min-width: 0;
+}
 .divider {
   height: 1px;
   background: var(--line);
