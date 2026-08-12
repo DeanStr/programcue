@@ -381,7 +381,7 @@ test.describe.serial(
       await captureLaptopViewport(page, "tasks-plan-expanded");
     });
 
-    test("Speaker CRM contains its sourcing board locally", async ({
+    test("Speaker CRM keeps every sourcing stage reachable locally", async ({
       page,
     }) => {
       await openHydrated(page, "/admin/crm/pipeline");
@@ -395,12 +395,18 @@ test.describe.serial(
         name: "Speaker sourcing stages",
       });
       await expect(board).toBeInViewport();
-      expect(
-        await board.evaluate(
-          (element) => element.scrollWidth > element.clientWidth,
-        ),
-        "the five-stage board should keep its intentional overflow inside the work area",
-      ).toBe(true);
+      const finalStage = board.getByRole("heading", {
+        name: "Declined",
+        exact: true,
+      });
+      await finalStage.scrollIntoViewIfNeeded();
+      await expect(finalStage).toBeInViewport();
+      await board.evaluate((element) => {
+        element.scrollLeft = 0;
+      });
+      await expect(
+        board.getByRole("heading", { name: "Identified", exact: true }),
+      ).toBeInViewport();
       await captureLaptopViewport(page, "speaker-crm-pipeline");
     });
   },
