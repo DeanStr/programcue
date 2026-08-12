@@ -4,6 +4,7 @@ import { useNavigation } from "react-router";
 const SCRIPT_ID = "program-cue-turnstile-script";
 const SCRIPT_STATE_ATTRIBUTE = "data-program-cue-turnstile-state";
 const ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,63}$/u;
+type TurnstileAppearance = "always" | "execute" | "interaction-only";
 
 function boundedErrorName(error: unknown) {
   if (!(error instanceof Error)) return "UnknownError";
@@ -17,6 +18,7 @@ type TurnstileApi = {
     options: {
       sitekey: string;
       action: string;
+      appearance: TurnstileAppearance;
       "response-field": boolean;
       callback(token: string): void;
       "expired-callback"(): void;
@@ -95,6 +97,7 @@ export function TurnstileWidget({
   action,
   onTokenChange,
   resetKey = 0,
+  appearance = "always",
 }: {
   siteKey: string | null;
   action:
@@ -107,6 +110,7 @@ export function TurnstileWidget({
     | "public_itinerary_create";
   onTokenChange?: (token: string) => void;
   resetKey?: number;
+  appearance?: TurnstileAppearance;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
@@ -134,6 +138,7 @@ export function TurnstileWidget({
         widgetId.current = turnstile.render(container.current, {
           sitekey: siteKey,
           action,
+          appearance,
           "response-field": false,
           callback: (value) => {
             setToken(value);
@@ -169,7 +174,7 @@ export function TurnstileWidget({
         widgetId.current = null;
       }
     };
-  }, [action, loadAttempt, siteKey]);
+  }, [action, appearance, loadAttempt, siteKey]);
 
   useEffect(() => {
     if (navigation.state === "submitting") {
