@@ -1,7 +1,7 @@
-@import url("./styles/base.css");
-@import url("./styles/workspaces.css");
-@import url("./styles/responsive-refinements.css");
-@import url("./styles/design-primitives.css");
-@import url("./styles/speaker-resources.css");
-@import url("./styles/schedule-operations.css");
-@import url("./styles/reviewer-responsive-tables.css");
+@import url("/styles/base.css");
+@import url("/styles/workspaces.css");
+@import url("/styles/responsive-refinements.css");
+@import url("/styles/design-primitives.css");
+@import url("/styles/speaker-resources.css");
+@import url("/styles/schedule-operations.css");
+@import url("/styles/reviewer-responsive-tables.css");

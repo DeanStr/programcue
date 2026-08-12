@@ -6,12 +6,20 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
 } from "react";
-import { useFetcher, useNavigate } from "react-router";
+import {
+  useFetcher,
+  useNavigate,
+  type FetcherWithComponents,
+} from "react-router";
 
 import {
   clearDraftRecoveryScope,
   useDraftRecovery,
+  type DraftRecoveryController,
 } from "~/platform/drafts/draft-recovery";
 import type { loader } from "~/routes/review-workbench.server";
 
@@ -28,6 +36,50 @@ type ReviewWorkbenchActionData = {
 };
 
 type ReviewWorkbenchAction = () => Promise<ReviewWorkbenchActionData>;
+
+type ReviewWorkbenchLoaderData = Awaited<ReturnType<typeof loader>>;
+type ReviewWorkspace = ReviewWorkbenchLoaderData["workspace"];
+type ReviewAssignment = ReviewWorkspace["assignments"][number];
+
+export type ReviewRecoveryPayload = {
+  scores: Record<string, string>;
+  recommendation: string;
+  confidence: string;
+  submitterFeedback: string;
+  privateNotes: string;
+};
+
+export type ReviewWorkbenchModel = {
+  viewer: ReviewWorkbenchLoaderData["viewer"];
+  workspace: ReviewWorkspace;
+  eventName: string;
+  assignmentKey: string;
+  fetcher: FetcherWithComponents<ReviewWorkbenchActionData>;
+  formRef: RefObject<HTMLFormElement | null>;
+  editGeneration: RefObject<number>;
+  inFlightSaveGeneration: RefObject<number | null>;
+  conflictOpen: boolean;
+  setConflictOpen: Dispatch<SetStateAction<boolean>>;
+  submitMode: "stay" | "next" | null;
+  setSubmitMode: Dispatch<SetStateAction<"stay" | "next" | null>>;
+  dirty: boolean;
+  requiredCriterionCount: number;
+  completedCriterionCount: number;
+  setCompletedCriterionCount: Dispatch<SetStateAction<number>>;
+  readOnly: boolean;
+  revision: number;
+  committedWarning: boolean;
+  saveFailed: boolean;
+  previousAssignment: ReviewAssignment | null;
+  nextAssignment: ReviewAssignment | null;
+  recoveryPayload: ReviewRecoveryPayload;
+  recovery: DraftRecoveryController<ReviewRecoveryPayload>;
+  clearAutosaveTimer(): void;
+  cancelAutosave(): void;
+  markDirty(): void;
+  captureRecoveryPayload(form: HTMLFormElement): void;
+  requestAssignmentNavigation(href: string): void;
+};
 
 export function reviewSaveCoversCurrentEdits(
   savedEditGeneration: number | null,
@@ -46,12 +98,12 @@ export function reviewCanAdoptServerPayload(
   return currentEditGeneration === serverSyncedEditGeneration;
 }
 export type ReviewWorkbenchWorkspaceProps = {
-  loaderData: Awaited<ReturnType<typeof loader>>;
+  loaderData: ReviewWorkbenchLoaderData;
 };
 
 export function useReviewWorkbenchState({
   loaderData,
-}: ReviewWorkbenchWorkspaceProps) {
+}: ReviewWorkbenchWorkspaceProps): ReviewWorkbenchModel {
   const { viewer, eventName, workspace } = loaderData;
   const assignmentKey = workspace.selected?.id ?? "no-assignment";
   const fetcher = useFetcher<ReviewWorkbenchAction>({
@@ -115,13 +167,6 @@ export function useReviewWorkbenchState({
       ? workspace.assignments[selectedIndex + 1]
       : null;
   const handledSubmission = useRef<string | null>(null);
-  type ReviewRecoveryPayload = {
-    scores: Record<string, string>;
-    recommendation: string;
-    confidence: string;
-    submitterFeedback: string;
-    privateNotes: string;
-  };
   const serverRecoveryPayload = useMemo<ReviewRecoveryPayload>(
     () => ({
       scores: Object.fromEntries(
@@ -439,11 +484,10 @@ export function useReviewWorkbenchState({
   };
 }
 
-export const ReviewWorkbenchModelContext = createContext<ReturnType<
-  typeof useReviewWorkbenchState
-> | null>(null);
+export const ReviewWorkbenchModelContext =
+  createContext<ReviewWorkbenchModel | null>(null);
 
-export function useReviewWorkbenchModel() {
+export function useReviewWorkbenchModel(): ReviewWorkbenchModel {
   const model = useContext(ReviewWorkbenchModelContext);
   if (!model) throw new Error("Review workbench model is unavailable.");
   return model;

@@ -1,9 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useLocation } from "react-router";
 
-import type { PublicProgrammeLoaderData } from "~/routes/public-programme";
+import type { parseProgrammeEmbedSearchParameters } from "~/modules/programme/programme-embed-configuration";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
-import type { PublishedSpeaker } from "~/modules/programme/public-programme-service.server";
+import type {
+  PublishedProgramme,
+  PublishedSpeaker,
+} from "~/modules/programme/public-programme-service.server";
+
+export type PublicProgrammeLoaderData = {
+  programme: PublishedProgramme;
+  itinerary: string[];
+  embedded: boolean;
+  embedOptions: ReturnType<typeof parseProgrammeEmbedSearchParameters>;
+  signedIn: boolean;
+  itineraryVerificationRequired: boolean;
+  turnstileSiteKey: string | null;
+  itinerarySynced: boolean;
+  shared: boolean;
+};
 
 export function formatDay(epoch: number, timezone: string) {
   return new Intl.DateTimeFormat("en", {

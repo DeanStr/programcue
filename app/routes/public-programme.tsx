@@ -1,8 +1,6 @@
 import { data } from "react-router";
 
 import type { Route } from "./+types/public-programme";
-
-export type PublicProgrammeLoaderData = Route.ComponentProps["loaderData"];
 import {
   ProgrammeEmbedConfigurationError,
   parseProgrammeEmbedSearchParameters,

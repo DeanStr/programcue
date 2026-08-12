@@ -1,4 +1,8 @@
-import { data } from "react-router";
+import {
+  data,
+  type ActionFunctionArgs,
+  type LoaderFunctionArgs,
+} from "react-router";
 import { ZodError } from "zod";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import {
@@ -14,7 +18,6 @@ import { EventService } from "~/modules/events/event-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
-import type { Route } from "./+types/evaluation-admin";
 import {
   canReleaseEvaluationDecisions,
   decisionActionOutcome,
@@ -45,7 +48,7 @@ function readRubricCriteria(values: FormData) {
     .map((criterion, position) => ({ ...criterion, position }));
 }
 
-export async function loader({ request, context }: Route.LoaderArgs) {
+export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env } = getCloudflareContext(context);
   const viewer = await requireCurrentEventRole(request, env, [
     "owner",
@@ -90,7 +93,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ request, context }: Route.ActionArgs) {
+export async function action({ request, context }: ActionFunctionArgs) {
   const { env } = getCloudflareContext(context);
   const viewer = await requireCurrentEventRole(request, env, [
     "owner",

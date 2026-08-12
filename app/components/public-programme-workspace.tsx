@@ -4,7 +4,6 @@ import { Link } from "react-router";
 
 import { TurnstileWidget } from "~/components/turnstile-widget";
 import { formatProgrammeEventDay } from "~/modules/programme/programme-presentation";
-import type { PublicProgrammeLoaderData } from "~/routes/public-programme";
 import {
   descriptionSnippet,
   formatDay,
@@ -12,6 +11,7 @@ import {
   initials,
   normaliseDescription,
   speakerAffiliation,
+  type PublicProgrammeLoaderData,
   usePublicProgrammeModel,
 } from "~/components/public-programme-model";
 
