@@ -237,6 +237,164 @@ async function captureState(page: Page, target: Locator, name: string) {
   await expectDocumentContained(page, name);
 }
 
+async function captureLaptopViewport(page: Page, name: string) {
+  expect(page.viewportSize(), `${name} should use the laptop viewport`).toEqual(
+    {
+      width: 1280,
+      height: 720,
+    },
+  );
+  await expect(page.locator("main#main")).toBeInViewport();
+  await expect(page).toHaveScreenshot(`${name}.png`);
+  await expectDocumentContained(page, `${name} at the laptop viewport`);
+}
+
+test.describe.serial(
+  "common-laptop visual coverage",
+  { tag: "@laptop-visual" },
+  () => {
+    test.beforeAll(async ({ request }) => {
+      await prepareVisualBaseline(request);
+    });
+
+    test.afterAll(async ({ request }) => {
+      await resetDemoEvent(request);
+    });
+
+    test("Command Centre keeps its readiness workspace usable", async ({
+      page,
+    }) => {
+      await openHydrated(page, "/admin/command");
+      await expect(
+        page.getByRole("heading", { name: "Command Centre", level: 1 }),
+      ).toBeInViewport();
+      await expect(
+        page.getByRole("progressbar", { name: "Overall event readiness" }),
+      ).toBeInViewport();
+      await captureLaptopViewport(page, "command-centre");
+    });
+
+    test("Review Workbench keeps the evaluation context visible", async ({
+      page,
+    }) => {
+      await selectDemoRole(page, "evaluator");
+      await openHydrated(page, "/review/workbench");
+      await expect(
+        page.getByRole("heading", { name: "Review Workbench", level: 1 }),
+      ).toBeInViewport();
+      await expect(
+        page.getByRole("navigation", { name: "Assigned review sources" }),
+      ).toBeInViewport();
+      await captureLaptopViewport(page, "review-workbench");
+    });
+
+    test("Form Builder keeps the visual editor visible", async ({ page }) => {
+      await openHydrated(page, "/admin/submissions/form");
+      await waitForSurfaceReady(page, "form-builder");
+      await expect(
+        page.getByRole("region", {
+          name: "Visual call-for-speakers form editor",
+        }),
+      ).toBeInViewport();
+      await captureLaptopViewport(page, "form-builder");
+    });
+
+    test("evaluation administration keeps its controls visible", async ({
+      page,
+    }) => {
+      await openHydrated(page, "/admin/review");
+      await expect(
+        page.getByRole("heading", { name: "Evaluation", level: 1 }),
+      ).toBeInViewport();
+      await expect(
+        page.getByRole("heading", { name: "Evaluation teams" }),
+      ).toBeInViewport();
+      await captureLaptopViewport(page, "evaluation-admin");
+    });
+
+    test("Schedule Planner keeps the focused planning canvas visible", async ({
+      page,
+    }) => {
+      await openHydrated(page, "/admin/schedule?session=demo-session-1");
+      await expect(
+        page.getByRole("heading", { name: "Schedule Planner", level: 1 }),
+      ).toBeInViewport();
+      await expect(page.locator(".schedule-canvas")).toBeInViewport();
+      await captureLaptopViewport(page, "schedule-planner");
+    });
+
+    test("Communications keeps preview and confirmation context visible", async ({
+      page,
+    }) => {
+      await selectCurrentEvent(page);
+      await openHydrated(page, "/admin/communications/compose");
+      const composer = page.locator("section").filter({
+        has: page.getByRole("heading", { name: "1. Create the durable draft" }),
+      });
+      await composer
+        .getByLabel("Schedule for later (optional, America/Toronto)")
+        .fill("2027-07-10T09:30");
+      await composer
+        .getByRole("button", { name: "Create durable draft" })
+        .click();
+      await page
+        .getByRole("button", { name: "Generate current preview" })
+        .click();
+      await expect(
+        page.getByRole("heading", {
+          name: "2. Verify the authoritative preview",
+        }),
+      ).toBeInViewport();
+      const mergedPreview = page.getByRole("heading", {
+        name: "Representative merged email",
+      });
+      await mergedPreview.scrollIntoViewIfNeeded();
+      await expect(mergedPreview).toBeInViewport();
+      await captureLaptopViewport(page, "communications-preview");
+    });
+
+    test("Tasks keeps the expanded task-plan controls visible", async ({
+      page,
+    }) => {
+      await openHydrated(page, "/admin/tasks");
+      const taskPlan = page.locator("aside").filter({
+        has: page.getByRole("heading", { name: "Assign a plan" }),
+      });
+      const template = taskPlan.locator("details").filter({
+        has: page.getByText("Create task template", { exact: true }),
+      });
+      await template.getByText("Create task template", { exact: true }).click();
+      const dueDateAnchor = template.getByLabel("Due date anchor");
+      await dueDateAnchor.scrollIntoViewIfNeeded();
+      await expect(dueDateAnchor).toBeInViewport();
+      await captureLaptopViewport(page, "tasks-plan-expanded");
+    });
+
+    test("Speaker CRM contains its sourcing board locally", async ({
+      page,
+    }) => {
+      await openHydrated(page, "/admin/crm/pipeline");
+      await expect(
+        page.getByRole("heading", {
+          name: "Speaker sourcing pipeline",
+          level: 1,
+        }),
+      ).toBeInViewport();
+      const board = page.getByRole("region", {
+        name: "Speaker sourcing stages",
+      });
+      await expect(board).toBeInViewport();
+      expect(
+        await board.evaluate(
+          (element) => element.scrollWidth > element.clientWidth,
+        ),
+        "the five-stage board should keep its intentional overflow inside the work area",
+      ).toBe(true);
+      await captureLaptopViewport(page, "speaker-crm-pipeline");
+    });
+  },
+);
+
 test.describe.serial("responsive visual inventory", () => {
   test.beforeAll(async ({ request }) => {
     await prepareVisualBaseline(request);

@@ -2,12 +2,16 @@ import { defineConfig, devices } from "@playwright/test";
 
 import { e2eOrigin } from "./e2e/support/e2e-origin";
 
-const trace = process.env.CI || process.env.PROGRAM_CUE_E2E_TRACE === "1"
-  ? "retain-on-failure"
-  : "off";
+const trace =
+  process.env.CI || process.env.PROGRAM_CUE_E2E_TRACE === "1"
+    ? "retain-on-failure"
+    : "off";
+
+const laptopVisualTag = /@laptop-visual/;
 
 export const desktopChromiumProject = {
   name: "desktop-chromium",
+  grepInvert: laptopVisualTag,
   testIgnore: /cross-browser-smoke\.spec\.ts/,
   use: {
     ...devices["Desktop Chrome"],
@@ -60,7 +64,17 @@ export default defineConfig({
     desktopChromiumProject,
     {
       name: "mobile-chromium",
+      grepInvert: laptopVisualTag,
       use: { ...devices["Pixel 7"] },
+      testMatch: /visual\.spec\.ts/,
+    },
+    {
+      name: "laptop-chromium",
+      grep: laptopVisualTag,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+      },
       testMatch: /visual\.spec\.ts/,
     },
     {
