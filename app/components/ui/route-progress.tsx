@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigation } from "react-router";
+import { useLocation, useNavigation } from "react-router";
+
+function locationKey(location: {
+  pathname: string;
+  search: string;
+  hash: string;
+}) {
+  return `${location.pathname}${location.search}${location.hash}`;
+}
 
 /**
  * Navigation feedback for the whole app.
@@ -14,11 +22,19 @@ import { useNavigation } from "react-router";
  */
 export function RouteProgress() {
   const navigation = useNavigation();
-  const active = navigation.state !== "idle";
+  const location = useLocation();
+  const currentLocationKey = locationKey(location);
+  const destinationLocationKey = navigation.location
+    ? locationKey(navigation.location)
+    : null;
+  const active =
+    navigation.state !== "idle" &&
+    destinationLocationKey !== null &&
+    destinationLocationKey !== currentLocationKey;
   const [visible, setVisible] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const timer = useRef<number | undefined>(undefined);
-  const wasActive = useRef(false);
+  const announcedLocation = useRef(currentLocationKey);
 
   useEffect(() => {
     window.clearTimeout(timer.current);
@@ -33,19 +49,15 @@ export function RouteProgress() {
   }, [active]);
 
   useEffect(() => {
-    if (active) {
-      wasActive.current = true;
-      return;
-    }
-    if (!wasActive.current) return;
-    wasActive.current = false;
+    if (active || announcedLocation.current === currentLocationKey) return;
+    announcedLocation.current = currentLocationKey;
     /* <Meta> sets the new document title while the destination renders, so it
        is settled by the time this commit's frame runs. */
     const frame = requestAnimationFrame(() =>
       setAnnouncement(document.title || "Page loaded"),
     );
     return () => cancelAnimationFrame(frame);
-  }, [active]);
+  }, [active, currentLocationKey]);
 
   return (
     <>
@@ -56,7 +68,11 @@ export function RouteProgress() {
       >
         <span />
       </div>
-      <div aria-live="polite" className="sr-only">
+      <div
+        aria-live="polite"
+        className="sr-only"
+        data-pc-route-announcement
+      >
         {active ? "Loading" : announcement}
       </div>
     </>

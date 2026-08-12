@@ -57,6 +57,37 @@ test("skip navigation and command palette preserve keyboard focus", async ({
   ).toBeVisible();
 });
 
+test("route announcements describe page changes but ignore same-page actions", async ({
+  page,
+}) => {
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await waitForInterface(page, "/admin/event");
+  const announcement = page.locator("[data-pc-route-announcement]");
+  await expect(announcement).toBeEmpty();
+
+  await page.getByLabel("End date").fill("2025-05-19");
+  await page.getByRole("button", { name: "Save event" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "End date cannot be before the start date",
+  );
+  await expect(announcement).toBeEmpty();
+
+  await page.getByRole("link", { name: "Command Centre", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Command Centre", level: 1 }),
+  ).toBeVisible();
+  await expect(announcement).toHaveText(await page.title());
+});
+
 test("shared form errors connect labels, help and corrective links", async ({
   page,
 }) => {

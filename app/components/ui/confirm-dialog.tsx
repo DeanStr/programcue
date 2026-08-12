@@ -44,6 +44,7 @@ export function ConfirmDialog({
         <>
           <button
             className="btn"
+            data-dialog-autofocus={tone === "danger" ? true : undefined}
             data-pc-confirm="cancel"
             disabled={busy}
             onClick={onCancel}
@@ -53,7 +54,7 @@ export function ConfirmDialog({
           </button>
           <button
             className={tone === "danger" ? "btn danger" : "btn primary"}
-            data-dialog-autofocus
+            data-dialog-autofocus={tone === "primary" ? true : undefined}
             data-pc-confirm="accept"
             disabled={busy}
             onClick={onConfirm}

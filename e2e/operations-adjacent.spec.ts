@@ -304,6 +304,9 @@ test("task import previews disclose every lifecycle transition before confirmati
     .getByRole("row")
     .filter({ hasText: operationId! });
   await operationRow.getByRole("button", { name: "Cancel" }).click();
+  await expect(
+    confirmDialog(page).locator("[data-pc-confirm='cancel']"),
+  ).toBeFocused();
   await acceptConfirm(page);
   await expect(
     page
