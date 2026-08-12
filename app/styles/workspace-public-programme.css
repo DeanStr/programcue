@@ -572,12 +572,6 @@
   margin: 0;
   font-size: var(--text-2xs);
 }
-.pc-plain-fieldset {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
 .programme-embed-builder-title {
   align-items: flex-start;
   justify-content: space-between;

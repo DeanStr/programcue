@@ -20,13 +20,43 @@ export const meta: Route.MetaFunction = () => [
   { title: "Design System · Program Cue" },
 ];
 
+/* Rendered from the tokens themselves, not from copies of their values, so
+   this page cannot drift from what the product actually uses. */
 const SWATCHES = [
-  ["Brand", "#4f46e5", "Primary actions"],
-  ["Ink", "#0f172a", "Core content"],
-  ["Canvas", "#f3f6fb", "Work surfaces"],
-  ["Success", "#16a34a", "Completed work"],
-  ["Warning", "#d97706", "Attention needed"],
-  ["Danger", "#dc2626", "Blocking issues"],
+  ["Brand", "--brand-600", "Primary actions"],
+  ["Ink", "--ink", "Core content"],
+  ["Canvas", "--canvas", "Work surfaces"],
+  ["Success", "--state-good-solid", "Completed work"],
+  ["Warning", "--state-warn-solid", "Attention needed"],
+  ["Danger", "--state-bad-solid", "Blocking issues"],
+] as const;
+
+const TYPE_SCALE = [
+  ["--text-3xl", "Page title"],
+  ["--text-2xl", "Section title"],
+  ["--text-xl", "Card title"],
+  ["--text-lg", "Subhead"],
+  ["--text-base", "Reading copy"],
+  ["--text-sm", "Interface default"],
+  ["--text-xs", "Dense data"],
+  ["--text-2xs", "Metadata floor"],
+] as const;
+
+const SPACE_SCALE = [
+  "--space-1",
+  "--space-2",
+  "--space-3",
+  "--space-4",
+  "--space-5",
+  "--space-6",
+  "--space-7",
+] as const;
+
+const ELEVATION = [
+  ["--elev-1", "Card on canvas"],
+  ["--elev-2", "Raised control"],
+  ["--elev-3", "Popover, dialog"],
+  ["--elev-4", "Dragged object"],
 ] as const;
 
 export default function DesignSystem() {
@@ -75,18 +105,130 @@ export default function DesignSystem() {
             </p>
           </div>
           <div className="pc-swatch-grid">
-            {SWATCHES.map(([name, colour, use]) => (
+            {SWATCHES.map(([name, token, use]) => (
               <div className="pc-swatch" key={name}>
                 <span
                   className="pc-swatch-colour"
-                  style={{ background: colour }}
+                  style={{ background: `var(${token})` }}
                   aria-hidden
                 />
                 <strong>{name}</strong>
                 <small>{use}</small>
-                <code>{colour}</code>
+                <code>{token}</code>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="card design-section pc-design-wide">
+          <div className="pc-section-heading">
+            <div>
+              <span className="pc-section-kicker">Foundations</span>
+              <h2>Type scale</h2>
+            </div>
+            <p>
+              Eight roles. 12px is the floor — anything smaller was unreadable at
+              exactly the moments that mattered most: errors, required marks and
+              record metadata.
+            </p>
+          </div>
+          <div className="pc-scale-list">
+            {TYPE_SCALE.map(([token, use]) => (
+              <div className="pc-scale-row" key={token}>
+                <span style={{ fontSize: `var(${token})` }}>
+                  Programme operations
+                </span>
+                <code>{token}</code>
+                <small>{use}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="card design-section">
+          <div className="pc-section-heading">
+            <div>
+              <span className="pc-section-kicker">Foundations</span>
+              <h2>Space</h2>
+            </div>
+            <p>
+              A 4px grid. Ties tighten the space between things and loosen the
+              space inside them.
+            </p>
+          </div>
+          <div className="pc-space-list">
+            {SPACE_SCALE.map((token) => (
+              <div className="pc-space-row" key={token}>
+                <span style={{ width: `var(${token})` }} aria-hidden />
+                <code>{token}</code>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="card design-section">
+          <div className="pc-section-heading">
+            <div>
+              <span className="pc-section-kicker">Foundations</span>
+              <h2>Elevation</h2>
+            </div>
+            <p>Border contains, tint groups, shadow floats.</p>
+          </div>
+          <div className="pc-elev-grid">
+            {ELEVATION.map(([token, use]) => (
+              <div
+                className="pc-elev-tile"
+                key={token}
+                style={{ boxShadow: `var(${token})` }}
+              >
+                <code>{token}</code>
+                <small>{use}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="card design-section pc-design-wide">
+          <div className="pc-section-heading">
+            <div>
+              <span className="pc-section-kicker">Foundations</span>
+              <h2>Focus, motion and state</h2>
+            </div>
+            <p>
+              One focus ring works on every ground: a dark ring carries contrast
+              on light surfaces, a white halo carries it on dark and saturated
+              ones. Both are always painted, so no surface needs its own rule.
+            </p>
+          </div>
+          <div className="pc-focus-row">
+            <button className="btn" type="button">
+              Tab to me on white
+            </button>
+            <span className="pc-focus-dark">
+              <button className="btn primary" type="button">
+                and on indigo
+              </button>
+            </span>
+          </div>
+          <div className="pc-rail-row mt">
+            <div className="card pad rail-top" style={{ "--rail": "var(--state-bad-solid)" } as React.CSSProperties}>
+              <div className="label">Overdue tasks</div>
+              <div className="value" style={{ color: "var(--state-bad-text)" }}>
+                12
+              </div>
+              <small className="subtle">
+                The numeral carries the tone; the container stays neutral.
+              </small>
+            </div>
+            <div className="card pad rail-top" style={{ "--rail": "var(--state-good-solid)" } as React.CSSProperties}>
+              <div className="label">Sessions published</div>
+              <div className="value" style={{ color: "var(--state-good-text)" }}>
+                48
+              </div>
+              <small className="subtle">
+                The rail never carries meaning a word does not also carry.
+              </small>
+            </div>
           </div>
         </section>
 

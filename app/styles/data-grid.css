@@ -9,7 +9,9 @@
   width: 100%;
   min-width: 850px;
 }
-.data-table th {
+/* thead only: promoting a body cell to <th scope="row"> must not make it
+   sticky or repaint it as a header. */
+.data-table thead th {
   position: sticky;
   top: 0;
   background: var(--soft);
@@ -18,8 +20,16 @@
   font-size: var(--text-2xs);
   letter-spacing: 0.02em;
   padding: var(--space-3);
-  border-bottom: 1px solid var(--line);
+  /* A border does not survive the sticky offset; an inset shadow does. */
+  box-shadow: inset 0 -1px 0 var(--line);
   z-index: 1;
+}
+.data-table tbody th[scope="row"] {
+  padding: var(--space-3);
+  border-bottom: 1px solid #edf1f6;
+  vertical-align: middle;
+  text-align: left;
+  font-weight: var(--weight-semibold);
 }
 .data-table td {
   padding: var(--space-3);
