@@ -106,3 +106,10 @@ test("API reference remains accessible with its persisted dark theme", async ({
   );
   await expectNoViolations(page, "/api/docs @ persisted dark theme");
 });
+
+test("public programme embeds retain contrast with a light event accent", async ({
+  page,
+}) => {
+  await openHydrated(page, "/embed/future-of-events-2025?accent=%23ffffff");
+  await expectNoViolations(page, "public programme @ light event accent");
+});

@@ -4,6 +4,7 @@ import {
   formatProgrammeDateTime,
   formatProgrammeDateTimeRange,
   formatProgrammeEventDay,
+  programmeAccentPalette,
   publicProgrammeSessionUrl,
   sortPublishedSpeakers,
   speakerSurname,
@@ -33,6 +34,20 @@ describe("programme presentation rules", () => {
   it("renders a date-only event boundary without treating it as an instant", () => {
     expect(formatProgrammeEventDay("2025-05-20")).toBe("Tuesday, May 20");
     expect(() => formatProgrammeEventDay("2025-02-30")).toThrow(/invalid/i);
+  });
+
+  it("keeps arbitrary event accents readable on light and solid surfaces", () => {
+    expect(programmeAccentPalette("#4f46e5")).toEqual({
+      accent: "#4f46e5",
+      ink: "#4f46e5",
+      onAccent: "#ffffff",
+    });
+    expect(programmeAccentPalette("#ffffff")).toMatchObject({
+      accent: "#ffffff",
+      onAccent: "#ffffff",
+    });
+    expect(programmeAccentPalette("#ffffff").ink).not.toBe("#ffffff");
+    expect(() => programmeAccentPalette("white")).toThrow(/six-digit/i);
   });
 
   it("keeps calendar links scoped to the requested public event", () => {

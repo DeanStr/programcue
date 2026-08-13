@@ -18,6 +18,7 @@
   --accent-soft: color-mix(in srgb, var(--event-accent) 8%, white);
   --accent-line: color-mix(in srgb, var(--event-accent) 26%, var(--line));
   --accent-ink: color-mix(in srgb, var(--event-accent) 78%, black);
+  --accent-on-solid: var(--text-inverse);
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
@@ -89,7 +90,7 @@
   left: 0;
   height: 2px;
   border-radius: var(--radius-full);
-  background: var(--event-accent);
+  background: var(--accent-ink);
   opacity: 0;
   transform: scaleX(0.4);
   transition:
@@ -116,7 +117,7 @@
   border-color: var(--accent-line);
 }
 .public-itinerary-link:hover {
-  border-color: var(--event-accent);
+  border-color: var(--accent-ink);
   background: var(--accent-soft);
 }
 .public-mobile-nav {
@@ -156,7 +157,7 @@
 .public-mobile-nav > nav a.active {
   color: var(--accent-ink);
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 var(--event-accent);
+  box-shadow: inset 3px 0 0 var(--accent-ink);
 }
 .public-mobile-nav > nav a + a {
   border-top: 1px solid var(--line);
@@ -461,7 +462,7 @@
 }
 .programme-entry.active {
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 var(--event-accent);
+  box-shadow: inset 3px 0 0 var(--accent-ink);
 }
 .programme-row {
   display: grid;
@@ -572,7 +573,7 @@
     color var(--dur-fast) var(--ease-out);
 }
 .session-save:hover:not(:disabled) {
-  border-color: var(--event-accent);
+  border-color: var(--accent-ink);
   background: var(--accent-soft);
   color: var(--accent-ink);
 }
@@ -737,7 +738,9 @@
   box-shadow: var(--elev-2);
 }
 .agenda-card.active {
-  box-shadow: var(--elev-2), inset 0 3px 0 var(--event-accent);
+  box-shadow:
+    var(--elev-2),
+    inset 0 3px 0 var(--accent-ink);
 }
 .agenda-card-time {
   display: flex;
@@ -768,6 +771,15 @@
 }
 .agenda-card-trigger:hover {
   color: var(--accent-ink);
+}
+.agenda-card-action {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--accent-ink);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .agenda-card-meta {
   display: flex;
@@ -830,7 +842,7 @@
   left: 0;
   width: 3px;
   border-radius: var(--radius-full);
-  background: var(--event-accent);
+  background: var(--accent-ink);
   opacity: 0.55;
 }
 .public-itinerary-time .session-time-range {
@@ -969,8 +981,8 @@
 }
 .public-day-tabs [aria-pressed="true"] {
   border-color: transparent;
-  background: var(--event-accent);
-  color: var(--text-inverse);
+  background: var(--accent-ink);
+  color: var(--accent-on-solid);
 }
 .public-speaker-directory-grid {
   align-items: stretch;
@@ -1197,7 +1209,7 @@
 }
 .itinerary-item[aria-pressed="true"] {
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 var(--event-accent);
+  box-shadow: inset 3px 0 0 var(--accent-ink);
 }
 .itinerary-item > strong {
   color: var(--accent-ink);

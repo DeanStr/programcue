@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useRef, type ReactNode, type Ref } from "react";
 
 import {
   descriptionSnippet,
@@ -156,14 +156,18 @@ function PublicSessionSpeakers({
 export function PublicSessionDetails({
   session,
   model,
+  detailRef,
 }: {
   session: PublishedSession;
   model: PublicProgrammeModel;
+  detailRef?: Ref<HTMLElement>;
 }) {
   return (
     <article
       className="card pad public-surface-detail"
       aria-labelledby="public-session-detail-title"
+      ref={detailRef}
+      tabIndex={-1}
     >
       <div className="public-surface-detail-heading">
         <div>
@@ -278,6 +282,7 @@ export function PublicAgendaSurface({
 }: {
   model: PublicProgrammeModel;
 }) {
+  const detailRef = useRef<HTMLElement>(null);
   const activeDay =
     model.day === "All days" ? (model.days[0] ?? "All days") : model.day;
   const sessions = model.visible.filter(
@@ -288,6 +293,10 @@ export function PublicAgendaSurface({
     sessions.find((session) => session.id === model.selected?.id) ??
     sessions[0] ??
     null;
+  const openSessionDetails = (sessionId: string) => {
+    model.setSelectedId(sessionId);
+    requestAnimationFrame(() => detailRef.current?.focus());
+  };
   return (
     <section className="public-surface" aria-labelledby="public-agenda-title">
       <SurfaceHeading
@@ -321,9 +330,13 @@ export function PublicAgendaSurface({
                   type="button"
                   className="agenda-card-trigger"
                   aria-pressed={session.id === selectedSession?.id}
-                  onClick={() => model.setSelectedId(session.id)}
+                  aria-label={`View details for ${session.title}`}
+                  onClick={() => openSessionDetails(session.id)}
                 >
                   {session.title}
+                  <span className="agenda-card-action" aria-hidden="true">
+                    View details
+                  </span>
                 </button>
               </h2>
               <div className="agenda-card-meta">
@@ -343,7 +356,11 @@ export function PublicAgendaSurface({
         )}
       </div>
       {selectedSession ? (
-        <PublicSessionDetails session={selectedSession} model={model} />
+        <PublicSessionDetails
+          session={selectedSession}
+          model={model}
+          detailRef={detailRef}
+        />
       ) : null}
     </section>
   );
@@ -618,11 +635,7 @@ function SpeakerDetailPanel({
             >
               <strong>{session.title}</strong>
               <span>
-                {formatDay(
-                  session.startsAt,
-                  model.programme.event.timezone,
-                )}{" "}
-                ·{" "}
+                {formatDay(session.startsAt, model.programme.event.timezone)} ·{" "}
                 {formatProgrammeTimeRange(
                   session.startsAt,
                   session.endsAt,

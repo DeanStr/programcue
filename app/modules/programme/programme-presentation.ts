@@ -14,6 +14,86 @@ export const PUBLIC_PROGRAMME_SURFACES = [
 
 export type PublicProgrammeSurface = (typeof PUBLIC_PROGRAMME_SURFACES)[number];
 
+type RgbColour = readonly [red: number, green: number, blue: number];
+
+const PROGRAMME_SURFACE_INK: RgbColour = [15, 23, 42];
+const PROGRAMME_SURFACE_WHITE: RgbColour = [255, 255, 255];
+
+function parseHexColour(value: string): RgbColour {
+  if (!/^#[0-9a-f]{6}$/iu.test(value)) {
+    throw new Error("Programme accent must be a six-digit hexadecimal colour.");
+  }
+  return [
+    Number.parseInt(value.slice(1, 3), 16),
+    Number.parseInt(value.slice(3, 5), 16),
+    Number.parseInt(value.slice(5, 7), 16),
+  ];
+}
+
+function formatHexColour(colour: RgbColour) {
+  return `#${colour
+    .map((channel) => Math.round(channel).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function mixColour(
+  foreground: RgbColour,
+  background: RgbColour,
+  foregroundWeight: number,
+): RgbColour {
+  return [
+    foreground[0] * foregroundWeight + background[0] * (1 - foregroundWeight),
+    foreground[1] * foregroundWeight + background[1] * (1 - foregroundWeight),
+    foreground[2] * foregroundWeight + background[2] * (1 - foregroundWeight),
+  ];
+}
+
+function relativeLuminance(colour: RgbColour) {
+  const [red, green, blue] = colour.map((channel) => {
+    const value = channel / 255;
+    return value <= 0.04045
+      ? value / 12.92
+      : Math.pow((value + 0.055) / 1.055, 2.4);
+  });
+  return red! * 0.2126 + green! * 0.7152 + blue! * 0.0722;
+}
+
+function contrastRatio(left: RgbColour, right: RgbColour) {
+  const light = Math.max(relativeLuminance(left), relativeLuminance(right));
+  const dark = Math.min(relativeLuminance(left), relativeLuminance(right));
+  return (light + 0.05) / (dark + 0.05);
+}
+
+/**
+ * Event branding accepts any six-digit colour, including colours that cannot
+ * carry readable text. Keep the customer's exact accent for decoration, but
+ * derive separate text colours for pale surfaces and solid accent controls.
+ */
+export function programmeAccentPalette(value: string) {
+  const accent = parseHexColour(value);
+  const softSurface = mixColour(accent, PROGRAMME_SURFACE_WHITE, 0.08);
+  let ink = accent;
+  for (let step = 0; step <= 100; step += 1) {
+    const candidate = mixColour(
+      accent,
+      PROGRAMME_SURFACE_INK,
+      (100 - step) / 100,
+    );
+    if (
+      contrastRatio(candidate, PROGRAMME_SURFACE_WHITE) >= 4.75 &&
+      contrastRatio(candidate, softSurface) >= 4.75
+    ) {
+      ink = candidate;
+      break;
+    }
+  }
+  return {
+    accent: formatHexColour(accent),
+    ink: formatHexColour(ink),
+    onAccent: formatHexColour(PROGRAMME_SURFACE_WHITE),
+  };
+}
+
 export function publicProgrammeSurfacePath(
   eventSlug: string,
   surface: Exclude<PublicProgrammeSurface, "overview">,

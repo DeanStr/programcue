@@ -59,6 +59,12 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await dayButtons.nth(1).press("Home");
   await expect(dayButtons.first()).toBeFocused();
   await expect(dayButtons.first()).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", { name: "View details for AI in Event Operations" })
+    .click();
+  const agendaDetail = page.locator(".public-surface-detail");
+  await expect(agendaDetail).toBeFocused();
+  await expect(agendaDetail).toContainText("AI in Event Operations");
 
   await openAnonymous(page, "/public/programme/future-of-events-2025/schedule");
   await expect(
@@ -116,4 +122,40 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await expect(search).toBeFocused();
   await expect(search).toHaveValue("Priya Shah");
   await expect(page.locator("a[href*='/sign-in']")).toHaveCount(0);
+});
+
+test("mobile programme navigation closes after activation and reflows at 320px", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openAnonymous(page, "/public/programme/future-of-events-2025");
+
+  const mobileNavigation = page.locator(".public-mobile-nav");
+  await mobileNavigation.getByText("Browse", { exact: true }).click();
+  await expect(mobileNavigation).toHaveAttribute("open", "");
+  await mobileNavigation
+    .getByRole("link", { name: "Speakers", exact: true })
+    .click();
+  await expect(mobileNavigation).not.toHaveAttribute("open", "");
+  await expect(
+    page.getByRole("heading", { name: "Speakers", exact: true }),
+  ).toBeInViewport();
+
+  await page.setViewportSize({ width: 320, height: 700 });
+  await openAnonymous(page, "/public/programme/future-of-events-2025");
+  const containment = await page.evaluate(() => ({
+    viewportWidth: document.documentElement.clientWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    panelRights: [...document.querySelectorAll("#itinerary > .card")].map(
+      (element) => Math.round(element.getBoundingClientRect().right),
+    ),
+  }));
+  expect(containment.documentWidth).toBeLessThanOrEqual(
+    containment.viewportWidth,
+  );
+  expect(
+    containment.panelRights.every(
+      (right) => right <= containment.viewportWidth + 1,
+    ),
+  ).toBe(true);
 });

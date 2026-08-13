@@ -1,4 +1,4 @@
-import type React from "react";
+import { useRef, type CSSProperties } from "react";
 import { CalendarDays, MapPin, Search } from "lucide-react";
 import { Link } from "react-router";
 
@@ -6,6 +6,7 @@ import { TurnstileWidget } from "~/components/turnstile-widget";
 import {
   formatProgrammeEventDay,
   formatProgrammeTimeRange,
+  programmeAccentPalette,
   publicProgrammeSurfacePath,
 } from "~/modules/programme/programme-presentation";
 import { PublicProgrammeSurfaceContent } from "~/components/public-programme-surfaces";
@@ -37,6 +38,7 @@ import {
  */
 function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
   const { programme, loaderData, shared, saved, showSpeakers } = model;
+  const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
   const slug = programme.event.slug;
   const overviewSurface =
     loaderData.surface === "overview" || loaderData.surface === "sessions";
@@ -44,7 +46,7 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
   const links = [
     {
       key: "sessions",
-      label: "Sessions",
+      label: "All sessions",
       href: overviewSurface ? "#programme" : programmeHref,
       active: overviewSurface,
       routed: false,
@@ -64,14 +66,14 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
       : []),
     {
       key: "agenda",
-      label: "Agenda",
+      label: "Day agenda",
       href: publicProgrammeSurfacePath(slug, "agenda"),
       active: loaderData.surface === "agenda",
       routed: true,
     },
     {
       key: "schedule",
-      label: "Schedule",
+      label: "Full schedule",
       href: publicProgrammeSurfacePath(slug, "schedule"),
       active: loaderData.surface === "schedule",
       routed: true,
@@ -92,13 +94,14 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
     ? "#itinerary"
     : `${programmeHref}#itinerary`;
 
-  const navLink = (link: (typeof links)[number]) =>
+  const navLink = (link: (typeof links)[number], onActivate?: () => void) =>
     link.routed ? (
       <Link
         key={link.key}
         to={link.href}
         className={link.active ? "active" : undefined}
         aria-current={link.active ? "page" : undefined}
+        onClick={onActivate}
       >
         {link.label}
       </Link>
@@ -108,6 +111,7 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
         href={link.href}
         className={link.active ? "active" : undefined}
         aria-current={link.active ? "page" : undefined}
+        onClick={onActivate}
       >
         {link.label}
       </a>
@@ -126,11 +130,17 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
         <span className="public-brand-name">{programme.event.name}</span>
       </Link>
       <nav className="public-nav" aria-label="Programme">
-        {links.map(navLink)}
+        {links.map((link) => navLink(link))}
       </nav>
-      <details className="public-mobile-nav">
+      <details className="public-mobile-nav" ref={mobileNavigationRef}>
         <summary className="btn small">Browse</summary>
-        <nav aria-label="Programme sections">{links.map(navLink)}</nav>
+        <nav aria-label="Programme sections">
+          {links.map((link) =>
+            navLink(link, () =>
+              mobileNavigationRef.current?.removeAttribute("open"),
+            ),
+          )}
+        </nav>
       </details>
       <a className="btn public-itinerary-link" href={itineraryHref}>
         <span aria-hidden="true">♡</span>
@@ -142,7 +152,7 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
 }
 
 function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
-  const { programme, embedOptions, embedded } = model;
+  const { programme, embedded } = model;
   const place = [programme.event.venue, programme.event.city]
     .filter(Boolean)
     .join(", ");
@@ -157,15 +167,7 @@ function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
     { label: dayCount === 1 ? "Day" : "Days", value: dayCount },
   ];
   return (
-    <section
-      className="hero"
-      style={
-        {
-          "--event-accent":
-            embedOptions.accent ?? programme.event.brandAccent,
-        } as React.CSSProperties
-      }
-    >
+    <section className="hero">
       <div className="hero-body">
         <h1>{programme.event.name}</h1>
         <p className="hero-meta">
@@ -586,7 +588,9 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
                       {sessionSpeakers.map((speaker) => (
                         <span key={speaker.id}>
                           {speaker.name}
-                          {speaker.affiliation ? ` — ${speaker.affiliation}` : ""}
+                          {speaker.affiliation
+                            ? ` — ${speaker.affiliation}`
+                            : ""}
                         </span>
                       ))}
                     </span>
@@ -820,17 +824,12 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
                   {selectedSpeaker.displayName}
                 </h2>
                 {speakerAffiliation(selectedSpeaker) ? (
-                  <p className="help">
-                    {speakerAffiliation(selectedSpeaker)}
-                  </p>
+                  <p className="help">{speakerAffiliation(selectedSpeaker)}</p>
                 ) : null}
               </div>
             </div>
             <div className="public-profile-actions">
-              <a
-                className="btn small"
-                href={`#speaker-${selectedSpeaker.id}`}
-              >
+              <a className="btn small" href={`#speaker-${selectedSpeaker.id}`}>
                 Share profile link
               </a>
               <button
@@ -883,23 +882,22 @@ export function PublicProgrammeWorkspace({
   loaderData: PublicProgrammeLoaderData;
 }) {
   const model = usePublicProgrammeModel(initialLoaderData);
-  const {
-    loaderData,
-    programme,
-    embedded,
-    embedOptions,
-    fetcher,
-    shareUrl,
-  } = model;
+  const { loaderData, programme, embedded, embedOptions, fetcher, shareUrl } =
+    model;
   const overviewSurface =
     loaderData.surface === "overview" || loaderData.surface === "sessions";
+  const accentPalette = programmeAccentPalette(
+    embedOptions.accent ?? programme.event.brandAccent,
+  );
   return (
     <div
       className={`public-shell event-branded${embedded ? " embedded" : ""}${embedded && embedOptions.density === "compact" ? " embed-compact" : ""}`}
       style={
         {
-          "--event-accent": embedOptions.accent ?? programme.event.brandAccent,
-        } as React.CSSProperties
+          "--event-accent": accentPalette.accent,
+          "--accent-ink": accentPalette.ink,
+          "--accent-on-solid": accentPalette.onAccent,
+        } as CSSProperties
       }
     >
       {!embedded ? <PublicProgrammeHeader model={model} /> : null}
