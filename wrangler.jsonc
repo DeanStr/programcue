@@ -86,6 +86,7 @@
     "APP_ENV": "production",
     "DEMO_MODE": "false",
     "EVALUATION_MODE": "true",
+    "MAINTENANCE_MODE": "false",
     "SOURCE_REVISION": "17597d8",
     "BETTER_AUTH_URL": "https://app.programcue.com",
     "AUTH_EMAIL_FROM": "Program Cue <auth@programcue.com>",

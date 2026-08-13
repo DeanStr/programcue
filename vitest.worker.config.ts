@@ -25,6 +25,7 @@ export default defineProject({
           APP_ENV: "test",
           DEMO_MODE: "true",
           EVALUATION_MODE: "false",
+          MAINTENANCE_MODE: "false",
           SOURCE_REVISION: "test-revision",
           DEFAULT_EVENT_ID: "evt-foe-2025",
           BETTER_AUTH_URL: "http://localhost",

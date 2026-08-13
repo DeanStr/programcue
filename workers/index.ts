@@ -23,6 +23,10 @@ import {
   mayExposeInternalErrors,
   requireRuntimeMode,
 } from "../app/platform/runtime-environment.server";
+import {
+  maintenanceResponse,
+  requireMaintenanceMode,
+} from "../app/platform/maintenance-mode.server";
 import { requireProductionRuntimeReadiness } from "../app/platform/runtime-readiness.server";
 import { handleProgramCueQueueMessage } from "./communications-queue";
 import { D1_BACKUP_CRON, scheduleDailyD1Backup } from "./d1-backup-workflow";
@@ -294,6 +298,9 @@ export default {
       requireRuntimeMode(env);
       sourceRevision = requireSourceRevision(env);
       requireProductionRuntimeReadiness(env);
+      if (requireMaintenanceMode(env)) {
+        return secure(maintenanceResponse(), request, env);
+      }
     } catch (error) {
       return invalidRuntimeConfiguration(request, env, correlationId, error);
     }
@@ -355,6 +362,9 @@ export default {
       requireRuntimeMode(env);
       requireSourceRevision(env);
       requireProductionRuntimeReadiness(env);
+      if (requireMaintenanceMode(env)) {
+        throw new Error("Production maintenance is in progress.");
+      }
     } catch (error) {
       console.error(
         JSON.stringify({
@@ -381,6 +391,20 @@ export default {
       requireRuntimeMode(env);
       sourceRevision = requireSourceRevision(env);
       requireProductionRuntimeReadiness(env);
+      if (requireMaintenanceMode(env)) {
+        console.info(
+          JSON.stringify({
+            level: "info",
+            sourceRevision,
+            subsystem: "maintenance",
+            event: "scheduled-task-suppressed",
+            trigger: controller.cron,
+            message:
+              "Scheduled work was suppressed during production maintenance.",
+          }),
+        );
+        return;
+      }
     } catch (error) {
       console.error(
         JSON.stringify({
