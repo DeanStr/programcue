@@ -73,6 +73,7 @@ const CALLBACK_STEP = {
   retries: { limit: 8, delay: "10 seconds", backoff: "exponential" },
   timeout: "2 minutes",
 } as const;
+const SCANNER_CONTAINER_INSTANCE = "primary-v2";
 
 export class FileScannerContainer extends Container<ScannerEnvironment> {
   defaultPort = 8080;
@@ -247,7 +248,7 @@ async function scanInContainer(
   environment: ScannerEnvironment,
   job: ScannerJob,
 ) {
-  const container = environment.CLAMAV.getByName("primary");
+  const container = environment.CLAMAV.getByName(SCANNER_CONTAINER_INSTANCE);
   const response = await container.fetch("http://scanner/scan", {
     method: "POST",
     headers: { "content-type": "application/json" },
