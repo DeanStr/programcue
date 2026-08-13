@@ -1,6 +1,11 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { Link } from "react-router";
 
+import {
+  RecordChevron,
+  RecordField,
+  RecordHead,
+} from "~/components/event-record-row";
 import type { ActionResponse } from "~/routes/event-setup";
 import type { EventSetup } from "~/modules/events/event-repository.server";
 import { AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES } from "~/modules/airtable/airtable-schema";
@@ -58,9 +63,9 @@ export function EventIdentityPanels({
     <>
       <section className="card pad">
         <div className="card-title">
-          <h2>Event identity</h2>
+          <h3>Event identity</h3>
         </div>
-        <div className="form-row">
+        <div className="form-row event-identity-fields">
           <label className="label">
             Event name
             <input
@@ -137,39 +142,41 @@ export function EventIdentityPanels({
 
       <section className="card pad">
         <div className="card-title">
-          <h2>Public identity</h2>
+          <h3>Public identity</h3>
         </div>
-        <label className="label">
-          Public slug
-          {event.programmePublished ? (
-            <input type="hidden" name="publicSlug" value={event.publicSlug} />
-          ) : null}
-          <input
-            className="field"
-            name={event.programmePublished ? undefined : "publicSlug"}
-            defaultValue={event.publicSlug}
-            required
-            pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-            disabled={event.programmePublished}
-          />
-          {event.programmePublished ? (
-            <span className="help">
-              Locked after programme publication to preserve every public,
-              embed, API and calendar URL.
-            </span>
-          ) : null}
-          <FieldError actionData={actionData} name="publicSlug" />
-        </label>
-        <label className="label mt">
-          Brand accent
-          <input
-            className="field"
-            name="brandAccent"
-            type="color"
-            defaultValue={event.brandAccent}
-            aria-label="Brand accent"
-          />
-        </label>
+        <div className="form-row">
+          <label className="label">
+            Public slug
+            {event.programmePublished ? (
+              <input type="hidden" name="publicSlug" value={event.publicSlug} />
+            ) : null}
+            <input
+              className="field"
+              name={event.programmePublished ? undefined : "publicSlug"}
+              defaultValue={event.publicSlug}
+              required
+              pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+              disabled={event.programmePublished}
+            />
+            {event.programmePublished ? (
+              <span className="help">
+                Locked after programme publication to preserve every public,
+                embed, API and calendar URL.
+              </span>
+            ) : null}
+            <FieldError actionData={actionData} name="publicSlug" />
+          </label>
+          <label className="label event-accent-field">
+            Brand accent
+            <input
+              className="field"
+              name="brandAccent"
+              type="color"
+              defaultValue={event.brandAccent}
+              aria-label="Brand accent"
+            />
+          </label>
+        </div>
         <div className="form-row mt">
           <label className="label">
             Participant logo URL
@@ -202,26 +209,28 @@ export function EventIdentityPanels({
             <FieldError actionData={actionData} name="participantSupportUrl" />
           </label>
         </div>
-        <label className="label mt">
-          Participant welcome message
-          <textarea
-            className="textarea"
-            name="participantWelcomeText"
-            defaultValue={event.participantWelcomeText}
-            maxLength={500}
-            placeholder="Welcome. Use this workspace to manage your applications and event preparation."
-          />
-          <FieldError actionData={actionData} name="participantWelcomeText" />
-        </label>
-        <label className="label mt">
-          Programme description
-          <textarea
-            className="textarea"
-            name="description"
-            defaultValue={event.description}
-            maxLength={2000}
-          />
-        </label>
+        <div className="form-row mt">
+          <label className="label">
+            Participant welcome message
+            <textarea
+              className="textarea"
+              name="participantWelcomeText"
+              defaultValue={event.participantWelcomeText}
+              maxLength={500}
+              placeholder="Welcome. Use this workspace to manage your applications and event preparation."
+            />
+            <FieldError actionData={actionData} name="participantWelcomeText" />
+          </label>
+          <label className="label">
+            Programme description
+            <textarea
+              className="textarea"
+              name="description"
+              defaultValue={event.description}
+              maxLength={2000}
+            />
+          </label>
+        </div>
       </section>
     </>
   );
@@ -234,6 +243,7 @@ export function EventRoomsPanel({
   onAdd,
   onRemove,
   focusedRoomId,
+  onDraftStateChange,
 }: {
   rooms: EventSetup["rooms"];
   setRooms: Dispatch<SetStateAction<EventSetup["rooms"]>>;
@@ -241,10 +251,24 @@ export function EventRoomsPanel({
   onAdd: () => void;
   onRemove: (roomId: string) => void;
   focusedRoomId: string | null;
+  onDraftStateChange: (draftKey: string, value: string) => void;
 }) {
   const [resourceDrafts, setResourceDrafts] = useState<Record<string, string>>(
     {},
   );
+
+  function updateResourceDraft(roomId: string, value: string) {
+    const nextDrafts = { ...resourceDrafts, [roomId]: value };
+    setResourceDrafts(nextDrafts);
+    onDraftStateChange(`room-resource:${roomId}`, value);
+  }
+
+  function clearResourceDraft(roomId: string) {
+    const nextDrafts = { ...resourceDrafts };
+    delete nextDrafts[roomId];
+    setResourceDrafts(nextDrafts);
+    onDraftStateChange(`room-resource:${roomId}`, "");
+  }
 
   function addResource(roomId: string) {
     const resource = (resourceDrafts[roomId] ?? "").trim().toLowerCase();
@@ -256,147 +280,168 @@ export function EventRoomsPanel({
           : room,
       ),
     );
-    setResourceDrafts((current) => ({ ...current, [roomId]: "" }));
+    clearResourceDraft(roomId);
   }
 
   return (
-    <section className="card pad">
-      <div className="card-title">
-        <h2>Rooms and capacities</h2>
-        <button type="button" className="btn small right" onClick={onAdd}>
-          + Add room
-        </button>
-      </div>
-      {rooms.length ? (
-        rooms.map((room) => (
-          <div
-            className={`card pad mb${focusedRoomId === room.id ? " selected" : ""}`}
-            id={`event-room-${room.id}`}
-            key={room.id}
-            tabIndex={-1}
-            aria-label={`${room.name} room settings`}
-          >
-            <div className="form-row">
-              <input
-                className="field"
-                value={room.name}
-                aria-label="Room name"
-                onChange={(changeEvent) =>
-                  setRooms((current) =>
-                    current.map((item) =>
-                      item.id === room.id
-                        ? { ...item, name: changeEvent.target.value }
-                        : item,
-                    ),
-                  )
-                }
-              />
-              <div style={{ display: "flex", gap: 6 }}>
-                <input
-                  className="field"
-                  type="number"
-                  min={1}
-                  value={room.capacity}
-                  aria-label="Room capacity"
-                  onChange={(changeEvent) =>
-                    setRooms((current) =>
-                      current.map((item) =>
-                        item.id === room.id
-                          ? {
-                              ...item,
-                              capacity: Number(changeEvent.target.value),
-                            }
-                          : item,
-                      ),
-                    )
-                  }
-                />
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label={`Remove ${room.name}`}
-                  onClick={() => {
-                    setRooms((current) =>
-                      current.filter((item) => item.id !== room.id),
-                    );
-                    onRemove(room.id);
-                  }}
+    <details
+      className="card pad event-record-panel"
+      // A deep link from the command palette focuses a room by id, which cannot
+      // happen inside a closed panel.
+      open={
+        focusedRoomId !== null || Boolean(actionData?.errors?.rooms?.length)
+      }
+    >
+      <summary>
+        <RecordChevron />
+        <h3>Rooms and capacities</h3>
+        <span className="event-record-count">
+          {rooms.length} {rooms.length === 1 ? "room" : "rooms"}
+        </span>
+      </summary>
+      <div className="event-record-body">
+        <div className="event-record-intro">
+          <p className="help">
+            A session can only be placed in a room when every resource it
+            requires is in that room's inventory.
+          </p>
+          <button type="button" className="btn small" onClick={onAdd}>
+            + Add room
+          </button>
+        </div>
+        {rooms.length ? (
+          <div>
+            <RecordHead
+              columns="event-room-columns"
+              captions={["Room", "Capacity", "Available resources", ""]}
+            />
+            <div className="event-record-list">
+              {rooms.map((room) => (
+                <div
+                  className={`event-record-row event-room-columns${focusedRoomId === room.id ? " selected" : ""}`}
+                  id={`event-room-${room.id}`}
+                  key={room.id}
+                  tabIndex={-1}
+                  role="group"
+                  aria-label={`${room.name} room settings`}
                 >
-                  ×
-                </button>
-              </div>
-            </div>
-            <div className="mt">
-              <strong>Available resources</strong>
-              <p className="help">
-                A session can only be placed here when every required resource
-                is in this inventory.
-              </p>
-              <div className="row-main" style={{ flexWrap: "wrap" }}>
-                {room.resources.map((resource) => (
-                  <button
-                    key={resource}
-                    type="button"
-                    className="tag"
-                    aria-label={`Remove ${resource} from ${room.name}`}
-                    onClick={() =>
-                      setRooms((current) =>
-                        current.map((candidate) =>
-                          candidate.id === room.id
-                            ? {
-                                ...candidate,
-                                resources: candidate.resources.filter(
-                                  (item) => item !== resource,
-                                ),
-                              }
-                            : candidate,
-                        ),
-                      )
-                    }
+                  <RecordField
+                    caption="Room"
+                    accessibleCaption={`${room.name} room name`}
                   >
-                    {resource} ×
-                  </button>
-                ))}
-                {!room.resources.length ? (
-                  <span className="subtle">No resources</span>
-                ) : null}
-              </div>
-              <div className="row-main mt">
-                <input
-                  className="field"
-                  value={resourceDrafts[room.id] ?? ""}
-                  maxLength={80}
-                  placeholder="livestream crew"
-                  aria-label={`New resource for ${room.name}`}
-                  onChange={(changeEvent) =>
-                    setResourceDrafts((current) => ({
-                      ...current,
-                      [room.id]: changeEvent.target.value,
-                    }))
-                  }
-                  onKeyDown={(keyboardEvent) => {
-                    if (keyboardEvent.key !== "Enter") return;
-                    keyboardEvent.preventDefault();
-                    addResource(room.id);
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn small"
-                  disabled={!(resourceDrafts[room.id] ?? "").trim()}
-                  onClick={() => addResource(room.id)}
-                >
-                  Add resource
-                </button>
-              </div>
+                    <input
+                      className="field"
+                      value={room.name}
+                      onChange={(changeEvent) =>
+                        setRooms((current) =>
+                          current.map((item) =>
+                            item.id === room.id
+                              ? { ...item, name: changeEvent.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  </RecordField>
+                  <RecordField
+                    caption="Capacity"
+                    accessibleCaption={`${room.name} capacity`}
+                  >
+                    <input
+                      className="field"
+                      type="number"
+                      min={1}
+                      value={room.capacity}
+                      onChange={(changeEvent) =>
+                        setRooms((current) =>
+                          current.map((item) =>
+                            item.id === room.id
+                              ? {
+                                  ...item,
+                                  capacity: Number(changeEvent.target.value),
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  </RecordField>
+                  <div className="event-record-resources">
+                    {room.resources.map((resource) => (
+                      <button
+                        key={resource}
+                        type="button"
+                        className="tag"
+                        aria-label={`Remove ${resource} from ${room.name}`}
+                        onClick={() =>
+                          setRooms((current) =>
+                            current.map((candidate) =>
+                              candidate.id === room.id
+                                ? {
+                                    ...candidate,
+                                    resources: candidate.resources.filter(
+                                      (item) => item !== resource,
+                                    ),
+                                  }
+                                : candidate,
+                            ),
+                          )
+                        }
+                      >
+                        {resource} ×
+                      </button>
+                    ))}
+                    <input
+                      className="field"
+                      value={resourceDrafts[room.id] ?? ""}
+                      data-event-record-draft={`room-resource:${room.id}`}
+                      maxLength={80}
+                      placeholder="Add a resource"
+                      aria-label={`New resource for ${room.name}`}
+                      onChange={(changeEvent) =>
+                        updateResourceDraft(room.id, changeEvent.target.value)
+                      }
+                      onKeyDown={(keyboardEvent) => {
+                        if (keyboardEvent.key !== "Enter") return;
+                        keyboardEvent.preventDefault();
+                        addResource(room.id);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn small"
+                      disabled={!(resourceDrafts[room.id] ?? "").trim()}
+                      onClick={() => addResource(room.id)}
+                    >
+                      Add resource
+                    </button>
+                  </div>
+                  <div className="event-record-actions">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label={`Remove ${room.name}`}
+                      onClick={() => {
+                        setRooms((current) =>
+                          current.filter((item) => item.id !== room.id),
+                        );
+                        clearResourceDraft(room.id);
+                        onRemove(room.id);
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        ))
-      ) : (
-        <p className="subtle">No rooms configured.</p>
-      )}
-      <FieldError actionData={actionData} name="rooms" />
-    </section>
+        ) : (
+          <p className="subtle">No rooms configured.</p>
+        )}
+        <FieldError actionData={actionData} name="rooms" />
+      </div>
+    </details>
   );
 }
 
@@ -440,7 +485,7 @@ export function EventFilePolicyPanel({
   return (
     <section className="card pad">
       <div className="card-title">
-        <h2>Private file limits</h2>
+        <h3>Private file limits</h3>
       </div>
       <p className="help">
         Limits are event-specific and may be reduced from Program Cue's secure
@@ -474,9 +519,6 @@ export function EventAccessPanels({
   event,
   onInvite,
   onRevoke,
-  onConfigureAirtable,
-  onMigrateRepository,
-  canManageFileRetention,
   canManageAdministrators,
 }: {
   event: EventSetup;
@@ -486,81 +528,76 @@ export function EventAccessPanels({
     name: string,
     scope: "event" | "organisation",
   ) => void;
-  onConfigureAirtable: () => void;
-  onMigrateRepository: () => void;
-  canManageFileRetention: boolean;
   canManageAdministrators: boolean;
 }) {
   return (
     <>
       <section className="card pad">
         <div className="card-title">
-          <h2>Roles and access</h2>
+          <h3>Roles and access</h3>
           <button type="button" className="btn small right" onClick={onInvite}>
             Invite administrator
           </button>
         </div>
-        <div className="stack">
-          <div className="card pad">
-            <strong>Organisation owners</strong>
-            <p className="subtle">
-              Manage organisation settings and all events.
+        <div className="event-role-group">
+          <strong>Organisation owners</strong>
+          <p className="subtle">Manage organisation settings and all events.</p>
+        </div>
+        <div className="divider" />
+        <div className="event-role-group">
+          <strong>Administrators</strong>
+          <p className="subtle">
+            Event administrators manage this event. Organisation administrators
+            manage every event in this organisation.
+          </p>
+          {event.administrators.map((administrator) => (
+            <div className="row-main mt" key={administrator.id}>
+              <Avatar name={administrator.name} />
+              <span>
+                <strong>{administrator.name}</strong>
+                <small>
+                  {administrator.email} ·{" "}
+                  {administrator.scope === "organisation"
+                    ? "Organisation"
+                    : "Event"}{" "}
+                  · {administrator.status}
+                </small>
+              </span>
+              {canManageAdministrators ? (
+                <button
+                  type="button"
+                  className="btn small danger right"
+                  onClick={() =>
+                    onRevoke(
+                      administrator.id,
+                      administrator.name,
+                      administrator.scope,
+                    )
+                  }
+                >
+                  Revoke
+                </button>
+              ) : null}
+            </div>
+          ))}
+          {!event.administrators.length ? (
+            <p className="help mt">
+              No additional administrators are assigned.
             </p>
-          </div>
-          <div className="card pad">
-            <strong>Administrators</strong>
-            <p className="subtle">
-              Event administrators manage this event. Organisation
-              administrators manage every event in this organisation.
-            </p>
-            {event.administrators.map((administrator) => (
-              <div className="row-main mt" key={administrator.id}>
-                <Avatar name={administrator.name} />
-                <span>
-                  <strong>{administrator.name}</strong>
-                  <small>
-                    {administrator.email} ·{" "}
-                    {administrator.scope === "organisation"
-                      ? "Organisation"
-                      : "Event"}{" "}
-                    · {administrator.status}
-                  </small>
-                </span>
-                {canManageAdministrators ? (
-                  <button
-                    type="button"
-                    className="btn small danger right"
-                    onClick={() =>
-                      onRevoke(
-                        administrator.id,
-                        administrator.name,
-                        administrator.scope,
-                      )
-                    }
-                  >
-                    Revoke
-                  </button>
-                ) : null}
-              </div>
-            ))}
-            {!event.administrators.length ? (
-              <p className="help mt">
-                No additional administrators are assigned.
-              </p>
-            ) : null}
-          </div>
-          <div className="card pad">
-            <strong>Evaluators</strong>
-            <p className="subtle">
-              Review only assigned submissions. Cannot publish decisions.
-            </p>
-          </div>
+          ) : null}
+        </div>
+        <div className="divider" />
+        <div className="event-role-group">
+          <strong>Evaluators</strong>
+          <p className="subtle">
+            Review only assigned submissions. Cannot publish decisions.
+          </p>
         </div>
       </section>
 
       <section className="card pad">
         <div className="card-title">
-          <h2>Submission access</h2>
+          <h3>Submission access</h3>
         </div>
         <label className="label">
           Public form access
@@ -593,10 +630,26 @@ export function EventAccessPanels({
           Enable duplicate-person warnings
         </label>
       </section>
+    </>
+  );
+}
 
+export function EventRepositoryPanel({
+  event,
+  onConfigureAirtable,
+  onMigrateRepository,
+  canManageFileRetention,
+}: {
+  event: EventSetup;
+  onConfigureAirtable: () => void;
+  onMigrateRepository: () => void;
+  canManageFileRetention: boolean;
+}) {
+  return (
+    <>
       <section className="card pad">
         <div className="card-title">
-          <h2>Provider and retention</h2>
+          <h3>Provider and retention</h3>
           <span
             className={`status ${event.repositoryProvider === "airtable" ? "success" : "info"}`}
           >

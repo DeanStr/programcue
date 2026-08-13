@@ -42,6 +42,17 @@
      overflow below ~250px. */
   min-width: min(220px, 100%);
 }
+/* A read-only field styled exactly like an editable one invites typing that
+   silently does nothing. 61 of them ship across submissions, review, schedule
+   and event setup — stable keys, computed values and locked slugs. They recede
+   to the sunken surface instead. Focus styling is deliberately left alone: they
+   are still reachable by keyboard and must still show where focus is. */
+.field[readonly],
+.textarea[readonly] {
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  cursor: default;
+}
 .textarea {
   min-height: 110px;
   width: 100%;
@@ -85,6 +96,13 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
+}
+/* A .label is itself a grid, and as a stretched .form-row cell its rows spread
+   to fill the tallest cell in the row. A field whose neighbour carries help
+   text therefore sits visibly lower than the rest of the row instead of
+   sharing its top edge. Pack the rows to the top. */
+.form-row > .label {
+  align-content: start;
 }
 .toggle {
   display: inline-flex;

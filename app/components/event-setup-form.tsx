@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Form,
   Link,
   useActionData,
+  useBeforeUnload,
+  useBlocker,
   useFetcher,
   useNavigate,
   useNavigation,
@@ -13,10 +15,11 @@ import {
   EventAccessPanels,
   EventFilePolicyPanel,
   EventIdentityPanels,
+  EventRepositoryPanel,
   EventRoomsPanel,
 } from "~/components/event-setup-panels";
 import { EventScheduleConfigurationPanels } from "~/components/event-schedule-configuration-panel";
-import { useConfirm } from "~/components/ui/confirm-dialog";
+import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import type { EventSetup } from "~/modules/events/event-repository.server";
 import type { IncompleteEventSummary } from "~/modules/events/event-repository-recovery.server";
 import type { action, ActionResponse } from "~/routes/event-setup";
@@ -50,6 +53,9 @@ export function EventSetupForm({
   const [migrationOpen, setMigrationOpen] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomCapacity, setNewRoomCapacity] = useState("100");
+  const [recordDraftValues, setRecordDraftValues] = useState<
+    Readonly<Record<string, string>>
+  >({});
   const focusedRecordId = focusedRecord?.id ?? null;
   const focusedRecordKind = focusedRecord?.kind ?? null;
   const saving =
@@ -99,6 +105,58 @@ export function EventSetupForm({
   const inviteData = inviteFetcher.data as ActionResponse | undefined;
   const repositoryData = repositoryFetcher.data as ActionResponse | undefined;
 
+  // Rooms, tracks and formats live in client state and reach the server only
+  // through the serialised hidden inputs above, so leaving the page discarded
+  // them silently. The named fields are uncontrolled, so a form-level input
+  // event is what marks them edited.
+  const [fieldsTouched, setFieldsTouched] = useState(false);
+  const savedStructure = useMemo(
+    () => JSON.stringify([event.rooms, event.tracks, event.sessionFormats]),
+    [event.revision],
+  );
+  const currentStructure = JSON.stringify([
+    orderedRooms,
+    orderedTracks,
+    orderedSessionFormats,
+  ]);
+  const newRoomDraftPresent = Boolean(
+    newRoomName.trim() || newRoomCapacity !== "100",
+  );
+  const pendingRecordDraftPresent =
+    Object.values(recordDraftValues).some((value) => value.trim()) ||
+    newRoomDraftPresent;
+  const hasUnsavedChanges =
+    fieldsTouched ||
+    currentStructure !== savedStructure ||
+    pendingRecordDraftPresent;
+
+  const handleRecordDraftStateChange = useCallback(
+    (draftKey: string, value: string) =>
+      setRecordDraftValues((current) => ({ ...current, [draftKey]: value })),
+    [],
+  );
+
+  useEffect(() => {
+    setFieldsTouched(false);
+  }, [event.revision]);
+
+  useBeforeUnload(
+    useCallback(
+      (unloadEvent: BeforeUnloadEvent) => {
+        if (!hasUnsavedChanges) return;
+        unloadEvent.preventDefault();
+      },
+      [hasUnsavedChanges],
+    ),
+  );
+
+  // Saving posts to this same path, and the focus-clearing replace after a
+  // record is removed stays here too, so comparing pathnames lets both through.
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      hasUnsavedChanges && currentLocation.pathname !== nextLocation.pathname,
+  );
+
   function addRoom() {
     const capacity = Number(newRoomCapacity);
     if (!newRoomName.trim() || !Number.isInteger(capacity) || capacity < 1)
@@ -113,6 +171,12 @@ export function EventSetupForm({
         position: current.length,
       },
     ]);
+    setNewRoomName("");
+    setNewRoomCapacity("100");
+    setAddRoomOpen(false);
+  }
+
+  function cancelAddRoom() {
     setNewRoomName("");
     setNewRoomCapacity("100");
     setAddRoomOpen(false);
@@ -154,7 +218,28 @@ export function EventSetupForm({
   return (
     <>
       {dialog}
-      <Form method="post">
+      {blocker.state === "blocked" ? (
+        <ConfirmDialog
+          title="Leave without saving?"
+          description="This event has changes that have not been saved. Leaving discards them."
+          confirmLabel="Leave and discard"
+          cancelLabel="Stay on this page"
+          onCancel={() => blocker.reset()}
+          onConfirm={() => blocker.proceed()}
+        />
+      ) : null}
+      <Form
+        method="post"
+        onInput={(inputEvent) => {
+          setFieldsTouched(true);
+          const input = inputEvent.target as HTMLInputElement;
+          const draftKey = input.dataset.eventRecordDraft;
+          if (draftKey) handleRecordDraftStateChange(draftKey, input.value);
+        }}
+        onSubmit={(submitEvent) => {
+          if (pendingRecordDraftPresent) submitEvent.preventDefault();
+        }}
+      >
         <input type="hidden" name="_intent" value="save" />
         <input type="hidden" name="revision" value={event.revision} />
         <input
@@ -182,9 +267,24 @@ export function EventSetupForm({
             </p>
           </div>
           <div className="page-actions">
-            <button type="submit" className="btn primary" disabled={saving}>
+            <button
+              type="submit"
+              className="btn primary"
+              disabled={saving || pendingRecordDraftPresent}
+              aria-describedby={
+                pendingRecordDraftPresent
+                  ? "event-setup-pending-record-help"
+                  : undefined
+              }
+            >
               {saving ? "Saving…" : "Save event"}
             </button>
+            {pendingRecordDraftPresent ? (
+              <span className="help" id="event-setup-pending-record-help">
+                Add or clear the unfinished room, resource, track or format
+                before saving.
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -258,53 +358,126 @@ export function EventSetupForm({
           </div>
         ) : null}
 
-        <div className="grid grid-2">
-          <EventIdentityPanels event={event} actionData={actionData} />
-          <EventRoomsPanel
-            rooms={rooms}
-            setRooms={setRooms}
-            actionData={actionData}
-            onAdd={() => setAddRoomOpen(true)}
-            onRemove={(roomId) => clearRemovedRecordFocus("room", roomId)}
-            focusedRoomId={
-              focusedRecordKind === "room" ? focusedRecordId : null
-            }
-          />
-          <EventScheduleConfigurationPanels
-            tracks={tracks}
-            setTracks={setTracks}
-            sessionFormats={sessionFormats}
-            setSessionFormats={setSessionFormats}
-            actionData={actionData}
-            onRemove={(trackId) => clearRemovedRecordFocus("track", trackId)}
-            focusedTrackId={
-              focusedRecordKind === "track" ? focusedRecordId : null
-            }
-          />
-          <EventFilePolicyPanel event={event} actionData={actionData} />
-          <EventAccessPanels
-            event={event}
-            onInvite={() => setInviteOpen(true)}
-            onRevoke={revokeAdministrator}
-            onConfigureAirtable={() => setAirtableOpen(true)}
-            onMigrateRepository={() => setMigrationOpen(true)}
-            canManageFileRetention={canManageFileRetention}
-            canManageAdministrators={canManageOrganisationAdministrators}
-          />
+        {/* Four titled bands rather than one nine-card grid. Panels are paired
+            by height as well as by subject: the three record editors are full
+            width because they grow without bound, and the fixed-size settings
+            cards sit two-up beside a comparable neighbour. A grid row is as
+            tall as its tallest card, so mixing the two shapes in one grid is
+            what left a 1,096px hole under Event identity. */}
+        <div className="event-setup-page">
+          <section
+            className="event-setup-section"
+            aria-labelledby="event-setup-identity"
+          >
+            <div className="event-setup-section-head">
+              <h2 id="event-setup-identity">Identity</h2>
+              <p>
+                How this event is named internally and how it presents itself to
+                participants and the public.
+              </p>
+            </div>
+            {/* Full width rather than two-up. The two cards are 336px and
+                644px, and a grid row is as tall as its tallest child, so
+                pairing them left a ~300px hole under the shorter one. Stacked,
+                each card lays its own fields out across the full measure for
+                the same total height and no gap. */}
+            <div className="grid">
+              <EventIdentityPanels event={event} actionData={actionData} />
+            </div>
+          </section>
+
+          <section
+            className="event-setup-section"
+            aria-labelledby="event-setup-structure"
+          >
+            <div className="event-setup-section-head">
+              <h2 id="event-setup-structure">Programme structure</h2>
+              <p>
+                The rooms, tracks and session formats the schedule builder can
+                draw on.
+              </p>
+            </div>
+            <div className="grid">
+              <EventRoomsPanel
+                rooms={rooms}
+                setRooms={setRooms}
+                actionData={actionData}
+                onAdd={() => setAddRoomOpen(true)}
+                onRemove={(roomId) => clearRemovedRecordFocus("room", roomId)}
+                focusedRoomId={
+                  focusedRecordKind === "room" ? focusedRecordId : null
+                }
+                onDraftStateChange={handleRecordDraftStateChange}
+              />
+              <EventScheduleConfigurationPanels
+                tracks={tracks}
+                setTracks={setTracks}
+                sessionFormats={sessionFormats}
+                setSessionFormats={setSessionFormats}
+                actionData={actionData}
+                onRemove={(trackId) =>
+                  clearRemovedRecordFocus("track", trackId)
+                }
+                focusedTrackId={
+                  focusedRecordKind === "track" ? focusedRecordId : null
+                }
+                onDraftStateChange={handleRecordDraftStateChange}
+              />
+            </div>
+          </section>
+
+          <section
+            className="event-setup-section"
+            aria-labelledby="event-setup-access"
+          >
+            <div className="event-setup-section-head">
+              <h2 id="event-setup-access">Access and roles</h2>
+              <p>
+                Who can administer this event, and how applicants reach the
+                submission form.
+              </p>
+            </div>
+            <div className="grid grid-2">
+              <EventAccessPanels
+                event={event}
+                onInvite={() => setInviteOpen(true)}
+                onRevoke={revokeAdministrator}
+                canManageAdministrators={canManageOrganisationAdministrators}
+              />
+            </div>
+          </section>
+
+          <section
+            className="event-setup-section"
+            aria-labelledby="event-setup-data"
+          >
+            <div className="event-setup-section-head">
+              <h2 id="event-setup-data">Data and files</h2>
+              <p>
+                Upload limits, where event data is authoritative, and how long
+                it is kept.
+              </p>
+            </div>
+            <div className="grid grid-2">
+              <EventFilePolicyPanel event={event} actionData={actionData} />
+              <EventRepositoryPanel
+                event={event}
+                onConfigureAirtable={() => setAirtableOpen(true)}
+                onMigrateRepository={() => setMigrationOpen(true)}
+                canManageFileRetention={canManageFileRetention}
+              />
+            </div>
+          </section>
         </div>
       </Form>
 
       {addRoomOpen ? (
         <Dialog
           title="Add room"
-          onClose={() => setAddRoomOpen(false)}
+          onClose={cancelAddRoom}
           footer={
             <>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setAddRoomOpen(false)}
-              >
+              <button type="button" className="btn" onClick={cancelAddRoom}>
                 Cancel
               </button>
               <button

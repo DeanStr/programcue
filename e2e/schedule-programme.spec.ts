@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { e2eOrigin } from "./support/e2e-origin";
+import { openRecordPanel } from "./support/open-record-panel";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 async function waitForInterface(page: Page, path: string) {
@@ -574,6 +575,7 @@ test.describe("mutable schedule authoring", () => {
   }) => {
     test.slow();
     await waitForInterface(page, "/admin/event");
+    await openRecordPanel(page, "Rooms and capacities");
     const resourceInputs = page.getByLabel(/^New resource for /);
     const resourceCount = await resourceInputs.count();
     expect(resourceCount).toBeGreaterThan(0);

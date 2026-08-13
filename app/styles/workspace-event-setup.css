@@ -1,0 +1,268 @@
+/*
+ * Event Setup.
+ *
+ * Two patterns live here. Titled section bands group the nine panels into four
+ * named areas so a 3,600px settings page has landmarks. Record rows render a
+ * repeating collection as one line per record instead of a stacked card each.
+ *
+ * The stacked cards were the direct cause of this page's layout problem: rooms
+ * (1,432px), tracks (1,203px) and session formats (1,326px) sat in the same
+ * row-based grid as event identity (336px) and submission access (215px), and
+ * a grid row is as tall as its tallest card. Equalising the heights removes the
+ * holes at the source rather than hiding them.
+ */
+
+.event-setup-section + .event-setup-section {
+  margin-top: var(--space-7);
+}
+.event-setup-section-head {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+/* The band title outranks the card titles inside it, so it is an h2 to their
+   h3. It reads as an eyebrow rather than a heading because the cards below
+   carry the visible weight; a second full-size heading level competes. */
+.event-setup-section-head h2 {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* Prose gets a measure, not the container width. `.main` has no maximum width,
+   so an unconstrained paragraph ran 166 characters at 1440px and 326 at
+   2560px against a comfortable 45–75. */
+.event-setup-section-head p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+/* Card titles keep the size they had as h2 before the section band pushed them
+   down a level. Scoped so the global .card-title h3 scale is left alone. */
+.event-setup-page .card-title h3 {
+  font-size: var(--text-base);
+}
+
+/* Six fields across three columns is two rows instead of three, which is what
+   lets Event identity sit above Public identity at the same total height the
+   two-up pairing had — without the hole the height mismatch used to leave. */
+@media (min-width: 700px) {
+  .event-identity-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+/* A colour input has no useful width beyond its swatch, and .field's 220px
+   floor would otherwise stretch it across a whole column. */
+.event-accent-field .field {
+  width: 56px;
+  min-width: 0;
+  padding: 2px;
+  cursor: pointer;
+}
+
+/* Role bands read as one card split by rules. They were three nested `card pad`
+   blocks inside a fourth, which stacked three white elevations on white and
+   made the group look like four unrelated panels. */
+.event-role-group > strong {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+.event-role-group > .subtle {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+/* The three record editors collapse because their height is unbounded — they
+   grow with the event, and together they were 1,600px of a 3,577px page. The
+   summary keeps the count visible so collapsing never hides whether anything
+   is configured. Native <details> carries the keyboard and assistive-technology
+   behaviour; only the marker is restyled. */
+.event-record-panel > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  list-style: none;
+}
+.event-record-panel > summary::-webkit-details-marker {
+  display: none;
+}
+.event-record-panel > summary:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
+  border-radius: var(--radius-xs);
+}
+.event-record-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.event-record-panel[open] > summary .event-record-chevron {
+  transform: rotate(90deg);
+}
+.event-record-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+}
+.event-record-body {
+  margin-top: var(--space-3);
+}
+.event-record-intro {
+  display: flex;
+  align-items: start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.event-record-intro .help {
+  margin: 0;
+  max-width: 62ch;
+}
+.event-record-intro .btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.event-record-list {
+  display: grid;
+  gap: var(--space-2);
+}
+/* Mobile first: one field per line, each labelled by its own caption. The
+   multi-column table and its shared header row are a wide-viewport
+   presentation, applied together in the min-width block below. Declaring the
+   column templates outside that block would defeat the narrow-viewport reset —
+   they carry equal specificity and would win on source order alone, which is
+   what pushed a 4-column room row past a 390px viewport. */
+.event-record-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.event-record-head {
+  display: none;
+}
+/* Deep links from the command palette focus a record by id. Before this the
+   target was styled identically to every other row, so arriving at it showed
+   nothing. */
+.event-record-row.selected {
+  border-color: var(--brand-500);
+  background: var(--brand-50);
+}
+.event-record-row:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
+}
+
+/* .field carries a 220px floor that keeps single-column forms readable. Inside
+   a record row the column track sets the width, and the floor would stop the
+   row compressing at all. */
+.event-record-row .field {
+  min-width: 0;
+  width: 100%;
+}
+.event-record-row input[type="color"].field {
+  width: 44px;
+  padding: 2px;
+  cursor: pointer;
+}
+.event-record-field {
+  min-width: 0;
+}
+.event-record-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-self: start;
+}
+
+/* 700px is where the widest of these tables — tracks, at 308px of fixed
+   columns plus gutters — still leaves both text columns usable, measured
+   against a 632px card interior. Holding the tables back to 900px cost ~2,400px
+   of extra scrolling between 768px and 900px, because every field dropped onto
+   its own line while the cards beside them were still two-up. */
+@media (min-width: 700px) {
+  .event-record-head {
+    display: grid;
+    gap: var(--space-2) var(--space-3);
+    /* Matches .event-record-row's horizontal padding plus its border so the
+       captions sit over their columns rather than one pixel to the left. */
+    padding: 0 calc(var(--space-3) + 1px);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-semibold);
+    color: var(--muted);
+  }
+  .event-record-row {
+    padding: var(--space-2) var(--space-3);
+  }
+  /* The header row carries the column captions here, so each row's own copy is
+     hidden from sight but kept in the accessibility tree as the input's label. */
+  .event-record-caption {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  /* The header row and the record rows are separate grids, so every track that
+     is not an fr share has to be an explicit width. An `auto` track sizes to
+     its own contents, which for the header is a short caption and for a row is
+     a colour swatch or a pair of toggles — the two grids then disagree and the
+     captions drift off their columns. 40px is .icon-btn's width; 212px fits
+     both toggles. */
+  .event-room-columns {
+    grid-template-columns: minmax(0, 1.15fr) 104px minmax(0, 2fr) 40px;
+  }
+  /* Keys are short, stable and read-only, so they take the smaller share; the
+     editable name is what the user actually scans and retypes. */
+  .event-track-columns {
+    grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr) 56px 212px 40px;
+  }
+  .event-format-columns {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 116px 40px;
+  }
+}
+
+.event-record-toggles {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.event-record-resources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.event-record-resources .field {
+  flex: 1 1 116px;
+  min-width: 116px;
+}
+/* The add-a-record row closes the list rather than floating under it. */
+.event-record-add {
+  display: flex;
+  align-items: end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+.event-record-add .label {
+  flex: 1;
+  min-width: 0;
+}

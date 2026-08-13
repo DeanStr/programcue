@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { openRecordPanel } from "./support/open-record-panel";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 test.beforeEach(async ({ context }) => {
@@ -112,6 +113,60 @@ test("Event Setup rejects an invalid date range before persistence", async ({
   );
 });
 
+test("programme validation opens the affected disclosure and retains record context", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await openRecordPanel(page, "Programme tracks");
+
+  const trackPanel = page.locator("details.event-record-panel").filter({
+    has: page.getByRole("heading", {
+      name: "Programme tracks",
+      exact: true,
+    }),
+  });
+  await expect(
+    page.getByRole("group", { name: "Leadership track settings" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Leadership colour")).toBeVisible();
+  await expect(page.getByLabel("Leadership exclusive")).toBeVisible();
+
+  await page.getByLabel("Leadership track name").fill("");
+  await trackPanel.locator("summary").click();
+  await expect(trackPanel).not.toHaveAttribute("open", "");
+  await page.getByRole("button", { name: "Save event" }).click();
+
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(trackPanel).toHaveAttribute("open", "");
+  await expect(trackPanel.locator(".help").last()).toBeVisible();
+});
+
+test("uncommitted record drafts block save and remain protected during navigation", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await openRecordPanel(page, "Programme tracks");
+  const draft = page.getByLabel("New track");
+  await draft.fill("Draft that still needs adding");
+
+  const save = page.getByRole("button", { name: "Save event" });
+  await expect(save).toBeDisabled();
+  await expect(
+    page.getByText(/Add or clear the unfinished room/),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Submissions", exact: true }).click();
+  const warning = page.getByRole("dialog", { name: "Leave without saving?" });
+  await expect(warning).toBeVisible();
+  await warning.getByRole("button", { name: "Stay on this page" }).click();
+  await expect(warning).toBeHidden();
+  await expect(page).toHaveURL(/\/admin\/event$/);
+  await expect(draft).toHaveValue("Draft that still needs adding");
+
+  await draft.fill("");
+  await expect(save).toBeEnabled();
+});
+
 test("tracks added by keyboard and button survive reload and reach the schedule builder", async ({
   page,
   request,
@@ -123,6 +178,7 @@ test("tracks added by keyboard and button survive reload and reach the schedule 
   try {
     await page.goto("/admin/event");
     await page.locator("body[data-hydrated='true']").waitFor();
+    await openRecordPanel(page, "Programme tracks");
 
     const newTrack = page.getByLabel("New track");
     await newTrack.fill(keyboardTrack);
@@ -156,6 +212,7 @@ test("tracks added by keyboard and button survive reload and reach the schedule 
 
     await page.goto("/admin/event");
     await page.reload();
+    await openRecordPanel(page, "Programme tracks");
     await expect(
       page.getByLabel(`${keyboardTrack} track settings`),
     ).toBeVisible();

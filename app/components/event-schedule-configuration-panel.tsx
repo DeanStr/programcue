@@ -1,5 +1,10 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 
+import {
+  RecordChevron,
+  RecordField,
+  RecordHead,
+} from "~/components/event-record-row";
 import type { EventSetup } from "~/modules/events/event-repository.server";
 import type { ActionResponse } from "~/routes/event-setup";
 
@@ -38,6 +43,7 @@ export function EventScheduleConfigurationPanels({
   actionData,
   onRemove,
   focusedTrackId,
+  onDraftStateChange,
 }: {
   tracks: Tracks;
   setTracks: Dispatch<SetStateAction<Tracks>>;
@@ -46,9 +52,20 @@ export function EventScheduleConfigurationPanels({
   actionData?: ActionResponse;
   onRemove: (trackId: string) => void;
   focusedTrackId: string | null;
+  onDraftStateChange: (draftKey: string, value: string) => void;
 }) {
   const [newTrackName, setNewTrackName] = useState("");
   const [newFormatLabel, setNewFormatLabel] = useState("");
+
+  function updateTrackDraft(value: string) {
+    setNewTrackName(value);
+    onDraftStateChange("track", value);
+  }
+
+  function updateFormatDraft(value: string) {
+    setNewFormatLabel(value);
+    onDraftStateChange("format", value);
+  }
 
   function addTrack() {
     const name = newTrackName.trim();
@@ -70,6 +87,7 @@ export function EventScheduleConfigurationPanels({
       },
     ]);
     setNewTrackName("");
+    onDraftStateChange("track", "");
   }
 
   function addFormat() {
@@ -89,141 +107,178 @@ export function EventScheduleConfigurationPanels({
       },
     ]);
     setNewFormatLabel("");
+    onDraftStateChange("format", "");
   }
 
   return (
     <>
-      <section className="card pad">
-        <div className="card-title">
-          <div>
-            <h2>Programme tracks</h2>
-            <p className="subtle">
+      <details
+        className="card pad event-record-panel"
+        // A deep link from Event Setup focuses a track by id, which cannot
+        // happen inside a closed panel.
+        open={
+          focusedTrackId !== null || Boolean(actionData?.errors?.tracks?.length)
+        }
+      >
+        <summary>
+          <RecordChevron />
+          <h3>Programme tracks</h3>
+          <span className="event-record-count">
+            {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
+          </span>
+        </summary>
+        <div className="event-record-body">
+          <div className="event-record-intro">
+            <p className="help">
               Exclusive tracks cannot overlap when that schedule policy is
-              enabled.
+              enabled. Track keys are stable after creation.
             </p>
           </div>
-        </div>
-        <div className="stack">
-          {tracks.map((track) => (
-            <div
-              className={`card pad${focusedTrackId === track.id ? " selected" : ""}`}
-              id={`event-track-${track.id}`}
-              key={track.id}
-              tabIndex={-1}
-              aria-label={`${track.name} track settings`}
-            >
-              <div className="form-row">
-                <label className="label">
-                  Track name
-                  <input
-                    className="field"
-                    value={track.name}
-                    maxLength={120}
-                    onChange={(changeEvent) =>
-                      setTracks((current) =>
-                        current.map((candidate) =>
-                          candidate.id === track.id
-                            ? { ...candidate, name: changeEvent.target.value }
-                            : candidate,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <label className="label">
-                  Track key
-                  <input className="field" value={track.slug} readOnly />
-                  <span className="help">Stable after creation.</span>
-                </label>
-                <label className="label">
-                  Colour
-                  <input
-                    className="field"
-                    type="color"
-                    aria-label={`${track.name} colour`}
-                    value={track.colourToken ?? "#5e6ad2"}
-                    onChange={(changeEvent) =>
-                      setTracks((current) =>
-                        current.map((candidate) =>
-                          candidate.id === track.id
-                            ? {
-                                ...candidate,
-                                colourToken: changeEvent.target.value,
-                              }
-                            : candidate,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-              </div>
-              <div className="row-main mt" style={{ flexWrap: "wrap" }}>
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={track.exclusive}
-                    onChange={(changeEvent) =>
-                      setTracks((current) =>
-                        current.map((candidate) =>
-                          candidate.id === track.id
-                            ? {
-                                ...candidate,
-                                exclusive: changeEvent.target.checked,
-                              }
-                            : candidate,
-                        ),
-                      )
-                    }
-                  />{" "}
-                  Exclusive
-                </label>
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={track.isPublic}
-                    onChange={(changeEvent) =>
-                      setTracks((current) =>
-                        current.map((candidate) =>
-                          candidate.id === track.id
-                            ? {
-                                ...candidate,
-                                isPublic: changeEvent.target.checked,
-                              }
-                            : candidate,
-                        ),
-                      )
-                    }
-                  />{" "}
-                  Public
-                </label>
-                <button
-                  type="button"
-                  className="btn small right"
-                  onClick={() => {
-                    setTracks((current) =>
-                      current.filter((candidate) => candidate.id !== track.id),
-                    );
-                    onRemove(track.id);
-                  }}
-                  aria-label={`Remove ${track.name}`}
-                >
-                  Remove
-                </button>
+          {tracks.length ? (
+            <div>
+              <RecordHead
+                columns="event-track-columns"
+                // The two toggles carry their own visible text, so that column
+                // needs no caption. "Visibility" was wrong for Exclusive, which
+                // is a scheduling constraint rather than an audience.
+                captions={["Track name", "Track key", "Colour", "", ""]}
+              />
+              <div className="event-record-list">
+                {tracks.map((track) => (
+                  <div
+                    className={`event-record-row event-track-columns${focusedTrackId === track.id ? " selected" : ""}`}
+                    id={`event-track-${track.id}`}
+                    key={track.id}
+                    tabIndex={-1}
+                    role="group"
+                    aria-label={`${track.name} track settings`}
+                  >
+                    <RecordField
+                      caption="Track name"
+                      accessibleCaption={`${track.name} track name`}
+                    >
+                      <input
+                        className="field"
+                        value={track.name}
+                        maxLength={120}
+                        onChange={(changeEvent) =>
+                          setTracks((current) =>
+                            current.map((candidate) =>
+                              candidate.id === track.id
+                                ? {
+                                    ...candidate,
+                                    name: changeEvent.target.value,
+                                  }
+                                : candidate,
+                            ),
+                          )
+                        }
+                      />
+                    </RecordField>
+                    <RecordField
+                      caption="Track key"
+                      accessibleCaption={`${track.name} track key`}
+                    >
+                      <input className="field" value={track.slug} readOnly />
+                    </RecordField>
+                    <RecordField
+                      caption="Colour"
+                      accessibleCaption={`${track.name} colour`}
+                    >
+                      <input
+                        className="field"
+                        type="color"
+                        value={track.colourToken ?? "#5e6ad2"}
+                        onChange={(changeEvent) =>
+                          setTracks((current) =>
+                            current.map((candidate) =>
+                              candidate.id === track.id
+                                ? {
+                                    ...candidate,
+                                    colourToken: changeEvent.target.value,
+                                  }
+                                : candidate,
+                            ),
+                          )
+                        }
+                      />
+                    </RecordField>
+                    <div className="event-record-toggles">
+                      <label className="toggle">
+                        <input
+                          type="checkbox"
+                          aria-label={`${track.name} exclusive`}
+                          checked={track.exclusive}
+                          onChange={(changeEvent) =>
+                            setTracks((current) =>
+                              current.map((candidate) =>
+                                candidate.id === track.id
+                                  ? {
+                                      ...candidate,
+                                      exclusive: changeEvent.target.checked,
+                                    }
+                                  : candidate,
+                              ),
+                            )
+                          }
+                        />{" "}
+                        Exclusive
+                      </label>
+                      <label className="toggle">
+                        <input
+                          type="checkbox"
+                          aria-label={`${track.name} public`}
+                          checked={track.isPublic}
+                          onChange={(changeEvent) =>
+                            setTracks((current) =>
+                              current.map((candidate) =>
+                                candidate.id === track.id
+                                  ? {
+                                      ...candidate,
+                                      isPublic: changeEvent.target.checked,
+                                    }
+                                  : candidate,
+                              ),
+                            )
+                          }
+                        />{" "}
+                        Public
+                      </label>
+                    </div>
+                    <div className="event-record-actions">
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => {
+                          setTracks((current) =>
+                            current.filter(
+                              (candidate) => candidate.id !== track.id,
+                            ),
+                          );
+                          onRemove(track.id);
+                        }}
+                        aria-label={`Remove ${track.name}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-          {!tracks.length ? (
+          ) : (
             <p className="subtle">No tracks configured.</p>
-          ) : null}
-          <div className="row-main" style={{ alignItems: "end" }}>
-            <label className="label" style={{ flex: 1 }}>
+          )}
+          <div className="event-record-add">
+            <label className="label">
               New track
               <input
                 className="field"
                 value={newTrackName}
+                data-event-record-draft="track"
                 placeholder="Leadership"
                 onChange={(changeEvent) =>
-                  setNewTrackName(changeEvent.target.value)
+                  updateTrackDraft(changeEvent.target.value)
                 }
                 onKeyDown={(keyboardEvent) => {
                   if (keyboardEvent.key !== "Enter") return;
@@ -241,101 +296,129 @@ export function EventScheduleConfigurationPanels({
               Add track
             </button>
           </div>
+          <FieldError actionData={actionData} name="tracks" />
         </div>
-        <FieldError actionData={actionData} name="tracks" />
-      </section>
+      </details>
 
-      <section className="card pad">
-        <div className="card-title">
-          <div>
-            <h2>Session formats and durations</h2>
-            <p className="subtle">
+      <details
+        className="card pad event-record-panel"
+        open={Boolean(actionData?.errors?.sessionFormats?.length)}
+      >
+        <summary>
+          <RecordChevron />
+          <h3>Session formats and durations</h3>
+          <span className="event-record-count">
+            {sessionFormats.length}{" "}
+            {sessionFormats.length === 1 ? "format" : "formats"}
+          </span>
+        </summary>
+        <div className="event-record-body">
+          <div className="event-record-intro">
+            <p className="help">
               Defaults are used when a new session is created; schedulers can
-              still set an explicit duration.
+              still set an explicit duration. Format keys are stable after
+              creation.
             </p>
           </div>
-        </div>
-        <div className="stack">
-          {sessionFormats.map((format) => (
-            <div className="form-row" key={format.key}>
-              <label className="label">
-                Format label
-                <input
-                  className="field"
-                  value={format.label}
-                  maxLength={80}
-                  onChange={(changeEvent) =>
-                    setSessionFormats((current) =>
-                      current.map((candidate) =>
-                        candidate.key === format.key
-                          ? { ...candidate, label: changeEvent.target.value }
-                          : candidate,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <label className="label">
-                Format key
-                <input
-                  className="field"
-                  value={format.key}
-                  readOnly
-                  aria-describedby={`format-key-help-${format.key}`}
-                />
-                <span className="help" id={`format-key-help-${format.key}`}>
-                  Stable after creation.
-                </span>
-              </label>
-              <label className="label">
-                Default minutes
-                <input
-                  className="field"
-                  type="number"
-                  min={5}
-                  max={480}
-                  step={5}
-                  value={format.defaultDurationMinutes}
-                  onChange={(changeEvent) =>
-                    setSessionFormats((current) =>
-                      current.map((candidate) =>
-                        candidate.key === format.key
-                          ? {
-                              ...candidate,
-                              defaultDurationMinutes: Number(
-                                changeEvent.target.value,
-                              ),
-                            }
-                          : candidate,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label={`Remove ${format.label}`}
-                disabled={sessionFormats.length === 1}
-                onClick={() =>
-                  setSessionFormats((current) =>
-                    current.filter((candidate) => candidate.key !== format.key),
-                  )
-                }
-              >
-                ×
-              </button>
+          <div>
+            <RecordHead
+              columns="event-format-columns"
+              captions={["Format label", "Format key", "Default minutes", ""]}
+            />
+            <div className="event-record-list">
+              {sessionFormats.map((format) => (
+                <div
+                  className="event-record-row event-format-columns"
+                  key={format.key}
+                  role="group"
+                  aria-label={`${format.label} format settings`}
+                >
+                  <RecordField
+                    caption="Format label"
+                    accessibleCaption={`${format.label} format label`}
+                  >
+                    <input
+                      className="field"
+                      value={format.label}
+                      maxLength={80}
+                      onChange={(changeEvent) =>
+                        setSessionFormats((current) =>
+                          current.map((candidate) =>
+                            candidate.key === format.key
+                              ? {
+                                  ...candidate,
+                                  label: changeEvent.target.value,
+                                }
+                              : candidate,
+                          ),
+                        )
+                      }
+                    />
+                  </RecordField>
+                  <RecordField
+                    caption="Format key"
+                    accessibleCaption={`${format.label} format key`}
+                  >
+                    <input className="field" value={format.key} readOnly />
+                  </RecordField>
+                  <RecordField
+                    caption="Default minutes"
+                    accessibleCaption={`${format.label} default minutes`}
+                  >
+                    <input
+                      className="field"
+                      type="number"
+                      min={5}
+                      max={480}
+                      step={5}
+                      value={format.defaultDurationMinutes}
+                      onChange={(changeEvent) =>
+                        setSessionFormats((current) =>
+                          current.map((candidate) =>
+                            candidate.key === format.key
+                              ? {
+                                  ...candidate,
+                                  defaultDurationMinutes: Number(
+                                    changeEvent.target.value,
+                                  ),
+                                }
+                              : candidate,
+                          ),
+                        )
+                      }
+                    />
+                  </RecordField>
+                  <div className="event-record-actions">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label={`Remove ${format.label}`}
+                      disabled={sessionFormats.length === 1}
+                      onClick={() =>
+                        setSessionFormats((current) =>
+                          current.filter(
+                            (candidate) => candidate.key !== format.key,
+                          ),
+                        )
+                      }
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-          <div className="row-main" style={{ alignItems: "end" }}>
-            <label className="label" style={{ flex: 1 }}>
+          </div>
+          <div className="event-record-add">
+            <label className="label">
               New format
               <input
                 className="field"
                 value={newFormatLabel}
+                data-event-record-draft="format"
                 placeholder="Roundtable"
                 onChange={(changeEvent) =>
-                  setNewFormatLabel(changeEvent.target.value)
+                  updateFormatDraft(changeEvent.target.value)
                 }
                 onKeyDown={(keyboardEvent) => {
                   if (keyboardEvent.key !== "Enter") return;
@@ -353,9 +436,9 @@ export function EventScheduleConfigurationPanels({
               Add format
             </button>
           </div>
+          <FieldError actionData={actionData} name="sessionFormats" />
         </div>
-        <FieldError actionData={actionData} name="sessionFormats" />
-      </section>
+      </details>
     </>
   );
 }

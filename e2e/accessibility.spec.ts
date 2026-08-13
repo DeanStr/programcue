@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { e2eOrigin } from "./support/e2e-origin";
+import { openRecordPanel } from "./support/open-record-panel";
 
 async function waitForInterface(
   page: import("@playwright/test").Page,
@@ -157,6 +158,9 @@ test("route announcements describe page changes but ignore same-page actions", a
   await expect(announcement).toBeEmpty();
 
   await page.getByRole("link", { name: "Command Centre", exact: true }).click();
+  // The save was rejected, so the edited end date is still unsaved and Event
+  // Setup asks before discarding it.
+  await page.getByRole("button", { name: "Leave and discard" }).click();
   await expect(
     page.getByRole("heading", { name: "Command Centre", level: 1 }),
   ).toBeVisible();
@@ -371,6 +375,9 @@ test("custom toggles retain their complete track at desktop and phone widths", a
   ]) {
     await page.setViewportSize(viewport);
     await waitForInterface(page, "/admin/event");
+    // The first toggles on this page are a track's Exclusive/Public pair, which
+    // now sit inside a collapsed record panel.
+    await openRecordPanel(page, "Programme tracks");
     const toggle = page.locator('label.toggle input[type="checkbox"]').first();
     await expect(toggle).toBeVisible();
     await expect(toggle).toHaveCSS("width", "38px");

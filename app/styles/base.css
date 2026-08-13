@@ -419,8 +419,18 @@ a {
 }
 .main {
   grid-area: main;
-  margin-left: 0;
   margin-top: 0;
+  /* Admin content had no maximum width, so it stretched with the viewport: an
+     Event Setup section paragraph ran 166 characters at 1440px and 326 at
+     2560px, and a single record field reached 1,194px. Past this cap the
+     surplus becomes margin rather than line length. The cap sits above every
+     laptop width, so nothing below ~1830px viewport changes. */
+  /* width:100% is load-bearing. Auto inline margins stop a grid item being
+     stretched to its track, so without a definite width the box falls back to
+     fit-content and the cap silently becomes "however wide the content is". */
+  width: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
   padding: var(--space-6);
   min-width: 0;
 }
@@ -587,7 +597,10 @@ a {
 }
 .grid {
   display: grid;
-  gap: var(--space-3);
+  /* Held in a custom property because the column formula below has to subtract
+     the exact gutter total. A sheet that overrides one must override both. */
+  --grid-gap: var(--space-3);
+  gap: var(--grid-gap);
   /* Children size to their content rather than stretching to the tallest
      sibling. Stretch was leaving up to ~1,100px of empty card interior on
      event-setup and a 120px empty state inside a 626px card on settings. */
@@ -600,28 +613,52 @@ a {
 .grid > * {
   min-width: 0;
 }
-/* Intrinsic columns. The count is a maximum, not a fixed value, so these
-   reflow continuously instead of holding N columns to 760px and then
-   dropping straight to one. --grid-min is the narrowest a column may get. */
+/* Intrinsic columns, capped at the count in the class name. The track floor is
+   whichever is larger: --grid-min, or an exact 1/N share of the row. Below the
+   crossover the --grid-min term wins and columns drop off one at a time; above
+   it the 1/N term wins and auto-fill can never place an N+1th track, so extra
+   width widens the existing columns instead.
+
+   Without the 1/N term the number in the class name was decorative: .grid-2 is
+   "as many 320px columns as fit", which is three columns at 1440px, four at
+   1920px and six at 2560px. Wider screens bought more cramped columns rather
+   than more comfortable ones, and event-setup's grid held 35% empty area with
+   a 1,096px hole under its shortest card.
+
+   The 0.02px trim absorbs subpixel rounding in the share calculation, which
+   can otherwise leave room for only N-1 tracks. */
 .grid-2,
 .grid-3,
 .grid-4,
 .grid-5 {
   grid-template-columns: repeat(
     auto-fill,
-    minmax(min(var(--grid-min), 100%), 1fr)
+    minmax(
+      max(
+        min(var(--grid-min), 100%),
+        calc(
+          (100% - (var(--grid-cols) - 1) * var(--grid-gap)) / var(--grid-cols) -
+            0.02px
+        )
+      ),
+      1fr
+    )
   );
 }
 .grid-2 {
+  --grid-cols: 2;
   --grid-min: 320px;
 }
 .grid-3 {
+  --grid-cols: 3;
   --grid-min: 260px;
 }
 .grid-4 {
+  --grid-cols: 4;
   --grid-min: 210px;
 }
 .grid-5 {
+  --grid-cols: 5;
   --grid-min: 170px;
 }
 .span-2 {

@@ -29,6 +29,7 @@
 @import "./workspace-crm.css";
 @import "./design-system-reference.css";
 @import "./workspace-command.css";
+@import "./workspace-event-setup.css";
 @import "./workspace-review.css";
 @import "./workspace-form-builder.css";
 @import "./workspace-schedule.css";
