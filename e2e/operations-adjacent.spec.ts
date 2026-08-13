@@ -115,9 +115,17 @@ test("blank event creation keeps templates empty and makes repository authority 
   );
   await waitForInterface(page, "/admin/command");
   await expect(
-    page.getByRole("heading", { name: "Set up this event" }),
+    page.getByRole("heading", { name: "Run this programme" }),
   ).toBeVisible();
-  await expect(page.getByText("0 of 6 complete")).toBeVisible();
+  await expect(page.getByText("0 of 4 phases ready")).toBeVisible();
+  for (const phase of [
+    "Set up",
+    "Collect and decide",
+    "Prepare speakers",
+    "Publish and verify",
+  ]) {
+    await expect(page.getByRole("heading", { name: phase })).toBeVisible();
+  }
   await expect(
     page.getByRole("link", { name: /Publish an application form/ }),
   ).toHaveAttribute("href", "/admin/submissions/form");

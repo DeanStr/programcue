@@ -1,12 +1,12 @@
 /* final layout refinements */
 @media (max-width: 1024px) {
-  .command-setup-steps {
+  .command-workflow-phases {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
-  .command-setup-steps {
+  .command-workflow-phases {
     grid-template-columns: 1fr;
   }
 }

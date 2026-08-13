@@ -23,6 +23,10 @@ import { PageHeader } from "~/components/ui/page-header";
 import { StatusBadge } from "~/components/ui/status-badge";
 import { AiProviderSettingsService } from "~/modules/ai/ai-provider.server";
 import {
+  PROGRAMME_WORKFLOW_PHASES,
+  type ProgrammeWorkflowPhaseKey,
+} from "~/modules/readiness/programme-workflow-phases";
+import {
   emailProviderConfigurationIssue,
   requireEmailProviderConfiguration,
 } from "~/modules/communications/email-provider.server";
@@ -52,80 +56,104 @@ import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
-const walkthrough = [
-  [
-    "Command Centre",
-    "Open the exact blocker cohorts and readiness actions.",
-    "/admin/command",
-    "administrator",
-  ],
-  [
-    "Form builder",
-    "Edit, preview and publish the seeded call for speakers.",
-    "/admin/submissions/form",
-    "administrator",
-  ],
-  [
-    "Applicant path",
-    "Start a clean SBEK-compatible draft as Priya Raman, add Marcus Okafor and submit.",
-    "/apply/form",
-    "sbek_speaker",
-  ],
-  [
-    "Review workbench",
-    "Score an assigned proposal in the split-pane review flow.",
-    "/review/workbench",
-    "evaluator",
-  ],
-  [
-    "Evaluation administration",
-    "Inspect rounds, assignments and decision previews.",
-    "/admin/review",
-    "administrator",
-  ],
-  [
-    "Speaker readiness",
-    "Complete the profile, resources and dependent task evidence.",
-    "/participant/dashboard",
-    "speaker",
-  ],
-  [
-    "Communications",
-    "Preview a targeted reminder and inspect provider readiness.",
-    "/admin/communications",
-    "administrator",
-  ],
-  [
-    "Schedule",
-    "Use drag or keyboard placement, validate and publish.",
-    "/admin/schedule",
-    "administrator",
-  ],
-  [
-    "Public programme",
-    "Try gallery filters, itinerary, calendar and embed links.",
-    "/public/programme/future-of-events-2025",
-    "administrator",
-  ],
-  [
-    "Integrations",
-    "Run an honest dry run; unavailable providers stay labelled.",
-    "/admin/integrations",
-    "administrator",
-  ],
-  [
-    "Event assistant",
-    "Inspect context and approve a bounded task action.",
-    "/admin/assistant",
-    "administrator",
-  ],
-  [
-    "Operations",
-    "Inspect durable progress, item results and retry state.",
-    "/admin/operations",
-    "administrator",
-  ],
-] as const;
+type DemoWalkthroughStep = {
+  phase: ProgrammeWorkflowPhaseKey;
+  title: string;
+  copy: string;
+  href: string;
+  identityKey: DemoIdentityKey;
+  evidence?: boolean;
+};
+
+const walkthrough: ReadonlyArray<DemoWalkthroughStep> = [
+  {
+    phase: "setup",
+    title: "Command Centre",
+    copy: "Open the exact blocker cohorts and readiness actions.",
+    href: "/admin/command",
+    identityKey: "administrator",
+  },
+  {
+    phase: "setup",
+    title: "Form builder",
+    copy: "Edit, preview and publish the seeded call for speakers.",
+    href: "/admin/submissions/form",
+    identityKey: "administrator",
+  },
+  {
+    phase: "setup",
+    title: "Applicant path",
+    copy: "Start a clean SBEK-compatible draft as Priya Raman, add Marcus Okafor and submit.",
+    href: "/apply/form",
+    identityKey: "sbek_speaker",
+  },
+  {
+    phase: "decide",
+    title: "Review workbench",
+    copy: "Score an assigned proposal in the split-pane review flow.",
+    href: "/review/workbench",
+    identityKey: "evaluator",
+  },
+  {
+    phase: "decide",
+    title: "Evaluation administration",
+    copy: "Inspect rounds, assignments and decision previews.",
+    href: "/admin/review",
+    identityKey: "administrator",
+  },
+  {
+    phase: "prepare",
+    title: "Speaker readiness",
+    copy: "Complete the profile, resources and dependent task evidence.",
+    href: "/participant/dashboard",
+    identityKey: "speaker",
+  },
+  {
+    phase: "prepare",
+    title: "Communications",
+    copy: "Preview a targeted reminder and inspect provider readiness.",
+    href: "/admin/communications",
+    identityKey: "administrator",
+  },
+  {
+    phase: "prepare",
+    title: "Schedule",
+    copy: "Use drag or keyboard placement, validate and publish.",
+    href: "/admin/schedule",
+    identityKey: "administrator",
+  },
+  {
+    phase: "publish",
+    title: "Public programme",
+    copy: "Try gallery filters, itinerary, calendar and embed links.",
+    href: "/public/programme/future-of-events-2025",
+    identityKey: "administrator",
+  },
+  {
+    phase: "publish",
+    title: "Integrations",
+    copy: "Run an honest dry run; unavailable providers stay labelled.",
+    href: "/admin/integrations",
+    identityKey: "administrator",
+    evidence: true,
+  },
+  {
+    phase: "publish",
+    title: "Event assistant",
+    copy: "Inspect context and approve a bounded task action.",
+    href: "/admin/assistant",
+    identityKey: "administrator",
+    evidence: true,
+  },
+  {
+    phase: "publish",
+    title: "Operations",
+    copy: "Inspect durable progress, item results and retry state.",
+    href: "/admin/operations",
+    identityKey: "administrator",
+    evidence: true,
+  },
+];
 
 function assertDemoRoute(env: CloudflareEnvironment) {
   if (
@@ -559,38 +587,70 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
       </section>
 
       <div className="grid grid-2 mb">
-        <section className="card design-section">
+        <section
+          aria-labelledby="demo-walkthrough-heading"
+          className="card design-section"
+        >
           <div className="pc-section-heading">
             <div>
-              <span className="pc-section-kicker">Guided checklist</span>
-              <h2>What to try</h2>
+              <span className="pc-section-kicker">Guided workflow</span>
+              <h2 id="demo-walkthrough-heading">
+                Follow the programme story
+              </h2>
             </div>
+            <p>
+              Complete the core path in order. The final phase also exposes
+              optional technical evidence after the public result.
+            </p>
           </div>
-          <ol className="stack">
-            {walkthrough.map(([title, copy, href, identityKey], index) => (
-              <li className="card pad" key={title}>
+          <div className="stack">
+            {PROGRAMME_WORKFLOW_PHASES.map((phase, phaseIndex) => (
+              <section className="card pad" key={phase.key}>
                 <div className="card-title">
-                  <StatusBadge tone="info">{index + 1}</StatusBadge>
-                  <h3>{title}</h3>
+                  <StatusBadge tone="info">{phaseIndex + 1}</StatusBadge>
+                  <div>
+                    <h3>{phase.label}</h3>
+                    <p className="subtle">{phase.description}</p>
+                  </div>
                 </div>
-                <p className="subtle">{copy}</p>
-                <div className="page-actions">
-                  <Form method="post" action="/demo/role">
-                    <input
-                      type="hidden"
-                      name="identity"
-                      value={identityKey satisfies DemoIdentityKey}
-                    />
-                    <input type="hidden" name="returnTo" value={href} />
-                    <button className="btn small" type="submit">
-                      Open as {DEMO_IDENTITIES[identityKey].name}{" "}
-                      <ArrowRight aria-hidden size={13} />
-                    </button>
-                  </Form>
-                </div>
-              </li>
+                <ol className="stack mt">
+                  {walkthrough
+                    .filter((step) => step.phase === phase.key)
+                    .map((step) => (
+                      <li className="card pad" key={step.title}>
+                        <div className="card-title">
+                          <h4>{step.title}</h4>
+                          {step.evidence ? (
+                            <StatusBadge tone="neutral">
+                              Technical evidence
+                            </StatusBadge>
+                          ) : null}
+                        </div>
+                        <p className="subtle">{step.copy}</p>
+                        <div className="page-actions">
+                          <Form method="post" action="/demo/role">
+                            <input
+                              type="hidden"
+                              name="identity"
+                              value={step.identityKey}
+                            />
+                            <input
+                              type="hidden"
+                              name="returnTo"
+                              value={step.href}
+                            />
+                            <button className="btn small" type="submit">
+                              Open as {DEMO_IDENTITIES[step.identityKey].name}{" "}
+                              <ArrowRight aria-hidden size={13} />
+                            </button>
+                          </Form>
+                        </div>
+                      </li>
+                    ))}
+                </ol>
+              </section>
             ))}
-          </ol>
+          </div>
         </section>
 
         <div className="stack">

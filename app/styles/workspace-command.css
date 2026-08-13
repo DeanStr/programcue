@@ -3,21 +3,48 @@
   margin-bottom: var(--space-3);
   border-top: 3px solid var(--brand-600);
 }
-.command-setup-steps {
+.command-workflow-phases {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-2);
 }
-.command-setup-steps .suggestion {
+.command-workflow-phase {
+  align-content: start;
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+}
+.command-workflow-phase-heading {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+}
+.command-workflow-phase h3 {
+  margin: 0;
+}
+.command-workflow-steps {
+  display: grid;
+  gap: var(--space-1);
+}
+.command-workflow-step {
+  align-items: center;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
   color: inherit;
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: var(--space-2);
   text-decoration: none;
 }
-.command-setup-steps .suggestion > span:nth-child(2) {
-  display: grid;
-  gap: 2px;
+.command-workflow-step:hover {
+  background: var(--state-info-surface);
 }
-.command-setup-steps small {
-  display: block;
+.command-workflow-step .chev {
+  color: var(--text-tertiary);
 }
 .command-grid {
   display: grid;

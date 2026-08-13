@@ -34,9 +34,21 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
   await expect(
     page.getByRole("row", { name: /sbek speaker.*Priya Raman/i }),
   ).toBeVisible();
+  const walkthrough = page.getByRole("region", {
+    name: "Follow the programme story",
+  });
+  await expect(walkthrough).toBeVisible();
+  for (const phase of [
+    "Set up",
+    "Collect and decide",
+    "Prepare speakers",
+    "Publish and verify",
+  ]) {
+    await expect(walkthrough.getByRole("heading", { name: phase })).toBeVisible();
+  }
   await expect(
-    page.getByRole("heading", { name: "What to try" }),
-  ).toBeVisible();
+    walkthrough.getByText("Technical evidence", { exact: true }),
+  ).toHaveCount(3);
   await expect(
     page.getByText("No success is simulated.").first(),
   ).toBeVisible();

@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import {
+  groupProgrammeSetupSteps,
+  type ProgrammeSetupStep,
+} from "./programme-workflow-phases";
 import { ReadinessService } from "./readiness-service.server";
 
 const viewer: Viewer = {
@@ -43,6 +47,24 @@ describe("D1-backed command centre", () => {
     expect(
       incomplete.setupGuide.find((step) => step.key === "event-details"),
     ).toMatchObject({ complete: false, href: "/admin/event" });
+    const incompletePhases = groupProgrammeSetupSteps(incomplete.setupGuide);
+    expect(
+      incompletePhases.map((phase) => ({
+        key: phase.key,
+        stepKeys: phase.steps.map((step) => step.key),
+      })),
+    ).toEqual([
+      { key: "setup", stepKeys: ["event-details", "application-form"] },
+      { key: "decide", stepKeys: ["review-plan"] },
+      {
+        key: "prepare",
+        stepKeys: ["participant-tasks", "communications"],
+      },
+      { key: "publish", stepKeys: ["publication"] },
+    ]);
+    expect(
+      incompletePhases.find((phase) => phase.key === "setup"),
+    ).toMatchObject({ complete: false });
 
     await testEnv.DB.prepare(
       "UPDATE events SET description = 'A configured event.' WHERE id = ?",
@@ -55,6 +77,28 @@ describe("D1-backed command centre", () => {
     expect(
       completed.setupGuide.find((step) => step.key === "event-details"),
     ).toMatchObject({ complete: true });
+    expect(
+      groupProgrammeSetupSteps(
+        completed.setupGuide.map((step) => ({ ...step, complete: true })),
+      ).every((phase) => phase.complete),
+    ).toBe(true);
+    expect(() =>
+      groupProgrammeSetupSteps([
+        ...completed.setupGuide,
+        completed.setupGuide[0],
+      ]),
+    ).toThrow("Programme setup steps contain a duplicate key.");
+    expect(() =>
+      groupProgrammeSetupSteps([
+        ...completed.setupGuide,
+        {
+          ...completed.setupGuide[0],
+          key: "unassigned-step" as ProgrammeSetupStep["key"],
+        },
+      ]),
+    ).toThrow(
+      'The programme setup step "unassigned-step" is not assigned to a phase.',
+    );
   });
 
   it("fails closed before calculating readiness from an unreadable Airtable projection", async () => {

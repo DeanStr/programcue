@@ -15,6 +15,7 @@ import {
 import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { ReadinessService } from "~/modules/readiness/readiness-service.server";
+import { groupProgrammeSetupSteps } from "~/modules/readiness/programme-workflow-phases";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
@@ -104,6 +105,10 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
   const completedSetupSteps = loaderData.setupGuide.filter(
     (step) => step.complete,
   ).length;
+  const workflowPhases = groupProgrammeSetupSteps(loaderData.setupGuide);
+  const completedWorkflowPhases = workflowPhases.filter(
+    (phase) => phase.complete,
+  ).length;
   const hasOverdueTasks = loaderData.blockers.some(
     (blocker) => blocker.key === "overdue_tasks",
   );
@@ -145,36 +150,53 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
           <div className="card-title">
             <div>
               <span className="pc-section-kicker">Getting started</span>
-              <h2>Set up this event</h2>
+              <h2>Run this programme</h2>
               <p className="subtle">
-                These steps reflect the event's current records; there is no
-                separate checklist to maintain.
+                Follow one connected path from event setup to publication.
+                Status comes from the event's current records; there is no
+                separate checklist.
               </p>
             </div>
             <StatusBadge tone="info">
-              {completedSetupSteps} of {loaderData.setupGuide.length} complete
+              {completedWorkflowPhases} of {workflowPhases.length} phases ready
             </StatusBadge>
           </div>
-          <div className="command-setup-steps">
-            {loaderData.setupGuide.map((step) => (
-              <Link className="suggestion" to={step.href} key={step.key}>
-                {step.complete ? (
-                  <CheckCircle2
-                    aria-label="Complete"
-                    className="tone-success"
-                    size={18}
-                  />
-                ) : (
-                  <Clock3 aria-label="Not complete" size={18} />
-                )}
-                <span>
-                  <strong>{step.label}</strong>
-                  <small className="subtle">{step.description}</small>
-                </span>
-                <span className="chev" aria-hidden>
-                  ›
-                </span>
-              </Link>
+          <div className="command-workflow-phases">
+            {workflowPhases.map((phase, index) => (
+              <section className="command-workflow-phase" key={phase.key}>
+                <div className="command-workflow-phase-heading">
+                  <StatusBadge tone={phase.complete ? "success" : "info"}>
+                    <span aria-hidden>{index + 1}</span>
+                    <span className="sr-only">
+                      Phase {index + 1} {phase.complete ? "ready" : "not ready"}
+                    </span>
+                  </StatusBadge>
+                  <h3>{phase.label}</h3>
+                </div>
+                <div className="command-workflow-steps">
+                  {phase.steps.map((step) => (
+                    <Link
+                      className="command-workflow-step"
+                      to={step.href}
+                      key={step.key}
+                    >
+                      {step.complete ? (
+                        <CheckCircle2
+                          aria-label="Complete"
+                          className="tone-success"
+                          size={16}
+                        />
+                      ) : (
+                        <Clock3 aria-label="Not complete" size={16} />
+                      )}
+                      <span>{step.label}</span>
+                      <span className="chev" aria-hidden>
+                        ›
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         </section>

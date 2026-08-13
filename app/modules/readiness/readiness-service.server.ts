@@ -5,6 +5,7 @@ import {
   calculateReadiness,
   type ReadinessTask,
 } from "./readiness-rules";
+import type { ProgrammeSetupStep } from "./programme-workflow-phases";
 
 type CountRow = { total: number; complete?: number; failed?: number };
 type TaskRow = {
@@ -55,13 +56,7 @@ export type CommandCentreSnapshot = {
     declaredBlockers: number;
     explanation: string;
   };
-  setupGuide: Array<{
-    key: string;
-    label: string;
-    description: string;
-    href: string;
-    complete: boolean;
-  }>;
+  setupGuide: ProgrammeSetupStep[];
   workflows: ReadinessWorkflow[];
   blockers: ReadinessBlocker[];
   deliveryHealth: Array<{
@@ -612,7 +607,7 @@ export class ReadinessService {
         href: "/admin/schedule",
         complete: Boolean(event.publicationComplete),
       },
-    ];
+    ] satisfies ProgrammeSetupStep[];
     return {
       eventId: viewer.eventId,
       eventTimezone: event.timezone,
