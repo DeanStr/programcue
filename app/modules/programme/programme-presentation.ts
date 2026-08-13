@@ -166,6 +166,42 @@ export function formatProgrammeDateTimeRange(
   return `${startDate} · ${startTime}${startZone ? ` ${startZone}` : ""}–${endDate} · ${endTime}${endZone ? ` ${endZone}` : ""}`;
 }
 
+/**
+ * Attendee-facing time. The full `formatProgrammeDateTimeRange` string repeats
+ * the calendar date on every row of a list that is already grouped by day, so
+ * the public surfaces show only the clock range and let a day heading carry the
+ * date. A shared meridiem is written once: "9:00–9:45 AM", not
+ * "9:00 AM–9:45 AM".
+ */
+export function formatProgrammeTimeRange(
+  startsAt: number,
+  endsAt: number,
+  timezone: string,
+) {
+  const time = new Intl.DateTimeFormat("en", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: timezone,
+  });
+  const start = time.format(new Date(startsAt * 1_000));
+  const end = time.format(new Date(endsAt * 1_000));
+  const meridiem = /\s*(AM|PM)$/u;
+  const startMeridiem = start.match(meridiem)?.[1];
+  const endMeridiem = end.match(meridiem)?.[1];
+  if (startMeridiem && startMeridiem === endMeridiem) {
+    return `${start.replace(meridiem, "")}–${end}`;
+  }
+  return `${start}–${end}`;
+}
+
+export function formatProgrammeDuration(startsAt: number, endsAt: number) {
+  const minutes = Math.max(0, Math.round((endsAt - startsAt) / 60));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `${hours} hr ${remainder} min` : `${hours} hr`;
+}
+
 export function formatProgrammeEventDay(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
     throw new Error("Programme event date must use YYYY-MM-DD format.");

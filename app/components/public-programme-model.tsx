@@ -68,6 +68,31 @@ export function initials(name: string) {
   );
 }
 
+/**
+ * Consecutive sessions that share a calendar day become one group. The service
+ * already orders by `starts_at`, so a running comparison preserves programme
+ * order without re-sorting, and every list that renders sessions can show the
+ * date once as a heading instead of repeating it on every row.
+ */
+export function groupSessionsByDay<T extends { startsAt: number }>(
+  sessions: readonly T[],
+  timezone: string,
+) {
+  const groups: Array<{ key: string; label: string; sessions: T[] }> = [];
+  for (const session of sessions) {
+    const key = eventLocalCalendarDate(session.startsAt, timezone);
+    const current = groups.at(-1);
+    if (current?.key === key) current.sessions.push(session);
+    else
+      groups.push({
+        key,
+        label: formatDay(session.startsAt, timezone),
+        sessions: [session],
+      });
+  }
+  return groups;
+}
+
 export function distinctSorted(values: Array<string | null>) {
   return [
     ...new Set(values.filter((value): value is string => Boolean(value))),

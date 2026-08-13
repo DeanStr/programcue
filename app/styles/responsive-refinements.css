@@ -164,12 +164,6 @@
   .hero {
     width: calc(100% - 24px);
   }
-  .programme-row {
-    grid-template-columns: 95px 1fr 120px 55px;
-  }
-  .programme-row > .track-col {
-    display: none;
-  }
 }
 @media (max-width: 760px) {
   :root {
@@ -391,11 +385,14 @@
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
   }
+  /* The event name is the identity of this page, so it truncates rather than
+     disappearing the way the old vendor wordmark did. */
   .public-top .brand {
-    flex: none;
+    flex: 1 1 auto;
+    min-width: 0;
   }
-  .public-top .brand > span:last-child {
-    display: none;
+  .public-brand-name {
+    font-size: var(--text-sm);
   }
   .public-nav {
     display: none;
@@ -421,30 +418,9 @@
   .public-shell #itinerary {
     scroll-margin-top: 80px;
   }
-  .hero {
-    min-height: 190px;
-    padding: var(--space-6);
-  }
-  .hero h1 {
-    font-size: var(--text-3xl);
-  }
-  .public-main {
-    display: block;
-  }
-  .public-filters {
-    position: static;
-    background: var(--surface);
-    padding: var(--space-2) 0;
-  }
+  /* On a phone the list stays scannable by collapsing descriptions until a
+     session is opened. Room, track and format stay visible in every state. */
   .programme-entry:not(.active) .programme-entry-description {
-    display: none;
-  }
-  .programme-row {
-    grid-template-columns: 82px 1fr 44px;
-    padding: var(--space-3);
-  }
-  .programme-row > .room-col,
-  .programme-row > .track-col {
     display: none;
   }
   .itinerary {

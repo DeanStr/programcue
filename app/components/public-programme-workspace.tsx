@@ -1,25 +1,881 @@
 import type React from "react";
-import { CalendarDays, MapPin } from "lucide-react";
+import { CalendarDays, MapPin, Search } from "lucide-react";
 import { Link } from "react-router";
 
-import { BrandMark } from "~/components/brand-mark";
 import { TurnstileWidget } from "~/components/turnstile-widget";
 import {
-  formatProgrammeDateTimeRange,
   formatProgrammeEventDay,
+  formatProgrammeTimeRange,
   publicProgrammeSurfacePath,
 } from "~/modules/programme/programme-presentation";
 import { PublicProgrammeSurfaceContent } from "~/components/public-programme-surfaces";
 import {
+  ProgrammeDayHeading,
+  PublicSpeakerAvatar,
+  SaveSessionButton,
+  SessionPlace,
+  SessionSpeakerLines,
+  SessionTags,
+  SessionTime,
+} from "~/components/public-programme-parts";
+import {
   descriptionSnippet,
   formatDay,
   formatTime,
+  groupSessionsByDay,
   initials,
   normaliseDescription,
   speakerAffiliation,
   type PublicProgrammeLoaderData,
+  type PublicProgrammeModel,
   usePublicProgrammeModel,
 } from "~/components/public-programme-model";
+
+/**
+ * The header, hero and footer wrap every published surface, so they live here
+ * and the surface modules only render their own content.
+ */
+function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
+  const { programme, loaderData, shared, saved, showSpeakers } = model;
+  const slug = programme.event.slug;
+  const overviewSurface =
+    loaderData.surface === "overview" || loaderData.surface === "sessions";
+  const programmeHref = `/public/programme/${slug}`;
+  const links = [
+    {
+      key: "sessions",
+      label: "Sessions",
+      href: overviewSurface ? "#programme" : programmeHref,
+      active: overviewSurface,
+      routed: false,
+    },
+    ...(showSpeakers
+      ? [
+          {
+            key: "speakers",
+            label: "Speakers",
+            href: overviewSurface
+              ? "#speakers"
+              : publicProgrammeSurfacePath(slug, "speakers"),
+            active: loaderData.surface === "speakers",
+            routed: false,
+          },
+        ]
+      : []),
+    {
+      key: "agenda",
+      label: "Agenda",
+      href: publicProgrammeSurfacePath(slug, "agenda"),
+      active: loaderData.surface === "agenda",
+      routed: true,
+    },
+    {
+      key: "schedule",
+      label: "Schedule",
+      href: publicProgrammeSurfacePath(slug, "schedule"),
+      active: loaderData.surface === "schedule",
+      routed: true,
+    },
+    ...(showSpeakers
+      ? [
+          {
+            key: "gallery",
+            label: "Speaker Gallery",
+            href: publicProgrammeSurfacePath(slug, "gallery"),
+            active: loaderData.surface === "gallery",
+            routed: true,
+          },
+        ]
+      : []),
+  ];
+  const itineraryHref = overviewSurface
+    ? "#itinerary"
+    : `${programmeHref}#itinerary`;
+
+  const navLink = (link: (typeof links)[number]) =>
+    link.routed ? (
+      <Link
+        key={link.key}
+        to={link.href}
+        className={link.active ? "active" : undefined}
+        aria-current={link.active ? "page" : undefined}
+      >
+        {link.label}
+      </Link>
+    ) : (
+      <a
+        key={link.key}
+        href={link.href}
+        className={link.active ? "active" : undefined}
+        aria-current={link.active ? "page" : undefined}
+      >
+        {link.label}
+      </a>
+    );
+
+  return (
+    <header className="public-top">
+      {/* The event owns this page. The platform is credited in the footer, not
+          in the masthead where it used to outrank the customer's own name. */}
+      <Link
+        aria-label={`${programme.event.name} programme`}
+        className="brand"
+        to={programmeHref}
+      >
+        <span className="public-brand-mark" aria-hidden="true" />
+        <span className="public-brand-name">{programme.event.name}</span>
+      </Link>
+      <nav className="public-nav" aria-label="Programme">
+        {links.map(navLink)}
+      </nav>
+      <details className="public-mobile-nav">
+        <summary className="btn small">Browse</summary>
+        <nav aria-label="Programme sections">{links.map(navLink)}</nav>
+      </details>
+      <a className="btn public-itinerary-link" href={itineraryHref}>
+        <span aria-hidden="true">♡</span>
+        <span>{shared ? "Shared itinerary" : "My itinerary"}</span>
+        <span className="status info">{saved.length}</span>
+      </a>
+    </header>
+  );
+}
+
+function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
+  const { programme, embedOptions, embedded } = model;
+  const place = [programme.event.venue, programme.event.city]
+    .filter(Boolean)
+    .join(", ");
+  const dayCount = new Set(
+    programme.sessions.map((session) =>
+      formatDay(session.startsAt, programme.event.timezone),
+    ),
+  ).size;
+  const stats = [
+    { label: "Sessions", value: programme.sessions.length },
+    { label: "Speakers", value: programme.speakers.length },
+    { label: dayCount === 1 ? "Day" : "Days", value: dayCount },
+  ];
+  return (
+    <section
+      className="hero"
+      style={
+        {
+          "--event-accent":
+            embedOptions.accent ?? programme.event.brandAccent,
+        } as React.CSSProperties
+      }
+    >
+      <div className="hero-body">
+        <h1>{programme.event.name}</h1>
+        <p className="hero-meta">
+          <span>
+            <CalendarDays aria-hidden="true" size={15} />
+            <span>
+              {formatProgrammeEventDay(programme.event.startDate)}–
+              {formatProgrammeEventDay(programme.event.endDate)}
+            </span>
+          </span>
+          {place ? (
+            <span>
+              <MapPin aria-hidden="true" size={15} />
+              <span>{place}</span>
+            </span>
+          ) : null}
+        </p>
+        {embedded ? null : (
+          <dl className="hero-stats">
+            {stats.map((stat) => (
+              <div key={stat.label}>
+                <dt>{stat.label}</dt>
+                <dd>{stat.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PublicProgrammeFooter({ model }: { model: PublicProgrammeModel }) {
+  const { programme } = model;
+  const published = new Intl.DateTimeFormat("en", {
+    dateStyle: "long",
+    timeZone: programme.event.timezone,
+  }).format(new Date(programme.version.publishedAt * 1_000));
+  return (
+    <footer className="public-footer">
+      <div>
+        <p className="public-footer-primary">
+          All times shown in {programme.event.timezone}.
+        </p>
+        <p className="public-footer-secondary">
+          Programme version {programme.version.versionNumber} · published{" "}
+          {published}
+        </p>
+      </div>
+      <div className="public-footer-actions">
+        <a
+          className="btn small"
+          href={`/api/v1/public/events/${encodeURIComponent(programme.event.slug)}/calendar.ics`}
+        >
+          Add to calendar (.ics)
+        </a>
+        <p className="public-footer-secondary">Powered by Program Cue</p>
+      </div>
+    </footer>
+  );
+}
+
+/** One speaker card, used by the overview roster and the speaker directory. */
+export function PublicSpeakerCard({
+  speaker,
+  model,
+}: {
+  speaker: PublicProgrammeModel["orderedSpeakers"][number];
+  model: PublicProgrammeModel;
+}) {
+  const affiliation = speakerAffiliation(speaker);
+  return (
+    <article
+      id={`speaker-${speaker.id}`}
+      className="card pad public-speaker-card"
+      key={speaker.id}
+    >
+      <div className="public-speaker-card-identity">
+        <PublicSpeakerAvatar speaker={speaker} size={56} />
+        <div>
+          <h3>{speaker.displayName}</h3>
+          {affiliation ? <p className="help">{affiliation}</p> : null}
+        </div>
+      </div>
+      <p className="public-speaker-card-bio">
+        {speaker.biography
+          ? descriptionSnippet(speaker.biography)
+          : "Biography not provided."}
+      </p>
+      <div className="public-speaker-card-foot">
+        <span className="help">
+          {speaker.sessionIds.length} session
+          {speaker.sessionIds.length === 1 ? "" : "s"}
+        </span>
+        <a
+          className="btn small"
+          id={`speaker-profile-link-${speaker.id}`}
+          href="#programme-speaker-profile"
+          aria-label={`View profile and sessions for ${speaker.displayName}`}
+          onClick={(event) =>
+            model.openSpeakerProfile(speaker.id, event.currentTarget)
+          }
+        >
+          View profile and sessions
+        </a>
+      </div>
+    </article>
+  );
+}
+
+function PublicProgrammeFilters({ model }: { model: PublicProgrammeModel }) {
+  const {
+    showControl,
+    query,
+    setQuery,
+    day,
+    setDay,
+    days,
+    track,
+    setTrack,
+    tracks,
+    format,
+    setFormat,
+    formats,
+    room,
+    setRoom,
+    rooms,
+    clearFilters,
+    clearableFiltersActive,
+    visible,
+    programme,
+    filtersActive,
+  } = model;
+  return (
+    <div className="public-filters-bar">
+      <div className="public-filters">
+        {showControl("search") ? (
+          <div className="public-search">
+            <Search aria-hidden="true" size={16} />
+            <input
+              className="field"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search sessions, speakers, or topics"
+              aria-label="Search sessions, speakers, or topics"
+              type="search"
+            />
+          </div>
+        ) : null}
+        {showControl("day") ? (
+          <select
+            className="select"
+            value={day}
+            onChange={(event) => setDay(event.target.value)}
+            aria-label="Filter by day"
+          >
+            <option>All days</option>
+            {days.map((value) => (
+              <option key={value}>{value}</option>
+            ))}
+          </select>
+        ) : null}
+        {showControl("track") && tracks.length > 1 ? (
+          <select
+            className="select"
+            value={track}
+            onChange={(event) => setTrack(event.target.value)}
+            aria-label="Filter by track"
+          >
+            <option value="">All tracks</option>
+            {tracks.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        {showControl("format") && formats.length > 1 ? (
+          <select
+            className="select"
+            value={format}
+            onChange={(event) => setFormat(event.target.value)}
+            aria-label="Filter by format"
+          >
+            <option value="">All formats</option>
+            {formats.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        {showControl("room") && rooms.length > 1 ? (
+          <select
+            className="select"
+            value={room}
+            onChange={(event) => setRoom(event.target.value)}
+            aria-label="Filter by room"
+          >
+            <option value="">All rooms</option>
+            {rooms.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        ) : null}
+      </div>
+      {/* Reset sits with the result count, not among the facets: it undoes them
+          rather than being one of them, and it kept wrapping onto a line of its
+          own at the end of the control row. */}
+      <div className="public-filter-summary">
+        <p className="help" role="status">
+          Showing {visible.length} of {programme.sessions.length} published
+          session{programme.sessions.length === 1 ? "" : "s"}
+          {filtersActive ? " for the current filters" : ""}.
+        </p>
+        <button
+          type="button"
+          className="btn small"
+          onClick={clearFilters}
+          disabled={!clearableFiltersActive}
+        >
+          Clear filters
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProgrammeSessionEntry({
+  session,
+  model,
+}: {
+  session: PublicProgrammeModel["visible"][number];
+  model: PublicProgrammeModel;
+}) {
+  const { programme, embedded, shared, selected, expandedDescriptions } = model;
+  const description = normaliseDescription(session.description);
+  const snippet = descriptionSnippet(description);
+  const expanded = expandedDescriptions.includes(session.id);
+  const active = session.id === selected?.id;
+  return (
+    <div className={`programme-entry${active ? " active" : ""}`}>
+      <button
+        type="button"
+        id={`session-${session.slug}`}
+        className={`programme-row${active ? " active" : ""}`}
+        aria-pressed={active}
+        onClick={() => model.setSelectedId(session.id)}
+      >
+        <span className="session-time">
+          <SessionTime session={session} timezone={programme.event.timezone} />
+        </span>
+        <span className="session-main">
+          <SessionTags session={session} />
+          <h3>{session.title}</h3>
+          <SessionSpeakerLines session={session} model={model} />
+          <SessionPlace session={session} />
+        </span>
+      </button>
+      {!embedded && !shared ? (
+        <SaveSessionButton session={session} model={model} />
+      ) : null}
+      {snippet || !description ? (
+        <div className="programme-entry-description">
+          <p id={`session-description-${session.id}`}>
+            {description
+              ? expanded
+                ? description
+                : snippet
+              : "Description not provided."}
+          </p>
+          {snippet && snippet !== description ? (
+            <button
+              type="button"
+              className="btn small"
+              aria-expanded={expanded}
+              aria-controls={`session-description-${session.id}`}
+              aria-label={`${expanded ? "Show less" : "Show more"} of the ${session.title} description`}
+              onClick={() => model.toggleDescription(session.id)}
+            >
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ProgrammeSessionList({ model }: { model: PublicProgrammeModel }) {
+  const { visible, programme, clearableFiltersActive, clearFilters } = model;
+  if (!visible.length) {
+    return (
+      <section className="card pad public-empty">
+        <h2>No matching sessions</h2>
+        <p className="subtle">Clear a filter or broaden the search.</p>
+        {clearableFiltersActive ? (
+          <button type="button" className="btn" onClick={clearFilters}>
+            Clear filters
+          </button>
+        ) : null}
+      </section>
+    );
+  }
+  return (
+    <div className="programme-days">
+      {groupSessionsByDay(visible, programme.event.timezone).map((group) => (
+        <section className="programme-day" key={group.key}>
+          <ProgrammeDayHeading
+            label={group.label}
+            count={group.sessions.length}
+          />
+          <div className="programme-list">
+            {group.sessions.map((session) => (
+              <ProgrammeSessionEntry
+                key={session.id}
+                session={session}
+                model={model}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
+  const {
+    fetcher,
+    shared,
+    saved,
+    savedSessions,
+    itineraryConflicts,
+    loaderData,
+    programme,
+    speakerById,
+    selected,
+    setTurnstileToken,
+    turnstileResetKey,
+    selectSavedSession,
+  } = model;
+  const calendarExportHref = `/api/v1/public/events/${encodeURIComponent(
+    programme.event.slug,
+  )}/calendar.ics?${loaderData.calendarExportQuery}`;
+  return (
+    <section
+      className="card itinerary"
+      aria-busy={fetcher.state !== "idle" || undefined}
+    >
+      <div className="card-title">
+        <h2>{shared ? "Shared itinerary" : "My itinerary"}</h2>
+        <span className="status info right">{saved.length}</span>
+      </div>
+      {itineraryConflicts.length ? (
+        <div className="validation-item warn">
+          <strong>Schedule conflict</strong>
+          <p>{itineraryConflicts[0].join(" overlaps ")}</p>
+        </div>
+      ) : null}
+      {fetcher.data &&
+      "error" in fetcher.data &&
+      typeof fetcher.data.error === "string" ? (
+        <p className="validation-item error" role="alert">
+          {fetcher.data.error}
+        </p>
+      ) : null}
+      {loaderData.itineraryVerificationRequired ? (
+        <div className="stack mb">
+          <p className="help">
+            Complete the security check once to start this browser's itinerary.
+          </p>
+          <TurnstileWidget
+            siteKey={loaderData.turnstileSiteKey}
+            action="public_itinerary_create"
+            onTokenChange={setTurnstileToken}
+            resetKey={turnstileResetKey}
+          />
+        </div>
+      ) : null}
+      {savedSessions.length ? (
+        <>
+          <div className="itinerary-items">
+            {savedSessions.map((session) => {
+              const sessionSpeakers = session.speakerIds.map(
+                (speakerId, index) => ({
+                  id: speakerId,
+                  name: session.speakerNames[index]!,
+                  affiliation: speakerAffiliation(speakerById.get(speakerId)!),
+                }),
+              );
+              return (
+                <button
+                  type="button"
+                  className="itinerary-item"
+                  key={session.id}
+                  aria-pressed={session.id === selected?.id}
+                  onClick={() => selectSavedSession(session.id)}
+                >
+                  <strong>
+                    {formatDay(session.startsAt, programme.event.timezone)} ·{" "}
+                    {formatProgrammeTimeRange(
+                      session.startsAt,
+                      session.endsAt,
+                      programme.event.timezone,
+                    )}
+                  </strong>
+                  <span className="itinerary-title">{session.title}</span>
+                  <span className="itinerary-meta">
+                    {[session.room, session.format, session.track]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                  {sessionSpeakers.length ? (
+                    <span className="itinerary-speakers">
+                      {sessionSpeakers.map((speaker) => (
+                        <span key={speaker.id}>
+                          {speaker.name}
+                          {speaker.affiliation ? ` — ${speaker.affiliation}` : ""}
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+          {!shared ? (
+            <div className="page-actions mt">
+              <a className="btn primary" href={calendarExportHref} download>
+                <CalendarDays aria-hidden size={15} /> Export itinerary
+              </a>
+              <fetcher.Form method="post">
+                <input type="hidden" name="intent" value="share" />
+                <button
+                  className="btn"
+                  type="submit"
+                  disabled={fetcher.state !== "idle"}
+                >
+                  Create read-only share link
+                </button>
+              </fetcher.Form>
+            </div>
+          ) : (
+            <a
+              className="btn primary mt"
+              href={calendarExportHref}
+              download
+            >
+              <CalendarDays aria-hidden size={15} /> Export itinerary
+            </a>
+          )}
+          {loaderData.itinerarySynced && !shared ? (
+            <p className="help">
+              Synced to your signed-in account across devices.
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <div className="itinerary-empty">
+          <span aria-hidden="true">♡</span>
+          <p className="subtle">No saved sessions yet.</p>
+          <p className="help">
+            Save a session to build a personal itinerary you can share.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
+  const {
+    selected,
+    programme,
+    speakerById,
+    embedded,
+    shared,
+    saved,
+    fetcher,
+    loaderData,
+    turnstileToken,
+    showSpeakers,
+  } = model;
+  if (!selected) return null;
+  return (
+    <section className="card session-detail-panel">
+      <span className="pc-page-eyebrow">Session detail</span>
+      <h2>{selected.title}</h2>
+      <p className="session-detail-when">
+        {formatDay(selected.startsAt, programme.event.timezone)} ·{" "}
+        {formatProgrammeTimeRange(
+          selected.startsAt,
+          selected.endsAt,
+          programme.event.timezone,
+        )}
+      </p>
+      <SessionPlace session={selected} />
+      <div className="public-detail-tags mt">
+        {selected.track ? (
+          <span className="pill track">{selected.track}</span>
+        ) : null}
+        <span className="pill format">{selected.format}</span>
+      </div>
+      <div className="stack mt mb">
+        {selected.speakerIds.length ? (
+          selected.speakerIds.map((speakerId, index) => {
+            const speaker = speakerById.get(speakerId)!;
+            const name = selected.speakerNames[index]!;
+            const affiliation = speakerAffiliation(speaker);
+            return (
+              <div className="row-main" key={speakerId}>
+                {speaker.imageUrl ? (
+                  <img
+                    className="avatar"
+                    src={speaker.imageUrl}
+                    alt=""
+                    width={40}
+                    height={40}
+                  />
+                ) : (
+                  <span className="avatar" aria-hidden="true">
+                    {initials(name)}
+                  </span>
+                )}
+                <div>
+                  <strong>{name}</strong>
+                  {affiliation ? <small>{affiliation}</small> : null}
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="row-main">
+            <span className="avatar" aria-hidden="true">
+              PC
+            </span>
+            <div>
+              <strong>Speaker to be announced</strong>
+              <small>{selected.track}</small>
+            </div>
+          </div>
+        )}
+      </div>
+      {!embedded && !shared ? (
+        <button
+          type="button"
+          className={`btn${saved.includes(selected.id) ? "" : " primary"}`}
+          disabled={
+            fetcher.state !== "idle" ||
+            (!saved.includes(selected.id) &&
+              loaderData.itineraryVerificationRequired &&
+              loaderData.turnstileSiteKey !== null &&
+              !turnstileToken)
+          }
+          onClick={() => model.toggle(selected.id)}
+        >
+          {fetcher.state !== "idle"
+            ? "Updating itinerary…"
+            : saved.includes(selected.id)
+              ? "Remove from itinerary"
+              : "Add to itinerary"}
+        </button>
+      ) : null}
+      <h3>About this session</h3>
+      <p className="session-detail-description">
+        {selected.description || "A description is coming soon."}
+      </p>
+      {showSpeakers && selected.speakerIds.length ? (
+        <div className="stack mt">
+          {selected.speakerIds.map((speakerId, index) => (
+            <a
+              key={speakerId}
+              href={`#speaker-${speakerId}`}
+              onClick={(event) =>
+                model.openSpeakerProfile(speakerId, event.currentTarget)
+              }
+            >
+              View {selected.speakerNames[index]}’s profile
+            </a>
+          ))}
+        </div>
+      ) : null}
+      <div className="divider" />
+      <Link
+        className="btn small"
+        to={`/public/programme/${programme.event.slug}#session-${selected.slug}`}
+      >
+        Shareable session link
+      </Link>
+    </section>
+  );
+}
+
+function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
+  const {
+    showSpeakers,
+    visibleSpeakers,
+    selectedSpeaker,
+    selectedSpeakerSessions,
+    programme,
+    speakerProfileRef,
+    closeSpeakerProfile,
+    setSelectedId,
+  } = model;
+  return (
+    <section
+      id="speakers"
+      className="mt public-speakers-section"
+      aria-labelledby="speakers-title"
+      hidden={!showSpeakers}
+    >
+      <div className="card-title">
+        <div>
+          <span className="pc-page-eyebrow">Meet the programme</span>
+          <h2 id="speakers-title">Speakers</h2>
+        </div>
+        <span className="status info">{visibleSpeakers.length}</span>
+      </div>
+      {visibleSpeakers.length ? (
+        <div className="grid grid-3">
+          {visibleSpeakers.map((speaker) => (
+            <PublicSpeakerCard
+              key={speaker.id}
+              speaker={speaker}
+              model={model}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="empty">
+          <p>No speakers match this search.</p>
+        </div>
+      )}
+      {selectedSpeaker ? (
+        <article
+          className="card pad mt public-speaker-profile"
+          id="programme-speaker-profile"
+          aria-live="polite"
+          aria-labelledby="programme-speaker-profile-name"
+          tabIndex={-1}
+          ref={speakerProfileRef}
+        >
+          <div className="card-title">
+            <div className="public-speaker-profile-identity">
+              <PublicSpeakerAvatar speaker={selectedSpeaker} size={72} />
+              <div>
+                <span className="pill">Speaker profile</span>
+                <h2 id="programme-speaker-profile-name">
+                  {selectedSpeaker.displayName}
+                </h2>
+                {speakerAffiliation(selectedSpeaker) ? (
+                  <p className="help">
+                    {speakerAffiliation(selectedSpeaker)}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <div className="public-profile-actions">
+              <a
+                className="btn small"
+                href={`#speaker-${selectedSpeaker.id}`}
+              >
+                Share profile link
+              </a>
+              <button
+                type="button"
+                className="btn small"
+                onClick={closeSpeakerProfile}
+              >
+                Close profile
+              </button>
+            </div>
+          </div>
+          {selectedSpeaker.pronunciation ? (
+            <p className="help">
+              Pronunciation · {selectedSpeaker.pronunciation}
+            </p>
+          ) : null}
+          <p>{selectedSpeaker.biography || "Biography not provided."}</p>
+          <h3>
+            Sessions{" "}
+            <span className="status info">
+              {selectedSpeakerSessions.length}
+            </span>
+          </h3>
+          <div className="stack">
+            {selectedSpeakerSessions.length ? (
+              selectedSpeakerSessions.map((session) => (
+                <a
+                  href={`#session-${session.slug}`}
+                  key={session.id}
+                  onClick={() => setSelectedId(session.id)}
+                >
+                  {formatDay(session.startsAt, programme.event.timezone)} ·{" "}
+                  {formatTime(session.startsAt, programme.event.timezone)} ·{" "}
+                  {session.title} · {session.room}
+                </a>
+              ))
+            ) : (
+              <p className="subtle">No sessions match the current filters.</p>
+            )}
+          </div>
+        </article>
+      ) : null}
+    </section>
+  );
+}
 
 export function PublicProgrammeWorkspace({
   loaderData: initialLoaderData,
@@ -31,63 +887,12 @@ export function PublicProgrammeWorkspace({
     loaderData,
     programme,
     embedded,
-    shared,
     embedOptions,
     fetcher,
-    turnstileToken,
-    setTurnstileToken,
-    turnstileResetKey,
     shareUrl,
-    saved,
-    query,
-    setQuery,
-    days,
-    day,
-    setDay,
-    track,
-    setTrack,
-    format,
-    setFormat,
-    room,
-    setRoom,
-    expandedDescriptions,
-    tracks,
-    formats,
-    rooms,
-    speakerById,
-    setSelectedId,
-    speakerProfileRef,
-    showControl,
-    showSpeakers,
-    visible,
-    filtersActive,
-    clearableFiltersActive,
-    selected,
-    visibleSpeakers,
-    selectedSpeaker,
-    selectedSpeakerSessions,
-    savedSessions,
-    itineraryConflicts,
-    openSpeakerProfile,
-    closeSpeakerProfile,
-    toggleDescription,
-    clearFilters,
-    selectSavedSession,
-    toggle,
   } = model;
   const overviewSurface =
     loaderData.surface === "overview" || loaderData.surface === "sessions";
-  const speakersHref = overviewSurface
-    ? "#speakers"
-    : `/public/programme/${programme.event.slug}/speakers`;
-  const programmeHref = `/public/programme/${programme.event.slug}`;
-  const sessionsHref = overviewSurface ? "#programme" : programmeHref;
-  const itineraryHref = overviewSurface
-    ? "#itinerary"
-    : `${programmeHref}#itinerary`;
-  const calendarExportHref = `/api/v1/public/events/${encodeURIComponent(
-    programme.event.slug,
-  )}/calendar.ics?${loaderData.calendarExportQuery}`;
   return (
     <div
       className={`public-shell event-branded${embedded ? " embedded" : ""}${embedded && embedOptions.density === "compact" ? " embed-compact" : ""}`}
@@ -97,182 +902,8 @@ export function PublicProgrammeWorkspace({
         } as React.CSSProperties
       }
     >
-      {!embedded ? (
-        <header className="public-top">
-          <Link
-            aria-label={`${programme.event.name} programme`}
-            className="brand"
-            to={`/public/programme/${programme.event.slug}`}
-            style={{ color: "var(--ink)", padding: 0 }}
-          >
-            <BrandMark />
-            <span>Program Cue</span>
-          </Link>
-          <nav className="public-nav" aria-label="Programme">
-            <a
-              className={overviewSurface ? "active" : undefined}
-              href={sessionsHref}
-              aria-current={overviewSurface ? "page" : undefined}
-            >
-              Sessions
-            </a>
-            {showSpeakers ? (
-              <a
-                className={
-                  loaderData.surface === "speakers" ? "active" : undefined
-                }
-                href={speakersHref}
-                aria-current={
-                  loaderData.surface === "speakers" ? "page" : undefined
-                }
-              >
-                Speakers
-              </a>
-            ) : null}
-            <Link
-              className={loaderData.surface === "agenda" ? "active" : undefined}
-              to={publicProgrammeSurfacePath(programme.event.slug, "agenda")}
-              aria-current={
-                loaderData.surface === "agenda" ? "page" : undefined
-              }
-            >
-              Agenda
-            </Link>
-            <Link
-              className={
-                loaderData.surface === "schedule" ? "active" : undefined
-              }
-              to={publicProgrammeSurfacePath(programme.event.slug, "schedule")}
-              aria-current={
-                loaderData.surface === "schedule" ? "page" : undefined
-              }
-            >
-              Schedule
-            </Link>
-            {showSpeakers ? (
-              <Link
-                className={
-                  loaderData.surface === "gallery" ? "active" : undefined
-                }
-                to={publicProgrammeSurfacePath(programme.event.slug, "gallery")}
-                aria-current={
-                  loaderData.surface === "gallery" ? "page" : undefined
-                }
-              >
-                Speaker Gallery
-              </Link>
-            ) : null}
-          </nav>
-          <details className="public-mobile-nav">
-            <summary className="btn small">Browse</summary>
-            <nav aria-label="Programme sections">
-              <a
-                className={overviewSurface ? "active" : undefined}
-                href={sessionsHref}
-                aria-current={overviewSurface ? "page" : undefined}
-              >
-                Sessions
-              </a>
-              {showSpeakers ? (
-                <a
-                  className={
-                    loaderData.surface === "speakers" ? "active" : undefined
-                  }
-                  href={speakersHref}
-                  aria-current={
-                    loaderData.surface === "speakers" ? "page" : undefined
-                  }
-                >
-                  Speakers
-                </a>
-              ) : null}
-              <Link
-                className={
-                  loaderData.surface === "agenda" ? "active" : undefined
-                }
-                to={publicProgrammeSurfacePath(programme.event.slug, "agenda")}
-                aria-current={
-                  loaderData.surface === "agenda" ? "page" : undefined
-                }
-              >
-                Agenda
-              </Link>
-              <Link
-                className={
-                  loaderData.surface === "schedule" ? "active" : undefined
-                }
-                to={publicProgrammeSurfacePath(
-                  programme.event.slug,
-                  "schedule",
-                )}
-                aria-current={
-                  loaderData.surface === "schedule" ? "page" : undefined
-                }
-              >
-                Schedule
-              </Link>
-              {showSpeakers ? (
-                <Link
-                  className={
-                    loaderData.surface === "gallery" ? "active" : undefined
-                  }
-                  to={publicProgrammeSurfacePath(
-                    programme.event.slug,
-                    "gallery",
-                  )}
-                  aria-current={
-                    loaderData.surface === "gallery" ? "page" : undefined
-                  }
-                >
-                  Speaker Gallery
-                </Link>
-              ) : null}
-            </nav>
-          </details>
-          <a className="btn" href={itineraryHref}>
-            ♡ {shared ? "Shared itinerary" : "My itinerary"}{" "}
-            <span className="status info">{saved.length}</span>
-          </a>
-        </header>
-      ) : null}
-      <section
-        className="hero"
-        style={
-          {
-            "--event-accent":
-              embedOptions.accent ?? programme.event.brandAccent,
-            background: embedOptions.accent
-              ? `linear-gradient(135deg, #0f172a, ${embedOptions.accent})`
-              : undefined,
-          } as React.CSSProperties
-        }
-      >
-        <span className="status info">
-          Published version {programme.version.versionNumber}
-        </span>
-        <h1>{programme.event.name}</h1>
-        <p
-          style={{
-            display: "flex",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "6px",
-          }}
-        >
-          <CalendarDays aria-hidden="true" size={15} />{" "}
-          <span>
-            {formatProgrammeEventDay(programme.event.startDate)}–
-            {formatProgrammeEventDay(programme.event.endDate)}
-          </span>
-          <span aria-hidden="true">·</span>
-          <MapPin aria-hidden="true" size={15} />{" "}
-          <span>
-            {[programme.event.venue, programme.event.city]
-              .filter(Boolean)
-              .join(", ")}
-          </span>
-        </p>
-      </section>
+      {!embedded ? <PublicProgrammeHeader model={model} /> : null}
+      <PublicProgrammeHero model={model} />
       <main
         id="main"
         className={`public-main${!overviewSurface ? " public-surface-main" : ""}`}
@@ -281,8 +912,7 @@ export function PublicProgrammeWorkspace({
           <div className="public-surface-content">
             <PublicProgrammeSurfaceContent model={model} />
           </div>
-        ) : null}
-        {overviewSurface ? (
+        ) : (
           <>
             <div className="public-content" id="programme">
               {fetcher.data && "error" in fetcher.data ? (
@@ -292,7 +922,7 @@ export function PublicProgrammeWorkspace({
                 </div>
               ) : null}
               {shareUrl ? (
-                <div className="validation-item ok mb" role="status">
+                <div className="public-share-notice mb" role="status">
                   <strong>Share link ready</strong>
                   <a href={shareUrl}>{shareUrl}</a>
                   <span>
@@ -301,661 +931,19 @@ export function PublicProgrammeWorkspace({
                 </div>
               ) : null}
               {embedOptions.controls.length || !embedded ? (
-                <div className="public-filters">
-                  {showControl("search") ? (
-                    <input
-                      className="field"
-                      value={query}
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder="Search sessions, speakers, or topics"
-                      aria-label="Search sessions, speakers, or topics"
-                      style={{ flex: 1 }}
-                    />
-                  ) : null}
-                  {showControl("day") ? (
-                    <select
-                      className="select"
-                      value={day}
-                      onChange={(event) => setDay(event.target.value)}
-                      aria-label="Filter by day"
-                    >
-                      <option>All days</option>
-                      {days.map((value) => (
-                        <option key={value}>{value}</option>
-                      ))}
-                    </select>
-                  ) : null}
-                  {showControl("track") && tracks.length > 1 ? (
-                    <select
-                      className="select"
-                      value={track}
-                      onChange={(event) => setTrack(event.target.value)}
-                      aria-label="Filter by track"
-                    >
-                      <option value="">All tracks</option>
-                      {tracks.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-                  {showControl("format") && formats.length > 1 ? (
-                    <select
-                      className="select"
-                      value={format}
-                      onChange={(event) => setFormat(event.target.value)}
-                      aria-label="Filter by format"
-                    >
-                      <option value="">All formats</option>
-                      {formats.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-                  {showControl("room") && rooms.length > 1 ? (
-                    <select
-                      className="select"
-                      value={room}
-                      onChange={(event) => setRoom(event.target.value)}
-                      aria-label="Filter by room"
-                    >
-                      <option value="">All rooms</option>
-                      {rooms.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={clearFilters}
-                    disabled={!clearableFiltersActive}
-                  >
-                    Clear filters
-                  </button>
-                </div>
+                <PublicProgrammeFilters model={model} />
               ) : null}
-              <p className="public-filter-summary help" role="status">
-                Showing {visible.length} of {programme.sessions.length}{" "}
-                published session{programme.sessions.length === 1 ? "" : "s"}
-                {filtersActive ? " for the current filters" : ""}.
-              </p>
-              <div className="programme-list">
-                {visible.length ? (
-                  visible.map((session) => {
-                    const sessionSpeakers = session.speakerIds.map(
-                      (speakerId, index) => {
-                        const speaker = speakerById.get(speakerId)!;
-                        return {
-                          id: speakerId,
-                          name: session.speakerNames[index]!,
-                          affiliation: speakerAffiliation(speaker),
-                        };
-                      },
-                    );
-                    const description = normaliseDescription(
-                      session.description,
-                    );
-                    const snippet = descriptionSnippet(description);
-                    const expanded = expandedDescriptions.includes(session.id);
-                    return (
-                      <div
-                        className={`programme-entry${session.id === selected?.id ? " active" : ""}`}
-                        key={session.id}
-                      >
-                        <button
-                          type="button"
-                          id={`session-${session.slug}`}
-                          className={`programme-row${session.id === selected?.id ? " active" : ""}`}
-                          aria-pressed={session.id === selected?.id}
-                          onClick={() => setSelectedId(session.id)}
-                          style={{
-                            width: "100%",
-                            textAlign: "left",
-                            borderTop: 0,
-                            borderLeft: 0,
-                            borderRight: 0,
-                          }}
-                        >
-                          <div>
-                            <strong>
-                              {formatTime(
-                                session.startsAt,
-                                programme.event.timezone,
-                              )}
-                            </strong>
-                            <time
-                              className="subtle programme-row-datetime"
-                              dateTime={new Date(
-                                session.startsAt * 1_000,
-                              ).toISOString()}
-                            >
-                              {formatProgrammeDateTimeRange(
-                                session.startsAt,
-                                session.endsAt,
-                                programme.event.timezone,
-                              )}
-                            </time>
-                          </div>
-                          <div>
-                            <span className="pill">{session.format}</span>
-                            <h3>{session.title}</h3>
-                            <div className="programme-row-speakers">
-                              {sessionSpeakers.length ? (
-                                sessionSpeakers.map((speaker) => (
-                                  <div
-                                    className="programme-row-speaker"
-                                    key={speaker.id}
-                                  >
-                                    <span className="speaker">
-                                      {speaker.name}
-                                    </span>
-                                    {speaker.affiliation ? (
-                                      <small className="subtle programme-row-affiliation">
-                                        {" "}
-                                        <span aria-hidden="true">— </span>
-                                        {speaker.affiliation}
-                                      </small>
-                                    ) : null}
-                                  </div>
-                                ))
-                              ) : (
-                                <span className="speaker">
-                                  Speaker to be announced
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="room-col">
-                            <strong>{session.room}</strong>
-                            <small
-                              className="subtle"
-                              style={{ display: "block" }}
-                            >
-                              {[session.building, session.level]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </small>
-                          </div>
-                          <div className="track-col">
-                            <span className="pill">
-                              {session.track || "Track not assigned"}
-                            </span>
-                          </div>
-                          <div>
-                            {!embedded && saved.includes(session.id) ? (
-                              <span className="status success">Saved ✓</span>
-                            ) : !embedded && !shared ? (
-                              <span className="pill">＋</span>
-                            ) : null}
-                          </div>
-                        </button>
-                        {snippet || !description ? (
-                          <div className="programme-entry-description">
-                            <p id={`session-description-${session.id}`}>
-                              {description
-                                ? expanded
-                                  ? description
-                                  : snippet
-                                : "Description not provided."}
-                            </p>
-                            {snippet && snippet !== description ? (
-                              <button
-                                type="button"
-                                className="btn small"
-                                aria-expanded={expanded}
-                                aria-controls={`session-description-${session.id}`}
-                                aria-label={`${expanded ? "Show less" : "Show more"} of the ${session.title} description`}
-                                onClick={() => toggleDescription(session.id)}
-                              >
-                                {expanded ? "Show less" : "Show more"}
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })
-                ) : (
-                  <section className="card pad">
-                    <h2>No matching sessions</h2>
-                    <p className="subtle">
-                      Clear a filter or broaden the search.
-                    </p>
-                    {clearableFiltersActive ? (
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={clearFilters}
-                      >
-                        Clear filters
-                      </button>
-                    ) : null}
-                  </section>
-                )}
-              </div>
-              <section
-                id="speakers"
-                className="mt"
-                aria-labelledby="speakers-title"
-                hidden={!showSpeakers}
-              >
-                <div className="card-title">
-                  <div>
-                    <span className="pc-page-eyebrow">Meet the programme</span>
-                    <h2 id="speakers-title">Speakers</h2>
-                  </div>
-                  <span className="status info">{visibleSpeakers.length}</span>
-                </div>
-                {visibleSpeakers.length ? (
-                  <div className="grid grid-3">
-                    {visibleSpeakers.map((speaker) => (
-                      <article
-                        id={`speaker-${speaker.id}`}
-                        className="card pad"
-                        key={speaker.id}
-                      >
-                        <div className="row-main mb">
-                          {speaker.imageUrl ? (
-                            <img
-                              className="avatar"
-                              src={speaker.imageUrl}
-                              alt={`${speaker.displayName} headshot`}
-                              width={48}
-                              height={48}
-                            />
-                          ) : (
-                            <span
-                              className="avatar"
-                              role="img"
-                              aria-label={`${speaker.displayName} headshot not available`}
-                            >
-                              {speaker.displayName
-                                .split(" ")
-                                .map((part) => part[0])
-                                .join("")
-                                .slice(0, 2)}
-                            </span>
-                          )}
-                          <div>
-                            <h3>{speaker.displayName}</h3>
-                            {speakerAffiliation(speaker) ? (
-                              <p className="help">
-                                {speakerAffiliation(speaker)}
-                              </p>
-                            ) : null}
-                          </div>
-                        </div>
-                        <p>
-                          {speaker.biography
-                            ? descriptionSnippet(speaker.biography)
-                            : "Biography not provided."}
-                        </p>
-                        <p className="help">
-                          {speaker.sessionIds.length} session
-                          {speaker.sessionIds.length === 1 ? "" : "s"}
-                        </p>
-                        <a
-                          className="btn small"
-                          id={`speaker-profile-link-${speaker.id}`}
-                          href="#programme-speaker-profile"
-                          aria-label={`View profile and sessions for ${speaker.displayName}`}
-                          onClick={(event) =>
-                            openSpeakerProfile(speaker.id, event.currentTarget)
-                          }
-                        >
-                          View profile and sessions
-                        </a>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="empty">
-                    <p>No speakers match this search.</p>
-                  </div>
-                )}
-                {selectedSpeaker ? (
-                  <article
-                    className="card pad mt"
-                    id="programme-speaker-profile"
-                    aria-live="polite"
-                    aria-labelledby="programme-speaker-profile-name"
-                    tabIndex={-1}
-                    ref={speakerProfileRef}
-                  >
-                    <div className="card-title">
-                      <div>
-                        <span className="pill">Speaker profile</span>
-                        <h2 id="programme-speaker-profile-name">
-                          {selectedSpeaker.displayName}
-                        </h2>
-                        {speakerAffiliation(selectedSpeaker) ? (
-                          <p className="help">
-                            {speakerAffiliation(selectedSpeaker)}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="public-profile-actions">
-                        <a
-                          className="btn small"
-                          href={`#speaker-${selectedSpeaker.id}`}
-                        >
-                          Share profile link
-                        </a>
-                        <button
-                          type="button"
-                          className="btn small"
-                          onClick={closeSpeakerProfile}
-                        >
-                          Close profile
-                        </button>
-                      </div>
-                    </div>
-                    {selectedSpeaker.pronunciation ? (
-                      <p className="help">
-                        Pronunciation · {selectedSpeaker.pronunciation}
-                      </p>
-                    ) : null}
-                    <p>
-                      {selectedSpeaker.biography || "Biography not provided."}
-                    </p>
-                    <h3>
-                      Sessions{" "}
-                      <span className="status info">
-                        {selectedSpeakerSessions.length}
-                      </span>
-                    </h3>
-                    <div className="stack">
-                      {selectedSpeakerSessions.length ? (
-                        selectedSpeakerSessions.map((session) => (
-                          <a
-                            href={`#session-${session.slug}`}
-                            key={session.id}
-                            onClick={() => setSelectedId(session.id)}
-                          >
-                            {formatDay(
-                              session.startsAt,
-                              programme.event.timezone,
-                            )}{" "}
-                            ·{" "}
-                            {formatTime(
-                              session.startsAt,
-                              programme.event.timezone,
-                            )}{" "}
-                            · {session.title} · {session.room}
-                          </a>
-                        ))
-                      ) : (
-                        <p className="subtle">
-                          No sessions match the current filters.
-                        </p>
-                      )}
-                    </div>
-                  </article>
-                ) : null}
-              </section>
+              <ProgrammeSessionList model={model} />
+              <OverviewSpeakers model={model} />
             </div>
             <aside id="itinerary">
-              {!embedded ? (
-                <section
-                  className="card itinerary"
-                  aria-busy={fetcher.state !== "idle" || undefined}
-                >
-                  <div className="card-title">
-                    <h2>{shared ? "Shared itinerary" : "My itinerary"}</h2>
-                    <span className="status info right">{saved.length}</span>
-                  </div>
-                  {itineraryConflicts.length ? (
-                    <div className="validation-item warn">
-                      <strong>Schedule conflict</strong>
-                      <p>{itineraryConflicts[0].join(" overlaps ")}</p>
-                    </div>
-                  ) : null}
-                  {fetcher.data &&
-                  "error" in fetcher.data &&
-                  typeof fetcher.data.error === "string" ? (
-                    <p className="validation-item error" role="alert">
-                      {fetcher.data.error}
-                    </p>
-                  ) : null}
-                  {loaderData.itineraryVerificationRequired ? (
-                    <div className="stack mb">
-                      <p className="help">
-                        Complete the security check once to start this browser's
-                        itinerary.
-                      </p>
-                      <TurnstileWidget
-                        siteKey={loaderData.turnstileSiteKey}
-                        action="public_itinerary_create"
-                        onTokenChange={setTurnstileToken}
-                        resetKey={turnstileResetKey}
-                      />
-                    </div>
-                  ) : null}
-                  {savedSessions.length ? (
-                    <>
-                      {savedSessions.map((session) => {
-                        const sessionSpeakers = session.speakerIds.map(
-                          (speakerId, index) => {
-                            const speaker = speakerById.get(speakerId)!;
-                            return {
-                              id: speakerId,
-                              name: session.speakerNames[index]!,
-                              affiliation: speakerAffiliation(speaker),
-                            };
-                          },
-                        );
-                        return (
-                          <button
-                            type="button"
-                            className="itinerary-item"
-                            style={{ width: "100%", textAlign: "left" }}
-                            key={session.id}
-                            aria-pressed={session.id === selected?.id}
-                            onClick={() => selectSavedSession(session.id)}
-                          >
-                            <strong>
-                              {formatDay(
-                                session.startsAt,
-                                programme.event.timezone,
-                              )}{" "}
-                              ·{" "}
-                              {formatTime(
-                                session.startsAt,
-                                programme.event.timezone,
-                              )}
-                            </strong>
-                            <span className="itinerary-title">
-                              {session.title}
-                            </span>
-                            <span className="itinerary-meta">
-                              {[session.room, session.format, session.track]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </span>
-                            {sessionSpeakers.length ? (
-                              <span className="itinerary-speakers">
-                                {sessionSpeakers.map((speaker) => (
-                                  <span key={speaker.id}>
-                                    {speaker.name}
-                                    {speaker.affiliation
-                                      ? ` — ${speaker.affiliation}`
-                                      : ""}
-                                  </span>
-                                ))}
-                              </span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                      {!shared ? (
-                        <div className="page-actions mt">
-                          <a
-                            className="btn primary"
-                            href={calendarExportHref}
-                            download
-                          >
-                            <CalendarDays aria-hidden size={15} /> Export
-                            itinerary
-                          </a>
-                          <fetcher.Form method="post">
-                            <input type="hidden" name="intent" value="share" />
-                            <button
-                              className="btn"
-                              type="submit"
-                              disabled={fetcher.state !== "idle"}
-                            >
-                              Create read-only share link
-                            </button>
-                          </fetcher.Form>
-                        </div>
-                      ) : (
-                        <a
-                          className="btn primary mt"
-                          href={calendarExportHref}
-                          download
-                        >
-                          <CalendarDays aria-hidden size={15} /> Export
-                          itinerary
-                        </a>
-                      )}
-                      {loaderData.itinerarySynced && !shared ? (
-                        <p className="help">
-                          Synced to your signed-in account across devices.
-                        </p>
-                      ) : null}
-                    </>
-                  ) : (
-                    <p className="subtle">No saved sessions yet.</p>
-                  )}
-                </section>
-              ) : null}
-              {selected ? (
-                <section className="card session-detail-panel mt">
-                  <div className="card-title">
-                    <span className="pill">{selected.format}</span>
-                  </div>
-                  <h2>{selected.title}</h2>
-                  <div className="stack mb">
-                    {selected.speakerIds.length ? (
-                      selected.speakerIds.map((speakerId, index) => {
-                        const speaker = speakerById.get(speakerId)!;
-                        const name = selected.speakerNames[index]!;
-                        const affiliation = speakerAffiliation(speaker);
-                        return (
-                          <div className="row-main" key={speakerId}>
-                            {speaker.imageUrl ? (
-                              <img
-                                className="avatar"
-                                src={speaker.imageUrl}
-                                alt=""
-                                width={40}
-                                height={40}
-                              />
-                            ) : (
-                              <span className="avatar" aria-hidden="true">
-                                {initials(name)}
-                              </span>
-                            )}
-                            <div>
-                              <strong>{name}</strong>
-                              {affiliation ? (
-                                <small>{affiliation}</small>
-                              ) : null}
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="row-main">
-                        <span className="avatar" aria-hidden="true">
-                          PC
-                        </span>
-                        <div>
-                          <strong>Speaker to be announced</strong>
-                          <small>{selected.track}</small>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {!embedded && !shared ? (
-                    <button
-                      type="button"
-                      className={`btn${saved.includes(selected.id) ? "" : " primary"}`}
-                      disabled={
-                        fetcher.state !== "idle" ||
-                        (!saved.includes(selected.id) &&
-                          loaderData.itineraryVerificationRequired &&
-                          loaderData.turnstileSiteKey !== null &&
-                          !turnstileToken)
-                      }
-                      onClick={() => toggle(selected.id)}
-                    >
-                      {fetcher.state !== "idle"
-                        ? "Updating itinerary…"
-                        : saved.includes(selected.id)
-                          ? "Remove from itinerary"
-                          : "Add to itinerary"}
-                    </button>
-                  ) : null}
-                  <h3>About this session</h3>
-                  <p>
-                    {selected.description || "A description is coming soon."}
-                  </p>
-                  <Link
-                    className="btn small"
-                    to={`/public/programme/${programme.event.slug}#session-${selected.slug}`}
-                  >
-                    Shareable session link
-                  </Link>
-                  {showSpeakers && selected.speakerIds.length ? (
-                    <div className="stack mt">
-                      {selected.speakerIds.map((speakerId, index) => (
-                        <a
-                          key={speakerId}
-                          href={`#speaker-${speakerId}`}
-                          onClick={(event) =>
-                            openSpeakerProfile(speakerId, event.currentTarget)
-                          }
-                        >
-                          View {selected.speakerNames[index]}’s profile
-                        </a>
-                      ))}
-                    </div>
-                  ) : null}
-                  <div className="divider" />
-                  <h3>Details</h3>
-                  <dl className="public-detail-list">
-                    <dt>When</dt>
-                    <dd>
-                      {formatDay(selected.startsAt, programme.event.timezone)} ·{" "}
-                      {formatTime(selected.startsAt, programme.event.timezone)}–
-                      {formatTime(selected.endsAt, programme.event.timezone)}
-                    </dd>
-                    <dt>Where</dt>
-                    <dd>
-                      {[selected.room, selected.building, selected.level]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </dd>
-                    <dt>Track</dt>
-                    <dd>
-                      {selected.track ?? "Not assigned to a public track"}
-                    </dd>
-                    <dt>Format</dt>
-                    <dd>{selected.format}</dd>
-                  </dl>
-                </section>
-              ) : null}
+              {!embedded ? <ItineraryPanel model={model} /> : null}
+              <SessionDetailPanel model={model} />
             </aside>
           </>
-        ) : null}
+        )}
       </main>
+      {!embedded ? <PublicProgrammeFooter model={model} /> : null}
     </div>
   );
 }

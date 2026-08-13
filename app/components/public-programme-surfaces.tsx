@@ -1,15 +1,27 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 
 import {
   descriptionSnippet,
   formatDay,
+  groupSessionsByDay,
   initials,
   normaliseDescription,
   sessionSpeakerDetails,
   speakerAffiliation,
   type PublicProgrammeModel,
 } from "./public-programme-model";
-import { formatProgrammeDateTimeRange } from "~/modules/programme/programme-presentation";
+import {
+  ProgrammeDayHeading,
+  PublicSpeakerAvatar,
+  SaveSessionButton,
+  SessionPlace,
+  SessionTags,
+  SessionTime,
+} from "./public-programme-parts";
+import {
+  formatProgrammeDuration,
+  formatProgrammeTimeRange,
+} from "~/modules/programme/programme-presentation";
 import type {
   PublishedSession,
   PublishedSpeaker,
@@ -74,11 +86,7 @@ function PublicDayTabs({
 function PublicSpeakerMetadata({ speaker }: { speaker: PublishedSpeaker }) {
   const affiliation = speakerAffiliation(speaker);
   if (!affiliation) return null;
-  return (
-    <span className="public-speaker-metadata">
-      {affiliation}
-    </span>
-  );
+  return <span className="public-speaker-metadata">{affiliation}</span>;
 }
 
 function PublicSpeakerPhoto({
@@ -130,10 +138,13 @@ function PublicSessionSpeakers({
     <div className="public-session-speakers" aria-label="Speakers">
       {speakers.map((speaker) => (
         <div className="public-session-speaker" key={speaker.id}>
-          <strong>{speaker.displayName}</strong>
-          {speakerAffiliation(speaker) ? (
-            <span>{speakerAffiliation(speaker)}</span>
-          ) : null}
+          <PublicSpeakerAvatar speaker={speaker} size={32} />
+          <span>
+            <strong>{speaker.displayName}</strong>
+            {speakerAffiliation(speaker) ? (
+              <span>{speakerAffiliation(speaker)}</span>
+            ) : null}
+          </span>
         </div>
       ))}
     </div>
@@ -159,29 +170,39 @@ export function PublicSessionDetails({
           <span className="pc-page-eyebrow">Session detail</span>
           <h2 id="public-session-detail-title">{session.title}</h2>
         </div>
-        <div className="public-detail-tags">
-          <span className="pill">{session.format}</span>
-          <span className="pill">{session.track || "Track not assigned"}</span>
-        </div>
+        <SessionTags session={session} />
       </div>
-      <p className="public-full-datetime">
-        {formatProgrammeDateTimeRange(
-          session.startsAt,
-          session.endsAt,
-          model.programme.event.timezone,
-        )}
-      </p>
-      <p className="public-room-line">
-        {[session.room, session.building, session.level]
-          .filter(Boolean)
-          .join(" · ")}
-      </p>
-      <p className="public-detail-description">
-        {normaliseDescription(session.description) ||
-          "Description not provided."}
-      </p>
-      <h3>Speakers</h3>
-      <PublicSessionSpeakers session={session} model={model} />
+      <div className="public-surface-detail-body">
+        <div>
+          <p className="public-detail-description">
+            {normaliseDescription(session.description) ||
+              "Description not provided."}
+          </p>
+        </div>
+        <aside className="public-surface-detail-facts">
+          <dl className="public-detail-list">
+            <dt>When</dt>
+            <dd>
+              {formatDay(session.startsAt, model.programme.event.timezone)}
+              <br />
+              {formatProgrammeTimeRange(
+                session.startsAt,
+                session.endsAt,
+                model.programme.event.timezone,
+              )}{" "}
+              · {formatProgrammeDuration(session.startsAt, session.endsAt)}
+            </dd>
+            <dt>Where</dt>
+            <dd>
+              {[session.room, session.building, session.level]
+                .filter(Boolean)
+                .join(" · ")}
+            </dd>
+          </dl>
+          <h3>Speakers</h3>
+          <PublicSessionSpeakers session={session} model={model} />
+        </aside>
+      </div>
     </article>
   );
 }
@@ -217,6 +238,41 @@ function SessionCardDescription({
   );
 }
 
+/**
+ * Heading, count and the surface's own control sit on one line. Keeping the
+ * search beside the count stops a directory of a handful of speakers from
+ * reading as an empty page with a stray badge in the corner.
+ */
+function SurfaceHeading({
+  eyebrow,
+  title,
+  id,
+  description,
+  count,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  id: string;
+  description: string;
+  count: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="public-surface-heading">
+      <div className="public-surface-heading-copy">
+        <span className="pc-page-eyebrow">{eyebrow}</span>
+        <h1 id={id}>{title}</h1>
+        <p className="subtle">{description}</p>
+      </div>
+      <div className="public-surface-heading-aside">
+        <span className="status info">{count}</span>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function PublicAgendaSurface({
   model,
 }: {
@@ -234,16 +290,13 @@ export function PublicAgendaSurface({
     null;
   return (
     <section className="public-surface" aria-labelledby="public-agenda-title">
-      <div className="public-surface-heading">
-        <div>
-          <span className="pc-page-eyebrow">Public programme</span>
-          <h1 id="public-agenda-title">Agenda</h1>
-          <p className="subtle">
-            Browse the published sessions by event day, time and room.
-          </p>
-        </div>
-        <span className="status info">{sessions.length} sessions</span>
-      </div>
+      <SurfaceHeading
+        eyebrow="Public programme"
+        title="Agenda"
+        id="public-agenda-title"
+        description="Every published session for the selected day, side by side."
+        count={`${sessions.length} sessions`}
+      />
       <PublicDayTabs model={model} label="Agenda days" />
       <div
         className="agenda-board"
@@ -257,21 +310,11 @@ export function PublicAgendaSurface({
               key={session.id}
               role="listitem"
             >
-              <div className="agenda-card-header">
-                <time>
-                  {formatProgrammeDateTimeRange(
-                    session.startsAt,
-                    session.endsAt,
-                    model.programme.event.timezone,
-                  )}
-                </time>
-                <span className="agenda-card-room">{session.room}</span>
-                <span className="public-detail-tags">
-                  <span className="pill">
-                    {session.track || "Track not assigned"}
-                  </span>
-                  <span className="pill">{session.format}</span>
-                </span>
+              <div className="agenda-card-time">
+                <SessionTime
+                  session={session}
+                  timezone={model.programme.event.timezone}
+                />
               </div>
               <h2 className="agenda-card-title">
                 <button
@@ -283,9 +326,14 @@ export function PublicAgendaSurface({
                   {session.title}
                 </button>
               </h2>
+              <div className="agenda-card-meta">
+                <SessionPlace session={session} />
+                <SessionTags session={session} />
+              </div>
               <p className="public-surface-description agenda-card-description">
-                {normaliseDescription(session.description) ||
-                  "Description not provided."}
+                {descriptionSnippet(
+                  normaliseDescription(session.description),
+                ) || "Description not provided."}
               </p>
               <PublicSessionSpeakers session={session} model={model} />
             </article>
@@ -301,6 +349,11 @@ export function PublicAgendaSurface({
   );
 }
 
+/**
+ * The chronological read: one day at a time, in programme order, with the
+ * calendar date stated once by the day heading rather than repeated on every
+ * card.
+ */
 export function PublicScheduleSurface({
   model,
 }: {
@@ -308,60 +361,66 @@ export function PublicScheduleSurface({
 }) {
   const activeDay =
     model.day === "All days" ? (model.days[0] ?? "All days") : model.day;
-  const sessions = model.visible.filter(
-    (session) =>
-      formatDay(session.startsAt, model.programme.event.timezone) === activeDay,
+  const days = groupSessionsByDay(
+    model.visible.filter(
+      (session) =>
+        formatDay(session.startsAt, model.programme.event.timezone) ===
+        activeDay,
+    ),
+    model.programme.event.timezone,
+  );
+  const sessionCount = days.reduce(
+    (total, group) => total + group.sessions.length,
+    0,
   );
   return (
     <section className="public-surface" aria-labelledby="public-schedule-title">
-      <div className="public-surface-heading">
-        <div>
-          <span className="pc-page-eyebrow">Browse chronologically</span>
-          <h1 id="public-schedule-title">Schedule Itinerary</h1>
-          <p className="subtle">
-            A day-by-day itinerary of the published programme, with complete
-            session and speaker details.
-          </p>
-        </div>
-        <span className="status info">{sessions.length} sessions</span>
-      </div>
+      <SurfaceHeading
+        eyebrow="Browse chronologically"
+        title="Schedule Itinerary"
+        id="public-schedule-title"
+        description="A day-by-day itinerary of the published programme, with complete session and speaker details."
+        count={`${sessionCount} sessions`}
+      />
       <PublicDayTabs model={model} label="Schedule itinerary days" />
-      <ol
-        className="public-itinerary-list"
-        aria-label={`${activeDay} schedule`}
-      >
-        {sessions.length ? (
-          sessions.map((session) => {
-            return (
-              <li className="public-itinerary-card" key={session.id}>
-                <div className="public-itinerary-time">
-                  <time>
-                    {formatProgrammeDateTimeRange(
-                      session.startsAt,
-                      session.endsAt,
-                      model.programme.event.timezone,
-                    )}
-                  </time>
-                  <strong>{session.room}</strong>
-                </div>
-                <div className="public-itinerary-content">
-                  <div className="public-detail-tags">
-                    <span className="pill">
-                      {session.track || "Track not assigned"}
-                    </span>
-                    <span className="pill">{session.format}</span>
+      {days.length ? (
+        days.map((group) => (
+          <section className="public-itinerary-day" key={group.key}>
+            <ProgrammeDayHeading
+              label={group.label}
+              count={group.sessions.length}
+            />
+            <ol className="public-itinerary-list" aria-label={group.label}>
+              {group.sessions.map((session) => (
+                <li className="public-itinerary-card" key={session.id}>
+                  <div className="public-itinerary-time">
+                    <SessionTime
+                      session={session}
+                      timezone={model.programme.event.timezone}
+                    />
                   </div>
-                  <h2>{session.title}</h2>
-                  <SessionCardDescription session={session} model={model} />
-                  <PublicSessionSpeakers session={session} model={model} />
-                </div>
-              </li>
-            );
-          })
-        ) : (
-          <li className="empty">No published sessions on this day.</li>
-        )}
-      </ol>
+                  <div className="public-itinerary-content">
+                    <div className="public-itinerary-title-row">
+                      <h2>{session.title}</h2>
+                      {model.embedded || model.shared ? null : (
+                        <SaveSessionButton session={session} model={model} />
+                      )}
+                    </div>
+                    <div className="public-itinerary-meta">
+                      <SessionPlace session={session} />
+                      <SessionTags session={session} />
+                    </div>
+                    <SessionCardDescription session={session} model={model} />
+                    <PublicSessionSpeakers session={session} model={model} />
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ))
+      ) : (
+        <p className="empty">No published sessions match the current day.</p>
+      )}
     </section>
   );
 }
@@ -410,29 +469,27 @@ export function PublicSpeakersSurface({
 }) {
   return (
     <section className="public-surface" aria-labelledby="public-speakers-title">
-      <div className="public-surface-heading">
-        <div>
-          <span className="pc-page-eyebrow">Published directory</span>
-          <h1 id="public-speakers-title">Speakers</h1>
-          <p className="subtle">Meet the people presenting this event.</p>
+      <SurfaceHeading
+        eyebrow="Published directory"
+        title="Speakers"
+        id="public-speakers-title"
+        description="Meet the people presenting this event."
+        count={`${model.directorySpeakers.length} speakers`}
+      >
+        <div className="public-surface-search">
+          <label className="sr-only" htmlFor="public-speaker-search">
+            Search speakers by name
+          </label>
+          <input
+            id="public-speaker-search"
+            className="field"
+            value={model.directoryQuery}
+            onChange={(event) => model.setDirectoryQuery(event.target.value)}
+            placeholder="Search by name"
+            type="search"
+          />
         </div>
-        <span className="status info">
-          {model.directorySpeakers.length} speakers
-        </span>
-      </div>
-      <div className="public-surface-search">
-        <label className="sr-only" htmlFor="public-speaker-search">
-          Search speakers by name
-        </label>
-        <input
-          id="public-speaker-search"
-          className="field"
-          value={model.directoryQuery}
-          onChange={(event) => model.setDirectoryQuery(event.target.value)}
-          placeholder="Search speakers by name"
-          type="search"
-        />
-      </div>
+      </SurfaceHeading>
       <div className="grid grid-3 public-speaker-directory-grid">
         {model.directorySpeakers.length ? (
           model.directorySpeakers.map((speaker) => (
@@ -474,6 +531,10 @@ function SpeakerGalleryCard({
       <span className="speaker-gallery-card-copy">
         <strong>{speaker.displayName}</strong>
         <PublicSpeakerMetadata speaker={speaker} />
+        <span className="speaker-gallery-card-sessions">
+          {speaker.sessionIds.length} session
+          {speaker.sessionIds.length === 1 ? "" : "s"}
+        </span>
       </span>
     </button>
   );
@@ -512,16 +573,16 @@ function SpeakerDetailPanel({
           <span className="pc-page-eyebrow">Speaker details</span>
           <h2 id={`${variant}-speaker-detail-name`}>{speaker.displayName}</h2>
           <PublicSpeakerMetadata speaker={speaker} />
+          <div className="public-profile-actions">
+            <button
+              type="button"
+              className="btn small"
+              onClick={model.closeSpeakerProfile}
+            >
+              Close speaker details
+            </button>
+          </div>
         </div>
-      </div>
-      <div className="public-profile-actions">
-        <button
-          type="button"
-          className="btn small"
-          onClick={model.closeSpeakerProfile}
-        >
-          Close speaker details
-        </button>
       </div>
       <h3>Biography</h3>
       <p id={biographyId}>
@@ -557,7 +618,12 @@ function SpeakerDetailPanel({
             >
               <strong>{session.title}</strong>
               <span>
-                {formatProgrammeDateTimeRange(
+                {formatDay(
+                  session.startsAt,
+                  model.programme.event.timezone,
+                )}{" "}
+                ·{" "}
+                {formatProgrammeTimeRange(
                   session.startsAt,
                   session.endsAt,
                   model.programme.event.timezone,
@@ -584,32 +650,27 @@ export function PublicSpeakerGallerySurface({
       className="public-surface speaker-gallery-surface"
       aria-labelledby="speaker-gallery-title"
     >
-      <div className="public-surface-heading">
-        <div>
-          <span className="pc-page-eyebrow">Visual speaker showcase</span>
-          <h1 id="speaker-gallery-title">Speaker Gallery</h1>
-          <p className="subtle">
-            Browse the published speaker community by name. Open a card for
-            biography and session details.
-          </p>
+      <SurfaceHeading
+        eyebrow="Visual speaker showcase"
+        title="Speaker Gallery"
+        id="speaker-gallery-title"
+        description="Browse the published speaker community by name. Open a card for biography and session details."
+        count={`${model.gallerySpeakers.length} speakers`}
+      >
+        <div className="public-surface-search">
+          <label className="sr-only" htmlFor="speaker-gallery-search">
+            Search speaker gallery by name
+          </label>
+          <input
+            id="speaker-gallery-search"
+            className="field"
+            value={model.galleryQuery}
+            onChange={(event) => model.setGalleryQuery(event.target.value)}
+            placeholder="Search by name"
+            type="search"
+          />
         </div>
-        <span className="status info">
-          {model.gallerySpeakers.length} speakers
-        </span>
-      </div>
-      <div className="public-surface-search">
-        <label className="sr-only" htmlFor="speaker-gallery-search">
-          Search speaker gallery by name
-        </label>
-        <input
-          id="speaker-gallery-search"
-          className="field"
-          value={model.galleryQuery}
-          onChange={(event) => model.setGalleryQuery(event.target.value)}
-          placeholder="Search Speaker Gallery by name"
-          type="search"
-        />
-      </div>
+      </SurfaceHeading>
       {model.gallerySpeakers.length ? (
         <div className="speaker-gallery-grid" aria-label="Speaker Gallery">
           {model.gallerySpeakers.map((speaker) => (

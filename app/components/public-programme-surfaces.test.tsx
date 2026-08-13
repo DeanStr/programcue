@@ -122,7 +122,10 @@ describe("public programme speaker surfaces", () => {
     expect(markup).toContain("The Future of Attendee Engagement");
     expect(markup).toContain("Main Stage");
     expect(markup).toContain('loading="eager"');
-    expect(markup).toContain("Tuesday, May 20, 2025");
+    // Day and clock range, without the redundant year the previous long-form
+    // timestamp repeated on every row of every published list.
+    expect(markup).toContain("Tuesday, May 20");
+    expect(markup).toContain("9:00–9:45 AM");
     expect(markup).toContain(
       'href="/public/programme/future-of-events-2025#session-future-attendee-engagement"',
     );
