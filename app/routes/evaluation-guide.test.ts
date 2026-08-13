@@ -122,6 +122,9 @@ describe("production evaluation guide", () => {
     expect((selected as Response).headers.get("location")).toBe(
       "/admin/command",
     );
+    expect(
+      (selected as Response).headers.get("x-remix-reload-document"),
+    ).toBe("true");
     const selectedCookies = responseCookieHeader(selected as Response);
     await expect(
       requireAuthenticatedPerson(

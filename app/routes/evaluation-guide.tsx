@@ -10,6 +10,7 @@ import {
   Form,
   Link,
   redirect,
+  redirectDocument,
   useActionData,
   useNavigation,
 } from "react-router";
@@ -192,7 +193,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   const headers = new Headers();
   headers.append("set-cookie", await evaluationSessionCookie(env, identityKey));
   headers.append("set-cookie", currentEventCookie(EVALUATION_EVENT_ID, env));
-  return redirect(selected.definition.destination, { status: 303, headers });
+  return redirectDocument(selected.definition.destination, {
+    status: 303,
+    headers,
+  });
 }
 
 function RoleCards({
