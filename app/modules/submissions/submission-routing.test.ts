@@ -346,6 +346,26 @@ describe("Submissions D1 vertical slice", () => {
         await service.listAdminSubmissions(viewer, { status: "submitted" })
       ).find((submission) => submission.id === firstId);
       expect(routed?.routedTo).toBe(teamName);
+      await expect(
+        service.getAdminSubmission(viewer, firstId),
+      ).resolves.toMatchObject({
+        routingExplanation: {
+          source: {
+            kind: "published_form",
+            formName: expect.stringMatching(/^Test form /),
+            versionNumber: 1,
+          },
+          routes: [
+            {
+              trackId: "demo-track-ai",
+              trackName: "AI & Innovation",
+              teamId,
+              teamName,
+            },
+          ],
+          routedTeams: [{ id: teamId, name: teamName }],
+        },
+      });
       const assigned = (
         await service.repository.getApplicantDrafts(id, applicant)
       ).find((draft) => draft.id === firstId)!;
@@ -517,6 +537,27 @@ describe("Submissions D1 vertical slice", () => {
         category: "AI & Innovation, Event Operations",
         routedTeamIds: [aiTeamId, operationsTeamId].sort(),
         routedTo: "AI reviewers, Operations reviewers",
+        routingExplanation: {
+          source: {
+            kind: "published_form",
+            formName: expect.stringMatching(/^Test form /),
+            versionNumber: 1,
+          },
+          routes: [
+            {
+              trackId: "demo-track-ai",
+              trackName: "AI & Innovation",
+              teamId: aiTeamId,
+              teamName: "AI reviewers",
+            },
+            {
+              trackId: "demo-track-operations",
+              trackName: "Event Operations",
+              teamId: operationsTeamId,
+              teamName: "Operations reviewers",
+            },
+          ],
+        },
       });
       await testEnv.DB.prepare(
         `DELETE FROM submission_routing_teams
@@ -527,6 +568,9 @@ describe("Submissions D1 vertical slice", () => {
       await expect(
         service.listAdminSubmissions(viewer, { status: "submitted" }),
       ).resolves.toEqual(expect.any(Array));
+      await expect(
+        service.getAdminSubmission(viewer, submissionId),
+      ).rejects.toThrow(/persisted routed teams that do not match/i);
       await testEnv.DB.batch([
         testEnv.DB.prepare(
           `INSERT INTO submission_routing_teams (submission_id, event_id, team_id)

@@ -10,6 +10,7 @@ import {
   parseJson,
   type AdminSubmission,
 } from "./submission-repository-shared";
+import { explainSubmissionRouting } from "./submission-routing-explanation";
 
 function requireRoutedTeamSummary(
   submissionId: string,
@@ -230,7 +231,9 @@ export class SubmissionAdminRepository {
              s.submitted_at AS submittedAt, s.updated_at AS updatedAt,
              COALESCE(p.display_name, s.submitter_email) AS submitterName,
              COALESCE(p.email, s.submitter_email) AS submitterEmail,
+             s.form_version_id AS formVersionId,
              fv.version_number AS versionNumber, fv.schema_json AS schemaJson,
+             json_extract(fv.settings_snapshot_json, '$.name') AS formName,
              COALESCE((
                SELECT json_group_array(routed.team_id)
                  FROM (
@@ -255,7 +258,8 @@ export class SubmissionAdminRepository {
         FROM submissions s
         JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
         LEFT JOIN people p ON p.id = s.submitter_person_id
-        LEFT JOIN form_versions fv ON fv.id = s.form_version_id
+        LEFT JOIN form_versions fv
+          ON fv.id = s.form_version_id AND fv.event_id = s.event_id
        WHERE s.event_id = ? AND s.id = ?
     `,
     )
@@ -272,7 +276,9 @@ export class SubmissionAdminRepository {
         updatedAt: number;
         submitterName: string | null;
         submitterEmail: string | null;
+        formVersionId: string | null;
         versionNumber: number | null;
+        formName: string | null;
         schemaJson: string | null;
         routingJson: string | null;
         routedTeamIdsJson: string;
@@ -285,8 +291,9 @@ export class SubmissionAdminRepository {
         `Submission ${row.id} is missing its immutable routing snapshot.`,
       );
     }
-    const speakers = await this.env.DB.prepare(
-      `
+    const [speakers, selectedTracks] = await Promise.all([
+      this.env.DB.prepare(
+        `
       SELECT ss.id, ss.person_id AS personId, ss.display_name AS name,
              ss.email, ss.position, ss.invitation_status AS invitationStatus,
              ss.is_primary AS isPrimary, ss.role_label AS roleLabel,
@@ -296,19 +303,28 @@ export class SubmissionAdminRepository {
        WHERE ss.submission_id = ? AND ss.event_id = ?
        ORDER BY ss.position
     `,
-    )
-      .bind(submissionId, eventId)
-      .all<{
-        id: string;
-        personId: string | null;
-        name: string;
-        email: string;
-        position: number;
-        invitationStatus: string;
-        isPrimary: number;
-        roleLabel: string | null;
-        currentBiography: string;
-      }>();
+      )
+        .bind(submissionId, eventId)
+        .all<{
+          id: string;
+          personId: string | null;
+          name: string;
+          email: string;
+          position: number;
+          invitationStatus: string;
+          isPrimary: number;
+          roleLabel: string | null;
+          currentBiography: string;
+        }>(),
+      this.env.DB.prepare(
+        `SELECT track_id AS trackId, track_name_snapshot AS trackName
+           FROM submission_track_selections
+          WHERE submission_id = ? AND event_id = ?
+          ORDER BY position`,
+      )
+        .bind(submissionId, eventId)
+        .all<{ trackId: string; trackName: string }>(),
+    ]);
     const snapshot =
       row.status === "draft"
         ? null
@@ -317,6 +333,18 @@ export class SubmissionAdminRepository {
     const routedTeamIds = z
       .array(z.string())
       .parse(JSON.parse(row.routedTeamIdsJson));
+    const routingExplanation = explainSubmissionRouting({
+      submissionId: row.id,
+      status: row.status,
+      formVersionId: row.formVersionId,
+      snapshotFormVersionId: snapshot?.formVersionId ?? null,
+      snapshotVersionNumber: snapshot?.versionNumber ?? null,
+      formName: row.formName,
+      versionNumber: row.versionNumber,
+      routing,
+      selectedTracks: selectedTracks.results,
+      routedTeamIds,
+    });
     const sourceSpeakers = snapshot
       ? snapshot.speakers
       : row.latestSpeakerSnapshotJson
@@ -341,6 +369,8 @@ export class SubmissionAdminRepository {
         : null;
     const {
       answersJson: _answersJson,
+      formVersionId: _formVersionId,
+      formName: _formName,
       schemaJson: _schemaJson,
       routingJson: _routingJson,
       routedTeamIdsJson: _routedTeamIdsJson,
@@ -361,6 +391,7 @@ export class SubmissionAdminRepository {
       schema,
       routedTeamIds,
       routedTo: requireRoutedTeamSummary(row.id, routedTeamIds, routing),
+      routingExplanation,
       uploads: snapshot ? snapshot.uploads : {},
       speakers: speakers.results.map(({ currentBiography, ...speaker }) => {
         const submittedBiography =

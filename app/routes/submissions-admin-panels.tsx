@@ -101,15 +101,72 @@ export function SubmissionAdminDetailPanel({
           <section className="card pad">
             <h2>Routing</h2>
             <p>
-              <span className="label">Tracks</span>
+              <span className="label">Source</span>
               <br />
-              {submission.category ?? "Uncategorised"}
+              {submission.routingExplanation.source.kind ===
+              "administrator_manual_entry"
+                ? "Administrator manual entry"
+                : `${submission.routingExplanation.source.formName} · Form version ${submission.routingExplanation.source.versionNumber}`}
             </p>
-            <p>
-              <span className="label">Assigned teams</span>
-              <br />
-              {submission.routedTo}
-            </p>
+            {submission.routingExplanation.source.kind === "form_draft" ? (
+              <>
+                <p>
+                  <span className="label">Current draft tracks</span>
+                  <br />
+                  {submission.category || "No tracks selected yet"}
+                </p>
+                <p className="subtle">
+                  This draft has not been routed. Track and review-team routing
+                  is persisted when the application is submitted.
+                </p>
+              </>
+            ) : submission.routingExplanation.source.kind ===
+              "administrator_manual_entry" ? (
+              <>
+                <div>
+                  <span className="label">Selected tracks</span>
+                  <ul className="stack mt">
+                    {submission.routingExplanation.routes.map((route) => (
+                      <li key={route.trackId}>{route.trackName}</li>
+                    ))}
+                  </ul>
+                </div>
+                <p>
+                  <span className="label">Review-team override</span>
+                  <br />
+                  {submission.routingExplanation.routedTeams.length
+                    ? submission.routingExplanation.routedTeams
+                        .map((team) => team.name)
+                        .join(", ")
+                    : "No review-team override"}
+                </p>
+              </>
+            ) : (
+              <div>
+                <span className="label">Routing explanation</span>
+                <ul className="stack mt">
+                  {submission.routingExplanation.routes.map((route) => (
+                    <li key={route.trackId}>
+                      Selected “<strong>{route.trackName}</strong>” →{" "}
+                      {route.teamName ? (
+                        <>{route.teamName}</>
+                      ) : (
+                        <span className="subtle">
+                          No automatic review-team route configured
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {submission.routingExplanation.source.kind !== "form_draft" ? (
+              <p className="subtle">
+                Review-team routing records the intended review destination.
+                Individual evaluators are assigned separately in Review
+                administration.
+              </p>
+            ) : null}
             <p>
               <span className="label">Format</span>
               <br />

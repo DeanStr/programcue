@@ -17,6 +17,7 @@ import {
   type FormWorkspace,
 } from "./submission-repository.server";
 import {
+  ADMIN_MANUAL_ENTRY_FORM_VERSION_ID,
   DEFAULT_FORM_SCHEMA,
   type SaveFormInput,
   type SubmissionFormSchema,
@@ -812,7 +813,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         })),
     } satisfies SubmissionFormSchema;
     const snapshot = {
-      formVersionId: "manual-administrator-entry",
+      formVersionId: ADMIN_MANUAL_ENTRY_FORM_VERSION_ID,
       versionNumber: 1,
       schema: manualSchema,
       routing: {

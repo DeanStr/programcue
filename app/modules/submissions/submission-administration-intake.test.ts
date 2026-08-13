@@ -321,6 +321,28 @@ describe("Submissions D1 vertical slice", () => {
       ).resolves.toMatchObject({
         routedTo: teamName,
         category: "AI & Innovation, Event Operations",
+        routingExplanation: {
+          source: {
+            kind: "administrator_manual_entry",
+            formName: null,
+            versionNumber: null,
+          },
+          routes: [
+            {
+              trackId: "demo-track-ai",
+              trackName: "AI & Innovation",
+              teamId: null,
+              teamName: null,
+            },
+            {
+              trackId: "demo-track-operations",
+              trackName: "Event Operations",
+              teamId: null,
+              teamName: null,
+            },
+          ],
+          routedTeams: [{ id: teamId, name: teamName }],
+        },
       });
       const selectedTracks = await env.DB.prepare(
         `SELECT track_id AS trackId, track_name_snapshot AS trackName, position

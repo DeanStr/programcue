@@ -233,8 +233,14 @@ test.describe.serial("submissions vertical slice", () => {
       has: page.getByRole("heading", { name: "Routing", exact: true }),
     });
     await expect(
-      routing.locator("p").filter({ hasText: "Assigned team" }),
-    ).toContainText("Unassigned");
+      routing.getByText(/Call for Speakers · Form version \d+/),
+    ).toBeVisible();
+    await expect(
+      routing.getByText(/Selected “Event Operations” →/),
+    ).toContainText("No automatic review-team route configured");
+    await expect(routing).toContainText(
+      "Review-team routing records the intended review destination",
+    );
     await expect(page.getByText("Casey Collaborator")).toBeVisible();
   });
 

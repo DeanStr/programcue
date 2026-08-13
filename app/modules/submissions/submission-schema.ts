@@ -427,6 +427,8 @@ export type DraftPayload = Omit<
   uploads?: Record<string, UploadReference>;
 };
 
+export const ADMIN_MANUAL_ENTRY_FORM_VERSION_ID = "manual-administrator-entry";
+
 export const submittedSnapshotSchema = z.object({
   formVersionId: z.string().min(1).max(100),
   versionNumber: z.number().int().positive(),
