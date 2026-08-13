@@ -93,6 +93,16 @@ export class FileScannerContainer extends Container<ScannerEnvironment> {
   };
 }
 
+FileScannerContainer.outbound = async (request) => {
+  if (!["GET", "HEAD"].includes(request.method)) {
+    return new Response("Method not allowed.", {
+      status: 405,
+      headers: { allow: "GET, HEAD" },
+    });
+  }
+  return fetch(request);
+};
+
 function requiredValue(
   value: string | undefined,
   name: string,
