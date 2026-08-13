@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Form, Link } from "react-router";
 
+import { BrandMark } from "~/components/brand-mark";
 import { Dialog } from "~/components/dialog";
 import {
   DirectMultipartUpload,
@@ -359,7 +360,7 @@ function ResourcePreviewPanel() {
           }
         >
           <header>
-            <span className="brand-mark small">P</span>
+            <BrandMark size="small" />
             <span>
               <strong>{loaderData.previewEvent.name}</strong>
               <small>Speaker resources</small>

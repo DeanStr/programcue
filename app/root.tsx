@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { Toaster } from "sonner";
 
 import type { Route } from "./+types/root";
+import { BrandMark } from "~/components/brand-mark";
 import { installDraftRecoverySignOutCleanup } from "~/platform/drafts/draft-recovery";
 import { RouteProgress } from "~/components/ui/route-progress";
 import "./styles/index.css";
@@ -25,7 +26,8 @@ export const links: Route.LinksFunction = () => [
   },
   {
     rel: "icon",
-    href: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%234f46e5'/%3E%3Cpath d='M20 14h18c11 0 18 6 18 16s-7 16-18 16h-8v8H20V14zm10 10v12h8c5 0 8-2 8-6s-3-6-8-6h-8z' fill='white'/%3E%3C/svg%3E",
+    type: "image/svg+xml",
+    href: "/brand-mark.svg",
   },
 ];
 
@@ -124,7 +126,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         className="card pad"
         style={{ maxWidth: 680, margin: "8vh auto" }}
       >
-        <span className="brand-mark">P</span>
+        <BrandMark />
         <h1>{title}</h1>
         <p className="subtle">{message}</p>
         <div className="page-actions mt">

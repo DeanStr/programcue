@@ -1,5 +1,7 @@
 import { Form, Link, useLocation } from "react-router";
 
+import { BrandMark } from "~/components/brand-mark";
+
 export function ReviewerShell({ viewer, eventName, children }: {
   viewer: { name: string; role: string; demo: boolean };
   eventName: string;
@@ -13,7 +15,7 @@ export function ReviewerShell({ viewer, eventName, children }: {
   return <div className="speaker-shell reviewer-shell">
     <header className="speaker-top review-top">
       <Link className="review-brand" to="/review/workbench" aria-label="Program Cue review workbench">
-        <span className="brand-mark">P</span>
+        <BrandMark />
         <span>Program Cue</span>
       </Link>
       <div className="review-context">

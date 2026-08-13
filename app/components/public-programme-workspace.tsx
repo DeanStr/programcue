@@ -2,6 +2,7 @@ import type React from "react";
 import { CalendarDays, MapPin } from "lucide-react";
 import { Link } from "react-router";
 
+import { BrandMark } from "~/components/brand-mark";
 import { TurnstileWidget } from "~/components/turnstile-widget";
 import {
   formatProgrammeDateTimeRange,
@@ -101,7 +102,7 @@ export function PublicProgrammeWorkspace({
             to={`/public/programme/${programme.event.slug}`}
             style={{ color: "var(--ink)", padding: 0 }}
           >
-            <span className="brand-mark">P</span>
+            <BrandMark />
             <span>Program Cue</span>
           </Link>
           <nav className="public-nav" aria-label="Programme">

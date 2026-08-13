@@ -1,9 +1,11 @@
 import type { CSSProperties } from "react";
+import { Plus } from "lucide-react";
 import { Form, Link, useActionData, useNavigation } from "react-router";
 
 import type { Route } from "./+types/application-form";
 import type { action, loader, ActionResult } from "./application-form.server";
 import { claimApplicantVideoUploadOperation } from "~/components/applicant-video-upload";
+import { BrandMark } from "~/components/brand-mark";
 import { DraftEditor } from "~/components/application-draft-editor";
 import { PublicApplicationLanding } from "~/components/application-public-landing";
 import { TurnstileWidget } from "~/components/turnstile-widget";
@@ -449,7 +451,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
           className="card pad"
           style={{ maxWidth: 620, margin: "8vh auto" }}
         >
-          <span className="brand-mark">P</span>
+          <BrandMark />
           <h1>Applications unavailable</h1>
           <p className="subtle">{loaderData.unavailable}</p>
         </section>
@@ -478,6 +480,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
       >
         <header className="public-top">
           <Link
+            aria-label={`${form.eventName} application home`}
             className="brand"
             to={`/apply/${form.publicSlug}`}
             style={{ color: "var(--ink)", padding: 0 }}
@@ -490,7 +493,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <span className="brand-mark">P</span>
+              <BrandMark />
             )}
             <span>Program Cue</span>
           </Link>
@@ -532,6 +535,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
     >
       <header className="public-top">
         <Link
+          aria-label={`${form.eventName} application home`}
           className="brand"
           to={`/apply/${form.publicSlug}`}
           style={{ color: "var(--ink)", padding: 0 }}
@@ -544,7 +548,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
               referrerPolicy="no-referrer"
             />
           ) : (
-            <span className="brand-mark">P</span>
+            <BrandMark />
           )}
           <span>Program Cue</span>
         </Link>
@@ -808,7 +812,9 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                   />
                 ) : (
                   <div style={{ textAlign: "center", padding: "52px 20px" }}>
-                    <span className="brand-mark">＋</span>
+                    <span className="pc-state-icon" aria-hidden="true">
+                      <Plus size={20} />
+                    </span>
                     <h2>
                       {applicant.claimOnly
                         ? "Sign in to manage applications"

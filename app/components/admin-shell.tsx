@@ -42,6 +42,7 @@ import type {
   SavedViewArea,
   SavedViewListItem,
 } from "~/platform/operations/saved-view-service.server";
+import { BrandMark } from "./brand-mark";
 
 import { AdminAuxiliaryDialogs } from "./admin-shell-dialogs";
 import { AdminCommandDialog } from "./admin-shell-command-dialog";
@@ -399,7 +400,7 @@ export function AdminShell({
           }
           aria-label="Program Cue home"
         >
-          <span className="brand-mark">P</span>
+          <BrandMark />
           <span>Program Cue</span>
         </Link>
         <nav className="nav">

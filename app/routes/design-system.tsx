@@ -8,6 +8,7 @@ import {
 import { Link } from "react-router";
 
 import type { Route } from "./+types/design-system";
+import { BrandMark } from "~/components/brand-mark";
 import { Button } from "~/components/ui/button";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import { Field } from "~/components/ui/field";
@@ -83,7 +84,7 @@ export default function DesignSystem() {
           </p>
         </div>
         <div className="pc-design-hero-mark" aria-hidden>
-          <span className="brand-mark">P</span>
+          <BrandMark />
           <span>
             Programme operations,
             <br />

@@ -1,6 +1,7 @@
 import { Form, redirect } from "react-router";
 
 import type { Route } from "./+types/home";
+import { BrandMark } from "~/components/brand-mark";
 import type { ViewerRole } from "~/platform/auth/authorize.server";
 import {
   listAuthorisedEvents,
@@ -49,7 +50,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         style={{ width: "min(520px, calc(100vw - 32px))" }}
       >
         <div className="brand" style={{ color: "var(--ink)", padding: 0 }}>
-          <span className="brand-mark">P</span>
+          <BrandMark />
           <span>Program Cue</span>
         </div>
         <span className="pc-page-eyebrow">Account ready</span>

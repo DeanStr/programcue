@@ -1,6 +1,7 @@
 import { data, Form, redirect, useLoaderData, useNavigation } from "react-router";
 
 import type { Route } from "./+types/communication-unsubscribe";
+import { BrandMark } from "~/components/brand-mark";
 import type { CommunicationCategory } from "~/modules/communications/communication-schema";
 import {
   describeCommunicationUnsubscribe,
@@ -72,7 +73,7 @@ export default function CommunicationUnsubscribe() {
     <main className="design-board" id="main" style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
       <section className="card pad" style={{ width: "min(520px, calc(100vw - 32px))" }}>
         <div className="brand" style={{ color: "var(--ink)", padding: 0 }}>
-          <span className="brand-mark">P</span><span>Program Cue</span>
+          <BrandMark /><span>Program Cue</span>
         </div>
         <p className="pc-page-eyebrow mt">{preference.eventName}</p>
         <h1>Email preferences</h1>

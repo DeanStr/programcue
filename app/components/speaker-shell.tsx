@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { Form, Link, NavLink, useLocation } from "react-router";
 
+import { BrandMark } from "~/components/brand-mark";
+
 export function SpeakerShell({
   children,
   event,
@@ -56,7 +58,7 @@ export function SpeakerShell({
               referrerPolicy="no-referrer"
             />
           ) : (
-            <span className="brand-mark">P</span>
+            <BrandMark />
           )}
           <span>Program Cue</span>
         </NavLink>

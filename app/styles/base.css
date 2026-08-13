@@ -91,25 +91,25 @@ a {
 .brand-mark {
   width: 34px;
   height: 34px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(145deg, #8b5cf6, var(--brand-600) 55%, #0ea5e9);
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: var(--text-lg);
-  font-weight: var(--weight-extrabold);
-  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.35);
+  display: block;
+  flex: 0 0 auto;
+  color: var(--ink);
+}
+.brand .brand-mark {
+  color: currentColor;
+}
+.brand-mark-ink {
+  fill: currentColor;
+}
+.brand-mark-accent {
+  fill: var(--brand-mark-accent, var(--brand-600));
 }
 .brand-mark.small {
   width: 27px;
   height: 27px;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-base);
 }
 .event-branded .brand-mark {
-  background: linear-gradient(145deg, #111b3f, var(--event-accent));
-  box-shadow: 0 8px 20px
-    color-mix(in srgb, var(--event-accent) 35%, transparent);
+  --brand-mark-accent: var(--event-accent);
 }
 .event-branded .btn.primary {
   background: linear-gradient(

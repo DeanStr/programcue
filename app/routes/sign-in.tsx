@@ -8,6 +8,7 @@ import {
 import { z } from "zod";
 
 import type { Route } from "./+types/sign-in";
+import { BrandMark } from "~/components/brand-mark";
 import { TurnstileWidget } from "~/components/turnstile-widget";
 import {
   createAuth,
@@ -415,7 +416,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
           style={{ width: "min(460px, calc(100vw - 32px))" }}
         >
           <div className="brand" style={{ color: "var(--ink)", padding: 0 }}>
-            <span className="brand-mark">P</span>
+            <BrandMark />
             <span>Program Cue</span>
           </div>
           <h1>Link Microsoft</h1>
@@ -476,7 +477,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
         style={{ width: "min(460px, calc(100vw - 32px))" }}
       >
         <div className="brand" style={{ color: "var(--ink)", padding: 0 }}>
-          <span className="brand-mark">P</span>
+          <BrandMark />
           <span>Program Cue</span>
         </div>
         <h1>Sign in</h1>

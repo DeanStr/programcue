@@ -3,6 +3,7 @@ import { Form, redirect } from "react-router";
 import { z } from "zod";
 
 import type { Route } from "./+types/event-selector";
+import { BrandMark } from "~/components/brand-mark";
 import {
   acceptEventInvitation,
   requireEventRole,
@@ -179,7 +180,7 @@ export default function EventSelector({ loaderData }: Route.ComponentProps) {
               use.
             </p>
           </div>
-          <span className="brand-mark">P</span>
+          <BrandMark />
         </div>
         <div className="stack">
           {loaderData.events.map((event) => {

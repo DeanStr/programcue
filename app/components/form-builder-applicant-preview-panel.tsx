@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { BrandMark } from "~/components/brand-mark";
 import {
   heroImagePathSchema,
   validateAnswerShapes,
@@ -171,7 +172,7 @@ export function ApplicantPreviewPanel({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span className="brand-mark small">P</span>
+            <BrandMark size="small" />
             <strong>Program Cue</strong>
           </div>
           <h3>{input.name}</h3>

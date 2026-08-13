@@ -247,8 +247,6 @@
   .reviewer-shell .review-brand .brand-mark {
     width: 31px;
     height: 31px;
-    border-radius: var(--radius-sm);
-    font-size: var(--text-base);
   }
   .reviewer-shell .review-context {
     grid-column: 1/-1;
