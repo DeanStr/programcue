@@ -47,6 +47,14 @@ export type EvaluationAssignmentResult = {
   undoExpiresAt: number | null;
 };
 
+export type EvaluationReviewCycleResult = {
+  archivedPlanId: string;
+  planId: string;
+  roundId: string;
+  unfinishedAssignmentCount: number;
+  unfinishedReviewCount: number;
+};
+
 export type EvaluationRoundReviewerResult = {
   roundId: string;
   personId: string;
@@ -116,12 +124,7 @@ export type Criterion = {
   name: string;
   description: string | null;
   weightPercent: number;
-  inputType:
-    | "scale_5"
-    | "scale_10"
-    | "yes_no"
-    | "free_text"
-    | "dropdown";
+  inputType: "scale_5" | "scale_10" | "yes_no" | "free_text" | "dropdown";
   options: string[];
   required: boolean;
   position: number;
@@ -240,6 +243,7 @@ export type Round = {
   closesAt: number | null;
   scorecardId: string;
   scorecardVersion: number;
+  runningAiAssessmentCount: number;
   reviewers: Array<{ personId: string; name: string; email: string }>;
   criteria: Criterion[];
 };

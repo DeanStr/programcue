@@ -190,6 +190,21 @@ export class OperationReadService {
                  'integration.accelevents.export', 'webhook.deliver',
                  'file.scan.dispatch'
                ) THEN 0
+               WHEN o.type = 'communication.send' AND EXISTS (
+                 SELECT 1 FROM communications communication
+                 JOIN communication_deliveries delivery
+                   ON delivery.communication_id = communication.id
+                  AND delivery.event_id = communication.event_id
+                 JOIN submission_speakers speaker
+                   ON speaker.id = delivery.source_id
+                  AND speaker.event_id = delivery.event_id
+                WHERE communication.operation_id = o.id
+                  AND communication.event_id = o.event_id
+                  AND json_extract(communication.audience_json, '$.type') =
+                      'co_speaker_invitation'
+                  AND json_extract(communication.audience_json, '$.speakerId') =
+                      speaker.id
+               ) THEN 0
                WHEN o.status IN ('queue_failed','failed','partially_failed') THEN 1
                WHEN o.status = 'queued'
                     AND o.updated_at <= unixepoch() - ${STALE_QUEUED_OPERATION_SECONDS} THEN 1
@@ -246,6 +261,21 @@ export class OperationReadService {
                   'submission.notification', 'schedule.calendar_fanout',
                   'integration.accelevents.export', 'webhook.deliver',
                   'file.scan.dispatch'
+                ) THEN 0
+                WHEN o.type = 'communication.send' AND EXISTS (
+                  SELECT 1 FROM communications communication
+                  JOIN communication_deliveries delivery
+                    ON delivery.communication_id = communication.id
+                   AND delivery.event_id = communication.event_id
+                  JOIN submission_speakers speaker
+                    ON speaker.id = delivery.source_id
+                   AND speaker.event_id = delivery.event_id
+                 WHERE communication.operation_id = o.id
+                   AND communication.event_id = o.event_id
+                   AND json_extract(communication.audience_json, '$.type') =
+                       'co_speaker_invitation'
+                   AND json_extract(communication.audience_json, '$.speakerId') =
+                       speaker.id
                 ) THEN 0
                 WHEN o.status IN ('queue_failed','failed','partially_failed') THEN 1
                 WHEN o.status = 'queued'

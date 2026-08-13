@@ -1,22 +1,66 @@
+import { z } from "zod";
 import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
 import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
 import { hashApplicantToken } from "./applicant-session.server";
 import { SubmissionStateError } from "./submission-repository-shared";
 
-export type CoSpeakerQueueMessage = {
-  type: "communication.send";
-  operationId: string;
-  communicationId: string;
-  eventId: string;
-  organisationId: string;
-  idempotencyKey: string;
-};
+const coSpeakerQueueMessageSchema = z
+  .object({
+    type: z.literal("communication.send"),
+    operationId: z.string().min(1).max(200),
+    communicationId: z.string().min(1).max(200),
+    eventId: z.string().min(1).max(200),
+    organisationId: z.string().min(1).max(200),
+    idempotencyKey: z.string().min(8).max(300),
+  })
+  .strict();
+
+export type CoSpeakerQueueMessage = z.infer<typeof coSpeakerQueueMessageSchema>;
+
+export function parseCoSpeakerQueueMessage(
+  payloadJson: string,
+  expected: {
+    operationId: string;
+    communicationId: string;
+    eventId: string;
+    organisationId: string;
+    idempotencyKey: string;
+  },
+) {
+  let input: unknown;
+  try {
+    input = JSON.parse(payloadJson);
+  } catch {
+    throw new Error(
+      "The persisted co-speaker invitation operation contains invalid JSON.",
+    );
+  }
+  const result = coSpeakerQueueMessageSchema.safeParse(input);
+  if (!result.success) {
+    throw new Error(
+      "The persisted co-speaker invitation operation has an invalid queue payload.",
+    );
+  }
+  if (
+    result.data.operationId !== expected.operationId ||
+    result.data.communicationId !== expected.communicationId ||
+    result.data.eventId !== expected.eventId ||
+    result.data.organisationId !== expected.organisationId ||
+    result.data.idempotencyKey !== expected.idempotencyKey
+  ) {
+    throw new Error(
+      "The persisted co-speaker invitation queue payload does not match its authoritative operation.",
+    );
+  }
+  return result.data;
+}
 
 export type CoSpeakerInvitationPlan = {
   speakerId: string;
   claimUrl: string;
   operationId: string;
   communicationId: string;
+  deliveryId: string;
   tokenHash: string;
   previousTokenHash: string | null;
   message: CoSpeakerQueueMessage;
@@ -37,6 +81,7 @@ type InvitationContext = {
   submissionTitle: string;
   requestedByPersonId: string;
   submissionOperationId?: string;
+  operationId?: string;
 };
 
 type InvitationSpeaker = {
@@ -112,7 +157,7 @@ export async function buildCoSpeakerInvitationPlan(
       "A verified sender profile is required before co-speaker invitations can be created.",
     );
   }
-  const operationId = crypto.randomUUID();
+  const operationId = context.operationId ?? crypto.randomUUID();
   const communicationId = crypto.randomUUID();
   const deliveryId = crypto.randomUUID();
   const idempotencyKey = `co-speaker:${speaker.id}:${tokenHash.slice(0, 20)}`;
@@ -289,6 +334,7 @@ export async function buildCoSpeakerInvitationPlan(
     claimUrl: claimUrl.toString(),
     operationId,
     communicationId,
+    deliveryId,
     tokenHash,
     previousTokenHash: speaker.claimTokenHash,
     message,
@@ -301,24 +347,84 @@ export async function persistQueueFailure(
   plan: CoSpeakerInvitationPlan,
   error: unknown,
 ) {
+  return persistCoSpeakerQueueFailure(
+    env,
+    {
+      organisationId: plan.message.organisationId,
+      eventId: plan.message.eventId,
+      operationId: plan.operationId,
+      communicationId: plan.communicationId,
+      deliveryId: plan.deliveryId,
+      speakerId: plan.speakerId,
+      tokenHash: plan.tokenHash,
+    },
+    error,
+  );
+}
+
+export async function persistCoSpeakerQueueFailure(
+  env: CloudflareEnvironment,
+  reference: {
+    organisationId: string;
+    eventId: string;
+    operationId: string;
+    communicationId: string;
+    deliveryId: string;
+    speakerId: string;
+    tokenHash: string;
+  },
+  error: unknown,
+) {
   const internalMessage = (
     error instanceof Error ? error.message : String(error)
   ).slice(0, 2_000);
-  await env.DB.batch([
+  const results = await env.DB.batch([
     env.DB.prepare(
       `UPDATE operation_jobs
           SET status = 'queue_failed', last_error = ?, updated_at = unixepoch()
-        WHERE id = ? AND event_id = ? AND status = 'queued'`,
-    ).bind(internalMessage, plan.operationId, plan.message.eventId),
+        WHERE id = ? AND organisation_id = ? AND event_id = ?
+          AND status = 'queued'`,
+    ).bind(
+      internalMessage,
+      reference.operationId,
+      reference.organisationId,
+      reference.eventId,
+    ),
+    env.DB.prepare(
+      `UPDATE operation_items
+          SET status = 'failed', error_code = 'QUEUE_UNAVAILABLE',
+              error_message = ?, completed_at = unixepoch(),
+              updated_at = unixepoch()
+        WHERE operation_id = ? AND entity_type = 'communication_delivery'
+          AND entity_id = ? AND status = 'pending'`,
+    ).bind(internalMessage, reference.operationId, reference.deliveryId),
     env.DB.prepare(
       `UPDATE communications SET status = 'failed', updated_at = unixepoch()
         WHERE id = ? AND event_id = ? AND operation_id = ? AND status = 'queued'`,
-    ).bind(plan.communicationId, plan.message.eventId, plan.operationId),
+    ).bind(reference.communicationId, reference.eventId, reference.operationId),
+    env.DB.prepare(
+      `UPDATE communication_deliveries
+          SET status = 'failed', failure_code = 'QUEUE_UNAVAILABLE',
+              failure_message = ?, updated_at = unixepoch()
+        WHERE id = ? AND event_id = ? AND communication_id = ?
+          AND source_id = ? AND status = 'queued'`,
+    ).bind(
+      internalMessage,
+      reference.deliveryId,
+      reference.eventId,
+      reference.communicationId,
+      reference.speakerId,
+    ),
     env.DB.prepare(
       `UPDATE submission_speakers
           SET invitation_status = 'pending', updated_at = unixepoch()
         WHERE id = ? AND event_id = ? AND claim_token_hash = ?
           AND invitation_status = 'sent'`,
-    ).bind(plan.speakerId, plan.message.eventId, plan.tokenHash),
+    ).bind(reference.speakerId, reference.eventId, reference.tokenHash),
   ]);
+  if (results.some((result) => (result.meta.changes ?? 0) !== 1)) {
+    throw new Error(
+      "The persisted co-speaker invitation queue failure was inconsistent.",
+    );
+  }
 }

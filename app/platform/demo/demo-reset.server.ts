@@ -131,6 +131,7 @@ export const DEMO_RESET_EVENT_TABLES = [
   "tracks",
   "schedule_policies",
   "submission_decisions",
+  "ai_review_assessments",
   "review_moderations",
   "review_revisions",
   "reviews",
@@ -159,6 +160,13 @@ export { DEMO_EVALUATION_RESET_CONFIRMATION };
 
 const DEMO_REMINDER_TEMPLATE_ID = "4eb07b55-60fe-4fd4-aab5-56a171283335";
 const DEMO_REMINDER_VERSION_ID = "c4be71b7-cf55-4e8a-ac28-73f2c83bde42";
+const DEMO_REVIEWER_REMINDER_TEMPLATE_ID =
+  "cf82ad49-991e-40dd-896d-7b45b288d16f";
+const DEMO_REVIEWER_REMINDER_VERSION_ID =
+  "2a37e49b-95ca-4383-8c58-720c2e681bab";
+const DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP = Math.floor(
+  Date.parse("2025-05-01T12:00:00Z") / 1_000,
+);
 
 function assertDemoRuntime(env: CloudflareEnvironment) {
   const mode = requireRuntimeMode(env);
@@ -348,11 +356,13 @@ async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
          id, event_id, name, category, status, created_by_person_id,
          created_at, updated_at
        ) VALUES (?, ?, 'Speaker task reminder', 'task_reminder', 'active', ?,
-                 unixepoch(), unixepoch())`,
+                 ?, ?)`,
     ).bind(
       DEMO_REMINDER_TEMPLATE_ID,
       DEMO_EVENT_ID,
       DEMO_IDENTITIES.administrator.personId,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP + 1,
     ),
     env.DB.prepare(
       `INSERT OR IGNORE INTO communication_template_versions (
@@ -370,6 +380,39 @@ async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
       DEMO_REMINDER_TEMPLATE_ID,
       JSON.stringify({
         body: "Hi {{recipient.firstName}},\n\nPlease complete {{task.title}} for {{event.name}}.",
+        physicalAddress: "255 Front Street West, Toronto, ON",
+      }),
+      DEMO_IDENTITIES.administrator.personId,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communication_templates (
+         id, event_id, name, category, status, created_by_person_id,
+         created_at, updated_at
+       ) VALUES (?, ?, 'Reviewer reminder', 'ad_hoc', 'active', ?,
+                 ?, ?)`,
+    ).bind(
+      DEMO_REVIEWER_REMINDER_TEMPLATE_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.administrator.personId,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communication_template_versions (
+         id, event_id, template_id, version_number, name, category, channel,
+         subject_template, content_json, rendered_preview_html, status,
+         created_by_person_id, created_at, published_at
+       ) VALUES (
+         ?, ?, ?, 1, 'Reviewer reminder', 'ad_hoc', 'email',
+         'Reviews awaiting your attention for {{event.name}}', ?, NULL,
+         'published', ?, unixepoch(), unixepoch()
+       )`,
+    ).bind(
+      DEMO_REVIEWER_REMINDER_VERSION_ID,
+      DEMO_EVENT_ID,
+      DEMO_REVIEWER_REMINDER_TEMPLATE_ID,
+      JSON.stringify({
+        body: "Hi {{recipient.firstName}},\n\nYou have outstanding review assignments for {{event.name}}. Please return to your reviewer workspace to complete them.",
         physicalAddress: "255 Front Street West, Toronto, ON",
       }),
       DEMO_IDENTITIES.administrator.personId,
@@ -402,7 +445,7 @@ export function demoBaselineIsComplete(evidence: DemoBaselineEvidence) {
     evidence.tasks >= 3 &&
     evidence.sessions >= 6 &&
     evidence.publishedSchedules === 1 &&
-    evidence.publishedTemplates === 1 &&
+    evidence.publishedTemplates === 2 &&
     evidence.sbekPeople === 4 &&
     evidence.sbekReviewerMemberships === 0 &&
     evidence.sbekReviewerAssignments === 0 &&
@@ -421,8 +464,31 @@ async function baselineEvidence(env: CloudflareEnvironment) {
        (SELECT COUNT(*) FROM task_instances WHERE event_id = ?) AS tasks,
        (SELECT COUNT(*) FROM sessions WHERE event_id = ?) AS sessions,
        (SELECT COUNT(*) FROM schedule_versions WHERE event_id = ? AND status = 'published') AS publishedSchedules,
-       (SELECT COUNT(*) FROM communication_template_versions
-         WHERE event_id = ? AND id = ? AND status = 'published') AS publishedTemplates,
+       (SELECT COUNT(*)
+          FROM communication_template_versions version
+          JOIN communication_templates template
+            ON template.id = version.template_id
+           AND template.event_id = version.event_id
+         WHERE version.event_id = ?
+           AND template.status = 'active'
+           AND version.status = 'published'
+           AND (
+             (template.id = ?
+               AND template.name = 'Speaker task reminder'
+               AND template.category = 'task_reminder'
+               AND version.id = ?
+               AND version.name = 'Speaker task reminder'
+               AND version.category = 'task_reminder'
+               AND version.channel = 'email')
+             OR
+             (template.id = ?
+               AND template.name = 'Reviewer reminder'
+               AND template.category = 'ad_hoc'
+               AND version.id = ?
+               AND version.name = 'Reviewer reminder'
+               AND version.category = 'ad_hoc'
+               AND version.channel = 'email')
+           )) AS publishedTemplates,
        (SELECT COUNT(*) FROM people
          WHERE (id = ? AND email = ? COLLATE NOCASE AND display_name = ? AND profile_status = ?)
             OR (id = ? AND email = ? COLLATE NOCASE AND display_name = ? AND profile_status = ?)
@@ -460,7 +526,10 @@ async function baselineEvidence(env: CloudflareEnvironment) {
       DEMO_EVENT_ID,
       DEMO_EVENT_ID,
       DEMO_EVENT_ID,
+      DEMO_REMINDER_TEMPLATE_ID,
       DEMO_REMINDER_VERSION_ID,
+      DEMO_REVIEWER_REMINDER_TEMPLATE_ID,
+      DEMO_REVIEWER_REMINDER_VERSION_ID,
       ...Object.values(SBEK_FIXTURE_PEOPLE).flatMap((identity) => [
         identity.personId,
         identity.email,
@@ -530,6 +599,7 @@ export async function clearDemoEvaluationWorkflow(
   await env.DB.batch(
     [
       "submission_decisions",
+      "ai_review_assessments",
       "review_moderations",
       "review_revisions",
       "reviews",

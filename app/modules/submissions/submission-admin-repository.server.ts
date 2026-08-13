@@ -289,7 +289,7 @@ export class SubmissionAdminRepository {
       `
       SELECT ss.id, ss.person_id AS personId, ss.display_name AS name,
              ss.email, ss.position, ss.invitation_status AS invitationStatus,
-             ss.is_primary AS isPrimary,
+             ss.is_primary AS isPrimary, ss.role_label AS roleLabel,
              COALESCE(person.biography, '') AS currentBiography
         FROM submission_speakers ss
         LEFT JOIN people person ON person.id = ss.person_id
@@ -306,6 +306,7 @@ export class SubmissionAdminRepository {
         position: number;
         invitationStatus: string;
         isPrimary: number;
+        roleLabel: string | null;
         currentBiography: string;
       }>();
     const snapshot =

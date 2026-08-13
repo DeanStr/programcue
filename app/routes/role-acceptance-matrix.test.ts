@@ -372,6 +372,7 @@ const boundaries: readonly Boundary[] = [
       evaluationAction({
         request: requestFor(actor, "/admin/review", {
           method: "POST",
+          headers: { origin: "http://localhost" },
           body: new URLSearchParams({ intent: "unsupported" }),
         }),
         params: {},

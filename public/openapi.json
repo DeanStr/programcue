@@ -73,10 +73,7 @@
             "description": "Download a static snapshot instead of the normal API response.",
             "schema": {
               "type": "string",
-              "enum": [
-                "json",
-                "html"
-              ]
+              "enum": ["json", "html"]
             }
           }
         ],
@@ -547,8 +544,8 @@
     "/api/v1/events/{eventId}/participant/submissions/{submissionId}/{command}": {
       "post": {
         "operationId": "runParticipantSubmissionCommand",
-        "summary": "Submit or withdraw an owned application",
-        "description": "Requires an exact same-origin authenticated browser request, explicit confirmation and an Idempotency-Key. The command resolves the form and verified primary submitter from the owned URL-event submission, then uses the same revision, validation, audit, notification and workflow service as the browser application flow. Co-speakers may read a claimed submission but cannot submit or withdraw it.",
+        "summary": "Submit, withdraw or add a co-speaker to an owned application",
+        "description": "Requires an exact same-origin authenticated browser request, explicit confirmation and an Idempotency-Key. The command resolves the form and verified primary submitter from the owned URL-event submission, then uses the same revision, validation, audit, notification and workflow service as the browser application flow. An accepted application with exactly one editable derived session may add an unclaimed co-speaker relationship and queue an expiring claim invitation without changing its submitted answer snapshot. The mutation records a `submission.updated` change and queues matching webhook work idempotently. Co-speakers may read a claimed submission but cannot submit, withdraw or add participants.",
         "security": [
           {
             "sessionAuth": []
@@ -589,6 +586,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/ParticipantWithdrawCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ParticipantInviteCoSpeakerCommand"
                   }
                 ]
               }
@@ -597,11 +597,28 @@
         },
         "responses": {
           "200": {
-            "description": "Command committed or an exact retry replayed; durably recorded downstream delivery degradation is reported in warnings, while an unrecorded effect remains recoverable through exact retry",
+            "description": "Command committed or an exact retry replayed without a known post-commit delivery warning",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ParticipantSubmissionCommandResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ParticipantSubmissionCommandResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ParticipantCoSpeakerInvitationCommandResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "207": {
+            "description": "The co-speaker relationship committed or replayed, but invitation delivery, outbound webhook delivery or realtime invalidation requires attention; exact replay reconciles post-commit effects idempotently without duplicating the relationship",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipantCoSpeakerInvitationCommandResponse"
                 }
               }
             }
@@ -986,10 +1003,7 @@
             "name": "kind",
             "schema": {
               "type": "string",
-              "enum": [
-                "submission",
-                "direct_session"
-              ]
+              "enum": ["submission", "direct_session"]
             }
           },
           {
@@ -997,11 +1011,7 @@
             "name": "profileStatus",
             "schema": {
               "type": "string",
-              "enum": [
-                "draft",
-                "published",
-                "archived"
-              ]
+              "enum": ["draft", "published", "archived"]
             }
           },
           {
@@ -1025,11 +1035,7 @@
             "name": "visibility",
             "schema": {
               "type": "string",
-              "enum": [
-                "public",
-                "private",
-                "hidden"
-              ]
+              "enum": ["public", "private", "hidden"]
             }
           },
           {
@@ -1046,11 +1052,7 @@
             "name": "decision",
             "schema": {
               "type": "string",
-              "enum": [
-                "accepted",
-                "rejected",
-                "waitlisted"
-              ]
+              "enum": ["accepted", "rejected", "waitlisted"]
             }
           },
           {
@@ -1069,10 +1071,7 @@
             "description": "Assignment, review or conflict target kind.",
             "schema": {
               "type": "string",
-              "enum": [
-                "submission",
-                "session"
-              ]
+              "enum": ["submission", "session"]
             }
           },
           {
@@ -1090,12 +1089,7 @@
             "name": "channel",
             "schema": {
               "type": "string",
-              "enum": [
-                "email",
-                "sms",
-                "push",
-                "calendar"
-              ]
+              "enum": ["email", "sms", "push", "calendar"]
             }
           },
           {
@@ -2111,11 +2105,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": [
-                    "operations",
-                    "nextCursor",
-                    "correlationId"
-                  ],
+                  "required": ["operations", "nextCursor", "correlationId"],
                   "properties": {
                     "operations": {
                       "type": "array",
@@ -2124,10 +2114,7 @@
                       }
                     },
                     "nextCursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "correlationId": {
                       "type": "string"
@@ -2182,11 +2169,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": [
-                    "tasks",
-                    "nextCursor",
-                    "correlationId"
-                  ],
+                  "required": ["tasks", "nextCursor", "correlationId"],
                   "properties": {
                     "tasks": {
                       "type": "array",
@@ -2195,10 +2178,7 @@
                       }
                     },
                     "nextCursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "description": "Opaque cursor for the next task page"
                     },
                     "correlationId": {
@@ -2276,10 +2256,7 @@
                       "minimum": 1
                     },
                     "realtimeWarning": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "webhookDeliveries": {
                       "type": "array",
@@ -2288,10 +2265,7 @@
                       }
                     },
                     "webhookWarning": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "correlationId": {
                       "type": "string"
@@ -2673,9 +2647,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "properties": {
                     "error": {
                       "type": "string"
@@ -2827,13 +2799,7 @@
         "required": true,
         "schema": {
           "type": "string",
-          "enum": [
-            "profile",
-            "submissions",
-            "sessions",
-            "files",
-            "tasks"
-          ]
+          "enum": ["profile", "submissions", "sessions", "files", "tasks"]
         }
       },
       "ParticipantSubmissionCommand": {
@@ -2842,10 +2808,7 @@
         "required": true,
         "schema": {
           "type": "string",
-          "enum": [
-            "submit",
-            "withdraw"
-          ]
+          "enum": ["submit", "withdraw", "invite-co-speaker"]
         }
       },
       "EvaluationResource": {
@@ -2872,12 +2835,7 @@
         "required": true,
         "schema": {
           "type": "string",
-          "enum": [
-            "review",
-            "conflict",
-            "moderation",
-            "reopen"
-          ]
+          "enum": ["review", "conflict", "moderation", "reopen"]
         }
       },
       "CommunicationCommand": {
@@ -2886,12 +2844,7 @@
         "required": true,
         "schema": {
           "type": "string",
-          "enum": [
-            "preview",
-            "send",
-            "schedule",
-            "test"
-          ]
+          "enum": ["preview", "send", "schedule", "test"]
         }
       },
       "OperationCommand": {
@@ -2900,11 +2853,7 @@
         "required": true,
         "schema": {
           "type": "string",
-          "enum": [
-            "retry",
-            "retry-item",
-            "cancel"
-          ]
+          "enum": ["retry", "retry-item", "cancel"]
         }
       },
       "IntegrationResource": {
@@ -2913,12 +2862,7 @@
         "required": true,
         "schema": {
           "type": "string",
-          "enum": [
-            "connections",
-            "mappings",
-            "runs",
-            "run-items"
-          ]
+          "enum": ["connections", "mappings", "runs", "run-items"]
         }
       },
       "Limit100": {
@@ -3126,10 +3070,7 @@
       "PublicationSummary": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "versionNumber"
-        ],
+        "required": ["id", "versionNumber"],
         "properties": {
           "id": {
             "type": "string"
@@ -3178,22 +3119,13 @@
             "format": "date"
           },
           "venue": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "city": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "description": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "brandAccent": {
             "type": "string"
@@ -3203,11 +3135,7 @@
       "PublicEventResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "event",
-          "publication",
-          "freshness"
-        ],
+        "required": ["event", "publication", "freshness"],
         "properties": {
           "event": {
             "$ref": "#/components/schemas/PublicEvent"
@@ -3215,11 +3143,7 @@
           "publication": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "id",
-              "versionNumber",
-              "publishedAt"
-            ],
+            "required": ["id", "versionNumber", "publishedAt"],
             "properties": {
               "id": {
                 "type": "string"
@@ -3242,13 +3166,7 @@
       "PublicProgramme": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "event",
-          "version",
-          "sessions",
-          "speakers",
-          "freshness"
-        ],
+        "required": ["event", "version", "sessions", "speakers", "freshness"],
         "properties": {
           "event": {
             "type": "object",
@@ -3289,22 +3207,13 @@
                 "description": "Last event calendar date in the event timezone"
               },
               "venue": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "city": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "description": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "brandAccent": {
                 "type": "string"
@@ -3314,11 +3223,7 @@
           "version": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "id",
-              "versionNumber",
-              "publishedAt"
-            ],
+            "required": ["id", "versionNumber", "publishedAt"],
             "properties": {
               "id": {
                 "type": "string"
@@ -3396,22 +3301,13 @@
             "type": "string"
           },
           "building": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "level": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "track": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "speakerIds": {
             "type": "array",
@@ -3448,34 +3344,19 @@
             "type": "string"
           },
           "imageUrl": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "biography": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "pronunciation": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "organisationName": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "jobTitle": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "sessionIds": {
             "type": "array",
@@ -3488,29 +3369,18 @@
       "ProgrammeFreshness": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "source",
-          "fetchedAt",
-          "cacheExpiresAt",
-          "cached"
-        ],
+        "required": ["source", "fetchedAt", "cacheExpiresAt", "cached"],
         "properties": {
           "source": {
             "type": "string",
-            "enum": [
-              "d1",
-              "airtable"
-            ]
+            "enum": ["d1", "airtable"]
           },
           "fetchedAt": {
             "type": "string",
             "format": "date-time"
           },
           "cacheExpiresAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "cached": {
@@ -3521,12 +3391,7 @@
       "PublicSessionPage": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "sessions",
-          "nextCursor",
-          "publication",
-          "freshness"
-        ],
+        "required": ["sessions", "nextCursor", "publication", "freshness"],
         "properties": {
           "sessions": {
             "type": "array",
@@ -3535,10 +3400,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "publication": {
             "$ref": "#/components/schemas/PublicationSummary"
@@ -3551,12 +3413,7 @@
       "PublicSpeakerPage": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "speakers",
-          "nextCursor",
-          "publication",
-          "freshness"
-        ],
+        "required": ["speakers", "nextCursor", "publication", "freshness"],
         "properties": {
           "speakers": {
             "type": "array",
@@ -3565,10 +3422,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "publication": {
             "$ref": "#/components/schemas/PublicationSummary"
@@ -3596,10 +3450,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "publication": {
             "$ref": "#/components/schemas/PublicationSummary"
@@ -3616,10 +3467,7 @@
       "PrivateEventResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "event",
-          "correlationId"
-        ],
+        "required": ["event", "correlationId"],
         "properties": {
           "event": {
             "type": "object",
@@ -3667,9 +3515,7 @@
       },
       "ApiRecord": {
         "type": "object",
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "properties": {
           "id": {
             "type": "string"
@@ -3687,11 +3533,7 @@
       "SubmissionTrackSelection": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "name",
-          "position"
-        ],
+        "required": ["id", "name", "position"],
         "properties": {
           "id": {
             "type": "string",
@@ -3709,10 +3551,7 @@
       },
       "AdministrationSubmissionRecord": {
         "type": "object",
-        "required": [
-          "id",
-          "tracks"
-        ],
+        "required": ["id", "tracks"],
         "properties": {
           "id": {
             "type": "string"
@@ -3755,36 +3594,20 @@
             "type": "string"
           },
           "biography": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "pronunciation": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "organisationName": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "jobTitle": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "profileStatus": {
             "type": "string",
-            "enum": [
-              "draft",
-              "published",
-              "archived"
-            ]
+            "enum": ["draft", "published", "archived"]
           },
           "revision": {
             "type": "integer",
@@ -3806,10 +3629,7 @@
       "ParticipantProfileResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "profile",
-          "correlationId"
-        ],
+        "required": ["profile", "correlationId"],
         "properties": {
           "profile": {
             "$ref": "#/components/schemas/ParticipantProfile"
@@ -3822,30 +3642,19 @@
       "ParticipantCollectionPage": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "nextCursor",
-          "correlationId"
-        ],
+        "required": ["nextCursor", "correlationId"],
         "anyOf": [
           {
-            "required": [
-              "submissions"
-            ]
+            "required": ["submissions"]
           },
           {
-            "required": [
-              "sessions"
-            ]
+            "required": ["sessions"]
           },
           {
-            "required": [
-              "files"
-            ]
+            "required": ["files"]
           },
           {
-            "required": [
-              "tasks"
-            ]
+            "required": ["tasks"]
           }
         ],
         "properties": {
@@ -3874,10 +3683,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "correlationId": {
             "type": "string"
@@ -3897,11 +3703,7 @@
       "ParticipantProfilePatch": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "revision",
-          "name",
-          "biography"
-        ],
+        "required": ["revision", "name", "biography"],
         "properties": {
           "revision": {
             "type": "integer",
@@ -3942,16 +3744,10 @@
             "minimum": 1
           },
           "realtimeWarning": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "webhookWarning": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "correlationId": {
             "type": "string"
@@ -3961,10 +3757,7 @@
       "ParticipantSpeakerInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "name",
-          "email"
-        ],
+        "required": ["name", "email"],
         "properties": {
           "name": {
             "type": "string",
@@ -3986,10 +3779,7 @@
       "ParticipantUploadReference": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "assetId",
-          "versionId"
-        ],
+        "required": ["assetId", "versionId"],
         "properties": {
           "assetId": {
             "type": "string",
@@ -4006,12 +3796,7 @@
       "ParticipantSubmitCommand": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "confirmed",
-          "revision",
-          "answers",
-          "speakers"
-        ],
+        "required": ["confirmed", "revision", "answers", "speakers"],
         "properties": {
           "confirmed": {
             "type": "boolean",
@@ -4070,10 +3855,7 @@
       "ParticipantWithdrawCommand": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "confirmed",
-          "revision"
-        ],
+        "required": ["confirmed", "revision"],
         "properties": {
           "confirmed": {
             "type": "boolean",
@@ -4085,15 +3867,39 @@
           }
         }
       },
+      "ParticipantInviteCoSpeakerCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["confirmed", "revision", "name", "email", "roleLabel"],
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "roleLabel": {
+            "type": "string",
+            "enum": ["Co-author", "Co-speaker", "Co-presenter"]
+          }
+        }
+      },
       "WebhookDeliverySummary": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "endpointId",
-          "deliveryId",
-          "operationId",
-          "status"
-        ],
+        "required": ["endpointId", "deliveryId", "operationId", "status"],
         "properties": {
           "endpointId": {
             "type": "string"
@@ -4108,7 +3914,11 @@
             "type": "string",
             "enum": [
               "queued",
-              "queue_failed"
+              "queue_failed",
+              "completed",
+              "partially_failed",
+              "failed",
+              "cancelled"
             ]
           },
           "duplicate": {
@@ -4132,32 +3942,21 @@
           "submission": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "id",
-              "status"
-            ],
+            "required": ["id", "status"],
             "properties": {
               "id": {
                 "type": "string"
               },
               "status": {
                 "type": "string",
-                "enum": [
-                  "submitted",
-                  "assigned",
-                  "accepted",
-                  "withdrawn"
-                ]
+                "enum": ["submitted", "assigned", "accepted", "withdrawn"]
               },
               "revision": {
                 "type": "integer",
                 "minimum": 1
               },
               "directSessionId": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               }
             }
           },
@@ -4180,26 +3979,17 @@
                 },
                 "type": {
                   "type": "string",
-                  "enum": [
-                    "confirmation",
-                    "co_speaker_invitation"
-                  ]
+                  "enum": ["confirmation", "co_speaker_invitation"]
                 },
                 "idempotencyKey": {
                   "type": "string"
                 },
                 "status": {
                   "type": "string",
-                  "enum": [
-                    "queued",
-                    "queue_failed"
-                  ]
+                  "enum": ["queued", "queue_failed"]
                 },
                 "communicationId": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
+                  "type": ["string", "null"]
                 }
               }
             }
@@ -4211,10 +4001,115 @@
             }
           },
           "changeCursor": {
-            "type": [
-              "integer",
-              "null"
+            "type": ["integer", "null"],
+            "minimum": 1
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "ParticipantCoSpeakerInvitationCommandResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "submission",
+          "speaker",
+          "invitation",
+          "webhookDeliveries",
+          "changeCursor",
+          "warnings",
+          "replayed",
+          "correlationId"
+        ],
+        "properties": {
+          "submission": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "status", "revision"],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "const": "accepted"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "speaker": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "email",
+              "roleLabel",
+              "invitationStatus"
             ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "roleLabel": {
+                "type": "string",
+                "enum": ["Co-author", "Co-speaker", "Co-presenter"]
+              },
+              "invitationStatus": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "sent",
+                  "claimed",
+                  "declined",
+                  "expired",
+                  "revoked"
+                ]
+              }
+            }
+          },
+          "invitation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "operationId"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["queued", "queue_failed"]
+              },
+              "operationId": {
+                "type": "string"
+              }
+            }
+          },
+          "webhookDeliveries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDeliverySummary"
+            }
+          },
+          "changeCursor": {
+            "type": ["integer", "null"],
             "minimum": 1
           },
           "warnings": {
@@ -4234,30 +4129,19 @@
       "ParticipantTaskCompletionResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "result",
-          "correlationId"
-        ],
+        "required": ["result", "correlationId"],
         "properties": {
           "result": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "taskId",
-              "status",
-              "revision",
-              "replayed"
-            ],
+            "required": ["taskId", "status", "revision", "replayed"],
             "properties": {
               "taskId": {
                 "type": "string"
               },
               "status": {
                 "type": "string",
-                "enum": [
-                  "submitted",
-                  "completed"
-                ]
+                "enum": ["submitted", "completed"]
               },
               "revision": {
                 "type": "integer",
@@ -4276,10 +4160,7 @@
       "AdministrationCommandResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "result",
-          "correlationId"
-        ],
+        "required": ["result", "correlationId"],
         "properties": {
           "result": {
             "type": "object",
@@ -4294,12 +4175,7 @@
       "DirectSessionCommand": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "title",
-          "trackId",
-          "format",
-          "speakers"
-        ],
+        "required": ["title", "trackId", "format", "speakers"],
         "properties": {
           "title": {
             "type": "string",
@@ -4354,10 +4230,7 @@
           "session": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "id",
-              "status"
-            ],
+            "required": ["id", "status"],
             "properties": {
               "id": {
                 "type": "string"
@@ -4372,23 +4245,14 @@
             "type": "boolean"
           },
           "changeCursor": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1
           },
           "realtimeWarning": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "invitationWarning": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "webhookDeliveries": {
             "type": "array",
@@ -4397,10 +4261,7 @@
             }
           },
           "webhookWarning": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "correlationId": {
             "type": "string"
@@ -4410,55 +4271,34 @@
       "AdministrationCollectionPage": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "nextCursor",
-          "correlationId"
-        ],
+        "required": ["nextCursor", "correlationId"],
         "anyOf": [
           {
-            "required": [
-              "submissions"
-            ]
+            "required": ["submissions"]
           },
           {
-            "required": [
-              "forms"
-            ]
+            "required": ["forms"]
           },
           {
-            "required": [
-              "people"
-            ]
+            "required": ["people"]
           },
           {
-            "required": [
-              "speakers"
-            ]
+            "required": ["speakers"]
           },
           {
-            "required": [
-              "sessions"
-            ]
+            "required": ["sessions"]
           },
           {
-            "required": [
-              "scheduleVersions"
-            ]
+            "required": ["scheduleVersions"]
           },
           {
-            "required": [
-              "decisions"
-            ]
+            "required": ["decisions"]
           },
           {
-            "required": [
-              "communications"
-            ]
+            "required": ["communications"]
           },
           {
-            "required": [
-              "resources"
-            ]
+            "required": ["resources"]
           }
         ],
         "properties": {
@@ -4517,10 +4357,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "correlationId": {
             "type": "string"
@@ -4530,12 +4367,7 @@
       "AdministrationItemResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "item",
-          "related",
-          "relatedHasMore",
-          "correlationId"
-        ],
+        "required": ["item", "related", "relatedHasMore", "correlationId"],
         "properties": {
           "item": {
             "$ref": "#/components/schemas/ApiRecord"
@@ -4559,45 +4391,28 @@
       "EvaluationCollectionPage": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "nextCursor",
-          "correlationId"
-        ],
+        "required": ["nextCursor", "correlationId"],
         "anyOf": [
           {
-            "required": [
-              "plans"
-            ]
+            "required": ["plans"]
           },
           {
-            "required": [
-              "teams"
-            ]
+            "required": ["teams"]
           },
           {
-            "required": [
-              "rounds"
-            ]
+            "required": ["rounds"]
           },
           {
-            "required": [
-              "assignments"
-            ]
+            "required": ["assignments"]
           },
           {
-            "required": [
-              "reviews"
-            ]
+            "required": ["reviews"]
           },
           {
-            "required": [
-              "conflicts"
-            ]
+            "required": ["conflicts"]
           },
           {
-            "required": [
-              "moderations"
-            ]
+            "required": ["moderations"]
           }
         ],
         "properties": {
@@ -4644,10 +4459,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "correlationId": {
             "type": "string"
@@ -4717,10 +4529,7 @@
             }
           },
           "recommendation": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "enum": [
               "accept",
               "minor_changes",
@@ -4731,10 +4540,7 @@
             ]
           },
           "confidence": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1,
             "maximum": 5
           },
@@ -4748,10 +4554,7 @@
           },
           "intent": {
             "type": "string",
-            "enum": [
-              "save",
-              "submit"
-            ]
+            "enum": ["save", "submit"]
           }
         },
         "description": "recommendation and confidence must be non-null when intent is submit."
@@ -4759,10 +4562,7 @@
       "EvaluationConflictCommand": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "assignmentId",
-          "reason"
-        ],
+        "required": ["assignmentId", "reason"],
         "properties": {
           "assignmentId": {
             "type": "string",
@@ -4801,27 +4601,16 @@
             "maxLength": 200
           },
           "expectedModerationId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 200
           },
           "recommendation": {
             "type": "string",
-            "enum": [
-              "accept",
-              "waitlist",
-              "reject",
-              "advance"
-            ]
+            "enum": ["accept", "waitlist", "reject", "advance"]
           },
           "moderatedScore": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": ["number", "null"],
             "minimum": 1,
             "maximum": 5
           },
@@ -4832,10 +4621,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "draft",
-              "confirmed"
-            ]
+            "enum": ["draft", "confirmed"]
           },
           "confirmed": {
             "type": "boolean"
@@ -4845,11 +4631,7 @@
       "EvaluationReopenCommand": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "assignmentId",
-          "reason",
-          "confirmed"
-        ],
+        "required": ["assignmentId", "reason", "confirmed"],
         "properties": {
           "assignmentId": {
             "type": "string",
@@ -4870,11 +4652,7 @@
       "EvaluationPersonCommandResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "changeCursor",
-          "realtimeWarning",
-          "correlationId"
-        ],
+        "required": ["changeCursor", "realtimeWarning", "correlationId"],
         "anyOf": [
           {
             "required": [
@@ -4887,16 +4665,10 @@
             ]
           },
           {
-            "required": [
-              "assignmentId",
-              "status"
-            ]
+            "required": ["assignmentId", "status"]
           },
           {
-            "required": [
-              "moderationId",
-              "status"
-            ]
+            "required": ["moderationId", "status"]
           },
           {
             "required": [
@@ -4916,16 +4688,10 @@
             "minimum": 1
           },
           "weightedScore": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": ["number", "null"]
           },
           "nextAssignmentId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "assignmentId": {
             "type": "string"
@@ -4935,24 +4701,14 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "recused",
-              "draft",
-              "confirmed"
-            ]
+            "enum": ["recused", "draft", "confirmed"]
           },
           "changeCursor": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1
           },
           "realtimeWarning": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "webhookDeliveries": {
             "type": "array",
@@ -4961,10 +4717,7 @@
             }
           },
           "webhookWarning": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "correlationId": {
             "type": "string"
@@ -4974,30 +4727,19 @@
       "IntegrationCollectionPage": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "nextCursor",
-          "correlationId"
-        ],
+        "required": ["nextCursor", "correlationId"],
         "anyOf": [
           {
-            "required": [
-              "connections"
-            ]
+            "required": ["connections"]
           },
           {
-            "required": [
-              "mappings"
-            ]
+            "required": ["mappings"]
           },
           {
-            "required": [
-              "runs"
-            ]
+            "required": ["runs"]
           },
           {
-            "required": [
-              "runItems"
-            ]
+            "required": ["runItems"]
           }
         ],
         "properties": {
@@ -5026,10 +4768,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "correlationId": {
             "type": "string"
@@ -5055,11 +4794,7 @@
       "CommunicationPreviewRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "templateVersionId",
-          "audienceType",
-          "kind"
-        ],
+        "required": ["templateVersionId", "audienceType", "kind"],
         "properties": {
           "templateVersionId": {
             "type": "string",
@@ -5085,10 +4820,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "transactional",
-              "optional"
-            ]
+            "enum": ["transactional", "optional"]
           }
         }
       },
@@ -5129,10 +4861,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "transactional",
-              "optional"
-            ]
+            "enum": ["transactional", "optional"]
           },
           "idempotencyKey": {
             "type": "string",
@@ -5191,10 +4920,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "transactional",
-              "optional"
-            ]
+            "enum": ["transactional", "optional"]
           },
           "idempotencyKey": {
             "type": "string",
@@ -5223,11 +4949,7 @@
       "CommunicationTestRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "templateVersionId",
-          "recipient",
-          "idempotencyKey"
-        ],
+        "required": ["templateVersionId", "recipient", "idempotencyKey"],
         "properties": {
           "templateVersionId": {
             "type": "string",
@@ -5247,10 +4969,7 @@
       "CommunicationCommandResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "result",
-          "correlationId"
-        ],
+        "required": ["result", "correlationId"],
         "properties": {
           "result": {
             "oneOf": [
@@ -5285,12 +5004,7 @@
           "recipients": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "selected",
-              "deliverable",
-              "invalid",
-              "suppressed"
-            ],
+            "required": ["selected", "deliverable", "invalid", "suppressed"],
             "properties": {
               "selected": {
                 "type": "integer",
@@ -5349,11 +5063,7 @@
           "rendered": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "subject",
-              "html",
-              "text"
-            ],
+            "required": ["subject", "html", "text"],
             "properties": {
               "subject": {
                 "type": "string"
@@ -5369,20 +5079,13 @@
           "provider": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "configured",
-              "sender",
-              "queueConfigured"
-            ],
+            "required": ["configured", "sender", "queueConfigured"],
             "properties": {
               "configured": {
                 "type": "boolean"
               },
               "sender": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "queueConfigured": {
                 "type": "boolean"
@@ -5406,27 +5109,15 @@
             "type": "string"
           },
           "operationId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "status": {
             "type": "string",
-            "enum": [
-              "scheduled",
-              "queued"
-            ]
+            "enum": ["scheduled", "queued"]
           },
           "operationStatus": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "queued",
-              null
-            ]
+            "type": ["string", "null"],
+            "enum": ["queued", null]
           },
           "duplicate": {
             "type": "boolean"
@@ -5438,9 +5129,7 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "confirmed"
-            ],
+            "required": ["confirmed"],
             "properties": {
               "confirmed": {
                 "type": "boolean",
@@ -5451,10 +5140,7 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "confirmed",
-              "itemId"
-            ],
+            "required": ["confirmed", "itemId"],
             "properties": {
               "confirmed": {
                 "type": "boolean",
@@ -5472,11 +5158,7 @@
       "OperationCommandResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "operationId",
-          "status",
-          "correlationId"
-        ],
+        "required": ["operationId", "status", "correlationId"],
         "properties": {
           "operationId": {
             "type": "string"
@@ -5486,10 +5168,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "queued",
-              "cancelled"
-            ]
+            "enum": ["queued", "cancelled"]
           },
           "correlationId": {
             "type": "string"
@@ -5525,13 +5204,7 @@
           },
           "inputType": {
             "type": "string",
-            "enum": [
-              "scale_5",
-              "scale_10",
-              "yes_no",
-              "free_text",
-              "dropdown"
-            ]
+            "enum": ["scale_5", "scale_10", "yes_no", "free_text", "dropdown"]
           },
           "options": {
             "type": "array",
@@ -5580,24 +5253,15 @@
             "maxLength": 120
           },
           "opensAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "closesAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "dueAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "anonymous": {
@@ -5625,13 +5289,7 @@
       "EvaluationPlanCommand": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "revision",
-          "name",
-          "status",
-          "decisionRole",
-          "rounds"
-        ],
+        "required": ["revision", "name", "status", "decisionRole", "rounds"],
         "properties": {
           "revision": {
             "type": "integer",
@@ -5644,18 +5302,11 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "draft",
-              "active",
-              "closed"
-            ]
+            "enum": ["draft", "active", "closed"]
           },
           "decisionRole": {
             "type": "string",
-            "enum": [
-              "administrator",
-              "committee_chair"
-            ]
+            "enum": ["administrator", "committee_chair"]
           },
           "rounds": {
             "type": "array",
@@ -5670,12 +5321,7 @@
       "EvaluationNextRoundCommand": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "planId",
-          "planRevision",
-          "name",
-          "cloneRoundId"
-        ],
+        "required": ["planId", "planRevision", "name", "cloneRoundId"],
         "properties": {
           "planId": {
             "type": "string",
@@ -5692,24 +5338,15 @@
             "maxLength": 120
           },
           "opensAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "closesAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "dueAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time",
             "default": null
           },
@@ -5717,10 +5354,7 @@
             "type": "boolean"
           },
           "scorecardId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 120
           },
@@ -5738,11 +5372,7 @@
       "EvaluationAssignmentCommand": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "roundId",
-          "targetType",
-          "targetIds"
-        ],
+        "required": ["roundId", "targetType", "targetIds"],
         "properties": {
           "roundId": {
             "type": "string",
@@ -5751,10 +5381,7 @@
           },
           "targetType": {
             "type": "string",
-            "enum": [
-              "submission",
-              "session"
-            ]
+            "enum": ["submission", "session"]
           },
           "targetIds": {
             "type": "array",
@@ -5779,10 +5406,7 @@
             }
           },
           "teamId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 200,
             "default": null
@@ -5843,10 +5467,7 @@
             }
           },
           "teamId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 200,
             "default": null
@@ -5860,10 +5481,7 @@
       "EvaluationPlanCommandResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "planId",
-          "correlationId"
-        ],
+        "required": ["planId", "correlationId"],
         "properties": {
           "planId": {
             "type": "string"
@@ -5876,10 +5494,7 @@
       "EvaluationRoundCommandResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "roundId",
-          "correlationId"
-        ],
+        "required": ["roundId", "correlationId"],
         "properties": {
           "roundId": {
             "type": "string"
@@ -5909,16 +5524,10 @@
             "minimum": 1
           },
           "undoOperationId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "undoExpiresAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "correlationId": {
@@ -5929,11 +5538,7 @@
       "EvaluationRoundReviewerCommand": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "roundId",
-          "personId",
-          "operation"
-        ],
+        "required": ["roundId", "personId", "operation"],
         "description": "Set `confirmed` to true when removing a reviewer. The response reports the exact number of unfinished assignments cancelled.",
         "properties": {
           "roundId": {
@@ -5948,10 +5553,7 @@
           },
           "operation": {
             "type": "string",
-            "enum": [
-              "add",
-              "remove"
-            ]
+            "enum": ["add", "remove"]
           },
           "confirmed": {
             "type": "boolean",
@@ -5978,10 +5580,7 @@
           },
           "operation": {
             "type": "string",
-            "enum": [
-              "add",
-              "remove"
-            ]
+            "enum": ["add", "remove"]
           },
           "cancelledAssignmentCount": {
             "type": "integer",
@@ -6018,10 +5617,7 @@
             }
           },
           "webhookWarning": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "correlationId": {
             "type": "string"
@@ -6031,10 +5627,7 @@
       "AcceleventsExportRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "connectionId",
-          "dryRun"
-        ],
+        "required": ["connectionId", "dryRun"],
         "properties": {
           "connectionId": {
             "type": "string",
@@ -6058,14 +5651,10 @@
                   "const": false
                 }
               },
-              "required": [
-                "dryRun"
-              ]
+              "required": ["dryRun"]
             },
             "then": {
-              "required": [
-                "previewFingerprint"
-              ]
+              "required": ["previewFingerprint"]
             }
           }
         ]
@@ -6086,10 +5675,7 @@
             "type": "string"
           },
           "operationId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "queued": {
             "type": "boolean"
@@ -6142,10 +5728,7 @@
             "type": "string"
           },
           "progressTotal": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0
           },
           "progressCompleted": {
@@ -6161,10 +5744,7 @@
             "minimum": 0
           },
           "lastError": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "createdAt": {
             "type": "string",
@@ -6175,10 +5755,7 @@
             "format": "date-time"
           },
           "completedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           }
         }
@@ -6186,13 +5763,7 @@
       "TaskCreateRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "title",
-          "targetType",
-          "targetId",
-          "taskType",
-          "impact"
-        ],
+        "required": ["title", "targetType", "targetId", "taskType", "impact"],
         "properties": {
           "title": {
             "type": "string",
@@ -6200,20 +5771,13 @@
             "maxLength": 200
           },
           "description": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 2000,
             "default": null
           },
           "targetType": {
             "type": "string",
-            "enum": [
-              "speaker",
-              "session",
-              "event"
-            ]
+            "enum": ["speaker", "session", "event"]
           },
           "targetId": {
             "type": "string",
@@ -6221,10 +5785,7 @@
             "maxLength": 200
           },
           "ownerPersonId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 200,
             "default": null
@@ -6236,10 +5797,7 @@
             "$ref": "#/components/schemas/TaskImpact"
           },
           "dueAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time",
             "default": null,
             "description": "RFC 3339 timestamp"
@@ -6260,10 +5818,7 @@
       "TaskItemResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "task",
-          "correlationId"
-        ],
+        "required": ["task", "correlationId"],
         "properties": {
           "task": {
             "$ref": "#/components/schemas/Task"
@@ -6305,42 +5860,26 @@
             "type": "string"
           },
           "templateId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "targetType": {
             "type": "string",
-            "enum": [
-              "speaker",
-              "session",
-              "event"
-            ]
+            "enum": ["speaker", "session", "event"]
           },
           "targetId": {
             "type": "string"
           },
           "ownerPersonId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "ownerName": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "title": {
             "type": "string"
           },
           "description": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "taskType": {
             "$ref": "#/components/schemas/TaskType"
@@ -6362,12 +5901,7 @@
           },
           "readinessState": {
             "type": "string",
-            "enum": [
-              "on_track",
-              "at_risk",
-              "blocked",
-              "overdue"
-            ]
+            "enum": ["on_track", "at_risk", "blocked", "overdue"]
           },
           "readinessPercent": {
             "type": "integer",
@@ -6379,36 +5913,21 @@
             "minimum": 1
           },
           "dueAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "evidenceJson": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "waiverJson": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "submittedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "completedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "createdAt": {
@@ -6440,20 +5959,12 @@
       },
       "TaskImpact": {
         "type": "string",
-        "enum": [
-          "critical",
-          "high",
-          "medium",
-          "low"
-        ]
+        "enum": ["critical", "high", "medium", "low"]
       },
       "SchedulePublishRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "scheduleVersionId",
-          "scheduleRevision"
-        ],
+        "required": ["scheduleVersionId", "scheduleRevision"],
         "properties": {
           "scheduleVersionId": {
             "type": "string",
@@ -6486,17 +5997,11 @@
             "type": "string"
           },
           "changeCursor": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1
           },
           "realtimeWarning": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "calendar": {
             "$ref": "#/components/schemas/CalendarFanoutSummary"
@@ -6509,36 +6014,23 @@
       "CalendarFanoutSummary": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "operationId",
-          "status",
-          "dispatchError"
-        ],
+        "required": ["operationId", "status", "dispatchError"],
         "properties": {
           "operationId": {
             "type": "string"
           },
           "status": {
             "type": "string",
-            "enum": [
-              "queued",
-              "queue_failed"
-            ]
+            "enum": ["queued", "queue_failed"]
           },
           "dispatchError": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           }
         }
       },
       "ResendWebhook": {
         "type": "object",
-        "required": [
-          "type",
-          "data"
-        ],
+        "required": ["type", "data"],
         "properties": {
           "type": {
             "type": "string"
@@ -6549,9 +6041,7 @@
           },
           "data": {
             "type": "object",
-            "required": [
-              "email_id"
-            ],
+            "required": ["email_id"],
             "properties": {
               "email_id": {
                 "type": "string"
@@ -6562,10 +6052,7 @@
       },
       "WebhookResult": {
         "type": "object",
-        "required": [
-          "matched",
-          "duplicate"
-        ],
+        "required": ["matched", "duplicate"],
         "properties": {
           "matched": {
             "type": "boolean"
@@ -6578,12 +6065,7 @@
       "FileScannerCallbackResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "ok",
-          "applied",
-          "duplicate",
-          "status"
-        ],
+        "required": ["ok", "applied", "duplicate", "status"],
         "properties": {
           "ok": {
             "type": "boolean",
@@ -6597,20 +6079,14 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "clean",
-              "infected",
-              "failed"
-            ]
+            "enum": ["clean", "infected", "failed"]
           }
         }
       },
       "WebhookError": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "error"
-        ],
+        "required": ["error"],
         "properties": {
           "error": {
             "type": "string"
@@ -6620,12 +6096,7 @@
       "EventChangePage": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "changes",
-          "cursor",
-          "hasMore",
-          "pollAfterMs"
-        ],
+        "required": ["changes", "cursor", "hasMore", "pollAfterMs"],
         "properties": {
           "changes": {
             "type": "array",
@@ -6676,26 +6147,14 @@
             "type": "string"
           },
           "entityId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "changeType": {
             "type": "string",
-            "enum": [
-              "created",
-              "updated",
-              "deleted",
-              "published",
-              "progress"
-            ]
+            "enum": ["created", "updated", "deleted", "published", "progress"]
           },
           "correlationId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "committedAt": {
             "type": "integer",
@@ -6733,11 +6192,7 @@
           },
           "decision": {
             "type": "string",
-            "enum": [
-              "accepted",
-              "rejected",
-              "waitlisted"
-            ]
+            "enum": ["accepted", "rejected", "waitlisted"]
           },
           "rationale": {
             "type": "string",
@@ -6783,12 +6238,7 @@
             "const": true
           }
         },
-        "required": [
-          "submissionId",
-          "decision",
-          "rationale",
-          "confirmed"
-        ],
+        "required": ["submissionId", "decision", "rationale", "confirmed"],
         "additionalProperties": false
       },
       "AdministrationFamily": {
@@ -6821,10 +6271,7 @@
             "maximum": 9007199254740991
           }
         },
-        "required": [
-          "formRevision",
-          "draftRevision"
-        ],
+        "required": ["formRevision", "draftRevision"],
         "additionalProperties": false
       },
       "AdministrationFormSaveRequest": {
@@ -6852,10 +6299,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "submission",
-              "direct_session"
-            ]
+            "enum": ["submission", "direct_session"]
           },
           "publicSlug": {
             "type": "string",
@@ -6903,11 +6347,7 @@
           },
           "accessMode": {
             "type": "string",
-            "enum": [
-              "email_verified",
-              "account_required",
-              "password_protected"
-            ]
+            "enum": ["email_verified", "account_required", "password_protected"]
           },
           "accessPassword": {
             "default": "",
@@ -7029,17 +6469,11 @@
                     },
                     "reviewVisibility": {
                       "type": "string",
-                      "enum": [
-                        "reviewers",
-                        "administrators_only"
-                      ]
+                      "enum": ["reviewers", "administrators_only"]
                     },
                     "blindReviewVisibility": {
                       "type": "string",
-                      "enum": [
-                        "content",
-                        "identity"
-                      ]
+                      "enum": ["content", "identity"]
                     },
                     "condition": {
                       "default": null,
@@ -7055,10 +6489,7 @@
                               "maxLength": 120
                             }
                           },
-                          "required": [
-                            "fieldId",
-                            "equals"
-                          ],
+                          "required": ["fieldId", "equals"],
                           "additionalProperties": false
                         },
                         {
@@ -7078,9 +6509,7 @@
                 }
               }
             },
-            "required": [
-              "fields"
-            ],
+            "required": ["fields"],
             "additionalProperties": false
           },
           "routing": {
@@ -7156,11 +6585,7 @@
                 ]
               }
             },
-            "required": [
-              "categories",
-              "trackIds",
-              "trackNames"
-            ],
+            "required": ["categories", "trackIds", "trackNames"],
             "additionalProperties": false
           }
         },
@@ -7196,11 +6621,7 @@
           },
           "sessionTypeFormat": {
             "type": "string",
-            "enum": [
-              "VIRTUAL",
-              "IN_PERSON",
-              "HYBRID"
-            ]
+            "enum": ["VIRTUAL", "IN_PERSON", "HYBRID"]
           },
           "provider": {
             "type": "string",
@@ -7224,9 +6645,7 @@
             "const": true
           }
         },
-        "required": [
-          "confirmed"
-        ],
+        "required": ["confirmed"],
         "additionalProperties": false
       },
       "AdministrationIntegrationMappingDeleteRequest": {
@@ -7234,12 +6653,7 @@
         "properties": {
           "entityType": {
             "type": "string",
-            "enum": [
-              "speaker",
-              "track",
-              "session",
-              "session_speaker"
-            ]
+            "enum": ["speaker", "track", "session", "session_speaker"]
           },
           "entityId": {
             "type": "string",
@@ -7251,11 +6665,7 @@
             "const": true
           }
         },
-        "required": [
-          "entityType",
-          "entityId",
-          "confirmed"
-        ],
+        "required": ["entityType", "entityId", "confirmed"],
         "additionalProperties": false
       },
       "AdministrationIntegrationMappingRequest": {
@@ -7263,12 +6673,7 @@
         "properties": {
           "entityType": {
             "type": "string",
-            "enum": [
-              "speaker",
-              "track",
-              "session",
-              "session_speaker"
-            ]
+            "enum": ["speaker", "track", "session", "session_speaker"]
           },
           "entityId": {
             "type": "string",
@@ -7294,12 +6699,7 @@
             "additionalProperties": {}
           }
         },
-        "required": [
-          "entityType",
-          "entityId",
-          "externalId",
-          "sourceHash"
-        ],
+        "required": ["entityType", "entityId", "externalId", "sourceHash"],
         "additionalProperties": false
       },
       "AdministrationMembershipRevocationRequest": {
@@ -7315,10 +6715,7 @@
             "const": true
           }
         },
-        "required": [
-          "membershipId",
-          "confirmed"
-        ],
+        "required": ["membershipId", "confirmed"],
         "additionalProperties": false
       },
       "AdministrationPersonInvitationRequest": {
@@ -7336,17 +6733,10 @@
           },
           "scope": {
             "type": "string",
-            "enum": [
-              "event",
-              "organisation"
-            ]
+            "enum": ["event", "organisation"]
           }
         },
-        "required": [
-          "name",
-          "email",
-          "scope"
-        ],
+        "required": ["name", "email", "scope"],
         "additionalProperties": false
       },
       "AdministrationResourcePublishRequest": {
@@ -7358,9 +6748,7 @@
             "maximum": 9007199254740991
           }
         },
-        "required": [
-          "revision"
-        ],
+        "required": ["revision"],
         "additionalProperties": false
       },
       "AdministrationResourceSaveRequest": {
@@ -7390,11 +6778,7 @@
           },
           "audienceScope": {
             "type": "string",
-            "enum": [
-              "all_speakers",
-              "accepted_speakers",
-              "custom"
-            ]
+            "enum": ["all_speakers", "accepted_speakers", "custom"]
           },
           "audiencePersonIds": {
             "default": [],
@@ -7501,11 +6885,7 @@
           },
           "visibility": {
             "type": "string",
-            "enum": [
-              "public",
-              "private",
-              "hidden"
-            ]
+            "enum": ["public", "private", "hidden"]
           },
           "requiredResources": {
             "maxItems": 50,
@@ -7541,9 +6921,7 @@
             "const": true
           }
         },
-        "required": [
-          "confirmed"
-        ],
+        "required": ["confirmed"],
         "additionalProperties": false
       },
       "AdministrationTaskAssignmentRequest": {
@@ -7560,10 +6938,7 @@
             "maxLength": 200
           }
         },
-        "required": [
-          "templateId",
-          "targetId"
-        ],
+        "required": ["templateId", "targetId"],
         "additionalProperties": false
       },
       "AdministrationTaskTemplateRequest": {
@@ -7580,11 +6955,7 @@
           },
           "targetType": {
             "type": "string",
-            "enum": [
-              "speaker",
-              "session",
-              "event"
-            ]
+            "enum": ["speaker", "session", "event"]
           },
           "taskType": {
             "type": "string",
@@ -7599,12 +6970,7 @@
           },
           "impact": {
             "type": "string",
-            "enum": [
-              "critical",
-              "high",
-              "medium",
-              "low"
-            ]
+            "enum": ["critical", "high", "medium", "low"]
           },
           "evidenceMode": {
             "type": "string",
@@ -7619,12 +6985,7 @@
           },
           "dueAnchor": {
             "type": "string",
-            "enum": [
-              "none",
-              "acceptance",
-              "session_start",
-              "fixed"
-            ]
+            "enum": ["none", "acceptance", "session_start", "fixed"]
           },
           "dueOffsetDays": {
             "anyOf": [
@@ -7668,10 +7029,7 @@
             "properties": {
               "preset": {
                 "type": "string",
-                "enum": [
-                  "speaker_travel_hotel_v1",
-                  "speaker_travel_flight_v1"
-                ]
+                "enum": ["speaker_travel_hotel_v1", "speaker_travel_flight_v1"]
               },
               "form": {
                 "type": "object",
@@ -7740,23 +7098,14 @@
                               ]
                             }
                           },
-                          "required": [
-                            "fieldId",
-                            "equals"
-                          ]
+                          "required": ["fieldId", "equals"]
                         }
                       },
-                      "required": [
-                        "id",
-                        "label",
-                        "type"
-                      ]
+                      "required": ["id", "label", "type"]
                     }
                   }
                 },
-                "required": [
-                  "fields"
-                ]
+                "required": ["fields"]
               }
             }
           }
@@ -7790,13 +7139,14 @@
           },
           "eventTypes": {
             "minItems": 1,
-            "maxItems": 15,
+            "maxItems": 16,
             "type": "array",
             "items": {
               "type": "string",
               "enum": [
                 "submission.created",
                 "submission.submitted",
+                "submission.updated",
                 "submission.withdrawn",
                 "review.submitted",
                 "review.reopened",
@@ -7814,11 +7164,7 @@
             }
           }
         },
-        "required": [
-          "name",
-          "url",
-          "eventTypes"
-        ],
+        "required": ["name", "url", "eventTypes"],
         "additionalProperties": false
       },
       "AdministrationWebhookRotateSecretRequest": {
@@ -7829,9 +7175,7 @@
             "const": true
           }
         },
-        "required": [
-          "confirmed"
-        ],
+        "required": ["confirmed"],
         "additionalProperties": false
       },
       "AdministrationWebhookStatusRequest": {
@@ -7839,15 +7183,10 @@
         "properties": {
           "status": {
             "type": "string",
-            "enum": [
-              "active",
-              "disabled"
-            ]
+            "enum": ["active", "disabled"]
           }
         },
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "additionalProperties": false
       },
       "AdministrationWebhookTestRequest": {
@@ -7858,9 +7197,7 @@
             "const": true
           }
         },
-        "required": [
-          "confirmed"
-        ],
+        "required": ["confirmed"],
         "additionalProperties": false
       },
       "FileScannerCallbackRequest": {
@@ -7902,10 +7239,7 @@
                     "maximum": 1073741824
                   }
                 },
-                "required": [
-                  "etag",
-                  "sizeBytes"
-                ],
+                "required": ["etag", "sizeBytes"],
                 "additionalProperties": false
               },
               "provider": {
@@ -7968,10 +7302,7 @@
                     "maximum": 1073741824
                   }
                 },
-                "required": [
-                  "etag",
-                  "sizeBytes"
-                ],
+                "required": ["etag", "sizeBytes"],
                 "additionalProperties": false
               },
               "provider": {
@@ -8034,10 +7365,7 @@
                     "maximum": 1073741824
                   }
                 },
-                "required": [
-                  "etag",
-                  "sizeBytes"
-                ],
+                "required": ["etag", "sizeBytes"],
                 "additionalProperties": false
               },
               "provider": {
@@ -8076,6 +7404,7 @@
         "enum": [
           "submission.created",
           "submission.submitted",
+          "submission.updated",
           "submission.withdrawn",
           "review.submitted",
           "review.reopened",
@@ -8150,26 +7479,17 @@
             }
           }
         },
-        "required": [
-          "taskId",
-          "revision"
-        ],
+        "required": ["taskId", "revision"],
         "additionalProperties": false
       },
       "Error": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "error",
-          "correlationId"
-        ],
+        "required": ["error", "correlationId"],
         "properties": {
           "error": {
             "type": "object",
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "properties": {
               "code": {
                 "type": "string"

@@ -165,7 +165,8 @@ export function useEvaluationAdminState(
   ).length;
   const advanceableSubmissions = loaderData.submissions.filter(
     (submission) =>
-      ["assigned", "in_review", "decision_ready"].includes(submission.status) &&
+      (submission.reviewableInCurrentCycle ||
+        submission.status === "decision_ready") &&
       activeRoundAssignments.some(
         (assignment) =>
           assignment.submissionId === submission.id &&
@@ -207,8 +208,7 @@ export function useEvaluationAdminState(
     nextRound ?? undefined,
   );
   const bulkAssignableSubmissions = loaderData.submissions.filter(
-    (submission) =>
-      ["submitted", "assigned", "in_review"].includes(submission.status),
+    (submission) => submission.reviewableInCurrentCycle,
   );
   const bulkSelectedSubmissions = bulkAssignableSubmissions.filter(
     (submission) => bulkSubmissionIds.has(submission.id),

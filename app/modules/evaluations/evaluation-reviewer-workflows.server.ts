@@ -7,6 +7,7 @@ import {
 } from "./evaluation-errors";
 import { EvaluationReviewSubmissionWorkflows } from "./evaluation-review-submission-workflows.server";
 import { moderationSchema, reviewReopenSchema } from "./evaluation-schema";
+import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 
 export abstract class EvaluationReviewerWorkflows extends EvaluationReviewSubmissionWorkflows {
   async moderate(viewer: Viewer, input: unknown) {
@@ -78,13 +79,17 @@ export abstract class EvaluationReviewerWorkflows extends EvaluationReviewSubmis
          WHERE id = ? AND organisation_id = ?
            AND EXISTS (
              SELECT 1 FROM evaluation_rounds active_round
+             JOIN evaluation_plans active_plan
+               ON active_plan.id = active_round.plan_id
+              AND active_plan.event_id = active_round.event_id
               WHERE active_round.id = ? AND active_round.event_id = events.id
                 AND active_round.status = 'active'
+                AND active_plan.status = 'active'
            )
            AND EXISTS (
-             SELECT 1 FROM submissions candidate
-              WHERE candidate.id = ? AND candidate.event_id = events.id
-                AND candidate.status IN ('assigned','in_review','decision_ready')
+             SELECT 1 FROM submissions submission
+              WHERE submission.id = ? AND submission.event_id = events.id
+                AND ${reviewableSubmissionSql("submission", "review")}
            )
            AND EXISTS (
              SELECT 1 FROM evaluator_assignments assignment
@@ -238,8 +243,11 @@ export abstract class EvaluationReviewerWorkflows extends EvaluationReviewSubmis
         JOIN reviews r ON r.assignment_id = a.id AND r.event_id = a.event_id
         JOIN evaluation_rounds round
           ON round.id = a.round_id AND round.event_id = a.event_id
+        JOIN evaluation_plans plan
+          ON plan.id = round.plan_id AND plan.event_id = round.event_id
        WHERE a.id = ? AND a.event_id = ?
          AND a.status = 'submitted' AND r.status IN ('submitted','locked')
+         AND plan.status = 'active'
          AND round.status = 'active'
          AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
          AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
@@ -249,11 +257,19 @@ export abstract class EvaluationReviewerWorkflows extends EvaluationReviewSubmis
               AND pool.round_id = a.round_id
               AND pool.person_id = a.evaluator_person_id
          )
-         AND NOT EXISTS (
-           SELECT 1 FROM submission_decisions final_decision
-            WHERE final_decision.event_id = a.event_id
-              AND final_decision.submission_id = a.submission_id
-              AND final_decision.status = 'published'
+         AND (
+           (a.submission_id IS NOT NULL AND EXISTS (
+             SELECT 1 FROM submissions submission
+              WHERE submission.id = a.submission_id
+                AND submission.event_id = a.event_id
+                AND ${reviewableSubmissionSql("submission", "review")}
+           ))
+           OR (a.session_id IS NOT NULL AND EXISTS (
+             SELECT 1 FROM sessions session
+              WHERE session.id = a.session_id
+                AND session.event_id = a.event_id
+                AND session.status NOT IN ('cancelled','archived')
+           ))
          )
     `,
     )
@@ -273,7 +289,7 @@ export abstract class EvaluationReviewerWorkflows extends EvaluationReviewSubmis
       }>();
     if (!state) {
       throw new EvaluationStateError(
-        "Only a submitted review in the active round can be reopened, and released decisions remain final.",
+        "Only a submitted review for an eligible target in the current active round can be reopened.",
       );
     }
     const operationId = crypto.randomUUID();
@@ -300,10 +316,13 @@ export abstract class EvaluationReviewerWorkflows extends EvaluationReviewSubmis
                last_operation_id = ?
          WHERE id = ? AND event_id = ? AND revision = ? AND status = 'submitted'
            AND EXISTS (
-             SELECT 1 FROM evaluation_rounds
-              WHERE id = ? AND event_id = ? AND status = 'active'
-                AND (opens_at IS NULL OR opens_at <= unixepoch())
-                AND (closes_at IS NULL OR closes_at > unixepoch())
+             SELECT 1 FROM evaluation_rounds round
+             JOIN evaluation_plans plan
+               ON plan.id = round.plan_id AND plan.event_id = round.event_id
+              WHERE round.id = ? AND round.event_id = ?
+                AND plan.status = 'active' AND round.status = 'active'
+                AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
+                AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
                 AND EXISTS (
                   SELECT 1 FROM evaluation_round_reviewers pool
                    WHERE pool.event_id = evaluator_assignments.event_id
@@ -311,9 +330,19 @@ export abstract class EvaluationReviewerWorkflows extends EvaluationReviewSubmis
                      AND pool.person_id = evaluator_assignments.evaluator_person_id
                 )
            )
-           AND NOT EXISTS (
-             SELECT 1 FROM submission_decisions
-              WHERE event_id = ? AND submission_id = ? AND status = 'published'
+           AND (
+             (submission_id IS NOT NULL AND EXISTS (
+               SELECT 1 FROM submissions submission
+                WHERE submission.id = evaluator_assignments.submission_id
+                  AND submission.event_id = evaluator_assignments.event_id
+                  AND ${reviewableSubmissionSql("submission", "review")}
+             ))
+             OR (session_id IS NOT NULL AND EXISTS (
+               SELECT 1 FROM sessions session
+                WHERE session.id = evaluator_assignments.session_id
+                  AND session.event_id = evaluator_assignments.event_id
+                  AND session.status NOT IN ('cancelled','archived')
+             ))
            )
       `,
       ).bind(
@@ -323,8 +352,6 @@ export abstract class EvaluationReviewerWorkflows extends EvaluationReviewSubmis
         state.assignmentRevision,
         state.roundId,
         viewer.eventId,
-        viewer.eventId,
-        state.submissionId,
       ),
       this.env.DB.prepare(
         `

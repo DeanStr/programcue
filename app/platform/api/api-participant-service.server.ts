@@ -4,17 +4,25 @@ import {
   AirtableProviderBoundary,
   airtableIntentCommand,
 } from "~/modules/airtable/airtable-provider-boundary.server";
+import {
+  acceptedCoSpeakerInvitationSchema,
+  type AcceptedCoSpeakerInvitationInput,
+} from "~/modules/submissions/submission-co-speaker-workflows.server";
 import type { Applicant } from "~/modules/submissions/submission-repository.server";
+import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  WebhookService,
+  type WebhookEventResult,
+} from "~/platform/operations/webhook-service.server";
 import {
   ParticipantProfileConflictError,
   ParticipantProfileIntegrityError,
   ParticipantProfileService,
 } from "~/modules/speakers/participant-profile-service.server";
 import { isoTimestamp, parseStrictQuery } from "./api-pagination.server";
-import { ApiError } from "./api.server";
+import { ApiError, apiRequestHash } from "./api.server";
 
 export const PARTICIPANT_API_RESOURCES = [
   "profile",
@@ -114,6 +122,22 @@ type ParticipantCommandRecovery<T> = {
   progressed: boolean;
 };
 
+type AcceptedCoSpeakerInvitationResult = {
+  submission: {
+    id: string;
+    status: "accepted";
+    revision: number;
+  };
+  speaker: {
+    id: string;
+    roleLabel: "Co-author" | "Co-speaker" | "Co-presenter";
+  };
+  invitation: {
+    status: "queued" | "queue_failed";
+    operationId: string;
+  };
+};
+
 const MAX_PARTICIPANT_COMMAND_RESPONSE_BYTES = 64 * 1_024;
 
 function serialiseParticipantCommandResponse(value: unknown) {
@@ -146,6 +170,100 @@ export class ApiParticipantService {
   async profile(viewer: Viewer) {
     await this.airtable.assertReadable(viewer);
     return this.profileD1(viewer);
+  }
+
+  async inviteAcceptedCoSpeaker(
+    viewer: Viewer,
+    rawInput: AcceptedCoSpeakerInvitationInput,
+    idempotencyKey: string,
+  ) {
+    const input = acceptedCoSpeakerInvitationSchema.parse(rawInput);
+    const submissions = new SubmissionService(this.env);
+    return this.runCommand(
+      viewer,
+      "participant.submission.invite_co_speaker",
+      idempotencyKey,
+      await apiRequestHash(input),
+      (operationId) =>
+        submissions.inviteAcceptedCoSpeaker(viewer, input, operationId),
+      async (operationId) => {
+        const response = await submissions.recoverAcceptedCoSpeakerInvitation(
+          viewer,
+          input.submissionId,
+          operationId,
+        );
+        return { response, progressed: Boolean(response) };
+      },
+    );
+  }
+
+  async finalizeAcceptedCoSpeakerInvitation(
+    viewer: Viewer,
+    result: AcceptedCoSpeakerInvitationResult,
+  ) {
+    const operationId = result.invitation.operationId;
+    let webhookDeliveries: WebhookEventResult[] = [];
+    let webhookWarning: string | null = null;
+    try {
+      webhookDeliveries = await new WebhookService(this.env).queueEvent(
+        viewer,
+        {
+          eventType: "submission.updated",
+          entityType: "submission",
+          entityId: result.submission.id,
+          idempotencyKey: `submission.updated:${operationId}`,
+          correlationId: operationId,
+          data: {
+            status: result.submission.status,
+            revision: result.submission.revision,
+            change: "co_speaker_invited",
+            speakerId: result.speaker.id,
+            roleLabel: result.speaker.roleLabel,
+          },
+        },
+      );
+      if (
+        webhookDeliveries.some((delivery) =>
+          ["queue_failed", "partially_failed", "failed", "cancelled"].includes(
+            delivery.status,
+          ),
+        )
+      ) {
+        webhookWarning =
+          "The co-speaker invitation committed, but one or more outbound webhooks require attention.";
+      }
+    } catch (error) {
+      console.error(
+        "Failed to record the committed co-speaker invitation webhook",
+        {
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        },
+      );
+      webhookWarning =
+        "The co-speaker invitation committed, but its outbound webhook could not be recorded.";
+    }
+
+    const realtime = await this.recordSubmissionCommandChange(
+      viewer,
+      operationId,
+      result.submission.id,
+      "updated",
+    );
+    const warnings = [
+      result.invitation.status === "queue_failed"
+        ? "The co-speaker relationship committed, but invitation delivery could not be queued. An organiser must retry it."
+        : null,
+      webhookWarning,
+      realtime.realtimeWarning,
+    ].filter((warning): warning is string => Boolean(warning));
+
+    return {
+      webhookDeliveries: webhookDeliveries.map(
+        ({ duplicate: _duplicate, ...delivery }) => delivery,
+      ),
+      changeCursor: realtime.changeCursor,
+      warnings,
+    };
   }
 
   private async profileD1(viewer: Viewer) {

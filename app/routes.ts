@@ -150,6 +150,7 @@ export default [
     ),
     route("admin/communications", "routes/communications-centre.tsx"),
     route("admin/review", "routes/evaluation-admin.tsx"),
+    route("admin/review/results.csv", "routes/evaluation-results-export.ts"),
     route("admin/speakers", "routes/admin-speakers.tsx"),
     route(
       "admin/speakers/:personId/files/:assetId",

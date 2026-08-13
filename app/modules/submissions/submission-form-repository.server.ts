@@ -784,4 +784,84 @@ export class SubmissionFormRepository {
       version,
     };
   }
+
+  async getCoSpeakerClaimForm(
+    publicSlug: string,
+    speakerId: string,
+  ): Promise<(FormSummary & { version: FormVersion }) | null> {
+    const form = await this.env.DB.prepare(
+      `SELECT f.id, f.revision, f.event_id AS eventId, e.name AS eventName,
+              e.slug AS eventSlug, e.timezone AS eventTimezone,
+              e.allow_anonymous_drafts AS allowAnonymousDrafts,
+              e.starts_at AS eventStartsAt, e.ends_at AS eventEndsAt,
+              e.venue_name AS eventVenue, e.city AS eventCity,
+              e.description AS eventDescription,
+              e.brand_accent AS brandAccent,
+              e.participant_logo_url AS participantLogoUrl,
+              e.participant_welcome_text AS participantWelcomeText,
+              e.participant_support_url AS participantSupportUrl,
+              e.file_policy_json AS filePolicyJson,
+              f.name, f.kind, f.status, f.public_slug AS publicSlug,
+              f.closes_at AS closesAt, f.submission_limit AS submissionLimit,
+              f.min_speakers AS minSpeakers, f.max_speakers AS maxSpeakers,
+              f.access_mode AS accessMode,
+              f.access_password_hash AS accessPasswordHash,
+              (SELECT COUNT(*) FROM submissions submitted
+                JOIN form_versions submitted_version
+                  ON submitted_version.id = submitted.form_version_id
+                 AND submitted_version.event_id = submitted.event_id
+               WHERE submitted_version.form_id = f.id
+                 AND submitted.status <> 'draft') AS submittedCount,
+              version.id AS versionId, version.revision AS versionRevision,
+              version.version_number AS versionNumber,
+              version.schema_json AS schemaJson,
+              version.routing_json AS routingJson,
+              version.settings_snapshot_json AS settingsSnapshotJson,
+              version.status AS versionStatus,
+              version.published_at AS publishedAt
+         FROM submission_speakers speaker
+         JOIN submissions submission
+           ON submission.id = speaker.submission_id
+          AND submission.event_id = speaker.event_id
+         JOIN form_versions version
+           ON version.id = submission.form_version_id
+          AND version.event_id = submission.event_id
+         JOIN form_definitions f
+           ON f.id = version.form_id AND f.event_id = version.event_id
+         JOIN events e ON e.id = f.event_id
+        WHERE speaker.id = ? AND f.public_slug = ?
+          AND speaker.invitation_status IN ('pending','sent','expired','claimed')
+        LIMIT 1`,
+    )
+      .bind(speakerId, publicSlug)
+      .first<
+        FormRow & {
+          versionId: string;
+          versionRevision: number;
+          versionNumber: number;
+          schemaJson: string;
+          routingJson: string;
+          settingsSnapshotJson: string;
+          versionStatus: FormVersion["status"];
+          publishedAt: number | null;
+        }
+      >();
+    if (!form) return null;
+    const version = mapVersion({
+      id: form.versionId,
+      revision: form.versionRevision,
+      versionNumber: form.versionNumber,
+      schemaJson: form.schemaJson,
+      routingJson: form.routingJson,
+      settingsSnapshotJson: form.settingsSnapshotJson,
+      status: form.versionStatus,
+      publishedAt: form.publishedAt,
+    });
+    return {
+      ...mapForm(form),
+      ...version.settings,
+      accessPasswordHash: version.routing.passwordHash,
+      version,
+    };
+  }
 }

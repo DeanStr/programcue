@@ -4,10 +4,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import { verifyApplicationNotice } from "~/modules/submissions/application-notice.server";
+import { hashApplicantToken } from "~/modules/submissions/applicant-session.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   action,
+  applicationDraftHref,
   claimApplicantVideoUploadOperation,
   loader,
 } from "./application-form";
@@ -34,6 +36,396 @@ beforeEach(async () => {
 });
 
 describe("public application mutations", () => {
+  it("opens a closed form only for an exact co-speaker claim token", async () => {
+    const form = await env.DB.prepare(
+      `SELECT form.id, form.event_id AS eventId, version.id AS versionId
+         FROM form_definitions form
+         JOIN form_versions version
+           ON version.form_id = form.id AND version.event_id = form.event_id
+        WHERE form.public_slug = 'form' AND version.status = 'published'
+        LIMIT 1`,
+    ).first<{ id: string; eventId: string; versionId: string }>();
+    if (!form) throw new Error("Published demo form is missing.");
+    const submission = {
+      id: crypto.randomUUID(),
+      title: "Closed-form claim proposal",
+    };
+    const speakerId = crypto.randomUUID();
+    const rawToken = crypto.randomUUID() + crypto.randomUUID();
+    const tokenHash = await hashApplicantToken(
+      `co-speaker-claim:${form.id}:${speakerId}:${rawToken}`,
+    );
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, form_version_id, public_reference, title, status,
+           answers_json, submitted_snapshot_json, submitted_at,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 'submitted', '{}', '{}', unixepoch(),
+                   unixepoch(), unixepoch())`,
+      ).bind(
+        submission.id,
+        form.eventId,
+        form.versionId,
+        `CLAIM-${submission.id}`,
+        submission.title,
+      ),
+      env.DB.prepare(
+        `INSERT INTO submission_revisions (
+           id, event_id, submission_id, form_version_id, revision_number,
+           answers_json, speaker_snapshot_json, save_kind, created_at
+         ) VALUES (?, ?, ?, ?, 1, '{}', ?, 'submitted', unixepoch())`,
+      ).bind(
+        crypto.randomUUID(),
+        form.eventId,
+        submission.id,
+        form.versionId,
+        JSON.stringify([
+          {
+            name: "Closed-form invitee",
+            email: `closed-claim-${speakerId}@example.com`,
+            biography: "Biography supplied with the invitation.",
+          },
+        ]),
+      ),
+      env.DB.prepare(
+        `INSERT INTO submission_speakers (
+           id, event_id, submission_id, email, display_name, role_label,
+           position, invitation_status, is_primary, claim_token_hash,
+           invitation_expires_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'Closed-form invitee', 'Co-speaker',
+                   99, 'sent', 0, ?, unixepoch() + 3600,
+                   unixepoch(), unixepoch())`,
+      ).bind(
+        speakerId,
+        form.eventId,
+        submission.id,
+        `closed-claim-${speakerId}@example.com`,
+        tokenHash,
+      ),
+      env.DB.prepare(
+        `UPDATE form_definitions SET status = 'closed'
+          WHERE id = ? AND event_id = ?`,
+      ).bind(form.id, form.eventId),
+    ]);
+
+    await expect(
+      loader({
+        request: new Request("http://localhost/apply/form"),
+        params: { slug: "form" },
+        context: context(),
+      } as never),
+    ).rejects.toMatchObject({ status: 404 });
+
+    const result = await loader({
+      request: new Request(
+        `http://localhost/apply/form?${new URLSearchParams({ claim: rawToken, speaker: speakerId })}`,
+      ),
+      params: { slug: "form" },
+      context: context(),
+    } as never);
+    if (result instanceof Response || "data" in result) {
+      throw new Error("Expected the token-bound claim payload.");
+    }
+    expect(result.claim).toMatchObject({
+      id: speakerId,
+      displayName: "Closed-form invitee",
+      submissionTitle: submission.title,
+      expired: false,
+    });
+    expect(result.availability).toEqual({
+      accepting: false,
+      reason: "Applications for this event are closed.",
+    });
+    const invalidClaim = await loader({
+      request: new Request(
+        `http://localhost/apply/form?${new URLSearchParams({ claim: "wrong-token", speaker: speakerId })}`,
+      ),
+      params: { slug: "form" },
+      context: context(),
+    } as never);
+    if (invalidClaim instanceof Response || !("data" in invalidClaim)) {
+      throw new Error("Expected the bounded unavailable claim response.");
+    }
+    expect(invalidClaim.init?.status).toBe(404);
+    expect(invalidClaim.data).toEqual({
+      unavailable: "This co-speaker invitation is unavailable.",
+    });
+
+    await expect(
+      action({
+        request: new Request("http://localhost/apply/form", {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            origin: "http://localhost",
+          },
+          body: new URLSearchParams({
+            _intent: "update_profile",
+            revision: "1",
+            name: "Not authorised",
+            biography: "A closed form must not accept this.",
+          }),
+        }),
+        params: { slug: "form" },
+        context: context(),
+      } as never),
+    ).rejects.toMatchObject({ status: 404 });
+
+    const crossOriginClaim = await action({
+      request: new Request(
+        `http://localhost/apply/form?${new URLSearchParams({ claim: rawToken, speaker: speakerId })}`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            origin: "https://attacker.example",
+          },
+          body: new URLSearchParams({
+            _intent: "claim_token",
+            speakerId,
+            claimToken: rawToken,
+          }),
+        },
+      ),
+      params: { slug: "form" },
+      context: context(),
+    } as never);
+    expect(crossOriginClaim).toBeInstanceOf(Response);
+    expect((crossOriginClaim as Response).status).toBe(403);
+    expect((crossOriginClaim as Response).headers.get("set-cookie")).toBeNull();
+
+    const claimed = await action({
+      request: new Request(
+        `http://localhost/apply/form?${new URLSearchParams({ claim: rawToken, speaker: speakerId })}`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            origin: "http://localhost",
+          },
+          body: new URLSearchParams({
+            _intent: "claim_token",
+            speakerId,
+            claimToken: rawToken,
+          }),
+        },
+      ),
+      params: { slug: "form" },
+      context: context(),
+    } as never);
+    expect(claimed).toBeInstanceOf(Response);
+    const claimResponse = claimed as Response;
+    expect(claimResponse.status).toBe(302);
+    const claimCookie = claimResponse.headers.get("set-cookie")!.split(";")[0]!;
+    const claimDestination = new URL(
+      claimResponse.headers.get("location")!,
+      "http://localhost",
+    );
+    expect(claimDestination.searchParams.get("claimedSpeaker")).toBe(speakerId);
+
+    const updated = await action({
+      request: new Request(claimDestination, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: claimCookie,
+          origin: "http://localhost",
+        },
+        body: new URLSearchParams({
+          _intent: "update_profile",
+          revision: "1",
+          name: "Claimed speaker",
+          biography: "Biography owned by the claimed speaker.",
+        }),
+      }),
+      params: { slug: "form" },
+      context: context(),
+    } as never);
+    expect(updated).toBeInstanceOf(Response);
+    const updateResponse = updated as Response;
+    expect(updateResponse.status).toBe(302);
+    const updateDestination = new URL(
+      updateResponse.headers.get("location")!,
+      "http://localhost",
+    );
+    expect(updateDestination.searchParams.get("claimedSpeaker")).toBe(
+      speakerId,
+    );
+    await expect(
+      env.DB.prepare(
+        `SELECT person.display_name AS displayName, person.biography
+           FROM submission_speakers speaker
+           JOIN people person ON person.id = speaker.person_id
+          WHERE speaker.id = ? AND speaker.event_id = ?`,
+      )
+        .bind(speakerId, form.eventId)
+        .first(),
+    ).resolves.toEqual({
+      displayName: "Claimed speaker",
+      biography: "Biography owned by the claimed speaker.",
+    });
+
+    const claimedPerson = await env.DB.prepare(
+      `SELECT person_id AS personId, email, display_name AS displayName
+         FROM submission_speakers WHERE id = ? AND event_id = ?`,
+    )
+      .bind(speakerId, form.eventId)
+      .first<{ personId: string; email: string; displayName: string }>();
+    if (!claimedPerson?.personId) {
+      throw new Error("The claimed speaker identity is missing.");
+    }
+    const draftId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, form_version_id, submitter_person_id,
+           public_reference, title, status, answers_json,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 'Historical claimed draft', 'draft', '{}',
+                   unixepoch(), unixepoch())`,
+      ).bind(
+        draftId,
+        form.eventId,
+        form.versionId,
+        claimedPerson.personId,
+        `DRAFT-${draftId}`,
+      ),
+      env.DB.prepare(
+        `INSERT INTO submission_revisions (
+           id, event_id, submission_id, form_version_id, revision_number,
+           answers_json, speaker_snapshot_json, save_kind,
+           saved_by_person_id, created_at
+         ) VALUES (?, ?, ?, ?, 1, '{}', ?, 'manual', ?, unixepoch())`,
+      ).bind(
+        crypto.randomUUID(),
+        form.eventId,
+        draftId,
+        form.versionId,
+        JSON.stringify([
+          {
+            name: claimedPerson.displayName,
+            email: claimedPerson.email,
+            biography: "Claimed draft biography.",
+          },
+        ]),
+        claimedPerson.personId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO submission_speakers (
+           id, event_id, submission_id, person_id, email, display_name,
+           role_label, position, invitation_status, is_primary,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, 'Primary speaker', 0, 'claimed', 1,
+                   unixepoch(), unixepoch())`,
+      ).bind(
+        crypto.randomUUID(),
+        form.eventId,
+        draftId,
+        claimedPerson.personId,
+        claimedPerson.email,
+        claimedPerson.displayName,
+      ),
+    ]);
+    expect(applicationDraftHref(draftId, speakerId)).toBe(
+      `?claimedSpeaker=${encodeURIComponent(speakerId)}&draft=${encodeURIComponent(draftId)}`,
+    );
+    const historicalDraftPortal = await loader({
+      request: new Request(
+        `http://localhost/apply/form${applicationDraftHref(draftId, speakerId)}`,
+        { headers: { cookie: claimCookie } },
+      ),
+      params: { slug: "form" },
+      context: context(),
+    } as never);
+    if (
+      historicalDraftPortal instanceof Response ||
+      "data" in historicalDraftPortal
+    ) {
+      throw new Error("Expected the claim-scoped historical draft portal.");
+    }
+    expect(historicalDraftPortal.selected).toMatchObject({
+      id: draftId,
+      status: "draft",
+    });
+    for (const [intent, values] of [
+      ["create_draft", { intentId: crypto.randomUUID() }],
+      [
+        "save_draft",
+        {
+          submissionId: draftId,
+          revision: "1",
+          answers: "{}",
+          speakers: "[]",
+          uploads: "{}",
+        },
+      ],
+      [
+        "submit",
+        {
+          submissionId: draftId,
+          revision: "1",
+          answers: "{}",
+          speakers: "[]",
+          uploads: "{}",
+          confirm: "yes",
+        },
+      ],
+    ] as const) {
+      await expect(
+        action({
+          request: new Request(updateDestination, {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-www-form-urlencoded",
+              cookie: claimCookie,
+              origin: "http://localhost",
+            },
+            body: new URLSearchParams({ _intent: intent, ...values }),
+          }),
+          params: { slug: "form" },
+          context: context(),
+        } as never),
+      ).rejects.toMatchObject({ status: 404 });
+    }
+
+    const signedOut = await action({
+      request: new Request(updateDestination, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: claimCookie,
+          origin: "http://localhost",
+        },
+        body: new URLSearchParams({ _intent: "sign_out" }),
+      }),
+      params: { slug: "form" },
+      context: context(),
+    } as never);
+    expect(signedOut).toBeInstanceOf(Response);
+    expect((signedOut as Response).status).toBe(302);
+    expect((signedOut as Response).headers.get("location")).toBe("/");
+    expect((signedOut as Response).headers.get("set-cookie")).toContain(
+      "Max-Age=0",
+    );
+    await expect(
+      loader({
+        request: new Request(updateDestination, {
+          headers: { cookie: claimCookie },
+        }),
+        params: { slug: "form" },
+        context: context(),
+      } as never),
+    ).rejects.toMatchObject({ status: 404 });
+
+    await env.DB.prepare(
+      `UPDATE form_definitions SET status = 'published'
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(form.id, form.eventId)
+      .run();
+  });
+
   it("keeps published programme navigation independent of the speaker showcase", async () => {
     const publishedVersion = await env.DB.prepare(
       `SELECT id, schema_json AS schemaJson

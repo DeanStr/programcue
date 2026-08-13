@@ -1079,6 +1079,67 @@ export const reviews = sqliteTable(
   ],
 );
 
+export const aiReviewAssessments = sqliteTable(
+  "ai_review_assessments",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id").notNull(),
+    roundId: text("round_id").notNull(),
+    submissionId: text("submission_id").notNull(),
+    scorecardId: text("scorecard_id").notNull(),
+    scorecardVersion: integer("scorecard_version").notNull(),
+    roundRevision: integer("round_revision").notNull(),
+    score: real("score").notNull(),
+    rationale: text("rationale").notNull(),
+    provider: text("provider")
+      .notNull()
+      .$type<"workers_ai" | "openai" | "anthropic">(),
+    model: text("model").notNull(),
+    providerResponseId: text("provider_response_id").notNull(),
+    generatedByPersonId: text("generated_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    generatedAt: integer("generated_at").notNull().default(epochNow),
+    overrideScore: real("override_score"),
+    overrideRationale: text("override_rationale"),
+    overrideByPersonId: text("override_by_person_id").references(
+      () => people.id,
+    ),
+    overrideAt: integer("override_at"),
+    revision: integer("revision").notNull().default(1),
+    lastOperationId: text("last_operation_id").notNull(),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.roundId, table.eventId],
+      foreignColumns: [evaluationRounds.id, evaluationRounds.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.submissionId, table.eventId],
+      foreignColumns: [submissions.id, submissions.eventId],
+    }).onDelete("cascade"),
+    uniqueIndex("ai_review_assessments_target_unique").on(
+      table.eventId,
+      table.roundId,
+      table.submissionId,
+    ),
+    uniqueIndex("ai_review_assessments_operation_unique").on(
+      table.lastOperationId,
+    ),
+    index("idx_ai_review_assessments_round").on(
+      table.eventId,
+      table.roundId,
+      table.submissionId,
+    ),
+    index("idx_ai_review_assessments_submission").on(
+      table.eventId,
+      table.submissionId,
+      table.roundId,
+    ),
+  ],
+);
+
 export const reviewRevisions = sqliteTable(
   "review_revisions",
   {

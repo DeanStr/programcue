@@ -5,6 +5,7 @@ export const nodeOnlyTestFiles = [
   "app/components/application-public-landing.test.tsx",
   "app/components/public-programme-surfaces.test.tsx",
   "app/components/communications-centre-panels.test.tsx",
+  "app/components/evaluation-review-cycle-panel.test.tsx",
   "app/components/form-js-import-queue.test.ts",
   "app/components/sessionize-profile-import.test.ts",
   "app/components/ui/domain-status-badge.test.tsx",

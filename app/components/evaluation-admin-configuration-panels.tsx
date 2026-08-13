@@ -1,4 +1,4 @@
-import { Form } from "react-router";
+import { Form, Link } from "react-router";
 
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { EventDateTime } from "~/components/ui/event-date-time";
@@ -54,6 +54,7 @@ export function RubricFields({
   criteria,
 }: {
   criteria: ReadonlyArray<{
+    id?: string;
     name: string;
     description: string | null;
     inputType: string;
@@ -81,10 +82,12 @@ export function RubricFields({
         free-text criteria are contextual and must have zero weight. Every
         scored criterion is required; contextual criteria may be optional.
         Dropdown options are saved in the order entered, separated by commas.
-        Leave the final row blank unless another criterion is needed.
+        Leave the final row blank unless another criterion is needed. Clear an
+        existing criterion name to remove that criterion when you save.
       </p>
       {rows.map((criterion, index) => (
-        <div className="card pad" key={`${criterion.name}-${index}`}>
+        <div className="card pad" key={criterion.id ?? `new-${index}`}>
+          <input type="hidden" name="criterionId" value={criterion.id ?? ""} />
           <div className="grid grid-3">
             <label className="label">
               Criterion {index + 1}
@@ -92,7 +95,6 @@ export function RubricFields({
                 className="input"
                 name="criterionName"
                 defaultValue={criterion.name}
-                required={index < criteria.length}
               />
             </label>
             <label className="label">
@@ -181,6 +183,148 @@ export function EvaluationMetrics() {
         <strong className="value">{loaderData.submissions.length}</strong>
       </section>
     </div>
+  );
+}
+
+export function EvaluationReviewCyclePanel() {
+  const { loaderData, navigation } = useEvaluationAdminModel();
+  const { confirm, dialog } = useConfirm();
+  const plan = loaderData.plan;
+  const preview = loaderData.reviewCyclePreview;
+  if (!plan || !preview || !loaderData.canManageEvaluationAccess) return null;
+  const sourceCriteria = plan.rounds[0]?.criteria ?? defaultRubric;
+  const runningAssessmentCount = Number(
+    preview.runningAssessmentOperationCount,
+  );
+  const waitingForAiAssessments = runningAssessmentCount > 0;
+  return (
+    <>
+      {dialog}
+      <details className="card pad mb pc-disclosure">
+        <summary>Start a new review cycle</summary>
+        <div className="stack mt">
+          <p className="subtle">
+            Archive this plan and its rounds as historical evidence, then start
+            a fresh active round. Existing decisions, reviews and unfinished
+            work are retained unchanged; reviewer pools and assignments are not
+            copied into the new cycle.
+          </p>
+          {waitingForAiAssessments ? (
+            <div className="validation-item warn" role="status">
+              <strong>
+                Wait for {runningAssessmentCount} AI review assessment
+                {runningAssessmentCount === 1 ? "" : "s"}
+              </strong>
+              <span>
+                Finish or resume the running assessment
+                {runningAssessmentCount === 1 ? "" : "s"} from the submission
+                results before archiving this review cycle.
+              </span>
+            </div>
+          ) : null}
+          <Form method="post" className="stack">
+            <input type="hidden" name="intent" value="start-review-cycle" />
+            <input type="hidden" name="currentPlanId" value={plan.id} />
+            <input
+              type="hidden"
+              name="currentPlanRevision"
+              value={plan.revision}
+            />
+            <input
+              type="hidden"
+              name="expectedRunningAssessmentOperationCount"
+              value={runningAssessmentCount}
+            />
+            <input
+              type="hidden"
+              name="expectedUnfinishedAssignmentCount"
+              value={preview.unfinishedAssignmentCount}
+            />
+            <input
+              type="hidden"
+              name="expectedUnfinishedReviewCount"
+              value={preview.unfinishedReviewCount}
+            />
+            <input type="hidden" name="confirmed" value="true" />
+            <div className="grid grid-2">
+              <label className="label">
+                New plan name
+                <input
+                  className="input"
+                  name="planName"
+                  defaultValue={`${plan.name} · next cycle`}
+                  required
+                />
+              </label>
+              <label className="label">
+                First round name
+                <input
+                  className="input"
+                  name="roundName"
+                  defaultValue="Initial review"
+                  required
+                />
+              </label>
+            </div>
+            <div className="grid grid-2">
+              <label className="label">
+                Opens ({loaderData.eventTimezone})
+                <input
+                  className="input"
+                  type="datetime-local"
+                  name="roundOpensAt"
+                />
+              </label>
+              <label className="label">
+                Closes ({loaderData.eventTimezone})
+                <input
+                  className="input"
+                  type="datetime-local"
+                  name="roundClosesAt"
+                />
+              </label>
+            </div>
+            <label className="validation-item">
+              <input type="checkbox" name="anonymous" value="true" />
+              <span>
+                <strong>Hide author and co-author identity</strong>
+                Apply the blinded reviewer projection to this new round.
+              </span>
+            </label>
+            <RubricFields criteria={sourceCriteria} />
+            <button
+              className="btn danger"
+              type="button"
+              disabled={navigation.state !== "idle" || waitingForAiAssessments}
+              onClick={(event) => {
+                const form = event.currentTarget.form;
+                if (!form) {
+                  throw new Error("The new review cycle form is missing.");
+                }
+                if (!form.reportValidity()) return;
+                confirm(
+                  {
+                    title: "Start a new review cycle?",
+                    description:
+                      "The current plan leaves the active reviewer queues and becomes read-only history. Published decisions and submission states are not reopened or changed.",
+                    records: [
+                      `${plan.name} · ${plan.rounds.length} round${plan.rounds.length === 1 ? "" : "s"}`,
+                      `${preview.unfinishedAssignmentCount} unfinished assignment${preview.unfinishedAssignmentCount === 1 ? "" : "s"}`,
+                      `${preview.unfinishedReviewCount} saved unfinished review${preview.unfinishedReviewCount === 1 ? "" : "s"}`,
+                    ],
+                    confirmLabel: "Start new cycle",
+                    tone: "danger",
+                  },
+                  () => form.requestSubmit(),
+                );
+              }}
+            >
+              Review and start new cycle
+            </button>
+          </Form>
+        </div>
+      </details>
+    </>
   );
 }
 
@@ -559,225 +703,429 @@ export function EvaluationTeamsPanel() {
 
 export function EvaluationRoundsPanel() {
   const { loaderData, navigation } = useEvaluationAdminModel();
+  const { confirm, dialog } = useConfirm();
   const plan = loaderData.plan;
   if (!plan) return null;
   return (
-    <div className="grid grid-3 mb">
-      {plan.rounds.map((round) => (
-        <section
-          id={`evaluation-round-${round.id}`}
-          className="card pad"
-          key={round.id}
-          tabIndex={round.id === loaderData.focusedRoundId ? -1 : undefined}
-        >
-          <div className="card-title">
-            <h2>Round {round.roundNumber}</h2>
-            <span
-              className={`status ${round.status === "active" ? "success" : "info"}`}
-            >
-              {round.status}
-            </span>
-          </div>
-          <h3>{round.name}</h3>
-          <p className="subtle">
-            Opens: {round.opensAt ? (
-              <EventDateTime
-                epochSeconds={round.opensAt}
-                timeZone={loaderData.eventTimezone}
-                showTimeZone
-              />
-            ) : "immediately"} {" · "} Closes: {round.closesAt ? (
-              <EventDateTime
-                epochSeconds={round.closesAt}
-                timeZone={loaderData.eventTimezone}
-                showTimeZone
-              />
-            ) : "no closing date"} {" · "}
-            {round.anonymous ? "blind review" : "identity visible"} {" · "}
-            Scorecard v{round.scorecardVersion}
-          </p>
-          {round.criteria.map((criterion) => (
-            <div className="progress-row" key={criterion.id}>
-              <span>
-                <span>{criterion.name}</span>
-                <small className="subtle">
-                  {" · Response: "}
-                  {criterion.inputType === "scale_5"
-                    ? "Score 1–5"
-                    : criterion.inputType === "scale_10"
-                      ? "Score 1–10"
-                      : criterion.inputType === "yes_no"
-                        ? "Yes / no"
-                        : criterion.inputType === "dropdown"
-                          ? `Dropdown: ${criterion.options.join(", ")}`
-                        : "Free text"}
-                </small>
+    <>
+      {dialog}
+      <div className="grid grid-3 mb">
+        {plan.rounds.map((round) => (
+          <section
+            id={`evaluation-round-${round.id}`}
+            className="card pad"
+            key={round.id}
+            tabIndex={round.id === loaderData.focusedRoundId ? -1 : undefined}
+          >
+            <div className="card-title">
+              <h2>Round {round.roundNumber}</h2>
+              <span
+                className={`status ${round.status === "active" ? "success" : "info"}`}
+              >
+                {round.status}
               </span>
-              {criterion.weightPercent > 0 ? (
-                <>
-                  <div className="progress">
-                    <span style={{ width: `${criterion.weightPercent}%` }} />
-                  </div>
-                  <b>{criterion.weightPercent}%</b>
-                </>
-              ) : (
-                <span className="help">unweighted</span>
-              )}
             </div>
-          ))}
-          {round.status === "draft" ? (
-            <details className="mt pc-disclosure">
-              <summary>Edit draft round and rubric</summary>
-              <Form method="post" className="stack mt">
-                <input type="hidden" name="intent" value="update-draft-round" />
+            <h3>{round.name}</h3>
+            <p className="subtle">
+              Opens:{" "}
+              {round.opensAt ? (
+                <EventDateTime
+                  epochSeconds={round.opensAt}
+                  timeZone={loaderData.eventTimezone}
+                  showTimeZone
+                />
+              ) : (
+                "immediately"
+              )}{" "}
+              {" · "} Closes:{" "}
+              {round.closesAt ? (
+                <EventDateTime
+                  epochSeconds={round.closesAt}
+                  timeZone={loaderData.eventTimezone}
+                  showTimeZone
+                />
+              ) : (
+                "no closing date"
+              )}{" "}
+              {" · "}
+              {round.anonymous ? "blind review" : "identity visible"} {" · "}
+              Scorecard v{round.scorecardVersion}
+            </p>
+            {round.criteria.map((criterion) => (
+              <div className="progress-row" key={criterion.id}>
+                <span>
+                  <span>{criterion.name}</span>
+                  <small className="subtle">
+                    {" · Response: "}
+                    {criterion.inputType === "scale_5"
+                      ? "Score 1–5"
+                      : criterion.inputType === "scale_10"
+                        ? "Score 1–10"
+                        : criterion.inputType === "yes_no"
+                          ? "Yes / no"
+                          : criterion.inputType === "dropdown"
+                            ? `Dropdown: ${criterion.options.join(", ")}`
+                            : "Free text"}
+                  </small>
+                </span>
+                {criterion.weightPercent > 0 ? (
+                  <>
+                    <div className="progress">
+                      <span style={{ width: `${criterion.weightPercent}%` }} />
+                    </div>
+                    <b>{criterion.weightPercent}%</b>
+                  </>
+                ) : (
+                  <span className="help">unweighted</span>
+                )}
+              </div>
+            ))}
+            {Number(round.runningAiAssessmentCount) > 0 ? (
+              <div className="validation-item warn mt" role="status">
+                <strong>AI assessment in progress</strong>
+                <span>
+                  Wait for the running assessment to finish before editing or
+                  deleting this round.
+                </span>
+              </div>
+            ) : null}
+            {(round.status === "draft" || round.status === "active") &&
+            !loaderData.assignments.some(
+              (assignment) => assignment.roundId === round.id,
+            ) &&
+            !loaderData.aiReviewAssessments.some(
+              (assessment) => assessment.roundId === round.id,
+            ) &&
+            Number(round.runningAiAssessmentCount) === 0 ? (
+              <details className="mt pc-disclosure">
+                <summary>Edit unassigned round and rubric</summary>
+                <Form method="post" className="stack mt">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="update-draft-round"
+                  />
+                  <input type="hidden" name="roundId" value={round.id} />
+                  <input
+                    type="hidden"
+                    name="roundRevision"
+                    value={round.revision}
+                  />
+                  <label className="label">
+                    Round name
+                    <input
+                      className="input"
+                      name="name"
+                      defaultValue={round.name}
+                      required
+                    />
+                  </label>
+                  <div className="grid grid-2">
+                    <label className="label">
+                      Opens ({loaderData.eventTimezone})
+                      <input
+                        className="input"
+                        type="datetime-local"
+                        name="roundOpensAt"
+                        defaultValue={communicationScheduledLocalValue(
+                          round.opensAt,
+                          loaderData.eventTimezone,
+                        )}
+                      />
+                    </label>
+                    <label className="label">
+                      Closes ({loaderData.eventTimezone})
+                      <input
+                        className="input"
+                        type="datetime-local"
+                        name="roundClosesAt"
+                        defaultValue={communicationScheduledLocalValue(
+                          round.closesAt,
+                          loaderData.eventTimezone,
+                        )}
+                      />
+                    </label>
+                  </div>
+                  <input
+                    type="hidden"
+                    name="scorecardId"
+                    value={round.scorecardId}
+                  />
+                  <input
+                    type="hidden"
+                    name="scorecardVersion"
+                    value={round.scorecardVersion}
+                  />
+                  <label className="validation-item">
+                    <input
+                      type="checkbox"
+                      name="anonymous"
+                      value="true"
+                      defaultChecked={round.anonymous}
+                    />
+                    <span>
+                      Hide author and co-author identity from reviewers in this
+                      round
+                    </span>
+                  </label>
+                  <RubricFields criteria={round.criteria} />
+                  <button
+                    className="btn"
+                    disabled={navigation.state !== "idle"}
+                  >
+                    Save round
+                  </button>
+                </Form>
+              </details>
+            ) : null}
+            {round.status === "draft" &&
+            round.roundNumber === plan.rounds.at(-1)?.roundNumber &&
+            plan.rounds.length > 1 &&
+            Number(round.runningAiAssessmentCount) === 0 ? (
+              <Form method="post" className="mt">
+                <input type="hidden" name="intent" value="delete-draft-round" />
                 <input type="hidden" name="roundId" value={round.id} />
                 <input
                   type="hidden"
                   name="roundRevision"
                   value={round.revision}
                 />
-                <label className="label">
-                  Round name
-                  <input
-                    className="input"
-                    name="name"
-                    defaultValue={round.name}
-                    required
-                  />
-                </label>
-                <div className="grid grid-2">
-                  <label className="label">
-                    Opens ({loaderData.eventTimezone})
-                    <input
-                      className="input"
-                      type="datetime-local"
-                      name="roundOpensAt"
-                      defaultValue={communicationScheduledLocalValue(
-                        round.opensAt,
-                        loaderData.eventTimezone,
-                      )}
-                    />
-                  </label>
-                  <label className="label">
-                    Closes ({loaderData.eventTimezone})
-                    <input
-                      className="input"
-                      type="datetime-local"
-                      name="roundClosesAt"
-                      defaultValue={communicationScheduledLocalValue(
-                        round.closesAt,
-                        loaderData.eventTimezone,
-                      )}
-                    />
-                  </label>
-                </div>
-                <input type="hidden" name="scorecardId" value={round.scorecardId} />
                 <input
                   type="hidden"
-                  name="scorecardVersion"
-                  value={round.scorecardVersion}
+                  name="planRevision"
+                  value={plan.revision}
                 />
-                <label className="validation-item">
+                {round.reviewers.map((reviewer) => (
                   <input
-                    type="checkbox"
-                    name="anonymous"
-                    value="true"
-                    defaultChecked={round.anonymous}
+                    key={reviewer.personId}
+                    type="hidden"
+                    name="expectedReviewerPersonIds"
+                    value={reviewer.personId}
                   />
-                  <span>Blind reviewer identity for this round</span>
-                </label>
-                <RubricFields criteria={round.criteria} />
-                <button className="btn" disabled={navigation.state !== "idle"}>
-                  Save draft round
+                ))}
+                <input type="hidden" name="confirmed" value="true" />
+                <button
+                  className="btn small danger"
+                  type="button"
+                  disabled={navigation.state !== "idle"}
+                  onClick={(event) => {
+                    const form = event.currentTarget.form;
+                    if (!form) return;
+                    confirm(
+                      {
+                        title: "Delete unused final round?",
+                        description:
+                          "Only this unassigned draft round will be removed. Earlier rounds and review history are preserved.",
+                        records: [
+                          `${round.name} · ${round.criteria.length} criteria · ${round.reviewers.length} reviewers`,
+                        ],
+                        confirmLabel: "Delete round",
+                      },
+                      () => form.requestSubmit(),
+                    );
+                  }}
+                >
+                  Delete unused round
                 </button>
               </Form>
-            </details>
-          ) : null}
-          <div className="divider" />
-          <div className="card-title">
-            <div>
-              <h3>Round reviewer pool</h3>
-              <p className="help">
-                Event evaluator access does not add anyone here automatically.
-              </p>
+            ) : null}
+            <div className="divider" />
+            <div className="card-title">
+              <div>
+                <h3>Round reviewer pool</h3>
+                <p className="help">
+                  Event evaluator access does not add anyone here automatically.
+                </p>
+              </div>
+              <span className="status info">{round.reviewers.length}</span>
             </div>
-            <span className="status info">{round.reviewers.length}</span>
-          </div>
-          {round.reviewers.length ? (
-            <ul className="list-clean">
-              {round.reviewers.map((reviewer) => (
-                <li key={reviewer.personId}>
-                  <span>
-                    <strong>{reviewer.name}</strong>
-                    <small className="subtle">{reviewer.email}</small>
-                  </span>
-                  <Form
-                    method="post"
-                    onSubmit={(event) => {
-                      if (
-                        !window.confirm(
-                          `Remove ${reviewer.name} from ${round.name}? Any unfinished assignments for this round will be cancelled and need reassignment.`,
-                        )
-                      ) {
-                        event.preventDefault();
-                      }
-                    }}
-                  >
-                    <input
-                      type="hidden"
-                      name="intent"
-                      value="change-round-reviewer"
-                    />
-                    <input type="hidden" name="roundId" value={round.id} />
-                    <input
-                      type="hidden"
-                      name="personId"
-                      value={reviewer.personId}
-                    />
-                    <input type="hidden" name="confirmed" value="true" />
-                    <button
-                      className="btn small"
-                      name="operation"
-                      value="remove"
-                      disabled={navigation.state !== "idle"}
-                    >
-                      Remove
-                    </button>
-                  </Form>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="help">No reviewers are in this round pool.</p>
-          )}
-          {loaderData.evaluators.length ? (
-            <Form method="post" className="inline-form mt">
-              <input
-                type="hidden"
-                name="intent"
-                value="change-round-reviewer"
-              />
-              <input type="hidden" name="roundId" value={round.id} />
-              <select className="select" name="personId" aria-label={`Reviewer for ${round.name}`}>
-                {loaderData.evaluators.map((evaluator) => (
-                  <option key={evaluator.id} value={evaluator.id}>
-                    {evaluator.name} · {evaluator.email}
-                  </option>
+            {round.reviewers.length ? (
+              <ul className="list-clean">
+                {round.reviewers.map((reviewer) => (
+                  <li key={reviewer.personId}>
+                    <span>
+                      <strong>{reviewer.name}</strong>
+                      <small className="subtle">{reviewer.email}</small>
+                    </span>
+                    <Form method="post">
+                      <input
+                        type="hidden"
+                        name="intent"
+                        value="change-round-reviewer"
+                      />
+                      <input type="hidden" name="roundId" value={round.id} />
+                      <input
+                        type="hidden"
+                        name="personId"
+                        value={reviewer.personId}
+                      />
+                      <input type="hidden" name="operation" value="remove" />
+                      <input type="hidden" name="confirmed" value="true" />
+                      <button
+                        className="btn small"
+                        disabled={navigation.state !== "idle"}
+                        type="button"
+                        onClick={(event) => {
+                          const form = event.currentTarget.form;
+                          if (!form) return;
+                          confirm(
+                            {
+                              title: "Remove reviewer from this round?",
+                              description:
+                                "Unfinished assignments in this round will be cancelled and must be reassigned.",
+                              records: [`${reviewer.name} · ${round.name}`],
+                              confirmLabel: "Remove reviewer",
+                            },
+                            () => form.requestSubmit(),
+                          );
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </Form>
+                  </li>
                 ))}
-              </select>
-              <button
-                className="btn small"
-                name="operation"
-                value="add"
-                disabled={navigation.state !== "idle"}
-              >
-                Add reviewer
-              </button>
-            </Form>
-          ) : null}
-        </section>
-      ))}
-    </div>
+              </ul>
+            ) : (
+              <p className="help">No reviewers are in this round pool.</p>
+            )}
+            {loaderData.evaluators.length ? (
+              <Form method="post" className="inline-form mt">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="change-round-reviewer"
+                />
+                <input type="hidden" name="roundId" value={round.id} />
+                <select
+                  className="select"
+                  name="personId"
+                  aria-label={`Reviewer for ${round.name}`}
+                >
+                  {loaderData.evaluators.map((evaluator) => (
+                    <option key={evaluator.id} value={evaluator.id}>
+                      {evaluator.name} · {evaluator.email}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn small"
+                  name="operation"
+                  value="add"
+                  disabled={navigation.state !== "idle"}
+                >
+                  Add reviewer
+                </button>
+              </Form>
+            ) : null}
+            <div className="divider" />
+            <div className="card-title">
+              <div>
+                <h3>Reviewer progress</h3>
+                <p className="help">
+                  Round-scoped completion updates as reviews are submitted.
+                </p>
+              </div>
+            </div>
+            {loaderData.reviewerProgress.some(
+              (progress) => progress.roundId === round.id,
+            ) ? (
+              <Form method="post" className="stack">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="prepare-reviewer-reminder"
+                />
+                <input type="hidden" name="roundId" value={round.id} />
+                <ul className="list-clean">
+                  {loaderData.reviewerProgress
+                    .filter((progress) => progress.roundId === round.id)
+                    .map((progress) => {
+                      const outstanding =
+                        progress.pendingCount + progress.inProgressCount;
+                      const percentage = progress.assignedCount
+                        ? Math.round(
+                            (progress.completedCount / progress.assignedCount) *
+                              100,
+                          )
+                        : 0;
+                      return (
+                        <li key={progress.reviewerPersonId}>
+                          <span>
+                            <strong>{progress.reviewerName}</strong>
+                            <small className="subtle">
+                              {" · "}
+                              {progress.assignedCount} assigned ·{" "}
+                              {progress.completedCount} complete · {percentage}%
+                              {progress.recusedCount
+                                ? ` · ${progress.recusedCount} recused`
+                                : ""}
+                            </small>
+                          </span>
+                          {loaderData.canPrepareReviewerReminders &&
+                          outstanding > 0 ? (
+                            <label className="validation-item">
+                              <input
+                                type="checkbox"
+                                name="reviewerPersonId"
+                                value={progress.reviewerPersonId}
+                                aria-label={`Include ${progress.reviewerName} in reminder`}
+                              />
+                              <span>Include in reminder</span>
+                            </label>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                </ul>
+                {loaderData.canPrepareReviewerReminders &&
+                loaderData.reviewerProgress.some(
+                  (progress) =>
+                    progress.roundId === round.id &&
+                    progress.pendingCount + progress.inProgressCount > 0,
+                ) ? (
+                  loaderData.reviewerReminderTemplates.length ? (
+                    <div className="inline-form">
+                      <select
+                        className="select"
+                        name="templateVersionId"
+                        aria-label={`Reminder template for ${round.name}`}
+                        required
+                      >
+                        {loaderData.reviewerReminderTemplates.map(
+                          (template) => (
+                            <option key={template.id} value={template.id}>
+                              {template.name} · v{template.versionNumber}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                      <button
+                        className="btn small"
+                        disabled={navigation.state !== "idle"}
+                      >
+                        Prepare selected reminders
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="help">
+                      <Link to="/admin/communications">
+                        Publish an ad hoc email template
+                      </Link>{" "}
+                      before preparing reviewer reminders.
+                    </p>
+                  )
+                ) : null}
+              </Form>
+            ) : (
+              <p className="help">
+                Add reviewers to this round pool to track their progress.
+              </p>
+            )}
+          </section>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -813,19 +1161,27 @@ export function EvaluationPlanState() {
         <div className="grid grid-2">
           <label className="label">
             Opens ({loaderData.eventTimezone})
-            <input className="input" type="datetime-local" name="roundOpensAt" />
+            <input
+              className="input"
+              type="datetime-local"
+              name="roundOpensAt"
+            />
           </label>
           <label className="label">
             Closes ({loaderData.eventTimezone})
-            <input className="input" type="datetime-local" name="roundClosesAt" />
+            <input
+              className="input"
+              type="datetime-local"
+              name="roundClosesAt"
+            />
           </label>
         </div>
         <label className="validation-item">
           <input type="checkbox" name="anonymous" value="true" />
           <span>
-            <strong>Blind speaker identity context</strong>
+            <strong>Hide author and co-author identity</strong>
             Speaker names and email addresses are omitted from reviewer
-            workspaces for every round. Administrator-only form answers are
+            workspaces for this round. Administrator-only form answers are
             always excluded, whether identity blinding is on or off.
           </span>
         </label>
@@ -863,6 +1219,7 @@ export function EvaluationPlanState() {
   ) : (
     <>
       <EvaluationMetrics />
+      <EvaluationReviewCyclePanel />
       <EvaluationTeamsPanel />
       <EvaluationRoundsPanel />
       <EvaluationProgressionPanel />

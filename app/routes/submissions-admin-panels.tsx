@@ -144,13 +144,11 @@ export function SubmissionAdminDetailPanel({
                     .join("")}
                 </span>
                 <span>
-                  <strong>
-                    {speaker.name}
-                    {speaker.isPrimary ? " · Primary" : ""}
-                  </strong>
+                  <strong>{speaker.name}</strong>
                   <small>
-                    {speaker.email} · {speaker.invitationStatus}
+                    {speaker.roleLabel ?? "Role not recorded"} · {speaker.email}
                   </small>
+                  <small>Relationship status: {speaker.invitationStatus}</small>
                   {speaker.biography ? (
                     <small>Current biography: {speaker.biography}</small>
                   ) : null}

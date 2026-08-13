@@ -39,6 +39,35 @@ other cancellation reasons are never revived. Migration
 `0006_evaluation_round_depth.sql` backfills pools only from distinct existing
 assignment reviewers, without a global-membership fallback.
 
+An AI first-pass assessment is one immutable, provider-attributed score and
+rationale for a submission in an exact round/scorecard revision. It is not a
+reviewer draft and never changes a human review or the committee aggregate.
+Owners and administrators may record a revision-checked human override, but
+the override is stored and audited separately so the original model output,
+provider, model and response identity remain visible. Invalid structured model
+output, missing provider configuration and round/rubric drift fail without a
+default or simulated score.
+
+An active or draft evaluation round remains configurable only until its first
+assignment or AI assessment. Scorecard edits fork the next immutable version;
+clearing a criterion removes it. Only the final unused draft round may be
+deleted, after a confirmation bound to the exact plan, round and reviewer-pool
+snapshot. Existing review history is never made editable to repair a later
+evaluation scenario.
+
+A new review cycle explicitly archives the current plan and rounds as immutable
+history, then creates one fresh active round with no copied reviewer pool or
+assignments. Terminal submissions may enter that fresh cycle only when their
+published decision proves the terminal state came from an archived cycle; the
+terminal submission status itself is not reopened. Current-work queries and
+mutations exclude archived assignments, reviews and pools.
+
+Reviewer reminders reuse the ordinary Communications draft, preview and
+confirmation workflow. Review administration prepares an exact manual-recipient
+draft from a published ad-hoc template; it never sends directly. Abstract result
+exports are same-origin, audited, round-scoped CSV operations with formula
+neutralisation, durable intent identity and explicit source/output size limits.
+
 ## Content management workstream decisions
 
 | Decision             | Outcome                                                                                                                                                                                                                                                                                                                                   |
@@ -84,6 +113,19 @@ Participant UI and REST profile edits use one canonical full-profile
 compare-and-set mutation. The REST patch may remain smaller, but it shares
 validation, audit, `speaker.updated` webhook, durable realtime invalidation and
 the Airtable authority boundary. Submitted speaker snapshots remain immutable.
+
+After acceptance, the verified primary submitter may add a role-labelled
+co-speaker only after explicitly confirming the exact recipient and while the
+application has exactly one derived session in an editable unscheduled or
+scheduled state and the form's speaker limit still permits it. This appends an
+attributed submission revision and an unclaimed relationship, queues the
+existing expiring claim invitation and never rewrites the submitted answer
+snapshot or links a global person by email alone. Claiming carries the recorded
+role into that session, activates speaker access and idempotently materialises
+the published acceptance decision's speaker onboarding task graph using the
+original decision time for acceptance-relative deadlines. Direct-session intake
+has the same session lock but does not fabricate an evaluation decision or task
+plan.
 
 | Decision                             | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -4,15 +4,11 @@ export const criterionSchema = z.object({
   id: z.string().trim().min(1).max(80),
   name: z.string().trim().min(1, "Criterion name is required.").max(120),
   description: z.string().trim().max(500).default(""),
-  inputType: z.enum([
-    "scale_5",
-    "scale_10",
-    "yes_no",
-    "free_text",
-    "dropdown",
-  ]),
+  inputType: z.enum(["scale_5", "scale_10", "yes_no", "free_text", "dropdown"]),
   options: z
-    .array(z.string().trim().min(1, "Dropdown options cannot be blank.").max(120))
+    .array(
+      z.string().trim().min(1, "Dropdown options cannot be blank.").max(120),
+    )
     .max(100)
     .default([]),
   weightPercent: z.coerce.number().int().min(0).max(100),
@@ -106,11 +102,7 @@ export const evaluationRoundSchema = z
     const opensAt = round.opensAt ?? null;
     const closesAt =
       round.closesAt !== undefined ? round.closesAt : (round.dueAt ?? null);
-    if (
-      opensAt &&
-      closesAt &&
-      Date.parse(closesAt) <= Date.parse(opensAt)
-    ) {
+    if (opensAt && closesAt && Date.parse(closesAt) <= Date.parse(opensAt)) {
       context.addIssue({
         code: "custom",
         path: ["closesAt"],
@@ -152,7 +144,62 @@ export const evaluationPlanSchema = z
         message: "Round identifiers must be unique.",
       });
     }
+    const normalisedRoundNames = plan.rounds.map((round) =>
+      round.name.trim().toLowerCase(),
+    );
+    if (new Set(normalisedRoundNames).size !== normalisedRoundNames.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["rounds"],
+        message: "Round names must be unique within an evaluation plan.",
+      });
+    }
   });
+
+const reviewCycleRoundDefinitionSchema = z
+  .object({
+    name: z.string().trim().min(1, "Round name is required.").max(120),
+    opensAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    closesAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    anonymous: z.boolean().default(false),
+    criteria: z
+      .array(criterionSchema.omit({ id: true, position: true }))
+      .min(1)
+      .max(30),
+  })
+  .superRefine((round, context) => {
+    const validation = evaluationRoundSchema.safeParse({
+      id: "new-review-cycle-round",
+      ...round,
+      criteria: round.criteria.map((criterion, index) => ({
+        ...criterion,
+        id: `new-review-cycle-criterion-${index}`,
+        position: index,
+      })),
+    });
+    if (!validation.success) {
+      for (const issue of validation.error.issues) {
+        context.addIssue({
+          ...issue,
+          path: issue.path,
+        });
+      }
+    }
+  });
+
+export const reviewCycleStartSchema = z.object({
+  currentPlanId: z.string().trim().min(1).max(80),
+  currentPlanRevision: z.coerce.number().int().positive(),
+  expectedRunningAssessmentOperationCount: z.coerce
+    .number()
+    .int()
+    .nonnegative(),
+  expectedUnfinishedAssignmentCount: z.coerce.number().int().nonnegative(),
+  expectedUnfinishedReviewCount: z.coerce.number().int().nonnegative(),
+  planName: z.string().trim().min(1, "Plan name is required.").max(120),
+  round: reviewCycleRoundDefinitionSchema,
+  confirmed: z.literal(true),
+});
 
 export const assignmentBatchSchema = z
   .object({
@@ -468,6 +515,19 @@ export const draftRoundUpdateSchema = z
       });
     }
   });
+
+export const evaluationRoundDeleteSchema = z.object({
+  roundId: z.string().trim().min(1),
+  roundRevision: z.coerce.number().int().positive(),
+  planRevision: z.coerce.number().int().positive(),
+  expectedReviewerPersonIds: z
+    .array(z.string().trim().min(1).max(128))
+    .max(100)
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "Expected reviewer identifiers must be unique.",
+    }),
+  confirmed: z.literal(true),
+});
 
 export const roundAdvancementSchema = z
   .object({

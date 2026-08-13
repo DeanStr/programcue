@@ -3,6 +3,7 @@ import { z } from "zod";
 export const outboundWebhookEventTypes = [
   "submission.created",
   "submission.submitted",
+  "submission.updated",
   "submission.withdrawn",
   "review.submitted",
   "review.reopened",
@@ -18,9 +19,7 @@ export const outboundWebhookEventTypes = [
   "communication.completed",
 ] as const;
 
-export const outboundWebhookEventTypeSchema = z.enum(
-  outboundWebhookEventTypes,
-);
+export const outboundWebhookEventTypeSchema = z.enum(outboundWebhookEventTypes);
 
 export const webhookDeliveryMessageSchema = z
   .object({

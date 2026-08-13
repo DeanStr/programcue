@@ -477,6 +477,21 @@ describe("evaluation vertical slice", () => {
           (assignment) =>
             assignment.sessionId === "eval-session-conflict-target",
         );
+        await service.saveReview(evaluator, {
+          assignmentId: conflictAssignment!.id,
+          revision: 0,
+          scores,
+          recommendation: "reject",
+          confidence: 4,
+          submitterFeedback: "This needs another reviewer.",
+          privateNotes: "A conflict became apparent after submission.",
+          intent: "submit",
+        });
+        await service.reopenReview(admin, {
+          assignmentId: conflictAssignment!.id,
+          reason: "The evaluator disclosed a conflict after submitting.",
+          confirmed: true,
+        });
         await service.declareConflict(evaluator, {
           assignmentId: conflictAssignment!.id,
           reason: "I have a close working relationship with the session owner.",
@@ -502,6 +517,250 @@ describe("evaluation vertical slice", () => {
         await env.DB.prepare("DELETE FROM sessions WHERE id IN (?, ?)")
           .bind("eval-session-target", "eval-session-conflict-target")
           .run();
+      }
+    });
+
+    it("excludes cancelled and archived sessions from the review queue and next assignment", async () => {
+      await resetEvaluationFixture();
+      const service = new EvaluationService(
+        env as unknown as CloudflareEnvironment,
+      );
+      const sessionIds = [
+        "eval-session-current",
+        "eval-session-cancelled",
+        "eval-session-archived",
+      ];
+      await env.DB.batch(
+        sessionIds.map((sessionId) =>
+          env.DB.prepare(
+            `INSERT INTO sessions (
+                 id, event_id, title, slug, description, format,
+                 duration_minutes, status, revision, created_at, updated_at
+               ) VALUES (
+                 ?, ?, ?, ?, 'A direct session review target.', 'presentation',
+                 45, 'unscheduled', 1, unixepoch(), unixepoch()
+               )`,
+          ).bind(
+            sessionId,
+            admin.eventId,
+            sessionId.replaceAll("-", " "),
+            sessionId,
+          ),
+        ),
+      );
+      try {
+        await service.savePlan(admin, {
+          revision: 0,
+          name: "Session state boundary plan",
+          status: "active",
+          rounds: [
+            {
+              id: "eval-session-state-round",
+              name: "Session review",
+              anonymous: false,
+              criteria,
+            },
+          ],
+        });
+        await addRoundReviewer("eval-session-state-round");
+        await service.assign(admin, {
+          roundId: "eval-session-state-round",
+          targetType: "session",
+          targetIds: sessionIds,
+          evaluatorPersonIds: [evaluator.personId],
+        });
+
+        const assignmentRows = await env.DB.prepare(
+          `SELECT id, session_id AS sessionId
+             FROM evaluator_assignments
+            WHERE event_id = ? AND round_id = 'eval-session-state-round'`,
+        )
+          .bind(admin.eventId)
+          .all<{ id: string; sessionId: string }>();
+        const assignmentBySession = new Map(
+          assignmentRows.results.map((assignment) => [
+            assignment.sessionId,
+            assignment.id,
+          ]),
+        );
+        expect(assignmentBySession.size).toBe(3);
+        const attachmentBody = "cancelled session attachment";
+        const attachmentObject = await env.FILES.put(
+          "evaluation-test/cancelled-session-attachment.txt",
+          attachmentBody,
+        );
+        if (!attachmentObject) {
+          throw new Error("The cancelled-session attachment was not stored.");
+        }
+        await env.DB.batch([
+          env.DB.prepare(
+            `INSERT INTO file_assets (
+               id, event_id, owner_person_id, target_type, target_id,
+               asset_kind, status, created_at, updated_at
+             ) VALUES (
+               'eval-cancelled-session-attachment', ?, ?, 'session',
+               'eval-session-cancelled', 'supporting_document', 'active',
+               unixepoch(), unixepoch()
+             )`,
+          ).bind(admin.eventId, admin.personId),
+          env.DB.prepare(
+            `INSERT INTO file_versions (
+               id, event_id, asset_id, version_number, object_key,
+               original_filename, declared_content_type,
+               detected_content_type, size_bytes, object_etag, upload_status,
+               signature_status, scan_status, created_by_person_id,
+               created_at, uploaded_at, scanned_at, released_at
+             ) VALUES (
+               'eval-cancelled-session-attachment-v1', ?,
+               'eval-cancelled-session-attachment', 1,
+               'evaluation-test/cancelled-session-attachment.txt',
+               'session-evidence.txt', 'text/plain', 'text/plain', ?, ?,
+               'uploaded', 'valid', 'clean', ?, unixepoch(), unixepoch(),
+               unixepoch(), unixepoch()
+             )`,
+          ).bind(
+            admin.eventId,
+            new TextEncoder().encode(attachmentBody).byteLength,
+            attachmentObject.httpEtag,
+            admin.personId,
+          ),
+          env.DB.prepare(
+            `UPDATE file_assets
+                SET current_version_id = 'eval-cancelled-session-attachment-v1'
+              WHERE id = 'eval-cancelled-session-attachment' AND event_id = ?`,
+          ).bind(admin.eventId),
+        ]);
+        await expect(
+          service
+            .downloadReviewerAttachment(
+              evaluator,
+              "eval-cancelled-session-attachment",
+            )
+            .then((response) => response.text()),
+        ).resolves.toBe(attachmentBody);
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE sessions SET status = 'cancelled', revision = revision + 1
+              WHERE id = 'eval-session-cancelled' AND event_id = ?`,
+          ).bind(admin.eventId),
+          env.DB.prepare(
+            `UPDATE sessions SET status = 'archived', revision = revision + 1
+              WHERE id = 'eval-session-archived' AND event_id = ?`,
+          ).bind(admin.eventId),
+        ]);
+
+        const queue = await service.getReviewerWorkspace(evaluator);
+        expect(
+          queue.assignments.map((assignment) => assignment.sessionId),
+        ).toEqual(["eval-session-current"]);
+        await expect(
+          service.getReviewerWorkspace(
+            evaluator,
+            assignmentBySession.get("eval-session-cancelled"),
+          ),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          service.getReviewerWorkspace(
+            evaluator,
+            assignmentBySession.get("eval-session-archived"),
+          ),
+        ).rejects.toMatchObject({ status: 404 });
+
+        const adminWorkspace = await service.getAdminWorkspace(admin);
+        const visibleRoundAssignmentSessions = adminWorkspace.assignments
+          .filter(
+            (assignment) => assignment.roundId === "eval-session-state-round",
+          )
+          .map((assignment) => assignment.sessionId);
+        expect(visibleRoundAssignmentSessions).toEqual([
+          "eval-session-current",
+        ]);
+        await expect(
+          service.downloadReviewerAttachment(
+            evaluator,
+            "eval-cancelled-session-attachment",
+          ),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          service
+            .downloadReviewerAttachment(
+              admin,
+              "eval-cancelled-session-attachment",
+            )
+            .then((response) => response.text()),
+        ).resolves.toBe(attachmentBody);
+        await expect(
+          service.declareConflict(evaluator, {
+            assignmentId: assignmentBySession.get("eval-session-cancelled"),
+            reason: "This stale assignment must remain immutable.",
+          }),
+        ).rejects.toBeInstanceOf(EvaluationStateError);
+        await expect(
+          service.saveReview(evaluator, {
+            assignmentId: assignmentBySession.get("eval-session-archived"),
+            revision: 0,
+            scores: {},
+            recommendation: "reject",
+            confidence: 1,
+            submitterFeedback: "No longer reviewable.",
+            privateNotes: "The session is archived.",
+            intent: "save",
+          }),
+        ).rejects.toBeInstanceOf(EvaluationStateError);
+        await expect(
+          env.DB.prepare(
+            `SELECT COUNT(*) AS count FROM evaluator_assignments
+              WHERE id IN (?, ?) AND event_id = ? AND status = 'assigned'`,
+          )
+            .bind(
+              assignmentBySession.get("eval-session-cancelled"),
+              assignmentBySession.get("eval-session-archived"),
+              admin.eventId,
+            )
+            .first<{ count: number }>(),
+        ).resolves.toEqual({ count: 2 });
+
+        const currentAssignmentId = assignmentBySession.get(
+          "eval-session-current",
+        );
+        const current = await service.getReviewerWorkspace(
+          evaluator,
+          currentAssignmentId,
+        );
+        const result = await service.saveReview(evaluator, {
+          assignmentId: currentAssignmentId,
+          revision: 0,
+          scores: Object.fromEntries(
+            current.criteria.map((criterion) => [criterion.id, 4]),
+          ),
+          recommendation: "accept",
+          confidence: 4,
+          submitterFeedback: "Ready for the programme.",
+          privateNotes: "No concerns.",
+          intent: "submit",
+        });
+        expect(result.nextAssignmentId).toBeNull();
+      } finally {
+        await env.DB.prepare(
+          `DELETE FROM file_assets
+            WHERE id = 'eval-cancelled-session-attachment' AND event_id = ?`,
+        )
+          .bind(admin.eventId)
+          .run();
+        await env.FILES.delete(
+          "evaluation-test/cancelled-session-attachment.txt",
+        );
+        await env.DB.prepare(
+          "DELETE FROM evaluation_plans WHERE id = 'eval-session-state-round' OR name = 'Session state boundary plan'",
+        ).run();
+        await env.DB.prepare(
+          `DELETE FROM sessions
+            WHERE id IN (
+              'eval-session-current',
+              'eval-session-cancelled',
+              'eval-session-archived'
+            )`,
+        ).run();
       }
     });
 
@@ -825,9 +1084,9 @@ describe("evaluation vertical slice", () => {
             name: "Assistant assignment round",
             anonymous: false,
             criteria,
-            },
-          ],
-        });
+          },
+        ],
+      });
       await addRoundReviewer("eval-assistant-assignment-round");
       const input = {
         roundId: "eval-assistant-assignment-round",
@@ -866,9 +1125,9 @@ describe("evaluation vertical slice", () => {
             name: "Initial review",
             anonymous: false,
             criteria,
-            },
-          ],
-        });
+          },
+        ],
+      });
       await addRoundReviewer("eval-undo-round");
       const assigned = await service.assign(admin, {
         roundId: "eval-undo-round",

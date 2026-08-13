@@ -279,14 +279,18 @@ paths:
   /api/v1/events/{eventId}/participant/submissions/{submissionId}/{command}:
     post:
       operationId: runParticipantSubmissionCommand
-      summary: Submit or withdraw an owned application
+      summary: Submit, withdraw or add a co-speaker to an owned application
       description: >-
         Requires an exact same-origin authenticated browser request, explicit
         confirmation and an Idempotency-Key. The command resolves the form and
         verified primary submitter from the owned URL-event submission, then uses
         the same revision, validation, audit, notification and workflow service as
-        the browser application flow. Co-speakers may read a claimed submission but
-        cannot submit or withdraw it.
+        the browser application flow. An accepted application with exactly one
+        editable derived session may add an unclaimed co-speaker relationship and
+        queue an expiring claim invitation without changing its submitted answer
+        snapshot. The mutation records a `submission.updated` change and queues
+        matching webhook work idempotently. Co-speakers may read a claimed
+        submission but cannot submit, withdraw or add participants.
       security: [{ sessionAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/EventId"
@@ -305,15 +309,22 @@ paths:
               oneOf:
                 - $ref: "#/components/schemas/ParticipantSubmitCommand"
                 - $ref: "#/components/schemas/ParticipantWithdrawCommand"
+                - $ref: "#/components/schemas/ParticipantInviteCoSpeakerCommand"
       responses:
         "200":
-          description: Command committed or an exact retry replayed; durably recorded downstream delivery degradation is reported in warnings, while an unrecorded effect remains recoverable through exact retry
+          description: Command committed or an exact retry replayed without a known post-commit delivery warning
           content:
             application/json:
               schema:
-                {
-                  $ref: "#/components/schemas/ParticipantSubmissionCommandResponse",
-                }
+                oneOf:
+                  - $ref: "#/components/schemas/ParticipantSubmissionCommandResponse"
+                  - $ref: "#/components/schemas/ParticipantCoSpeakerInvitationCommandResponse"
+        "207":
+          description: The co-speaker relationship committed or replayed, but invitation delivery, outbound webhook delivery or realtime invalidation requires attention; exact replay reconciles post-commit effects idempotently without duplicating the relationship
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParticipantCoSpeakerInvitationCommandResponse"
         "401": { $ref: "#/components/responses/SessionUnauthorised" }
         "403": { $ref: "#/components/responses/SessionForbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -781,14 +792,17 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/EvaluationRoundReviewerCommand" }
+            schema:
+              { $ref: "#/components/schemas/EvaluationRoundReviewerCommand" }
       responses:
         "200":
           description: Reviewer-pool change committed or an exact retry replayed
           content:
             application/json:
               schema:
-                { $ref: "#/components/schemas/EvaluationRoundReviewerCommandResponse" }
+                {
+                  $ref: "#/components/schemas/EvaluationRoundReviewerCommandResponse",
+                }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorised" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -1413,7 +1427,7 @@ components:
       in: path
       name: command
       required: true
-      schema: { type: string, enum: [submit, withdraw] }
+      schema: { type: string, enum: [submit, withdraw, invite-co-speaker] }
     EvaluationResource:
       in: path
       name: resource
@@ -1421,7 +1435,16 @@ components:
       schema:
         type: string
         enum:
-          [plans, teams, rounds, round-reviewers, assignments, reviews, conflicts, moderations]
+          [
+            plans,
+            teams,
+            rounds,
+            round-reviewers,
+            assignments,
+            reviews,
+            conflicts,
+            moderations,
+          ]
     EvaluationPersonCommand:
       in: path
       name: command
@@ -1956,6 +1979,16 @@ components:
       properties:
         confirmed: { type: boolean, const: true }
         revision: { type: integer, minimum: 1 }
+    ParticipantInviteCoSpeakerCommand:
+      type: object
+      additionalProperties: false
+      required: [confirmed, revision, name, email, roleLabel]
+      properties:
+        confirmed: { type: boolean, const: true }
+        revision: { type: integer, minimum: 1 }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        email: { type: string, format: email, maxLength: 254 }
+        roleLabel: { type: string, enum: [Co-author, Co-speaker, Co-presenter] }
     WebhookDeliverySummary:
       type: object
       additionalProperties: false
@@ -1964,7 +1997,19 @@ components:
         endpointId: { type: string }
         deliveryId: { type: string }
         operationId: { type: string }
-        status: { type: string, enum: [queued, queue_failed] }
+        status:
+          {
+            type: string,
+            enum:
+              [
+                queued,
+                queue_failed,
+                completed,
+                partially_failed,
+                failed,
+                cancelled,
+              ],
+          }
         duplicate: { type: boolean }
     ParticipantSubmissionCommandResponse:
       type: object
@@ -2005,6 +2050,58 @@ components:
               idempotencyKey: { type: string }
               status: { type: string, enum: [queued, queue_failed] }
               communicationId: { type: [string, "null"] }
+        webhookDeliveries:
+          type: array
+          items: { $ref: "#/components/schemas/WebhookDeliverySummary" }
+        changeCursor: { type: [integer, "null"], minimum: 1 }
+        warnings:
+          type: array
+          items: { type: string }
+        replayed: { type: boolean }
+        correlationId: { type: string }
+    ParticipantCoSpeakerInvitationCommandResponse:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          submission,
+          speaker,
+          invitation,
+          webhookDeliveries,
+          changeCursor,
+          warnings,
+          replayed,
+          correlationId,
+        ]
+      properties:
+        submission:
+          type: object
+          additionalProperties: false
+          required: [id, status, revision]
+          properties:
+            id: { type: string }
+            status: { type: string, const: accepted }
+            revision: { type: integer, minimum: 1 }
+        speaker:
+          type: object
+          additionalProperties: false
+          required: [id, name, email, roleLabel, invitationStatus]
+          properties:
+            id: { type: string }
+            name: { type: string }
+            email: { type: string, format: email }
+            roleLabel:
+              { type: string, enum: [Co-author, Co-speaker, Co-presenter] }
+            invitationStatus:
+              type: string
+              enum: [pending, sent, claimed, declined, expired, revoked]
+        invitation:
+          type: object
+          additionalProperties: false
+          required: [status, operationId]
+          properties:
+            status: { type: string, enum: [queued, queue_failed] }
+            operationId: { type: string }
         webhookDeliveries:
           type: array
           items: { $ref: "#/components/schemas/WebhookDeliverySummary" }
@@ -2574,8 +2671,7 @@ components:
         closesAt: { type: [string, "null"], format: date-time }
         dueAt: { type: [string, "null"], format: date-time, default: null }
         anonymous: { type: boolean }
-        scorecardId:
-          { type: [string, "null"], minLength: 1, maxLength: 120 }
+        scorecardId: { type: [string, "null"], minLength: 1, maxLength: 120 }
         scorecardVersion: { type: integer, minimum: 1 }
         cloneRoundId: { type: string, minLength: 1, maxLength: 200 }
     EvaluationAssignmentCommand:
@@ -3813,13 +3909,14 @@ components:
           format: uri
         eventTypes:
           minItems: 1
-          maxItems: 15
+          maxItems: 16
           type: array
           items:
             type: string
             enum:
               - submission.created
               - submission.submitted
+              - submission.updated
               - submission.withdrawn
               - review.submitted
               - review.reopened
@@ -4032,6 +4129,7 @@ components:
       enum:
         - submission.created
         - submission.submitted
+        - submission.updated
         - submission.withdrawn
         - review.submitted
         - review.reopened

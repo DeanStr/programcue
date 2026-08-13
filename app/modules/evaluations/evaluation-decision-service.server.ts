@@ -168,7 +168,14 @@ export class EvaluationDecisionService {
          AND r.status IN ('submitted','locked')
         JOIN evaluation_rounds round
           ON round.id = a.round_id AND round.event_id = a.event_id
+        JOIN evaluation_plans plan
+          ON plan.id = round.plan_id AND plan.event_id = round.event_id
        WHERE a.event_id = ? AND a.submission_id = ?
+         AND plan.status IN ('active','closed')
+         AND round.status IN ('active','closed')
+         AND (SELECT COUNT(*) FROM evaluation_plans current_plan
+               WHERE current_plan.event_id = a.event_id
+                 AND current_plan.status <> 'archived') = 1
        ORDER BY round.round_number DESC LIMIT 1
     `,
     )

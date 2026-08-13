@@ -14,6 +14,7 @@ import {
   speakerInputSchema,
   uploadReferenceSchema,
 } from "~/modules/submissions/submission-schema";
+import { acceptedCoSpeakerInvitationSchema } from "~/modules/submissions/submission-co-speaker-workflows.server";
 import { ApiParticipantService } from "~/platform/api/api-participant-service.server";
 import {
   ApiError,
@@ -28,16 +29,13 @@ import { requireEventRole } from "~/platform/auth/authorize.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 
-const commandSchema = z.enum(["submit", "withdraw"]);
+const commandSchema = z.enum(["submit", "withdraw", "invite-co-speaker"]);
 const answerSchema = z.union([
   z.string().max(5_000),
   z.array(z.string().max(200)).max(30),
 ]);
 const answersSchema = z
-  .record(
-    z.string().regex(/^[a-z][a-z0-9_]{1,39}$/u),
-    answerSchema,
-  )
+  .record(z.string().regex(/^[a-z][a-z0-9_]{1,39}$/u), answerSchema)
   .refine((answers) => Object.keys(answers).length <= 50, {
     message: "A submission may contain at most 50 answers",
   });
@@ -80,6 +78,10 @@ const withdrawSchema = z
     revision: z.number().int().positive(),
   })
   .strict();
+const inviteCoSpeakerSchema = acceptedCoSpeakerInvitationSchema
+  .omit({ submissionId: true })
+  .extend({ confirmed: z.literal(true) })
+  .strict();
 
 function requireSameOrigin(request: Request) {
   if (request.headers.get("origin") !== new URL(request.url).origin) {
@@ -101,16 +103,11 @@ function participantCommandError(error: unknown) {
     );
   }
   if (error instanceof SubmissionDraftSavedError) {
-    return new ApiError(
-      409,
-      "SUBMISSION_BLOCKED_DRAFT_SAVED",
-      error.message,
-      {
-        committed: true,
-        submissionId: error.submissionId,
-        draftRevision: error.draftRevision,
-      },
-    );
+    return new ApiError(409, "SUBMISSION_BLOCKED_DRAFT_SAVED", error.message, {
+      committed: true,
+      submissionId: error.submissionId,
+      draftRevision: error.draftRevision,
+    });
   }
   if (error instanceof SubmissionRevisionConflictError) {
     return new ApiError(409, "SUBMISSION_REVISION_CONFLICT", error.message);
@@ -152,9 +149,7 @@ async function queueWebhook(
     const deliveries = await new WebhookService(env).queueEvent(actor, input);
     return {
       deliveries,
-      warning: deliveries.some(
-        (delivery) => delivery.status === "queue_failed",
-      )
+      warning: deliveries.some((delivery) => delivery.status === "queue_failed")
         ? "One or more outbound webhook deliveries require retry."
         : null,
     };
@@ -200,11 +195,37 @@ export async function action({ request, params, context }: Route.ActionArgs) {
             command: "submit" as const,
             input: submitSchema.parse(rawInput),
           } as const)
-        : ({
-            command: "withdraw" as const,
-            input: withdrawSchema.parse(rawInput),
-          } as const);
+        : command === "withdraw"
+          ? ({
+              command: "withdraw" as const,
+              input: withdrawSchema.parse(rawInput),
+            } as const)
+          : ({
+              command: "invite-co-speaker" as const,
+              input: inviteCoSpeakerSchema.parse(rawInput),
+            } as const);
     const participantService = new ApiParticipantService(env);
+    if (parsedCommand.command === "invite-co-speaker") {
+      const result = await participantService.inviteAcceptedCoSpeaker(
+        viewer,
+        { submissionId: params.submissionId, ...parsedCommand.input },
+        idempotencyKey,
+      );
+      const finalization =
+        await participantService.finalizeAcceptedCoSpeakerInvitation(
+          viewer,
+          result.response,
+        );
+      return apiSuccess(
+        {
+          ...result.response,
+          ...finalization,
+          replayed: result.replayed,
+          correlationId: requestCorrelationId,
+        },
+        finalization.warnings.length ? 207 : 200,
+      );
+    }
     const { applicant, publicSlug } =
       await participantService.submissionCommandContext(
         viewer,
@@ -258,8 +279,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
               : { directSessionId: domain.submission.directSessionId }),
           },
         }),
-        parsedCommand.command === "submit" &&
-        domain.submission.directSessionId
+        parsedCommand.command === "submit" && domain.submission.directSessionId
           ? queueWebhook(env, viewer, {
               eventType: "session.created",
               entityType: "session",
@@ -323,36 +343,43 @@ export async function action({ request, params, context }: Route.ActionArgs) {
               },
               operationId,
             );
-          return finishCommand(operationId, {
-            submission: {
-              id: withdrawn.submissionId,
-              status: "withdrawn",
-              revision: withdrawn.revision,
+          return finishCommand(
+            operationId,
+            {
+              submission: {
+                id: withdrawn.submissionId,
+                status: "withdrawn",
+                revision: withdrawn.revision,
+              },
             },
-          }, false);
+            false,
+          );
         }
 
         const input = parsedCommand.input;
-        const submitted =
-          await submissionService.submitDraftForParticipantApi(
-            publicSlug,
-            applicant,
-            {
-              submissionId: params.submissionId,
-              revision: input.revision,
-              answers: input.answers,
-              speakers: input.speakers,
-              uploads: input.uploads,
-            },
-            operationId,
-          );
-        return finishCommand(operationId, {
-          submission: {
-            id: submitted.submissionId,
-            status: submitted.status,
-            directSessionId: submitted.directSessionId,
+        const submitted = await submissionService.submitDraftForParticipantApi(
+          publicSlug,
+          applicant,
+          {
+            submissionId: params.submissionId,
+            revision: input.revision,
+            answers: input.answers,
+            speakers: input.speakers,
+            uploads: input.uploads,
           },
-        }, false);
+          operationId,
+        );
+        return finishCommand(
+          operationId,
+          {
+            submission: {
+              id: submitted.submissionId,
+              status: submitted.status,
+              directSessionId: submitted.directSessionId,
+            },
+          },
+          false,
+        );
       },
       async (operationId) => {
         const recovered = await participantService.recoverSubmissionCommand(

@@ -160,9 +160,12 @@ export class AiOperationalReadTools {
               COALESCE(SUM(CASE WHEN a.status IN ('assigned','in_progress','reopened') THEN 1 ELSE 0 END), 0) AS openAssignments,
               COALESCE(SUM(CASE WHEN a.status = 'recused' THEN 1 ELSE 0 END), 0) AS recusals
          FROM evaluation_rounds r
+         JOIN evaluation_plans plan
+           ON plan.id = r.plan_id AND plan.event_id = r.event_id
          JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
          LEFT JOIN evaluator_assignments a ON a.round_id = r.id AND a.event_id = r.event_id
-        WHERE r.event_id = ?
+        WHERE r.event_id = ? AND r.status <> 'archived'
+          AND plan.status <> 'archived'
         GROUP BY r.id, r.name, r.round_number, r.status
         ORDER BY r.round_number`,
     )

@@ -92,9 +92,13 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     search.get("category"),
     communicationCategorySchema,
   );
-  const defaultTemplate = categoryPreset
-    ? templates.find((template) => template.category === categoryPreset)
-    : templates[0];
+  const defaultTemplateCategory =
+    categoryPreset ?? (audiencePreset === null ? "task_reminder" : null);
+  const defaultTemplate = defaultTemplateCategory
+    ? templates.find(
+        (template) => template.category === defaultTemplateCategory,
+      )
+    : undefined;
   let draft = null;
   if (params.draftId) {
     try {

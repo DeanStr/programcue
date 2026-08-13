@@ -227,6 +227,8 @@ const nullablePositiveInteger = z.preprocess(
   z.number().int().positive().nullable(),
 );
 
+export const MAX_SUBMISSION_SPEAKERS = 20;
+
 const optionalPositiveInteger = z.preprocess(
   (value) =>
     value === "" || value === null || value === undefined
@@ -254,8 +256,10 @@ export const saveFormSchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .nullable(),
     submissionLimit: nullablePositiveInteger,
-    minSpeakers: z.coerce.number().int().min(1).max(20),
-    maxSpeakers: nullablePositiveInteger,
+    minSpeakers: z.coerce.number().int().min(1).max(MAX_SUBMISSION_SPEAKERS),
+    maxSpeakers: nullablePositiveInteger.pipe(
+      z.number().int().positive().max(MAX_SUBMISSION_SPEAKERS).nullable(),
+    ),
     accessMode: z.enum([
       "email_verified",
       "account_required",
@@ -400,7 +404,7 @@ export const draftPayloadSchema = z.object({
   speakers: z
     .array(speakerInputSchema)
     .min(1)
-    .max(20)
+    .max(MAX_SUBMISSION_SPEAKERS)
     .superRefine((speakers, context) => {
       const emails = speakers.map((speaker) => speaker.email);
       if (new Set(emails).size !== emails.length) {
@@ -558,8 +562,12 @@ export function validateFinalAnswers(
     errors.speakers = [
       `Add at least ${minSpeakers} speaker${minSpeakers === 1 ? "" : "s"}`,
     ];
-  if (maxSpeakers !== null && speakers.length > maxSpeakers)
-    errors.speakers = [`This form allows at most ${maxSpeakers} speakers`];
+  const effectiveMaximum = Math.min(
+    maxSpeakers ?? MAX_SUBMISSION_SPEAKERS,
+    MAX_SUBMISSION_SPEAKERS,
+  );
+  if (speakers.length > effectiveMaximum)
+    errors.speakers = [`This form allows at most ${effectiveMaximum} speakers`];
   const emails = speakers.map((speaker) => speaker.email.toLowerCase());
   if (new Set(emails).size !== emails.length)
     errors.speakers = ["Each speaker must use a different email address"];

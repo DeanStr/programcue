@@ -23,6 +23,7 @@ import {
   summaryAnswer,
   type Criterion,
 } from "./evaluation-service-foundation.server";
+import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 
 function parseReviewerCriterionOptions(
   value: string,
@@ -140,6 +141,8 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
         LEFT JOIN sessions session
           ON session.id = a.session_id AND session.event_id = a.event_id
         JOIN evaluation_rounds r ON r.id = a.round_id AND r.event_id = a.event_id
+        JOIN evaluation_plans plan
+          ON plan.id = r.plan_id AND plan.event_id = r.event_id
         JOIN evaluation_round_reviewers pool
           ON pool.event_id = a.event_id
          AND pool.round_id = a.round_id
@@ -153,9 +156,16 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
         JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
        WHERE a.event_id = ? AND a.evaluator_person_id = ?
          AND a.status NOT IN ('recused','cancelled')
+         AND plan.status = 'active'
          AND r.status = 'active'
          AND (r.opens_at IS NULL OR r.opens_at <= unixepoch())
          AND (r.closes_at IS NULL OR r.closes_at > unixepoch())
+         AND (
+           (a.submission_id IS NOT NULL
+            AND ${reviewableSubmissionSql("submission", "review")})
+           OR (a.session_id IS NOT NULL
+               AND session.status NOT IN ('cancelled','archived'))
+         )
        ORDER BY CASE a.status WHEN 'in_progress' THEN 0 WHEN 'reopened' THEN 0 WHEN 'assigned' THEN 1 ELSE 2 END,
                 a.due_at, a.assigned_at
     `,
@@ -176,7 +186,7 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
         blindedReviewing: number | boolean;
         opensAt: number | null;
         closesAt: number | null;
-    }>();
+      }>();
     const reviewerAssignments = assignments.results.map(
       ({
         submissionSnapshotJson,
@@ -263,12 +273,17 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
           FROM evaluation_criteria c
           JOIN evaluator_assignments a
             ON a.round_id = c.round_id AND a.event_id = c.event_id
+          JOIN evaluation_rounds round
+            ON round.id = a.round_id AND round.event_id = a.event_id
+          JOIN evaluation_plans plan
+            ON plan.id = round.plan_id AND plan.event_id = round.event_id
           JOIN evaluation_round_reviewers pool
             ON pool.round_id = a.round_id
            AND pool.event_id = a.event_id
            AND pool.person_id = a.evaluator_person_id
           JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
          WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ?
+           AND plan.status = 'active' AND round.status = 'active'
          ORDER BY c.position
       `,
       )
@@ -288,19 +303,36 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
           LEFT JOIN submissions submission
             ON submission.id = a.submission_id
            AND submission.event_id = a.event_id
+          LEFT JOIN sessions session
+            ON session.id = a.session_id
+           AND session.event_id = a.event_id
          JOIN evaluation_rounds round
            ON round.id = a.round_id AND round.event_id = a.event_id
+         JOIN evaluation_plans plan
+           ON plan.id = round.plan_id AND plan.event_id = round.event_id
          JOIN evaluation_round_reviewers pool
            ON pool.round_id = a.round_id
           AND pool.event_id = a.event_id
           AND pool.person_id = a.evaluator_person_id
          JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
          WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ?
+           AND plan.status = 'active' AND round.status = 'active'
            AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
            AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
+           AND (
+             (a.submission_id IS NOT NULL
+              AND ${reviewableSubmissionSql("submission", "review")})
+             OR (a.session_id IS NOT NULL
+                 AND session.status NOT IN ('cancelled','archived'))
+           )
       `,
       )
-        .bind(viewer.organisationId, selected.id, viewer.eventId, viewer.personId)
+        .bind(
+          viewer.organisationId,
+          selected.id,
+          viewer.eventId,
+          viewer.personId,
+        )
         .first<{
           submissionId: string | null;
           sessionId: string | null;
@@ -315,15 +347,25 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
           FROM reviews r
           JOIN evaluator_assignments a
             ON a.id = r.assignment_id AND a.event_id = r.event_id
+          JOIN evaluation_rounds round
+            ON round.id = a.round_id AND round.event_id = a.event_id
+          JOIN evaluation_plans plan
+            ON plan.id = round.plan_id AND plan.event_id = round.event_id
           JOIN evaluation_round_reviewers pool
             ON pool.event_id = a.event_id
            AND pool.round_id = a.round_id
            AND pool.person_id = a.evaluator_person_id
           JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
          WHERE r.assignment_id = ? AND r.event_id = ? AND a.evaluator_person_id = ?
+           AND plan.status = 'active' AND round.status = 'active'
       `,
       )
-        .bind(viewer.organisationId, selected.id, viewer.eventId, viewer.personId)
+        .bind(
+          viewer.organisationId,
+          selected.id,
+          viewer.eventId,
+          viewer.personId,
+        )
         .first<{
           id: string;
           status: string;
@@ -353,6 +395,14 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
            )
           JOIN evaluation_rounds round
             ON round.id = a.round_id AND round.event_id = a.event_id
+          JOIN evaluation_plans plan
+            ON plan.id = round.plan_id AND plan.event_id = round.event_id
+          LEFT JOIN submissions submission
+            ON submission.id = a.submission_id
+           AND submission.event_id = a.event_id
+          LEFT JOIN sessions session
+            ON session.id = a.session_id
+           AND session.event_id = a.event_id
           JOIN evaluation_round_reviewers pool
             ON pool.event_id = a.event_id
            AND pool.round_id = a.round_id
@@ -360,7 +410,14 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
           JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
          WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ?
            AND a.status NOT IN ('recused','cancelled')
+           AND plan.status = 'active' AND round.status = 'active'
            AND round.blinded_reviewing = 0
+           AND (
+             (a.submission_id IS NOT NULL
+              AND ${reviewableSubmissionSql("submission", "review")})
+             OR (a.session_id IS NOT NULL
+                 AND session.status NOT IN ('cancelled','archived'))
+           )
            AND fa.status = 'active'
            AND fv.upload_status = 'uploaded'
            AND fv.signature_status = 'valid' AND fv.scan_status = 'clean'
@@ -554,6 +611,8 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
              SELECT 1 FROM evaluator_assignments a
               JOIN evaluation_rounds round
                 ON round.id = a.round_id AND round.event_id = a.event_id
+              JOIN evaluation_plans plan
+                ON plan.id = round.plan_id AND plan.event_id = round.event_id
               JOIN evaluation_round_reviewers pool
                 ON pool.event_id = a.event_id
                AND pool.round_id = a.round_id
@@ -570,10 +629,26 @@ export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAss
                 )
                 AND a.evaluator_person_id = ?
                 AND a.status NOT IN ('recused','cancelled')
+                AND plan.status = 'active'
                 AND round.status = 'active'
                 AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
                 AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
                 AND round.blinded_reviewing = 0
+                AND (
+                  (
+                    fa.target_type = 'session'
+                    AND EXISTS (
+                      SELECT 1 FROM sessions active_session
+                       WHERE active_session.id = fa.target_id
+                         AND active_session.event_id = fa.event_id
+                         AND active_session.status NOT IN ('cancelled','archived')
+                    )
+                  )
+                  OR (
+                    fa.target_type = 'submission'
+                    AND ${reviewableSubmissionSql("submission", "review")}
+                  )
+                )
            )
          )
     `,

@@ -1,6 +1,7 @@
 import { Form } from "react-router";
 
 import { EventDateTime } from "~/components/ui/event-date-time";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { EmptyState } from "~/components/ui/states";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { encodeScorecardSelection } from "~/modules/evaluations/evaluation-scorecard-selection";
@@ -99,7 +100,9 @@ export function EvaluationProgressionPanel() {
           </div>
           <label className="validation-item">
             <input type="checkbox" name="anonymous" value="true" />
-            <span>Blind reviewer identity for this round</span>
+            <span>
+              Hide author and co-author identity from reviewers in this round
+            </span>
           </label>
           <button className="btn" disabled={navigation.state !== "idle"}>
             Add next round
@@ -158,12 +161,95 @@ export function EvaluationSubmissionQueue() {
     assignmentTargets,
     bulkAssignableSubmissions,
   } = useEvaluationAdminModel();
+  const { confirm, dialog } = useConfirm();
+  const selectedResultsRound = loaderData.plan?.rounds.find(
+    (round) => round.id === loaderData.resultsRoundId,
+  );
+  if (loaderData.resultsRoundId && !selectedResultsRound) {
+    throw new Error("The selected evaluation results round is unavailable.");
+  }
+  const selectedResultsRoundName = () => {
+    if (!selectedResultsRound) {
+      throw new Error("The selected evaluation results round is unavailable.");
+    }
+    return selectedResultsRound.name;
+  };
   return (
     <section className="card pad">
+      {dialog}
       <div className="card-title">
-        <h2>Submission queue</h2>
+        <div>
+          <h2>Submission results and assignments</h2>
+          <p className="subtle">
+            Sort the aggregate review results or download the round-by-round
+            review record.
+          </p>
+          {!loaderData.aiReviewAssessmentsSupported ? (
+            <p className="help">
+              AI first-pass assessments are unavailable while Airtable is the
+              authoritative event repository.
+            </p>
+          ) : null}
+        </div>
         <div className="page-actions right">
-          <span className="help">Assignments and decisions are audited</span>
+          <Form method="get" className="inline-form">
+            {loaderData.unassignedOnly ? (
+              <input type="hidden" name="filter" value="unassigned" />
+            ) : null}
+            <label className="label">
+              Results round
+              <select
+                className="select"
+                name="resultsRound"
+                defaultValue={loaderData.resultsRoundId ?? ""}
+              >
+                {loaderData.plan?.rounds.map((round) => (
+                  <option key={round.id} value={round.id}>
+                    {round.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="label">
+              Sort results
+              <select
+                className="select"
+                name="sort"
+                defaultValue={loaderData.resultSort}
+              >
+                <option value="score_desc">Score, high to low</option>
+                <option value="score_asc">Score, low to high</option>
+                <option value="completion_desc">Review completion</option>
+                <option value="title_asc">Submission title</option>
+              </select>
+            </label>
+            <button className="btn small">Apply</button>
+          </Form>
+          {loaderData.resultsRoundId ? (
+            <Form
+              method="post"
+              action={`/admin/review/results.csv?round=${encodeURIComponent(loaderData.resultsRoundId)}`}
+              reloadDocument
+              onSubmit={(event) => {
+                const intent =
+                  event.currentTarget.elements.namedItem("idempotencyKey");
+                if (!(intent instanceof HTMLInputElement)) {
+                  event.preventDefault();
+                  throw new Error(
+                    "The Abstract results export intent control is missing.",
+                  );
+                }
+                intent.value = crypto.randomUUID();
+              }}
+            >
+              <input
+                type="hidden"
+                name="idempotencyKey"
+                defaultValue={loaderData.resultsExportIntent}
+              />
+              <button className="btn small">Download results CSV</button>
+            </Form>
+          ) : null}
           {activeRound &&
           assignmentTargets.length > 0 &&
           bulkAssignableSubmissions.length > 0 ? (
@@ -197,6 +283,11 @@ export function EvaluationSubmissionQueue() {
             </thead>
             <tbody>
               {loaderData.submissions.map((submission) => {
+                const aiAssessment = loaderData.aiReviewAssessments.find(
+                  (assessment) =>
+                    assessment.roundId === loaderData.resultsRoundId &&
+                    assessment.submissionId === submission.id,
+                );
                 const terminal = [
                   "accepted",
                   "waitlisted",
@@ -204,11 +295,7 @@ export function EvaluationSubmissionQueue() {
                 ].includes(submission.status);
                 const decidable =
                   !terminal && submission.status !== "withdrawn";
-                const assignable = [
-                  "submitted",
-                  "assigned",
-                  "in_review",
-                ].includes(submission.status);
+                const assignable = submission.reviewableInCurrentCycle;
                 return (
                   <tr key={submission.id}>
                     <td
@@ -225,6 +312,191 @@ export function EvaluationSubmissionQueue() {
                           <small className="subtle">
                             Routed to {submission.routedTeamName}
                           </small>
+                        ) : null}
+                        {aiAssessment ? (
+                          <details className="pc-disclosure mt">
+                            <summary>
+                              AI first pass · {aiAssessment.score.toFixed(1)} /
+                              5
+                              {aiAssessment.overridden
+                                ? ` · human override ${aiAssessment.effectiveScore.toFixed(1)} / 5`
+                                : ""}
+                            </summary>
+                            <div className="stack mt">
+                              <p>{aiAssessment.rationale}</p>
+                              <p className="help">
+                                AI-generated advisory output ·{" "}
+                                {aiAssessment.providerLabel}{" "}
+                                {aiAssessment.model}
+                              </p>
+                              {aiAssessment.overridden ? (
+                                <div className="validation-item ok">
+                                  <strong>
+                                    Human override ·{" "}
+                                    {aiAssessment.overrideScore?.toFixed(1)} / 5
+                                  </strong>
+                                  <span>{aiAssessment.overrideRationale}</span>
+                                </div>
+                              ) : null}
+                              {loaderData.canManageAiAssessments ? (
+                                <Form method="post" className="stack">
+                                  <input
+                                    type="hidden"
+                                    name="intent"
+                                    value="override-ai-review-assessment"
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="assessmentId"
+                                    value={aiAssessment.id}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="expectedRevision"
+                                    value={aiAssessment.revision}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="confirmed"
+                                    value="true"
+                                  />
+                                  <label className="label">
+                                    Human override score
+                                    <input
+                                      className="input"
+                                      name="score"
+                                      type="number"
+                                      min="1"
+                                      max="5"
+                                      step="0.1"
+                                      defaultValue={
+                                        aiAssessment.overrideScore ??
+                                        aiAssessment.score
+                                      }
+                                      required
+                                    />
+                                  </label>
+                                  <label className="label">
+                                    Override rationale
+                                    <textarea
+                                      className="textarea"
+                                      name="rationale"
+                                      minLength={10}
+                                      maxLength={2000}
+                                      defaultValue={
+                                        aiAssessment.overrideRationale ?? ""
+                                      }
+                                      required
+                                    />
+                                  </label>
+                                  <button
+                                    className="btn small"
+                                    type="button"
+                                    onClick={(event) => {
+                                      const form = event.currentTarget.form;
+                                      if (!form) {
+                                        throw new Error(
+                                          "The AI override form is missing.",
+                                        );
+                                      }
+                                      const formData = new FormData(form);
+                                      const score = formData.get("score");
+                                      const rationale =
+                                        formData.get("rationale");
+                                      if (
+                                        typeof score !== "string" ||
+                                        typeof rationale !== "string"
+                                      ) {
+                                        throw new Error(
+                                          "The AI override confirmation values are missing.",
+                                        );
+                                      }
+                                      if (!form.reportValidity()) return;
+                                      confirm(
+                                        {
+                                          title:
+                                            "Save human AI-score override?",
+                                          description:
+                                            "The original AI result stays immutable. This saves a separate human score and rationale that becomes the effective advisory score.",
+                                          records: [
+                                            `${submission.title} · ${selectedResultsRoundName()}`,
+                                            `Effective score: ${score} / 5`,
+                                            `Rationale: ${rationale.trim()}`,
+                                          ],
+                                          confirmLabel: "Save override",
+                                          tone: "primary",
+                                        },
+                                        () => form.requestSubmit(),
+                                      );
+                                    }}
+                                  >
+                                    Review human override
+                                  </button>
+                                </Form>
+                              ) : null}
+                            </div>
+                          </details>
+                        ) : loaderData.canManageAiAssessments &&
+                          loaderData.resultsRoundId &&
+                          selectedResultsRound &&
+                          ["active", "closed"].includes(
+                            selectedResultsRound.status,
+                          ) &&
+                          submission.reviewableInCurrentCycle ? (
+                          <Form method="post" className="mt">
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="generate-ai-review-assessment"
+                            />
+                            <input
+                              type="hidden"
+                              name="generationIntentId"
+                              value={submission.aiAssessmentGenerationIntent}
+                            />
+                            <input
+                              type="hidden"
+                              name="roundId"
+                              value={loaderData.resultsRoundId}
+                            />
+                            <input
+                              type="hidden"
+                              name="submissionId"
+                              value={submission.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="confirmed"
+                              value="true"
+                            />
+                            <button
+                              className="btn small"
+                              type="button"
+                              onClick={(event) => {
+                                const form = event.currentTarget.form;
+                                if (!form) {
+                                  throw new Error(
+                                    "The AI assessment form is missing.",
+                                  );
+                                }
+                                confirm(
+                                  {
+                                    title: "Generate AI first-pass assessment?",
+                                    description:
+                                      "Program Cue sends the authorised immutable proposal projection and persisted rubric to the configured AI provider, then saves its advisory score and rationale. The provider request cannot be undone.",
+                                    records: [
+                                      `${submission.title} · ${selectedResultsRound.name}`,
+                                    ],
+                                    confirmLabel: "Generate first pass",
+                                    tone: "primary",
+                                  },
+                                  () => form.requestSubmit(),
+                                );
+                              }}
+                            >
+                              Review AI first pass
+                            </button>
+                          </Form>
                         ) : null}
                       </div>
                     </td>

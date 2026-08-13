@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { assistantProposalMetadataSchema } from "~/modules/ai/ai-tools.server";
+import { CommunicationService } from "~/modules/communications/communication-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   DEMO_ASSISTANT_FIXTURE_MODEL,
@@ -19,6 +20,7 @@ import {
   DemoResetRetentionError,
   DemoResetUnavailableError,
   ensureJudgedDemoWorkflow,
+  prepareJudgedDemoWorkflow,
   resetDemoEvent,
 } from "./demo-reset.server";
 
@@ -175,7 +177,7 @@ describe("complete evaluator demo reset", () => {
       submissions: 2,
       assignments: 2,
       publishedSchedules: 1,
-      publishedTemplates: 1,
+      publishedTemplates: 2,
       sbekPeople: 4,
       sbekReviewerMemberships: 0,
       sbekReviewerAssignments: 0,
@@ -199,6 +201,14 @@ describe("complete evaluator demo reset", () => {
       accent: "#4f46e5",
       provider: "d1",
     });
+    const communicationCentre = await new CommunicationService(
+      testEnvironment,
+    ).listCentre(demoAdministrator);
+    expect(
+      communicationCentre.templates
+        .filter((template) => template.versionStatus === "published")
+        .map((template) => template.name),
+    ).toEqual(["Speaker task reminder", "Reviewer reminder"]);
     const fixturePeople = await testEnvironment.DB.prepare(
       `SELECT id, email, display_name AS name, profile_status AS profileStatus
          FROM people
@@ -244,6 +254,173 @@ describe("complete evaluator demo reset", () => {
     expect(audits.results.map((row) => row.action)).toEqual(
       expect.arrayContaining(["test.sentinel", "demo.reset"]),
     );
+  });
+
+  it("reports stale required communication templates as an incomplete baseline", async () => {
+    const testEnvironment = demoEnvironment();
+    await ensureJudgedDemoWorkflow(testEnvironment);
+
+    try {
+      await testEnvironment.DB.prepare(
+        `UPDATE communication_templates
+            SET status = 'archived'
+          WHERE event_id = ? AND name = 'Reviewer reminder'`,
+      )
+        .bind(DEMO_EVENT_ID)
+        .run();
+
+      await expect(prepareJudgedDemoWorkflow(testEnvironment)).resolves.toEqual(
+        expect.objectContaining({
+          complete: false,
+          evidence: expect.objectContaining({ publishedTemplates: 1 }),
+        }),
+      );
+      await expect(ensureJudgedDemoWorkflow(testEnvironment)).rejects.toThrow(
+        "The restored demo baseline is incomplete.",
+      );
+
+      await testEnvironment.DB.prepare(
+        `UPDATE communication_templates
+            SET status = 'active'
+          WHERE event_id = ? AND name = 'Reviewer reminder'`,
+      )
+        .bind(DEMO_EVENT_ID)
+        .run();
+      await testEnvironment.DB.prepare(
+        `UPDATE communication_template_versions
+            SET status = 'retired'
+          WHERE event_id = ? AND name = 'Reviewer reminder'`,
+      )
+        .bind(DEMO_EVENT_ID)
+        .run();
+
+      await expect(prepareJudgedDemoWorkflow(testEnvironment)).resolves.toEqual(
+        expect.objectContaining({
+          complete: false,
+          evidence: expect.objectContaining({ publishedTemplates: 1 }),
+        }),
+      );
+    } finally {
+      await testEnvironment.DB.batch([
+        testEnvironment.DB.prepare(
+          `UPDATE communication_templates
+              SET status = 'active'
+            WHERE event_id = ? AND name = 'Reviewer reminder'`,
+        ).bind(DEMO_EVENT_ID),
+        testEnvironment.DB.prepare(
+          `UPDATE communication_template_versions
+              SET status = 'published'
+            WHERE event_id = ? AND name = 'Reviewer reminder'`,
+        ).bind(DEMO_EVENT_ID),
+      ]);
+    }
+  });
+
+  it("reports semantic drift in either required communication template as incomplete", async () => {
+    const testEnvironment = demoEnvironment();
+    await ensureJudgedDemoWorkflow(testEnvironment);
+    const requiredTemplates = await testEnvironment.DB.prepare(
+      `SELECT template.id AS templateId, version.id AS versionId,
+              template.name AS templateName
+         FROM communication_templates template
+         JOIN communication_template_versions version
+           ON version.template_id = template.id
+          AND version.event_id = template.event_id
+        WHERE template.event_id = ?
+          AND template.name IN ('Speaker task reminder', 'Reviewer reminder')`,
+    )
+      .bind(DEMO_EVENT_ID)
+      .all<{
+        templateId: string;
+        versionId: string;
+        templateName: string;
+      }>();
+    const templatesByName = new Map(
+      requiredTemplates.results.map((template) => [
+        template.templateName,
+        template,
+      ]),
+    );
+    const speaker = templatesByName.get("Speaker task reminder");
+    const reviewer = templatesByName.get("Reviewer reminder");
+    if (!speaker || !reviewer) {
+      throw new Error("The required demo communication templates are absent.");
+    }
+
+    const expectIncomplete = async () => {
+      await expect(prepareJudgedDemoWorkflow(testEnvironment)).resolves.toEqual(
+        expect.objectContaining({
+          complete: false,
+          evidence: expect.objectContaining({ publishedTemplates: 1 }),
+        }),
+      );
+      await expect(ensureJudgedDemoWorkflow(testEnvironment)).rejects.toThrow(
+        "The restored demo baseline is incomplete.",
+      );
+    };
+
+    try {
+      await testEnvironment.DB.prepare(
+        `UPDATE communication_template_versions
+            SET name = 'Drifted reviewer reminder',
+                category = 'schedule', channel = 'sms'
+          WHERE event_id = ? AND id = ?`,
+      )
+        .bind(DEMO_EVENT_ID, reviewer.versionId)
+        .run();
+      await expectIncomplete();
+
+      await testEnvironment.DB.prepare(
+        `UPDATE communication_template_versions
+            SET name = 'Reviewer reminder',
+                category = 'ad_hoc', channel = 'email'
+          WHERE event_id = ? AND id = ?`,
+      )
+        .bind(DEMO_EVENT_ID, reviewer.versionId)
+        .run();
+      await testEnvironment.DB.batch([
+        testEnvironment.DB.prepare(
+          `UPDATE communication_templates
+              SET name = 'Drifted speaker reminder', category = 'ad_hoc'
+            WHERE event_id = ? AND id = ?`,
+        ).bind(DEMO_EVENT_ID, speaker.templateId),
+        testEnvironment.DB.prepare(
+          `UPDATE communication_template_versions
+              SET name = 'Drifted speaker reminder',
+                  category = 'ad_hoc', channel = 'sms'
+            WHERE event_id = ? AND id = ?`,
+        ).bind(DEMO_EVENT_ID, speaker.versionId),
+      ]);
+      await expectIncomplete();
+    } finally {
+      await testEnvironment.DB.batch([
+        testEnvironment.DB.prepare(
+          `UPDATE communication_templates
+              SET name = 'Speaker task reminder',
+                  category = 'task_reminder', status = 'active'
+            WHERE event_id = ? AND id = ?`,
+        ).bind(DEMO_EVENT_ID, speaker.templateId),
+        testEnvironment.DB.prepare(
+          `UPDATE communication_template_versions
+              SET name = 'Speaker task reminder',
+                  category = 'task_reminder', channel = 'email',
+                  status = 'published'
+            WHERE event_id = ? AND id = ?`,
+        ).bind(DEMO_EVENT_ID, speaker.versionId),
+        testEnvironment.DB.prepare(
+          `UPDATE communication_templates
+              SET name = 'Reviewer reminder',
+                  category = 'ad_hoc', status = 'active'
+            WHERE event_id = ? AND id = ?`,
+        ).bind(DEMO_EVENT_ID, reviewer.templateId),
+        testEnvironment.DB.prepare(
+          `UPDATE communication_template_versions
+              SET name = 'Reviewer reminder', category = 'ad_hoc',
+                  channel = 'email', status = 'published'
+            WHERE event_id = ? AND id = ?`,
+        ).bind(DEMO_EVENT_ID, reviewer.versionId),
+      ]);
+    }
   });
 
   it("tombstones only stale demo assistant fixture proposals while preserving their audits", async () => {

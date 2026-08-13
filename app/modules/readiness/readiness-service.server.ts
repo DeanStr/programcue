@@ -118,9 +118,16 @@ async function loadCommandCentreRecords(
     env.DB.prepare(
       `
         SELECT COUNT(*) AS total,
-               COALESCE(SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END), 0) AS complete
-          FROM evaluator_assignments
-         WHERE event_id = ? AND status NOT IN ('cancelled','recused')
+               COALESCE(SUM(CASE WHEN assignment.status = 'submitted' THEN 1 ELSE 0 END), 0) AS complete
+          FROM evaluator_assignments assignment
+          JOIN evaluation_rounds round
+            ON round.id = assignment.round_id
+           AND round.event_id = assignment.event_id
+          JOIN evaluation_plans plan
+            ON plan.id = round.plan_id AND plan.event_id = round.event_id
+         WHERE assignment.event_id = ?
+           AND assignment.status NOT IN ('cancelled','recused')
+           AND round.status = 'active' AND plan.status = 'active'
       `,
     )
       .bind(viewer.eventId)
@@ -152,9 +159,14 @@ async function loadCommandCentreRecords(
            AND s.status IN ('submitted','assigned','in_review')
            AND NOT EXISTS (
              SELECT 1 FROM evaluator_assignments a
+             JOIN evaluation_rounds round
+               ON round.id = a.round_id AND round.event_id = a.event_id
+             JOIN evaluation_plans plan
+               ON plan.id = round.plan_id AND plan.event_id = round.event_id
               WHERE a.event_id = s.event_id
                 AND a.submission_id = s.id
                 AND a.status NOT IN ('cancelled','recused')
+                AND round.status = 'active' AND plan.status = 'active'
            )
       `,
     )

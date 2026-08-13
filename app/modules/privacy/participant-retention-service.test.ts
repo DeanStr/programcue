@@ -366,6 +366,87 @@ describe("participant retention", () => {
     });
   });
 
+  it("deletes AI assessment content and rejects new assessments after retention", async () => {
+    const seeded = await seedExpiredRetentionEvent();
+    const planId = id("privacy-ai-plan");
+    const roundId = id("privacy-ai-round");
+    const assessmentId = id("privacy-ai-assessment");
+    await seeded.testEnv.DB.batch([
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO evaluation_plans (
+           id, event_id, name, status, created_by_person_id
+         ) VALUES (?, ?, 'Retained AI review', 'active',
+                   'person-demo-owner')`,
+      ).bind(planId, seeded.eventId),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO evaluation_rounds (
+           id, event_id, plan_id, round_number, name, status,
+           scorecard_id, scorecard_version
+         ) VALUES (?, ?, ?, 1, 'Retained AI review', 'active', ?, 1)`,
+      ).bind(roundId, seeded.eventId, planId, roundId),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO ai_review_assessments (
+           id, event_id, round_id, submission_id, scorecard_id,
+           scorecard_version, round_revision, score, rationale, provider,
+           model, provider_response_id, generated_by_person_id,
+           last_operation_id
+         ) VALUES (?, ?, ?, ?, ?, 1, 1, 4,
+                   'Private generated rationale that must be deleted when participant retention completes.',
+                   'workers_ai', '@cf/openai/gpt-oss-120b', ?,
+                   'person-demo-owner', ?)`,
+      ).bind(
+        assessmentId,
+        seeded.eventId,
+        roundId,
+        seeded.exclusiveSubmissionId,
+        roundId,
+        id("privacy-ai-provider-response"),
+        id("privacy-ai-operation"),
+      ),
+    ]);
+
+    const service = new ParticipantRetentionService(seeded.testEnv);
+    await service.anonymiseExpiredParticipants(seeded.owner, {
+      confirmation: "Expired privacy event",
+      acknowledged: true,
+    });
+
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `SELECT COUNT(*) AS total FROM ai_review_assessments
+          WHERE event_id = ?`,
+      )
+        .bind(seeded.eventId)
+        .first(),
+    ).resolves.toEqual({ total: 0 });
+
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO ai_review_assessments (
+           id, event_id, round_id, submission_id, scorecard_id,
+           scorecard_version, round_revision, score, rationale, provider,
+           model, provider_response_id, generated_by_person_id,
+           last_operation_id
+         ) VALUES (?, ?, ?, ?, ?, 1, 1, 4,
+                   'A new private rationale must not be written after participant retention has completed.',
+                   'workers_ai', '@cf/openai/gpt-oss-120b', ?,
+                   'person-demo-owner', ?)`,
+      )
+        .bind(
+          id("post-retention-ai-assessment"),
+          seeded.eventId,
+          roundId,
+          seeded.exclusiveSubmissionId,
+          roundId,
+          id("post-retention-ai-provider-response"),
+          id("post-retention-ai-operation"),
+        )
+        .run(),
+    ).rejects.toThrow(
+      "event participant retention is complete; participant PII is read-only",
+    );
+  });
+
   it("rejects participant PII writes after the durable completion tombstone", async () => {
     const seeded = await seedExpiredRetentionEvent();
     const service = new ParticipantRetentionService(seeded.testEnv);

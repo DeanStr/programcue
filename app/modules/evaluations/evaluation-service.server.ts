@@ -20,6 +20,7 @@ export {
   type EvaluationApiActor,
   type EvaluationApiCommand,
   type EvaluationAssignmentResult,
+  type EvaluationReviewCycleResult,
   type EvaluationRoundReviewerResult,
 } from "./evaluation-service-foundation.server";
 

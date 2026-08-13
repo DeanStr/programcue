@@ -13,6 +13,7 @@ import { useConfirm } from "~/components/ui/confirm-dialog";
 import type { ApplicantDraft } from "~/modules/submissions/submission-repository.server";
 import {
   DEFAULT_FORM_PRESENTATION,
+  MAX_SUBMISSION_SPEAKERS,
   visibleFields,
   type FormField,
 } from "~/modules/submissions/submission-schema";
@@ -124,6 +125,9 @@ export function DraftEditor({
   maxSpeakers,
   errors,
   canSubmit = true,
+  forceReadOnly = false,
+  readOnlyNotice,
+  action,
   timezone,
 }: {
   draft: ApplicantDraft;
@@ -140,10 +144,17 @@ export function DraftEditor({
   maxSpeakers: number | null;
   errors?: Record<string, string[]>;
   canSubmit?: boolean;
+  forceReadOnly?: boolean;
+  readOnlyNotice?: string;
+  action?: string;
   timezone: string;
 }) {
   const navigation = useNavigation();
   const { confirm, dialog } = useConfirm();
+  const effectiveMaximumSpeakers = Math.min(
+    maxSpeakers ?? MAX_SUBMISSION_SPEAKERS,
+    MAX_SUBMISSION_SPEAKERS,
+  );
   const [answers, setAnswers] = useState(draft.answers);
   const [speakers, setSpeakers] = useState(
     draft.speakers.length
@@ -175,7 +186,7 @@ export function DraftEditor({
       : draft.uploads,
   );
   const [dirty, setDirty] = useState(false);
-  const readOnly = draft.status !== "draft";
+  const readOnly = forceReadOnly || draft.status !== "draft";
   const recoveryPayload = useMemo(
     () => ({ answers, speakers, uploads }),
     [answers, speakers, uploads],
@@ -260,7 +271,12 @@ export function DraftEditor({
   );
 
   return (
-    <Form method="post" className="stack" onChange={() => setDirty(true)}>
+    <Form
+      method="post"
+      action={action}
+      className="stack"
+      onChange={() => setDirty(true)}
+    >
       {dialog}
       <input type="hidden" name="submissionId" value={draft.id} />
       <input type="hidden" name="revision" value={draft.revision} />
@@ -543,8 +559,7 @@ export function DraftEditor({
             </label>
           </div>
         ))}
-        {!readOnly &&
-        (maxSpeakers === null || speakers.length < maxSpeakers) ? (
+        {!readOnly && speakers.length < effectiveMaximumSpeakers ? (
           <button
             className="btn small"
             type="button"
@@ -563,10 +578,10 @@ export function DraftEditor({
           >
             + Add co-speaker
           </button>
-        ) : !readOnly && maxSpeakers !== null ? (
+        ) : !readOnly ? (
           <span className="help">
-            This form allows at most {maxSpeakers} speaker
-            {maxSpeakers === 1 ? "" : "s"}.
+            This form allows at most {effectiveMaximumSpeakers} speaker
+            {effectiveMaximumSpeakers === 1 ? "" : "s"}.
           </span>
         ) : null}
         {errors?.speakers ? (
@@ -676,28 +691,36 @@ export function DraftEditor({
       ) : (
         <>
           <div
-            className={`validation-item ${draft.status === "withdrawn" ? "warn" : "ok"}`}
+            className={`validation-item ${forceReadOnly || draft.status === "withdrawn" ? "warn" : "ok"}`}
           >
             <strong>
-              {draft.status === "withdrawn" ? "△ Withdrawn" : "✓ Submitted"}
+              {forceReadOnly
+                ? "Read-only application"
+                : draft.status === "withdrawn"
+                  ? "△ Withdrawn"
+                  : "✓ Submitted"}
             </strong>
             <span>
-              {draft.status === "withdrawn"
-                ? "This application is no longer in the review queue. Its immutable submitted snapshot remains in the audit history."
-                : `This immutable application was received ${
-                    draft.submittedAt
-                      ? `${new Intl.DateTimeFormat("en", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                          timeZone: timezone,
-                        }).format(
-                          new Date(draft.submittedAt * 1_000),
-                        )} (${timezone})`
-                      : "successfully"
-                  }.`}
+              {forceReadOnly
+                ? (readOnlyNotice ??
+                  "This application is available for reference but cannot be changed here.")
+                : draft.status === "withdrawn"
+                  ? "This application is no longer in the review queue. Its immutable submitted snapshot remains in the audit history."
+                  : `This immutable application was received ${
+                      draft.submittedAt
+                        ? `${new Intl.DateTimeFormat("en", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                            timeZone: timezone,
+                          }).format(
+                            new Date(draft.submittedAt * 1_000),
+                          )} (${timezone})`
+                        : "successfully"
+                    }.`}
             </span>
           </div>
-          {draft.status === "submitted" || draft.status === "assigned" ? (
+          {!forceReadOnly &&
+          (draft.status === "submitted" || draft.status === "assigned") ? (
             <details className="card pad pc-disclosure">
               <summary>
                 <strong>Withdraw application</strong>

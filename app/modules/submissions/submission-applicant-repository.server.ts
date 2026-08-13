@@ -296,9 +296,10 @@ export class SubmissionApplicantRepository {
         this.env.DB.prepare(
           `
         INSERT INTO submission_speakers (
-          id, event_id, submission_id, person_id, email, display_name, position,
+          id, event_id, submission_id, person_id, email, display_name, role_label, position,
           invitation_status, is_primary, claimed_at, created_at, updated_at
-        ) SELECT ?, ?, ?, ?, ?, ?, 0, 'claimed', 1, unixepoch(), unixepoch(), unixepoch()
+        ) SELECT ?, ?, ?, ?, ?, ?, 'Primary speaker', 0, 'claimed', 1,
+                 unixepoch(), unixepoch(), unixepoch()
           WHERE ? IS NOT NULL
       `,
         ).bind(
@@ -484,10 +485,11 @@ export class SubmissionApplicantRepository {
         this.env.DB.prepare(
           `
         INSERT INTO submission_speakers (
-          id, event_id, submission_id, person_id, email, display_name, position,
+          id, event_id, submission_id, person_id, email, display_name, role_label, position,
           invitation_status, is_primary, invited_at, claimed_at, created_at, updated_at
         )
-        SELECT ?, ?, ?, CASE WHEN ? = ? COLLATE NOCASE THEN ? ELSE NULL END, ?, ?, ?,
+        SELECT ?, ?, ?, CASE WHEN ? = ? COLLATE NOCASE THEN ? ELSE NULL END, ?, ?,
+               CASE WHEN ? = 0 THEN 'Primary speaker' ELSE 'Co-speaker' END, ?,
                CASE WHEN ? IS NOT NULL AND ? = ? COLLATE NOCASE THEN 'claimed' ELSE 'pending' END, ?,
                NULL,
                CASE WHEN ? = ? COLLATE NOCASE THEN unixepoch() ELSE NULL END,
@@ -503,6 +505,12 @@ export class SubmissionApplicantRepository {
              AND submission_speakers.is_primary = 0
               THEN submission_speakers.display_name
             ELSE excluded.display_name
+          END,
+          role_label = CASE
+            WHEN submission_speakers.invitation_status = 'claimed'
+             AND submission_speakers.is_primary = 0
+              THEN submission_speakers.role_label
+            ELSE excluded.role_label
           END,
           position = excluded.position,
           invitation_status = CASE
@@ -529,6 +537,7 @@ export class SubmissionApplicantRepository {
           applicant.personId,
           speaker.email,
           speaker.name,
+          position,
           position,
           applicant.personId,
           speaker.email,
@@ -651,9 +660,16 @@ export class SubmissionApplicantRepository {
             )
             AND NOT EXISTS (
               SELECT 1 FROM evaluator_assignments assignment
+              JOIN evaluation_rounds round
+                ON round.id = assignment.round_id
+               AND round.event_id = assignment.event_id
+              JOIN evaluation_plans plan
+                ON plan.id = round.plan_id AND plan.event_id = round.event_id
                WHERE assignment.event_id = submissions.event_id
                  AND assignment.submission_id = submissions.id
                  AND assignment.status <> 'assigned'
+                 AND round.status <> 'archived'
+                 AND plan.status <> 'archived'
             )`,
       ).bind(
         operationId,
@@ -668,6 +684,15 @@ export class SubmissionApplicantRepository {
             SET status = 'cancelled', revision = revision + 1,
                 last_operation_id = ?, cancellation_reason = 'submission_withdrawn'
           WHERE submission_id = ? AND event_id = ? AND status = 'assigned'
+            AND EXISTS (
+              SELECT 1 FROM evaluation_rounds round
+              JOIN evaluation_plans plan
+                ON plan.id = round.plan_id AND plan.event_id = round.event_id
+               WHERE round.id = evaluator_assignments.round_id
+                 AND round.event_id = evaluator_assignments.event_id
+                 AND round.status <> 'archived'
+                 AND plan.status <> 'archived'
+            )
             AND EXISTS (
               SELECT 1 FROM submissions
                WHERE id = ? AND event_id = ? AND status = 'withdrawn'

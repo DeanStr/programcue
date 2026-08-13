@@ -1006,8 +1006,10 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
         this.env.DB.prepare(
           `INSERT INTO submission_speakers (
              id, event_id, submission_id, person_id, email, display_name,
-             position, invitation_status, is_primary, claimed_at, created_at, updated_at
-           ) SELECT ?, ?, ?, person.id, ?, ?, ?, 'claimed', ?, unixepoch(), unixepoch(), unixepoch()
+             role_label, position, invitation_status, is_primary, claimed_at,
+             created_at, updated_at
+           ) SELECT ?, ?, ?, person.id, ?, ?, ?, ?, 'claimed', ?,
+                    unixepoch(), unixepoch(), unixepoch()
                FROM people person
                JOIN memberships membership
                  ON membership.person_id = person.id
@@ -1026,6 +1028,7 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
           submissionId,
           speaker.email,
           speaker.name,
+          position === 0 ? "Primary speaker" : "Co-speaker",
           position,
           position === 0 ? 1 : 0,
           viewer.eventId,

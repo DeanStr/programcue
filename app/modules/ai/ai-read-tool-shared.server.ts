@@ -79,7 +79,11 @@ export async function loadReminderCohort(
     },
     reviewers_with_open_assignments: {
       from: `people p JOIN evaluator_assignments a
-               ON a.evaluator_person_id = p.id AND a.event_id = ?`,
+               ON a.evaluator_person_id = p.id AND a.event_id = ?
+              JOIN evaluation_rounds round
+                ON round.id = a.round_id AND round.event_id = a.event_id
+              JOIN evaluation_plans plan
+                ON plan.id = round.plan_id AND plan.event_id = round.event_id`,
       where: "a.status IN ('assigned','in_progress','reopened')",
       reason: "open review assignments",
       href: "/admin/review?filter=open",
@@ -88,7 +92,8 @@ export async function loadReminderCohort(
   const definition = definitions[cohort];
   const base = `FROM ${definition.from}
     JOIN events e ON e.id = ? AND e.organisation_id = ?
-   WHERE ${definition.where}`;
+   WHERE ${definition.where}
+     ${cohort === "reviewers_with_open_assignments" ? "AND round.status = 'active' AND plan.status = 'active'" : ""}`;
   const [count, sample] = await Promise.all([
     env.DB.prepare(`SELECT COUNT(DISTINCT p.id) AS count ${base}`)
       .bind(viewer.eventId, viewer.eventId, viewer.organisationId)

@@ -123,6 +123,12 @@ export abstract class SubmissionApplicantWorkflows extends SubmissionCoSpeakerWo
   protected applicationAvailability(
     form: Awaited<ReturnType<SubmissionCoSpeakerWorkflows["getPublicForm"]>>,
   ) {
+    if (form.status !== "published") {
+      return {
+        accepting: false as const,
+        reason: "Applications for this event are closed.",
+      };
+    }
     if (
       form.closesAt !== null &&
       form.closesAt < Math.floor(Date.now() / 1_000)
@@ -206,9 +212,27 @@ export abstract class SubmissionApplicantWorkflows extends SubmissionCoSpeakerWo
     publicSlug: string,
     request: Request,
     selectedId?: string | null,
+    claimAccess?: { speakerId: string; rawToken?: string },
   ) {
-    const form = await this.getPublicForm(publicSlug);
-    const applicant = await this.applicants.get(request, form);
+    const claimedContext =
+      claimAccess && !claimAccess.rawToken
+        ? await this.requireClaimedCoSpeakerContext(
+            publicSlug,
+            claimAccess.speakerId,
+            request,
+          )
+        : null;
+    const form = claimedContext
+      ? claimedContext.form
+      : claimAccess?.rawToken
+        ? await this.requireCoSpeakerClaimForm(
+            publicSlug,
+            claimAccess.speakerId,
+            claimAccess.rawToken,
+          )
+        : await this.getPublicForm(publicSlug);
+    const applicant =
+      claimedContext?.applicant ?? (await this.applicants.get(request, form));
     const availability = this.applicationAvailability(form);
     if (!applicant) {
       const browserForm = applicantFormView(form);

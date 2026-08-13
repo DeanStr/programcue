@@ -27,9 +27,9 @@ export abstract class AiEvaluationProposalWorkflows extends AiFormProposalWorkfl
     const round = workspace.plan?.rounds.find(
       (candidate) => candidate.id === args.roundId,
     );
-    if (!round || round.status !== "draft") {
+    if (!round || !["draft", "active"].includes(round.status)) {
       throw new AiToolValidationError(
-        "The proposed rubric target is not a draft evaluation round in this event.",
+        "The proposed rubric target is not an editable draft or active evaluation round in this event.",
       );
     }
     if (round.revision !== args.revision) {
@@ -46,6 +46,21 @@ export abstract class AiEvaluationProposalWorkflows extends AiFormProposalWorkfl
         "A rubric cannot be replaced after the round has assignments.",
       );
     }
+    const assessment = await this.env.DB.prepare(
+      `SELECT 1
+         FROM ai_review_assessments assessment
+         JOIN events event
+           ON event.id = assessment.event_id AND event.organisation_id = ?
+        WHERE assessment.event_id = ? AND assessment.round_id = ?
+        LIMIT 1`,
+    )
+      .bind(this.viewer.organisationId, this.viewer.eventId, round.id)
+      .first();
+    if (assessment) {
+      throw new AiToolValidationError(
+        "A rubric cannot be replaced after the round has an AI first-pass assessment.",
+      );
+    }
     const proposalId = crypto.randomUUID();
     const scoredWeight = args.criteria
       .filter((criterion) => criterion.inputType.startsWith("scale_"))
@@ -54,9 +69,9 @@ export abstract class AiEvaluationProposalWorkflows extends AiFormProposalWorkfl
       id: proposalId,
       toolName: "propose_rubric_update",
       title: `${args.name} rubric`,
-      summary: `Replace the editable rubric for draft round ${round.name} with ${args.criteria.length} validated criteria.`,
+      summary: `Replace the editable rubric for ${round.status} round ${round.name} with ${args.criteria.length} validated criteria.`,
       consequence:
-        "Approval updates only this unassigned draft round through EvaluationService CAS validation. It does not activate the round, assign reviewers, score submissions or submit reviews.",
+        "Approval updates only this unassigned draft or active round through EvaluationService CAS validation. It does not change round status, assign reviewers, score submissions or submit reviews.",
       changes: [
         { field: "Round name", before: round.name, after: args.name },
         {
@@ -71,7 +86,7 @@ export abstract class AiEvaluationProposalWorkflows extends AiFormProposalWorkfl
         },
         {
           field: "Due date",
-          before: "Current draft setting",
+          before: "Current round setting",
           after: args.dueAt ?? "No due date",
         },
       ],
@@ -96,7 +111,7 @@ export abstract class AiEvaluationProposalWorkflows extends AiFormProposalWorkfl
       {
         id: `evaluation-round:${round.id}`,
         label: round.name,
-        detail: `Draft revision ${round.revision} · ${round.criteria.length} current criteria`,
+        detail: `${round.status === "draft" ? "Draft" : "Active"} revision ${round.revision} · ${round.criteria.length} current criteria`,
         href: `/admin/review?round=${encodeURIComponent(round.id)}`,
         source: "Program Cue D1",
       },

@@ -15,6 +15,7 @@ import {
   type EvaluationApiCommand,
   type EvaluationAssignmentResult,
 } from "./evaluation-service-foundation.server";
+import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 
 export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkflows {
   async assign(
@@ -59,6 +60,7 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
       SELECT r.id FROM evaluation_rounds r JOIN evaluation_plans p ON p.id = r.plan_id AND p.event_id = r.event_id
       JOIN events e ON e.id = r.event_id
        WHERE r.id = ? AND r.event_id = ? AND e.organisation_id = ?
+         AND p.status = 'active'
          AND r.status = 'active'
          AND (r.opens_at IS NULL OR r.opens_at <= unixepoch())
          AND (r.closes_at IS NULL OR r.closes_at > unixepoch())
@@ -70,10 +72,18 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
       throw new EvaluationStateError("Active evaluation round not found.");
     const targetTable =
       parsed.targetType === "submission" ? "submissions" : "sessions";
-    const targetStatus =
+    const targetEligibility =
       parsed.targetType === "submission"
-        ? "status IN ('submitted','assigned','in_review')"
-        : "status NOT IN ('cancelled','archived')";
+        ? reviewableSubmissionSql("target")
+        : "target.status NOT IN ('cancelled','archived')";
+    const currentTargetEligibility =
+      parsed.targetType === "submission"
+        ? reviewableSubmissionSql("current_target", "assignment", true)
+        : "current_target.status NOT IN ('cancelled','archived')";
+    const operationTargetEligibility =
+      parsed.targetType === "submission"
+        ? reviewableSubmissionSql("target", "assignment", true)
+        : targetEligibility;
     const targetColumn =
       parsed.targetType === "submission" ? "submission_id" : "session_id";
     const targetPlaceholders = parsed.targetIds.map(() => "?").join(",");
@@ -84,7 +94,7 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
            ON event.id = target.event_id AND event.organisation_id = ?
         WHERE target.event_id = ?
           AND target.id IN (${targetPlaceholders})
-          AND target.${targetStatus}`,
+          AND ${targetEligibility}`,
     )
       .bind(viewer.organisationId, viewer.eventId, ...parsed.targetIds)
       .all<{ id: string }>();
@@ -104,6 +114,7 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
           JOIN events current_event ON current_event.id = current_round.event_id
          WHERE current_round.id = ? AND current_round.event_id = ?
            AND current_event.organisation_id = ?
+           AND current_plan.status = 'active'
            AND current_round.status = 'active'
            AND (current_round.opens_at IS NULL OR current_round.opens_at <= unixepoch())
            AND (current_round.closes_at IS NULL OR current_round.closes_at > unixepoch())
@@ -112,7 +123,7 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
         SELECT COUNT(*) FROM ${targetTable} current_target
          WHERE current_target.event_id = ?
            AND current_target.id IN (${targetPlaceholders})
-           AND current_target.${targetStatus}
+           AND ${currentTargetEligibility}
       ) = ?
       AND (
         SELECT COUNT(DISTINCT current_membership.person_id)
@@ -201,6 +212,7 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
       viewer.organisationId,
       viewer.eventId,
       ...parsed.targetIds,
+      ...(parsed.targetType === "submission" ? [operationId] : []),
       parsed.targetIds.length,
       viewer.eventId,
       ...evaluatorPersonIds,
@@ -303,8 +315,8 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
           revision, last_operation_id, assigned_at
         )
         SELECT ?, ?, ?, ${assignmentTargetSelect}, ?, 'assigned', ?, 1, ?, unixepoch()
-          FROM ${targetTable} target
-         WHERE target.id = ? AND target.event_id = ? AND target.${targetStatus}
+         FROM ${targetTable} target
+         WHERE target.id = ? AND target.event_id = ? AND ${operationTargetEligibility}
            AND ${eligibilitySql}
         ${conflictTarget}
       `,
@@ -317,6 +329,7 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
             operationId,
             targetId,
             viewer.eventId,
+            ...(parsed.targetType === "submission" ? [operationId] : []),
             ...eligibilityBindings,
           ),
         );
@@ -329,7 +342,7 @@ export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkf
          SET status = 'assigned', revision = revision + 1,
              last_operation_id = ?, updated_at = unixepoch()
        WHERE event_id = ? AND id IN (${targetPlaceholders})
-         AND status = 'submitted'
+         AND status IN ('submitted','decision_ready')
          AND ${eligibilitySql}
          AND ${coverageSql}
     `,

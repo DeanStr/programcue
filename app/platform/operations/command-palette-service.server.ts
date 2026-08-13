@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { reviewableSubmissionSql } from "~/modules/evaluations/evaluation-submission-review-eligibility.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 
 export type CommandRecord = {
@@ -96,15 +97,14 @@ const aliasKinds = new Map(
     aliases.map((alias) => [alias, kind as CommandRecord["kind"]] as const),
   ),
 );
-const operationFamilyByAlias = new Map<
-  string,
-  "communication" | "integration"
->([
-  ["communication", "communication"],
-  ["communications", "communication"],
-  ["integration", "integration"],
-  ["integrations", "integration"],
-]);
+const operationFamilyByAlias = new Map<string, "communication" | "integration">(
+  [
+    ["communication", "communication"],
+    ["communications", "communication"],
+    ["integration", "integration"],
+    ["integrations", "integration"],
+  ],
+);
 const coreRecordKinds = new Set<CommandRecord["kind"]>([
   "speaker",
   "submission",
@@ -312,6 +312,51 @@ export class CommandPaletteService {
   ): Promise<RecentCommandRecord[]> {
     const rows = await this.env.DB.prepare(
       `
+      WITH authorised_assignments AS (
+        SELECT assignment.id, assignment.event_id
+          FROM evaluator_assignments assignment
+          JOIN events event
+            ON event.id = assignment.event_id
+           AND event.organisation_id = ?
+          JOIN evaluation_rounds round
+            ON round.id = assignment.round_id
+           AND round.event_id = assignment.event_id
+          JOIN evaluation_plans plan
+            ON plan.id = round.plan_id
+           AND plan.event_id = round.event_id
+          JOIN evaluation_round_reviewers pool
+            ON pool.event_id = assignment.event_id
+           AND pool.round_id = assignment.round_id
+           AND pool.person_id = assignment.evaluator_person_id
+          LEFT JOIN submissions submission
+            ON submission.id = assignment.submission_id
+           AND submission.event_id = assignment.event_id
+          LEFT JOIN sessions session
+            ON session.id = assignment.session_id
+           AND session.event_id = assignment.event_id
+         WHERE assignment.event_id = ?
+           AND assignment.evaluator_person_id = ?
+           AND assignment.status NOT IN ('recused','cancelled')
+           AND plan.status = 'active'
+           AND round.status = 'active'
+           AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
+           AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
+           AND EXISTS (
+             SELECT 1
+               FROM memberships reviewer_membership
+              WHERE reviewer_membership.event_id = assignment.event_id
+                AND reviewer_membership.person_id = assignment.evaluator_person_id
+                AND reviewer_membership.accepted_at IS NOT NULL
+                AND reviewer_membership.revoked_at IS NULL
+                AND reviewer_membership.role IN ('evaluator','committee_chair')
+           )
+           AND (
+             (assignment.submission_id IS NOT NULL
+              AND ${reviewableSubmissionSql("submission", "review")})
+             OR (assignment.session_id IS NOT NULL
+                 AND session.status NOT IN ('cancelled','archived'))
+           )
+      )
       SELECT * FROM (
         SELECT audit.id, audit.action, audit.entity_type AS entityType,
                assignment.id AS assignmentId, audit.created_at AS createdAt,
@@ -322,8 +367,9 @@ export class CommandPaletteService {
           JOIN evaluator_assignments assignment
             ON assignment.id = audit.entity_id
            AND assignment.event_id = audit.event_id
-           AND assignment.evaluator_person_id = ?
-           AND assignment.status NOT IN ('recused','cancelled')
+          JOIN authorised_assignments authorised
+            ON authorised.id = assignment.id
+           AND authorised.event_id = assignment.event_id
           LEFT JOIN people actor ON actor.id = audit.actor_person_id
          WHERE audit.event_id = ? AND audit.entity_type = 'evaluator_assignment'
         UNION ALL
@@ -338,8 +384,9 @@ export class CommandPaletteService {
           JOIN evaluator_assignments assignment
             ON assignment.id = review.assignment_id
            AND assignment.event_id = review.event_id
-           AND assignment.evaluator_person_id = ?
-           AND assignment.status NOT IN ('recused','cancelled')
+          JOIN authorised_assignments authorised
+            ON authorised.id = assignment.id
+           AND authorised.event_id = assignment.event_id
           LEFT JOIN people actor ON actor.id = audit.actor_person_id
          WHERE audit.event_id = ? AND audit.entity_type = 'review'
       ) authorised
@@ -349,10 +396,11 @@ export class CommandPaletteService {
     )
       .bind(
         viewer.organisationId,
+        viewer.eventId,
         viewer.personId,
+        viewer.organisationId,
         viewer.eventId,
         viewer.organisationId,
-        viewer.personId,
         viewer.eventId,
       )
       .all<{
@@ -410,8 +458,30 @@ export class CommandPaletteService {
           JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
           JOIN evaluator_assignments ea
             ON ea.submission_id = s.id AND ea.event_id = s.event_id
+          JOIN evaluation_rounds round
+            ON round.id = ea.round_id AND round.event_id = ea.event_id
+          JOIN evaluation_plans plan
+            ON plan.id = round.plan_id AND plan.event_id = round.event_id
+          JOIN evaluation_round_reviewers pool
+            ON pool.event_id = ea.event_id
+           AND pool.round_id = ea.round_id
+           AND pool.person_id = ea.evaluator_person_id
          WHERE s.event_id = ? AND ea.evaluator_person_id = ?
            AND ea.status NOT IN ('recused','cancelled')
+           AND plan.status = 'active'
+           AND round.status = 'active'
+           AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
+           AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
+           AND ${reviewableSubmissionSql("s", "review")}
+           AND EXISTS (
+             SELECT 1
+               FROM memberships reviewer_membership
+              WHERE reviewer_membership.event_id = ea.event_id
+                AND reviewer_membership.person_id = ea.evaluator_person_id
+                AND reviewer_membership.accepted_at IS NOT NULL
+                AND reviewer_membership.revoked_at IS NULL
+                AND reviewer_membership.role IN ('evaluator','committee_chair')
+           )
            AND (instr(lower(s.title), lower(?)) > 0 OR instr(lower(s.public_reference), lower(?)) > 0)
          ORDER BY s.title, ea.assigned_at, ea.id LIMIT 30
       `,

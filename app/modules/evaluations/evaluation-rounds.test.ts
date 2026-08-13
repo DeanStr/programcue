@@ -221,6 +221,62 @@ function withBatchRace(
   });
 }
 
+async function insertAiAssessmentOperation(input: {
+  id: string;
+  eventId: string;
+  roundId: string;
+  status?: "running" | "completed";
+}) {
+  await env.DB.prepare(
+    `INSERT INTO operation_jobs (
+       id, organisation_id, event_id, requested_by_person_id, type,
+       idempotency_key, correlation_id, status, payload_json,
+       progress_total, progress_completed, attempt_count, cancellable,
+       started_at, completed_at, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, 'ai.review_assessment.generate', ?, ?, ?, ?,
+               1, ?, 1, 0, unixepoch(), ?, unixepoch(), unixepoch())`,
+  )
+    .bind(
+      input.id,
+      admin.organisationId,
+      input.eventId,
+      admin.personId,
+      input.id,
+      input.id,
+      input.status ?? "running",
+      JSON.stringify({
+        type: "ai.review_assessment.generate",
+        generationIntentId: input.id,
+        assessmentId: `assessment-${input.id}`,
+        requestHash: "a".repeat(64),
+        roundId: input.roundId,
+        submissionId: "eval-test-submission",
+        provider: "workers_ai",
+        model: "@cf/openai/gpt-oss-120b",
+        roundRevision: 1,
+        scorecardId: input.roundId,
+        scorecardVersion: 1,
+        criterionIds: [criteria[0]!.id],
+      }),
+      input.status === "completed" ? 1 : 0,
+      input.status === "completed" ? Math.floor(Date.now() / 1_000) : null,
+    )
+    .run();
+}
+
+async function insertOtherEvaluationEvent(eventId: string) {
+  await env.DB.prepare(
+    `INSERT INTO events (
+       id, organisation_id, name, slug, timezone, starts_at, ends_at,
+       file_policy_json
+     ) VALUES (?, ?, 'Other evaluation event', ?, 'UTC', 2_000_000_000,
+               2_000_086_400,
+               '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')`,
+  )
+    .bind(eventId, admin.organisationId, eventId)
+    .run();
+}
+
 async function resetEvaluationFixture() {
   await env.DB.batch([
     env.DB.prepare(
@@ -466,9 +522,381 @@ describe("evaluation vertical slice", () => {
         replacementRoundCount: 0,
       });
     });
+
+    it("preserves AI assessments when plan replacement races the activity check", async () => {
+      await resetEvaluationFixture();
+      const testEnv = env as unknown as CloudflareEnvironment;
+      const service = new EvaluationService(testEnv);
+      const roundId = "eval-ai-guard-round";
+      const replacementRoundId = "eval-ai-guard-replacement-round";
+      const assessmentId = "eval-ai-plan-replacement-assessment";
+      await service.savePlan(admin, {
+        revision: 0,
+        name: "AI-assessed plan",
+        status: "active",
+        rounds: [
+          {
+            id: roundId,
+            name: "Original AI-assessed round",
+            anonymous: false,
+            criteria,
+          },
+        ],
+      });
+      const replacement = {
+        revision: 1,
+        name: "Unsafe AI replacement",
+        status: "active" as const,
+        rounds: [
+          {
+            id: replacementRoundId,
+            name: "Replacement round",
+            anonymous: false,
+            criteria: criteria.map((criterion) => ({
+              ...criterion,
+              id: `${criterion.id}-ai-replacement`,
+            })),
+          },
+        ],
+      };
+      const racingEnv = withBatchRace(testEnv, async () => {
+        await testEnv.DB.prepare(
+          `INSERT INTO ai_review_assessments (
+             id, event_id, round_id, submission_id, scorecard_id,
+             scorecard_version, round_revision, score, rationale, provider,
+             model, provider_response_id, generated_by_person_id,
+             last_operation_id
+           ) VALUES (?, ?, ?, 'eval-test-submission', ?, 1, 1, 4,
+                     'This persisted AI assessment must survive a concurrent plan replacement attempt.',
+                     'workers_ai', '@cf/openai/gpt-oss-120b', ?, ?, ?)`,
+        )
+          .bind(
+            assessmentId,
+            admin.eventId,
+            roundId,
+            roundId,
+            "eval-ai-plan-replacement-response",
+            admin.personId,
+            "eval-ai-plan-replacement-operation",
+          )
+          .run();
+      });
+
+      await expect(
+        new EvaluationService(racingEnv).savePlan(admin, replacement),
+      ).rejects.toThrow(/plan with AI assessments cannot/i);
+      await expect(service.savePlan(admin, replacement)).rejects.toThrow(
+        /plan with AI assessments cannot/i,
+      );
+
+      const state = await testEnv.DB.prepare(
+        `SELECT plan.name, plan.revision,
+                (SELECT COUNT(*) FROM evaluation_rounds current_round
+                  WHERE current_round.plan_id = plan.id
+                    AND current_round.id = ?) AS originalRoundCount,
+                (SELECT COUNT(*) FROM evaluation_rounds replacement_round
+                  WHERE replacement_round.plan_id = plan.id
+                    AND replacement_round.id = ?) AS replacementRoundCount,
+                (SELECT COUNT(*) FROM ai_review_assessments assessment
+                  WHERE assessment.id = ? AND assessment.event_id = plan.event_id
+                    AND assessment.round_id = ?) AS assessmentCount
+           FROM evaluation_plans plan
+          WHERE plan.event_id = ? AND plan.status <> 'archived'`,
+      )
+        .bind(roundId, replacementRoundId, assessmentId, roundId, admin.eventId)
+        .first<{
+          name: string;
+          revision: number;
+          originalRoundCount: number;
+          replacementRoundCount: number;
+          assessmentCount: number;
+        }>();
+      expect(state).toEqual({
+        name: "AI-assessed plan",
+        revision: 1,
+        originalRoundCount: 1,
+        replacementRoundCount: 0,
+        assessmentCount: 1,
+      });
+    });
+
+    it("blocks a running AI operation that races plan replacement", async () => {
+      await resetEvaluationFixture();
+      const testEnv = env as unknown as CloudflareEnvironment;
+      const service = new EvaluationService(testEnv);
+      const token = crypto.randomUUID();
+      const roundId = `eval-ai-running-plan-round-${token}`;
+      const replacementRoundId = `eval-ai-running-plan-replacement-${token}`;
+      const operationId = crypto.randomUUID();
+      await service.savePlan(admin, {
+        revision: 0,
+        name: "Stable AI generation plan",
+        status: "active",
+        rounds: [
+          {
+            id: roundId,
+            name: "Original AI generation round",
+            anonymous: false,
+            criteria,
+          },
+        ],
+      });
+      const replacement = {
+        revision: 1,
+        name: "Unsafe running-AI replacement",
+        status: "active" as const,
+        rounds: [
+          {
+            id: replacementRoundId,
+            name: "Replacement round",
+            anonymous: false,
+            criteria: criteria.map((criterion) => ({
+              ...criterion,
+              id: `${criterion.id}-${token}-replacement`,
+            })),
+          },
+        ],
+      };
+      let raceInjected = false;
+      const racingEnv = withBatchRace(testEnv, async () => {
+        raceInjected = true;
+        await insertAiAssessmentOperation({
+          id: operationId,
+          eventId: admin.eventId,
+          roundId,
+        });
+      });
+
+      try {
+        await expect(
+          new EvaluationService(racingEnv).savePlan(admin, replacement),
+        ).rejects.toThrow(/running AI review assessment appeared/i);
+        expect(raceInjected).toBe(true);
+        await expect(service.savePlan(admin, replacement)).rejects.toThrow(
+          /running AI review assessment/i,
+        );
+
+        const state = await testEnv.DB.prepare(
+          `SELECT plan.name, plan.revision,
+                  (SELECT COUNT(*) FROM evaluation_rounds current_round
+                    WHERE current_round.plan_id = plan.id
+                      AND current_round.id = ?) AS originalRoundCount,
+                  (SELECT COUNT(*) FROM evaluation_rounds replacement_round
+                    WHERE replacement_round.plan_id = plan.id
+                      AND replacement_round.id = ?) AS replacementRoundCount
+             FROM evaluation_plans plan
+            WHERE plan.event_id = ? AND plan.status <> 'archived'`,
+        )
+          .bind(roundId, replacementRoundId, admin.eventId)
+          .first();
+        expect(state).toEqual({
+          name: "Stable AI generation plan",
+          revision: 1,
+          originalRoundCount: 1,
+          replacementRoundCount: 0,
+        });
+      } finally {
+        await testEnv.DB.prepare("DELETE FROM operation_jobs WHERE id = ?")
+          .bind(operationId)
+          .run();
+      }
+    });
+
+    it("ignores terminal, unrelated and other-event AI operations during plan replacement", async () => {
+      await resetEvaluationFixture();
+      const service = new EvaluationService(
+        env as unknown as CloudflareEnvironment,
+      );
+      const token = crypto.randomUUID();
+      const roundId = `eval-ai-plan-scope-round-${token}`;
+      const replacementRoundId = `eval-ai-plan-scope-replacement-${token}`;
+      const otherEventId = `eval-ai-plan-scope-event-${token}`;
+      const completedOperationId = crypto.randomUUID();
+      const unrelatedOperationId = crypto.randomUUID();
+      const otherEventOperationId = crypto.randomUUID();
+      await service.savePlan(admin, {
+        revision: 0,
+        name: "Scoped AI plan",
+        status: "active",
+        rounds: [
+          {
+            id: roundId,
+            name: "Scoped round",
+            anonymous: false,
+            criteria,
+          },
+        ],
+      });
+      await insertOtherEvaluationEvent(otherEventId);
+      await insertAiAssessmentOperation({
+        id: completedOperationId,
+        eventId: admin.eventId,
+        roundId,
+        status: "completed",
+      });
+      await insertAiAssessmentOperation({
+        id: unrelatedOperationId,
+        eventId: admin.eventId,
+        roundId: `missing-round-${token}`,
+      });
+      await insertAiAssessmentOperation({
+        id: otherEventOperationId,
+        eventId: otherEventId,
+        roundId,
+      });
+
+      try {
+        await expect(
+          service.savePlan(admin, {
+            revision: 1,
+            name: "Safely replaced scoped AI plan",
+            status: "active",
+            rounds: [
+              {
+                id: replacementRoundId,
+                name: "Safe replacement round",
+                anonymous: false,
+                criteria: criteria.map((criterion) => ({
+                  ...criterion,
+                  id: `${criterion.id}-${token}-safe-replacement`,
+                })),
+              },
+            ],
+          }),
+        ).resolves.toBeTruthy();
+      } finally {
+        await env.DB.prepare("DELETE FROM operation_jobs WHERE id IN (?, ?, ?)")
+          .bind(
+            completedOperationId,
+            unrelatedOperationId,
+            otherEventOperationId,
+          )
+          .run();
+        await env.DB.prepare("DELETE FROM events WHERE id = ?")
+          .bind(otherEventId)
+          .run();
+      }
+    });
   });
 
   describe("round workflows", () => {
+    it("blocks running AI operations that race round edits and deletions", async () => {
+      await resetEvaluationFixture();
+      const testEnv = env as unknown as CloudflareEnvironment;
+      const service = new EvaluationService(testEnv);
+      const token = crypto.randomUUID();
+      const firstRoundId = `eval-ai-round-guard-first-${token}`;
+      const guardedRoundId = `eval-ai-round-guard-draft-${token}`;
+      await service.savePlan(admin, {
+        revision: 0,
+        name: "AI round mutation guards",
+        status: "active",
+        rounds: [
+          {
+            id: firstRoundId,
+            name: "Active review",
+            anonymous: false,
+            criteria,
+          },
+          {
+            id: guardedRoundId,
+            name: "Guarded draft review",
+            anonymous: false,
+            criteria: criteria.map((criterion) => ({
+              ...criterion,
+              id: `${criterion.id}-${token}-draft`,
+            })),
+          },
+        ],
+      });
+      const initialWorkspace = await service.getAdminWorkspace(admin);
+      const guardedRound = initialWorkspace.plan!.rounds.find(
+        (round) => round.id === guardedRoundId,
+      )!;
+      const editOperationId = crypto.randomUUID();
+      const editRace = withBatchRace(testEnv, () =>
+        insertAiAssessmentOperation({
+          id: editOperationId,
+          eventId: admin.eventId,
+          roundId: guardedRoundId,
+        }),
+      );
+      const editInput = {
+        roundId: guardedRoundId,
+        revision: guardedRound.revision,
+        name: "Unsafe edited draft review",
+        dueAt: null,
+        criteria: guardedRound.criteria.map((criterion) => ({
+          ...criterion,
+          description: criterion.description ?? "",
+        })),
+      };
+
+      try {
+        await expect(
+          new EvaluationService(editRace).updateDraftRound(admin, editInput),
+        ).rejects.toThrow(/running AI review assessment appeared/i);
+        await expect(
+          service.updateDraftRound(admin, editInput),
+        ).rejects.toThrow(/running AI-assessment activity/i);
+        expect(
+          (await service.getAdminWorkspace(admin)).plan!.rounds.find(
+            (round) => round.id === guardedRoundId,
+          ),
+        ).toMatchObject({
+          name: "Guarded draft review",
+          runningAiAssessmentCount: 1,
+        });
+      } finally {
+        await testEnv.DB.prepare("DELETE FROM operation_jobs WHERE id = ?")
+          .bind(editOperationId)
+          .run();
+      }
+
+      const refreshed = await service.getAdminWorkspace(admin);
+      const deletableRound = refreshed.plan!.rounds.find(
+        (round) => round.id === guardedRoundId,
+      )!;
+      const deleteOperationId = crypto.randomUUID();
+      const deleteRace = withBatchRace(testEnv, () =>
+        insertAiAssessmentOperation({
+          id: deleteOperationId,
+          eventId: admin.eventId,
+          roundId: guardedRoundId,
+        }),
+      );
+      const deleteInput = {
+        roundId: guardedRoundId,
+        roundRevision: deletableRound.revision,
+        planRevision: refreshed.plan!.revision,
+        expectedReviewerPersonIds: [],
+        confirmed: true,
+      };
+
+      try {
+        await expect(
+          new EvaluationService(deleteRace).deleteDraftRound(
+            admin,
+            deleteInput,
+          ),
+        ).rejects.toThrow(/running AI review assessment appeared/i);
+        await expect(
+          service.deleteDraftRound(admin, deleteInput),
+        ).rejects.toThrow(/running AI review assessment/i);
+        await expect(
+          testEnv.DB.prepare(
+            "SELECT name FROM evaluation_rounds WHERE id = ? AND event_id = ?",
+          )
+            .bind(guardedRoundId, admin.eventId)
+            .first(),
+        ).resolves.toEqual({ name: "Guarded draft review" });
+      } finally {
+        await testEnv.DB.prepare("DELETE FROM operation_jobs WHERE id = ?")
+          .bind(deleteOperationId)
+          .run();
+      }
+    });
+
     it("closes a completed round, locks its review and advances a shortlist atomically", async () => {
       await resetEvaluationFixture();
       const service = new EvaluationService(
@@ -501,14 +929,17 @@ describe("evaluation vertical slice", () => {
       );
       await addRoundReviewer("eval-multi-round-one");
       await addRoundReviewer(nextRoundId);
+      const nextRound = (
+        await service.getAdminWorkspace(admin)
+      ).plan!.rounds.find((round) => round.id === nextRoundId)!;
       const draftRoundUpdate = {
         roundId: nextRoundId,
         revision: 1,
         name: "Final review",
         dueAt: null,
-        criteria: criteria.map((criterion) => ({
+        criteria: nextRound.criteria.map((criterion) => ({
           ...criterion,
-          id: `${criterion.id}-final`,
+          description: criterion.description ?? "",
         })),
       };
       const roundOperation = {
@@ -591,6 +1022,38 @@ describe("evaluation vertical slice", () => {
         teamId: null,
         confirmed: true as const,
       };
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO sessions (
+             id, event_id, source_submission_id, title, slug, description,
+             format, duration_minutes, status, revision, created_at, updated_at
+           ) VALUES (
+             'eval-multi-round-stale-session', ?, 'eval-test-submission',
+             'Stale direct review target', 'eval-multi-round-stale-session',
+             'This assignment becomes historical before advancement.',
+             'presentation', 45, 'unscheduled', 1, unixepoch(), unixepoch()
+           )`,
+        ).bind(admin.eventId),
+        env.DB.prepare(
+          `INSERT INTO evaluator_assignments (
+             id, event_id, round_id, session_id, session_snapshot_json,
+             evaluator_person_id, status, revision, assigned_at
+           ) VALUES (
+             'eval-multi-round-stale-session-assignment', ?,
+             'eval-multi-round-one', 'eval-multi-round-stale-session', '{}',
+             ?, 'assigned', 1, unixepoch()
+           )`,
+        ).bind(admin.eventId, evaluator.personId),
+      ]);
+      await expect(
+        service.advanceRound(admin, advanceInput),
+      ).rejects.toBeInstanceOf(EvaluationRevisionConflictError);
+      await env.DB.prepare(
+        `UPDATE sessions SET status = 'cancelled', revision = revision + 1
+          WHERE id = 'eval-multi-round-stale-session' AND event_id = ?`,
+      )
+        .bind(admin.eventId)
+        .run();
       const advanceActor = {
         kind: "api_key" as const,
         organisationId: admin.organisationId,
@@ -630,7 +1093,11 @@ describe("evaluation vertical slice", () => {
               AND status = 'assigned') AS nextAssignmentCount,
           (SELECT COUNT(*) FROM evaluator_assignments
             WHERE round_id = ?
-              AND submission_id = 'eval-multi-round-not-advanced') AS nonAdvancedAssignmentCount
+              AND submission_id = 'eval-multi-round-not-advanced') AS nonAdvancedAssignmentCount,
+          (SELECT status FROM evaluator_assignments
+              WHERE id = 'eval-multi-round-stale-session-assignment') AS staleAssignmentStatus,
+          (SELECT status FROM sessions
+              WHERE id = 'eval-multi-round-stale-session') AS staleSessionStatus
       `,
       )
         .bind(
@@ -650,6 +1117,8 @@ describe("evaluation vertical slice", () => {
         nonAdvancedSubmissionStatus: "decision_ready",
         nextAssignmentCount: 1,
         nonAdvancedAssignmentCount: 0,
+        staleAssignmentStatus: "assigned",
+        staleSessionStatus: "cancelled",
       });
       const nextWorkspace = await service.getReviewerWorkspace(evaluator);
       expect(nextWorkspace.selected).toMatchObject({

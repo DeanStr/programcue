@@ -351,18 +351,15 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM evaluation_plans WHERE event_id = ?").bind(
       admin.eventId,
     ),
-    env.DB.prepare("DELETE FROM submissions WHERE id = ? AND event_id = ?").bind(
-      submissionId,
-      admin.eventId,
-    ),
-    env.DB.prepare("DELETE FROM form_versions WHERE id = ? AND event_id = ?").bind(
-      formVersionId,
-      admin.eventId,
-    ),
-    env.DB.prepare("DELETE FROM form_definitions WHERE id = ? AND event_id = ?").bind(
-      formId,
-      admin.eventId,
-    ),
+    env.DB.prepare(
+      "DELETE FROM submissions WHERE id = ? AND event_id = ?",
+    ).bind(submissionId, admin.eventId),
+    env.DB.prepare(
+      "DELETE FROM form_versions WHERE id = ? AND event_id = ?",
+    ).bind(formVersionId, admin.eventId),
+    env.DB.prepare(
+      "DELETE FROM form_definitions WHERE id = ? AND event_id = ?",
+    ).bind(formId, admin.eventId),
   ]);
   await addSamToMembership();
   await addSubmission();
@@ -404,7 +401,9 @@ function planInput() {
 
 describe("abstract management round depth", () => {
   it("persists independent round dates, scorecards, pools and dropdown options", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     const planId = await service.savePlan(admin, planInput());
     const initialPool = await service.changeRoundReviewerPool(admin, {
       roundId: "abstract-initial-round",
@@ -445,15 +444,18 @@ describe("abstract management round depth", () => {
     const initial = workspace.plan!.rounds.find(
       (round) => round.id === "abstract-initial-round",
     )!;
-    expect(initial.criteria.find((criterion) => criterion.inputType === "dropdown"))
-      .toMatchObject({
-        name: "Recommendation",
-        options: ["Accept", "Maybe", "Reject"],
+    expect(
+      initial.criteria.find((criterion) => criterion.inputType === "dropdown"),
+    ).toMatchObject({
+      name: "Recommendation",
+      options: ["Accept", "Maybe", "Reject"],
     });
   });
 
   it("assigns and advances only the pooled members of a partially scoped team", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     await service.savePlan(admin, planInput());
     const teamId = await service.saveTeam(admin, {
       name: "Partially scoped review team",
@@ -511,8 +513,11 @@ describe("abstract management round depth", () => {
         scores: Object.fromEntries(
           workspace.criteria.map((criterion) => [
             criterion.id,
-            criterion.inputType === "dropdown" ? "Accept" :
-              criterion.inputType === "free_text" ? "Strong proposal." : 5,
+            criterion.inputType === "dropdown"
+              ? "Accept"
+              : criterion.inputType === "free_text"
+                ? "Strong proposal."
+                : 5,
           ]),
         ),
         recommendation: "accept",
@@ -565,9 +570,7 @@ describe("abstract management round depth", () => {
         meta: expect.anything(),
       });
     } finally {
-      await env.DB.prepare(
-        "DELETE FROM evaluation_plans WHERE event_id = ?",
-      )
+      await env.DB.prepare("DELETE FROM evaluation_plans WHERE event_id = ?")
         .bind(admin.eventId)
         .run();
       await env.DB.prepare(
@@ -579,7 +582,9 @@ describe("abstract management round depth", () => {
   });
 
   it("preserves round pools when an unassigned plan is replaced", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     await service.savePlan(admin, planInput());
     await service.changeRoundReviewerPool(admin, {
       roundId: "abstract-initial-round",
@@ -594,9 +599,9 @@ describe("abstract management round depth", () => {
 
     const reloaded = await service.getAdminWorkspace(admin);
     expect(
-      reloaded.plan!.rounds
-        .find((round) => round.id === "abstract-initial-round")!
-        .reviewers,
+      reloaded.plan!.rounds.find(
+        (round) => round.id === "abstract-initial-round",
+      )!.reviewers,
     ).toEqual([
       expect.objectContaining({
         personId: sam.personId,
@@ -606,7 +611,9 @@ describe("abstract management round depth", () => {
   });
 
   it("rejects invalid date ranges before persisting a round", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     await expect(
       service.savePlan(admin, {
         ...planInput(),
@@ -627,8 +634,293 @@ describe("abstract management round depth", () => {
     ).resolves.toEqual({ count: 0 });
   });
 
+  it("edits an active unassigned round without replacing stable criterion identifiers", async () => {
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
+    await service.savePlan(admin, planInput());
+    const workspace = await service.getAdminWorkspace(admin);
+    const activeRound = workspace.plan!.rounds.find(
+      (round) => round.id === "abstract-initial-round",
+    )!;
+
+    await service.updateDraftRound(admin, {
+      roundId: activeRound.id,
+      revision: activeRound.revision,
+      name: "Initial abstract review",
+      opensAt: new Date(activeRound.opensAt! * 1_000).toISOString(),
+      closesAt: new Date(activeRound.closesAt! * 1_000).toISOString(),
+      anonymous: activeRound.anonymous,
+      scorecardId: activeRound.scorecardId,
+      scorecardVersion: activeRound.scorecardVersion,
+      dueAt: null,
+      criteria: activeRound.criteria,
+    });
+
+    const reloaded = await service.getAdminWorkspace(admin);
+    const editedRound = reloaded.plan!.rounds.find(
+      (round) => round.id === activeRound.id,
+    )!;
+    expect(editedRound).toMatchObject({
+      name: "Initial abstract review",
+      status: "active",
+      revision: activeRound.revision + 1,
+    });
+    expect(editedRound.criteria.map((criterion) => criterion.id)).toEqual(
+      activeRound.criteria.map((criterion) => criterion.id),
+    );
+
+    await env.DB.prepare(
+      `INSERT INTO ai_review_assessments (
+         id, event_id, round_id, submission_id, scorecard_id,
+         scorecard_version, round_revision, score, rationale, provider,
+         model, provider_response_id, generated_by_person_id,
+         last_operation_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 4,
+                 'A sufficiently detailed persisted AI assessment rationale for this test.',
+                 'workers_ai', '@cf/openai/gpt-oss-120b', ?, ?, ?)`,
+    )
+      .bind(
+        "abstract-round-edit-ai-assessment",
+        admin.eventId,
+        editedRound.id,
+        submissionId,
+        editedRound.scorecardId,
+        editedRound.scorecardVersion,
+        editedRound.revision,
+        "abstract-round-edit-ai-response",
+        admin.personId,
+        "abstract-round-edit-ai-operation",
+      )
+      .run();
+    await expect(
+      service.updateDraftRound(admin, {
+        roundId: editedRound.id,
+        revision: editedRound.revision,
+        name: editedRound.name,
+        dueAt: null,
+        criteria: editedRound.criteria,
+      }),
+    ).rejects.toThrow(/AI-assessment activity|not editable/i);
+    await env.DB.prepare(
+      "DELETE FROM ai_review_assessments WHERE id = ? AND event_id = ?",
+    )
+      .bind("abstract-round-edit-ai-assessment", admin.eventId)
+      .run();
+
+    await expect(
+      service.updateDraftRound(admin, {
+        roundId: editedRound.id,
+        revision: editedRound.revision,
+        name: editedRound.name,
+        dueAt: null,
+        criteria: editedRound.criteria.map((criterion, index) => ({
+          ...criterion,
+          id: `replacement-id-${index}`,
+        })),
+      }),
+    ).rejects.toThrow(/identifiers must be preserved/i);
+
+    await service.changeRoundReviewerPool(admin, {
+      roundId: editedRound.id,
+      personId: sam.personId,
+      operation: "add",
+    });
+    await service.assign(admin, {
+      roundId: editedRound.id,
+      targetType: "submission",
+      targetIds: [submissionId],
+      evaluatorPersonIds: [sam.personId],
+    });
+    await expect(
+      service.updateDraftRound(admin, {
+        roundId: editedRound.id,
+        revision: editedRound.revision,
+        name: "Should not save",
+        dueAt: null,
+        criteria: editedRound.criteria,
+      }),
+    ).rejects.toThrow(/without assignments|not editable/i);
+  });
+
+  it("rejects case-insensitive duplicate names across plan, add and edit paths", async () => {
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const duplicatePlan = planInput();
+    duplicatePlan.rounds[1]!.name = " initial review ";
+    await expect(service.savePlan(admin, duplicatePlan)).rejects.toThrow(
+      /round names must be unique/i,
+    );
+
+    const planId = await service.savePlan(admin, planInput());
+    let workspace = await service.getAdminWorkspace(admin);
+    await expect(
+      service.addNextRound(admin, {
+        planId,
+        planRevision: workspace.plan!.revision,
+        name: " final review ",
+        dueAt: null,
+        cloneRoundId: "abstract-final-round",
+      }),
+    ).rejects.toThrow(/round with that name already exists/i);
+
+    workspace = await service.getAdminWorkspace(admin);
+    const finalRound = workspace.plan!.rounds.find(
+      (round) => round.id === "abstract-final-round",
+    )!;
+    await expect(
+      service.updateDraftRound(admin, {
+        roundId: finalRound.id,
+        revision: finalRound.revision,
+        name: " INITIAL REVIEW ",
+        dueAt: null,
+        criteria: finalRound.criteria,
+      }),
+    ).rejects.toThrow(/round with that name already exists/i);
+  });
+
+  it("deletes only the confirmed final unassigned draft and cascades its configuration", async () => {
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const planId = await service.savePlan(admin, planInput());
+    let workspace = await service.getAdminWorkspace(admin);
+    const addedRoundId = await service.addNextRound(admin, {
+      planId,
+      planRevision: workspace.plan!.revision,
+      name: "Panel Review",
+      dueAt: null,
+      cloneRoundId: "abstract-final-round",
+    });
+    workspace = await service.getAdminWorkspace(admin);
+    const staleAddedRound = workspace.plan!.rounds.find(
+      (round) => round.id === addedRoundId,
+    )!;
+    await service.changeRoundReviewerPool(admin, {
+      roundId: addedRoundId,
+      personId: sam.personId,
+      operation: "add",
+    });
+    await expect(
+      service.deleteDraftRound(admin, {
+        roundId: staleAddedRound.id,
+        roundRevision: staleAddedRound.revision,
+        planRevision: workspace.plan!.revision,
+        expectedReviewerPersonIds: [],
+        confirmed: true,
+      }),
+    ).rejects.toThrow(/reviewer pool changed after.*confirmed/i);
+    workspace = await service.getAdminWorkspace(admin);
+    const middleRound = workspace.plan!.rounds.find(
+      (round) => round.id === "abstract-final-round",
+    )!;
+    const addedRound = workspace.plan!.rounds.find(
+      (round) => round.id === addedRoundId,
+    )!;
+
+    await expect(
+      service.deleteDraftRound(admin, {
+        roundId: addedRound.id,
+        roundRevision: addedRound.revision,
+        planRevision: workspace.plan!.revision,
+        expectedReviewerPersonIds: addedRound.reviewers.map(
+          (reviewer) => reviewer.personId,
+        ),
+        confirmed: false,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      service.deleteDraftRound(admin, {
+        roundId: middleRound.id,
+        roundRevision: middleRound.revision,
+        planRevision: workspace.plan!.revision,
+        expectedReviewerPersonIds: middleRound.reviewers.map(
+          (reviewer) => reviewer.personId,
+        ),
+        confirmed: true,
+      }),
+    ).rejects.toThrow(/final draft round/i);
+
+    await env.DB.prepare(
+      `INSERT INTO evaluator_assignments (
+         id, event_id, round_id, submission_id, evaluator_person_id,
+         status, revision, assigned_at
+       ) VALUES (?, ?, ?, ?, ?, 'assigned', 1, unixepoch())`,
+    )
+      .bind(
+        "abstract-delete-guard-assignment",
+        admin.eventId,
+        addedRound.id,
+        submissionId,
+        sam.personId,
+      )
+      .run();
+    await expect(
+      service.deleteDraftRound(admin, {
+        roundId: addedRound.id,
+        roundRevision: addedRound.revision,
+        planRevision: workspace.plan!.revision,
+        expectedReviewerPersonIds: addedRound.reviewers.map(
+          (reviewer) => reviewer.personId,
+        ),
+        confirmed: true,
+      }),
+    ).rejects.toThrow(/assignment.*activity/i);
+    await env.DB.prepare(
+      "DELETE FROM evaluator_assignments WHERE id = ? AND event_id = ?",
+    )
+      .bind("abstract-delete-guard-assignment", admin.eventId)
+      .run();
+
+    const result = await service.deleteDraftRound(admin, {
+      roundId: addedRound.id,
+      roundRevision: addedRound.revision,
+      planRevision: workspace.plan!.revision,
+      expectedReviewerPersonIds: addedRound.reviewers.map(
+        (reviewer) => reviewer.personId,
+      ),
+      confirmed: true,
+    });
+    expect(result).toEqual({
+      roundId: addedRound.id,
+      planRevision: workspace.plan!.revision + 1,
+    });
+    await expect(
+      env.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM evaluation_rounds
+             WHERE id = ? AND event_id = ?) AS roundCount,
+           (SELECT COUNT(*) FROM evaluation_criteria
+             WHERE round_id = ? AND event_id = ?) AS criterionCount,
+           (SELECT COUNT(*) FROM evaluation_round_reviewers
+             WHERE round_id = ? AND event_id = ?) AS reviewerCount,
+           (SELECT revision FROM evaluation_plans
+             WHERE id = ? AND event_id = ?) AS planRevision`,
+      )
+        .bind(
+          addedRound.id,
+          admin.eventId,
+          addedRound.id,
+          admin.eventId,
+          addedRound.id,
+          admin.eventId,
+          planId,
+          admin.eventId,
+        )
+        .first(),
+    ).resolves.toEqual({
+      roundCount: 0,
+      criterionCount: 0,
+      reviewerCount: 0,
+      planRevision: workspace.plan!.revision + 1,
+    });
+  });
+
   it("binds reused scorecards to their rubric and forks edited drafts", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     const planId = await service.savePlan(admin, planInput());
     const beforeAdd = await service.getAdminWorkspace(admin);
     const addedRoundId = await service.addNextRound(admin, {
@@ -656,9 +948,9 @@ describe("abstract management round depth", () => {
         "Comments",
       ]),
     );
-    expect(addedRound.criteria.map((criterion) => criterion.name)).not.toContain(
-      "Final Originality",
-    );
+    expect(
+      addedRound.criteria.map((criterion) => criterion.name),
+    ).not.toContain("Final Originality");
 
     await service.updateDraftRound(admin, {
       roundId: addedRound.id,
@@ -672,7 +964,6 @@ describe("abstract management round depth", () => {
       dueAt: null,
       criteria: addedRound.criteria.map((criterion, index) => ({
         ...criterion,
-        id: `forked-${index}`,
         name: index === 0 ? "Forked Originality" : criterion.name,
       })),
     });
@@ -683,10 +974,13 @@ describe("abstract management round depth", () => {
     expect(editedRound.scorecardId).toBe(addedRound.id);
     expect(editedRound.scorecardVersion).toBe(1);
     expect(editedRound.criteria[0]?.name).toBe("Forked Originality");
+    expect(editedRound.criteria[0]?.id).toBe(addedRound.criteria[0]?.id);
   });
 
   it("rejects one scorecard version being saved with different rubrics", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     const input = planInput();
     await expect(
       service.savePlan(admin, {
@@ -704,7 +998,9 @@ describe("abstract management round depth", () => {
   });
 
   it("rejects editing a persisted scorecard version under the same identity", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     await service.savePlan(admin, planInput());
     const workspace = await service.getAdminWorkspace(admin);
     const changed = planInput();
@@ -720,7 +1016,9 @@ describe("abstract management round depth", () => {
   });
 
   it("rejects invalid round dates and does not inherit omitted dates", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     const planId = await service.savePlan(admin, planInput());
     const workspace = await service.getAdminWorkspace(admin);
 
@@ -756,7 +1054,9 @@ describe("abstract management round depth", () => {
   });
 
   it("requires round membership for assignment and keeps blinded identities out of reviewer output", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     await service.savePlan(admin, planInput());
     await expect(
       service.assign(admin, {
@@ -831,7 +1131,9 @@ describe("abstract management round depth", () => {
   });
 
   it("persists and reloads dropdown responses, while guessed URLs cannot bypass pool membership", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     await service.savePlan(admin, planInput());
     await service.changeRoundReviewerPool(admin, {
       roundId: "abstract-initial-round",
@@ -867,8 +1169,11 @@ describe("abstract management round depth", () => {
     });
     expect(saved.reviewId).toBeTruthy();
     const reloaded = await service.getReviewerWorkspace(sam);
-    expect(reloaded.criteria.find((criterion) => criterion.name === "Recommendation"))
-      .toMatchObject({ options: ["Accept", "Maybe", "Reject"] });
+    expect(
+      reloaded.criteria.find(
+        (criterion) => criterion.name === "Recommendation",
+      ),
+    ).toMatchObject({ options: ["Accept", "Maybe", "Reject"] });
     expect(reloaded.review).toMatchObject({
       scores: expect.objectContaining({
         "abstract-recommendation": "Accept",
@@ -893,7 +1198,9 @@ describe("abstract management round depth", () => {
   });
 
   it("cancels unfinished assignments when a reviewer leaves a round pool", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     await service.savePlan(admin, planInput());
     await service.changeRoundReviewerPool(admin, {
       roundId: "abstract-initial-round",
@@ -954,7 +1261,9 @@ describe("abstract management round depth", () => {
         .bind(admin.eventId, "abstract-initial-round")
         .first(),
     ).resolves.toEqual({ count: 0 });
-    await expect(service.getReviewerWorkspace(sam, assigned!.id)).rejects.toMatchObject({
+    await expect(
+      service.getReviewerWorkspace(sam, assigned!.id),
+    ).rejects.toMatchObject({
       status: 404,
     });
 
@@ -990,7 +1299,9 @@ describe("abstract management round depth", () => {
   });
 
   it("rejects conflict declarations after a round closes", async () => {
-    const service = new EvaluationService(env as unknown as CloudflareEnvironment);
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
     await service.savePlan(admin, planInput());
     await service.changeRoundReviewerPool(admin, {
       roundId: "abstract-initial-round",

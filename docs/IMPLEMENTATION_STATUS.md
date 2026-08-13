@@ -74,11 +74,29 @@ boundaries.
 
 Independent round dates, scorecards, blind-review settings and reviewer pools
 are connected through event-scoped D1 services and the administrator UI.
-Round assignment, reopening and advancement revalidate persisted windows at the
-mutation boundary. Reviewer removal reports and cancels affected unfinished
-work, and blinded assignment payloads omit participant identity and
-title-derived references in the server projection. Focused Worker coverage and
-the ABS-S2/S3 Chromium workflow exercise these production behaviors.
+An active or draft unassigned round can be edited, with stable criterion
+identity and scorecard-version forks; only the confirmed final unused draft may
+be deleted. A confirmed new-cycle command archives the prior plan as immutable
+history and creates a clean active round, while terminal submissions remain
+terminal and are reviewable only with published archived-decision provenance.
+Round assignment, reopening, conflict recusal and advancement revalidate
+persisted windows and current-cycle scope at the mutation boundary. Reviewer
+progress is round- and person-scoped; owners and administrators can prepare an
+exact-recipient reminder through the existing Communications preview rather
+than sending directly. Results support round-scoped stable sorting and an
+audited, formula-safe, size-bounded CSV export. Blinded reviewer projections
+omit participant identity, identifying references and attachments server-side.
+One immutable provider-attributed AI first-pass score/rationale may be generated
+for an exact round, rubric and submitted snapshot; a human override is stored
+and audited separately, and missing/invalid provider behavior fails without a
+simulated score. Focused Worker coverage exercises review advancement,
+archived-cycle decisions, late co-speaker claim/profile/session/task propagation
+and AI persistence/idempotency. The ABS-S2/S3 Chromium workflow exercises cycle
+creation, round/rubric edit and deletion, reviewer pools/progress/reminder
+draft preparation, result sorting/export, server-side blinding, an explicit
+decision override and confirmed co-speaker invitation. Real Workers AI
+generation and the invited person's claim remain provider/persona acceptance
+rather than local-browser evidence.
 
 ### Deterministic auto-placement evidence
 

@@ -476,9 +476,14 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationAccessW
             `
             SELECT 1
               FROM evaluation_round_reviewers pool
+              JOIN evaluation_rounds round
+                ON round.id = pool.round_id AND round.event_id = pool.event_id
+              JOIN evaluation_plans plan
+                ON plan.id = round.plan_id AND plan.event_id = round.event_id
               JOIN events e
                 ON e.id = pool.event_id AND e.organisation_id = ?
              WHERE pool.event_id = ? AND pool.round_id = ? AND pool.person_id = ?
+               AND round.status <> 'archived' AND plan.status <> 'archived'
           `,
           )
             .bind(
@@ -507,6 +512,8 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationAccessW
             )
             SELECT ?, r.event_id, r.id, ?, ?, 1, unixepoch(), unixepoch()
               FROM evaluation_rounds r
+              JOIN evaluation_plans plan
+                ON plan.id = r.plan_id AND plan.event_id = r.event_id
               JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
               JOIN memberships m
                 ON m.event_id = r.event_id
@@ -516,6 +523,7 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationAccessW
                AND m.role IN ('evaluator','committee_chair')
              WHERE r.id = ? AND r.event_id = ?
                AND r.status IN ('draft','active','closed')
+               AND plan.status <> 'archived'
                ${commandGuard.sql}
             ON CONFLICT(round_id, person_id) DO UPDATE SET
               revision = evaluation_round_reviewers.revision + 1,
@@ -542,10 +550,14 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationAccessW
                AND status IN ('assigned','in_progress','reopened')
                AND EXISTS (
                  SELECT 1 FROM evaluation_rounds r
+                 JOIN evaluation_plans plan
+                   ON plan.id = r.plan_id AND plan.event_id = r.event_id
                  JOIN events e
                    ON e.id = r.event_id AND e.organisation_id = ?
                 WHERE r.id = evaluator_assignments.round_id
                   AND r.event_id = evaluator_assignments.event_id
+                  AND r.status <> 'archived'
+                  AND plan.status <> 'archived'
                )
                ${commandGuard.sql}
           `,
@@ -562,9 +574,15 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationAccessW
             DELETE FROM evaluation_round_reviewers
              WHERE event_id = ? AND round_id = ? AND person_id = ?
                AND EXISTS (
-                 SELECT 1 FROM events e
-                  WHERE e.id = evaluation_round_reviewers.event_id
-                    AND e.organisation_id = ?
+                 SELECT 1 FROM evaluation_rounds r
+                 JOIN evaluation_plans plan
+                   ON plan.id = r.plan_id AND plan.event_id = r.event_id
+                 JOIN events e
+                   ON e.id = r.event_id AND e.organisation_id = ?
+                  WHERE r.id = evaluation_round_reviewers.round_id
+                    AND r.event_id = evaluation_round_reviewers.event_id
+                    AND r.status <> 'archived'
+                    AND plan.status <> 'archived'
                )
                ${commandGuard.sql}
           `,
@@ -596,8 +614,11 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationAccessW
               ), unixepoch()
        WHERE EXISTS (
          SELECT 1 FROM evaluation_rounds r
+         JOIN evaluation_plans plan
+           ON plan.id = r.plan_id AND plan.event_id = r.event_id
          JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
         WHERE r.id = ? AND r.event_id = ?
+          AND r.status <> 'archived' AND plan.status <> 'archived'
        )
        ${commandGuard.sql}
     `,
@@ -687,9 +708,8 @@ export abstract class EvaluationConfigurationWorkflows extends EvaluationAccessW
       );
     }
     const results = await this.env.DB.batch(statements);
-    const changed = results[
-      domainStatementIndex + (parsed.operation === "add" ? 0 : 1)
-    ];
+    const changed =
+      results[domainStatementIndex + (parsed.operation === "add" ? 0 : 1)];
     const audited = results[auditIndex];
     const commandCompleted = commandState.prepared
       ? (results.at(-1)?.meta.changes ?? 0) === 1

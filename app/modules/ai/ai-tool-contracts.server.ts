@@ -598,7 +598,7 @@ export const AI_TOOLS: AiToolDefinition[] = [
   defineAiTool(
     "propose_rubric_update",
     "write",
-    "Prepare an exact preview for updating the rubric of one existing draft evaluation round. Use current round IDs/revisions and preserve domain weight invariants. Approval is required before the draft is saved.",
+    "Prepare an exact preview for updating one existing draft or active evaluation round with no assignments. Use current round, criterion and revision identifiers and preserve domain weight invariants. Approval is required before the round is saved.",
     draftRoundUpdateSchema,
   ),
   defineAiTool(

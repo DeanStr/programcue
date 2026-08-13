@@ -9,6 +9,8 @@ import { ResendEmailProvider } from "~/modules/communications/resend.server";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { processSubmissionNotification } from "../../../workers/communications-queue";
+import { OperationService } from "~/platform/operations/operation-service.server";
+import { ParticipantApplicationSummaryService } from "./participant-application-summary.server";
 import {
   ApplicantConfigurationError,
   ApplicantSessionService,
@@ -291,6 +293,494 @@ describe("Submissions D1 vertical slice", () => {
   });
 
   describe("co-speaker workflows", () => {
+    it("invites an unclaimed co-author after acceptance without rewriting submitted answers", async () => {
+      const { service, id, slug, queued, testEnv } = await publishedForm();
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT OR IGNORE INTO sender_profiles (
+             id, event_id, name, from_name, from_email, provider, status,
+             created_at, updated_at
+           ) VALUES (?, ?, 'Accepted proposal invitations', 'Program Cue',
+                     'submissions@example.com', 'resend', 'verified',
+                     unixepoch(), unixepoch())`,
+        ).bind(`sender-accepted-${crypto.randomUUID()}`, viewer.eventId),
+        testEnv.DB.prepare(
+          `UPDATE sender_profiles SET status = 'verified', updated_at = unixepoch()
+            WHERE event_id = ? AND provider = 'resend'`,
+        ).bind(viewer.eventId),
+      ]);
+      const applicant = await verifiedApplicant(service, slug);
+      if (!applicant.verified)
+        throw new Error("Expected a verified applicant.");
+      const submissionId = await service.createDraft(slug, applicant);
+      const draft = (
+        await service.repository.getApplicantDrafts(id, applicant)
+      )[0]!;
+      await service.submitDraft(slug, applicant, {
+        submissionId,
+        revision: draft.revision,
+        answers: validAnswers,
+        speakers: [
+          {
+            name: applicant.name,
+            email: applicant.email,
+            biography: "The primary speaker's submitted biography.",
+          },
+        ],
+      });
+      const submitted = await testEnv.DB.prepare(
+        `SELECT submitted_snapshot_json AS snapshotJson, revision
+           FROM submissions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(submissionId, viewer.eventId)
+        .first<{ snapshotJson: string; revision: number }>();
+      const sessionId = crypto.randomUUID();
+      const decisionId = crypto.randomUUID();
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `UPDATE submissions
+              SET status = 'accepted', revision = revision + 1,
+                  updated_at = unixepoch()
+            WHERE id = ? AND event_id = ?`,
+        ).bind(submissionId, viewer.eventId),
+        testEnv.DB.prepare(
+          `INSERT INTO submission_decisions (
+             id, event_id, submission_id, revision_number, status, decision,
+             decided_by_person_id, notification_feedback_json,
+             effect_preview_json, idempotency_key, published_at
+           ) VALUES (?, ?, ?, 1, 'published', 'accepted', ?, '[]', '{}', ?,
+                     unixepoch())`,
+        ).bind(
+          decisionId,
+          viewer.eventId,
+          submissionId,
+          viewer.personId,
+          `accepted-test:${decisionId}`,
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO sessions (
+             id, event_id, source_submission_id, title, slug, description,
+             format, duration_minutes, status, visibility, revision,
+             created_at, updated_at
+           ) VALUES (?, ?, ?, 'Accepted proposal', ?, '', 'presentation', 60,
+                     'unscheduled', 'public', 1, unixepoch(), unixepoch())`,
+        ).bind(
+          sessionId,
+          viewer.eventId,
+          submissionId,
+          `accepted-invite-${sessionId}`,
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO session_speakers (
+             session_id, event_id, person_id, position, role_label,
+             participation_status, participation_confirmed_at, visibility
+           ) VALUES (?, ?, ?, 0, 'Primary speaker', 'confirmed', unixepoch(), 'public')`,
+        ).bind(sessionId, viewer.eventId, applicant.personId),
+      ]);
+      const accepted = await testEnv.DB.prepare(
+        "SELECT revision FROM submissions WHERE id = ? AND event_id = ?",
+      )
+        .bind(submissionId, viewer.eventId)
+        .first<{ revision: number }>();
+      const coSpeakerEmail = `post-acceptance-${crypto.randomUUID()}@example.com`;
+      const existingPersonId = crypto.randomUUID();
+      await testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, profile_status,
+           created_at, updated_at
+         ) VALUES (?, ?, 'Person-owned identity', 1, 'published',
+                   unixepoch(), unixepoch())`,
+      )
+        .bind(existingPersonId, coSpeakerEmail)
+        .run();
+      const participantViewer: Viewer = {
+        personId: applicant.personId!,
+        name: applicant.name,
+        email: applicant.email!,
+        role: "submitter",
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        demo: true,
+      };
+
+      const result = await service.inviteAcceptedCoSpeaker(
+        participantViewer,
+        {
+          submissionId,
+          revision: accepted!.revision,
+          name: "Marcus Example",
+          email: coSpeakerEmail,
+          roleLabel: "Co-author",
+          confirmed: true,
+        },
+        `accepted-speaker-${crypto.randomUUID()}`,
+      );
+
+      expect(result).toMatchObject({
+        submission: {
+          id: submissionId,
+          status: "accepted",
+          revision: accepted!.revision + 1,
+        },
+        speaker: {
+          name: "Marcus Example",
+          email: coSpeakerEmail,
+          roleLabel: "Co-author",
+          invitationStatus: "sent",
+        },
+        invitation: { status: "queued" },
+      });
+      expect(queued).toContainEqual(
+        expect.objectContaining({
+          type: "communication.send",
+          operationId: result.invitation.operationId,
+        }),
+      );
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT person_id AS personId, role_label AS roleLabel,
+                  invitation_status AS invitationStatus
+             FROM submission_speakers WHERE id = ? AND event_id = ?`,
+        )
+          .bind(result.speaker.id, viewer.eventId)
+          .first(),
+      ).resolves.toEqual({
+        personId: null,
+        roleLabel: "Co-author",
+        invitationStatus: "sent",
+      });
+      const afterInvite = await testEnv.DB.prepare(
+        `SELECT submitted_snapshot_json AS snapshotJson, revision,
+                (SELECT speaker_snapshot_json FROM submission_revisions revision
+                  WHERE revision.submission_id = submissions.id
+                  ORDER BY revision.revision_number DESC LIMIT 1) AS speakerSnapshotJson
+           FROM submissions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(submissionId, viewer.eventId)
+        .first<{
+          snapshotJson: string;
+          revision: number;
+          speakerSnapshotJson: string;
+        }>();
+      expect(afterInvite!.snapshotJson).toBe(submitted!.snapshotJson);
+      expect(JSON.parse(afterInvite!.speakerSnapshotJson)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            email: coSpeakerEmail,
+            roleLabel: "Co-author",
+            isPrimary: false,
+          }),
+        ]),
+      );
+
+      await testEnv.DB.prepare(
+        `UPDATE operation_jobs SET status = 'failed', last_error = 'Provider rejected delivery'
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(result.invitation.operationId, viewer.eventId)
+        .run();
+      await expect(
+        service.recoverAcceptedCoSpeakerInvitation(
+          participantViewer,
+          submissionId,
+          result.invitation.operationId,
+        ),
+      ).resolves.toMatchObject({
+        speaker: { invitationStatus: "pending" },
+        invitation: { status: "queue_failed" },
+      });
+
+      const authoritativePayload = await testEnv.DB.prepare(
+        `SELECT payload_json AS payloadJson
+           FROM operation_jobs WHERE id = ? AND event_id = ?`,
+      )
+        .bind(result.invitation.operationId, viewer.eventId)
+        .first<{ payloadJson: string }>();
+      for (const invalidPayload of [
+        JSON.stringify({
+          type: "communication.send",
+          operationId: result.invitation.operationId,
+        }),
+        JSON.stringify({
+          ...JSON.parse(authoritativePayload!.payloadJson),
+          communicationId: crypto.randomUUID(),
+        }),
+      ]) {
+        await testEnv.DB.prepare(
+          `UPDATE operation_jobs SET status = 'queued', payload_json = ?,
+                  updated_at = unixepoch()
+            WHERE id = ? AND event_id = ?`,
+        )
+          .bind(invalidPayload, result.invitation.operationId, viewer.eventId)
+          .run();
+        await expect(
+          service.recoverAcceptedCoSpeakerInvitation(
+            participantViewer,
+            submissionId,
+            result.invitation.operationId,
+          ),
+        ).rejects.toThrow(/invalid queue payload|does not match/i);
+      }
+      await testEnv.DB.prepare(
+        `UPDATE operation_jobs SET status = 'failed', payload_json = ?,
+                updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(
+          authoritativePayload!.payloadJson,
+          result.invitation.operationId,
+          viewer.eventId,
+        )
+        .run();
+
+      const originalQueue = testEnv.OPERATIONS_QUEUE;
+      testEnv.OPERATIONS_QUEUE = {
+        send: async () => {
+          throw new Error("queue transport unavailable");
+        },
+      } as unknown as Queue;
+      const failedInvite = await service.inviteAcceptedCoSpeaker(
+        participantViewer,
+        {
+          submissionId,
+          revision: afterInvite!.revision,
+          name: "Queued failure co-speaker",
+          email: `queue-failure-${crypto.randomUUID()}@example.com`,
+          roleLabel: "Co-speaker",
+          confirmed: true,
+        },
+        `accepted-speaker-failure-${crypto.randomUUID()}`,
+      );
+      testEnv.OPERATIONS_QUEUE = originalQueue;
+      expect(failedInvite).toMatchObject({
+        speaker: { invitationStatus: "pending" },
+        invitation: { status: "queue_failed" },
+      });
+      const genericRetryQueue: unknown[] = [];
+      const operationService = new OperationService({
+        ...testEnv,
+        OPERATIONS_QUEUE: {
+          send: async (message: unknown) => genericRetryQueue.push(message),
+        },
+      } as unknown as CloudflareEnvironment);
+      expect(
+        (await operationService.list(viewer)).find(
+          (operation) => operation.id === failedInvite.invitation.operationId,
+        )?.retryable,
+      ).toBe(false);
+      await expect(
+        operationService.retry(viewer, failedInvite.invitation.operationId),
+      ).rejects.toThrow(/cannot use generic retry.*resend the invitation/i);
+      expect(genericRetryQueue).toEqual([]);
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT operation.status AS operationStatus,
+                  item.status AS itemStatus, item.error_code AS itemErrorCode,
+                  communication.status AS communicationStatus,
+                  delivery.status AS deliveryStatus,
+                  delivery.failure_code AS deliveryFailureCode,
+                  speaker.invitation_status AS speakerInvitationStatus
+             FROM operation_jobs operation
+             JOIN operation_items item ON item.operation_id = operation.id
+             JOIN communications communication
+               ON communication.operation_id = operation.id
+              AND communication.event_id = operation.event_id
+             JOIN communication_deliveries delivery
+               ON delivery.communication_id = communication.id
+              AND delivery.event_id = communication.event_id
+             JOIN submission_speakers speaker
+               ON speaker.id = delivery.source_id
+              AND speaker.event_id = delivery.event_id
+            WHERE operation.id = ? AND operation.event_id = ?`,
+        )
+          .bind(failedInvite.invitation.operationId, viewer.eventId)
+          .first(),
+      ).resolves.toEqual({
+        operationStatus: "queue_failed",
+        itemStatus: "failed",
+        itemErrorCode: "QUEUE_UNAVAILABLE",
+        communicationStatus: "failed",
+        deliveryStatus: "failed",
+        deliveryFailureCode: "QUEUE_UNAVAILABLE",
+        speakerInvitationStatus: "pending",
+      });
+
+      const fillSpeakerIds = Array.from({ length: 17 }, () =>
+        crypto.randomUUID(),
+      );
+      const racingEnv = withNthBatchRace(testEnv, 1, async () => {
+        await testEnv.DB.batch(
+          fillSpeakerIds.map((speakerId, index) =>
+            testEnv.DB.prepare(
+              `INSERT INTO submission_speakers (
+                 id, event_id, submission_id, email, display_name, position,
+                 invitation_status, is_primary, created_at, updated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, unixepoch(), unixepoch())`,
+            ).bind(
+              speakerId,
+              viewer.eventId,
+              submissionId,
+              `speaker-cap-${speakerId}@example.com`,
+              `Speaker cap ${index + 1}`,
+              index + 3,
+            ),
+          ),
+        );
+      });
+      const cappedEmail = `speaker-cap-race-${crypto.randomUUID()}@example.com`;
+      await expect(
+        new SubmissionService(racingEnv).inviteAcceptedCoSpeaker(
+          participantViewer,
+          {
+            submissionId,
+            revision: failedInvite.submission.revision,
+            name: "Twenty-first speaker",
+            email: cappedEmail,
+            roleLabel: "Co-speaker",
+            confirmed: true,
+          },
+          `accepted-speaker-cap-${crypto.randomUUID()}`,
+        ),
+      ).rejects.toBeInstanceOf(SubmissionRevisionConflictError);
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT COUNT(*) AS count FROM submission_speakers
+            WHERE submission_id = ? AND event_id = ? AND email = ? COLLATE NOCASE`,
+        )
+          .bind(submissionId, viewer.eventId, cappedEmail)
+          .first(),
+      ).resolves.toEqual({ count: 0 });
+      await testEnv.DB.prepare(
+        `DELETE FROM submission_speakers
+          WHERE submission_id = ? AND event_id = ?
+            AND id IN (${fillSpeakerIds.map(() => "?").join(",")})`,
+      )
+        .bind(submissionId, viewer.eventId, ...fillSpeakerIds)
+        .run();
+
+      const participantWorkspace =
+        await new ParticipantApplicationSummaryService(testEnv).getWorkspace(
+          participantViewer,
+          submissionId,
+        );
+      expect(participantWorkspace.selectedApplication?.speakers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: applicant.name,
+            roleLabel: "Primary speaker",
+            invitationStatus: "claimed",
+          }),
+          expect.objectContaining({
+            name: "Marcus Example",
+            roleLabel: "Co-author",
+            invitationStatus: "pending",
+          }),
+        ]),
+      );
+      const adminDetail = await service.getAdminSubmission(
+        viewer,
+        submissionId,
+      );
+      expect(adminDetail?.speakers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: result.speaker.id,
+            roleLabel: "Co-author",
+            invitationStatus: "pending",
+          }),
+        ]),
+      );
+
+      const delivery = await testEnv.DB.prepare(
+        `SELECT delivery.source_values_json AS sourceValuesJson
+           FROM communication_deliveries delivery
+          WHERE delivery.source_id = ?
+          ORDER BY delivery.created_at DESC LIMIT 1`,
+      )
+        .bind(result.speaker.id)
+        .first<{ sourceValuesJson: string }>();
+      const claimUrl = new URL(
+        String(JSON.parse(delivery!.sourceValuesJson)["claim.url"]),
+      );
+      await testEnv.DB.prepare(
+        "UPDATE form_definitions SET status = 'closed' WHERE id = ? AND event_id = ?",
+      )
+        .bind(id, viewer.eventId)
+        .run();
+      await expect(service.getPublicForm(slug)).rejects.toMatchObject({
+        status: 404,
+      });
+      await expect(
+        service.getCoSpeakerClaim(
+          slug,
+          result.speaker.id,
+          claimUrl.searchParams.get("claim")!,
+        ),
+      ).resolves.toMatchObject({ id: result.speaker.id, expired: false });
+      await service.claimCoSpeakerToken(
+        slug,
+        result.speaker.id,
+        claimUrl.searchParams.get("claim")!,
+      );
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT person_id AS personId, invitation_status AS invitationStatus
+             FROM submission_speakers WHERE id = ? AND event_id = ?`,
+        )
+          .bind(result.speaker.id, viewer.eventId)
+          .first(),
+      ).resolves.toEqual({
+        personId: existingPersonId,
+        invitationStatus: "claimed",
+      });
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT role_label AS roleLabel
+             FROM session_speakers
+            WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+        )
+          .bind(sessionId, viewer.eventId, existingPersonId)
+          .first(),
+      ).resolves.toEqual({ roleLabel: "Co-author" });
+
+      await testEnv.DB.prepare(
+        "UPDATE form_definitions SET status = 'published' WHERE id = ? AND event_id = ?",
+      )
+        .bind(id, viewer.eventId)
+        .run();
+
+      await testEnv.DB.prepare(
+        "UPDATE sessions SET status = 'published' WHERE id = ? AND event_id = ?",
+      )
+        .bind(sessionId, viewer.eventId)
+        .run();
+      await expect(
+        service.inviteAcceptedCoSpeaker(participantViewer, {
+          submissionId,
+          revision: failedInvite.submission.revision,
+          name: "Locked participant",
+          email: `locked-${crypto.randomUUID()}@example.com`,
+          roleLabel: "Co-speaker",
+          confirmed: true,
+        }),
+      ).rejects.toThrow(/speaker list is locked/i);
+      await testEnv.DB.prepare(
+        "DELETE FROM sessions WHERE id = ? AND event_id = ?",
+      )
+        .bind(sessionId, viewer.eventId)
+        .run();
+      await expect(
+        service.inviteAcceptedCoSpeaker(participantViewer, {
+          submissionId,
+          revision: failedInvite.submission.revision,
+          name: "No derived session",
+          email: `missing-session-${crypto.randomUUID()}@example.com`,
+          roleLabel: "Co-speaker",
+          confirmed: true,
+        }),
+      ).rejects.toThrow(/exactly one derived session/i);
+    });
+
     it("adds a co-speaker who claims after acceptance to the generated session", async () => {
       const { service, id, slug } = await publishedForm();
       const applicant = await verifiedApplicant(service, slug);
@@ -310,13 +800,49 @@ describe("Submissions D1 vertical slice", () => {
       });
 
       const sessionId = crypto.randomUUID();
+      const decisionId = crypto.randomUUID();
+      const prerequisiteTemplateId = `late-claim-prerequisite-${crypto.randomUUID()}`;
+      const acceptanceTemplateId = `late-claim-task-${crypto.randomUUID()}`;
       await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO task_templates (
+             id, event_id, name, target_type, task_type, impact, evidence_mode,
+             due_anchor, auto_assign_on_acceptance, status
+           ) VALUES (?, ?, 'Late claim prerequisite', 'speaker', 'checklist',
+                     'medium', 'checkbox', 'none', 0, 'active')`,
+        ).bind(prerequisiteTemplateId, viewer.eventId),
+        env.DB.prepare(
+          `INSERT INTO task_templates (
+             id, event_id, name, target_type, task_type, impact, evidence_mode,
+             due_anchor, due_offset_minutes, auto_assign_on_acceptance, status
+           ) VALUES (?, ?, 'Late claim acceptance task', 'speaker', 'checklist',
+                     'high', 'checkbox', 'acceptance', 60, 1, 'active')`,
+        ).bind(acceptanceTemplateId, viewer.eventId),
+        env.DB.prepare(
+          `INSERT INTO task_template_dependencies (
+             template_id, depends_on_template_id, created_at
+           ) VALUES (?, ?, unixepoch())`,
+        ).bind(acceptanceTemplateId, prerequisiteTemplateId),
         env.DB.prepare(
           `
           UPDATE submissions SET status = 'accepted', updated_at = unixepoch()
            WHERE id = ? AND status = 'submitted'
         `,
         ).bind(submissionId),
+        env.DB.prepare(
+          `INSERT INTO submission_decisions (
+             id, event_id, submission_id, revision_number, status, decision,
+             decided_by_person_id, notification_feedback_json,
+             effect_preview_json, idempotency_key, published_at
+           ) VALUES (?, ?, ?, 1, 'published', 'accepted', ?, '[]', '{}', ?,
+                     unixepoch())`,
+        ).bind(
+          decisionId,
+          viewer.eventId,
+          submissionId,
+          viewer.personId,
+          `accepted-test:${decisionId}`,
+        ),
         env.DB.prepare(
           `
           INSERT INTO sessions (
@@ -378,6 +904,49 @@ describe("Submissions D1 vertical slice", () => {
           .bind(viewer.eventId, coSpeaker.personId)
           .first(),
       ).resolves.toEqual({ role: "submitter" });
+      const acceptanceTasks = await env.DB.prepare(
+        `SELECT task.template_id AS templateId, task.status,
+                EXISTS (
+                  SELECT 1 FROM task_instance_dependencies dependency
+                  JOIN task_instances prerequisite
+                    ON prerequisite.id = dependency.depends_on_task_id
+                   WHERE dependency.task_id = task.id
+                     AND prerequisite.template_id = ?
+                ) AS dependsOnProfile
+           FROM task_instances task
+          WHERE task.event_id = ? AND task.target_type = 'speaker'
+            AND task.target_id = ?
+            AND task.template_id IN (?, ?)
+          ORDER BY task.template_id`,
+      )
+        .bind(
+          prerequisiteTemplateId,
+          viewer.eventId,
+          coSpeaker.personId,
+          prerequisiteTemplateId,
+          acceptanceTemplateId,
+        )
+        .all<{
+          templateId: string;
+          status: string;
+          dependsOnProfile: number;
+        }>();
+      expect(acceptanceTasks.results).toEqual(
+        [
+          {
+            templateId: prerequisiteTemplateId,
+            status: "not_started",
+            dependsOnProfile: 0,
+          },
+          {
+            templateId: acceptanceTemplateId,
+            status: "blocked",
+            dependsOnProfile: 1,
+          },
+        ].sort((left, right) =>
+          left.templateId.localeCompare(right.templateId),
+        ),
+      );
 
       const lockedSpeakerId = crypto.randomUUID();
       const lockedSpeakerEmail = `locked-speaker-${crypto.randomUUID()}@example.com`;

@@ -36,6 +36,7 @@ import {
   TurnstileRejectedError,
   TurnstileUnavailableError,
 } from "~/platform/http/public-abuse-protection.server";
+import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
 
 export type ActionResult = {
   ok: boolean;
@@ -87,14 +88,20 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   await ensureDemoSubmissionForm(env);
   const service = new SubmissionService(env);
   const url = new URL(request.url);
+  const claimToken = url.searchParams.get("claim");
+  const claimSpeakerId = url.searchParams.get("speaker");
   try {
+    const claimedSpeakerId = url.searchParams.get("claimedSpeaker");
     const portal = await service.getApplicantPortal(
       slugFrom(params),
       request,
       url.searchParams.get("draft"),
+      claimToken && claimSpeakerId
+        ? { speakerId: claimSpeakerId, rawToken: claimToken }
+        : claimedSpeakerId
+          ? { speakerId: claimedSpeakerId }
+          : undefined,
     );
-    const claimToken = url.searchParams.get("claim");
-    const claimSpeakerId = url.searchParams.get("speaker");
     const showLanding = !portal.applicant && !claimToken && !claimSpeakerId;
     const publishedProgramme = showLanding
       ? await new PublicProgrammeService(env).getPublishedLandingSummary(
@@ -201,6 +208,15 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     if (error instanceof PublicFormUnavailableError) {
       return data({ unavailable: error.message }, { status: 410 });
     }
+    if (
+      error instanceof SubmissionStateError &&
+      (claimToken || claimSpeakerId)
+    ) {
+      return data(
+        { unavailable: "This co-speaker invitation is unavailable." },
+        { status: 404 },
+      );
+    }
     throw error;
   }
 }
@@ -290,7 +306,6 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   await ensureDemoSubmissionForm(env);
   const service = new SubmissionService(env);
   const slug = slugFrom(params);
-  const form = await service.getPublicForm(slug);
   const formData = await request.formData();
   const intent = String(formData.get("_intent") ?? "");
   if (
@@ -329,6 +344,65 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     assertApplicationNoticeConfiguration(env);
   }
   try {
+    const actionUrl = new URL(request.url);
+    const claimedSpeakerId = actionUrl.searchParams.get("claimedSpeaker");
+    if (intent === "claim_token") {
+      const rejectedOrigin = rejectCrossOriginBrowserMutation(request);
+      if (rejectedOrigin) return rejectedOrigin;
+      const speakerId = String(
+        formData.get("speakerId") ??
+          actionUrl.searchParams.get("speaker") ??
+          "",
+      );
+      const rawToken = String(
+        formData.get("claimToken") ?? actionUrl.searchParams.get("claim") ?? "",
+      );
+      const result = await service.claimCoSpeakerToken(
+        slug,
+        speakerId,
+        rawToken,
+      );
+      const query = await applicationNoticeQuery(env, {
+        slug,
+        kind: "claimed",
+        submissionId: null,
+        webhookWarning: false,
+      });
+      query.set("claimedSpeaker", speakerId);
+      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`, {
+        headers: { "set-cookie": result.cookie },
+      });
+    }
+    if (intent === "update_profile" && claimedSpeakerId) {
+      await service.updateClaimedCoSpeakerProfile(
+        slug,
+        claimedSpeakerId,
+        request,
+        {
+          revision: formData.get("revision"),
+          name: formData.get("name"),
+          biography: formData.get("biography"),
+        },
+      );
+      const query = await applicationNoticeQuery(env, {
+        slug,
+        kind: "profile_updated",
+        submissionId: null,
+        webhookWarning: false,
+      });
+      query.set("claimedSpeaker", claimedSpeakerId);
+      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
+    }
+    const claimedSignOutContext =
+      intent === "sign_out" && claimedSpeakerId
+        ? await service.requireClaimedCoSpeakerContext(
+            slug,
+            claimedSpeakerId,
+            request,
+          )
+        : null;
+    const form =
+      claimedSignOutContext?.form ?? (await service.getPublicForm(slug));
     if (intent === "request_code") {
       const email = String(formData.get("email") ?? "");
       await enforcePublicAbuseProtection({
@@ -379,7 +453,9 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         const applicantCookie = await service.applicants.signOut(request, form);
         const result = await signOutSession(env, request);
         if (!result.ok) return result;
-        const returnTo = `/apply/${encodeURIComponent(slug)}`;
+        const returnTo = claimedSignOutContext
+          ? `/apply/${encodeURIComponent(slug)}?${new URLSearchParams({ claimedSpeaker: claimedSpeakerId! })}`
+          : `/apply/${encodeURIComponent(slug)}`;
         const headers = new Headers(result.headers);
         headers.append("set-cookie", applicantCookie);
         return redirect(`/sign-in?${new URLSearchParams({ returnTo })}`, {
@@ -387,11 +463,14 @@ export async function action({ request, context, params }: Route.ActionArgs) {
           headers,
         });
       }
-      return redirect(`/apply/${encodeURIComponent(slug)}`, {
-        headers: {
-          "set-cookie": await service.applicants.signOut(request, form),
+      return redirect(
+        claimedSignOutContext ? "/" : `/apply/${encodeURIComponent(slug)}`,
+        {
+          headers: {
+            "set-cookie": await service.applicants.signOut(request, form),
+          },
         },
-      });
+      );
     }
     if (intent === "start_anonymous") {
       await enforcePublicAbuseProtection({
@@ -424,32 +503,6 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         headers: { "set-cookie": result.cookie },
       });
     }
-    if (intent === "claim_token") {
-      const actionUrl = new URL(request.url);
-      const speakerId = String(
-        formData.get("speakerId") ??
-          actionUrl.searchParams.get("speaker") ??
-          "",
-      );
-      const rawToken = String(
-        formData.get("claimToken") ?? actionUrl.searchParams.get("claim") ?? "",
-      );
-      const result = await service.claimCoSpeakerToken(
-        slug,
-        speakerId,
-        rawToken,
-      );
-      const query = await applicationNoticeQuery(env, {
-        slug,
-        kind: "claimed",
-        submissionId: null,
-        webhookWarning: false,
-      });
-      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`, {
-        headers: { "set-cookie": result.cookie },
-      });
-    }
-
     const applicant = await service.applicants.get(request, form);
     if (!applicant)
       throw new Response("Verify your email before changing an application.", {

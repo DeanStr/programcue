@@ -116,10 +116,46 @@ export class ApiParticipantResourceReader {
                     form.id AS formId, form.name AS formName,
                     form.public_slug AS formSlug, form.kind AS formKind,
                     form.status AS formStatus, version.schema_json AS schemaJson,
+                    form.max_speakers AS maxSpeakers,
                     submission.title, submission.category, submission.format,
                     submission.status, submission.revision,
                     submission.answers_json AS answersJson,
                     submission.submitted_snapshot_json AS submittedSnapshotJson,
+                    EXISTS (
+                      SELECT 1 FROM sessions published_session
+                       WHERE published_session.source_submission_id = submission.id
+                         AND published_session.event_id = submission.event_id
+                         AND published_session.status = 'published'
+                    ) AS speakerListPublished,
+                    (
+                      SELECT COUNT(*) = 1
+                        FROM sessions editable_session
+                       WHERE editable_session.source_submission_id = submission.id
+                         AND editable_session.event_id = submission.event_id
+                         AND editable_session.status IN ('unscheduled','scheduled')
+                    ) AND (
+                      SELECT COUNT(*) = 1
+                        FROM sessions derived_session
+                       WHERE derived_session.source_submission_id = submission.id
+                         AND derived_session.event_id = submission.event_id
+                    ) AS speakerListEditable,
+                    (
+                      SELECT json_group_array(json(ordered_speaker.value))
+                        FROM (
+                          SELECT json_object(
+                            'id', speaker.id,
+                            'name', speaker.display_name,
+                            'email', speaker.email,
+                            'roleLabel', speaker.role_label,
+                            'invitationStatus', speaker.invitation_status,
+                            'isPrimary', speaker.is_primary
+                          ) AS value
+                            FROM submission_speakers speaker
+                           WHERE speaker.submission_id = submission.id
+                             AND speaker.event_id = submission.event_id
+                           ORDER BY speaker.position
+                        ) ordered_speaker
+                    ) AS speakersJson,
                     submission.submitter_person_id = ? AS primarySubmitter,
                     submission.submitted_at AS submittedAt,
                     submission.withdrawn_at AS withdrawnAt,
@@ -323,6 +359,8 @@ export class ApiParticipantResourceReader {
     }
     if (resource === "submissions") {
       result.primarySubmitter = Boolean(result.primarySubmitter);
+      result.speakerListPublished = Boolean(result.speakerListPublished);
+      result.speakerListEditable = Boolean(result.speakerListEditable);
       result.schema = parseJson(
         result.schemaJson,
         `Submission ${String(result.id)} form schema`,
@@ -335,9 +373,35 @@ export class ApiParticipantResourceReader {
         result.submittedSnapshotJson,
         `Submission ${String(result.id)} submitted snapshot`,
       );
+      const speakers = parseJson(
+        result.speakersJson,
+        `Submission ${String(result.id)} current speakers`,
+      );
+      if (!Array.isArray(speakers)) {
+        throw new Error(
+          `Submission ${String(result.id)} current speakers must be a JSON array.`,
+        );
+      }
+      result.speakers = speakers.map((speaker) => {
+        if (
+          !speaker ||
+          typeof speaker !== "object" ||
+          Array.isArray(speaker) ||
+          typeof (speaker as Record<string, unknown>).isPrimary !== "number"
+        ) {
+          throw new Error(
+            `Submission ${String(result.id)} contains an invalid current speaker relationship.`,
+          );
+        }
+        return {
+          ...(speaker as Record<string, unknown>),
+          isPrimary: Boolean((speaker as Record<string, unknown>).isPrimary),
+        };
+      });
       delete result.answersJson;
       delete result.schemaJson;
       delete result.submittedSnapshotJson;
+      delete result.speakersJson;
     }
     if (resource === "tasks") {
       result.evidence = parseJson(

@@ -88,6 +88,10 @@ export function buildParticipantRetentionFinalisationStatements(
       viewer.eventId,
     ),
     guarded(
+      `DELETE FROM ai_review_assessments WHERE event_id = ?`,
+      viewer.eventId,
+    ),
+    guarded(
       `UPDATE submission_decisions
           SET rationale = NULL, notification_feedback_json = '[]',
               effect_preview_json = ?, idempotency_key = NULL

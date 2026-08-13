@@ -91,12 +91,20 @@ export function acceptanceTaskPlanBindings(input: {
 
 export function buildAcceptanceTaskPlanStatements(input: {
   env: CloudflareEnvironment;
-  viewer: Viewer;
+  viewer: Pick<Viewer, "organisationId" | "eventId" | "personId">;
   submissionId: string;
   sessionId: string;
   decisionId: string;
+  materializationOperationId?: string;
 }) {
-  const { env, viewer, submissionId, sessionId, decisionId } = input;
+  const {
+    env,
+    viewer,
+    submissionId,
+    sessionId,
+    decisionId,
+    materializationOperationId = decisionId,
+  } = input;
   const bindings = acceptanceTaskPlanBindings({
     eventId: viewer.eventId,
     submissionId,
@@ -125,9 +133,16 @@ export function buildAcceptanceTaskPlanStatements(input: {
                SELECT 1 FROM task_template_dependencies dependency
                 WHERE dependency.template_id = template.id
              ) THEN 'blocked' ELSE 'on_track' END,
-             0, 1, scope.decision_id,
+             0, 1, ?,
              CASE template.due_anchor
-               WHEN 'acceptance' THEN unixepoch() + template.due_offset_minutes * 60
+               WHEN 'acceptance' THEN (
+                 SELECT decision.published_at
+                   FROM submission_decisions decision
+                  WHERE decision.id = scope.decision_id
+                    AND decision.event_id = scope.event_id
+                    AND decision.status = 'published'
+                    AND decision.decision = 'accepted'
+               ) + template.due_offset_minutes * 60
                WHEN 'fixed' THEN template.fixed_due_at
                ELSE NULL
              END,
@@ -149,7 +164,7 @@ export function buildAcceptanceTaskPlanStatements(input: {
       ON CONFLICT(event_id, template_id, target_type, target_id)
         WHERE template_id IS NOT NULL DO NOTHING
     `,
-    ).bind(...bindings),
+    ).bind(...bindings, materializationOperationId),
     env.DB.prepare(
       `
       ${acceptanceTaskPlanCteSql}
@@ -214,9 +229,9 @@ export function buildAcceptanceTaskPlanStatements(input: {
              END,
              updated_at = unixepoch()
        WHERE task.event_id = (SELECT event_id FROM acceptance_scope)
-         AND task.last_operation_id = (SELECT decision_id FROM acceptance_scope)
+         AND task.last_operation_id = ?
     `,
-    ).bind(...bindings),
+    ).bind(...bindings, materializationOperationId),
     env.DB.prepare(
       `
       ${acceptanceTaskPlanCteSql}
@@ -237,7 +252,7 @@ export function buildAcceptanceTaskPlanStatements(input: {
         FROM task_instances task
         CROSS JOIN acceptance_scope scope
        WHERE task.event_id = scope.event_id
-         AND task.last_operation_id = scope.decision_id
+         AND task.last_operation_id = ?
          AND NOT EXISTS (
            SELECT 1 FROM audit_events existing
             WHERE existing.event_id = scope.event_id
@@ -247,7 +262,12 @@ export function buildAcceptanceTaskPlanStatements(input: {
               AND json_extract(existing.metadata_json, '$.decisionId') = scope.decision_id
          )
     `,
-    ).bind(...bindings, viewer.organisationId, viewer.personId),
+    ).bind(
+      ...bindings,
+      viewer.organisationId,
+      viewer.personId,
+      materializationOperationId,
+    ),
   ];
 }
 
@@ -338,6 +358,32 @@ export function buildDecisionStatements(input: {
          WHERE id = ? AND event_id = ? AND revision = ?
            AND status IN ('submitted','assigned','in_review','decision_ready')
            AND (
+             ? IS NULL
+             OR EXISTS (
+               SELECT 1
+                 FROM evaluator_assignments evidence_assignment
+                 JOIN reviews evidence_review
+                   ON evidence_review.assignment_id = evidence_assignment.id
+                  AND evidence_review.event_id = evidence_assignment.event_id
+                  AND evidence_review.status IN ('submitted','locked')
+                 JOIN evaluation_rounds evidence_round
+                   ON evidence_round.id = evidence_assignment.round_id
+                  AND evidence_round.event_id = evidence_assignment.event_id
+                 JOIN evaluation_plans evidence_plan
+                   ON evidence_plan.id = evidence_round.plan_id
+                  AND evidence_plan.event_id = evidence_round.event_id
+                WHERE evidence_assignment.event_id = submissions.event_id
+                  AND evidence_assignment.submission_id = submissions.id
+                  AND evidence_assignment.round_id = ?
+                  AND evidence_round.status IN ('active','closed')
+                  AND evidence_plan.status IN ('active','closed')
+                  AND (SELECT COUNT(*)
+                         FROM evaluation_plans current_plan
+                        WHERE current_plan.event_id = submissions.event_id
+                          AND current_plan.status <> 'archived') = 1
+             )
+           )
+           AND (
              ? <> 'published' OR ? <> 'accepted'
              OR ((${speakerSetGuard}) AND (${acceptanceTaskPlanGuardSql}))
            )
@@ -374,6 +420,8 @@ export function buildDecisionStatements(input: {
       submission.id,
       viewer.eventId,
       submission.revision,
+      roundId,
+      roundId,
       status,
       parsed.decision,
       ...speakerSetBindings,
@@ -408,6 +456,17 @@ export function buildDecisionStatements(input: {
          WHERE event_id = ? AND submission_id = ?
            AND status IN ('assigned','in_progress','reopened')
            AND ? = 'published'
+           AND EXISTS (
+             SELECT 1
+               FROM evaluation_rounds current_round
+               JOIN evaluation_plans current_plan
+                 ON current_plan.id = current_round.plan_id
+                AND current_plan.event_id = current_round.event_id
+              WHERE current_round.id = evaluator_assignments.round_id
+                AND current_round.event_id = evaluator_assignments.event_id
+                AND current_round.status <> 'archived'
+                AND current_plan.status <> 'archived'
+           )
            AND EXISTS (
              SELECT 1 FROM submissions
               WHERE id = ? AND event_id = ? AND last_operation_id = ?

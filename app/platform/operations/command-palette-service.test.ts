@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
@@ -185,14 +186,17 @@ describe("command palette record search", () => {
       scope: "event",
     });
 
-    expect(records.filter((record) => record.id === operationId)).toHaveLength(1);
+    expect(records.filter((record) => record.id === operationId)).toHaveLength(
+      1,
+    );
     await expect(
-      new CommandPaletteService(
-        env as unknown as CloudflareEnvironment,
-      ).search(viewer, {
-        query: `communication ${secondCommunicationId}`,
-        scope: "event",
-      }),
+      new CommandPaletteService(env as unknown as CloudflareEnvironment).search(
+        viewer,
+        {
+          query: `communication ${secondCommunicationId}`,
+          scope: "event",
+        },
+      ),
     ).resolves.toContainEqual(expect.objectContaining({ id: operationId }));
   });
 
@@ -400,5 +404,113 @@ describe("command palette record search", () => {
     );
 
     expect(records).toEqual([]);
+  });
+
+  it("returns only current workbench assignments to committee chairs", async () => {
+    await ensureDemoEvaluationData(env as unknown as CloudflareEnvironment);
+    const token = crypto.randomUUID();
+    const archivedPlanId = `command-archived-plan-${token}`;
+    const archivedRoundId = `command-archived-round-${token}`;
+    const archivedAssignmentId = `command-archived-assignment-${token}`;
+    const archivedAuditId = `command-archived-audit-${token}`;
+    const currentAuditId = `command-current-audit-${token}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO evaluation_plans (
+           id,event_id,name,status,blinded_reviewing,decision_role,revision,
+           created_by_person_id
+         ) VALUES (?,?,'Archived command cycle','archived',0,
+                   'administrator',1,?)`,
+      ).bind(archivedPlanId, viewer.eventId, viewer.personId),
+      env.DB.prepare(
+        `INSERT INTO evaluation_rounds (
+           id,event_id,plan_id,round_number,name,status,blinded_reviewing,
+           scorecard_id,scorecard_version,advancement_rule_json,revision
+         ) VALUES (?,?,?,1,'Archived command round','archived',0,?,1,'{}',1)`,
+      ).bind(archivedRoundId, viewer.eventId, archivedPlanId, archivedRoundId),
+      env.DB.prepare(
+        `INSERT INTO evaluation_round_reviewers (
+           id,event_id,round_id,person_id,added_by_person_id
+         ) VALUES (?,?,?,?,?)`,
+      ).bind(
+        `command-archived-pool-${token}`,
+        viewer.eventId,
+        archivedRoundId,
+        "person-demo-evaluator",
+        viewer.personId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO evaluator_assignments (
+           id,event_id,round_id,submission_id,evaluator_person_id,status
+         ) VALUES (?,?,?,'demo-evaluation-submission-calm',?,'assigned')`,
+      ).bind(
+        archivedAssignmentId,
+        viewer.eventId,
+        archivedRoundId,
+        "person-demo-evaluator",
+      ),
+      env.DB.prepare(
+        `INSERT INTO audit_events (
+           id,organisation_id,event_id,actor_person_id,action,entity_type,
+           entity_id,created_at
+         ) VALUES (?,?,?,?,'evaluation.assignment.created',
+                   'evaluator_assignment',?,2000000102)`,
+      ).bind(
+        archivedAuditId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        archivedAssignmentId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO audit_events (
+           id,organisation_id,event_id,actor_person_id,action,entity_type,
+           entity_id,created_at
+         ) VALUES (?,?,?,?,'evaluation.assignment.created',
+                   'evaluator_assignment','demo-evaluation-assignment-1',
+                   2000000101)`,
+      ).bind(
+        currentAuditId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+      ),
+    ]);
+    const committeeChair: Viewer = {
+      ...viewer,
+      personId: "person-demo-evaluator",
+      name: "Jordan Lee",
+      email: "jordan.evaluator@example.com",
+      role: "committee_chair",
+    };
+    const service = new CommandPaletteService(
+      env as unknown as CloudflareEnvironment,
+    );
+
+    const searchResults = await service.search(committeeChair, {
+      query: "calm",
+      scope: "event",
+    });
+    expect(searchResults).toContainEqual(
+      expect.objectContaining({
+        href: "/review/workbench?assignment=demo-evaluation-assignment-1",
+      }),
+    );
+    expect(searchResults).not.toContainEqual(
+      expect.objectContaining({
+        href: `/review/workbench?assignment=${archivedAssignmentId}`,
+      }),
+    );
+
+    const recentResults = await service.recent(committeeChair);
+    expect(recentResults).toContainEqual(
+      expect.objectContaining({
+        id: currentAuditId,
+        href: "/review/workbench?assignment=demo-evaluation-assignment-1",
+      }),
+    );
+    expect(recentResults.map((record) => record.id)).not.toContain(
+      archivedAuditId,
+    );
   });
 });

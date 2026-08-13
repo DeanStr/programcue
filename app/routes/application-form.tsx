@@ -1,6 +1,12 @@
 import type { CSSProperties } from "react";
 import { Plus } from "lucide-react";
-import { Form, Link, useActionData, useNavigation } from "react-router";
+import {
+  Form,
+  Link,
+  useActionData,
+  useLocation,
+  useNavigation,
+} from "react-router";
 
 import type { Route } from "./+types/application-form";
 import type { action, loader, ActionResult } from "./application-form.server";
@@ -34,6 +40,16 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   }
   return [{ title: "Call for Speakers · Program Cue" }];
 };
+
+export function applicationDraftHref(
+  draftId: string,
+  claimedSpeakerId: string | null,
+) {
+  return `?${new URLSearchParams({
+    ...(claimedSpeakerId ? { claimedSpeaker: claimedSpeakerId } : {}),
+    draft: draftId,
+  })}`;
+}
 
 function AccessPanel({
   loaderData,
@@ -325,8 +341,10 @@ function AnonymousVerificationPanel({
 
 function SpeakerProfilePanel({
   profile,
+  action,
 }: {
   profile: { name: string; biography: string; revision: number };
+  action?: string;
 }) {
   const navigation = useNavigation();
   return (
@@ -335,7 +353,7 @@ function SpeakerProfilePanel({
         <strong>Your claimed speaker profile</strong>{" "}
         <span className="subtle">Edit the biography you own</span>
       </summary>
-      <Form method="post" className="stack mt">
+      <Form method="post" action={action} className="stack mt">
         <input type="hidden" name="_intent" value="update_profile" />
         <input type="hidden" name="revision" value={profile.revision} />
         <label className="label">
@@ -444,6 +462,7 @@ function ClaimPanel({
 export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>() as ActionResult | undefined;
   const navigation = useNavigation();
+  const location = useLocation();
   if ("unavailable" in loaderData)
     return (
       <main id="main" className="design-board">
@@ -471,6 +490,18 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
     featuredSpeakers,
     programmeUrl,
   } = loaderData;
+  const claimedSpeakerId = new URLSearchParams(location.search).get(
+    "claimedSpeaker",
+  );
+  const claimScopedAction = claimedSpeakerId
+    ? `?${new URLSearchParams({ claimedSpeaker: claimedSpeakerId })}`
+    : undefined;
+  const claimScopedPortalPath = claimedSpeakerId
+    ? `/apply/${encodeURIComponent(form.publicSlug)}?${new URLSearchParams({ claimedSpeaker: claimedSpeakerId })}`
+    : `/apply/${encodeURIComponent(form.publicSlug)}`;
+  const historicalClaimPortal = Boolean(
+    claimedSpeakerId && form.status !== "published",
+  );
 
   if (!claimRequested && !applicant) {
     return (
@@ -537,7 +568,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
         <Link
           aria-label={`${form.eventName} application home`}
           className="brand"
-          to={`/apply/${form.publicSlug}`}
+          to={claimScopedPortalPath}
           style={{ color: "var(--ink)", padding: 0 }}
         >
           {form.participantLogoUrl ? (
@@ -564,7 +595,11 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
           </a>
         ) : null}
         {applicant ? (
-          <Form method="post" style={{ marginLeft: "auto" }}>
+          <Form
+            method="post"
+            action={claimScopedAction}
+            style={{ marginLeft: "auto" }}
+          >
             <input type="hidden" name="_intent" value="sign_out" />
             <button type="submit" className="btn">
               {applicant.verified
@@ -611,8 +646,10 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                     {form.eventName} · {form.version.schema.introduction}
                   </p>
                 </div>
-                {applicant.verified && !applicant.claimOnly ? (
-                  <Form method="post">
+                {applicant.verified &&
+                !applicant.claimOnly &&
+                !historicalClaimPortal ? (
+                  <Form method="post" action={claimScopedAction}>
                     <input type="hidden" name="_intent" value="create_draft" />
                     <input
                       type="hidden"
@@ -633,11 +670,17 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                   <Link
                     className="btn primary"
                     to={`/sign-in?${new URLSearchParams({
-                      returnTo: `/apply/${encodeURIComponent(form.publicSlug)}`,
+                      returnTo: claimScopedPortalPath,
                     })}`}
                   >
-                    Sign in to apply
+                    {historicalClaimPortal
+                      ? "Sign in to view applications"
+                      : "Sign in to apply"}
                   </Link>
+                ) : historicalClaimPortal ? (
+                  <span className="help right">
+                    Application history is read-only.
+                  </span>
                 ) : (
                   <span className="help right">
                     Verify your email to start another application.
@@ -648,8 +691,10 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                 <div className="validation-item warn mt">
                   <strong>Notice</strong>
                   <span>
-                    {availability.reason} Existing drafts remain available to
-                    view and save.
+                    {availability.reason}{" "}
+                    {historicalClaimPortal
+                      ? "Existing applications remain available to view."
+                      : "Existing drafts remain available to view and save."}
                   </span>
                 </div>
               ) : form.closesAt ? (
@@ -688,9 +733,12 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
               />
             ) : null}
             {speakerProfile ? (
-              <SpeakerProfilePanel profile={speakerProfile} />
+              <SpeakerProfilePanel
+                profile={speakerProfile}
+                action={claimScopedAction}
+              />
             ) : null}
-            {invitations.length ? (
+            {invitations.length && !historicalClaimPortal ? (
               <section className="card pad mb">
                 <div className="card-title">
                   <div>
@@ -713,7 +761,11 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                       <strong>{invitation.submissionTitle}</strong>
                       <small>Invited as {invitation.displayName}</small>
                     </span>
-                    <Form method="post" className="right">
+                    <Form
+                      method="post"
+                      action={claimScopedAction}
+                      className="right"
+                    >
                       <input
                         type="hidden"
                         name="_intent"
@@ -743,7 +795,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                     {drafts.map((draft) => (
                       <Link
                         className={`queue-card${selected?.id === draft.id ? " active" : ""}`}
-                        to={`?draft=${encodeURIComponent(draft.id)}`}
+                        to={applicationDraftHref(draft.id, claimedSpeakerId)}
                         key={draft.id}
                       >
                         <span
@@ -763,7 +815,9 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                   <p className="subtle">
                     {applicant.claimOnly
                       ? "Your claim link grants access only to your speaker profile. Sign in to view or manage applications."
-                      : "Create a draft to begin. You can maintain more than one application."}
+                      : historicalClaimPortal
+                        ? "No applications are available for this account on the closed form."
+                        : "Create a draft to begin. You can maintain more than one application."}
                   </p>
                 )}
               </aside>
@@ -808,6 +862,9 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                     maxSpeakers={selectedForm.maxSpeakers}
                     errors={actionData?.errors}
                     canSubmit={availability.accepting && applicant.verified}
+                    forceReadOnly={historicalClaimPortal}
+                    readOnlyNotice="This application belongs to a closed form and is available for reference only."
+                    action={claimScopedAction}
                     timezone={form.eventTimezone}
                   />
                 ) : (
@@ -818,24 +875,32 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                     <h2>
                       {applicant.claimOnly
                         ? "Sign in to manage applications"
-                        : "Create your first application"}
+                        : historicalClaimPortal
+                          ? "No applications to show"
+                          : "Create your first application"}
                     </h2>
                     <p className="subtle">
                       {applicant.claimOnly
                         ? "A co-speaker claim link grants access to your speaker profile only."
-                        : "Drafts are private and saved against the current published form version."}
+                        : historicalClaimPortal
+                          ? "This closed form remains available only for claim-scoped profile and application history."
+                          : "Drafts are private and saved against the current published form version."}
                     </p>
                     {applicant.claimOnly ? (
                       <Link
                         className="btn primary"
                         to={`/sign-in?${new URLSearchParams({
-                          returnTo: `/apply/${encodeURIComponent(form.publicSlug)}`,
+                          returnTo: claimScopedPortalPath,
                         })}`}
                       >
                         Continue to sign in
                       </Link>
+                    ) : historicalClaimPortal ? (
+                      <p className="help">
+                        This form is closed to new applications.
+                      </p>
                     ) : (
-                      <Form method="post">
+                      <Form method="post" action={claimScopedAction}>
                         <input
                           type="hidden"
                           name="_intent"

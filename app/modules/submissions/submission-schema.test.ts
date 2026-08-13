@@ -168,6 +168,10 @@ describe("submission form rules", () => {
     )!.options = [];
     expect(saveFormSchema.safeParse(emptyTracks).success).toBe(false);
 
+    expect(
+      saveFormSchema.safeParse({ ...input, maxSpeakers: 21 }).success,
+    ).toBe(false);
+
     const conditionalDirectFormat = {
       ...structuredClone(input),
       kind: "direct_session" as const,

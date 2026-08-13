@@ -193,6 +193,36 @@ export class OperationService {
     );
   }
 
+  private async isCoSpeakerInvitationOperation(
+    viewer: Pick<Viewer, "organisationId" | "eventId">,
+    operationId: string,
+    payloadJson: string,
+  ) {
+    const row = await this.env.DB.prepare(
+      `SELECT 1 AS coSpeakerInvitation
+         FROM communications communication
+         JOIN events event
+           ON event.id = communication.event_id
+          AND event.organisation_id = ?
+         JOIN communication_deliveries delivery
+           ON delivery.communication_id = communication.id
+          AND delivery.event_id = communication.event_id
+         JOIN submission_speakers speaker
+           ON speaker.id = delivery.source_id
+          AND speaker.event_id = delivery.event_id
+        WHERE communication.operation_id = ? AND communication.event_id = ?
+          AND communication.id = json_extract(?, '$.communicationId')
+          AND json_extract(communication.audience_json, '$.type') =
+              'co_speaker_invitation'
+          AND json_extract(communication.audience_json, '$.speakerId') =
+              speaker.id
+        LIMIT 1`,
+    )
+      .bind(viewer.organisationId, operationId, viewer.eventId, payloadJson)
+      .first<{ coSpeakerInvitation: number }>();
+    return Boolean(row);
+  }
+
   async retry(viewer: Viewer, operationId: string) {
     const operation = await this.env.DB.prepare(
       `
@@ -214,6 +244,18 @@ export class OperationService {
         updatedAt: number;
       }>();
     if (!operation) throw new OperationNotFoundError();
+    if (
+      operation.type === "communication.send" &&
+      (await this.isCoSpeakerInvitationOperation(
+        viewer,
+        operation.id,
+        operation.payloadJson,
+      ))
+    ) {
+      throw new OperationStateError(
+        "Co-speaker invitation operations cannot use generic retry. Resend the invitation from the application participant list instead.",
+      );
+    }
     if (!retryableOperationTypes.has(operation.type)) {
       throw new OperationStateError(
         `Operation type ${operation.type} has no retryable Queue consumer. Start a new preview from its owning workflow instead.`,
