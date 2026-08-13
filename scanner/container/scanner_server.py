@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import ssl
 import subprocess
 import tempfile
 import threading
@@ -24,6 +25,7 @@ SCAN_TIMEOUT_SECONDS = 720
 CHUNK_BYTES = 1024 * 1024
 SCAN_DIRECTORY = Path("/tmp/program-cue-scans")
 READINESS_FILE = Path("/tmp/program-cue-scanner-ready")
+INTERCEPTION_CA = Path("/etc/cloudflare/certs/cloudflare-containers-ca.crt")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$")
 SCAN_LOCK = threading.BoundedSemaphore(1)
 
@@ -57,6 +59,20 @@ def wait_for_clamav(timeout_seconds: float = 300) -> bool:
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
         raise ObjectFetchError("R2 object downloads must not redirect.")
+
+
+def build_object_opener() -> urllib.request.OpenerDirector:
+    if not INTERCEPTION_CA.is_file():
+        raise ObjectFetchError("The trusted R2 proxy CA is unavailable.")
+    context = ssl.create_default_context()
+    try:
+        context.load_verify_locations(cafile=str(INTERCEPTION_CA))
+    except (OSError, ssl.SSLError) as error:
+        raise ObjectFetchError("The trusted R2 proxy CA could not be loaded.") from error
+    return urllib.request.build_opener(
+        NoRedirect(),
+        urllib.request.HTTPSHandler(context=context),
+    )
 
 
 def _required_string(value: Any, name: str, maximum: int) -> str:
@@ -144,7 +160,7 @@ def download_verified_object(
             "X-Program-Cue-Expected-Etag": expected_etag,
         },
     )
-    opener = urllib.request.build_opener(NoRedirect())
+    opener = build_object_opener()
     started = time.monotonic()
     try:
         with opener.open(request, timeout=60) as response:

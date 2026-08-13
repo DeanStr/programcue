@@ -110,7 +110,7 @@ class ScannerServerContractTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             destination = pathlib.Path(directory) / "object"
-            with mock.patch.object(scanner.urllib.request, "build_opener", return_value=opener):
+            with mock.patch.object(scanner, "build_object_opener", return_value=opener):
                 self.assertEqual(
                     scanner.download_verified_object(object_input, destination),
                     4,
@@ -120,6 +120,21 @@ class ScannerServerContractTests(unittest.TestCase):
             self.assertEqual(
                 request.get_header("X-program-cue-expected-etag"), '"etag-1"'
             )
+
+    def test_object_opener_fails_closed_without_interception_ca(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            mock.patch.object(
+                scanner,
+                "INTERCEPTION_CA",
+                pathlib.Path(directory) / "missing-ca.crt",
+            ),
+        ):
+            with self.assertRaisesRegex(
+                scanner.ObjectFetchError,
+                "trusted R2 proxy CA is unavailable",
+            ):
+                scanner.build_object_opener()
 
     def test_ping_is_liveness_while_health_is_readiness(self):
         handler = object.__new__(scanner.ScannerHandler)
