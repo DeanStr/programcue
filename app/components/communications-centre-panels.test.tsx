@@ -104,6 +104,22 @@ describe("communications presentation", () => {
           activeConnectionId: "google-connection",
           activeProvider: "google",
         },
+        {
+          sessionId: "cancelled-session",
+          sessionTitle: "Cancelled calendar provider acceptance",
+          personId: "speaker",
+          personName: "Test Speaker",
+          email: "speaker@example.com",
+          invitationId: "cancelled-invitation",
+          method: "CANCEL",
+          invitationStatus: "cancelled",
+          sequenceNumber: 2,
+          invitationConnectionId: "google-connection",
+          invitationProvider: "google",
+          rsvpStatus: null,
+          activeConnectionId: "google-connection",
+          activeProvider: "google",
+        },
       ],
       eventTimezone: "UTC",
     } as unknown as CommunicationsCentreLoaderData;
@@ -129,5 +145,7 @@ describe("communications presentation", () => {
     expect(markup).toContain("Send to Microsoft");
     expect(markup).toContain('value="google-connection"');
     expect(markup).toContain('value="microsoft-connection"');
+    expect(markup).not.toContain("Update Google");
+    expect(markup).not.toContain("Update Microsoft");
   });
 });

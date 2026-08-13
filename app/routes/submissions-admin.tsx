@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 
 import type { Route } from "./+types/submissions-admin";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
+import { EvaluationStateError } from "~/modules/evaluations/evaluation-errors";
 import { PersonDuplicateService } from "~/modules/people/person-duplicate-service.server";
 import { SubmissionDataGrid } from "~/components/submission-data-grid";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
@@ -297,7 +298,8 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
     if (
       error instanceof SubmissionStateError ||
-      error instanceof SubmissionRevisionConflictError
+      error instanceof SubmissionRevisionConflictError ||
+      error instanceof EvaluationStateError
     ) {
       return data<SubmissionsAdminActionResult>(
         { ok: false, message: error.message },

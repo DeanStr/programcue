@@ -1,9 +1,11 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { currentEventCookie } from "~/platform/auth/current-event.server";
+import { EvaluationStateError } from "~/modules/evaluations/evaluation-errors";
+import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { action } from "./submissions-admin";
 
@@ -32,6 +34,7 @@ function adminRequest(body: URLSearchParams) {
 }
 
 beforeEach(async () => {
+  vi.restoreAllMocks();
   await ensureDemoData(env as unknown as CloudflareEnvironment);
   await env.DB.prepare(
     "UPDATE events SET duplicate_person_warnings = 1 WHERE id = ?",
@@ -41,6 +44,56 @@ beforeEach(async () => {
 });
 
 describe("manual person creation warnings", () => {
+  it("reports an unmet speaker-invitation prerequisite instead of a server error", async () => {
+    const title = `Missing invitation prerequisite ${crypto.randomUUID()}`;
+    vi.spyOn(
+      SubmissionService.prototype,
+      "createDirectSession",
+    ).mockRejectedValueOnce(
+      new EvaluationStateError(
+        "Configure the event venue or mailing address before accepted-speaker invitations can be queued.",
+      ),
+    );
+
+    const result = await action({
+      request: adminRequest(
+        new URLSearchParams({
+          _intent: "create_direct_session",
+          idempotencyKey: crypto.randomUUID(),
+          title,
+          description: "This request cannot yet queue its speaker invitation.",
+          format: "presentation",
+          trackId: "demo-track-ai",
+          durationMinutes: "45",
+          speakers: JSON.stringify([
+            {
+              name: "Provider Acceptance Speaker",
+              email: `provider-acceptance-${crypto.randomUUID()}@example.com`,
+              biography: "",
+            },
+          ]),
+        }),
+      ),
+      params: {},
+      context: context(),
+    } as never);
+
+    if (result instanceof Response) {
+      throw new Error("Invitation prerequisite returned a raw response.");
+    }
+    expect(result.init?.status).toBe(409);
+    expect(result.data).toEqual({
+      ok: false,
+      message:
+        "Configure the event venue or mailing address before accepted-speaker invitations can be queued.",
+    });
+    await expect(
+      env.DB.prepare("SELECT 1 FROM sessions WHERE event_id = ? AND title = ?")
+        .bind("evt-foe-2025", title)
+        .first(),
+    ).resolves.toBeNull();
+  });
+
   it("rejects a missing speaker payload at the route boundary", async () => {
     const title = `Missing speakers ${crypto.randomUUID()}`;
     const result = await action({

@@ -66,6 +66,9 @@ function CalendarAction({
   connectionId?: string | null;
   working: boolean;
 }) {
+  const creating =
+    !target.invitationId ||
+    (target.method === "CANCEL" && target.invitationStatus === "cancelled");
   return (
     <Form method="post">
       <input type="hidden" name="intent" value="calendar-lifecycle" />
@@ -83,10 +86,10 @@ function CalendarAction({
         {method === "CANCEL"
           ? "Cancel invitation"
           : provider === "email_ics"
-            ? target.invitationId
-              ? "Email ICS update"
-              : "Send email ICS"
-            : `${target.invitationId ? "Update" : "Send to"} ${provider === "google" ? "Google" : "Microsoft"}`}
+            ? creating
+              ? "Send email ICS"
+              : "Email ICS update"
+            : `${creating ? "Send to" : "Update"} ${provider === "google" ? "Google" : "Microsoft"}`}
       </button>
     </Form>
   );
