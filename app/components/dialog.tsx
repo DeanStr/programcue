@@ -29,9 +29,6 @@ export function Dialog({
 
     return () => {
       window.clearTimeout(focusTimer);
-      requestAnimationFrame(() => {
-        if (returnFocusRef.current?.isConnected) returnFocusRef.current.focus();
-      });
     };
   }, []);
 
@@ -44,6 +41,12 @@ export function Dialog({
             className="modal"
             aria-labelledby={titleId}
             onOpenAutoFocus={(event) => event.preventDefault()}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              if (returnFocusRef.current?.isConnected) {
+                returnFocusRef.current.focus();
+              }
+            }}
           >
             <div className="modal-head">
               <DialogPrimitive.Title id={titleId} asChild><h2>{title}</h2></DialogPrimitive.Title>
