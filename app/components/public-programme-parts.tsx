@@ -68,7 +68,9 @@ export function SessionTime({
 export function SessionTags({ session }: { session: PublishedSession }) {
   return (
     <span className="public-detail-tags">
-      {session.track ? <span className="pill track">{session.track}</span> : null}
+      {session.track ? (
+        <span className="pill track">{session.track}</span>
+      ) : null}
       <span className="pill format">{session.format}</span>
     </span>
   );
@@ -198,7 +200,7 @@ export function PublicSpeakerAvatar({
       <img
         className="public-speaker-avatar"
         src={speaker.imageUrl}
-        alt={`${speaker.displayName} headshot`}
+        alt=""
         width={size}
         height={size}
         loading="lazy"
@@ -209,8 +211,7 @@ export function PublicSpeakerAvatar({
   return (
     <span
       className="public-speaker-avatar placeholder"
-      role="img"
-      aria-label={`${speaker.displayName} headshot not available`}
+      aria-hidden="true"
       style={{ width: size, height: size }}
     >
       {initials(speaker.displayName)}

@@ -251,7 +251,8 @@ export function formatProgrammeDateTimeRange(
  * the calendar date on every row of a list that is already grouped by day, so
  * the public surfaces show only the clock range and let a day heading carry the
  * date. A shared meridiem is written once: "9:00–9:45 AM", not
- * "9:00 AM–9:45 AM".
+ * "9:00 AM–9:45 AM". Sessions that cross local midnight include the end date,
+ * because the surrounding day heading only supplies the start date.
  */
 export function formatProgrammeTimeRange(
   startsAt: number,
@@ -263,8 +264,33 @@ export function formatProgrammeTimeRange(
     minute: "2-digit",
     timeZone: timezone,
   });
-  const start = time.format(new Date(startsAt * 1_000));
-  const end = time.format(new Date(endsAt * 1_000));
+  const date = new Intl.DateTimeFormat("en", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: timezone,
+  });
+  const zone = new Intl.DateTimeFormat("en", {
+    timeZoneName: "short",
+    timeZone: timezone,
+  });
+  const startInstant = new Date(startsAt * 1_000);
+  const endInstant = new Date(endsAt * 1_000);
+  const start = time.format(startInstant);
+  const end = time.format(endInstant);
+  const startDate = date.format(startInstant);
+  const endDate = date.format(endInstant);
+  const zoneName = (instant: Date) =>
+    zone.formatToParts(instant).find((part) => part.type === "timeZoneName")
+      ?.value;
+  const startZone = zoneName(startInstant);
+  const endZone = zoneName(endInstant);
+  if (startDate !== endDate) {
+    return `${start}${startZone !== endZone && startZone ? ` ${startZone}` : ""}–${endDate} · ${end}${startZone !== endZone && endZone ? ` ${endZone}` : ""}`;
+  }
+  if (startZone !== endZone) {
+    return `${start}${startZone ? ` ${startZone}` : ""}–${end}${endZone ? ` ${endZone}` : ""}`;
+  }
   const meridiem = /\s*(AM|PM)$/u;
   const startMeridiem = start.match(meridiem)?.[1];
   const endMeridiem = end.match(meridiem)?.[1];

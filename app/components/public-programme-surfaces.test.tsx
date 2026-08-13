@@ -7,6 +7,7 @@ import type {
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
 import { PublicSpeakerGallerySurface } from "./public-programme-surfaces";
+import { PublicSpeakerAvatar } from "./public-programme-parts";
 import {
   sessionSpeakerDetails,
   speakerAffiliation,
@@ -63,6 +64,23 @@ function model(overrides: Partial<PublicProgrammeModel> = {}) {
 }
 
 describe("public programme speaker surfaces", () => {
+  it("keeps contextual speaker avatars decorative", () => {
+    const photoMarkup = renderToStaticMarkup(
+      <PublicSpeakerAvatar speaker={speaker} size={32} />,
+    );
+    const placeholderMarkup = renderToStaticMarkup(
+      <PublicSpeakerAvatar
+        speaker={{ ...speaker, imageUrl: null }}
+        size={32}
+      />,
+    );
+
+    expect(photoMarkup).toContain('alt=""');
+    expect(photoMarkup).not.toContain("headshot");
+    expect(placeholderMarkup).toContain('aria-hidden="true"');
+    expect(placeholderMarkup).not.toContain('role="img"');
+  });
+
   it("renders only supplied affiliation fields and omits empty metadata", () => {
     expect(
       speakerAffiliation({ jobTitle: "Director", organisationName: null }),
@@ -70,9 +88,9 @@ describe("public programme speaker surfaces", () => {
     expect(
       speakerAffiliation({ jobTitle: null, organisationName: "EventLab" }),
     ).toBe("EventLab");
-    expect(
-      speakerAffiliation({ jobTitle: " ", organisationName: null }),
-    ).toBe("");
+    expect(speakerAffiliation({ jobTitle: " ", organisationName: null })).toBe(
+      "",
+    );
 
     const missingMetadataSpeaker = {
       ...speaker,

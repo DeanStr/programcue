@@ -4,6 +4,7 @@ import {
   formatProgrammeDateTime,
   formatProgrammeDateTimeRange,
   formatProgrammeEventDay,
+  formatProgrammeTimeRange,
   programmeAccentPalette,
   publicProgrammeSessionUrl,
   sortPublishedSpeakers,
@@ -98,5 +99,25 @@ describe("programme presentation rules", () => {
     );
     expect(range).toContain("Tuesday, May 20, 2025 · 11:00 PM EDT");
     expect(range).toContain("Wednesday, May 21, 2025 · 1:00 AM EDT");
+  });
+
+  it("includes the end date in a compact cross-day time range", () => {
+    expect(
+      formatProgrammeTimeRange(
+        Date.parse("2025-05-21T03:00:00Z") / 1_000,
+        Date.parse("2025-05-21T05:00:00Z") / 1_000,
+        "America/Toronto",
+      ),
+    ).toBe("11:00 PM–Wed, May 21 · 1:00 AM");
+  });
+
+  it("includes both offsets when a compact range crosses the repeated hour", () => {
+    expect(
+      formatProgrammeTimeRange(
+        Date.parse("2025-11-02T05:30:00Z") / 1_000,
+        Date.parse("2025-11-02T06:30:00Z") / 1_000,
+        "America/New_York",
+      ),
+    ).toMatch(/1:30 AM (?:EDT|GMT-4)–1:30 AM (?:EST|GMT-5)/u);
   });
 });
