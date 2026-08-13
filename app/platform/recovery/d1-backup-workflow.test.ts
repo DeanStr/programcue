@@ -299,6 +299,7 @@ describe("scheduled D1 backup Workflow boundaries", () => {
     });
     await expect(requests[1]?.json()).resolves.toEqual({
       current_bookmark: "bookmark-one",
+      output_format: "polling",
     });
   });
 

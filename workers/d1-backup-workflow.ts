@@ -424,7 +424,10 @@ export async function requestD1ExportState(
       },
       body: JSON.stringify(
         currentBookmark
-          ? { current_bookmark: currentBookmark }
+          ? {
+              current_bookmark: currentBookmark,
+              output_format: "polling",
+            }
           : { output_format: "polling" },
       ),
       signal: AbortSignal.timeout(EXPORT_API_TIMEOUT_MS),
