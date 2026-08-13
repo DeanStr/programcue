@@ -59,11 +59,15 @@ async function providerError(response: Response): Promise<never> {
 export type ResendDomain = z.infer<typeof domainSchema>;
 
 export class ResendDomainProvider {
+  private readonly fetcher: typeof fetch;
+
   constructor(
     private readonly apiKey: string | undefined,
-    private readonly fetcher: typeof fetch = fetch,
+    fetcher: typeof fetch = fetch,
     private readonly baseUrl = "https://api.resend.com",
-  ) {}
+  ) {
+    this.fetcher = (input, init) => fetcher(input, init);
+  }
 
   private headers(json = false) {
     if (!this.apiKey?.trim()) throw new ResendDomainConfigurationError();

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
@@ -44,6 +44,24 @@ async function environment(
 }
 
 describe("sender-profile provisioning", () => {
+  it("invokes the default runtime fetch without an object receiver", async () => {
+    const runtimeFetch = vi.fn(function (
+      this: unknown,
+      _input: string | URL | Request,
+    ) {
+      expect(this).toBeUndefined();
+      return Promise.resolve(Response.json({ data: [] }));
+    }) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", runtimeFetch);
+    try {
+      await expect(
+        new ResendDomainProvider("runtime-key").list(),
+      ).resolves.toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("persists only provider-verified domains as verified senders", async () => {
     const requests: Array<{ url: string; method: string }> = [];
     const requestSignals: Array<AbortSignal | null | undefined> = [];
