@@ -97,6 +97,22 @@ class ScannerServerContractTests(unittest.TestCase):
                 self.assertTrue(scanner.wait_for_clamav(timeout_seconds=1))
                 sleep.assert_called_once_with(0.25)
 
+    def test_ping_is_liveness_while_health_is_readiness(self):
+        handler = object.__new__(scanner.ScannerHandler)
+        handler._json = mock.Mock()
+
+        handler.path = "/ping"
+        with mock.patch.object(scanner, "clamav_ready") as ready:
+            handler.do_GET()
+            handler._json.assert_called_once_with(200, {"status": "alive"})
+            ready.assert_not_called()
+
+        handler._json.reset_mock()
+        handler.path = "/health"
+        with mock.patch.object(scanner, "clamav_ready", return_value=False):
+            handler.do_GET()
+            handler._json.assert_called_once_with(503, {"status": "starting"})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -275,6 +275,9 @@ class ScannerHandler(BaseHTTPRequestHandler):
         if self.path not in {"/", "/health", "/ping"}:
             self._json(404, {"error": "Not found."})
             return
+        if self.path == "/ping":
+            self._json(200, {"status": "alive"})
+            return
         if not clamav_ready():
             self._json(503, {"status": "starting"})
             return

@@ -76,8 +76,8 @@ const CALLBACK_STEP = {
 
 export class FileScannerContainer extends Container<ScannerEnvironment> {
   defaultPort = 8080;
-  pingEndpoint = "scanner/health";
-  sleepAfter = "2m";
+  pingEndpoint = "scanner/ping";
+  sleepAfter = "15m";
   enableInternet = false;
   allowedHosts = [this.env.R2_OBJECT_HOST ?? "invalid.invalid", "database.clamav.net"];
   envVars = {
