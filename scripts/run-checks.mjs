@@ -14,11 +14,10 @@ if (!["--core", "--full", "--quick"].includes(mode)) {
 }
 
 const startedAt = performance.now();
-const generatedTypes = await runProcess(
-  npmCommand,
-  ["run", "types:generate"],
-  { cwd: repositoryRoot, label: "generated Worker and route types" },
-);
+const generatedTypes = await runProcess(npmCommand, ["run", "types:generate"], {
+  cwd: repositoryRoot,
+  label: "generated Worker and route types",
+});
 if (generatedTypes.code !== 0) process.exit(generatedTypes.code);
 
 const coreRuns = await Promise.all([
@@ -78,7 +77,9 @@ if (coreFailures.length > 0) {
   process.exit(1);
 }
 
-console.log(`\nCore validation: ${formatDuration(performance.now() - startedAt)}`);
+console.log(
+  `\nCore validation: ${formatDuration(performance.now() - startedAt)}`,
+);
 for (const result of coreRuns) {
   console.log(`- ${result.label}: ${formatDuration(result.duration)}`);
 }
@@ -94,18 +95,21 @@ if (mode !== "--core") {
   if (quick && !process.env.PROGRAM_CUE_E2E_SHARDS) {
     e2eEnvironment.PROGRAM_CUE_E2E_SHARDS = "2";
   }
-  const [e2e, siteE2e] = await Promise.all([
-    runProcess("node", e2eArguments, {
-      cwd: repositoryRoot,
-      env: e2eEnvironment,
-      label: quick ? "quick Chromium behavior gate" : "full browser gate",
-    }),
-    runProcess(npmCommand, ["run", "test:site:e2e"], {
-      cwd: repositoryRoot,
-      label: "public website browser gate",
-    }),
-  ]);
-  if (e2e.code !== 0 || siteE2e.code !== 0) process.exit(1);
+  /* Both suites start local Workerd and Chromium processes. Running the small
+     site suite after the sharded application gate avoids cross-suite CPU and
+     focus contention without reducing coverage. */
+  const e2e = await runProcess("node", e2eArguments, {
+    cwd: repositoryRoot,
+    env: e2eEnvironment,
+    label: quick ? "quick Chromium behavior gate" : "full browser gate",
+  });
+  if (e2e.code !== 0) process.exit(1);
+
+  const siteE2e = await runProcess(npmCommand, ["run", "test:site:e2e"], {
+    cwd: repositoryRoot,
+    label: "public website browser gate",
+  });
+  if (siteE2e.code !== 0) process.exit(1);
 }
 
 console.log(`\nCheck total: ${formatDuration(performance.now() - startedAt)}`);

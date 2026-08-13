@@ -176,6 +176,35 @@ describe("published pages", () => {
     assert.ok(reports(issues, "calendar.events.owned"));
   });
 
+  test("unverified production backup assurance is rejected", () => {
+    const issues = brokenSite(({ replace }) =>
+      replace(
+        "privacy.html",
+        "A production export has been restored",
+        "We keep backups of the database and periodically verify that they can be restored. A production export has been restored",
+      ),
+    );
+    assert.ok(reports(issues, "unverified production backup assurance"));
+  });
+
+  test("describing Sessionize as a credentialed organisation integration is rejected", () => {
+    const privacyIssues = brokenSite(({ read, write }) =>
+      write(
+        "privacy.html",
+        read("privacy.html").replaceAll("Sessionize", "Other provider"),
+      ),
+    );
+    const termsIssues = brokenSite(({ replace }) =>
+      replace(
+        "terms.html",
+        "Accelevents or Airtable",
+        "Accelevents, Airtable and Sessionize",
+      ),
+    );
+    assert.ok(reports(privacyIssues, "Sessionize boundary"));
+    assert.ok(reports(termsIssues, "credentialed organisation integration"));
+  });
+
   test("a link to a page that does not exist is rejected", () => {
     const issues = brokenSite(({ replace }) =>
       replace("index.html", 'href="/privacy"', 'href="/pricing"'),
@@ -234,11 +263,28 @@ describe("published pages", () => {
     assert.ok(reports(issues, "1200 by 630 PNG"));
   });
 
+  test("a non-canonical brand mark is rejected", () => {
+    const assetIssues = brokenSite(({ write }) =>
+      write("brand-mark.svg", '<svg viewBox="0 0 32 32"><text>P</text></svg>'),
+    );
+    const wordmarkIssues = brokenSite(({ read, write }) =>
+      write(
+        "index.html",
+        read("index.html").replaceAll(
+          "M3 3h10v4H7v6H3V3Z",
+          "M3 3h8v4H7v6H3V3Z",
+        ),
+      ),
+    );
+    assert.ok(reports(assetIssues, "canonical application asset"));
+    assert.ok(reports(wordmarkIssues, "official mark geometry"));
+  });
+
   test("removing the contact address is rejected", () => {
     const issues = brokenSite(({ read, write }) =>
       write(
         "terms.html",
-        read("terms.html").replaceAll("dean@geniusmedia.com.au", ""),
+        read("terms.html").replaceAll("support@programcue.com", ""),
       ),
     );
     assert.ok(reports(issues, "monitored contact address"));

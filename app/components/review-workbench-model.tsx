@@ -56,6 +56,9 @@ export type ReviewWorkbenchModel = {
   assignmentKey: string;
   fetcher: FetcherWithComponents<ReviewWorkbenchActionData>;
   formRef: RefObject<HTMLFormElement | null>;
+  submitReviewTriggerRef: RefObject<HTMLButtonElement | null>;
+  submitNextTriggerRef: RefObject<HTMLButtonElement | null>;
+  conflictTriggerRef: RefObject<HTMLButtonElement | null>;
   editGeneration: RefObject<number>;
   inFlightSaveGeneration: RefObject<number | null>;
   conflictOpen: boolean;
@@ -111,6 +114,9 @@ export function useReviewWorkbenchState({
   });
   const navigate = useNavigate();
   const formRef = useRef<HTMLFormElement>(null);
+  const submitReviewTriggerRef = useRef<HTMLButtonElement>(null);
+  const submitNextTriggerRef = useRef<HTMLButtonElement>(null);
+  const conflictTriggerRef = useRef<HTMLButtonElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editGeneration = useRef(0);
   const serverSyncedEditGeneration = useRef(0);
@@ -458,6 +464,9 @@ export function useReviewWorkbenchState({
     assignmentKey,
     fetcher,
     formRef,
+    submitReviewTriggerRef,
+    submitNextTriggerRef,
+    conflictTriggerRef,
     editGeneration,
     inFlightSaveGeneration,
     conflictOpen,

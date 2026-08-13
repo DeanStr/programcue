@@ -181,17 +181,17 @@ article a {
 }
 
 .wordmark-mark {
-  display: grid;
-  place-items: center;
   width: 2rem;
   height: 2rem;
-  border-radius: 0.55rem;
-  background: var(--brand-600);
-  color: var(--text-inverse);
-  font-size: 0.8125rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
   flex: none;
+}
+
+.wordmark-ink {
+  fill: currentColor;
+}
+
+.wordmark-accent {
+  fill: var(--brand-400);
 }
 
 /* --- header ------------------------------------------------------------- */

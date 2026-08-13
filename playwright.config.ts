@@ -55,7 +55,10 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: "npm run serve:e2e",
+    // The outer runner creates one immutable production build before it starts
+    // any shards. A shard must never rebuild the shared output while another
+    // Workerd instance is serving it.
+    command: "npm run serve:e2e:prepared",
     url: `${e2eOrigin}/admin/event`,
     reuseExistingServer: false,
     timeout: 120_000,

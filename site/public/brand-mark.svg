@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .ink { fill: #111827; }
+    .accent { fill: #4f46e5; }
+    @media (prefers-color-scheme: dark) {
+      .ink { fill: #f9fafb; }
+      .accent { fill: #818cf8; }
+    }
+  </style>
+  <path class="ink" d="M3 3h10v4H7v6H3V3Z"/>
+  <path class="accent" d="M19 3h10v10h-4V7h-6V3Z"/>
+  <path class="ink" d="M25 19h4v10H19v-4h6v-6Z"/>
+  <path class="ink" d="M3 19h4v6h6v4H3V19Z"/>
+</svg>

@@ -11,7 +11,7 @@
     <link rel="canonical" href="https://programcue.com/privacy" />
     <meta name="robots" content="index, follow" />
     <meta name="theme-color" content="#091426" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/brand-mark.svg" type="image/svg+xml" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Program Cue" />
     <meta property="og:title" content="Privacy policy — Program Cue" />
@@ -28,7 +28,17 @@
     <header class="site-header">
       <div class="shell header-inner">
         <a class="wordmark" href="/">
-          <span class="wordmark-mark" aria-hidden="true">PC</span>
+          <svg
+            class="wordmark-mark"
+            aria-hidden="true"
+            focusable="false"
+            viewBox="0 0 32 32"
+          >
+            <path class="wordmark-ink" d="M3 3h10v4H7v6H3V3Z" />
+            <path class="wordmark-accent" d="M19 3h10v10h-4V7h-6V3Z" />
+            <path class="wordmark-ink" d="M25 19h4v10H19v-4h6v-6Z" />
+            <path class="wordmark-ink" d="M3 19h4v6h6v4H3V19Z" />
+          </svg>
           <span>Program Cue</span>
         </a>
         <nav class="site-nav" aria-label="Primary">
@@ -89,15 +99,14 @@
 
           <h2 id="operator">1. Who operates Program Cue</h2>
           <p>
-            Program Cue is operated by Dean Strezovski, sole trader, trading as
-            Program Cue, based in Victoria, Australia ("Program Cue", "we",
-            "us"). Dean Strezovski is the operator responsible for the personal
-            information described in this policy and is the contact for privacy
-            enquiries and requests.
+            Program Cue is based in Victoria, Australia ("Program Cue", "we",
+            "us"). Program Cue is responsible for the personal information
+            described in this policy and is the contact for privacy enquiries
+            and requests.
           </p>
           <p>
             Contact:
-            <a href="mailto:dean@geniusmedia.com.au">dean@geniusmedia.com.au</a>
+            <a href="mailto:support@programcue.com">support@programcue.com</a>
           </p>
 
           <h2 id="scope">2. What this policy covers</h2>
@@ -382,12 +391,22 @@
             disconnection on the same terms as the Google connection.
           </p>
           <p>
-            An organisation may also choose to connect Program Cue to other
-            services it already uses, currently Accelevents, Airtable and
-            Sessionize. Those connections are configured by the organisation,
-            not by us, and they move event and programme data between Program
-            Cue and the service the organisation has chosen. The receiving
-            service's own terms and privacy notice apply to the data it holds.
+            An organisation may also choose to connect Program Cue to
+            Accelevents or Airtable. Those credentialed connections are
+            configured by the organisation and move event and programme data
+            between Program Cue and the selected service.
+          </p>
+          <p>
+            Separately, a verified applicant may ask Program Cue to read one
+            public Sessionize speaker profile. Program Cue imports only the
+            public name and biography into the applicant's unsaved draft for
+            review. It does not sign in to Sessionize, request Sessionize
+            credentials, access private Sessionize data or create an ongoing
+            organisation connection.
+          </p>
+          <p>
+            The receiving service's own terms and privacy notice apply to data
+            it holds.
           </p>
 
           <h2 id="providers">7. Service providers and infrastructure</h2>
@@ -454,8 +473,10 @@
             Access is enforced on the server for every request, based on the
             organisation, event and role you have been assigned; hiding a
             control in the interface is never treated as authorisation on its
-            own. We keep backups of the database and periodically verify that
-            they can be restored.
+            own. A production export has been restored to an isolated database
+            as a recovery exercise. Scheduled production backups, rolling
+            retention, backup alerting and a measured incident restore have not
+            yet been completed.
           </p>
           <p>
             No system is completely secure. If a data breach occurs that is
@@ -468,8 +489,9 @@
           <ul>
             <li>
               <strong>Account information</strong> is kept while your account
-              exists, and for a short period afterwards to complete deletion
-              across backups.
+              exists. After deletion, some account data may remain in security,
+              audit, transaction or recovery-validation records described below,
+              or where applicable law requires it.
             </li>
             <li>
               <strong>Event and programme data</strong> is kept for as long as
@@ -493,8 +515,10 @@
               deletion of other records.
             </li>
             <li>
-              <strong>Backups</strong> are retained on a rolling schedule and
-              are overwritten in the ordinary course.
+              <strong>Backup exports</strong> created for recovery validation
+              may retain copies after live records are deleted. These exports do
+              not currently follow a fixed rolling production retention
+              schedule.
             </li>
           </ul>
 
@@ -517,7 +541,7 @@
           </p>
           <p>
             Email
-            <a href="mailto:dean@geniusmedia.com.au">dean@geniusmedia.com.au</a>
+            <a href="mailto:support@programcue.com">support@programcue.com</a>
             to make a request. We will verify who you are before acting, and we
             aim to respond within 30 days.
           </p>
@@ -562,9 +586,9 @@
 
           <h2 id="contact">14. How to contact us</h2>
           <p>
-            Dean Strezovski, sole trader, trading as Program Cue<br />
+            Program Cue<br />
             Victoria, Australia<br />
-            <a href="mailto:dean@geniusmedia.com.au">dean@geniusmedia.com.au</a>
+            <a href="mailto:support@programcue.com">support@programcue.com</a>
           </p>
           <p>
             This mailbox is monitored and is the correct address for privacy
@@ -578,13 +602,20 @@
       <div class="shell footer-inner">
         <div class="footer-brand">
           <span class="wordmark">
-            <span class="wordmark-mark" aria-hidden="true">PC</span>
+            <svg
+              class="wordmark-mark"
+              aria-hidden="true"
+              focusable="false"
+              viewBox="0 0 32 32"
+            >
+              <path class="wordmark-ink" d="M3 3h10v4H7v6H3V3Z" />
+              <path class="wordmark-accent" d="M19 3h10v10h-4V7h-6V3Z" />
+              <path class="wordmark-ink" d="M25 19h4v10H19v-4h6v-6Z" />
+              <path class="wordmark-ink" d="M3 19h4v6h6v4H3V19Z" />
+            </svg>
             <span>Program Cue</span>
           </span>
-          <p>
-            Operated by Dean Strezovski, sole trader, trading as Program Cue.
-            Victoria, Australia.
-          </p>
+          <p>Program Cue is based in Victoria, Australia.</p>
         </div>
         <nav aria-label="Footer">
           <h2>Site</h2>
@@ -598,9 +629,7 @@
           <h2>Contact</h2>
           <ul>
             <li>
-              <a href="mailto:dean@geniusmedia.com.au"
-                >dean@geniusmedia.com.au</a
-              >
+              <a href="mailto:support@programcue.com">support@programcue.com</a>
             </li>
             <li>
               <a href="https://app.programcue.com/sign-in"
@@ -611,7 +640,7 @@
         </div>
       </div>
       <div class="shell footer-legal">
-        <p>© 2026 Dean Strezovski. Program Cue.</p>
+        <p>© 2026 Program Cue.</p>
       </div>
     </footer>
   </body>

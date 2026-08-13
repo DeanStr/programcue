@@ -55,6 +55,23 @@ test("the local Worker enforces the static-site security contract", async ({
   expect(writeResponse.headers().allow).toBe("GET, HEAD");
 });
 
+test("the official favicon retains its adaptive brand colours", async ({
+  page,
+}) => {
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await openReady(page, "/brand-mark.svg");
+    await expect(page.locator(".ink").first()).toHaveCSS(
+      "fill",
+      scheme === "dark" ? "rgb(249, 250, 251)" : "rgb(17, 24, 39)",
+    );
+    await expect(page.locator(".accent")).toHaveCSS(
+      "fill",
+      scheme === "dark" ? "rgb(129, 140, 248)" : "rgb(79, 70, 229)",
+    );
+  }
+});
+
 test("public pages have no detectable WCAG A or AA violations", async ({
   page,
 }) => {

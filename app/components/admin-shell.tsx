@@ -311,10 +311,30 @@ export function AdminShell({
   );
   const recordSearch = useFetcher<{ records: CommandRecord[] }>();
   const requestedRecordSearchKey = useRef<string | null>(null);
+  const commandTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const commandReturnFocusRef = useRef<HTMLElement | null>(null);
   const [recordSearchResult, setRecordSearchResult] =
     useState<AdminCommandSearchResult | null>(null);
 
   const closeDialog = useCallback(() => setDialog(null), []);
+  const openCommandDialog = useCallback(() => {
+    commandReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : commandTriggerRef.current;
+    setDialog("command");
+  }, []);
+  const closeCommandDialog = useCallback(() => {
+    setDialog(null);
+    // The controlled Radix root unmounts in the same event as Escape. Restore
+    // after its focus scope has completed teardown, using the element captured
+    // synchronously when the toolbar button or keyboard shortcut opened it.
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() =>
+        commandReturnFocusRef.current?.focus(),
+      );
+    });
+  }, []);
   const initials = viewer.name
     .split(/\s+/)
     .map((part) => part[0])
@@ -352,7 +372,7 @@ export function AdminShell({
   }
   const breadcrumbs = adminPageBreadcrumbs(location.pathname);
 
-  useHotkeys("mod+k", () => setDialog("command"), {
+  useHotkeys("mod+k", openCommandDialog, {
     preventDefault: true,
     enableOnFormTags: false,
   });
@@ -533,10 +553,11 @@ export function AdminShell({
           <ChevronDown aria-hidden size={15} />
         </button>
         <button
+          ref={commandTriggerRef}
           type="button"
           className="command-trigger"
           aria-label="Search or run a command"
-          onClick={() => setDialog("command")}
+          onClick={openCommandDialog}
         >
           <Search aria-hidden size={14} />
           <span>Search or run a command…</span>
@@ -664,7 +685,7 @@ export function AdminShell({
 
       <AdminCommandDialog
         open={dialog === "command"}
-        closeDialog={closeDialog}
+        closeDialog={closeCommandDialog}
         commandPalette={commandPalette}
         commandQuery={commandQuery}
         setCommandQuery={setCommandQuery}
@@ -681,6 +702,7 @@ export function AdminShell({
         viewArea={viewArea}
         viewerRole={viewer.role}
         assistantAvailable={canOpenAdminAssistant(viewer.role)}
+        returnFocus={commandReturnFocusRef}
       />
 
       <AdminAuxiliaryDialogs

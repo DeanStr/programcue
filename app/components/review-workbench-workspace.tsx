@@ -182,6 +182,9 @@ function ReviewScorePanel() {
     assignmentKey,
     fetcher,
     formRef,
+    submitReviewTriggerRef,
+    submitNextTriggerRef,
+    conflictTriggerRef,
     editGeneration,
     inFlightSaveGeneration,
     setConflictOpen,
@@ -251,6 +254,7 @@ function ReviewScorePanel() {
             </span>
             {!readOnly ? (
               <button
+                ref={conflictTriggerRef}
                 className="btn small danger"
                 type="button"
                 onClick={() => {
@@ -430,6 +434,7 @@ function ReviewScorePanel() {
                 Save draft
               </button>
               <button
+                ref={submitReviewTriggerRef}
                 className="btn"
                 type="button"
                 disabled={fetcher.state !== "idle"}
@@ -441,6 +446,7 @@ function ReviewScorePanel() {
                 Submit review
               </button>
               <button
+                ref={submitNextTriggerRef}
                 className="btn primary"
                 type="button"
                 disabled={fetcher.state !== "idle"}
@@ -535,8 +541,15 @@ function ReviewActionNotice() {
 }
 
 function ReviewSubmitDialog() {
-  const { workspace, fetcher, submitMode, setSubmitMode, readOnly } =
-    useReviewWorkbenchModel();
+  const {
+    workspace,
+    fetcher,
+    submitMode,
+    setSubmitMode,
+    readOnly,
+    submitReviewTriggerRef,
+    submitNextTriggerRef,
+  } = useReviewWorkbenchModel();
   return submitMode && workspace.selected && !readOnly ? (
     <Dialog
       title={
@@ -545,6 +558,9 @@ function ReviewSubmitDialog() {
           : "Submit this review?"
       }
       onClose={() => setSubmitMode(null)}
+      returnFocus={
+        submitMode === "next" ? submitNextTriggerRef : submitReviewTriggerRef
+      }
       footer={null}
     >
       <div className="stack">
@@ -649,6 +665,7 @@ function ReviewConflictDialog() {
     fetcher,
     conflictOpen,
     setConflictOpen,
+    conflictTriggerRef,
     readOnly,
     cancelAutosave,
   } = useReviewWorkbenchModel();
@@ -656,6 +673,7 @@ function ReviewConflictDialog() {
     <Dialog
       title="Declare a conflict"
       onClose={() => setConflictOpen(false)}
+      returnFocus={conflictTriggerRef}
       footer={null}
     >
       <fetcher.Form

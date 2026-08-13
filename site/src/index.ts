@@ -13,11 +13,15 @@
 const CANONICAL_HOST = "programcue.com";
 const PUBLIC_HOSTS = new Set([CANONICAL_HOST, `www.${CANONICAL_HOST}`]);
 const READ_METHODS = new Set(["GET", "HEAD"]);
+/* Exact hash of the canonical brand-mark.svg style block. This permits its
+   adaptive light/dark fills without allowing arbitrary inline site styles. */
+const BRAND_MARK_STYLE_HASH =
+  "'sha256-y0BNy4M/KDhas6W22Ivuu4JFcXstAw0DS7LRMKA75k8='";
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'none'",
-  "style-src 'self'",
+  `style-src 'self' ${BRAND_MARK_STYLE_HASH}`,
   "img-src 'self' data:",
   "font-src 'self'",
   "connect-src 'none'",

@@ -23,7 +23,7 @@ import { repositoryRoot } from "./e2e-runtime.mjs";
 const SITE_CONFIG_FILE = "./site/wrangler.jsonc";
 const ASSET_ROOT = join(repositoryRoot, "site/public");
 
-const CONTACT_EMAIL = "dean@geniusmedia.com.au";
+const CONTACT_EMAIL = "support@programcue.com";
 const SIGN_IN_URL = "https://app.programcue.com/sign-in";
 const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.owned";
 const LIMITED_USE_STATEMENT =
@@ -32,6 +32,13 @@ const PRODUCT_DESCRIPTION =
   "Program Cue keeps submissions, reviews, speakers, communications and scheduling connected, so your team can see what needs action and move confidently from the first proposal to publication.";
 const ACCOUNT_ACTION = "Sign in or create an account";
 const SOCIAL_CARD = "social-card.png";
+const BRAND_MARK = "brand-mark.svg";
+const OFFICIAL_BRAND_PATHS = Object.freeze([
+  "M3 3h10v4H7v6H3V3Z",
+  "M19 3h10v10h-4V7h-6V3Z",
+  "M25 19h4v10H19v-4h6v-6Z",
+  "M3 19h4v6h6v4H3V19Z",
+]);
 const PNG_SIGNATURE = Buffer.from("89504e470d0a1a0a", "hex");
 
 /* Every page a visitor or a reviewer can reach, and the footer contract each
@@ -213,6 +220,17 @@ export function validateSitePages(assetRoot = ASSET_ROOT) {
     ]),
   );
 
+  const brandMarkPath = join(assetRoot, BRAND_MARK);
+  if (!existsSync(brandMarkPath))
+    add(`Public site brand mark ${BRAND_MARK} is missing.`);
+  else if (
+    !readFileSync(brandMarkPath).equals(
+      readFileSync(join(repositoryRoot, "public", BRAND_MARK)),
+    )
+  ) {
+    add("Public site brand mark must match the canonical application asset.");
+  }
+
   for (const file of required) {
     const html = sources.get(file);
     const text = documentText(html).toLowerCase();
@@ -237,6 +255,14 @@ export function validateSitePages(assetRoot = ASSET_ROOT) {
       add(`${file} must not include inline event handlers.`);
     if (!html.includes(CONTACT_EMAIL))
       add(`${file} must publish the monitored contact address.`);
+    if (!html.includes(`rel="icon" href="/${BRAND_MARK}"`))
+      add(`${file} must use the official Program Cue mark as its favicon.`);
+    if (!html.includes('class="wordmark-mark"'))
+      add(`${file} must render the official Program Cue wordmark.`);
+    for (const path of OFFICIAL_BRAND_PATHS) {
+      if (html.split(`d="${path}"`).length - 1 < 2)
+        add(`${file} wordmark is missing official mark geometry: ${path}.`);
+    }
 
     const footer = footerOf(html);
     if (!footer) add(`${file} must have a footer.`);
@@ -373,16 +399,42 @@ export function validateSitePages(assetRoot = ASSET_ROOT) {
   }
   if (!/Effective date: \d{1,2} \w+ \d{4}/.test(privacyText))
     add("Privacy policy must carry an effective date.");
-  if (!privacyText.includes("Dean Strezovski"))
-    add("Privacy policy must identify the operating legal entity.");
+  if (
+    !privacyText.includes(
+      "Program Cue is responsible for the personal information",
+    )
+  )
+    add(
+      "Privacy policy must identify Program Cue as the responsible operator.",
+    );
+  for (const unsupportedBackupClaim of [
+    "periodically verify that they can be restored",
+    "Backups are retained on a rolling schedule",
+  ]) {
+    if (privacyText.includes(unsupportedBackupClaim))
+      add(
+        `Privacy policy must not claim unverified production backup assurance: "${unsupportedBackupClaim}".`,
+      );
+  }
+  for (const sessionizeBoundary of [
+    "read one public Sessionize speaker profile",
+    "does not sign in to Sessionize",
+    "access private Sessionize data",
+    "ongoing organisation connection",
+  ]) {
+    if (!privacyText.includes(sessionizeBoundary))
+      add(
+        `Privacy policy must state the Sessionize boundary: "${sessionizeBoundary}".`,
+      );
+  }
 
   /* --- terms ------------------------------------------------------------- */
   const terms = sources.get("terms.html");
   const termsText = documentText(terms);
   if (!/Effective date: \d{1,2} \w+ \d{4}/.test(termsText))
     add("Terms must carry an effective date.");
-  if (!termsText.includes("Dean Strezovski"))
-    add("Terms must identify the operating legal entity.");
+  if (!termsText.includes("Program Cue is based in Victoria, Australia"))
+    add("Terms must identify Program Cue and its location.");
   if (!termsText.includes("laws of Victoria, Australia"))
     add("Terms must state the governing law.");
   if (
@@ -392,6 +444,17 @@ export function validateSitePages(assetRoot = ASSET_ROOT) {
   ) {
     add("Terms must state that signing up grants no private access.");
   }
+  for (const sessionizeBoundary of [
+    "read one public Sessionize speaker profile",
+    "This is not a Sessionize login, credentialed integration, private-data import or ongoing organisation connection.",
+  ]) {
+    if (!termsText.includes(sessionizeBoundary))
+      add(`Terms must state the Sessionize boundary: "${sessionizeBoundary}".`);
+  }
+  if (/Accelevents, Airtable and Sessionize/.test(termsText))
+    add(
+      "Terms must not describe Sessionize as a credentialed organisation integration.",
+    );
 
   /* --- crawlability ------------------------------------------------------ */
   const robots = sources.get("robots.txt");

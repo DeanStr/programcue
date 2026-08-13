@@ -13,6 +13,7 @@ import {
   Tags,
   UserRound,
 } from "lucide-react";
+import type { RefObject } from "react";
 
 import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
 import { Dialog } from "./dialog";
@@ -65,6 +66,7 @@ export function AdminCommandDialog({
   viewArea,
   viewerRole,
   assistantAvailable,
+  returnFocus,
 }: {
   open: boolean;
   closeDialog: () => void;
@@ -84,10 +86,15 @@ export function AdminCommandDialog({
   viewArea: string | null;
   viewerRole: string;
   assistantAvailable: boolean;
+  returnFocus: RefObject<HTMLElement | null>;
 }) {
   if (!open) return null;
   return (
-    <Dialog title="Search or run a command" onClose={closeDialog}>
+    <Dialog
+      title="Search or run a command"
+      onClose={closeDialog}
+      returnFocus={returnFocus}
+    >
       <Command label="Program Cue commands" shouldFilter={false}>
         <label className="label">
           Search Program Cue

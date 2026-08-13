@@ -55,6 +55,16 @@ test("skip navigation and command palette preserve keyboard focus", async ({
   await expect(
     page.getByRole("dialog", { name: "Search or run a command" }),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  const priorControl = page.getByRole("button", { name: "New", exact: true });
+  await priorControl.focus();
+  await page.keyboard.press("Control+k");
+  await expect(
+    page.getByRole("dialog", { name: "Search or run a command" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(priorControl).toBeFocused();
 });
 
 test("administrator navigation groups core work without hiding programme tools", async ({
