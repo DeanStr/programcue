@@ -5,17 +5,19 @@ import { promisify } from "node:util";
 
 import { parse, stringify } from "yaml";
 
+import { resolvePackageExecutable } from "./package-executable.mjs";
+
 const execFileAsync = promisify(execFile);
 const yamlUrl = new URL("../docs/openapi.yaml", import.meta.url);
 const routesUrl = new URL("../app/routes.ts", import.meta.url);
 const schemaEmitterUrl = new URL("./emit-openapi-schemas.ts", import.meta.url);
-const tsxUrl = new URL("../node_modules/.bin/tsx", import.meta.url);
+const tsx = resolvePackageExecutable("tsx", "tsx");
 const generatedStart = "    # BEGIN GENERATED ZOD SCHEMAS";
 const generatedEnd = "    # END GENERATED ZOD SCHEMAS";
 
 async function generatedSchemas() {
   const { stdout, stderr } = await execFileAsync(
-    tsxUrl.pathname,
+    tsx,
     ["--tsconfig", "tsconfig.cloudflare.json", schemaEmitterUrl.pathname],
     { cwd: new URL("..", import.meta.url), maxBuffer: 8 * 1024 * 1024 },
   );

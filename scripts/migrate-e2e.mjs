@@ -1,11 +1,10 @@
-import { resolve } from "node:path";
-
 import { resolveE2eRuntime, repositoryRoot } from "./e2e-runtime.mjs";
+import { resolvePackageExecutable } from "./package-executable.mjs";
 import { runProcess } from "./process-runner.mjs";
 
 const { statePath } = resolveE2eRuntime();
 const result = await runProcess(
-  resolve(repositoryRoot, "node_modules/.bin/wrangler"),
+  resolvePackageExecutable("wrangler", "wrangler"),
   [
     "d1",
     "migrations",

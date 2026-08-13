@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
+import { resolvePackageExecutable } from "./package-executable.mjs";
+
 const WRANGLER_EXPORT_TIMEOUT_MS = 30 * 60 * 1_000;
 
 // Wrangler creates the SQL destination. Restrict its mode from the first byte
@@ -32,7 +34,7 @@ for (const destination of [output, `${output}.manifest.json`]) {
 }
 
 await mkdir(dirname(output), { recursive: true });
-const wrangler = resolve("node_modules/.bin/wrangler");
+const wrangler = resolvePackageExecutable("wrangler", "wrangler");
 const result = spawnSync(
   wrangler,
   [

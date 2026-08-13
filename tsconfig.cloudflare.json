@@ -4,6 +4,7 @@
     ".react-router/types/**/*",
     "app/**/*",
     "scanner/src/**/*",
+    "site/src/**/*",
     "test/**/*",
     "workers/**/*",
     "worker-configuration.d.ts"

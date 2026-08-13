@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
-import { resolve } from "node:path";
 
 import { resolveE2eRuntime, repositoryRoot } from "./e2e-runtime.mjs";
+import { resolvePackageExecutable } from "./package-executable.mjs";
 import { npmCommand, runProcess } from "./process-runner.mjs";
 
 const argumentsSet = new Set(process.argv.slice(2));
@@ -15,7 +15,7 @@ const { statePath } = resolveE2eRuntime();
 await rm(statePath, { recursive: true, force: true });
 
 const migration = await runProcess(
-  resolve(repositoryRoot, "node_modules/.bin/wrangler"),
+  resolvePackageExecutable("wrangler", "wrangler"),
   [
     "d1",
     "migrations",

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { REQUIRED_PRODUCTION_SECRET_NAMES } from "./deploy-contract.mjs";
+import { resolvePackageExecutable } from "./package-executable.mjs";
 
 const SECRET_INVENTORY_TIMEOUT_MS = 60_000;
 
@@ -24,7 +25,7 @@ export function missingRequiredSecretNames(records) {
 
 function run() {
   const result = spawnSync(
-    resolve("node_modules/.bin/wrangler"),
+    resolvePackageExecutable("wrangler", "wrangler"),
     [
       "secret",
       "list",

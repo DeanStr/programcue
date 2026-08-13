@@ -2,9 +2,10 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 import { resolveE2eRuntime } from "./e2e-runtime.mjs";
+import { resolvePackageExecutable } from "./package-executable.mjs";
 
 const { inspectorPort, port, statePath } = resolveE2eRuntime();
 const e2ePort = String(port);
@@ -21,7 +22,7 @@ await writeFile(variableFile, `BETTER_AUTH_SECRET=${signingSecret}\n`, {
 });
 
 const wrangler = spawn(
-  resolve("node_modules/.bin/wrangler"),
+  resolvePackageExecutable("wrangler", "wrangler"),
   [
     "dev",
     "build/server/index.js",
@@ -48,13 +49,9 @@ const wrangler = spawn(
 );
 
 const signalForwarders = new Map(
-  ["SIGINT", "SIGTERM"].map((signal) => [
-    signal,
-    () => wrangler.kill(signal),
-  ]),
+  ["SIGINT", "SIGTERM"].map((signal) => [signal, () => wrangler.kill(signal)]),
 );
-for (const [signal, forward] of signalForwarders)
-  process.on(signal, forward);
+for (const [signal, forward] of signalForwarders) process.on(signal, forward);
 
 let exit;
 try {

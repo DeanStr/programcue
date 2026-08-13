@@ -1,0 +1,35 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "program-cue-site",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-08",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "programcue.com",
+      "custom_domain": true,
+    },
+    {
+      "pattern": "www.programcue.com",
+      "custom_domain": true,
+    },
+  ],
+  // run_worker_first keeps the Worker in front of every asset request so the
+  // www redirect and the security headers apply to the HTML too, not just to
+  // paths the asset router misses.
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./public",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": true,
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+    },
+  },
+  "upload_source_maps": true,
+}

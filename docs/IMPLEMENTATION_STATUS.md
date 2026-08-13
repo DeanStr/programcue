@@ -26,6 +26,24 @@ Status terms:
 
 The old static browser application, legacy JavaScript Worker delegation and `src/domain` compatibility path have been removed. All HTTP and Queue entry points use the current TypeScript Worker.
 
+## Public website
+
+**Production foundation; deployment acceptance outstanding:** A separate
+static-asset Worker serves the anonymous `programcue.com` home, privacy, terms
+and not-found surfaces without application data bindings, cookies, scripts,
+analytics or an authorisation dependency. The homepage presents the combined
+sign-in/account-creation entry point, an explicitly illustrative programme
+readiness workflow, outcome-led capabilities, operational trust boundaries and
+the required Google integration disclosure. Configuration contracts cover both
+Custom Domains, canonical routing, crawlability, social metadata, content and
+anchor integrity, the declared Google scopes and Limited Use statement, and the
+absence of production data bindings. Focused Playwright coverage exercises the
+real Worker at desktop/mobile widths for reachability, keyboard skip navigation,
+WCAG A/AA checks, 320-pixel containment and reviewed homepage/privacy visuals.
+Attaching the production Custom Domains, verifying the deployed headers and
+assets, and completing Google's external OAuth review remain deployment
+acceptance and are not claimed by the repository evidence.
+
 Open identity creation is now connected through email magic links, Google and
 Microsoft without changing authorisation. A brand-new identity is redirected to
 a neutral no-access page; signup creates no organisation, event, membership or

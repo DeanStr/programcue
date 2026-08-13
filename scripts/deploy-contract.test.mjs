@@ -270,7 +270,10 @@ test("every test file is registered in an executable project", async () => {
     if (path === "app/modules/ai/program-cue-agent.test.ts") return false;
     if (path.startsWith("app/") && path.endsWith(".test.ts")) return false;
     if (/^scripts\/[^/]+\.test\.mjs$/u.test(path)) return false;
-    return !(path.startsWith("e2e/") && path.endsWith(".spec.ts"));
+    return !(
+      (path.startsWith("e2e/") || path.startsWith("site/e2e/")) &&
+      path.endsWith(".spec.ts")
+    );
   });
   assert.deepEqual(unregistered, []);
 });

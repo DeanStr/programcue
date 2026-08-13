@@ -1,15 +1,8 @@
-import { resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 
-import {
-  resolveE2eShardRuntimes,
-  repositoryRoot,
-} from "./e2e-runtime.mjs";
-import {
-  formatDuration,
-  npmCommand,
-  runProcess,
-} from "./process-runner.mjs";
+import { resolveE2eShardRuntimes, repositoryRoot } from "./e2e-runtime.mjs";
+import { formatDuration, npmCommand, runProcess } from "./process-runner.mjs";
+import { resolvePackageExecutable } from "./package-executable.mjs";
 
 const startedAt = performance.now();
 const rawArguments = process.argv.slice(2);
@@ -37,7 +30,7 @@ if (!skipBuild) {
 console.log(
   `\nRunning Playwright in ${shardCount} isolated shard${shardCount === 1 ? "" : "s"}.`,
 );
-const playwright = resolve(repositoryRoot, "node_modules/.bin/playwright");
+const playwright = resolvePackageExecutable("playwright", "playwright");
 const shardRuns = runtimes.map((runtime) => {
   const { inspectorPort, port, shard, statePathFromRepository } = runtime;
   return runProcess(

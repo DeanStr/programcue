@@ -94,12 +94,18 @@ if (mode !== "--core") {
   if (quick && !process.env.PROGRAM_CUE_E2E_SHARDS) {
     e2eEnvironment.PROGRAM_CUE_E2E_SHARDS = "2";
   }
-  const e2e = await runProcess("node", e2eArguments, {
-    cwd: repositoryRoot,
-    env: e2eEnvironment,
-    label: quick ? "quick Chromium behavior gate" : "full browser gate",
-  });
-  if (e2e.code !== 0) process.exit(e2e.code);
+  const [e2e, siteE2e] = await Promise.all([
+    runProcess("node", e2eArguments, {
+      cwd: repositoryRoot,
+      env: e2eEnvironment,
+      label: quick ? "quick Chromium behavior gate" : "full browser gate",
+    }),
+    runProcess(npmCommand, ["run", "test:site:e2e"], {
+      cwd: repositoryRoot,
+      label: "public website browser gate",
+    }),
+  ]);
+  if (e2e.code !== 0 || siteE2e.code !== 0) process.exit(1);
 }
 
 console.log(`\nCheck total: ${formatDuration(performance.now() - startedAt)}`);

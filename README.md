@@ -209,6 +209,26 @@ returning `202`, validates that the signed object URL belongs to the private
 files bucket, and returns only an HMAC-signed verdict. A failed, expired or
 ambiguous scan leaves the file quarantined.
 
+The public website is deployed separately with `npm run deploy:site`. It is a
+static-asset Worker in `site/` with no D1, R2, Queue, Durable Object or AI
+binding: it publishes the home page, `/privacy` and `/terms` that Google's OAuth
+verification reviewers must be able to read anonymously, so it deliberately
+shares no authorisation or readiness path with the application. Deployment
+requires the `programcue.com` and `www.programcue.com` Custom Domains to be
+attached to `program-cue-site`; `www` answers a 301 to the apex host.
+Plain-HTTP requests to either production hostname are also upgraded to the
+secure apex URL.
+`npm run deploy:site` runs `scripts/validate-site-config.mjs` first, which fails
+the deploy on a lost Custom Domain, a data binding, a `noindex`, a broken
+internal link or anchor, placeholder copy, a missing contact address, or a
+privacy policy that no longer carries the declared Google scopes and the Limited
+Use statement. Preview it locally with `npm run dev:site`; run its focused
+desktop/mobile accessibility, containment and visual coverage with
+`npm run test:site:e2e`. That suite uses port `8788` by default; set
+`PROGRAM_CUE_SITE_E2E_PORT` when it is occupied. During `npm run check`, an
+overridden `PROGRAM_CUE_E2E_PORT` automatically gives the site an isolated port
+1,000 higher unless the site-specific value is set.
+
 The production bootstrap is intentionally one-time and requires an empty,
 migrated application database. It atomically creates the first Better Auth
 person, organisation-wide owner membership and explicitly slugged initial event; it
@@ -286,6 +306,7 @@ workers/event-channel.ts    Event-scoped Durable Object invalidation channel
 workers/d1-backup-workflow.ts
                             Scheduled logical D1 export to private backup R2
 scanner/                    Authenticated Workflow + ClamAV Container companion
+site/                       Public website Worker for programcue.com (static, no data bindings)
 migrations/                 Pre-release D1 baseline schema and constraints
 public/styles.css           Program Cue design tokens and component styles
 e2e/                        Browser behavior, accessibility and visual tests

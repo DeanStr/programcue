@@ -11,8 +11,10 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { resolvePackageExecutable } from "./package-executable.mjs";
+
 const projectRoot = process.cwd();
-const wrangler = resolve(projectRoot, "node_modules/.bin/wrangler");
+const wrangler = resolvePackageExecutable("wrangler", "wrangler");
 const migrationsDirectory = resolve(projectRoot, "migrations");
 const database = "program-cue-db";
 
@@ -22,8 +24,9 @@ function fail(message) {
 
 function runWrangler(cwd, config, args, { json = false } = {}) {
   const result = spawnSync(
-    wrangler,
+    process.execPath,
     [
+      wrangler,
       ...args,
       "--local",
       "--cwd",
@@ -34,9 +37,10 @@ function runWrangler(cwd, config, args, { json = false } = {}) {
     ],
     { cwd: projectRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
+  if (result.error) fail(`Could not start Wrangler: ${result.error.message}.`);
   if (result.status !== 0) {
-    process.stderr.write(result.stderr);
-    process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    if (result.stdout) process.stdout.write(result.stdout);
     fail(`Wrangler exited with status ${result.status ?? "unknown"}.`);
   }
   return result.stdout;
@@ -314,7 +318,9 @@ try {
     .sort()
     .map((entry) => resolve(migrationsDirectory, entry));
   const migrationSql = (
-    await Promise.all(migrations.map((migration) => readFile(migration, "utf8")))
+    await Promise.all(
+      migrations.map((migration) => readFile(migration, "utf8")),
+    )
   ).join("\n");
   // Build the final application inventory rather than counting CREATE TABLE
   // tokens. A numbered migration may rebuild a table by renaming the old
