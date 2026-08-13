@@ -348,15 +348,18 @@ function validateCommonProfile(profile, config, spec, issues) {
   }
   const database = databases[0];
   if (database) {
+    const expectedDatabaseName = local
+      ? "program-cue-db"
+      : "program-cue-db-wnam";
     if (
-      database.database_name !== "program-cue-db" ||
+      database.database_name !== expectedDatabaseName ||
       database.migrations_dir !== "migrations"
     ) {
       issues.push(
         issue(
           profile,
           "configuration",
-          "DB must use program-cue-db and the migrations directory.",
+          `DB must use ${expectedDatabaseName} and the migrations directory.`,
         ),
       );
     }
