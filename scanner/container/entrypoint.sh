@@ -2,6 +2,7 @@
 set -eu
 
 readiness_file=/tmp/program-cue-scanner-ready
+maximum_signature_age_seconds=604800
 rm -f "$readiness_file"
 
 /init &
@@ -17,10 +18,22 @@ rm -f "$readiness_file"
     sleep 1
   done
 
-  # The disk is ephemeral. Keep scans unavailable until the cold-start
-  # signature refresh succeeds, but do not delay the platform health port.
-  freshclam --stdout --user=clamav
+  version=$(clamdscan --version)
+  signature_date=${version##*/}
+  signature_epoch=$(date --date="$signature_date" +%s)
+  now=$(date +%s)
+  if [ "$signature_epoch" -gt $((now + 86400)) ] || \
+    [ $((now - signature_epoch)) -gt "$maximum_signature_age_seconds" ]; then
+    echo "The baked ClamAV signature database is outside the seven-day freshness window." >&2
+    exit 1
+  fi
   : > "$readiness_file"
+
+  # The deployment image contains a fresh, verified database so a transient
+  # mirror failure never blocks a cold start. Keep checking the allowlisted
+  # ClamAV mirror while this instance remains alive.
+  freshclam --daemon --foreground --checks=24 --daemon-notify=/etc/clamav/clamd.conf \
+    --stdout --user=clamav
 ) &
 
 exec python3 /opt/program-cue-scanner/scanner_server.py

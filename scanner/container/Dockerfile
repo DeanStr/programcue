@@ -11,7 +11,8 @@ COPY entrypoint.sh /usr/local/bin/program-cue-scanner-entrypoint
 
 RUN chmod 0755 \
     /opt/program-cue-scanner/scanner_server.py \
-    /usr/local/bin/program-cue-scanner-entrypoint
+    /usr/local/bin/program-cue-scanner-entrypoint \
+    && freshclam --stdout --user=clamav
 
 EXPOSE 8080
 
