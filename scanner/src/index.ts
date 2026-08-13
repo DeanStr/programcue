@@ -21,6 +21,7 @@ export { ContainerProxy };
 
 interface ScannerEnvironment {
   CLAMAV: DurableObjectNamespace<FileScannerContainer>;
+  FILES: R2Bucket;
   FILE_SCAN_WORKFLOW: Workflow<ScannerJob>;
   APP_ENV?: string;
   EXPECTED_CALLBACK_URL?: string;
@@ -94,11 +95,36 @@ export class FileScannerContainer extends Container<ScannerEnvironment> {
   };
 }
 
-FileScannerContainer.outbound = async (request) => {
+FileScannerContainer.outbound = async (request, environment) => {
   if (!["GET", "HEAD"].includes(request.method)) {
     return new Response("Method not allowed.", {
       status: 405,
       headers: { allow: "GET, HEAD" },
+    });
+  }
+  const scannerEnvironment = environment as unknown as ScannerEnvironment;
+  const url = new URL(request.url);
+  if (url.hostname === scannerEnvironment.R2_OBJECT_HOST) {
+    const bucketPrefix = `/${scannerEnvironment.R2_BUCKET_NAME}/`;
+    if (!url.pathname.startsWith(bucketPrefix)) {
+      return new Response("Not found.", { status: 404 });
+    }
+    let key: string;
+    try {
+      key = decodeURIComponent(url.pathname.slice(bucketPrefix.length));
+    } catch {
+      return new Response("Invalid object key.", { status: 400 });
+    }
+    if (!key.startsWith("private/")) {
+      return new Response("Forbidden.", { status: 403 });
+    }
+    const object = await scannerEnvironment.FILES.get(key);
+    if (!object) return new Response("Not found.", { status: 404 });
+    return new Response(request.method === "HEAD" ? null : object.body, {
+      headers: {
+        "content-length": String(object.size),
+        etag: object.httpEtag,
+      },
     });
   }
   return fetch(request);
