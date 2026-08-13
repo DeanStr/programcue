@@ -205,16 +205,24 @@ export class MultipartR2Provider {
   }
 
   async complete(row: MultipartProviderRow, parts: MultipartProviderPart[]) {
-    let object = await this.requireBucket().head(row.objectKey);
+    const bucket = this.requireBucket();
+    let object = await bucket.head(row.objectKey);
     if (object) return object;
     try {
-      object = await this.requireBucket()
+      await bucket
         .resumeMultipartUpload(row.objectKey, row.uploadId)
         .complete(parts);
     } catch (error) {
-      object = await this.requireBucket().head(row.objectKey);
+      object = await bucket.head(row.objectKey);
       if (!object) throw error;
+      return object;
     }
+    object = await bucket.head(row.objectKey);
+    if (!object)
+      throw new FileMultipartIncompleteError(
+        "R2 multipart completion returned before the completed object became readable. Retry with the same part manifest.",
+        true,
+      );
     return object;
   }
 
