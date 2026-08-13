@@ -78,6 +78,7 @@ const SCANNER_CONTAINER_INSTANCE = "primary-v2";
 
 export class FileScannerContainer extends Container<ScannerEnvironment> {
   defaultPort = 8080;
+  interceptHttps = true;
   pingEndpoint = "scanner/ping";
   sleepAfter = "15m";
   enableInternet = false;
