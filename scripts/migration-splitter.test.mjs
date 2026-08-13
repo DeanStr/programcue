@@ -16,5 +16,10 @@ test("the event speaker workflow migration remains complete through Wrangler's S
     statements.filter((statement) => statement.includes("CREATE TRIGGER")).length,
     4,
   );
+  for (const trigger of statements.filter((statement) =>
+    statement.includes("CREATE TRIGGER"),
+  )) {
+    assert.doesNotMatch(trigger, /\bEND;/u);
+  }
   assert.match(statements.at(-1), /^CREATE TRIGGER[\s\S]+END$/u);
 });

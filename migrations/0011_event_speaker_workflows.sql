@@ -169,8 +169,11 @@ BEGIN
      AND source IN ('session','membership','backfill')
      AND updated_by_person_id IS NULL;
 
-  SELECT CASE WHEN NOT EXISTS (
+  SELECT RAISE(
+    ABORT,
+    'confirmed session speaker is missing event workflow state'
+  ) WHERE NOT EXISTS (
     SELECT 1 FROM event_speaker_workflows
      WHERE event_id = NEW.event_id AND person_id = NEW.person_id
-  ) THEN RAISE(ABORT, 'confirmed session speaker is missing event workflow state') END;
+  );
 END;
