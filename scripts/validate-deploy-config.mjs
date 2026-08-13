@@ -16,6 +16,7 @@ const profileSpecs = Object.freeze({
     appEnvironment: "production",
     demoMode: "false",
     evaluationMode: "true",
+    maintenanceMode: "false",
     sourceRevision: null,
     queueName: "program-cue-operations",
     traceSamplingRate: 0.1,
@@ -26,6 +27,7 @@ const profileSpecs = Object.freeze({
     appEnvironment: "demo",
     demoMode: "true",
     evaluationMode: "false",
+    maintenanceMode: "false",
     sourceRevision: "local-demo",
     queueName: "program-cue-operations-demo",
     traceSamplingRate: 1,
@@ -36,6 +38,7 @@ const profileSpecs = Object.freeze({
     appEnvironment: "development",
     demoMode: "true",
     evaluationMode: "false",
+    maintenanceMode: "false",
     sourceRevision: "local-development",
     queueName: "program-cue-operations-development",
     traceSamplingRate: 1,
@@ -47,6 +50,7 @@ const commonVariableNames = [
   "APP_ENV",
   "DEMO_MODE",
   "EVALUATION_MODE",
+  "MAINTENANCE_MODE",
   "SOURCE_REVISION",
   "BETTER_AUTH_URL",
   "AUTH_EMAIL_FROM",
@@ -255,13 +259,14 @@ function validateCommonProfile(profile, config, spec, issues) {
   if (
     variables.APP_ENV !== spec.appEnvironment ||
     variables.DEMO_MODE !== spec.demoMode ||
-    variables.EVALUATION_MODE !== spec.evaluationMode
+    variables.EVALUATION_MODE !== spec.evaluationMode ||
+    variables.MAINTENANCE_MODE !== spec.maintenanceMode
   ) {
     issues.push(
       issue(
         profile,
         "configuration",
-        `${profile} requires APP_ENV=${spec.appEnvironment}, DEMO_MODE=${spec.demoMode} and EVALUATION_MODE=${spec.evaluationMode}.`,
+        `${profile} requires APP_ENV=${spec.appEnvironment}, DEMO_MODE=${spec.demoMode}, EVALUATION_MODE=${spec.evaluationMode} and MAINTENANCE_MODE=${spec.maintenanceMode}.`,
       ),
     );
   }

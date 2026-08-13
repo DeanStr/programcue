@@ -45,6 +45,7 @@
     "APP_ENV": "development",
     "DEMO_MODE": "true",
     "EVALUATION_MODE": "false",
+    "MAINTENANCE_MODE": "false",
     "SOURCE_REVISION": "local-development",
     "DEFAULT_EVENT_ID": "evt-foe-2025",
     "BETTER_AUTH_URL": "http://localhost:5173",
