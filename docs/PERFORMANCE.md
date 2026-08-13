@@ -62,6 +62,18 @@ migrations. These are topology and correctness checks, not representative US
 West percentile evidence. Smart Placement adapts from traffic, so field RUM and
 an authenticated US West admin journey remain the acceptance measurements.
 
+The optimization release (`0380504`, Worker version
+`9a4ea3a2-5986-4675-a9ce-c1ffb7b2042b`) was then probed through three
+independent California Globalping nodes. All public-programme requests returned
+HTTP 200 and ran locally in SJC/LAX. Retained Cloudflare invocation logs report
+252 ms, 276 ms and 617 ms Worker wall time; the first two completed end-to-end
+in 308 ms and 434 ms, while the third encountered a 2,320 ms edge outlier despite
+617 ms of Worker wall time. A California static-asset control completed in 71 ms,
+and the deployed hashed asset returned
+`Cache-Control: public, max-age=31536000, immutable`. This small sample proves
+the corrected locality and cache contract, but its variance is exactly why it
+is not presented as a production percentile.
+
 ## Interpretation and external acceptance
 
 All values here are local lab evidence, not production percentile claims. The public-filter measurement is a browser feedback proxy, not field INP. Event freshness uses the authoritative D1 commit timestamp, whose one-second resolution makes the local delta conservative but coarse. The single autosave sample proves a bounded real feedback path; it is not a durability claim for adverse networks.

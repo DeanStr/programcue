@@ -373,6 +373,14 @@ The post-optimization release gate passed in 349.6 seconds with 295 unit tests,
 contracts, migration and recovery validation, synchronized OpenAPI, 187
 application Playwright cases with three intentional skips, and all 16 public
 website browser cases.
+The optimized source revision `0380504` is deployed as Worker version
+`9a4ea3a2-5986-4675-a9ce-c1ffb7b2042b`. Live health and both published pilot
+programme routes returned HTTP 200, and a deployed content-hashed asset now
+returns the checked one-year immutable cache policy. Three independent
+California programme probes executed locally in SJC/LAX; retained logs measured
+252 ms, 276 ms and 617 ms Worker wall time. The saved production session value
+was empty at final acceptance, so this release does not claim a fresh
+authenticated production administration render.
 
 ## Remaining acceptance work
 
