@@ -93,10 +93,7 @@ a {
   height: 34px;
   display: block;
   flex: 0 0 auto;
-  color: var(--ink);
-}
-.brand .brand-mark {
-  color: currentColor;
+  color: inherit;
 }
 .brand-mark-ink {
   fill: currentColor;
