@@ -131,9 +131,16 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const aiReviewAssessmentsSupported = event.repositoryProvider === "d1";
   const canManageAiAssessments =
     canPrepareReviewerReminders && aiReviewAssessmentsSupported;
-  const aiReviewAssessments = aiReviewAssessmentsSupported
-    ? await new AiReviewAssessmentService(env).listForEvent(viewer)
-    : [];
+  const aiAssessmentService = new AiReviewAssessmentService(env);
+  const [aiReviewAssessments, failedAiReviewAssessmentAttempts] =
+    await Promise.all([
+      aiReviewAssessmentsSupported
+        ? aiAssessmentService.listForEvent(viewer)
+        : Promise.resolve([]),
+      canManageAiAssessments
+        ? aiAssessmentService.listFailedGenerationAttempts(viewer)
+        : Promise.resolve([]),
+    ]);
   const search = new URL(request.url).searchParams;
   const unassignedOnly = search.get("filter") === "unassigned";
   const requestedSort = search.get("sort") ?? "score_desc";
@@ -291,6 +298,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     aiReviewAssessmentsSupported,
     reviewerReminderTemplates: reviewerReminderTemplateRows.results,
     aiReviewAssessments,
+    failedAiReviewAssessmentAttempts,
     submissions: sortedSubmissions.map((submission) => ({
       ...submission,
       aiAssessmentGenerationIntent: crypto.randomUUID(),
@@ -331,6 +339,26 @@ export async function action({ request, context }: ActionFunctionArgs) {
       return {
         ok: true,
         message: `AI first-pass assessment saved at ${assessment.score.toFixed(1)} / 5.`,
+      };
+    }
+    if (values.get("intent") === "retry-ai-review-assessment") {
+      const assessment = await new AiReviewAssessmentService(env).generate(
+        viewer,
+        {
+          generationIntentId: values.get("generationIntentId"),
+          roundId: values.get("roundId"),
+          submissionId: values.get("submissionId"),
+          retryFailedOperationId: values.get("failedOperationId"),
+          duplicateRiskAcknowledged:
+            values.get("duplicateRiskAcknowledged") === "true"
+              ? true
+              : undefined,
+          confirmed: values.get("confirmed") === "true" ? true : undefined,
+        },
+      );
+      return {
+        ok: true,
+        message: `Retried AI first-pass assessment saved at ${assessment.score.toFixed(1)} / 5.`,
       };
     }
     if (values.get("intent") === "override-ai-review-assessment") {

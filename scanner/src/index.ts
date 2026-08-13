@@ -314,7 +314,10 @@ async function scanInContainer(
   environment: ScannerEnvironment,
   job: ScannerJob,
 ): Promise<ContainerScanAttempt> {
-  const instanceName = await scannerContainerInstanceName(job.jobId);
+  const instanceName = await scannerContainerInstanceName(
+    job.jobId,
+    job.attempt,
+  );
   const container = environment.CLAMAV.getByName(instanceName);
   const response = await container.fetch("http://scanner/scan", {
     method: "POST",

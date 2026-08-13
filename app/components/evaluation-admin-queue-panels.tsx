@@ -288,6 +288,18 @@ export function EvaluationSubmissionQueue() {
                     assessment.roundId === loaderData.resultsRoundId &&
                     assessment.submissionId === submission.id,
                 );
+                const failedAiAssessment =
+                  selectedResultsRound &&
+                  loaderData.failedAiReviewAssessmentAttempts.find(
+                    (attempt) =>
+                      attempt.roundId === selectedResultsRound.id &&
+                      attempt.submissionId === submission.id &&
+                      attempt.roundRevision === selectedResultsRound.revision &&
+                      attempt.scorecardId ===
+                        selectedResultsRound.scorecardId &&
+                      attempt.scorecardVersion ===
+                        selectedResultsRound.scorecardVersion,
+                  );
                 const terminal = [
                   "accepted",
                   "waitlisted",
@@ -436,6 +448,93 @@ export function EvaluationSubmissionQueue() {
                               ) : null}
                             </div>
                           </details>
+                        ) : failedAiAssessment &&
+                          loaderData.canManageAiAssessments &&
+                          loaderData.resultsRoundId &&
+                          selectedResultsRound &&
+                          ["active", "closed"].includes(
+                            selectedResultsRound.status,
+                          ) &&
+                          submission.reviewableInCurrentCycle ? (
+                          <div className="stack mt">
+                            <div className="validation-item warn">
+                              <strong>AI first pass failed</strong>
+                              <span>{failedAiAssessment.lastError}</span>
+                              <small>
+                                {failedAiAssessment.providerLabel}{" "}
+                                {failedAiAssessment.model}
+                                {failedAiAssessment.providerRequestId
+                                  ? ` · Provider request ${failedAiAssessment.providerRequestId}`
+                                  : ""}
+                              </small>
+                            </div>
+                            <Form method="post">
+                              <input
+                                type="hidden"
+                                name="intent"
+                                value="retry-ai-review-assessment"
+                              />
+                              <input
+                                type="hidden"
+                                name="generationIntentId"
+                                value={submission.aiAssessmentGenerationIntent}
+                              />
+                              <input
+                                type="hidden"
+                                name="failedOperationId"
+                                value={failedAiAssessment.operationId}
+                              />
+                              <input
+                                type="hidden"
+                                name="roundId"
+                                value={loaderData.resultsRoundId}
+                              />
+                              <input
+                                type="hidden"
+                                name="submissionId"
+                                value={submission.id}
+                              />
+                              <input
+                                type="hidden"
+                                name="duplicateRiskAcknowledged"
+                                value="true"
+                              />
+                              <input
+                                type="hidden"
+                                name="confirmed"
+                                value="true"
+                              />
+                              <button
+                                className="btn small"
+                                type="button"
+                                onClick={(event) => {
+                                  const form = event.currentTarget.form;
+                                  if (!form) {
+                                    throw new Error(
+                                      "The failed AI assessment retry form is missing.",
+                                    );
+                                  }
+                                  confirm(
+                                    {
+                                      title:
+                                        "Retry failed AI first-pass assessment?",
+                                      description:
+                                        "This creates a separate provider attempt and retains the failed operation. The earlier request may have been accepted or charged even though Program Cue received no usable result, so another provider charge or duplicate result is possible.",
+                                      records: [
+                                        `${submission.title} · ${selectedResultsRound.name}`,
+                                        `Failed attempt: ${failedAiAssessment.operationId}`,
+                                      ],
+                                      confirmLabel: "Retry first pass",
+                                      tone: "primary",
+                                    },
+                                    () => form.requestSubmit(),
+                                  );
+                                }}
+                              >
+                                Retry failed AI first pass
+                              </button>
+                            </Form>
+                          </div>
                         ) : loaderData.canManageAiAssessments &&
                           loaderData.resultsRoundId &&
                           selectedResultsRound &&

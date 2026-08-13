@@ -68,13 +68,25 @@ describe("file scanner provider contract", () => {
   it("routes jobs deterministically across the fixed scanner pool", async () => {
     const first = await scannerContainerInstanceName(
       "file-scan-dispatch:version-1",
+      1,
     );
     const repeated = await scannerContainerInstanceName(
       "file-scan-dispatch:version-1",
+      1,
     );
     expect(first).toBe(repeated);
     expect(first).toMatch(/^scanner-slot-[0-3]$/u);
     expect(first).not.toContain("version-1");
+
+    const retrySlots = await Promise.all(
+      [1, 2, 3, 4].map((attempt) =>
+        scannerContainerInstanceName("file-scan-dispatch:version-1", attempt),
+      ),
+    );
+    expect(new Set(retrySlots).size).toBe(4);
+    await expect(
+      scannerContainerInstanceName("file-scan-dispatch:version-1", 0),
+    ).rejects.toThrow(RangeError);
   });
 
   it("caps scanner-capacity retry delays at five minutes", () => {

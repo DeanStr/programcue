@@ -21,11 +21,26 @@ const generationInputSchema = z
     generationIntentId: z.uuid("Refresh before generating this AI assessment."),
     roundId: z.string().trim().min(1).max(200),
     submissionId: z.string().trim().min(1).max(200),
+    retryFailedOperationId: z.string().trim().min(1).max(200).optional(),
+    duplicateRiskAcknowledged: z.literal(true).optional(),
     confirmed: z.literal(true, {
       error: "Confirm the AI first-pass assessment before generating it.",
     }),
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    if (
+      Boolean(input.retryFailedOperationId) !==
+      Boolean(input.duplicateRiskAcknowledged)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["duplicateRiskAcknowledged"],
+        message:
+          "Explicitly acknowledge the possible duplicate provider request or charge before retrying a failed AI assessment.",
+      });
+    }
+  });
 
 const GENERATION_LEASE_SECONDS = 5 * 60;
 
@@ -164,6 +179,8 @@ const generationOperationPayloadSchema = z
   .object({
     type: z.literal("ai.review_assessment.generate"),
     generationIntentId: z.uuid(),
+    targetKey: z.string().regex(/^ai-review-assessment-target:[a-f0-9]{64}$/u),
+    retryOfOperationId: z.string().trim().min(1).max(200).nullable(),
     assessmentId: z.string().trim().min(1).max(200),
     requestHash: z.string().regex(/^[a-f0-9]{64}$/u),
     roundId: z.string().trim().min(1).max(200),
@@ -230,6 +247,21 @@ type GenerationOperationRow = {
   lastError: string | null;
   claimToken: string | null;
   claimExpiresAt: number | null;
+};
+
+export type FailedAiReviewAssessmentAttempt = {
+  operationId: string;
+  roundId: string;
+  submissionId: string;
+  roundRevision: number;
+  scorecardId: string;
+  scorecardVersion: number;
+  provider: ProviderKey;
+  providerLabel: AiModelProvider["providerName"];
+  model: string;
+  lastError: string;
+  providerRequestId: string | null;
+  failedAt: number;
 };
 
 export class AiReviewAssessmentConflictError extends Error {
@@ -376,6 +408,16 @@ function epochSeconds(value: Date) {
   return epoch;
 }
 
+function generationAttemptIdempotencyKey(
+  operationId: string,
+  targetKey: string,
+  retryOfOperationId: string | null,
+) {
+  return retryOfOperationId
+    ? `ai-review-assessment-attempt:${operationId}`
+    : targetKey;
+}
+
 export class AiReviewAssessmentService {
   private readonly now: () => Date;
 
@@ -455,6 +497,87 @@ export class AiReviewAssessmentService {
       .bind(viewer.organisationId, viewer.eventId)
       .all<AiReviewAssessmentRow>();
     return rows.results.map(assessmentFromRow);
+  }
+
+  async listFailedGenerationAttempts(
+    viewer: Viewer,
+  ): Promise<FailedAiReviewAssessmentAttempt[]> {
+    assertAssessmentAdministrator(viewer);
+    await this.assertViewerEvent(viewer);
+    const rows = await this.env.DB.prepare(
+      `SELECT operation.id, operation.payload_json AS payloadJson,
+              operation.result_json AS resultJson,
+              operation.last_error AS lastError,
+              operation.completed_at AS failedAt
+         FROM operation_jobs operation
+         JOIN events event
+           ON event.id = operation.event_id AND event.organisation_id = ?
+        WHERE operation.event_id = ?
+          AND operation.type = 'ai.review_assessment.generate'
+          AND operation.status = 'failed'
+        ORDER BY operation.completed_at DESC, operation.id DESC`,
+    )
+      .bind(viewer.organisationId, viewer.eventId)
+      .all<{
+        id: string;
+        payloadJson: string;
+        resultJson: string | null;
+        lastError: string | null;
+        failedAt: number | null;
+      }>();
+    const failedAttempts = rows.results.map((row) => {
+      if (!row.resultJson || !row.lastError || row.failedAt === null) {
+        throw new Error(
+          `Failed AI assessment operation ${row.id} is missing its durable failure evidence.`,
+        );
+      }
+      const payload = parseGenerationOperationPayload(row.payloadJson, row.id);
+      const failure = parseFailedGenerationResult(row.resultJson, row.id);
+      return {
+        id: row.id,
+        lastError: row.lastError,
+        failedAt: row.failedAt,
+        payload,
+        failure,
+      };
+    });
+    const retriedOperationIds = new Set(
+      failedAttempts.flatMap(({ payload }) =>
+        payload.retryOfOperationId ? [payload.retryOfOperationId] : [],
+      ),
+    );
+    const latestByTarget = new Map<string, FailedAiReviewAssessmentAttempt>();
+    for (const {
+      id,
+      lastError,
+      failedAt,
+      payload,
+      failure,
+    } of failedAttempts) {
+      // Failed attempts form a durable retry chain. Choose its leaf rather
+      // than relying on second-resolution timestamps and random UUID order.
+      if (retriedOperationIds.has(id)) continue;
+      if (latestByTarget.has(payload.targetKey)) {
+        throw new Error(
+          `AI assessment target ${payload.targetKey} has multiple failed retry leaves.`,
+        );
+      }
+      latestByTarget.set(payload.targetKey, {
+        operationId: id,
+        roundId: payload.roundId,
+        submissionId: payload.submissionId,
+        roundRevision: payload.roundRevision,
+        scorecardId: payload.scorecardId,
+        scorecardVersion: payload.scorecardVersion,
+        provider: payload.provider,
+        providerLabel: providerLabels[payload.provider],
+        model: payload.model,
+        lastError,
+        providerRequestId: failure.providerRequestId ?? null,
+        failedAt,
+      });
+    }
+    return [...latestByTarget.values()];
   }
 
   private async getById(viewer: Viewer, assessmentId: string) {
@@ -647,6 +770,30 @@ export class AiReviewAssessmentService {
       .first<GenerationOperationRow>();
   }
 
+  private async loadRunningGenerationOperation(
+    organisationId: string,
+    eventId: string,
+    targetKey: string,
+  ) {
+    return this.env.DB.prepare(
+      `SELECT id, organisation_id AS organisationId, event_id AS eventId,
+              requested_by_person_id AS requestedByPersonId, type,
+              idempotency_key AS idempotencyKey, status,
+              payload_json AS payloadJson, result_json AS resultJson,
+              last_error AS lastError, claim_token AS claimToken,
+              claim_expires_at AS claimExpiresAt
+         FROM operation_jobs
+        WHERE organisation_id = ? AND event_id = ?
+          AND type = 'ai.review_assessment.generate'
+          AND status = 'running'
+          AND json_extract(payload_json, '$.targetKey') = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1`,
+    )
+      .bind(organisationId, eventId, targetKey)
+      .first<GenerationOperationRow>();
+  }
+
   private assertOperationScope(
     viewer: Viewer,
     operation: GenerationOperationRow,
@@ -654,6 +801,7 @@ export class AiReviewAssessmentService {
       generationIntentId: string;
       roundId: string;
       submissionId: string;
+      retryFailedOperationId?: string;
     },
     targetKey: string,
     requestHash: string,
@@ -661,8 +809,7 @@ export class AiReviewAssessmentService {
     if (
       operation.organisationId !== viewer.organisationId ||
       operation.eventId !== viewer.eventId ||
-      operation.type !== "ai.review_assessment.generate" ||
-      operation.idempotencyKey !== targetKey
+      operation.type !== "ai.review_assessment.generate"
     ) {
       throw new AiReviewAssessmentIntentConflictError();
     }
@@ -672,11 +819,21 @@ export class AiReviewAssessmentService {
     );
     const exactIntent = operation.id === input.generationIntentId;
     if (
+      payload.targetKey !== targetKey ||
+      operation.idempotencyKey !==
+        generationAttemptIdempotencyKey(
+          operation.id,
+          targetKey,
+          payload.retryOfOperationId,
+        ) ||
       payload.generationIntentId !== operation.id ||
       !operation.requestedByPersonId ||
       payload.roundId !== input.roundId ||
       payload.submissionId !== input.submissionId ||
       payload.requestHash !== requestHash ||
+      (exactIntent &&
+        payload.retryOfOperationId !==
+          (input.retryFailedOperationId ?? null)) ||
       (exactIntent && operation.requestedByPersonId !== viewer.personId)
     ) {
       throw new AiReviewAssessmentIntentConflictError();
@@ -1118,8 +1275,14 @@ export class AiReviewAssessmentService {
   > {
     const claimToken = crypto.randomUUID();
     const now = epochSeconds(this.now());
+    const idempotencyKey = generationAttemptIdempotencyKey(
+      input.generationIntentId,
+      input.targetKey,
+      input.payload.retryOfOperationId,
+    );
     const metadata = JSON.stringify({
       operationId: input.generationIntentId,
+      retryOfOperationId: input.payload.retryOfOperationId,
       assessmentId: input.payload.assessmentId,
       roundId: input.payload.roundId,
       submissionId: input.payload.submissionId,
@@ -1170,11 +1333,29 @@ export class AiReviewAssessmentService {
                WHERE existing.event_id = event.id
                  AND existing.round_id = round.id
                  AND existing.submission_id = submission.id
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM operation_jobs active_attempt
+               WHERE active_attempt.event_id = event.id
+                 AND active_attempt.type = 'ai.review_assessment.generate'
+                 AND active_attempt.status IN ('running','completed')
+                 AND json_extract(active_attempt.payload_json, '$.targetKey') = ?
+            )
+            AND (
+              ? IS NULL OR NOT EXISTS (
+                SELECT 1 FROM operation_jobs retry_attempt
+                 WHERE retry_attempt.event_id = event.id
+                   AND retry_attempt.type = 'ai.review_assessment.generate'
+                   AND json_extract(
+                         retry_attempt.payload_json,
+                         '$.retryOfOperationId'
+                       ) = ?
+              )
             )`,
       ).bind(
         input.generationIntentId,
         viewer.personId,
-        input.targetKey,
+        idempotencyKey,
         input.generationIntentId,
         JSON.stringify(input.payload),
         claimToken,
@@ -1189,6 +1370,9 @@ export class AiReviewAssessmentService {
         input.payload.roundRevision,
         input.payload.scorecardId,
         input.payload.scorecardVersion,
+        input.targetKey,
+        input.payload.retryOfOperationId,
+        input.payload.retryOfOperationId,
       ),
       this.env.DB.prepare(
         `INSERT OR IGNORE INTO audit_events (
@@ -1221,11 +1405,18 @@ export class AiReviewAssessmentService {
         claimToken,
       ),
     ]);
-    const operation = await this.loadGenerationOperation(
+    const exactOperation = await this.loadExactGenerationOperation(
       input.generationIntentId,
-      viewer.eventId,
-      input.targetKey,
     );
+    const operation =
+      exactOperation ??
+      (input.payload.retryOfOperationId
+        ? null
+        : await this.loadGenerationOperation(
+            input.generationIntentId,
+            viewer.eventId,
+            input.targetKey,
+          ));
     if (!operation) {
       const state = await this.env.DB.prepare(
         `SELECT event.repository_provider AS repositoryProvider,
@@ -1259,7 +1450,23 @@ export class AiReviewAssessmentService {
                           AND existing.round_id = round.id
                           AND existing.submission_id = submission.id
                      )
-                ) AS targetIsCurrent
+                ) AS targetIsCurrent,
+                EXISTS (
+                  SELECT 1 FROM operation_jobs active_attempt
+                   WHERE active_attempt.event_id = event.id
+                     AND active_attempt.type = 'ai.review_assessment.generate'
+                     AND active_attempt.status IN ('running','completed')
+                     AND json_extract(active_attempt.payload_json, '$.targetKey') = ?
+                ) AS generationInProgress,
+                EXISTS (
+                  SELECT 1 FROM operation_jobs retry_attempt
+                   WHERE retry_attempt.event_id = event.id
+                     AND retry_attempt.type = 'ai.review_assessment.generate'
+                     AND json_extract(
+                           retry_attempt.payload_json,
+                           '$.retryOfOperationId'
+                         ) = ?
+                ) AS retryAlreadyCreated
            FROM events event
           WHERE event.id = ? AND event.organisation_id = ?`,
       )
@@ -1269,6 +1476,8 @@ export class AiReviewAssessmentService {
           input.payload.roundRevision,
           input.payload.scorecardId,
           input.payload.scorecardVersion,
+          input.targetKey,
+          input.payload.retryOfOperationId,
           viewer.eventId,
           viewer.organisationId,
         )
@@ -1276,6 +1485,8 @@ export class AiReviewAssessmentService {
           repositoryProvider: string;
           retentionCompletedAt: number | null;
           targetIsCurrent: number | boolean;
+          generationInProgress: number | boolean;
+          retryAlreadyCreated: number | boolean;
         }>();
       if (!state) {
         throw new Error(
@@ -1293,6 +1504,16 @@ export class AiReviewAssessmentService {
       if (!Boolean(state.targetIsCurrent)) {
         throw new AiReviewAssessmentStateError(
           "The review cycle, rubric or proposal changed before the AI assessment was reserved. Refresh before generating it.",
+        );
+      }
+      if (Boolean(state.generationInProgress)) {
+        throw new AiReviewAssessmentStateError(
+          "An AI first-pass assessment attempt is already running for this exact round and submission.",
+        );
+      }
+      if (Boolean(state.retryAlreadyCreated)) {
+        throw new AiReviewAssessmentStateError(
+          "A newer retry already exists for this failed AI assessment attempt. Refresh before retrying the latest failure.",
         );
       }
       throw new Error("The AI assessment operation could not be recorded.");
@@ -1341,25 +1562,76 @@ export class AiReviewAssessmentService {
       this.generationRequestHash(input, target),
       this.generationTargetKey(target),
     ]);
-    const existing = await this.loadGenerationOperation(
-      input.generationIntentId,
-      viewer.eventId,
-      targetKey,
-    );
-    if (existing) {
-      const payload = this.assertOperationScope(
-        viewer,
-        existing,
-        input,
-        targetKey,
-        requestHash,
-      );
-      return this.settleGenerationOperation(viewer, existing, payload);
-    }
     if (target.existingAssessmentId) {
       throw new AiReviewAssessmentStateError(
         "This round already has an AI first-pass assessment for the submission.",
       );
+    }
+    let retryOfOperationId: string | null = null;
+    if (input.retryFailedOperationId) {
+      const runningOperation = await this.loadRunningGenerationOperation(
+        viewer.organisationId,
+        viewer.eventId,
+        targetKey,
+      );
+      if (runningOperation) {
+        const runningPayload = this.assertOperationScope(
+          viewer,
+          runningOperation,
+          input,
+          targetKey,
+          requestHash,
+        );
+        // A prior explicit retry may have outlived its browser request. Resume
+        // a staged result, report an in-flight claim, or durably fail an
+        // expired indeterminate claim before another provider call is allowed.
+        return this.settleGenerationOperation(
+          viewer,
+          runningOperation,
+          runningPayload,
+        );
+      }
+      const failedOperation = await this.loadExactGenerationOperation(
+        input.retryFailedOperationId,
+      );
+      if (!failedOperation) {
+        throw new AiReviewAssessmentStateError(
+          "The failed AI assessment attempt is no longer available to retry.",
+        );
+      }
+      this.assertOperationScope(
+        viewer,
+        failedOperation,
+        input,
+        targetKey,
+        requestHash,
+      );
+      if (failedOperation.status !== "failed" || !failedOperation.resultJson) {
+        throw new AiReviewAssessmentStateError(
+          "Only a durably failed AI assessment attempt can be retried.",
+        );
+      }
+      parseFailedGenerationResult(
+        failedOperation.resultJson,
+        failedOperation.id,
+      );
+      retryOfOperationId = failedOperation.id;
+    } else {
+      const existing = await this.loadGenerationOperation(
+        input.generationIntentId,
+        viewer.eventId,
+        targetKey,
+      );
+      if (existing) {
+        const payload = this.assertOperationScope(
+          viewer,
+          existing,
+          input,
+          targetKey,
+          requestHash,
+        );
+        return this.settleGenerationOperation(viewer, existing, payload);
+      }
     }
     const rubric = await this.loadRubric(viewer, target);
     const snapshot = requireSubmittedSnapshot(
@@ -1387,6 +1659,8 @@ export class AiReviewAssessmentService {
     const payload = generationOperationPayloadSchema.parse({
       type: "ai.review_assessment.generate",
       generationIntentId: input.generationIntentId,
+      targetKey,
+      retryOfOperationId,
       assessmentId: crypto.randomUUID(),
       requestHash,
       roundId: target.roundId,

@@ -47,6 +47,14 @@ function backupBucket() {
   return (env as unknown as { BACKUPS: R2Bucket }).BACKUPS;
 }
 
+function exactLengthResponse(body: string) {
+  return new Response(body, {
+    headers: {
+      "content-length": String(new TextEncoder().encode(body).byteLength),
+    },
+  });
+}
+
 function immediateWorkflowStep(retryOnceFor?: string) {
   let retried = false;
   return {
@@ -353,25 +361,44 @@ describe("scheduled D1 backup Workflow boundaries", () => {
   });
 
   it("downloads the completed signed export as a stream without polling again", async () => {
-    const fetcher = vi.fn().mockResolvedValueOnce(
-      new Response("CREATE TABLE evidence(id TEXT);", { status: 200 }),
-    );
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        exactLengthResponse("CREATE TABLE evidence(id TEXT);"),
+      );
 
-    const stream = await downloadD1Export(
+    const download = await downloadD1Export(
       {
         phase: "complete",
-        bookmark:
-          "00000001-00000001-00004af0-4c272e70e7f7dc1d621ce046b88ad6c7",
+        bookmark: "00000001-00000001-00004af0-4c272e70e7f7dc1d621ce046b88ad6c7",
         filename: "export.sql",
         signedUrl,
       },
       fetcher,
     );
-    expect(stream).toBeInstanceOf(ReadableStream);
-    expect(await new Response(stream).text()).toBe(
+    expect(download.bytes).toBe(31);
+    expect(download.body).toBeInstanceOf(ReadableStream);
+    expect(await new Response(download.body).text()).toBe(
       "CREATE TABLE evidence(id TEXT);",
     );
     expect(fetcher.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("fails before storage when the signed export omits its exact length", async () => {
+    const response = new Response("CREATE TABLE evidence(id TEXT);");
+    response.headers.delete("content-length");
+
+    await expect(
+      downloadD1Export(
+        {
+          phase: "complete",
+          bookmark: "bookmark-one",
+          filename: "export.sql",
+          signedUrl,
+        },
+        vi.fn().mockResolvedValueOnce(response),
+      ),
+    ).rejects.toThrow("did not declare an exact content length");
   });
 
   it("streams bytes to private R2 and writes an immutable verifiable manifest", async () => {
@@ -387,6 +414,7 @@ describe("scheduled D1 backup Workflow boundaries", () => {
       databaseId: configuration.databaseId,
       bookmark: "bookmark-one",
       workflowInstanceId: `d1-backup-${backupDate}`,
+      expectedBytes: new TextEncoder().encode(sql).byteLength,
     });
 
     expect(stored).toMatchObject({
@@ -403,6 +431,7 @@ describe("scheduled D1 backup Workflow boundaries", () => {
         databaseId: configuration.databaseId,
         bookmark: "bookmark-one",
         workflowInstanceId: `d1-backup-${backupDate}`,
+        expectedBytes: new TextEncoder().encode(sql).byteLength,
       }),
     ).resolves.toEqual(stored);
     await expect(
@@ -412,6 +441,8 @@ describe("scheduled D1 backup Workflow boundaries", () => {
         databaseId: configuration.databaseId,
         bookmark: "bookmark-one",
         workflowInstanceId: `d1-backup-${backupDate}`,
+        expectedBytes: new TextEncoder().encode(`${sql}-- different\n`)
+          .byteLength,
       }),
     ).rejects.toMatchObject({
       name: "NonRetryableError",
@@ -444,6 +475,111 @@ describe("scheduled D1 backup Workflow boundaries", () => {
     ).resolves.toEqual(manifest);
   });
 
+  it("does not pull the complete export while the R2 consumer is paused", async () => {
+    const chunkCount = 128;
+    let sourcePulls = 0;
+    let releaseUpload!: () => void;
+    let observedFirstChunk!: () => void;
+    const uploadReleased = new Promise<void>((resolve) => {
+      releaseUpload = resolve;
+    });
+    const firstChunkObserved = new Promise<void>((resolve) => {
+      observedFirstChunk = resolve;
+    });
+    const source = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sourcePulls === chunkCount) {
+          controller.close();
+          return;
+        }
+        sourcePulls += 1;
+        controller.enqueue(Uint8Array.of(sourcePulls % 251));
+      },
+    });
+    const bucket = {
+      get: vi.fn().mockResolvedValue(null),
+      put: vi.fn(async (_key: string, value: unknown) => {
+        if (!(value instanceof ReadableStream)) {
+          throw new Error("The backup upload was not a readable stream.");
+        }
+        const reader = value.getReader();
+        let bytes = 0;
+        const first = await reader.read();
+        bytes += first.value?.byteLength ?? 0;
+        observedFirstChunk();
+        await uploadReleased;
+        while (true) {
+          const next = await reader.read();
+          if (next.done) break;
+          bytes += next.value.byteLength;
+        }
+        return {
+          size: bytes,
+          etag: "backpressure-etag",
+          uploaded: new Date("2026-08-13T02:17:00.000Z"),
+        } as R2Object;
+      }),
+    } as unknown as R2Bucket;
+    const storedPromise = storeBackupStream(bucket, source, {
+      backupKey: "d1-logical/2026-08-13/program-cue-2026-08-13.sql",
+      backupDate: "2026-08-13",
+      databaseId: configuration.databaseId,
+      bookmark: "bookmark-backpressure",
+      workflowInstanceId: "d1-backup-2026-08-13",
+      expectedBytes: chunkCount,
+    });
+
+    await firstChunkObserved;
+    expect(sourcePulls).toBeLessThan(chunkCount);
+    releaseUpload();
+    await expect(storedPromise).resolves.toMatchObject({
+      bytes: chunkCount,
+      objectEtag: "backpressure-etag",
+    });
+  });
+
+  it("aborts the digest pump when a conditional R2 write retains the stream lock", async () => {
+    const chunkCount = 1_000_000;
+    let sourcePulls = 0;
+    let sourceCancelled = false;
+    let uploadReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    const source = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        sourcePulls += 1;
+        controller.enqueue(Uint8Array.of(sourcePulls % 251));
+        if (sourcePulls === chunkCount) controller.close();
+      },
+      cancel() {
+        sourceCancelled = true;
+      },
+    });
+    const bucket = {
+      get: vi.fn().mockResolvedValue(null),
+      put: vi.fn(async (_key: string, value: unknown) => {
+        if (!(value instanceof ReadableStream)) {
+          throw new Error("The backup upload was not a readable stream.");
+        }
+        uploadReader = value.getReader();
+        void uploadReader.closed.catch(() => undefined);
+        return null;
+      }),
+    } as unknown as R2Bucket;
+
+    await expect(
+      storeBackupStream(bucket, source, {
+        backupKey: "d1-logical/2026-08-13/program-cue-2026-08-13.sql",
+        backupDate: "2026-08-13",
+        databaseId: configuration.databaseId,
+        bookmark: "bookmark-conflict",
+        workflowInstanceId: "d1-backup-2026-08-13",
+        expectedBytes: chunkCount,
+      }),
+    ).rejects.toThrow("reserved concurrently");
+    expect(sourceCancelled).toBe(true);
+    expect(sourcePulls).toBeLessThan(chunkCount);
+    uploadReader?.releaseLock();
+  });
+
   it("rejects an empty export before reserving its immutable daily key", async () => {
     const bucket = backupBucket();
     const backupDate = "2026-08-10";
@@ -454,6 +590,7 @@ describe("scheduled D1 backup Workflow boundaries", () => {
       databaseId: configuration.databaseId,
       bookmark: "bookmark-empty-retry",
       workflowInstanceId: `d1-backup-${backupDate}`,
+      expectedBytes: 0,
     };
 
     await expect(
@@ -465,7 +602,7 @@ describe("scheduled D1 backup Workflow boundaries", () => {
       storeBackupStream(
         bucket,
         new Blob(["CREATE TABLE recovered(id TEXT);\n"]).stream(),
-        input,
+        { ...input, expectedBytes: 33 },
       ),
     ).resolves.toMatchObject({ backupKey, bytes: 33 });
   });
@@ -497,7 +634,9 @@ describe("scheduled D1 backup Workflow boundaries", () => {
         );
       }
       if (url === signedUrl) {
-        return new Response("CREATE TABLE workflow_evidence(id TEXT);\n");
+        return exactLengthResponse(
+          "CREATE TABLE workflow_evidence(id TEXT);\n",
+        );
       }
       throw new Error(`Unexpected fetch in test: ${url}`);
     });
@@ -569,7 +708,7 @@ describe("scheduled D1 backup Workflow boundaries", () => {
       }
       if (url === signedUrl) {
         signedDownloads += 1;
-        return new Response(
+        return exactLengthResponse(
           `CREATE TABLE retry_evidence(id TEXT);\n-- download ${signedDownloads}\n`,
         );
       }

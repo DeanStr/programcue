@@ -4,6 +4,7 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 import {
   requireSourceRevision,
@@ -161,10 +162,11 @@ function isFetchTimeout(error: unknown) {
   );
 }
 
-function digestHex(value: ArrayBuffer) {
-  return Array.from(new Uint8Array(value), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
+function digestHex(value: ArrayBuffer | Uint8Array) {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 async function digestReadableStream(source: ReadableStream<Uint8Array>) {
@@ -187,41 +189,54 @@ async function digestReadableStream(source: ReadableStream<Uint8Array>) {
   };
 }
 
-async function requireNonEmptyStream(source: ReadableStream<Uint8Array>) {
+function startIncrementalDigestPipe(
+  source: ReadableStream<Uint8Array>,
+  destination: WritableStream<Uint8Array>,
+  expectedBytes: number,
+) {
+  const hasher = sha256.create();
+  let bytes = 0;
   const reader = source.getReader();
-  let firstChunk: Uint8Array;
-  try {
-    while (true) {
-      const next = await reader.read();
-      if (next.done) {
-        throw new Error("Cloudflare returned an empty D1 logical export.");
+  const writer = destination.getWriter();
+  const abort = async (reason: unknown) => {
+    await Promise.allSettled([
+      Promise.resolve().then(() => reader.cancel(reason)),
+      Promise.resolve().then(() => writer.abort(reason)),
+    ]);
+  };
+  const result = (async () => {
+    try {
+      while (true) {
+        const next = await reader.read();
+        if (next.done) break;
+        const chunk = next.value;
+        if (chunk.byteLength > Number.MAX_SAFE_INTEGER - bytes) {
+          throw new Error(
+            "The D1 backup is too large to record an exact byte count.",
+          );
+        }
+        if (chunk.byteLength > 0) {
+          bytes += chunk.byteLength;
+          hasher.update(chunk);
+          await writer.write(chunk);
+        }
       }
-      if (next.value.byteLength > 0) {
-        firstChunk = next.value;
-        break;
+      if (bytes !== expectedBytes) {
+        throw new Error(
+          "The D1 export body did not match its declared content length.",
+        );
       }
+      await writer.close();
+      return { bytes, sha256: digestHex(hasher.digest()) };
+    } catch (error) {
+      await abort(error);
+      throw error;
+    } finally {
+      reader.releaseLock();
+      writer.releaseLock();
     }
-  } catch (error) {
-    await reader.cancel(error).catch(() => undefined);
-    throw error;
-  }
-
-  let firstPending = true;
-  return new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      if (firstPending) {
-        firstPending = false;
-        controller.enqueue(firstChunk);
-        return;
-      }
-      const next = await reader.read();
-      if (next.done) controller.close();
-      else controller.enqueue(next.value);
-    },
-    cancel(reason) {
-      return reader.cancel(reason);
-    },
-  });
+  })();
+  return { abort, result };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -485,7 +500,25 @@ export async function downloadD1Export(
   if (response.redirected) {
     validateSignedDownloadUrl(response.url);
   }
-  return response.body;
+  const contentLength = response.headers.get("content-length") ?? "";
+  if (!/^\d+$/u.test(contentLength)) {
+    await response.body.cancel().catch(() => undefined);
+    throw new Error(
+      "The signed D1 export download did not declare an exact content length.",
+    );
+  }
+  const bytes = Number(contentLength);
+  if (!Number.isSafeInteger(bytes)) {
+    await response.body.cancel().catch(() => undefined);
+    throw new Error(
+      "The D1 backup is too large to record an exact byte count.",
+    );
+  }
+  if (bytes === 0) {
+    await response.body.cancel().catch(() => undefined);
+    throw new Error("Cloudflare returned an empty D1 logical export.");
+  }
+  return { body: response.body, bytes };
 }
 
 export async function storeBackupStream(
@@ -497,48 +530,26 @@ export async function storeBackupStream(
     databaseId: string;
     bookmark: string;
     workflowInstanceId: string;
+    expectedBytes: number;
   },
 ): Promise<StoredBackup> {
-  // Peek before reserving the immutable daily key. A successful zero-byte D1
-  // response must not poison that key for every subsequent Workflow retry.
-  const [storageStream, digestInput] = source.tee();
-  let nonEmptyDigestInput: ReadableStream<Uint8Array>;
-  try {
-    nonEmptyDigestInput = await requireNonEmptyStream(digestInput);
-  } catch (error) {
-    if (!storageStream.locked)
-      await storageStream.cancel(error).catch(() => undefined);
-    throw error;
+  if (input.expectedBytes === 0) {
+    await source.cancel().catch(() => undefined);
+    throw new Error("Cloudflare returned an empty D1 logical export.");
   }
-  const sourceDigestPromise = digestReadableStream(nonEmptyDigestInput);
-  let stored: R2Object | null;
-  try {
-    stored = await bucket.put(input.backupKey, storageStream, {
-      onlyIf: { etagDoesNotMatch: "*" },
-      httpMetadata: {
-        contentType: "application/sql; charset=utf-8",
-        contentDisposition: `attachment; filename="program-cue-${input.backupDate}.sql"`,
-      },
-      customMetadata: {
-        format: D1_BACKUP_FORMAT,
-        backupDate: input.backupDate,
-        databaseId: input.databaseId,
-        bookmark: input.bookmark,
-        workflowInstanceId: input.workflowInstanceId,
-      },
-    });
-  } catch (error) {
-    if (!storageStream.locked) await storageStream.cancel();
-    await sourceDigestPromise.catch(() => undefined);
-    throw error;
+  if (!Number.isSafeInteger(input.expectedBytes) || input.expectedBytes < 0) {
+    await source.cancel().catch(() => undefined);
+    throw new Error("Cloudflare returned an invalid D1 export length.");
   }
-  if (!stored && !storageStream.locked) await storageStream.cancel();
-  const sourceDigest = await sourceDigestPromise;
-  if (!stored) {
-    const existing = await bucket.get(input.backupKey);
-    if (!existing) {
+  const existing = await bucket.get(input.backupKey);
+  if (existing) {
+    // A prior attempt may have committed the immutable object before its
+    // manifest. Compare the two streams sequentially without coupling their
+    // consumers or buffering either body in Worker memory.
+    const sourceDigest = await digestReadableStream(source);
+    if (sourceDigest.bytes !== input.expectedBytes) {
       throw new Error(
-        "The conditional R2 backup write was rejected but no existing object was found.",
+        "The D1 export body did not match its declared content length.",
       );
     }
     const existingDigest = await digestReadableStream(
@@ -559,14 +570,57 @@ export async function storeBackupStream(
       uploadedAt: existing.uploaded.toISOString(),
     };
   }
-  if (stored.size !== sourceDigest.bytes) {
+
+  const fixedLength = new FixedLengthStream(input.expectedBytes);
+  const sourceDigest = startIncrementalDigestPipe(
+    source,
+    fixedLength.writable,
+    input.expectedBytes,
+  );
+  // R2 and the digest pump fail independently. Attach a rejection handler now
+  // so an early source failure is not reported as unhandled while put() is
+  // still settling; awaiting the original promise below still propagates it.
+  void sourceDigest.result.catch(() => undefined);
+  let stored: R2Object | null;
+  try {
+    stored = await bucket.put(input.backupKey, fixedLength.readable, {
+      onlyIf: { etagDoesNotMatch: "*" },
+      httpMetadata: {
+        contentType: "application/sql; charset=utf-8",
+        contentDisposition: `attachment; filename="program-cue-${input.backupDate}.sql"`,
+      },
+      customMetadata: {
+        format: D1_BACKUP_FORMAT,
+        backupDate: input.backupDate,
+        databaseId: input.databaseId,
+        bookmark: input.bookmark,
+        workflowInstanceId: input.workflowInstanceId,
+      },
+    });
+  } catch (error) {
+    await sourceDigest.abort(error);
+    await sourceDigest.result.catch(() => undefined);
+    throw error;
+  }
+  if (!stored) {
+    const conflict = new Error(
+      "The immutable R2 backup key was reserved concurrently; retry the storage step to verify it.",
+    );
+    await sourceDigest.abort(conflict);
+    await sourceDigest.result.catch(() => undefined);
+    // A concurrent writer won the conditional put. Retry with a fresh export
+    // stream so the existing-object branch above can compare exact contents.
+    throw conflict;
+  }
+  const digest = await sourceDigest.result;
+  if (stored.size !== digest.bytes) {
     throw new Error(
       "The private R2 backup write did not persist the complete export.",
     );
   }
   return {
     backupKey: input.backupKey,
-    ...sourceDigest,
+    ...digest,
     objectEtag: stored.etag,
     uploadedAt: stored.uploaded.toISOString(),
   };
@@ -870,12 +924,13 @@ export async function runD1BackupWorkflow(
         // validated short-lived URL from the durable poll into this retryable
         // download step instead.
         const dump = await downloadD1Export(state);
-        return storeBackupStream(environment.BACKUPS, dump, {
+        return storeBackupStream(environment.BACKUPS, dump.body, {
           backupKey,
           backupDate: expectedDate,
           databaseId: configuration.databaseId,
           bookmark: state.bookmark,
           workflowInstanceId: event.instanceId,
+          expectedBytes: dump.bytes,
         });
       },
     );

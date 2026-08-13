@@ -145,25 +145,30 @@ export async function workflowInstanceId(jobId: string) {
   return `scan-${hexadecimal}`;
 }
 
-export async function scannerContainerInstanceName(jobId: string) {
+export async function scannerContainerInstanceName(
+  jobId: string,
+  attempt: number,
+) {
+  const validAttempt = requirePositiveAttempt(attempt);
   const digest = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(jobId),
   );
-  const slot =
+  const baseSlot =
     new DataView(digest).getUint32(0, false) % SCANNER_CONTAINER_POOL_SIZE;
+  const slot = (baseSlot + validAttempt - 1) % SCANNER_CONTAINER_POOL_SIZE;
   return `scanner-slot-${slot}`;
 }
 
-function requireCapacityAttempt(attempt: number) {
+function requirePositiveAttempt(attempt: number) {
   if (!Number.isInteger(attempt) || attempt < 1) {
-    throw new RangeError("Scanner capacity attempt must be a positive integer.");
+    throw new RangeError("Scanner attempt must be a positive integer.");
   }
   return attempt;
 }
 
 export function scannerCapacityDelaySeconds(attempt: number) {
-  const validAttempt = requireCapacityAttempt(attempt);
+  const validAttempt = requirePositiveAttempt(attempt);
   return Math.min(300, 15 * 2 ** Math.min(validAttempt - 1, 5));
 }
 
@@ -171,7 +176,7 @@ export function scannerCapacityShouldWait(
   code: "scanner_busy" | "scanner_not_ready",
   attempt: number,
 ) {
-  const validAttempt = requireCapacityAttempt(attempt);
+  const validAttempt = requirePositiveAttempt(attempt);
   const limit =
     code === "scanner_busy"
       ? SCANNER_BUSY_ATTEMPT_LIMIT

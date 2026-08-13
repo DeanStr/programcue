@@ -192,7 +192,12 @@ export function EvaluationReviewCyclePanel() {
   const plan = loaderData.plan;
   const preview = loaderData.reviewCyclePreview;
   if (!plan || !preview || !loaderData.canManageEvaluationAccess) return null;
-  const sourceCriteria = plan.rounds[0]?.criteria ?? defaultRubric;
+  const sourceRound = plan.rounds.at(-1);
+  if (!sourceRound) {
+    throw new Error(
+      "The current evaluation plan has no round to supply a new-cycle rubric.",
+    );
+  }
   const runningAssessmentCount = Number(
     preview.runningAssessmentOperationCount,
   );
@@ -291,7 +296,16 @@ export function EvaluationReviewCyclePanel() {
                 Apply the blinded reviewer projection to this new round.
               </span>
             </label>
-            <RubricFields criteria={sourceCriteria} />
+            <div className="validation-item info">
+              <strong>Rubric source</strong>
+              <span>
+                Prefilled from Round {sourceRound.roundNumber} —{" "}
+                {sourceRound.name}
+                {" · "}Scorecard v{sourceRound.scorecardVersion}. Review and
+                edit every criterion before starting the new cycle.
+              </span>
+            </div>
+            <RubricFields criteria={sourceRound.criteria} />
             <button
               className="btn danger"
               type="button"
@@ -309,6 +323,7 @@ export function EvaluationReviewCyclePanel() {
                       "The current plan leaves the active reviewer queues and becomes read-only history. Published decisions and submission states are not reopened or changed.",
                     records: [
                       `${plan.name} · ${plan.rounds.length} round${plan.rounds.length === 1 ? "" : "s"}`,
+                      `Rubric copied from Round ${sourceRound.roundNumber} — ${sourceRound.name} · Scorecard v${sourceRound.scorecardVersion}`,
                       `${preview.unfinishedAssignmentCount} unfinished assignment${preview.unfinishedAssignmentCount === 1 ? "" : "s"}`,
                       `${preview.unfinishedReviewCount} saved unfinished review${preview.unfinishedReviewCount === 1 ? "" : "s"}`,
                     ],

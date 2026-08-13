@@ -35,6 +35,14 @@ const evaluator: Viewer = {
   role: "evaluator",
 };
 
+const committeeChair: Viewer = {
+  ...admin,
+  personId: "person-demo-chair",
+  name: "Priya Shah",
+  email: "priya.chair@example.com",
+  role: "committee_chair",
+};
+
 const ROUND_ID = "demo-evaluation-round";
 const SUBMISSION_ID = "demo-evaluation-submission-calm";
 const generatedAt = new Date("2026-08-13T12:00:00Z");
@@ -317,6 +325,269 @@ describe("persisted AI first-pass review assessments", () => {
       .bind(admin.eventId)
       .first<{ count: number }>();
     expect(failureAudit?.count).toBe(1);
+  });
+
+  it("creates an explicitly acknowledged attempt linked to the retained failed operation", async () => {
+    const create = vi
+      .fn<(request: OpenAiResponsesRequest) => Promise<OpenAiResponse>>()
+      .mockRejectedValueOnce(
+        new AiProviderError(
+          "Workers AI request failed with status 503.",
+          503,
+          "provider-request-503",
+        ),
+      )
+      .mockResolvedValueOnce(
+        structuredResponse(validAssessment(), "retry-provider-response"),
+      );
+    const service = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+      { provider: workersAiProvider(create), now: () => generatedAt },
+    );
+    const failedInput = generationInput();
+
+    await expect(service.generate(admin, failedInput)).rejects.toThrow(
+      /status 503/i,
+    );
+    await expect(
+      service.generate(admin, {
+        ...generationInput(),
+        retryFailedOperationId: failedInput.generationIntentId,
+      }),
+    ).rejects.toThrow(/acknowledge.*duplicate provider request or charge/i);
+    expect(create).toHaveBeenCalledTimes(1);
+
+    const failedAttempts = await service.listFailedGenerationAttempts(admin);
+    expect(failedAttempts).toEqual([
+      expect.objectContaining({
+        operationId: failedInput.generationIntentId,
+        roundId: ROUND_ID,
+        submissionId: SUBMISSION_ID,
+        lastError: expect.stringMatching(/status 503/i),
+        providerRequestId: "provider-request-503",
+      }),
+    ]);
+    await expect(
+      service.listFailedGenerationAttempts(committeeChair),
+    ).rejects.toMatchObject({ status: 403 });
+
+    const retryInput = {
+      ...generationInput(),
+      retryFailedOperationId: failedInput.generationIntentId,
+      duplicateRiskAcknowledged: true as const,
+    };
+    await expect(service.generate(admin, retryInput)).resolves.toMatchObject({
+      providerResponseId: "retry-provider-response",
+      score: 4.25,
+    });
+    expect(create).toHaveBeenCalledTimes(2);
+    await expect(service.generate(admin, retryInput)).resolves.toMatchObject({
+      providerResponseId: "retry-provider-response",
+    });
+    expect(create).toHaveBeenCalledTimes(2);
+
+    const operations = await env.DB.prepare(
+      `SELECT id, idempotency_key AS idempotencyKey, status,
+              json_extract(payload_json, '$.retryOfOperationId') AS retryOfOperationId
+         FROM operation_jobs
+        WHERE event_id = ? AND type = 'ai.review_assessment.generate'
+        ORDER BY id`,
+    )
+      .bind(admin.eventId)
+      .all<{
+        id: string;
+        idempotencyKey: string;
+        status: string;
+        retryOfOperationId: string | null;
+      }>();
+    expect(operations.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: failedInput.generationIntentId,
+          status: "failed",
+          retryOfOperationId: null,
+        }),
+        expect.objectContaining({
+          id: retryInput.generationIntentId,
+          idempotencyKey: `ai-review-assessment-attempt:${retryInput.generationIntentId}`,
+          status: "completed",
+          retryOfOperationId: failedInput.generationIntentId,
+        }),
+      ]),
+    );
+  });
+
+  it("allows only one explicit retry attempt to reach the provider", async () => {
+    let releaseRetry!: (response: OpenAiResponse) => void;
+    let markRetryStarted!: () => void;
+    const retryStarted = new Promise<void>((resolve) => {
+      markRetryStarted = resolve;
+    });
+    const pendingRetry = new Promise<OpenAiResponse>((resolve) => {
+      releaseRetry = resolve;
+    });
+    let providerCall = 0;
+    const create = vi.fn(async () => {
+      providerCall += 1;
+      if (providerCall === 1) {
+        throw new AiProviderError(
+          "Workers AI was temporarily unavailable.",
+          503,
+        );
+      }
+      markRetryStarted();
+      return pendingRetry;
+    });
+    const service = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+      { provider: workersAiProvider(create) },
+    );
+    const failedInput = generationInput();
+    await expect(service.generate(admin, failedInput)).rejects.toThrow(
+      /temporarily unavailable/i,
+    );
+    const retry = (generationIntentId = crypto.randomUUID()) => ({
+      ...generationInput(generationIntentId),
+      retryFailedOperationId: failedInput.generationIntentId,
+      duplicateRiskAcknowledged: true as const,
+    });
+
+    const firstRetry = service.generate(admin, retry());
+    await retryStarted;
+    await expect(service.generate(admin, retry())).rejects.toThrow(
+      /already running/i,
+    );
+    expect(create).toHaveBeenCalledTimes(2);
+
+    releaseRetry(
+      structuredResponse(validAssessment(), "single-retry-response"),
+    );
+    await expect(firstRetry).resolves.toMatchObject({
+      providerResponseId: "single-retry-response",
+    });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a stale retry once the failed operation has a retry child", async () => {
+    const create = vi
+      .fn<(request: OpenAiResponsesRequest) => Promise<OpenAiResponse>>()
+      .mockRejectedValueOnce(
+        new AiProviderError("Workers AI initial request failed.", 503),
+      )
+      .mockRejectedValueOnce(
+        new AiProviderError("Workers AI retry request failed.", 503),
+      )
+      .mockResolvedValueOnce(
+        structuredResponse(validAssessment(), "latest-retry-response"),
+      );
+    const service = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+      { provider: workersAiProvider(create) },
+    );
+    const initialInput = generationInput();
+    await expect(service.generate(admin, initialInput)).rejects.toThrow(
+      /initial request failed/i,
+    );
+    const firstRetryInput = {
+      ...generationInput(),
+      retryFailedOperationId: initialInput.generationIntentId,
+      duplicateRiskAcknowledged: true as const,
+    };
+    await expect(service.generate(admin, firstRetryInput)).rejects.toThrow(
+      /retry request failed/i,
+    );
+
+    await expect(
+      service.generate(admin, {
+        ...generationInput(),
+        retryFailedOperationId: initialInput.generationIntentId,
+        duplicateRiskAcknowledged: true,
+      }),
+    ).rejects.toThrow(/newer retry already exists/i);
+    expect(create).toHaveBeenCalledTimes(2);
+
+    const [latestFailure] = await service.listFailedGenerationAttempts(admin);
+    if (!latestFailure) throw new Error("Expected the failed retry leaf.");
+    expect(latestFailure.operationId).toBe(firstRetryInput.generationIntentId);
+    await expect(
+      service.generate(admin, {
+        ...generationInput(),
+        retryFailedOperationId: latestFailure.operationId,
+        duplicateRiskAcknowledged: true,
+      }),
+    ).resolves.toMatchObject({
+      providerResponseId: "latest-retry-response",
+    });
+    expect(create).toHaveBeenCalledTimes(3);
+  });
+
+  it("reconciles an expired explicit retry before another provider attempt", async () => {
+    const create = vi
+      .fn<(request: OpenAiResponsesRequest) => Promise<OpenAiResponse>>()
+      .mockRejectedValueOnce(
+        new AiProviderError("Workers AI was temporarily unavailable.", 503),
+      )
+      .mockResolvedValueOnce(
+        structuredResponse(validAssessment(), "unpersisted-retry-response"),
+      )
+      .mockResolvedValueOnce(
+        structuredResponse(validAssessment(), "recovered-retry-response"),
+      );
+    let interruptBeforePersistence = true;
+    const service = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+      {
+        provider: workersAiProvider(create),
+        beforeProviderResultPersisted: () => {
+          if (!interruptBeforePersistence) return;
+          interruptBeforePersistence = false;
+          throw new Error("Simulated Worker exit before retry persistence.");
+        },
+      },
+    );
+    const initialInput = generationInput();
+    await expect(service.generate(admin, initialInput)).rejects.toThrow(
+      /temporarily unavailable/i,
+    );
+
+    const interruptedRetry = {
+      ...generationInput(),
+      retryFailedOperationId: initialInput.generationIntentId,
+      duplicateRiskAcknowledged: true as const,
+    };
+    await expect(service.generate(admin, interruptedRetry)).rejects.toThrow(
+      /simulated Worker exit/i,
+    );
+    expect(create).toHaveBeenCalledTimes(2);
+    await env.DB.prepare(
+      "UPDATE operation_jobs SET claim_expires_at = 0 WHERE id = ?",
+    )
+      .bind(interruptedRetry.generationIntentId)
+      .run();
+
+    await expect(
+      service.generate(admin, {
+        ...generationInput(),
+        retryFailedOperationId: initialInput.generationIntentId,
+        duplicateRiskAcknowledged: true,
+      }),
+    ).rejects.toThrow(/outcome is indeterminate/i);
+    expect(create).toHaveBeenCalledTimes(2);
+
+    const [latestFailure] = await service.listFailedGenerationAttempts(admin);
+    expect(latestFailure?.operationId).toBe(
+      interruptedRetry.generationIntentId,
+    );
+    await expect(
+      service.generate(admin, {
+        ...generationInput(),
+        retryFailedOperationId: latestFailure?.operationId,
+        duplicateRiskAcknowledged: true,
+      }),
+    ).resolves.toMatchObject({
+      providerResponseId: "recovered-retry-response",
+    });
+    expect(create).toHaveBeenCalledTimes(3);
   });
 
   it("keeps the AI result immutable while a CAS-protected human override persists separately", async () => {

@@ -198,6 +198,9 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
       "No reviewers are in this round pool.",
     );
     await expect(initialCard).toContainText("Sam Whitfield");
+    await expect(cyclePanel).toContainText(
+      `Prefilled from Round 2 — ${FINAL_ROUND} · Scorecard v1`,
+    );
 
     await progression.getByLabel("Next round name").fill("Accidental round");
     await progression.getByRole("button", { name: "Add next round" }).click();
