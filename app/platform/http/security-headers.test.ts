@@ -17,10 +17,13 @@ describe("Worker security headers", () => {
       "frame-ancestors 'self'",
     );
     expect(production.get("content-security-policy")).toContain(
-      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
     );
     expect(production.get("content-security-policy")).toContain(
       "connect-src 'self' https://challenges.cloudflare.com https://*.r2.cloudflarestorage.com",
+    );
+    expect(production.get("content-security-policy")).not.toContain(
+      "https://cloudflareinsights.com",
     );
     expect(production.get("content-security-policy")).toContain(
       "img-src 'self' data: blob: https:",

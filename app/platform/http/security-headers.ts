@@ -21,7 +21,7 @@ function contentSecurityPolicy(resourceEmbedOrigins: unknown) {
     "https://challenges.cloudflare.com",
     ...origins,
   ].join(" ");
-  return `default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://challenges.cloudflare.com https://*.r2.cloudflarestorage.com; font-src 'self'; frame-src ${frameSources}; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'`;
+  return `default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://challenges.cloudflare.com https://*.r2.cloudflarestorage.com; font-src 'self'; frame-src ${frameSources}; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'`;
 }
 
 export function applySecurityHeaders(
