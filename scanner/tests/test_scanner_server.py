@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import pathlib
 import tempfile
 import unittest
@@ -96,6 +97,29 @@ class ScannerServerContractTests(unittest.TestCase):
             with mock.patch.object(scanner.time, "sleep") as sleep:
                 self.assertTrue(scanner.wait_for_clamav(timeout_seconds=1))
                 sleep.assert_called_once_with(0.25)
+
+    def test_download_passes_exact_identity_to_r2_binding_proxy(self):
+        object_input = self.job()["object"]
+        object_input["sizeBytes"] = 4
+        object_input["etag"] = '"etag-1"'
+        response = io.BytesIO(b"safe")
+        response.status = 200
+        response.headers = {"Content-Length": "4", "ETag": '"etag-1"'}
+        opener = mock.Mock()
+        opener.open.return_value = response
+
+        with tempfile.TemporaryDirectory() as directory:
+            destination = pathlib.Path(directory) / "object"
+            with mock.patch.object(scanner.urllib.request, "build_opener", return_value=opener):
+                self.assertEqual(
+                    scanner.download_verified_object(object_input, destination),
+                    4,
+                )
+            request = opener.open.call_args.args[0]
+            self.assertEqual(request.get_header("X-program-cue-expected-size"), "4")
+            self.assertEqual(
+                request.get_header("X-program-cue-expected-etag"), '"etag-1"'
+            )
 
     def test_ping_is_liveness_while_health_is_readiness(self):
         handler = object.__new__(scanner.ScannerHandler)

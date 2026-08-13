@@ -121,10 +121,19 @@ FileScannerContainer.outbound = async (request, environment) => {
     }
     const object = await scannerEnvironment.FILES.get(key);
     if (!object) return new Response("Not found.", { status: 404 });
+    const expectedSize = request.headers.get("x-program-cue-expected-size");
+    const expectedEtag = request.headers.get("x-program-cue-expected-etag");
+    if (
+      expectedSize !== String(object.size) ||
+      expectedEtag?.replace(/^W\//u, "").replaceAll('"', "") !== object.etag
+    ) {
+      return new Response("Object identity mismatch.", { status: 412 });
+    }
     return new Response(request.method === "HEAD" ? null : object.body, {
       headers: {
         "content-length": String(object.size),
         etag: object.httpEtag,
+        "x-program-cue-object-verified": "r2-binding-v1",
       },
     });
   }

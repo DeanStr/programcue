@@ -138,7 +138,11 @@ def download_verified_object(
     request = urllib.request.Request(
         object_input["url"],
         method="GET",
-        headers={"User-Agent": "Program-Cue-File-Scanner/1"},
+        headers={
+            "User-Agent": "Program-Cue-File-Scanner/1",
+            "X-Program-Cue-Expected-Size": str(expected_size),
+            "X-Program-Cue-Expected-Etag": expected_etag,
+        },
     )
     opener = urllib.request.build_opener(NoRedirect())
     started = time.monotonic()
@@ -313,7 +317,19 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 self._json(200, result)
             except (ContractError, UnicodeError, json.JSONDecodeError):
                 self._json(400, {"error": "The scan job is invalid."})
-            except ObjectFetchError:
+            except ObjectFetchError as error:
+                print(
+                    json.dumps(
+                        {
+                            "level": "error",
+                            "subsystem": "file-scanner-container",
+                            "event": "object-fetch-failed",
+                            "message": str(error),
+                        },
+                        separators=(",", ":"),
+                    ),
+                    flush=True,
+                )
                 self._json(422, {"error": "The private object could not be verified."})
             except ClamScanError:
                 self._json(503, {"error": "ClamAV could not produce a verdict."})
