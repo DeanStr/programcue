@@ -39,13 +39,24 @@
 
 ## Validation
 
-Run the smallest relevant checks during development. Before completing a code or configuration change, run:
+Run the smallest relevant checks during development and before completing an
+ordinary change. Prefer the directly affected unit or Worker files, or
+`npm run test:changed`, plus `npm run typecheck:generated`. Run
+`npm run typecheck` instead when route types, Worker bindings or generated
+types may have changed. `npm run check:focused` combines incremental
+TypeScript validation with tests affected by changes since the local `main`
+branch, including staged and unstaged changes.
 
-```bash
-npm run check:core
-```
+For user-facing changes, exercise the affected real browser workflow and run
+the relevant Playwright spec when applicable. Update Playwright behavior or
+visual coverage when the observable contract changes. A user-facing change
+does not by itself require the complete repository gate.
 
-For user-facing changes, exercise the real browser workflow, update Playwright behavior or visual coverage as needed, and run `npm run check` when Chromium is available. Also run `npm run check` for release or merge candidates. For Worker/API changes, update tests and keep `docs/openapi.yaml` and `public/openapi.json` synchronized.
+Run `npm run check:core` for cross-cutting runtime, schema, authorization,
+configuration or validation-runner changes. Run `npm run check` once for a
+release or merge candidate when Chromium is available. For Worker/API changes,
+update tests and keep `docs/openapi.yaml` and `public/openapi.json`
+synchronized.
 
 Documentation-only changes may use focused validation. Report any required checks that were not run and why; never claim the full suite passed when the browser check did not run.
 

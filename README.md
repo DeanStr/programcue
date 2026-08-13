@@ -86,19 +86,39 @@ The shards reserve five consecutive ports beginning at `5173`; their inspector p
 Use the smaller commands while developing:
 
 ```bash
+npm run check:focused
 npm run check:core
 npm run check:quick
 npm run typecheck
 npm test
 npm run test:unit
 npm run test:worker
+npm run test:worker:runtime -- app/modules/example/example.test.ts
+npm run test:changed
+npm run test:related -- app/modules/example/example.server.ts
 npm run test:config
 npm run build
 npm run test:e2e
 npm run performance:local
 ```
 
-`check:quick` runs the complete core gate plus sharded desktop Chromium behavior, excluding the full visual inventory and cross-browser smoke. It is an iteration aid, not a release or user-facing completion gate. `test:unit` runs deterministic Node-compatible rules without starting Workerd or applying D1 migrations. `test:worker` runs the service, route and provider-boundary suites against the Cloudflare runtime. `npm test` runs both projects; no focused or quick command replaces the complete validation gate.
+`check:focused` uses the existing generated types and runs tests affected by
+changes since the local `main` branch, including staged and unstaged changes.
+Use `typecheck` instead when route types, Worker bindings or generated types
+may have changed. `test:changed` selects tests from the Node, Workerd and Agents
+projects using Vitest's changed-file graph;
+`test:related` accepts one or more source paths explicitly. The
+`test:worker:runtime` command makes a single Workerd file genuinely focusable
+without also starting the separate Agents Durable Object project.
+
+`check:quick` runs the complete core gate plus sharded desktop Chromium
+behavior, excluding the full visual inventory and cross-browser smoke. It is an
+integration aid, not an ordinary completion gate. `test:unit` runs
+deterministic Node-compatible rules without starting Workerd or applying D1
+migrations. `test:worker` runs the service, route and provider-boundary suites
+against the Cloudflare runtime, followed by the Agents Durable Object project.
+`npm test` runs both projects; focused commands do not replace the complete
+merge or release gate.
 
 ## Production configuration
 

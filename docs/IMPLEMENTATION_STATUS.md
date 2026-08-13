@@ -219,6 +219,24 @@ npm run check:core
 npm run check
 ```
 
+The isolated `codex/test-productivity` worktree passed `npm run check:core` on
+13 August 2026 in 281.3 seconds. The gate covered 48 configuration contracts;
+52 Node files with 284 tests; 141 Worker/D1 files with 1,085 tests; the Agents
+Durable Object test; 10 scanner tests; production client/SSR builds; migration
+parity at 94 application tables, 106 indexes and 83 triggers; a 132,698-byte
+clean-room recovery drill; and synchronized OpenAPI documents at 33 paths and
+459 internal references. Five deterministic files now run in the Node project
+without deleting assertions. Focused related-source selection ran 16 tests in
+two affected files, while an unrelated documentation path exited successfully
+with no tests. A representative 70-test Workerd concurrency matrix improved
+from 18.6 seconds at two workers to 13.7 seconds at twelve, so the runner keeps
+Vitest's adaptive default rather than imposing an unproven global cap. Browser
+coverage was not rerun because this candidate changes validation policy and
+test routing, not product behavior. After the worktree fast-forwarded to the
+subsequent `3c34395` migration-splitter correction, all 48 configuration
+contracts, migration parity and a 132,697-byte clean-room recovery drill passed
+again with focused validation.
+
 The isolated `codex/review-fixes` candidate passed `npm run check` on 13
 August 2026 in 322.1 seconds. The gate covered 18 configuration contracts;
 44 Node files with 222 tests; 135 Worker/D1 files with 1,001 tests; the Agents
