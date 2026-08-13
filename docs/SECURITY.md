@@ -31,10 +31,10 @@ This is an implementation baseline, not a production certification.
 
 ## Outstanding production acceptance
 
-- Provision and exercise Turnstile, private R2 signing credentials/CORS, the malware scanner and provider-side erasure. Unit/Worker boundaries do not prove the live widget, bucket or scanner.
+- Turnstile and the private-R2-to-scanner clean/EICAR paths have live production evidence. Browser multipart signing/CORS, a fresh provider-error callback and provider-side erasure still require acceptance.
 - The current content security policy permits inline scripts and styles for the application build. A nonce/hash-based production policy and third-party provider allow-list are not complete.
-- Exercise real Resend sender/domain/webhook delivery, Google/Microsoft OAuth, Airtable, Accelevents and external AI-provider paths with production-scoped credentials. No live-provider success is claimed here.
-- The D1-export Workflow, checksum manifest and clean-room logical restore drill are repository evidence only. No production backup, alert, point-in-time/logical restore or measured RPO/RTO has been completed.
+- Real owner Resend magic-link delivery and Google/Microsoft sign-in/calendar connections have production evidence. Tracked Resend receipt reconciliation, calendar invitation lifecycle, Airtable, Accelevents and external AI-provider paths still require production acceptance.
+- The deployed D1-export Workflow code produced an immutable private-R2 backup and checksum manifest, and that exact object passed an isolated remote-D1 restore drill. The next autonomous post-fix cron, point-in-time restore exercise, alert delivery and measured RPO/RTO remain outstanding.
 - There is no deployed penetration test, dependency-policy gate, secret-rotation exercise or production access review in this workspace.
-- Invocation logs and sampled Workers traces are configured in-repository, but deployed log retention, alerts, dashboards, trace continuity and incident-response evidence remain unverified.
+- Retained production logs are queryable and both Workers persist full invocation logs plus 10% sampled traces. A generic Workers Observability failure-notification route exists, but condition-specific missing-backup/Queue/scanner alerts, delivered alert evidence, dashboards, trace continuity and incident response remain unverified.
 - Automated Playwright/axe coverage does not replace manual screen-reader, keyboard-only, contrast and zoom acceptance.

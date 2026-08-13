@@ -58,8 +58,8 @@ Route handlers own HTTP concerns. Deterministic rules and state transitions live
 
 ## External acceptance boundaries
 
-- No live Airtable or Accelevents base, Resend sending domain, Google/Microsoft OAuth application, external AI-provider credential, R2 signing/CORS setup, malware scanner or Turnstile widget has been exercised from this workspace.
-- The scheduled backup Workflow, structured Worker logs/traces and correlation/revision fields are implemented, but no deployed backup, retained log inspection, alert, live restore or measured RPO/RTO exists.
+- Turnstile, the Resend domain/owner magic-link path, Google/Microsoft sign-in/calendar connection and private-R2 clean/EICAR scanner verdicts have production evidence. Browser multipart signing/CORS, tracked provider delivery, Airtable/Accelevents and external AI-provider paths remain acceptance boundaries.
+- The deployed backup Workflow code has written a checksum-manifested private-R2 object, retained logs are queryable and that exact object passed an isolated remote-D1 restore. The next autonomous post-fix cron, condition-specific alert delivery, trace continuity and measured RPO/RTO remain outstanding.
 - The local performance harness and 10,000-record fixture are implemented. Deployed p75 RUM, production-like scale and cost evidence remain required.
 - Automated Playwright/axe and visual coverage does not replace manual screen-reader, keyboard-only, contrast and zoom acceptance.
 - Forge, a deployed evaluator URL and competition submission/walkthrough evidence are outside the repository implementation.
