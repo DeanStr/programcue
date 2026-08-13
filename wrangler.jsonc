@@ -17,8 +17,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "program-cue-db",
-      "database_id": "e272bd36-0f62-435e-b7bb-2e2995dedf34",
+      "database_name": "program-cue-db-wnam",
+      "database_id": "ac812720-eefc-45d0-b6cf-0236ab8de8c8",
       "migrations_dir": "migrations",
     },
   ],
@@ -93,7 +93,7 @@
     "EMAIL_PROVIDER": "resend",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAENJ1zg5h3WGnYdU",
     "CLOUDFLARE_ACCOUNT_ID": "327c60945460c16be8ecdbbc7fa35447",
-    "D1_DATABASE_ID": "e272bd36-0f62-435e-b7bb-2e2995dedf34",
+    "D1_DATABASE_ID": "ac812720-eefc-45d0-b6cf-0236ab8de8c8",
     "R2_ACCOUNT_ID": "327c60945460c16be8ecdbbc7fa35447",
     "R2_BUCKET_NAME": "program-cue-files",
     "FILE_SCANNER_API_URL": "https://scanner.programcue.com/v1/scans",
