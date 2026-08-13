@@ -326,33 +326,23 @@ describe("organisation AI provider boundary", () => {
     );
   });
 
-  it("streams Workers AI Responses deltas through the provider contract", async () => {
-    const encoder = new TextEncoder();
-    const raw = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(
-          encoder.encode(
-            'data: {"type":"response.output_text.delta","delta":"Workers "}\n\n',
-          ),
-        );
-        controller.enqueue(
-          encoder.encode(
-            'data: {"type":"response.output_text.delta","delta":"stream"}\n\n',
-          ),
-        );
-        controller.enqueue(
-          encoder.encode(
-            'data: {"type":"response.completed","response":{"id":"workers-stream-1","model":"@cf/openai/gpt-oss-120b","output":[{"type":"message","content":[{"type":"output_text","text":"Workers stream"}]}]}}\n\n',
-          ),
-        );
-        controller.close();
-      },
-    });
+  it("returns a Workers AI Responses result to streaming callers without requesting the incompatible binding stream", async () => {
+    const raw = {
+      id: "workers-buffered-1",
+      model: "@cf/openai/gpt-oss-120b",
+      output: [
+        {
+          type: "message",
+          content: [{ type: "output_text", text: "Workers result" }],
+        },
+      ],
+    };
     const deltas: string[] = [];
+    const run = vi.fn().mockResolvedValue(raw);
     const provider = new WorkersAiResponsesProvider(
       {
-        aiGatewayLogId: "workers-log-stream",
-        run: vi.fn().mockResolvedValue(raw),
+        aiGatewayLogId: "workers-log-buffered",
+        run,
       },
       "@cf/openai/gpt-oss-120b",
     );
@@ -362,8 +352,12 @@ describe("organisation AI provider boundary", () => {
       safetyIdentifier: "pc_test",
       onTextDelta: (delta) => deltas.push(delta),
     });
-    expect(deltas).toEqual(["Workers ", "stream"]);
-    expect(result.id).toBe("workers-stream-1");
+    expect(deltas).toEqual(["Workers result"]);
+    expect(result.id).toBe("workers-buffered-1");
+    expect(run).toHaveBeenCalledWith(
+      "@cf/openai/gpt-oss-120b",
+      expect.not.objectContaining({ stream: true }),
+    );
   });
 
   it("maps strict Anthropic tool calls and results through the shared contract", async () => {

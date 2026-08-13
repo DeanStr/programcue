@@ -1,7 +1,7 @@
 import {
   AiProviderError,
   aiProviderResponseSchema,
-  readResponsesApiStream,
+  openAiOutputText,
   type AiModelProvider,
   type OpenAiResponse,
   type OpenAiResponsesRequest,
@@ -30,7 +30,6 @@ export class WorkersAiResponsesProvider implements AiModelProvider {
       safety_identifier: request.safetyIdentifier,
       reasoning: { effort: "medium" },
       max_output_tokens: request.maxOutputTokens ?? 1_600,
-      ...(request.onTextDelta ? { stream: true } : {}),
       ...(request.textFormat
         ? {
             text: {
@@ -63,21 +62,6 @@ export class WorkersAiResponsesProvider implements AiModelProvider {
         { cause: error },
       );
     }
-    if (request.onTextDelta) {
-      if (!(raw instanceof ReadableStream)) {
-        throw new AiProviderError(
-          "Workers AI did not return the requested Responses API stream.",
-          null,
-          this.binding.aiGatewayLogId,
-        );
-      }
-      return readResponsesApiStream(
-        new Response(raw),
-        this.providerName,
-        this.binding.aiGatewayLogId,
-        request.onTextDelta,
-      );
-    }
     if (raw instanceof ReadableStream) {
       throw new AiProviderError("Workers AI returned an unexpected stream.");
     }
@@ -92,6 +76,10 @@ export class WorkersAiResponsesProvider implements AiModelProvider {
         null,
         this.binding.aiGatewayLogId,
       );
+    }
+    if (request.onTextDelta) {
+      const text = openAiOutputText(parsed.data);
+      if (text) request.onTextDelta(text);
     }
     return parsed.data;
   }
