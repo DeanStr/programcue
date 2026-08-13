@@ -6,7 +6,13 @@ import {
   useTable,
 } from "@tanstack/react-table";
 import { Check, ClipboardCopy, Columns3, Rows3, X } from "lucide-react";
-import { type InputHTMLAttributes, useEffect, useRef, useState } from "react";
+import {
+  type InputHTMLAttributes,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
@@ -31,6 +37,14 @@ const columnLabels: Record<string, string> = {
   action: "Action",
 };
 
+const routingStateLabels = {
+  draft: "Not routed yet",
+  automatic: "Automatically routed",
+  missing_automatic: "No automatic team route",
+  manual_override: "Manual routing override",
+  manual_unassigned: "No manual team override",
+} as const;
+
 function columnLabel(columnId: string) {
   const label = columnLabels[columnId];
   if (!label) throw new Error(`Missing data-grid label for ${columnId}.`);
@@ -52,105 +66,127 @@ function IndeterminateCheckbox({
   return <input ref={inputRef} type="checkbox" {...props} />;
 }
 
-const columns = columnHelper.columns([
-  columnHelper.display({
-    id: "select",
-    enableHiding: false,
-    header: ({ table }) => (
-      <IndeterminateCheckbox
-        aria-label="Select every application on this page"
-        checked={table.getIsAllPageRowsSelected()}
-        disabled={!table.getRowModel().rows.some((row) => row.getCanSelect())}
-        indeterminate={table.getIsSomePageRowsSelected()}
-        onChange={(event) => table.getToggleAllPageRowsSelectedHandler()(event)}
-      />
-    ),
-    cell: ({ row }) => (
-      <IndeterminateCheckbox
-        aria-label={`Select ${row.original.title}`}
-        checked={row.getIsSelected()}
-        disabled={!row.getCanSelect()}
-        onChange={(event) => row.getToggleSelectedHandler()(event)}
-      />
-    ),
-  }),
-  columnHelper.accessor((submission) => submission.title, {
-    id: "application",
-    header: "Application",
-    enableHiding: false,
-    cell: ({ row }) => (
-      <div className="pc-record-stack">
-        <Link to={`/admin/submissions/${row.original.id}`}>
-          <strong>{row.original.title}</strong>
+function submissionDetailHref(id: string, detailSearchParams: string) {
+  return `/admin/submissions/${encodeURIComponent(id)}${detailSearchParams ? `?${detailSearchParams}` : ""}`;
+}
+
+function submissionColumns(detailSearchParams: string) {
+  return columnHelper.columns([
+    columnHelper.display({
+      id: "select",
+      enableHiding: false,
+      header: ({ table }) => (
+        <IndeterminateCheckbox
+          aria-label="Select every application on this page"
+          checked={table.getIsAllPageRowsSelected()}
+          disabled={!table.getRowModel().rows.some((row) => row.getCanSelect())}
+          indeterminate={table.getIsSomePageRowsSelected()}
+          onChange={(event) =>
+            table.getToggleAllPageRowsSelectedHandler()(event)
+          }
+        />
+      ),
+      cell: ({ row }) => (
+        <IndeterminateCheckbox
+          aria-label={`Select ${row.original.title}`}
+          checked={row.getIsSelected()}
+          disabled={!row.getCanSelect()}
+          onChange={(event) => row.getToggleSelectedHandler()(event)}
+        />
+      ),
+    }),
+    columnHelper.accessor((submission) => submission.title, {
+      id: "application",
+      header: "Application",
+      enableHiding: false,
+      cell: ({ row }) => (
+        <div className="pc-record-stack">
+          <Link
+            to={submissionDetailHref(row.original.id, detailSearchParams)}
+          >
+            <strong>{row.original.title}</strong>
+          </Link>
+          <small className="subtle">
+            Reference {row.original.publicReference}
+          </small>
+          <small className="subtle">
+            {row.original.versionNumber
+              ? `Form v${row.original.versionNumber}`
+              : "Manual entry"}
+          </small>
+        </div>
+      ),
+    }),
+    columnHelper.accessor((submission) => submission.submitterName, {
+      id: "submitter",
+      header: "Submitter",
+      cell: ({ row }) => (
+        <div className="pc-record-stack">
+          <strong>{row.original.submitterName}</strong>
+          <small className="subtle pc-record-email">
+            {row.original.submitterEmail}
+          </small>
+        </div>
+      ),
+    }),
+    columnHelper.accessor((submission) => submission.category, {
+      id: "route",
+      header: "Category route",
+      cell: ({ row }) => (
+        <div className="pc-record-stack">
+          <span>{row.original.category || "Uncategorised"}</span>
+          <small className="subtle">{row.original.routedTo}</small>
+          <small className="subtle">
+            {routingStateLabels[row.original.routingState]}
+          </small>
+        </div>
+      ),
+    }),
+    columnHelper.accessor((submission) => submission.speakerCount, {
+      id: "speakers",
+      header: "Speakers",
+    }),
+    columnHelper.accessor((submission) => submission.status, {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <DomainStatusBadge domain="submission" status={row.original.status} />
+      ),
+    }),
+    columnHelper.display({
+      id: "action",
+      header: "Action",
+      enableHiding: false,
+      cell: ({ row }) => (
+        <Link
+          className="btn small"
+          to={submissionDetailHref(row.original.id, detailSearchParams)}
+        >
+          Open
         </Link>
-        <small className="subtle">
-          Reference {row.original.publicReference}
-        </small>
-        <small className="subtle">
-          {row.original.versionNumber
-            ? `Form v${row.original.versionNumber}`
-            : "Manual entry"}
-        </small>
-      </div>
-    ),
-  }),
-  columnHelper.accessor((submission) => submission.submitterName, {
-    id: "submitter",
-    header: "Submitter",
-    cell: ({ row }) => (
-      <div className="pc-record-stack">
-        <strong>{row.original.submitterName}</strong>
-        <small className="subtle pc-record-email">
-          {row.original.submitterEmail}
-        </small>
-      </div>
-    ),
-  }),
-  columnHelper.accessor((submission) => submission.category, {
-    id: "route",
-    header: "Category route",
-    cell: ({ row }) => (
-      <div className="pc-record-stack">
-        <span>{row.original.category || "Uncategorised"}</span>
-        <small className="subtle">{row.original.routedTo}</small>
-      </div>
-    ),
-  }),
-  columnHelper.accessor((submission) => submission.speakerCount, {
-    id: "speakers",
-    header: "Speakers",
-  }),
-  columnHelper.accessor((submission) => submission.status, {
-    id: "status",
-    header: "Status",
-    cell: ({ row }) => (
-      <DomainStatusBadge domain="submission" status={row.original.status} />
-    ),
-  }),
-  columnHelper.display({
-    id: "action",
-    header: "Action",
-    enableHiding: false,
-    cell: ({ row }) => (
-      <Link className="btn small" to={`/admin/submissions/${row.original.id}`}>
-        Open
-      </Link>
-    ),
-  }),
-]);
+      ),
+    }),
+  ]);
+}
 
 type ClipboardFeedback = { ok: boolean; message: string };
 
 export function SubmissionDataGrid({
   submissions,
+  detailSearchParams = "",
 }: {
   submissions: AdminSubmission[];
+  detailSearchParams?: string;
 }) {
   const [density, setDensity] = useState<"comfortable" | "compact">(
     "comfortable",
   );
   const [clipboardFeedback, setClipboardFeedback] =
     useState<ClipboardFeedback | null>(null);
+  const columns = useMemo(
+    () => submissionColumns(detailSearchParams),
+    [detailSearchParams],
+  );
   const table = useTable({
     features: gridFeatures,
     columns,

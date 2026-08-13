@@ -88,6 +88,14 @@ draft from a published ad-hoc template; it never sends directly. Abstract result
 exports are same-origin, audited, round-scoped CSV operations with formula
 neutralisation, durable intent identity and explicit source/output size limits.
 
+Submission routing attention and queue navigation are derived presentation,
+not new workflow state. Automatic-route gaps and administrator overrides come
+from the immutable form/routing snapshots already required by submission
+detail. Previous/Next navigation retains the originating server-side filters
+and ordering, while Review and activity handoffs link to the existing
+authorised evaluation and audit surfaces. No parallel lifecycle timeline or
+mutable queue record is introduced.
+
 ## Content management workstream decisions
 
 | Decision             | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |

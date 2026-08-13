@@ -7,6 +7,10 @@ import { EvaluationStateError } from "~/modules/evaluations/evaluation-errors";
 import { PersonDuplicateService } from "~/modules/people/person-duplicate-service.server";
 import { SubmissionDataGrid } from "~/components/submission-data-grid";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
+import type {
+  AdminSubmissionFilters,
+  AdminSubmissionRoutingFilter,
+} from "~/modules/submissions/submission-repository-shared";
 import {
   SubmissionRevisionConflictError,
   SubmissionStateError,
@@ -19,11 +23,55 @@ import {
   ManualEntryPanels,
   SubmissionAdminDetailPanel,
 } from "./submissions-admin-panels";
-import type { SubmissionsAdminActionResult } from "./submissions-admin-types";
+import type {
+  SubmissionAdminQueueNavigation,
+  SubmissionsAdminActionResult,
+} from "./submissions-admin-types";
 
 export const meta: Route.MetaFunction = () => [
   { title: "Submissions · Program Cue" },
 ];
+
+const routingFilters = new Set<AdminSubmissionRoutingFilter>([
+  "missing_automatic",
+  "manual_override",
+]);
+
+function submissionFilters(url: URL): AdminSubmissionFilters {
+  const routing = url.searchParams.get("routing") ?? "";
+  if (routing && !routingFilters.has(routing as AdminSubmissionRoutingFilter)) {
+    throw new Response("Invalid submission routing filter", { status: 400 });
+  }
+  return {
+    status: url.searchParams.get("status") ?? "",
+    category: url.searchParams.get("category") ?? "",
+    query: url.searchParams.get("query") ?? "",
+    routing: routing as AdminSubmissionRoutingFilter | "",
+  };
+}
+
+function queueSearchParams(filters: AdminSubmissionFilters, page: number) {
+  const search = listSearchParams(filters, page);
+  search.set("queue", "1");
+  return search;
+}
+
+function listSearchParams(filters: AdminSubmissionFilters, page: number) {
+  const search = new URLSearchParams({ page: String(page) });
+  for (const key of ["status", "category", "query", "routing"] as const) {
+    const value = filters[key];
+    if (value) search.set(key, value);
+  }
+  return search;
+}
+
+function detailHref(
+  submissionId: string,
+  filters: AdminSubmissionFilters,
+  page: number,
+) {
+  return `/admin/submissions/${encodeURIComponent(submissionId)}?${queueSearchParams(filters, page)}`;
+}
 
 async function getViewer(
   request: Request,
@@ -43,20 +91,56 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   const { env, viewer } = await getViewer(request, context);
   const service = new SubmissionService(env);
   if (params.submissionId) {
-    const submission = await service.getAdminSubmission(
-      viewer,
-      params.submissionId,
-    );
+    const url = new URL(request.url);
+    const fromQueue = url.searchParams.get("queue") === "1";
+    const filters = submissionFilters(url);
+    const page = Number(url.searchParams.get("page") ?? "1");
+    const [submission, queueContext] = await Promise.all([
+      service.getAdminSubmission(viewer, params.submissionId),
+      fromQueue
+        ? service.getAdminSubmissionQueueContext(
+            viewer,
+            params.submissionId,
+            filters,
+            page,
+          )
+        : Promise.resolve(null),
+    ]);
     if (!submission)
       throw new Response("Submission not found", { status: 404 });
-    return { mode: "detail" as const, submission };
+    let queueNavigation: SubmissionAdminQueueNavigation | null = null;
+    if (fromQueue) {
+      if (!queueContext) {
+        throw new Error("Submission queue context was not resolved.");
+      }
+      queueNavigation = {
+        backHref: `/admin/submissions?${listSearchParams(filters, page)}`,
+        previous: queueContext.previous
+          ? {
+              title: queueContext.previous.title,
+              href: detailHref(
+                queueContext.previous.id,
+                filters,
+                queueContext.previous.page,
+              ),
+            }
+          : null,
+        next: queueContext.next
+          ? {
+              title: queueContext.next.title,
+              href: detailHref(
+                queueContext.next.id,
+                filters,
+                queueContext.next.page,
+              ),
+            }
+          : null,
+      };
+    }
+    return { mode: "detail" as const, submission, queueNavigation };
   }
   const url = new URL(request.url);
-  const filters = {
-    status: url.searchParams.get("status") ?? "",
-    category: url.searchParams.get("category") ?? "",
-    query: url.searchParams.get("query") ?? "",
-  };
+  const filters = submissionFilters(url);
   const requestedPage = Number(url.searchParams.get("page") ?? "1");
   const [submissionPage, routingTeams, routingTracks, sessionFormats] =
     await Promise.all([
@@ -319,6 +403,7 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
       <SubmissionAdminDetailPanel
         submission={loaderData.submission}
         actionResult={actionData}
+        queueNavigation={loaderData.queueNavigation}
       />
     );
   const { submissions, routingTeams, filters, page, hasNext } = loaderData;
@@ -381,6 +466,20 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
             />
           </label>
           <label className="label">
+            Routing attention
+            <select
+              className="select"
+              name="routing"
+              defaultValue={filters.routing}
+            >
+              <option value="">All routing states</option>
+              <option value="missing_automatic">
+                No automatic review-team route
+              </option>
+              <option value="manual_override">Manual routing override</option>
+            </select>
+          </label>
+          <label className="label">
             Status
             <select
               className="select"
@@ -434,18 +533,16 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
           <span className="help right">D1 · tenant scoped · newest first</span>
         </div>
         <SubmissionDataGrid
-          key={`${page}:${filters.status}:${filters.category}:${filters.query}`}
+          key={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}`}
           submissions={submissions}
+          detailSearchParams={queueSearchParams(filters, page).toString()}
         />
         {page > 1 || hasNext ? (
           <nav className="page-actions mt" aria-label="Submission pages">
             {page > 1 ? (
               <Link
                 className="btn"
-                to={`?${new URLSearchParams({
-                  ...filters,
-                  page: String(page - 1),
-                })}`}
+                to={`?${listSearchParams(filters, page - 1)}`}
               >
                 ← Newer
               </Link>
@@ -454,10 +551,7 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
             {hasNext ? (
               <Link
                 className="btn"
-                to={`?${new URLSearchParams({
-                  ...filters,
-                  page: String(page + 1),
-                })}`}
+                to={`?${listSearchParams(filters, page + 1)}`}
               >
                 Older →
               </Link>

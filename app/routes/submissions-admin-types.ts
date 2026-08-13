@@ -22,3 +22,9 @@ export type SubmissionAdminSpeakerInput = {
 export type SubmissionAdminDetail = NonNullable<
   Awaited<ReturnType<SubmissionService["getAdminSubmission"]>>
 >;
+
+export type SubmissionAdminQueueNavigation = {
+  backHref: string;
+  previous: { title: string; href: string } | null;
+  next: { title: string; href: string } | null;
+};

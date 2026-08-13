@@ -329,7 +329,15 @@ export function EvaluationSubmissionQueue() {
                   !terminal && submission.status !== "withdrawn";
                 const assignable = submission.reviewableInCurrentCycle;
                 return (
-                  <tr key={submission.id}>
+                  <tr
+                    key={submission.id}
+                    id={`review-submission-${submission.id}`}
+                    className={
+                      loaderData.focusedSubmissionId === submission.id
+                        ? "pc-focused-record"
+                        : undefined
+                    }
+                  >
                     <td
                       className="pc-record-primary-cell"
                       data-label="Submission"

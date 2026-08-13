@@ -349,6 +349,7 @@ describe("Submissions D1 vertical slice", () => {
       await expect(
         service.getAdminSubmission(viewer, firstId),
       ).resolves.toMatchObject({
+        hasEvaluationPlan: true,
         routingExplanation: {
           source: {
             kind: "published_form",
@@ -366,6 +367,38 @@ describe("Submissions D1 vertical slice", () => {
           routedTeams: [{ id: teamId, name: teamName }],
         },
       });
+      await env.DB.prepare(
+        `UPDATE evaluation_plans SET status = 'archived'
+          WHERE event_id = ? AND status <> 'archived'`,
+      )
+        .bind(viewer.eventId)
+        .run();
+      await expect(
+        service.getAdminSubmission(viewer, firstId),
+      ).resolves.toMatchObject({ hasEvaluationPlan: false });
+      expect(routed?.routingState).toBe("automatic");
+
+      const exceptionId = await service.createDraft(slug, applicant);
+      const exceptionDraft = (
+        await service.repository.getApplicantDrafts(id, applicant)
+      ).find((draft) => draft.id === exceptionId)!;
+      await service.submitDraft(slug, applicant, {
+        submissionId: exceptionId,
+        revision: exceptionDraft.revision,
+        answers: { ...validAnswers, category: ["Event Operations"] },
+        speakers: [{ name: applicant.name, email: applicant.email }],
+      });
+      const routingExceptions = await service.listAdminSubmissions(viewer, {
+        routing: "missing_automatic",
+      });
+      expect(routingExceptions.map((submission) => submission.id)).toContain(
+        exceptionId,
+      );
+      expect(
+        routingExceptions.every(
+          (submission) => submission.routingState === "missing_automatic",
+        ),
+      ).toBe(true);
       const assigned = (
         await service.repository.getApplicantDrafts(id, applicant)
       ).find((draft) => draft.id === firstId)!;
@@ -567,7 +600,7 @@ describe("Submissions D1 vertical slice", () => {
         .run();
       await expect(
         service.listAdminSubmissions(viewer, { status: "submitted" }),
-      ).resolves.toEqual(expect.any(Array));
+      ).rejects.toThrow(/persisted routed teams that do not match/i);
       await expect(
         service.getAdminSubmission(viewer, submissionId),
       ).rejects.toThrow(/persisted routed teams that do not match/i);

@@ -140,6 +140,23 @@ export type AdminSubmission = {
   updatedAt: number;
   routedTo: string;
   routedTeamIds: string[];
+  routingState:
+    | "draft"
+    | "automatic"
+    | "missing_automatic"
+    | "manual_override"
+    | "manual_unassigned";
+};
+
+export type AdminSubmissionRoutingFilter =
+  | "missing_automatic"
+  | "manual_override";
+
+export type AdminSubmissionFilters = {
+  status?: string;
+  category?: string;
+  query?: string;
+  routing?: AdminSubmissionRoutingFilter | "";
 };
 
 export function parseJson<T>(

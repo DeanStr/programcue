@@ -316,6 +316,17 @@ describe("Submissions D1 vertical slice", () => {
           await service.listAdminSubmissions(viewer, { status: "submitted" })
         ).find((submission) => submission.id === submissionId)?.routedTo,
       ).toBe(teamName);
+      const manualOverrides = await service.listAdminSubmissions(viewer, {
+        routing: "manual_override",
+      });
+      expect(manualOverrides.map((submission) => submission.id)).toContain(
+        submissionId,
+      );
+      expect(
+        manualOverrides.every(
+          (submission) => submission.routingState === "manual_override",
+        ),
+      ).toBe(true);
       await expect(
         service.getAdminSubmission(viewer, submissionId),
       ).resolves.toMatchObject({

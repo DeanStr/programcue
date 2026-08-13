@@ -1,4 +1,5 @@
 import {
+  ADMIN_MANUAL_ENTRY_FORM_VERSION_ID,
   formSchemaSchema,
   routingSchema,
   submittedSnapshotSchema,
@@ -9,8 +10,12 @@ import { z } from "zod";
 import {
   parseJson,
   type AdminSubmission,
+  type AdminSubmissionFilters,
 } from "./submission-repository-shared";
-import { explainSubmissionRouting } from "./submission-routing-explanation";
+import {
+  classifySubmissionRouting,
+  explainSubmissionRouting,
+} from "./submission-routing-explanation";
 
 function requireRoutedTeamSummary(
   submissionId: string,
@@ -110,7 +115,7 @@ export class SubmissionAdminRepository {
   async listAdminSubmissions(
     organisationId: string,
     eventId: string,
-    filters: { status?: string; category?: string; query?: string },
+    filters: AdminSubmissionFilters,
     pagination: { limit: number; offset: number } = { limit: 200, offset: 0 },
   ): Promise<AdminSubmission[]> {
     if (
@@ -140,8 +145,22 @@ export class SubmissionAdminRepository {
              COALESCE(s.format, '') AS format, s.status,
              COALESCE(p.display_name, s.submitter_email, 'Unknown') AS submitterName,
              COALESCE(p.email, s.submitter_email, '') AS submitterEmail,
-             (SELECT COUNT(*) FROM submission_speakers ss WHERE ss.submission_id = s.id) AS speakerCount,
+             (SELECT COUNT(*) FROM submission_speakers ss
+               WHERE ss.submission_id = s.id AND ss.event_id = s.event_id) AS speakerCount,
              fv.version_number AS versionNumber, s.submitted_at AS submittedAt, s.updated_at AS updatedAt,
+             s.form_version_id AS formVersionId,
+             json_extract(s.submitted_snapshot_json, '$.formVersionId') AS snapshotFormVersionId,
+             json_extract(s.submitted_snapshot_json, '$.versionNumber') AS snapshotVersionNumber,
+             COALESCE((
+               SELECT json_group_array(json_object(
+                        'trackId', selected_track.track_id,
+                        'trackName', selected_track.track_name_snapshot
+                      ))
+                 FROM submission_track_selections selected_track
+                WHERE selected_track.submission_id = s.id
+                  AND selected_track.event_id = s.event_id
+                ORDER BY selected_track.position
+             ), '[]') AS selectedTracksJson,
              COALESCE((
                SELECT json_group_array(routed.team_id)
                  FROM (
@@ -151,14 +170,16 @@ export class SubmissionAdminRepository {
                     ORDER BY route.team_id
                  ) routed
              ), '[]') AS routedTeamIdsJson,
-             COALESCE(
-               fv.routing_json,
-               json_extract(s.submitted_snapshot_json, '$.routing')
-             ) AS routingJson
+             CASE
+               WHEN s.form_version_id IS NULL
+                 THEN json_extract(s.submitted_snapshot_json, '$.routing')
+               ELSE fv.routing_json
+             END AS routingJson
         FROM submissions s
         JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
         LEFT JOIN people p ON p.id = s.submitter_person_id
-        LEFT JOIN form_versions fv ON fv.id = s.form_version_id
+        LEFT JOIN form_versions fv
+          ON fv.id = s.form_version_id AND fv.event_id = s.event_id
        WHERE s.event_id = ?
          AND (? = '' OR s.status = ?)
          AND (? = '' OR (s.status = 'draft' AND s.category = ?) OR EXISTS (
@@ -168,6 +189,44 @@ export class SubmissionAdminRepository {
               AND selected_filter.track_name_snapshot = ?
          ))
          AND (? = '%%' OR s.title LIKE ? OR p.display_name LIKE ? OR COALESCE(p.email, s.submitter_email) LIKE ?)
+         AND (
+           ? = ''
+           OR (
+             ? = 'manual_override'
+             AND s.status <> 'draft'
+             AND s.form_version_id IS NULL
+             AND json_extract(s.submitted_snapshot_json, '$.formVersionId') = ?
+             AND EXISTS (
+               SELECT 1 FROM submission_routing_teams manual_route
+                WHERE manual_route.submission_id = s.id
+                  AND manual_route.event_id = s.event_id
+             )
+           )
+           OR (
+             ? = 'missing_automatic'
+             AND s.status <> 'draft'
+             AND s.form_version_id IS NOT NULL
+             AND EXISTS (
+               SELECT 1 FROM submission_track_selections selected_route
+                WHERE selected_route.submission_id = s.id
+                  AND selected_route.event_id = s.event_id
+                  AND NOT EXISTS (
+                    SELECT 1
+                      FROM json_each(
+                        CASE
+                          WHEN s.form_version_id IS NULL
+                            THEN json_extract(s.submitted_snapshot_json, '$.routing')
+                          ELSE fv.routing_json
+                        END,
+                        '$.categories'
+                      ) automatic_route
+                     WHERE automatic_route.key = selected_route.track_name_snapshot
+                       AND typeof(automatic_route.value) = 'text'
+                       AND trim(automatic_route.value) <> ''
+                  )
+             )
+           )
+         )
        ORDER BY COALESCE(s.submitted_at, s.updated_at) DESC, s.id DESC
        LIMIT ? OFFSET ?
     `,
@@ -184,17 +243,37 @@ export class SubmissionAdminRepository {
         query,
         query,
         query,
+        filters.routing ?? "",
+        filters.routing ?? "",
+        ADMIN_MANUAL_ENTRY_FORM_VERSION_ID,
+        filters.routing ?? "",
         pagination.limit,
         pagination.offset,
       )
       .all<
-        Omit<AdminSubmission, "category" | "routedTo" | "routedTeamIds"> & {
+        Omit<
+          AdminSubmission,
+          "category" | "routedTo" | "routedTeamIds" | "routingState"
+        > & {
           category: string | null;
+          formVersionId: string | null;
+          snapshotFormVersionId: string | null;
+          snapshotVersionNumber: number | null;
           routingJson: string | null;
           routedTeamIdsJson: string;
+          selectedTracksJson: string;
         }
       >();
-    return rows.results.map(({ routingJson, routedTeamIdsJson, ...row }) => {
+    return rows.results.map((result) => {
+      const {
+        formVersionId,
+        snapshotFormVersionId,
+        snapshotVersionNumber,
+        routingJson,
+        routedTeamIdsJson,
+        selectedTracksJson,
+        ...row
+      } = result;
       if (row.status !== "draft" && !row.category) {
         throw new Error(
           `Submission ${row.id} is missing persisted track selections.`,
@@ -209,12 +288,27 @@ export class SubmissionAdminRepository {
       const routedTeamIds = z
         .array(z.string())
         .parse(JSON.parse(routedTeamIdsJson));
+      const selectedTracks = z
+        .array(z.object({ trackId: z.string(), trackName: z.string() }))
+        .parse(JSON.parse(selectedTracksJson));
+      const routingState = classifySubmissionRouting({
+        submissionId: row.id,
+        status: row.status,
+        formVersionId,
+        snapshotFormVersionId,
+        versionNumber: row.versionNumber,
+        snapshotVersionNumber,
+        routing,
+        selectedTracks,
+        routedTeamIds,
+      });
       return {
         ...row,
         category: row.category ?? "",
         speakerCount: Number(row.speakerCount),
         routedTeamIds,
         routedTo: requireRoutedTeamSummary(row.id, routedTeamIds, routing),
+        routingState,
       };
     });
   }
@@ -234,6 +328,11 @@ export class SubmissionAdminRepository {
              s.form_version_id AS formVersionId,
              fv.version_number AS versionNumber, fv.schema_json AS schemaJson,
              json_extract(fv.settings_snapshot_json, '$.name') AS formName,
+             EXISTS (
+               SELECT 1 FROM evaluation_plans plan
+                WHERE plan.event_id = s.event_id
+                  AND plan.status <> 'archived'
+             ) AS hasEvaluationPlan,
              COALESCE((
                SELECT json_group_array(routed.team_id)
                  FROM (
@@ -279,6 +378,7 @@ export class SubmissionAdminRepository {
         formVersionId: string | null;
         versionNumber: number | null;
         formName: string | null;
+        hasEvaluationPlan: number | boolean;
         schemaJson: string | null;
         routingJson: string | null;
         routedTeamIdsJson: string;
@@ -371,6 +471,7 @@ export class SubmissionAdminRepository {
       answersJson: _answersJson,
       formVersionId: _formVersionId,
       formName: _formName,
+      hasEvaluationPlan,
       schemaJson: _schemaJson,
       routingJson: _routingJson,
       routedTeamIdsJson: _routedTeamIdsJson,
@@ -380,6 +481,7 @@ export class SubmissionAdminRepository {
     } = row;
     return {
       ...summary,
+      hasEvaluationPlan: Boolean(hasEvaluationPlan),
       ...(snapshot
         ? {
             title: requireSnapshotTitle(row.id, snapshot),

@@ -29,8 +29,8 @@ function request(origin: string) {
   });
 }
 
-function loaderRequest() {
-  return new Request("http://localhost/admin/review", {
+function loaderRequest(search = "") {
+  return new Request(`http://localhost/admin/review${search}`, {
     headers: {
       cookie:
         "program_cue_demo_identity=administrator; program_cue_event=evt-foe-2025",
@@ -116,6 +116,57 @@ describe("evaluation administration results", () => {
       completedReviewCount: 0,
       averageScore: null,
     });
+  });
+
+  it("accepts an event-scoped submission focus and rejects an unknown one", async () => {
+    const focused = await loader({
+      request: loaderRequest(
+        "?submission=demo-evaluation-submission-calm",
+      ),
+      params: {},
+      context: context(),
+    } as never);
+    expect(focused.focusedSubmissionId).toBe(
+      "demo-evaluation-submission-calm",
+    );
+
+    await expect(
+      loader({
+        request: loaderRequest("?submission=another-event-submission"),
+        params: {},
+        context: context(),
+      } as never),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("rejects a submission focus when Review has no evaluation plan", async () => {
+    const plans = await workerEnv.DB.prepare(
+      `SELECT id, status FROM evaluation_plans
+        WHERE event_id = 'evt-foe-2025' AND status <> 'archived'`,
+    ).all<{ id: string; status: string }>();
+    await workerEnv.DB.prepare(
+      `UPDATE evaluation_plans SET status = 'archived'
+        WHERE event_id = 'evt-foe-2025' AND status <> 'archived'`,
+    ).run();
+    try {
+      await expect(
+        loader({
+          request: loaderRequest(
+            "?submission=demo-evaluation-submission-calm",
+          ),
+          params: {},
+          context: context(),
+        } as never),
+      ).rejects.toMatchObject({ status: 409 });
+    } finally {
+      await workerEnv.DB.batch(
+        plans.results.map((plan) =>
+          workerEnv.DB.prepare(
+            "UPDATE evaluation_plans SET status = ? WHERE id = ? AND event_id = 'evt-foe-2025'",
+          ).bind(plan.status, plan.id),
+        ),
+      );
+    }
   });
 });
 

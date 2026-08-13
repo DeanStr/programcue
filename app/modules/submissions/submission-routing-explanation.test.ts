@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifySubmissionRouting,
   explainSubmissionRouting,
   type SubmissionRoutingExplanation,
 } from "./submission-routing-explanation";
@@ -50,6 +51,82 @@ function explain(
 }
 
 describe("submission routing explanation", () => {
+  it("classifies queue attention without coupling it to evaluator assignment", () => {
+    const base = {
+      submissionId: "submission-1",
+      status: "submitted",
+      formVersionId: "form-version-3" as string | null,
+      snapshotFormVersionId: "form-version-3" as string | null,
+      versionNumber: 3 as number | null,
+      snapshotVersionNumber: 3 as number | null,
+      routing,
+      selectedTracks: [
+        { trackId: "track-ai", trackName: "AI & Innovation" },
+      ],
+      routedTeamIds: ["team-workshops"],
+    };
+    expect(classifySubmissionRouting(base)).toBe("automatic");
+    expect(
+      classifySubmissionRouting({
+        ...base,
+        selectedTracks: [
+          { trackId: "track-community", trackName: "Community" },
+        ],
+        routedTeamIds: [],
+      }),
+    ).toBe("missing_automatic");
+    expect(
+      classifySubmissionRouting({
+        ...base,
+        formVersionId: null,
+        snapshotFormVersionId: ADMIN_MANUAL_ENTRY_FORM_VERSION_ID,
+        versionNumber: null,
+        snapshotVersionNumber: 1,
+        routedTeamIds: ["team-general"],
+      }),
+    ).toBe("manual_override");
+    expect(
+      classifySubmissionRouting({
+        ...base,
+        formVersionId: null,
+        snapshotFormVersionId: ADMIN_MANUAL_ENTRY_FORM_VERSION_ID,
+        versionNumber: null,
+        snapshotVersionNumber: 1,
+        routedTeamIds: [],
+      }),
+    ).toBe("manual_unassigned");
+    expect(classifySubmissionRouting({ ...base, status: "draft" })).toBe(
+      "draft",
+    );
+    expect(() =>
+      classifySubmissionRouting({
+        ...base,
+        snapshotFormVersionId: "another-form-version",
+      }),
+    ).toThrow(/conflicting immutable form-version identities/i);
+    expect(() =>
+      classifySubmissionRouting({
+        ...base,
+        snapshotVersionNumber: 2,
+      }),
+    ).toThrow(/conflicting immutable form-version identities/i);
+    expect(() =>
+      classifySubmissionRouting({
+        ...base,
+        routedTeamIds: ["team-general"],
+      }),
+    ).toThrow(/persisted routed teams that do not match/i);
+    expect(
+      classifySubmissionRouting({
+        ...base,
+        selectedTracks: [
+          { trackId: "track-ai", trackName: "AI & Innovation" },
+          { trackId: "track-community", trackName: "Community" },
+        ],
+      }),
+    ).toBe("missing_automatic");
+  });
+
   it("explains an automatic route from immutable form and routing data", () => {
     expect(explain()).toEqual({
       source: {
@@ -118,6 +195,7 @@ describe("submission routing explanation", () => {
         formVersionId: null,
         versionNumber: null,
         snapshotFormVersionId: ADMIN_MANUAL_ENTRY_FORM_VERSION_ID,
+        snapshotVersionNumber: 1,
         selectedTracks: [{ trackId: "track-ai", trackName: "AI & Innovation" }],
         routedTeamIds: ["team-general"],
       }),

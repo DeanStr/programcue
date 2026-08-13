@@ -91,6 +91,8 @@ describe("submission administration list", () => {
     );
     expect(firstPage.submissions).toHaveLength(50);
     expect(firstPage.hasNext).toBe(true);
+    expect(firstPage.submissions.every((row) => row.routingState === "draft"))
+      .toBe(true);
 
     const secondPage = await service.listAdminSubmissionPage(
       viewer,
@@ -127,6 +129,33 @@ describe("submission administration list", () => {
         category.startsWith(categoryPrefix),
       ),
     ).toHaveLength(55);
+
+    const pageBoundary = await service.getAdminSubmissionQueueContext(
+      viewer,
+      `grid-submission-${token}-5`,
+      { query: titlePrefix },
+      1,
+    );
+    expect(pageBoundary).toEqual({
+      previous: {
+        id: `grid-submission-${token}-6`,
+        title: `${titlePrefix} application 06`,
+        page: 1,
+      },
+      next: {
+        id: `grid-submission-${token}-4`,
+        title: `${titlePrefix} application 04`,
+        page: 2,
+      },
+    });
+    await expect(
+      service.getAdminSubmissionQueueContext(
+        viewer,
+        `grid-submission-${token}-5`,
+        { query: titlePrefix },
+        2,
+      ),
+    ).rejects.toMatchObject({ status: 409 });
 
     await testEnv.DB.prepare(
       `INSERT INTO submissions (
@@ -169,6 +198,14 @@ describe("submission administration list", () => {
     );
     await expect(
       service.getAdminSubmission(viewer, "submission-demo-ai"),
+    ).rejects.toThrow("Airtable projection freshness is unavailable");
+    await expect(
+      service.getAdminSubmissionQueueContext(
+        viewer,
+        "submission-demo-ai",
+        {},
+        1,
+      ),
     ).rejects.toThrow("Airtable projection freshness is unavailable");
   });
 });

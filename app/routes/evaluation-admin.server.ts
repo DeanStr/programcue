@@ -143,6 +143,26 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     ]);
   const search = new URL(request.url).searchParams;
   const unassignedOnly = search.get("filter") === "unassigned";
+  const focusedSubmissionId = search.get("submission")?.trim() ?? "";
+  if (focusedSubmissionId.length > 200) {
+    throw new Response("Invalid evaluation submission focus", { status: 400 });
+  }
+  if (
+    focusedSubmissionId &&
+    !workspace.submissions.some(
+      (submission) => submission.id === focusedSubmissionId,
+    )
+  ) {
+    throw new Response("Submission not found in this event's evaluation", {
+      status: 404,
+    });
+  }
+  if (focusedSubmissionId && !workspace.plan) {
+    throw new Response(
+      "Create an evaluation plan before opening a submission in Review.",
+      { status: 409 },
+    );
+  }
   const requestedSort = search.get("sort") ?? "score_desc";
   const resultSortOptions = [
     "score_desc",
@@ -304,6 +324,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       aiAssessmentGenerationIntent: crypto.randomUUID(),
     })),
     unassignedOnly,
+    focusedSubmissionId: focusedSubmissionId || null,
     resultSort,
     resultsRoundId,
     resultsExportIntent: crypto.randomUUID(),

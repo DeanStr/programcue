@@ -84,6 +84,23 @@ test.describe.serial("submissions vertical slice", () => {
       }),
     ).toBeVisible();
     await expect(page.getByText("published").first()).toBeVisible();
+    await page
+      .getByLabel("Public URL")
+      .fill(`unsaved-public-url-${unique}`);
+    await expect(
+      page.getByRole("link", { name: /Open public form/ }),
+    ).toHaveAttribute("href", "/apply/form");
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page
+      .getByRole("button", { name: "Copy public form link" })
+      .click();
+    await expect(page.getByText("Public form link copied.")).toBeVisible();
+    const expectedPublicFormUrl = new URL("/apply/form", page.url()).href;
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(expectedPublicFormUrl);
     await page.goto("/apply/form");
     await expect(
       page.getByRole("heading", { name: invitationHeading }),
@@ -241,7 +258,34 @@ test.describe.serial("submissions vertical slice", () => {
     await expect(routing).toContainText(
       "Review-team routing records the intended review destination",
     );
+    await expect(
+      page.getByRole("link", { name: "Open in Review" }),
+    ).toHaveAttribute(
+      "href",
+      /\/admin\/review\?submission=[^#]+#review-submission-/,
+    );
+    await expect(
+      page.getByRole("link", { name: "View activity" }),
+    ).toHaveAttribute("href", /panel=activity&activityQuery=/);
+    await expect(
+      page.getByRole("link", { name: "Return to filtered queue" }),
+    ).toBeVisible();
     await expect(page.getByText("Casey Collaborator")).toBeVisible();
+    await page.getByRole("link", { name: "Return to filtered queue" }).click();
+    const routingFilters = page.getByRole("search");
+    await routingFilters
+      .getByLabel("Routing attention")
+      .selectOption("missing_automatic");
+    await routingFilters
+      .getByRole("button", { name: "Apply filters" })
+      .click();
+    const filteredSubmissionRow = page.getByRole("row").filter({
+      has: page.getByRole("link", { name: title }),
+    });
+    await expect(filteredSubmissionRow).toBeVisible();
+    await expect(filteredSubmissionRow).toContainText(
+      "No automatic team route",
+    );
   });
 
   test("administrator creates a guaranteed direct session", async ({

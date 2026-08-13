@@ -24,6 +24,70 @@ export type SubmissionRoutingExplanation = {
   routedTeams: Array<{ id: string; name: string }>;
 };
 
+export type SubmissionRoutingState =
+  | "draft"
+  | "automatic"
+  | "missing_automatic"
+  | "manual_override"
+  | "manual_unassigned";
+
+export function classifySubmissionRouting(input: {
+  submissionId: string;
+  status: string;
+  formVersionId: string | null;
+  snapshotFormVersionId: string | null;
+  versionNumber: number | null;
+  snapshotVersionNumber: number | null;
+  routing: FormRouting;
+  selectedTracks: Array<{ trackId: string; trackName: string }>;
+  routedTeamIds: string[];
+}): SubmissionRoutingState {
+  if (input.status === "draft") return "draft";
+  const selectedTracks = input.selectedTracks.map((track) =>
+    requireTrackIdentity(input.submissionId, track, input.routing),
+  );
+  if (input.formVersionId === null) {
+    if (
+      input.snapshotFormVersionId !== ADMIN_MANUAL_ENTRY_FORM_VERSION_ID ||
+      input.snapshotVersionNumber !== 1 ||
+      input.versionNumber !== null
+    ) {
+      throw new Error(
+        `Submission ${input.submissionId} is missing its immutable form version identity.`,
+      );
+    }
+    return input.routedTeamIds.length
+      ? "manual_override"
+      : "manual_unassigned";
+  }
+  if (
+    input.versionNumber === null ||
+    input.snapshotFormVersionId !== input.formVersionId ||
+    input.snapshotVersionNumber !== input.versionNumber
+  ) {
+    throw new Error(
+      `Submission ${input.submissionId} has conflicting immutable form-version identities.`,
+    );
+  }
+  const hasMissingAutomaticRoute = selectedTracks.some(
+    (track) => !input.routing.categories[track.trackName],
+  );
+  const expectedTeamIds = [
+    ...new Set(
+      selectedTracks.flatMap((track) => {
+        const teamId = input.routing.categories[track.trackName];
+        return teamId ? [teamId] : [];
+      }),
+    ),
+  ];
+  if (!sameIdSet(expectedTeamIds, input.routedTeamIds)) {
+    throw new Error(
+      `Submission ${input.submissionId} has persisted routed teams that do not match its immutable routing snapshot.`,
+    );
+  }
+  return hasMissingAutomaticRoute ? "missing_automatic" : "automatic";
+}
+
 type RoutingExplanationInput = {
   submissionId: string;
   status: string;
@@ -116,7 +180,10 @@ export function explainSubmissionRouting(
   );
 
   if (input.formVersionId === null) {
-    if (input.snapshotFormVersionId !== ADMIN_MANUAL_ENTRY_FORM_VERSION_ID) {
+    if (
+      input.snapshotFormVersionId !== ADMIN_MANUAL_ENTRY_FORM_VERSION_ID ||
+      input.snapshotVersionNumber !== 1
+    ) {
       throw new Error(
         `Submission ${input.submissionId} is missing its immutable form version identity.`,
       );

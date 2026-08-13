@@ -7,6 +7,7 @@ import { EventDateTime } from "~/components/ui/event-date-time";
 import type { SubmissionService } from "~/modules/submissions/submission-service.server";
 import type {
   SubmissionAdminDetail,
+  SubmissionAdminQueueNavigation,
   SubmissionAdminSpeakerInput,
   SubmissionsAdminActionResult,
 } from "./submissions-admin-types";
@@ -38,9 +39,11 @@ export function ActionNotice({
 export function SubmissionAdminDetailPanel({
   submission,
   actionResult,
+  queueNavigation,
 }: {
   submission: SubmissionAdminDetail;
   actionResult?: SubmissionsAdminActionResult;
+  queueNavigation: SubmissionAdminQueueNavigation | null;
 }) {
   const navigation = useNavigation();
   const labels = new Map(
@@ -50,7 +53,10 @@ export function SubmissionAdminDetailPanel({
     <>
       <div className="page-head">
         <div>
-          <Link className="subtle" to="/admin/submissions">
+          <Link
+            className="subtle"
+            to={queueNavigation?.backHref ?? "/admin/submissions"}
+          >
             ← All submissions
           </Link>
           <h1>{submission.title}</h1>
@@ -59,6 +65,20 @@ export function SubmissionAdminDetailPanel({
           </p>
         </div>
         <div className="page-actions">
+          {submission.status !== "draft" && submission.hasEvaluationPlan ? (
+            <Link
+              className="btn"
+              to={`/admin/review?submission=${encodeURIComponent(submission.id)}#review-submission-${encodeURIComponent(submission.id)}`}
+            >
+              Open in Review
+            </Link>
+          ) : null}
+          <Link
+            className="btn"
+            to={`/admin/operations?panel=activity&activityQuery=${encodeURIComponent(submission.id)}`}
+          >
+            View activity
+          </Link>
           <DomainStatusBadge domain="submission" status={submission.status} />
           <span className="pill">
             {submission.versionNumber
@@ -67,6 +87,39 @@ export function SubmissionAdminDetailPanel({
           </span>
         </div>
       </div>
+      {queueNavigation ? (
+        <nav className="page-actions mb" aria-label="Submission working set">
+          {queueNavigation.previous ? (
+            <Link
+              className="btn"
+              to={queueNavigation.previous.href}
+              aria-label={`Previous submission: ${queueNavigation.previous.title}`}
+            >
+              ← Previous
+            </Link>
+          ) : (
+            <span className="btn" aria-disabled="true">
+              ← Previous
+            </span>
+          )}
+          <Link className="btn" to={queueNavigation.backHref}>
+            Return to filtered queue
+          </Link>
+          {queueNavigation.next ? (
+            <Link
+              className="btn"
+              to={queueNavigation.next.href}
+              aria-label={`Next submission: ${queueNavigation.next.title}`}
+            >
+              Next →
+            </Link>
+          ) : (
+            <span className="btn" aria-disabled="true">
+              Next →
+            </span>
+          )}
+        </nav>
+      ) : null}
       <ActionNotice result={actionResult} />
       <div className="grid grid-2">
         <section className="card pad">

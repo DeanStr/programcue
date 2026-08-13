@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { data, Form, Link, redirect, useActionData } from "react-router";
 import { ZodError } from "zod";
 
@@ -234,7 +235,18 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
     submitBuilder,
   } = useFormBuilderController(loaderData, actionData);
   const { confirm, dialog } = useConfirm();
-  const publicUrl = "/apply/" + input.publicSlug;
+  const [copyFeedback, setCopyFeedback] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+  const publishedPublicSlug =
+    loaderData.workspace?.publishedVersion?.settings.publicSlug;
+  if (loaderData.workspace?.publishedVersion && !publishedPublicSlug) {
+    throw new Error("The published form is missing its immutable public URL.");
+  }
+  const publicUrl = publishedPublicSlug
+    ? `/apply/${publishedPublicSlug}`
+    : null;
   const eventTimezone = loaderData.workspace?.eventTimezone ?? "UTC";
   return (
     <Form
@@ -292,16 +304,56 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             <span className="status warning">Not saved</span>
           )}
           <DraftRecoveryStatus state={recovery.state} />
-          {loaderData.workspace?.publishedVersion ? (
-            <Link
-              className="btn"
-              to={publicUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open public form
-              <span className="sr-only"> (opens in a new tab)</span>
-            </Link>
+          {publicUrl ? (
+            <>
+              <Link
+                className="btn"
+                to={publicUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open public form
+                <span className="sr-only"> (opens in a new tab)</span>
+              </Link>
+              <button
+                className="btn"
+                type="button"
+                onClick={async () => {
+                  try {
+                    if (!navigator.clipboard) {
+                      throw new Error(
+                        "Clipboard access is unavailable in this browser context.",
+                      );
+                    }
+                    await navigator.clipboard.writeText(
+                      new URL(publicUrl, window.location.origin).href,
+                    );
+                    setCopyFeedback({
+                      ok: true,
+                      message: "Public form link copied.",
+                    });
+                  } catch (error) {
+                    setCopyFeedback({
+                      ok: false,
+                      message:
+                        error instanceof Error
+                          ? error.message
+                          : "The public form link could not be copied.",
+                    });
+                  }
+                }}
+              >
+                Copy public form link
+              </button>
+              {copyFeedback ? (
+                <span
+                  className={copyFeedback.ok ? "help" : "field-error"}
+                  role={copyFeedback.ok ? "status" : "alert"}
+                >
+                  {copyFeedback.message}
+                </span>
+              ) : null}
+            </>
           ) : null}
           <button
             className="btn"
