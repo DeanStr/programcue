@@ -120,15 +120,31 @@ FileScannerContainer.outbound = async (request, environment) => {
       return new Response("Forbidden.", { status: 403 });
     }
     const object = await scannerEnvironment.FILES.get(key);
-    if (!object) return new Response("Not found.", { status: 404 });
+    if (!object) {
+      structuredLog("warning", "r2-proxy-rejected", {
+        reason: "object_missing",
+      });
+      return new Response("Not found.", { status: 404 });
+    }
     const expectedSize = request.headers.get("x-program-cue-expected-size");
     const expectedEtag = request.headers.get("x-program-cue-expected-etag");
-    if (
-      expectedSize !== String(object.size) ||
-      expectedEtag?.replace(/^W\//u, "").replaceAll('"', "") !== object.etag
-    ) {
+    const sizeMatches = expectedSize === String(object.size);
+    const etagMatches =
+      expectedEtag?.replace(/^W\//u, "").replaceAll('"', "") === object.etag;
+    if (!sizeMatches || !etagMatches) {
+      structuredLog("warning", "r2-proxy-rejected", {
+        reason: "object_identity_mismatch",
+        expectedSizePresent: expectedSize !== null,
+        expectedEtagPresent: expectedEtag !== null,
+        sizeMatches,
+        etagMatches,
+      });
       return new Response("Object identity mismatch.", { status: 412 });
     }
+    structuredLog("info", "r2-proxy-served", {
+      method: request.method,
+      sizeBytes: object.size,
+    });
     return new Response(request.method === "HEAD" ? null : object.body, {
       headers: {
         "content-length": String(object.size),
