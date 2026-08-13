@@ -64,6 +64,7 @@ export type ScheduleSession = {
   durationMinutes: number;
   expectedAttendance: number | null;
   requiredResources: string[];
+  sourceVisibility: "public" | "private" | "hidden";
   visibility: "public" | "private" | "hidden";
   contentStatus: "draft" | "in_review" | "approved" | "changes_requested";
   contentRevision: number;
@@ -460,6 +461,32 @@ export class ScheduleService {
       .bind(scheduleVersionId, viewer.eventId)
       .first<{ missing: number }>();
     return missing?.missing === 1;
+  }
+
+  private async findInvalidPublicScheduledContent(
+    viewer: ScheduleEventScope,
+    scheduleVersionId: string,
+  ) {
+    return this.env.DB.prepare(
+      `SELECT content.title, content.content_status AS contentStatus,
+              content.visibility
+         FROM schedule_entries entry
+         JOIN sessions session
+           ON session.id = entry.session_id
+          AND session.event_id = entry.event_id
+          AND session.visibility = 'public'
+         JOIN schedule_session_contents content
+           ON content.schedule_version_id = entry.schedule_version_id
+          AND content.event_id = entry.event_id
+          AND content.session_id = entry.session_id
+        WHERE entry.schedule_version_id = ? AND entry.event_id = ?
+          AND (content.visibility <> 'public'
+               OR content.content_status <> 'approved')
+        ORDER BY content.title COLLATE NOCASE, content.session_id
+        LIMIT 1`,
+    )
+      .bind(scheduleVersionId, viewer.eventId)
+      .first<{ title: string; contentStatus: string; visibility: string }>();
   }
 
   async getWorkspace(viewer: ScheduleEventScope): Promise<ScheduleWorkspace> {
@@ -1026,6 +1053,21 @@ export class ScheduleService {
         "Place at least one session before publishing.",
       );
 
+    const invalidContent = await this.findInvalidPublicScheduledContent(
+      viewer,
+      parsed.scheduleVersionId,
+    );
+    if (invalidContent) {
+      const state =
+        invalidContent.visibility === "public"
+          ? invalidContent.contentStatus.replaceAll("_", " ")
+          : invalidContent.visibility;
+      throw new SchedulePublicationBlockedError(
+        [],
+        `Every public session requires a public, approved content snapshot before publishing. “${invalidContent.title}” is ${state}.`,
+      );
+    }
+
     const unconfirmedSpeaker = await this.findUnconfirmedScheduledSpeaker(
       viewer,
       parsed.scheduleVersionId,
@@ -1129,6 +1171,20 @@ export class ScheduleService {
       ) {
         throw new ScheduleConfigurationError(
           "The active schedule version is missing one or more required frozen session-content snapshots.",
+        );
+      }
+      const newlyInvalidContent = await this.findInvalidPublicScheduledContent(
+        viewer,
+        parsed.scheduleVersionId,
+      );
+      if (newlyInvalidContent) {
+        const state =
+          newlyInvalidContent.visibility === "public"
+            ? newlyInvalidContent.contentStatus.replaceAll("_", " ")
+            : newlyInvalidContent.visibility;
+        throw new SchedulePublicationBlockedError(
+          [],
+          `Every public session requires a public, approved content snapshot before publishing. “${newlyInvalidContent.title}” is ${state}.`,
         );
       }
       const newlyUnconfirmedSpeaker =

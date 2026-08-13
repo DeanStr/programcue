@@ -17,6 +17,9 @@ import { ApiAdministrationItemService } from "./api-administration-item-service.
 import { ApiEvaluationService } from "./api-evaluation-service.server";
 import { ApiIntegrationService } from "./api-integration-service.server";
 import {
+  PUBLIC_CALENDAR_SESSION_ID_LIMIT,
+  PUBLIC_CALENDAR_SESSION_LIMIT,
+  publicCalendarQuerySchema,
   publicProgrammeResponse,
   publicSchedulePage,
   publicSessionPage,
@@ -125,6 +128,19 @@ describe("expanded public API contract", () => {
     ).toThrowError(
       expect.objectContaining({ status: 422, code: "VALIDATION_ERROR" }),
     );
+  });
+
+  it("accepts the documented maximum calendar session selection", () => {
+    const sessions = Array.from(
+      { length: PUBLIC_CALENDAR_SESSION_LIMIT },
+      (_, index) => `${index}-`.padEnd(PUBLIC_CALENDAR_SESSION_ID_LIMIT, "x"),
+    ).join(",");
+    const requestUrl = new URL("https://programcue.test/api");
+    requestUrl.searchParams.set("sessions", sessions);
+
+    expect(
+      parseStrictQuery(new Request(requestUrl), publicCalendarQuerySchema),
+    ).toEqual({ sessions });
   });
 
   it("round-trips opaque cursors for valid non-ASCII record identifiers", () => {

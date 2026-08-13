@@ -197,6 +197,48 @@ export const memberships = sqliteTable(
   ],
 );
 
+export const eventSpeakerWorkflows = sqliteTable(
+  "event_speaker_workflows",
+  {
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    status: text("status")
+      .notNull()
+      .$type<"prospect" | "invited" | "confirmed" | "declined" | "withdrawn">(),
+    source: text("source")
+      .notNull()
+      .$type<
+        | "application"
+        | "import"
+        | "manual"
+        | "session"
+        | "membership"
+        | "backfill"
+      >(),
+    revision: integer("revision").notNull().default(1),
+    lastOperationId: text("last_operation_id").notNull().unique(),
+    updatedByPersonId: text("updated_by_person_id").references(() => people.id),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    primaryKey({ columns: [table.eventId, table.personId] }),
+    index("idx_event_speaker_workflows_status").on(
+      table.eventId,
+      table.status,
+      table.personId,
+    ),
+    check(
+      "event_speaker_workflows_attribution",
+      sql`${table.updatedByPersonId} IS NOT NULL OR ${table.source} IN ('session','membership','backfill')`,
+    ),
+  ],
+);
+
 export const organisationContacts = sqliteTable(
   "organisation_contacts",
   {

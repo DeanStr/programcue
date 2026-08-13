@@ -228,10 +228,15 @@ describe("scheduled D1 backup Workflow boundaries", () => {
       requireProductionBackupRuntime({
         APP_ENV: "production",
         DEMO_MODE: "false",
+        EVALUATION_MODE: "false",
       }),
     ).not.toThrow();
     expect(() =>
-      requireProductionBackupRuntime({ APP_ENV: "test", DEMO_MODE: "true" }),
+      requireProductionBackupRuntime({
+        APP_ENV: "test",
+        DEMO_MODE: "true",
+        EVALUATION_MODE: "false",
+      }),
     ).toThrow("restricted to the production runtime");
     expect(() => requireProductionBackupRuntime({})).toThrow(
       "explicit production runtime configuration",

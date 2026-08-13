@@ -3,15 +3,19 @@ import { RouterContextProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { loader as publicCalendarLoader } from "~/routes/api-public-calendar";
 import { loader as publicProgrammeLoader } from "~/routes/api-public-programme";
 import {
   action as publicProgrammePageAction,
   descriptionSnippet,
-  itineraryCookie,
   loader as publicProgrammePageLoader,
 } from "~/routes/public-programme";
+import {
+  itineraryCookie,
+  publicItineraryIdentity,
+} from "./public-itinerary-identity.server";
 import {
   assertPublishedSpeakerGraphIntegrity,
   PublicProgrammeService,
@@ -26,6 +30,119 @@ describe("published programme and itinerary", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("fails fast when a published programme contains unapproved public content", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const service = new PublicProgrammeService(testEnv);
+    const baseline = await service.getPublished("future-of-events-2025");
+    expect(
+      baseline?.sessions.some((session) => session.id === "demo-session-1"),
+    ).toBe(true);
+    await testEnv.DB.prepare(
+      `UPDATE schedule_session_contents
+          SET content_status = 'in_review', approved_by_person_id = NULL,
+              approved_at = NULL
+        WHERE schedule_version_id = 'demo-schedule-published'
+          AND event_id = 'evt-foe-2025' AND session_id = 'demo-session-1'`,
+    ).run();
+    try {
+      await expect(
+        service.getPublished("future-of-events-2025"),
+      ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
+      await expect(
+        service.getPublishedLandingSummary("future-of-events-2025", 8),
+      ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
+    } finally {
+      await testEnv.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET content_status = 'approved',
+                approved_by_person_id = 'person-demo-admin',
+                approved_at = unixepoch()
+          WHERE schedule_version_id = 'demo-schedule-published'
+            AND event_id = 'evt-foe-2025' AND session_id = 'demo-session-1'`,
+      ).run();
+    }
+  });
+
+  it("exports the server-side personal itinerary without a session-ID URL", async () => {
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: env as unknown as CloudflareEnvironment,
+      ctx: {} as ExecutionContext,
+    });
+    const service = new PublicProgrammeService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const programme = await service.getPublished("future-of-events-2025");
+    const selected = programme!.sessions[0]!;
+    const omitted = programme!.sessions[1]!;
+    const { token } = await service.updateItinerary(
+      programme!,
+      { personId: null, visitorToken: null },
+      selected.id,
+      "add",
+    );
+    const response = await publicCalendarLoader({
+      request: new Request(
+        "https://programcue.test/api/v1/public/events/future-of-events-2025/calendar.ics?itinerary=mine",
+        {
+          headers: {
+            cookie: `program_cue_itinerary=${encodeURIComponent(token!)}`,
+          },
+        },
+      ),
+      params: { slug: "future-of-events-2025" },
+      context,
+    } as never);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toContain(
+      "future-of-events-2025-itinerary.ics",
+    );
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    const calendar = await response.text();
+    expect(calendar).toContain(`UID:${selected.id}@programcue`);
+    expect(calendar).not.toContain(`UID:${omitted.id}@programcue`);
+  });
+
+  it("uses the selected production evaluation persona as the itinerary identity", async () => {
+    const testEnv = {
+      ...(env as unknown as CloudflareEnvironment),
+      APP_ENV: "production",
+      DEMO_MODE: "false",
+      EVALUATION_MODE: "true",
+      EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+      EVALUATION_SESSION_SECRET:
+        "evaluation-session-secret-with-more-than-thirty-two-characters",
+    } as CloudflareEnvironment;
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    await testEnv.DB.prepare(
+      `INSERT INTO audit_events (
+         id, organisation_id, event_id, actor_id, action,
+         entity_type, entity_id, metadata_json, created_at
+       ) VALUES (?, 'org-future-events', 'evt-foe-2025', 'test-operator',
+                 'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
+                 unixepoch())`,
+    )
+      .bind(crypto.randomUUID())
+      .run();
+    const cookie = (await evaluationSessionCookie(testEnv, "organizer")).split(
+      ";",
+      1,
+    )[0]!;
+
+    await expect(
+      publicItineraryIdentity(
+        new Request("https://app.programcue.test/public/programme/event", {
+          headers: { cookie },
+        }),
+        testEnv,
+      ),
+    ).resolves.toEqual({
+      personId: "person-demo-admin",
+      visitorToken: null,
+    });
   });
 
   it("rejects an empty shared-itinerary token instead of loading private state", async () => {

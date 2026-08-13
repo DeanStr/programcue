@@ -120,6 +120,7 @@ export const DEMO_RESET_EVENT_TABLES = [
   "session_content_revisions",
   "schedule_session_contents",
   "schedule_versions",
+  "event_speaker_workflows",
   "session_tags",
   "session_archives",
   "session_speakers",
@@ -429,6 +430,10 @@ export type DemoBaselineEvidence = {
   sessions: number;
   publishedSchedules: number;
   publishedTemplates: number;
+  showcaseMemberships: number;
+  showcaseReviewerAssignments: number;
+  showcaseApplicantSubmissions: number;
+  showcaseSpeakerTasks: number;
   sbekPeople: number;
   sbekReviewerMemberships: number;
   sbekReviewerAssignments: number;
@@ -446,6 +451,10 @@ export function demoBaselineIsComplete(evidence: DemoBaselineEvidence) {
     evidence.sessions >= 6 &&
     evidence.publishedSchedules === 1 &&
     evidence.publishedTemplates === 2 &&
+    evidence.showcaseMemberships === 6 &&
+    evidence.showcaseReviewerAssignments >= 1 &&
+    evidence.showcaseApplicantSubmissions >= 1 &&
+    evidence.showcaseSpeakerTasks >= 1 &&
     evidence.sbekPeople === 4 &&
     evidence.sbekReviewerMemberships === 0 &&
     evidence.sbekReviewerAssignments === 0 &&
@@ -489,6 +498,22 @@ async function baselineEvidence(env: CloudflareEnvironment) {
                AND version.category = 'ad_hoc'
                AND version.channel = 'email')
            )) AS publishedTemplates,
+       (SELECT COUNT(*) FROM people person
+         WHERE person.id IN (?, ?, ?, ?, ?, ?)
+           AND EXISTS (
+             SELECT 1 FROM memberships membership
+              WHERE membership.person_id = person.id
+                AND membership.organisation_id = ?
+                AND (membership.event_id = ? OR membership.event_id IS NULL)
+                AND membership.accepted_at IS NOT NULL
+                AND membership.revoked_at IS NULL
+           )) AS showcaseMemberships,
+       (SELECT COUNT(*) FROM evaluator_assignments
+         WHERE event_id = ? AND evaluator_person_id = ?) AS showcaseReviewerAssignments,
+       (SELECT COUNT(*) FROM submissions
+         WHERE event_id = ? AND submitter_person_id = ?) AS showcaseApplicantSubmissions,
+       (SELECT COUNT(*) FROM task_instances
+         WHERE event_id = ? AND owner_person_id = ?) AS showcaseSpeakerTasks,
        (SELECT COUNT(*) FROM people
          WHERE (id = ? AND email = ? COLLATE NOCASE AND display_name = ? AND profile_status = ?)
             OR (id = ? AND email = ? COLLATE NOCASE AND display_name = ? AND profile_status = ?)
@@ -530,6 +555,20 @@ async function baselineEvidence(env: CloudflareEnvironment) {
       DEMO_REMINDER_VERSION_ID,
       DEMO_REVIEWER_REMINDER_TEMPLATE_ID,
       DEMO_REVIEWER_REMINDER_VERSION_ID,
+      DEMO_IDENTITIES.administrator.personId,
+      DEMO_IDENTITIES.owner.personId,
+      DEMO_IDENTITIES.committee_chair.personId,
+      DEMO_IDENTITIES.evaluator.personId,
+      DEMO_IDENTITIES.submitter.personId,
+      DEMO_IDENTITIES.speaker.personId,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.evaluator.personId,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.submitter.personId,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.speaker.personId,
       ...Object.values(SBEK_FIXTURE_PEOPLE).flatMap((identity) => [
         identity.personId,
         identity.email,
@@ -625,6 +664,7 @@ export async function resetDemoEvent(
   actorPersonId: string | null,
   confirmation: unknown,
   actorId: string | null = null,
+  beforeDestructiveWork: (() => Promise<void>) | null = null,
 ) {
   assertDemoRuntime(env);
   if (confirmation !== DEMO_RESET_CONFIRMATION) {
@@ -658,6 +698,7 @@ export async function resetDemoEvent(
         .first<{ count: number }>()
     )?.count ?? 0,
   );
+  await beforeDestructiveWork?.();
   const supersededAssistantFixtureProposals =
     await supersedeDemoAssistantFixtureProposals(env);
 

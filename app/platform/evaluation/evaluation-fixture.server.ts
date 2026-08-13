@@ -77,6 +77,7 @@ function demoSeedEnvironment(env: CloudflareEnvironment) {
     get(target, property, receiver) {
       if (property === "APP_ENV") return "demo";
       if (property === "DEMO_MODE") return "true";
+      if (property === "EVALUATION_MODE") return "false";
       if (property === "DEFAULT_EVENT_ID") return DEMO_EVENT_ID;
       return Reflect.get(target, property, receiver);
     },
@@ -368,9 +369,13 @@ export async function resetProductionEvaluationFixture(
   domains?: DomainReader,
 ) {
   const runtime = requireRuntimeMode(env);
-  if (runtime.appEnvironment !== "production" || runtime.demo) {
+  if (
+    runtime.appEnvironment !== "production" ||
+    runtime.demo ||
+    !runtime.evaluation
+  ) {
     throw new Error(
-      "The production evaluation fixture can run only in the ordinary production runtime.",
+      "The production evaluation fixture can run only when production evaluation mode is enabled.",
     );
   }
   if (confirmation !== DEMO_RESET_CONFIRMATION) {
@@ -391,12 +396,41 @@ export async function resetProductionEvaluationFixture(
     env,
     domains ?? evaluationDomainReader(env),
   );
+  const fixtureAttemptId = crypto.randomUUID();
 
   const seeded = await resetDemoEvent(
     demoSeedEnvironment(env),
     null,
     confirmation,
     EVALUATION_OPERATOR_ACTOR_ID,
+    async () => {
+      const started = await env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         ) VALUES (?, ?, ?, ?, 'evaluation.fixture.reset.started', 'event', ?, ?, unixepoch())`,
+      )
+        .bind(
+          fixtureAttemptId,
+          DEMO_ORGANISATION_ID,
+          DEMO_EVENT_ID,
+          EVALUATION_OPERATOR_ACTOR_ID,
+          DEMO_EVENT_ID,
+          JSON.stringify({
+            status: "started",
+            provider: "resend",
+            senderDomain: sender.domainName,
+            aiProvider: "workers_ai",
+            aiModel: WORKERS_AI_MODEL,
+          }),
+        )
+        .run();
+      if ((started.meta.changes ?? 0) !== 1) {
+        throw new Error(
+          "The production evaluation fixture start marker could not be recorded.",
+        );
+      }
+    },
   );
   const fixtureEntries = Object.entries(emails) as Array<
     [keyof EvaluationFixtureEmails, string]
@@ -469,29 +503,39 @@ export async function resetProductionEvaluationFixture(
       sender.address,
       sender.providerDomain.id,
     ),
-    env.DB.prepare(
-      `INSERT INTO audit_events (
-         id, organisation_id, event_id, actor_id, action,
-         entity_type, entity_id, metadata_json, created_at
-       ) VALUES (?, ?, ?, ?, 'evaluation.fixture.reset', 'event', ?, ?, unixepoch())`,
-    ).bind(
-      crypto.randomUUID(),
-      DEMO_ORGANISATION_ID,
-      DEMO_EVENT_ID,
-      EVALUATION_OPERATOR_ACTOR_ID,
-      DEMO_EVENT_ID,
-      JSON.stringify({
-        provider: "resend",
-        senderDomain: sender.domainName,
-        aiProvider: "workers_ai",
-        aiModel: WORKERS_AI_MODEL,
-      }),
-    ),
   ]);
 
   const evidence = await productionEvidence(env, emails);
   if (!fixtureIsComplete(evidence)) {
     throw new Error("The production evaluation fixture is incomplete.");
+  }
+  const fixtureGeneration = crypto.randomUUID();
+  const completed = await env.DB.prepare(
+    `INSERT INTO audit_events (
+       id, organisation_id, event_id, actor_id, action,
+       entity_type, entity_id, metadata_json, created_at
+     ) VALUES (?, ?, ?, ?, 'evaluation.fixture.reset', 'event', ?, ?, unixepoch())`,
+  )
+    .bind(
+      fixtureGeneration,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      EVALUATION_OPERATOR_ACTOR_ID,
+      DEMO_EVENT_ID,
+      JSON.stringify({
+        status: "completed",
+        attemptId: fixtureAttemptId,
+        provider: "resend",
+        senderDomain: sender.domainName,
+        aiProvider: "workers_ai",
+        aiModel: WORKERS_AI_MODEL,
+      }),
+    )
+    .run();
+  if ((completed.meta.changes ?? 0) !== 1) {
+    throw new Error(
+      "The production evaluation fixture completion marker could not be recorded.",
+    );
   }
   return { ...seeded, evidence };
 }

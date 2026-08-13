@@ -170,10 +170,9 @@ export default function AdminContentSession({
           {current.description || "No public description has been written."}
         </p>
         <p className="help">
-          Approval is an advisory editorial status and does not block schedule
-          publication. Public programme, embed and API output follow the
-          published snapshot&apos;s visibility; speaker calendar updates use the
-          scheduled snapshot. Saving an edit returns this status to Draft.
+          Approval is required before public schedule publication. Public
+          programme, embed and API output include only approved content from
+          the published snapshot. Saving an edit returns this status to Draft.
         </p>
         {current.approvedAt ? (
           <p className="help">

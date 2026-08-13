@@ -66,6 +66,34 @@ export const publicSpeakerQuerySchema = z
 
 export const emptyPublicQuerySchema = z.object({}).strict();
 
+export const PUBLIC_CALENDAR_SESSION_LIMIT = 50;
+export const PUBLIC_CALENDAR_SESSION_ID_LIMIT = 200;
+
+export const publicCalendarQuerySchema = z
+  .object({
+    sessions: z
+      .string()
+      .trim()
+      .min(1)
+      .max(
+        PUBLIC_CALENDAR_SESSION_LIMIT * PUBLIC_CALENDAR_SESSION_ID_LIMIT +
+          (PUBLIC_CALENDAR_SESSION_LIMIT - 1),
+      )
+      .optional(),
+    itinerary: z.literal("mine").optional(),
+    share: z.string().max(100).optional(),
+  })
+  .strict()
+  .refine(
+    ({ sessions, itinerary, share }) =>
+      [sessions, itinerary, share].filter((value) => value !== undefined)
+        .length <= 1,
+    {
+      message:
+        "Use only one calendar selection: sessions, itinerary, or share.",
+    },
+  );
+
 type SessionFilter = Pick<
   z.infer<typeof publicSessionQuerySchema>,
   "q" | "track" | "room" | "speakerId" | "from" | "to"

@@ -46,8 +46,10 @@ describe("event role authorization", () => {
   it("redirects unauthenticated page requests to sign-in with their local destination", async () => {
     const productionEnv = {
       ...(env as unknown as CloudflareEnvironment),
+      APP_ENV: "production",
       DEMO_MODE: "false",
-    } as CloudflareEnvironment;
+      EVALUATION_MODE: "false",
+    } as unknown as CloudflareEnvironment;
     const denied = await requireAuthenticatedPerson(
       new Request("http://localhost/admin/tasks?state=overdue"),
       productionEnv,
@@ -63,8 +65,10 @@ describe("event role authorization", () => {
   it("retains a bare 401 for non-page authentication boundaries", async () => {
     const productionEnv = {
       ...(env as unknown as CloudflareEnvironment),
+      APP_ENV: "production",
       DEMO_MODE: "false",
-    } as CloudflareEnvironment;
+      EVALUATION_MODE: "false",
+    } as unknown as CloudflareEnvironment;
 
     await expect(
       requireAuthenticatedPerson(

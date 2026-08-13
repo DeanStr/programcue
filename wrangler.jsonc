@@ -82,6 +82,7 @@
   "vars": {
     "APP_ENV": "production",
     "DEMO_MODE": "false",
+    "EVALUATION_MODE": "true",
     "SOURCE_REVISION": "d0dd6a5808757a712914c9fd62bbc37718b2396f",
     "BETTER_AUTH_URL": "https://app.programcue.com",
     "AUTH_EMAIL_FROM": "Program Cue <auth@programcue.com>",

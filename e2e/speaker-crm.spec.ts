@@ -204,3 +204,45 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
     page.getByRole("table", { name: "Deliverable recipient sample" }),
   ).toContainText("Marcus Okafor");
 });
+
+test("event roster previews CSV speakers and exposes explicit workflow status", async ({
+  page,
+}) => {
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/admin/speakers");
+  await page.getByText("Import event speakers from CSV").click();
+  await page.getByLabel("Event speaker CSV").setInputFiles(fixture);
+  await page.getByRole("button", { name: "Preview speaker import" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Import preview" }),
+  ).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Priya Raman" })).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "Prospect" }).first(),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Confirm event roster import" })
+    .click();
+  await expect(
+    page.getByText(
+      "3 speakers imported to this event roster. No invitation email was sent.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  const status = page.getByLabel("Workflow status for Dana Kowalski");
+  await expect(status).toHaveValue("prospect");
+  await status.selectOption("confirmed");
+  await status.locator("..").getByRole("button", { name: "Save" }).click();
+  await expect(
+    page.getByText("Speaker workflow updated to confirmed.", { exact: true }),
+  ).toBeVisible();
+});

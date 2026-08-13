@@ -101,6 +101,7 @@ describe("provider HTTP contracts through MSW", () => {
     const provider = createEmailProvider({
       APP_ENV: "development",
       DEMO_MODE: "true",
+      EVALUATION_MODE: "false",
       EMAIL_PROVIDER: "mailpit",
       MAILPIT_SEND_API_URL: "https://mailpit.test/api/v1/send",
       MAILPIT_SEND_API_USERNAME: "program-cue",
@@ -160,6 +161,7 @@ describe("email provider selection", () => {
       requireEmailProviderConfiguration({
         APP_ENV: "demo",
         DEMO_MODE: "true",
+        EVALUATION_MODE: "false",
         EMAIL_PROVIDER: "mailpit",
         MAILPIT_SEND_API_URL: "http://127.0.0.1:8025/api/v1/send",
       }),
@@ -174,6 +176,7 @@ describe("email provider selection", () => {
       requireEmailProviderConfiguration({
         APP_ENV: "production",
         DEMO_MODE: "false",
+        EVALUATION_MODE: "false",
         EMAIL_PROVIDER: "mailpit",
         MAILPIT_SEND_API_URL: "https://mailpit.test/api/v1/send",
       }),
@@ -182,6 +185,7 @@ describe("email provider selection", () => {
       requireEmailProviderConfiguration({
         APP_ENV: "production",
         DEMO_MODE: "false",
+        EVALUATION_MODE: "false",
         EMAIL_PROVIDER: "resend",
         MAILPIT_SEND_API_URL: "https://mailpit.test/api/v1/send",
       }),
@@ -193,6 +197,7 @@ describe("email provider selection", () => {
       requireEmailProviderConfiguration({
         APP_ENV: "test",
         DEMO_MODE: "true",
+        EVALUATION_MODE: "false",
         EMAIL_PROVIDER: "mailpit",
         MAILPIT_SEND_API_URL: "https://mailpit.test/api/v1/send",
         MAILPIT_SEND_API_USERNAME: "program-cue",

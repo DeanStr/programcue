@@ -69,6 +69,7 @@ describe("current event context", () => {
       ...workerEnv,
       APP_ENV: "production",
       DEMO_MODE: "false",
+      EVALUATION_MODE: "true",
     } as CloudflareEnvironment;
     const productionCookie = currentEventCookie("evt-production", production);
     expect(productionCookie).toContain(
@@ -89,7 +90,7 @@ describe("current event context", () => {
         APP_ENV: "production",
         DEMO_MODE: "true",
       } as unknown as CloudflareEnvironment),
-    ).toThrow("Unsupported APP_ENV/DEMO_MODE combination");
+    ).toThrow("Unsupported APP_ENV/DEMO_MODE/EVALUATION_MODE combination");
   });
 
   it("loads admin shell state through an event-and-organisation scoped service boundary", async () => {

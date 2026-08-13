@@ -53,6 +53,7 @@ interface D1BackupEnvironment {
   BACKUPS: R2Bucket;
   APP_ENV?: unknown;
   DEMO_MODE?: unknown;
+  EVALUATION_MODE?: unknown;
   CLOUDFLARE_ACCOUNT_ID?: string;
   D1_DATABASE_ID?: string;
   D1_REST_API_TOKEN?: string;
@@ -74,6 +75,7 @@ interface BackupConfiguration {
 export function requireProductionBackupRuntime(environment: {
   APP_ENV?: unknown;
   DEMO_MODE?: unknown;
+  EVALUATION_MODE?: unknown;
 }) {
   let mode: ReturnType<typeof requireRuntimeMode>;
   try {

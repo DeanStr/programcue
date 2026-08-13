@@ -1,5 +1,9 @@
 import { createAuth } from "~/platform/auth/auth.server";
 import { createEmailProvider } from "~/modules/communications/email-provider.server";
+import {
+  EVALUATION_EVENT_ID,
+  selectedEvaluationPerson,
+} from "~/platform/evaluation/evaluation-session.server";
 import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
 import type {
   Applicant,
@@ -135,6 +139,23 @@ export class ApplicantSessionService {
 
   async get(request: Request, form: PublicForm): Promise<Applicant | null> {
     if (form.accessMode !== "password_protected") {
+      if (form.eventId === EVALUATION_EVENT_ID) {
+        const evaluationPerson = await selectedEvaluationPerson(
+          request,
+          this.env,
+        );
+        if (evaluationPerson?.identityKey === "sbek_applicant") {
+          return {
+            personId: evaluationPerson.personId,
+            email: evaluationPerson.email,
+            name: evaluationPerson.name,
+            biography: evaluationPerson.biography,
+            profileRevision: evaluationPerson.profileRevision,
+            verified: true,
+            anonymousDraftId: null,
+          };
+        }
+      }
       const session = await createAuth(this.env).api.getSession({
         headers: request.headers,
       });

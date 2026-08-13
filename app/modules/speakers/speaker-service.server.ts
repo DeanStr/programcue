@@ -16,6 +16,7 @@ import {
   type SpeakerInvitationDelivery,
 } from "./speaker-invitation.server";
 import { speakerProfileSchema } from "./speaker-schema";
+import type { SpeakerWorkflowStatus } from "./speaker-roster-import.server";
 
 import {
   SpeakerPortalService,
@@ -81,11 +82,28 @@ const externalParticipationConfirmationSchema =
     externalConfirmation: z.literal("confirmed"),
   });
 
+const speakerWorkflowSchema = z
+  .object({
+    idempotencyKey: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9._:-]{8,128}$/u),
+    status: z.enum([
+      "prospect",
+      "invited",
+      "confirmed",
+      "declined",
+      "withdrawn",
+    ]),
+  })
+  .strict();
+
 export type AdminSpeakerFilters = {
   personId?: string;
   query?: string;
   profileStatus?: "" | "draft" | "published" | "archived";
   readiness?: "" | "ready" | "needs_attention";
+  workflowStatus?: "" | SpeakerWorkflowStatus;
 };
 
 export type AdminSpeakerFileVersion = {
@@ -108,6 +126,7 @@ export type AdminSpeakerListItem = {
   jobTitle: string | null;
   organisationName: string | null;
   profileStatus: string;
+  workflowStatus: SpeakerWorkflowStatus;
   sessionCount: number;
   outstandingTasks: number;
   completedTasks: number;
@@ -250,7 +269,8 @@ export class SpeakerService {
                WHERE session.id = session_speakers.session_id
                  AND session.event_id = session_speakers.event_id
                  AND session.status NOT IN ('cancelled','archived')
-            )`,
+            )
+          RETURNING session_id AS sessionId`,
       ).bind(viewer.eventId, sessionId, personId),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
@@ -270,7 +290,9 @@ export class SpeakerService {
         JSON.stringify({ sessionId, personId, source }),
       ),
     ]);
-    const updatedCount = updated.meta.changes;
+    // D1's mutation metadata includes writes performed by SQLite triggers.
+    // RETURNING identifies the row changed by this statement itself.
+    const updatedCount = updated.results.length;
     const auditedCount = audited.meta.changes;
     if (
       !Number.isSafeInteger(updatedCount) ||
@@ -452,14 +474,54 @@ export class SpeakerService {
         viewer.organisationId,
       ),
       this.env.DB.prepare(
+        `INSERT INTO event_speaker_workflows (
+           event_id, person_id, status, source, last_operation_id,
+           updated_by_person_id, created_at, updated_at
+         )
+         SELECT membership.event_id, membership.person_id, 'invited', 'manual',
+                ?, ?, unixepoch(), unixepoch()
+           FROM memberships membership
+           JOIN people person ON person.id = membership.person_id
+          WHERE membership.organisation_id = ? AND membership.event_id = ?
+            AND membership.role = 'speaker'
+            AND membership.accepted_at IS NULL
+            AND membership.revoked_at IS NULL
+            AND membership.last_operation_id = ?
+            AND person.email = ? COLLATE NOCASE
+         ON CONFLICT(event_id, person_id) DO UPDATE SET
+           status = excluded.status,
+           source = excluded.source,
+           revision = event_speaker_workflows.revision + 1,
+           last_operation_id = excluded.last_operation_id,
+           updated_by_person_id = excluded.updated_by_person_id,
+           updated_at = unixepoch()`,
+      ).bind(
+        `${commandId}:workflow`,
+        viewer.personId,
+        viewer.organisationId,
+        viewer.eventId,
+        commandId,
+        input.email,
+      ),
+      this.env.DB.prepare(
         `INSERT INTO audit_events (
            id, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
          SELECT ?, ?, ?, ?,
-                CASE WHEN membership.accepted_at IS NULL
-                     THEN 'speaker.admin.invited'
-                     ELSE 'speaker.admin.reused' END,
+                CASE
+                  WHEN membership.accepted_at IS NULL AND EXISTS (
+                    SELECT 1 FROM event_speaker_workflows workflow
+                     WHERE workflow.event_id = membership.event_id
+                       AND workflow.person_id = membership.person_id
+                       AND workflow.status = 'invited'
+                       AND workflow.source = 'manual'
+                       AND workflow.last_operation_id = ?
+                       AND workflow.updated_by_person_id = ?
+                  ) THEN 'speaker.admin.invited'
+                  WHEN membership.accepted_at IS NOT NULL
+                  THEN 'speaker.admin.reused'
+                END,
                 'person', person.id, ?,
                 json_object('enteredEmail', ?, 'createdIdentity',
                             person.last_operation_id = ?), unixepoch()
@@ -476,6 +538,8 @@ export class SpeakerService {
         crypto.randomUUID(),
         viewer.organisationId,
         viewer.eventId,
+        viewer.personId,
+        `${commandId}:workflow`,
         viewer.personId,
         commandId,
         input.email,
@@ -556,6 +620,11 @@ export class SpeakerService {
                 AND membership.accepted_at IS NOT NULL
                 AND membership.revoked_at IS NULL
            )
+           OR EXISTS (
+             SELECT 1 FROM event_speaker_workflows workflow
+              WHERE workflow.event_id = scope_event.id
+                AND workflow.person_id = ${alias}
+           )
          )
     )`;
   }
@@ -577,6 +646,13 @@ export class SpeakerService {
            JOIN events linked_event ON linked_event.id = link.event_id
           WHERE link.person_id = ?
             AND (link.event_id <> ? OR linked_event.organisation_id <> ?)
+       )
+          OR EXISTS (
+         SELECT 1
+           FROM event_speaker_workflows workflow
+           JOIN events workflow_event ON workflow_event.id = workflow.event_id
+          WHERE workflow.person_id = ?
+            AND (workflow.event_id <> ? OR workflow_event.organisation_id <> ?)
        )
           OR EXISTS (
          SELECT 1
@@ -622,6 +698,9 @@ export class SpeakerService {
         personId,
         viewer.eventId,
         viewer.organisationId,
+        personId,
+        viewer.eventId,
+        viewer.organisationId,
       )
       .first<{ shared: number }>();
     return Boolean(shared);
@@ -634,6 +713,12 @@ export class SpeakerService {
         JOIN events other_event ON other_event.id = other_link.event_id
        WHERE other_link.person_id = ${alias}
          AND (other_link.event_id <> ? OR other_event.organisation_id <> ?)
+    ) AND NOT EXISTS (
+      SELECT 1
+        FROM event_speaker_workflows other_workflow
+        JOIN events other_event ON other_event.id = other_workflow.event_id
+       WHERE other_workflow.person_id = ${alias}
+         AND (other_workflow.event_id <> ? OR other_event.organisation_id <> ?)
     ) AND NOT EXISTS (
       SELECT 1
         FROM submissions other_submission
@@ -890,6 +975,8 @@ export class SpeakerService {
         viewer.organisationId,
         viewer.eventId,
         viewer.organisationId,
+        viewer.eventId,
+        viewer.organisationId,
       ),
       this.env.DB.prepare(
         `
@@ -935,6 +1022,113 @@ export class SpeakerService {
     };
   }
 
+  async updateSpeakerWorkflowStatus(
+    viewer: Viewer,
+    rawPersonId: string,
+    rawInput: unknown,
+  ) {
+    if (viewer.role !== "owner" && viewer.role !== "administrator") {
+      throw new Response("Event administrator access is required.", {
+        status: 403,
+      });
+    }
+    const personId = rawPersonId.trim();
+    if (!personId || personId.length > 200) {
+      throw new Response("Speaker not found in this event.", { status: 404 });
+    }
+    const input = speakerWorkflowSchema.parse(rawInput);
+    try {
+      const { result } = await new ApiPersonIdempotencyService(this.env).run({
+        viewer,
+        scope: "speaker.workflow.update",
+        idempotencyKey: input.idempotencyKey,
+        input: { personId, status: input.status },
+        execute: async (commandId) => {
+          await this.env.DB.batch([
+            this.env.DB.prepare(
+              `INSERT INTO event_speaker_workflows (
+                 event_id, person_id, status, source, last_operation_id,
+                 updated_by_person_id, created_at, updated_at
+               )
+               SELECT ?, person.id, ?, 'manual', ?, ?, unixepoch(), unixepoch()
+                 FROM people person
+                WHERE person.id = ? AND ${this.adminSpeakerScopeSql()}
+               ON CONFLICT(event_id, person_id) DO UPDATE SET
+                 status = excluded.status,
+                 source = excluded.source,
+                 revision = event_speaker_workflows.revision + 1,
+                 last_operation_id = excluded.last_operation_id,
+                 updated_by_person_id = excluded.updated_by_person_id,
+                 updated_at = unixepoch()`,
+            ).bind(
+              viewer.eventId,
+              input.status,
+              commandId,
+              viewer.personId,
+              personId,
+              viewer.eventId,
+              viewer.organisationId,
+            ),
+            this.env.DB.prepare(
+              `INSERT INTO audit_events (
+                 id, organisation_id, event_id, actor_person_id, action,
+                 entity_type, entity_id, correlation_id, metadata_json, created_at
+               )
+               SELECT ?, ?, ?, ?, 'speaker.workflow.updated', 'person', ?, ?,
+                      json_object('status', ?), unixepoch()
+                 FROM event_speaker_workflows workflow
+                WHERE workflow.event_id = ? AND workflow.person_id = ?
+                  AND workflow.last_operation_id = ?`,
+            ).bind(
+              crypto.randomUUID(),
+              viewer.organisationId,
+              viewer.eventId,
+              viewer.personId,
+              personId,
+              commandId,
+              input.status,
+              viewer.eventId,
+              personId,
+              commandId,
+            ),
+          ]);
+          const recovered = await this.recoverSpeakerWorkflow(
+            viewer,
+            commandId,
+          );
+          if (!recovered) {
+            throw new Response("Speaker not found in this event.", {
+              status: 404,
+            });
+          }
+          return recovered;
+        },
+        recover: (commandId) => this.recoverSpeakerWorkflow(viewer, commandId),
+      });
+      return result;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new SpeakerAdminStateError(error.message, error.status);
+      }
+      throw error;
+    }
+  }
+
+  private async recoverSpeakerWorkflow(viewer: Viewer, commandId: string) {
+    return this.env.DB.prepare(
+      `SELECT audit.entity_id AS personId,
+              json_extract(audit.metadata_json, '$.status') AS status
+         FROM audit_events audit
+        WHERE audit.organisation_id = ? AND audit.event_id = ?
+          AND audit.actor_person_id = ?
+          AND audit.action = 'speaker.workflow.updated'
+          AND audit.correlation_id = ?
+        LIMIT 1`,
+    )
+      .bind(viewer.organisationId, viewer.eventId, viewer.personId, commandId)
+      .first<{ personId: string; status: SpeakerWorkflowStatus }>();
+  }
+
   async listAdminSpeakerPage(
     viewer: Viewer,
     filters: AdminSpeakerFilters,
@@ -970,12 +1164,46 @@ export class SpeakerService {
     ) {
       throw new Response("Invalid speaker readiness filter", { status: 400 });
     }
+    const workflowStatus = filters.workflowStatus ?? "";
+    if (
+      workflowStatus !== "" &&
+      workflowStatus !== "prospect" &&
+      workflowStatus !== "invited" &&
+      workflowStatus !== "confirmed" &&
+      workflowStatus !== "declined" &&
+      workflowStatus !== "withdrawn"
+    ) {
+      throw new Response("Invalid speaker workflow filter", { status: 400 });
+    }
     const event = await this.env.DB.prepare(
       "SELECT timezone FROM events WHERE id = ? AND organisation_id = ?",
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ timezone: string }>();
     if (!event) throw new Response("Event not found.", { status: 404 });
+    const missingWorkflow = await this.env.DB.prepare(
+      `WITH expected(person_id) AS (
+         SELECT person_id FROM session_speakers WHERE event_id = ?
+         UNION
+         SELECT person_id FROM memberships
+          WHERE event_id = ? AND role = 'speaker'
+            AND accepted_at IS NOT NULL AND revoked_at IS NULL
+       )
+       SELECT expected.person_id AS personId
+         FROM expected
+         LEFT JOIN event_speaker_workflows workflow
+           ON workflow.event_id = ? AND workflow.person_id = expected.person_id
+        WHERE workflow.person_id IS NULL
+        ORDER BY expected.person_id
+        LIMIT 1`,
+    )
+      .bind(viewer.eventId, viewer.eventId, viewer.eventId)
+      .first<{ personId: string }>();
+    if (missingWorkflow) {
+      throw new Error(
+        `Speaker ${missingWorkflow.personId} has no event workflow state.`,
+      );
+    }
     const pageSize = 50;
     const query = `%${queryValue}%`;
     const speakers = await this.env.DB.prepare(
@@ -989,18 +1217,24 @@ export class SpeakerService {
           FROM memberships
          WHERE event_id = ? AND role = 'speaker'
            AND accepted_at IS NOT NULL AND revoked_at IS NULL
+        UNION
+        SELECT person_id FROM event_speaker_workflows WHERE event_id = ?
       ), page_people AS (
         SELECT p.id, COALESCE(contact_profile.display_name, p.display_name) AS name,
                p.email,
                COALESCE(contact_profile.job_title, p.job_title) AS jobTitle,
                COALESCE(contact_profile.organisation_name, p.organisation_name) AS organisationName,
-               p.profile_status AS profileStatus
+               p.profile_status AS profileStatus,
+               workflow.status AS workflowStatus
           FROM event_speaker_ids speaker
           JOIN people p ON p.id = speaker.person_id
+          JOIN event_speaker_workflows workflow
+            ON workflow.event_id = ? AND workflow.person_id = p.id
           LEFT JOIN organisation_contact_profiles contact_profile
             ON contact_profile.organisation_id = ?
            AND contact_profile.person_id = p.id
          WHERE (? = '' OR p.profile_status = ?)
+           AND (? = '' OR workflow.status = ?)
            AND (? = '%%' OR COALESCE(contact_profile.display_name, p.display_name) LIKE ? OR p.email LIKE ?)
            AND (? = '' OR p.id = ?)
            AND (
@@ -1081,9 +1315,13 @@ export class SpeakerService {
       .bind(
         viewer.eventId,
         viewer.eventId,
+        viewer.eventId,
+        viewer.eventId,
         viewer.organisationId,
         profileStatus,
         profileStatus,
+        workflowStatus,
+        workflowStatus,
         query,
         query,
         query,
@@ -1113,6 +1351,8 @@ export class SpeakerService {
         SELECT person_id FROM memberships
          WHERE event_id = ? AND role = 'speaker'
            AND accepted_at IS NOT NULL AND revoked_at IS NULL
+        UNION
+        SELECT person_id FROM event_speaker_workflows WHERE event_id = ?
       )
       SELECT COUNT(*) AS knownSpeakers,
              SUM(CASE WHEN NOT (
@@ -1161,6 +1401,7 @@ export class SpeakerService {
           viewer.eventId,
           viewer.eventId,
           viewer.eventId,
+          viewer.eventId,
         )
         .first<{
           knownSpeakers: number;
@@ -1178,6 +1419,7 @@ export class SpeakerService {
           WHERE membership.organisation_id = ? AND membership.event_id = ?
             AND membership.role = 'speaker'
             AND membership.accepted_at IS NULL
+            AND membership.invited_at IS NOT NULL
             AND membership.revoked_at IS NULL
           ORDER BY membership.invited_at DESC, membership.id`,
       )

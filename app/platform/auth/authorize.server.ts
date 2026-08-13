@@ -8,6 +8,8 @@ import {
   isDemoIdentityKey,
   type DemoIdentityKey,
 } from "~/platform/demo/seed.server";
+import { selectedEvaluationPerson } from "~/platform/evaluation/evaluation-session.server";
+import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 export type ViewerRole =
   | "owner"
@@ -25,6 +27,7 @@ export type Viewer = {
   organisationId: string;
   eventId: string;
   demo: boolean;
+  evaluation?: boolean;
 };
 
 function invalidDemoIdentityCookie(): never {
@@ -87,20 +90,39 @@ export async function requireAuthenticatedPerson(
   env: CloudflareEnvironment,
   unauthenticatedBehavior: "redirect" | "response" = "redirect",
 ) {
-  if (String(env.DEMO_MODE) === "true") {
+  const runtime = requireRuntimeMode(env);
+  if (runtime.demo) {
     const selected = selectedDemoIdentity(request);
     if (!selected) {
       if (unauthenticatedBehavior === "redirect") {
         throw redirect(signInLocation(request, true));
       }
-      forbidden("Choose a demo identity before opening a private workspace", 401);
+      forbidden(
+        "Choose a demo identity before opening a private workspace",
+        401,
+      );
     }
     await ensureDemoData(env);
     return {
       ...selected.identity,
       demo: true,
+      evaluation: false,
       demoIdentity: selected.identityKey,
     };
+  }
+
+  if (runtime.evaluation) {
+    const selected = await selectedEvaluationPerson(request, env);
+    if (selected) {
+      return {
+        personId: selected.personId,
+        name: selected.name,
+        email: selected.email,
+        demo: false,
+        evaluation: true,
+        demoIdentity: null,
+      };
+    }
   }
 
   const session = await createAuth(env).api.getSession({
@@ -116,6 +138,7 @@ export async function requireAuthenticatedPerson(
     name: session.user.name,
     email: session.user.email,
     demo: false,
+    evaluation: false,
     demoIdentity: null,
   };
 }
@@ -128,11 +151,8 @@ async function resolveEventRole(
   unauthenticatedBehavior: "redirect" | "response",
   acceptPendingInvitation: boolean,
 ): Promise<Viewer> {
-  const { personId, name, email, demo } = await requireAuthenticatedPerson(
-    request,
-    env,
-    unauthenticatedBehavior,
-  );
+  const { personId, name, email, demo, evaluation } =
+    await requireAuthenticatedPerson(request, env, unauthenticatedBehavior);
 
   if (allowedRoles.length === 0)
     forbidden("You do not have permission to manage this event");
@@ -208,17 +228,18 @@ async function resolveEventRole(
       }>();
 
     if (invitation) {
+      const acceptanceOperationId = `membership-accepted:${crypto.randomUUID()}`;
       const [accepted] = await env.DB.batch([
         env.DB.prepare(
           `
           UPDATE memberships
-             SET accepted_at = unixepoch()
+             SET accepted_at = unixepoch(), last_operation_id = ?
            WHERE id = ? AND accepted_at IS NULL AND invited_at IS NOT NULL
              AND revoked_at IS NULL
              AND invitation_expires_at > unixepoch()
           RETURNING id, organisation_id AS organisationId, event_id AS eventId, role
         `,
-        ).bind(invitation.id),
+        ).bind(acceptanceOperationId, invitation.id),
         env.DB.prepare(
           `
           INSERT INTO audit_events (
@@ -228,7 +249,8 @@ async function resolveEventRole(
           SELECT ?, m.organisation_id, ?, ?, 'membership.accepted',
                  'membership', m.id, ?, unixepoch()
             FROM memberships m
-           WHERE m.id = ? AND changes() = 1
+           WHERE m.id = ? AND m.accepted_at IS NOT NULL
+             AND m.revoked_at IS NULL AND m.last_operation_id = ?
         `,
         ).bind(
           crypto.randomUUID(),
@@ -236,6 +258,7 @@ async function resolveEventRole(
           personId,
           JSON.stringify({ role: invitation.role }),
           invitation.id,
+          acceptanceOperationId,
         ),
       ]);
       membership =
@@ -280,6 +303,7 @@ async function resolveEventRole(
     organisationId: membership.organisationId,
     eventId,
     demo,
+    evaluation,
   };
 }
 

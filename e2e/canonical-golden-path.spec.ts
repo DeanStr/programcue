@@ -380,12 +380,36 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
 
     await waitForInterface(page, "/admin/schedule");
     await page.getByRole("button", { name: "Publish schedule" }).click();
-    const publication = page.getByRole("dialog", { name: "Publish schedule" });
-    await expect(publication).toContainText("not marked Approved");
+    let publication = page.getByRole("dialog", { name: "Publish schedule" });
+    await expect(publication).toContainText("cannot be published");
+    await expect(publication).toContainText(
+      "Every public session requires a public, Approved content snapshot",
+    );
+    await expect(
+      publication.getByRole("button", { name: "Confirm publication" }),
+    ).toBeDisabled();
+    await publication.getByRole("button", { name: "Cancel" }).click();
+
+    await waitForInterface(page, "/admin/content");
+    await contentRow.getByRole("link", { name: "Review history" }).click();
+    await page.getByLabel("Next status").selectOption("approved");
+    await page
+      .getByRole("checkbox", { name: /apply this exact status/i })
+      .check();
+    await page.getByRole("button", { name: "Change status" }).click();
+    await expect(
+      page.getByText("Content updated", { exact: true }),
+    ).toBeVisible();
+
+    await waitForInterface(page, "/admin/schedule");
+    await page.getByRole("button", { name: "Publish schedule" }).click();
+    publication = page.getByRole("dialog", { name: "Publish schedule" });
+    await expect(publication).toContainText(
+      "Every scheduled public session has a public, Approved content snapshot",
+    );
     await expect(publication).toContainText(
       "Confirming publication makes this exact schedule-version snapshot authoritative",
     );
-    await expect(publication).toContainText("editorial statuses stay unchanged");
     await expect(publication).toContainText("revalidated before publication");
     await publication
       .getByRole("button", { name: "Confirm publication" })

@@ -180,6 +180,8 @@ wrangler secret put FILE_SCANNER_WEBHOOK_SECRET
 wrangler secret put R2_ACCESS_KEY_ID
 wrangler secret put R2_SECRET_ACCESS_KEY
 wrangler secret put D1_REST_API_TOKEN
+wrangler secret put EVALUATION_ACCESS_CODE
+wrangler secret put EVALUATION_SESSION_SECRET
 
 npm run db:migrate:remote
 npm run db:bootstrap:production -- \\
@@ -255,8 +257,28 @@ environment has not been verified from this workspace.
 
 ### Production evaluation fixture
 
-The final SBEK run uses the ordinary production deployment, authentication and
-provider paths. It does not enable demo mode or alter normal request handling.
+The final SBEK run uses the ordinary production deployment and provider paths.
+The checked-in profile keeps `APP_ENV=production` and `DEMO_MODE=false` while
+explicitly setting `EVALUATION_MODE=true`. Install an independently random
+private access code (at least 16 characters) and 32+ character signing secret:
+
+```bash
+wrangler secret put EVALUATION_ACCESS_CODE -c wrangler.jsonc
+wrangler secret put EVALUATION_SESSION_SECRET -c wrangler.jsonc
+```
+
+Reviewers open `/evaluate`, enter the shared access code and choose one fixed
+fixture persona. The signed, secure, HttpOnly session lasts eight hours, is
+bound to the latest fixture-reset record and cannot select an arbitrary
+person, reset data or grant membership. A later reset invalidates every existing
+evaluator cookie. Missing or
+weak evaluator configuration fails production readiness, and fixture identity
+loss is an explicit reset-required failure rather than an anonymous fallback.
+Normal server authorisation and real production provider behavior still apply. Unlock
+attempts use the existing hashed, D1-backed production IP rate limit. Selecting
+the clean applicant also establishes that fixed person for the public
+application flow without changing the person's durable email-verification flag.
+
 An operator may temporarily install a dedicated reset secret plus four real,
 distinct evaluator addresses and invoke one narrow reset endpoint:
 
@@ -280,16 +302,17 @@ production D1/R2 bindings are available, the canonical fixture IDs are
 tenant-isolated, and the target addresses do not collide with another person.
 It resets only the dedicated Future Events Association event and R2 prefix,
 revokes prior fixture sessions, provider links and outstanding authentication
-tokens, leaves the four evaluator addresses unverified until their real magic
-links are consumed, configures that organisation for Workers AI
+tokens, leaves the four evaluator addresses unverified for optional real
+magic-link acceptance, configures that organisation for Workers AI
 `@cf/openai/gpt-oss-120b`, and verifies the resulting baseline. Normal users
 continue to use Better Auth and every normal production feature throughout.
 
 After seeding, delete `EVALUATION_FIXTURE_SECRET` and the temporary
 `EVALUATION_RESEND_API_KEY`; the endpoint then returns 404. The four address
 secrets may also be removed because the seeded people retain their addresses in
-D1. Authenticate each persona through ordinary Resend magic links and save its
-evaluator browser state. Full instructions are in [the SBEK evaluation
+D1. Use `/evaluate` to establish and save each evaluator browser state.
+Ordinary Resend magic links remain available when real email delivery itself is
+under test. Full instructions are in [the SBEK evaluation
 runbook](docs/SBEK_EVALUATION.md).
 
 Backup and point-in-time recovery procedures are in [docs/RECOVERY.md](docs/RECOVERY.md). Production configuration includes a fail-closed daily D1-export Workflow to a separate private R2 bucket; it is not evidence that a live backup has run. `npm run recovery:drill` exercises a clean-room logical export and restore without touching development or production data.

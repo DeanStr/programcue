@@ -85,6 +85,9 @@ export function PublicProgrammeWorkspace({
   const itineraryHref = overviewSurface
     ? "#itinerary"
     : `${programmeHref}#itinerary`;
+  const calendarExportHref = `/api/v1/public/events/${encodeURIComponent(
+    programme.event.slug,
+  )}/calendar.ics?${loaderData.calendarExportQuery}`;
   return (
     <div
       className={`public-shell event-branded${embedded ? " embedded" : ""}${embedded && embedOptions.density === "compact" ? " embed-compact" : ""}`}
@@ -791,17 +794,36 @@ export function PublicProgrammeWorkspace({
                         );
                       })}
                       {!shared ? (
-                        <fetcher.Form method="post" className="mt">
-                          <input type="hidden" name="intent" value="share" />
-                          <button
-                            className="btn"
-                            type="submit"
-                            disabled={fetcher.state !== "idle"}
+                        <div className="page-actions mt">
+                          <a
+                            className="btn primary"
+                            href={calendarExportHref}
+                            download
                           >
-                            Create read-only share link
-                          </button>
-                        </fetcher.Form>
-                      ) : null}
+                            <CalendarDays aria-hidden size={15} /> Export
+                            itinerary
+                          </a>
+                          <fetcher.Form method="post">
+                            <input type="hidden" name="intent" value="share" />
+                            <button
+                              className="btn"
+                              type="submit"
+                              disabled={fetcher.state !== "idle"}
+                            >
+                              Create read-only share link
+                            </button>
+                          </fetcher.Form>
+                        </div>
+                      ) : (
+                        <a
+                          className="btn primary mt"
+                          href={calendarExportHref}
+                          download
+                        >
+                          <CalendarDays aria-hidden size={15} /> Export
+                          itinerary
+                        </a>
+                      )}
                       {loaderData.itinerarySynced && !shared ? (
                         <p className="help">
                           Synced to your signed-in account across devices.
@@ -842,7 +864,9 @@ export function PublicProgrammeWorkspace({
                             )}
                             <div>
                               <strong>{name}</strong>
-                              {affiliation ? <small>{affiliation}</small> : null}
+                              {affiliation ? (
+                                <small>{affiliation}</small>
+                              ) : null}
                             </div>
                           </div>
                         );

@@ -90,6 +90,55 @@ def validate_session_participation_forward_migration() -> None:
 
 validate_session_participation_forward_migration()
 
+
+def validate_speaker_workflow_forward_migration() -> None:
+    deployed = sqlite3.connect(":memory:")
+    deployed.execute("PRAGMA foreign_keys = ON")
+    for path in migration_files:
+        if path.name == "0011_event_speaker_workflows.sql":
+            break
+        deployed.executescript(path.read_text())
+    deployed.executescript(
+        """
+        INSERT INTO organisations (id, name, slug)
+        VALUES ('legacy-org', 'Legacy organisation', 'legacy-organisation');
+        INSERT INTO people (id, email, display_name)
+        VALUES ('legacy-invitee', 'legacy-invitee@example.test', 'Legacy invitee');
+        INSERT INTO events (
+          id, organisation_id, name, slug, timezone, starts_at, ends_at,
+          file_policy_json
+        ) VALUES (
+          'legacy-event', 'legacy-org', 'Legacy event', 'legacy-event', 'UTC',
+          100, 200,
+          '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}'
+        );
+        INSERT INTO memberships (
+          id, organisation_id, event_id, person_id, role, invited_at,
+          invitation_expires_at
+        ) VALUES (
+          'legacy-speaker-invitation', 'legacy-org', 'legacy-event',
+          'legacy-invitee', 'speaker', 50, 150
+        );
+        """
+    )
+    deployed.executescript(
+        root.joinpath("migrations/0011_event_speaker_workflows.sql").read_text()
+    )
+    workflow = deployed.execute(
+        """
+        SELECT status, source
+          FROM event_speaker_workflows
+         WHERE event_id = 'legacy-event' AND person_id = 'legacy-invitee'
+        """
+    ).fetchone()
+    if workflow != ("invited", "backfill"):
+        raise SystemExit(
+            "Legacy pending speaker invitation was not migrated into the workflow roster"
+        )
+
+
+validate_speaker_workflow_forward_migration()
+
 tables = {
     row[0]
     for row in connection.execute(
@@ -106,7 +155,7 @@ required = {
     "evaluation_plans", "evaluation_teams", "evaluation_team_members", "evaluation_rounds",
     "evaluation_criteria", "evaluation_round_reviewers", "evaluator_conflicts", "evaluator_assignments", "reviews", "ai_review_assessments",
     "review_revisions", "review_moderations", "submission_decisions",
-    "tracks", "rooms", "schedule_policies", "sessions", "session_speakers",
+    "tracks", "rooms", "schedule_policies", "sessions", "session_speakers", "event_speaker_workflows",
     "tags", "session_tags", "session_archives",
     "schedule_versions", "schedule_session_contents", "session_content_revisions", "schedule_entries", "schedule_conflicts",
     "public_itineraries", "public_itinerary_items",

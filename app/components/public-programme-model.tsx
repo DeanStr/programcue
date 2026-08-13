@@ -23,6 +23,7 @@ export type PublicProgrammeLoaderData = {
   turnstileSiteKey: string | null;
   itinerarySynced: boolean;
   shared: boolean;
+  calendarExportQuery: string;
 };
 
 export function formatDay(epoch: number, timezone: string) {

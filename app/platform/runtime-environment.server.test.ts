@@ -9,31 +9,50 @@ import {
 
 describe("runtime environment mode", () => {
   it.each([
-    ["production", "false", false],
-    ["demo", "true", true],
-    ["development", "true", true],
-    ["test", "true", true],
-  ])("accepts the explicit %s/%s combination", (APP_ENV, DEMO_MODE, demo) => {
-    expect(requireRuntimeMode({ APP_ENV, DEMO_MODE })).toEqual({
-      appEnvironment: APP_ENV,
-      demo,
-    });
-  });
+    ["production", "false", "false", false, false],
+    ["production", "false", "true", false, true],
+    ["demo", "true", "false", true, false],
+    ["development", "true", "false", true, false],
+    ["test", "true", "false", true, false],
+  ])(
+    "accepts the explicit %s/%s/%s combination",
+    (APP_ENV, DEMO_MODE, EVALUATION_MODE, demo, evaluation) => {
+      expect(
+        requireRuntimeMode({ APP_ENV, DEMO_MODE, EVALUATION_MODE }),
+      ).toEqual({
+        appEnvironment: APP_ENV,
+        demo,
+        evaluation,
+      });
+    },
+  );
 
   it.each([
-    ["production", "true"],
-    ["demo", "false"],
-    ["development", "false"],
-    ["staging", "false"],
-    [undefined, "false"],
-    ["production", undefined],
-  ])("rejects unsupported or incomplete %s/%s configuration", (APP_ENV, DEMO_MODE) => {
-    expect(() => requireRuntimeMode({ APP_ENV, DEMO_MODE }))
-      .toThrow(RuntimeEnvironmentConfigurationError);
-  });
+    ["production", "true", "false"],
+    ["demo", "false", "false"],
+    ["demo", "true", "true"],
+    ["development", "false", "false"],
+    ["staging", "false", "false"],
+    [undefined, "false", "false"],
+    ["production", undefined, "false"],
+    ["production", "false", undefined],
+  ])(
+    "rejects unsupported or incomplete %s/%s/%s configuration",
+    (APP_ENV, DEMO_MODE, EVALUATION_MODE) => {
+      expect(() =>
+        requireRuntimeMode({ APP_ENV, DEMO_MODE, EVALUATION_MODE }),
+      ).toThrow(RuntimeEnvironmentConfigurationError);
+    },
+  );
 
   it("defaults unknown environments to production-grade security and error redaction", () => {
-    for (const environment of [undefined, "", "staging", "prodution", "production"]) {
+    for (const environment of [
+      undefined,
+      "",
+      "staging",
+      "prodution",
+      "production",
+    ]) {
       expect(requiresProductionSecurity(environment)).toBe(true);
       expect(mayExposeInternalErrors(environment)).toBe(false);
     }

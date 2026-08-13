@@ -8,6 +8,7 @@ import { ResourceService } from "~/modules/resources/resource-service.server";
 import { ResendEmailProvider } from "~/modules/communications/resend.server";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
 import { processSubmissionNotification } from "../../../workers/communications-queue";
 import {
   ApplicantConfigurationError,
@@ -514,6 +515,122 @@ describe("Submissions D1 vertical slice", () => {
       await expect(
         second.service.applicants.get(request, secondForm),
       ).resolves.toMatchObject({ email });
+    });
+
+    it("uses a selected production evaluation identity as the clean verified applicant", async () => {
+      const { service, slug, testEnv } = await publishedForm();
+      const form = await service.getPublicForm(slug);
+      await testEnv.DB.prepare(
+        `UPDATE people SET email_verified = 0
+          WHERE id = 'person-sbek-speaker'`,
+      ).run();
+      const evaluationEnvironment = {
+        ...testEnv,
+        APP_ENV: "production",
+        DEMO_MODE: "false",
+        EVALUATION_MODE: "true",
+        EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+        EVALUATION_SESSION_SECRET:
+          "evaluation-session-secret-with-more-than-thirty-two-characters",
+      } as CloudflareEnvironment;
+      await evaluationEnvironment.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         ) VALUES (?, 'org-future-events', 'evt-foe-2025', 'test-operator',
+                   'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
+                   unixepoch())`,
+      )
+        .bind(crypto.randomUUID())
+        .run();
+      const cookie = await evaluationSessionCookie(
+        evaluationEnvironment,
+        "sbek_applicant",
+      );
+      const request = new Request(`https://example.com/apply/${slug}`, {
+        headers: { cookie: cookie.split(";", 1)[0]! },
+      });
+
+      await expect(
+        new ApplicantSessionService(evaluationEnvironment).get(request, form),
+      ).resolves.toMatchObject({
+        personId: "person-sbek-speaker",
+        email: "sbek-speaker@example.com",
+        verified: true,
+      });
+    });
+
+    it("does not grant applicant verification to another evaluation persona", async () => {
+      const { service, slug, testEnv } = await publishedForm();
+      const form = await service.getPublicForm(slug);
+      const evaluationEnvironment = {
+        ...testEnv,
+        APP_ENV: "production",
+        DEMO_MODE: "false",
+        EVALUATION_MODE: "true",
+        EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+        EVALUATION_SESSION_SECRET:
+          "evaluation-session-secret-with-more-than-thirty-two-characters",
+      } as CloudflareEnvironment;
+      await evaluationEnvironment.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         ) VALUES (?, 'org-future-events', 'evt-foe-2025', 'test-operator',
+                   'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
+                   unixepoch())`,
+      )
+        .bind(crypto.randomUUID())
+        .run();
+      const cookie = await evaluationSessionCookie(
+        evaluationEnvironment,
+        "sbek_reviewer",
+      );
+      const request = new Request(`https://example.com/apply/${slug}`, {
+        headers: { cookie: cookie.split(";", 1)[0]! },
+      });
+
+      await expect(
+        new ApplicantSessionService(evaluationEnvironment).get(request, form),
+      ).resolves.toBeNull();
+    });
+
+    it("does not use a selected evaluation identity outside the fixture event", async () => {
+      const { service, slug, testEnv } = await publishedForm();
+      const form = await service.getPublicForm(slug);
+      const evaluationEnvironment = {
+        ...testEnv,
+        APP_ENV: "production",
+        DEMO_MODE: "false",
+        EVALUATION_MODE: "true",
+        EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+        EVALUATION_SESSION_SECRET:
+          "evaluation-session-secret-with-more-than-thirty-two-characters",
+      } as CloudflareEnvironment;
+      await evaluationEnvironment.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         ) VALUES (?, 'org-future-events', 'evt-foe-2025', 'test-operator',
+                   'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
+                   unixepoch())`,
+      )
+        .bind(crypto.randomUUID())
+        .run();
+      const cookie = await evaluationSessionCookie(
+        evaluationEnvironment,
+        "sbek_applicant",
+      );
+      const request = new Request("https://example.com/apply/another-event", {
+        headers: { cookie: cookie.split(";", 1)[0]! },
+      });
+
+      await expect(
+        new ApplicantSessionService(evaluationEnvironment).get(request, {
+          ...form,
+          eventId: "another-tenant-event",
+        }),
+      ).resolves.toBeNull();
     });
 
     it("treats a malformed applicant cookie as an absent session", async () => {

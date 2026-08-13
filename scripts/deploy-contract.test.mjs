@@ -219,6 +219,19 @@ test("production secret inventory is centralized, unique, and fail-closed", asyn
     readinessValues[1].matchAll(/"([A-Z0-9_]+)"/gu),
     (match) => match[1],
   );
+  const evaluationReadinessValues = readinessSource.match(
+    /const requiredProductionEvaluationValues = \[([\s\S]*?)\] as const;/u,
+  );
+  assert.ok(
+    evaluationReadinessValues,
+    "evaluation runtime readiness value inventory is missing",
+  );
+  runtimeNames.push(
+    ...Array.from(
+      evaluationReadinessValues[1].matchAll(/"([A-Z0-9_]+)"/gu),
+      (match) => match[1],
+    ),
+  );
   assert.deepEqual(
     REQUIRED_PRODUCTION_SECRET_NAMES.filter(
       (name) => !runtimeNames.includes(name),

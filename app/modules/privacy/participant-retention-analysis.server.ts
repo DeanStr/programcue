@@ -99,6 +99,14 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
               OR record.display_name <> 'Anonymised speaker'
               OR record.role_label IS NOT NULL OR record.invitation_status <> 'revoked'
               OR record.claim_token_hash IS NOT NULL))
+          + (SELECT COUNT(*) FROM event_speaker_workflows record
+              WHERE record.event_id IN locked
+                AND NOT EXISTS (
+                  SELECT 1 FROM participant_retention_locked_identities identity_link
+                   WHERE identity_link.event_id = record.event_id
+                     AND identity_link.person_id = record.person_id
+                     AND identity_link.identity_kind = 'pseudonym'
+                ))
           + (SELECT COUNT(*) FROM evaluator_assignments record
               WHERE record.event_id IN locked
                 AND record.session_snapshot_json IS NOT NULL

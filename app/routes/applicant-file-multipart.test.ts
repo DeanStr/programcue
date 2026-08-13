@@ -20,6 +20,8 @@ function configuredUploadEnvironment(options: { production?: boolean } = {}) {
   const productionOverrides = options.production
     ? {
         APP_ENV: "production",
+        DEMO_MODE: "false",
+        EVALUATION_MODE: "false",
         BETTER_AUTH_URL: "https://programcue.test",
         BETTER_AUTH_SECRET:
           "applicant-multipart-test-secret-with-at-least-thirty-two-characters",

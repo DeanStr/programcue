@@ -104,9 +104,21 @@ export type PublishedProgramme = {
 };
 
 export class PublishedProgrammeSnapshotInvariantError extends Error {
-  constructor(versionId: string, missingContent: number) {
+  constructor(
+    versionId: string,
+    missingContent: number,
+    unapprovedContent = 0,
+  ) {
+    const problems = [
+      missingContent
+        ? `${missingContent} missing session-content snapshot${missingContent === 1 ? "" : "s"}`
+        : null,
+      unapprovedContent
+        ? `${unapprovedContent} unapproved public session-content snapshot${unapprovedContent === 1 ? "" : "s"}`
+        : null,
+    ].filter(Boolean);
     super(
-      `Published schedule version ${versionId} is missing ${missingContent} session-content snapshot${missingContent === 1 ? "" : "s"}.`,
+      `Published schedule version ${versionId} has invalid public content: ${problems.join(" and ")}.`,
     );
     this.name = "PublishedProgrammeSnapshotInvariantError";
   }
@@ -346,6 +358,7 @@ export class PublicProgrammeService {
          AND published_version.status = 'published'
          AND session.status = 'published' AND session.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
          AND relation.visibility = 'public'
          AND person.profile_status = 'published'
          AND version.upload_status = 'uploaded'
@@ -401,6 +414,7 @@ export class PublicProgrammeService {
          AND published_version.status = 'published'
          AND session.status = 'published' AND session.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
          AND relation.visibility = 'public'
          AND person.profile_status = 'published'
          AND person.id IN (${placeholders})
@@ -481,6 +495,7 @@ export class PublicProgrammeService {
          AND published_version.status = 'published'
          AND session.status = 'published' AND session.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
          AND relation.visibility = 'public'
          AND person.profile_status = 'published'
          AND version.upload_status = 'uploaded'
@@ -562,6 +577,7 @@ export class PublicProgrammeService {
          AND person.id = ? AND person.profile_status = 'published'
          AND session.status = 'published' AND session.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
          AND relation.visibility = 'public'
          AND version.upload_status = 'uploaded'
          AND version.signature_status = 'valid'
@@ -656,7 +672,24 @@ export class PublicProgrammeService {
                 WHERE entry.event_id = event.id
                   AND entry.schedule_version_id = version.id
                   AND content.session_id IS NULL
-             ) AS missingContent
+             ) AS missingContent,
+             (
+               SELECT COUNT(*)
+                 FROM schedule_entries entry
+                 JOIN sessions session
+                   ON session.id = entry.session_id
+                  AND session.event_id = entry.event_id
+                  AND session.status = 'published'
+                  AND session.visibility = 'public'
+                 JOIN schedule_session_contents content
+                   ON content.schedule_version_id = entry.schedule_version_id
+                  AND content.event_id = entry.event_id
+                  AND content.session_id = entry.session_id
+                  AND content.visibility = 'public'
+                WHERE entry.event_id = event.id
+                  AND entry.schedule_version_id = version.id
+                  AND content.content_status <> 'approved'
+             ) AS unapprovedContent
         FROM events event
         JOIN schedule_versions version
           ON version.id = (
@@ -681,15 +714,17 @@ export class PublicProgrammeService {
         repositoryProvider: "d1" | "airtable";
         versionId: string;
         missingContent: number;
+        unapprovedContent: number;
       }>();
     if (!publication) return null;
     if (
       publication.repositoryProvider === "d1" &&
-      publication.missingContent > 0
+      (publication.missingContent > 0 || publication.unapprovedContent > 0)
     ) {
       throw new PublishedProgrammeSnapshotInvariantError(
         publication.versionId,
         publication.missingContent,
+        publication.unapprovedContent,
       );
     }
     if (speakerLimit === 0) return { speakers: [] };
@@ -733,6 +768,7 @@ export class PublicProgrammeService {
          WHERE entry.event_id = ? AND entry.schedule_version_id = ?
            AND session.status = 'published' AND session.visibility = 'public'
            AND content.visibility = 'public'
+           AND content.content_status = 'approved'
            AND relation.visibility = 'public'
            AND person.profile_status = 'published'
          GROUP BY person.id
@@ -819,7 +855,10 @@ export class PublicProgrammeService {
         freshness: snapshot.freshness,
       });
     }
-    type SnapshotIntegrityRow = { missingContent: number };
+    type SnapshotIntegrityRow = {
+      missingContent: number;
+      unapprovedContent: number;
+    };
     type PublishedSessionRow = Omit<
       PublishedSession,
       "speakerIds" | "speakerNames"
@@ -834,7 +873,10 @@ export class PublicProgrammeService {
       sessionIds: string;
     };
     const snapshotIntegrityStatement = this.env.DB.prepare(
-      `SELECT COUNT(*) AS missingContent
+      `SELECT COUNT(CASE WHEN content.session_id IS NULL THEN 1 END) AS missingContent,
+              COUNT(CASE WHEN content.session_id IS NOT NULL
+                               AND content.content_status <> 'approved'
+                         THEN 1 END) AS unapprovedContent
          FROM schedule_entries entry
          JOIN sessions session
            ON session.id = entry.session_id
@@ -846,8 +888,7 @@ export class PublicProgrammeService {
           AND content.event_id = entry.event_id
           AND content.session_id = entry.session_id
           AND content.visibility = 'public'
-        WHERE entry.event_id = ? AND entry.schedule_version_id = ?
-          AND content.session_id IS NULL`,
+        WHERE entry.event_id = ? AND entry.schedule_version_id = ?`,
     ).bind(event.id, version.id);
     const sessionsStatement = this.env.DB.prepare(
       `
@@ -893,6 +934,7 @@ export class PublicProgrammeService {
        WHERE se.event_id = ? AND se.schedule_version_id = ?
          AND s.status = 'published' AND s.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
        ORDER BY se.starts_at, r.position, content.title, s.id
     `,
     ).bind(event.id, version.id);
@@ -915,6 +957,7 @@ export class PublicProgrammeService {
        WHERE s.event_id = ? AND se.schedule_version_id = ?
          AND s.status = 'published' AND s.visibility = 'public'
          AND content.visibility = 'public'
+         AND content.content_status = 'approved'
          AND ss.visibility = 'public' AND p.profile_status = 'published'
        GROUP BY p.id
        ORDER BY p.display_name COLLATE NOCASE, p.id
@@ -934,10 +977,14 @@ export class PublicProgrammeService {
         "Published schedule snapshot integrity query returned no result.",
       );
     }
-    if (snapshotIntegrity.missingContent > 0) {
+    if (
+      snapshotIntegrity.missingContent > 0 ||
+      snapshotIntegrity.unapprovedContent > 0
+    ) {
       throw new PublishedProgrammeSnapshotInvariantError(
         version.id,
         snapshotIntegrity.missingContent,
+        snapshotIntegrity.unapprovedContent,
       );
     }
     const rows = sessionsResult.results as PublishedSessionRow[];

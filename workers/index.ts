@@ -64,6 +64,8 @@ declare global {
     R2_SECRET_ACCESS_KEY?: string;
     D1_REST_API_TOKEN?: string;
     EVALUATION_FIXTURE_SECRET?: string;
+    EVALUATION_ACCESS_CODE?: string;
+    EVALUATION_SESSION_SECRET?: string;
     EVALUATION_RESEND_API_KEY?: string;
     EVALUATOR_ORGANIZER_EMAIL?: string;
     EVALUATOR_SPEAKER_EMAIL?: string;

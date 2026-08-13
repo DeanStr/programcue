@@ -6,6 +6,7 @@ import { ResendEmailProvider } from "./resend.server";
 type EmailProviderEnvironment = {
   APP_ENV?: unknown;
   DEMO_MODE?: unknown;
+  EVALUATION_MODE?: unknown;
   EMAIL_PROVIDER?: unknown;
   RESEND_API_KEY?: string;
   MAILPIT_SEND_API_URL?: string;

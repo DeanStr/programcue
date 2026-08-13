@@ -32,6 +32,11 @@ export const contactScopeCte = `WITH candidate_contact_ids(person_id) AS (
     JOIN events event ON event.id = speaker.event_id
    WHERE event.organisation_id = ? AND event.activation_status = 'active'
      AND speaker.person_id IS NOT NULL
+  UNION
+  SELECT workflow.person_id
+    FROM event_speaker_workflows workflow
+    JOIN events event ON event.id = workflow.event_id
+   WHERE event.organisation_id = ? AND event.activation_status = 'active'
 ), organisation_contact_ids(person_id) AS (
   SELECT candidate.person_id
     FROM candidate_contact_ids candidate
@@ -47,7 +52,7 @@ export const contactScopeCte = `WITH candidate_contact_ids(person_id) AS (
 )`;
 
 export function contactScopeBindings(viewer: OrganisationAdministrator) {
-  return Array(6).fill(viewer.organisationId);
+  return Array(7).fill(viewer.organisationId);
 }
 
 export const existingPersonOrganisationRelationshipSql = `(
@@ -90,12 +95,18 @@ export const existingPersonOrganisationRelationshipSql = `(
      WHERE event.organisation_id = ? AND event.activation_status = 'active'
        AND submission.submitter_person_id = person.id
   )
+  OR EXISTS (
+    SELECT 1 FROM event_speaker_workflows workflow
+    JOIN events event ON event.id = workflow.event_id
+     WHERE event.organisation_id = ? AND event.activation_status = 'active'
+       AND workflow.person_id = person.id
+  )
 )`;
 
 export function organisationRelationshipBindings(
   viewer: OrganisationAdministrator,
 ) {
-  return Array(5).fill(viewer.organisationId);
+  return Array(6).fill(viewer.organisationId);
 }
 
 export async function unavailableExistingEmails(

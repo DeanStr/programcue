@@ -35,6 +35,15 @@ export const DEMO_IDENTITIES = {
     cohort: "showcase",
     profileStatus: "published",
   },
+  committee_chair: {
+    personId: "person-demo-chair",
+    name: "Taylor Brooks",
+    email: "taylor.chair@example.com",
+    role: "committee_chair",
+    destination: "/admin/review",
+    cohort: "showcase",
+    profileStatus: "published",
+  },
   submitter: {
     personId: "person-demo-submitter",
     name: "Alex Morgan",

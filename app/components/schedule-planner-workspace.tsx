@@ -284,11 +284,14 @@ export function SchedulePlannerWorkspace({
     () => new Map(workspace.sessions.map((session) => [session.id, session])),
     [workspace.sessions],
   );
-  const contentReviewAdvisories = useMemo(
+  const contentPublicationBlockers = useMemo(
     () =>
       workspace.entries.flatMap((entry) => {
         const session = sessionById.get(entry.sessionId);
-        return session && session.contentStatus !== "approved"
+        return session &&
+          session.sourceVisibility === "public" &&
+          (session.visibility !== "public" ||
+            session.contentStatus !== "approved")
           ? [session]
           : [];
       }),
@@ -482,7 +485,9 @@ export function SchedulePlannerWorkspace({
     pendingResizeSessionId.current = null;
   }, [fetcher.state, workspace.entries]);
 
-  function sessionLabel(active: { data: { current?: Record<string, unknown> } }) {
+  function sessionLabel(active: {
+    data: { current?: Record<string, unknown> };
+  }) {
     const sessionId = String(active.data.current?.sessionId ?? "");
     return sessionById.get(sessionId)?.title ?? "this session";
   }
@@ -1182,7 +1187,12 @@ export function SchedulePlannerWorkspace({
                   name="scheduleRevision"
                   value={workspace.version.revision}
                 />
-                <button className="btn primary">Confirm publication</button>
+                <button
+                  className="btn primary"
+                  disabled={contentPublicationBlockers.length > 0}
+                >
+                  Confirm publication
+                </button>
               </fetcher.Form>
             </>
           }
@@ -1191,31 +1201,41 @@ export function SchedulePlannerWorkspace({
             Publish version {workspace.version.versionNumber} with{" "}
             <strong>{workspace.entries.length} scheduled sessions</strong>.
           </p>
-          {contentReviewAdvisories.length ? (
-            <div className="validation-item warn">
+          <p className="help">
+            Confirming publication makes this exact schedule-version snapshot
+            authoritative. Approved content statuses stay unchanged.
+          </p>
+          {contentPublicationBlockers.length ? (
+            <div className="validation-item error">
               <strong>
-                {contentReviewAdvisories.length} scheduled content record
-                {contentReviewAdvisories.length === 1 ? " is" : "s are"} not
-                marked Approved.
+                {contentPublicationBlockers.length} scheduled public content
+                record
+                {contentPublicationBlockers.length === 1
+                  ? " cannot"
+                  : "s cannot"}
+                {" be published."}
               </strong>{" "}
-              Content review status is advisory. Confirming publication makes
-              this exact schedule-version snapshot authoritative; editorial
-              statuses stay unchanged, and public views continue to enforce
-              visibility.
+              Every public session requires a public, Approved content snapshot.
+              Correct each listed session, then return here to publish this
+              exact schedule-version snapshot.
               <ul>
-                {contentReviewAdvisories.slice(0, 5).map((session) => (
+                {contentPublicationBlockers.slice(0, 5).map((session) => (
                   <li key={session.id}>
-                    {session.title} · {session.contentStatus.replaceAll("_", " ")}
+                    {session.title} ·{" "}
+                    {session.visibility === "public"
+                      ? session.contentStatus.replaceAll("_", " ")
+                      : session.visibility}
                   </li>
                 ))}
-                {contentReviewAdvisories.length > 5 ? (
-                  <li>{contentReviewAdvisories.length - 5} more</li>
+                {contentPublicationBlockers.length > 5 ? (
+                  <li>{contentPublicationBlockers.length - 5} more</li>
                 ) : null}
               </ul>
             </div>
           ) : (
             <div className="validation-item ok">
-              Every scheduled content record is marked Approved.
+              Every scheduled public session has a public, Approved content
+              snapshot.
             </div>
           )}
           <div

@@ -118,22 +118,24 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
       ) VALUES ('membership-demo-owner', ?, NULL, ?, 'owner', unixepoch(), unixepoch(), unixepoch())
     `,
     ).bind(DEMO_ORGANISATION_ID, DEMO_IDENTITIES.owner.personId),
-    ...(["evaluator", "submitter", "speaker"] as const).map((identityKey) => {
-      const identity = DEMO_IDENTITIES[identityKey];
-      return env.DB.prepare(
-        `
+    ...(["committee_chair", "evaluator", "submitter", "speaker"] as const).map(
+      (identityKey) => {
+        const identity = DEMO_IDENTITIES[identityKey];
+        return env.DB.prepare(
+          `
         INSERT OR IGNORE INTO memberships (
           id, organisation_id, event_id, person_id, role, invited_at, accepted_at, created_at
         ) VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch(), unixepoch())
       `,
-      ).bind(
-        `membership-demo-${identityKey}`,
-        DEMO_ORGANISATION_ID,
-        DEMO_EVENT_ID,
-        identity.personId,
-        identity.role,
-      );
-    }),
+        ).bind(
+          `membership-demo-${identityKey}`,
+          DEMO_ORGANISATION_ID,
+          DEMO_EVENT_ID,
+          identity.personId,
+          identity.role,
+        );
+      },
+    ),
     env.DB.prepare(
       `
       INSERT OR IGNORE INTO memberships (

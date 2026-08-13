@@ -162,8 +162,36 @@ paths:
     get:
       operationId: getPublicProgrammeCalendar
       summary: Download the published programme as iCalendar
+      description: >-
+        Omit all selectors for the complete published programme. Use exactly
+        one selector for an itinerary export: `itinerary=mine` resolves the
+        caller's signed-in or anonymous-cookie itinerary, `share` resolves a
+        read-only shared itinerary, and `sessions` accepts a bounded explicit
+        session selection.
       parameters:
         - $ref: "#/components/parameters/EventSlug"
+        - name: sessions
+          in: query
+          required: false
+          description: Comma-separated list of 1-50 published session IDs, each at most 200 characters, for an explicit export.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 10049
+        - name: itinerary
+          in: query
+          required: false
+          description: Resolve the complete saved itinerary for the current signed-in person or anonymous itinerary cookie.
+          schema:
+            type: string
+            enum: [mine]
+        - name: share
+          in: query
+          required: false
+          description: Resolve a read-only itinerary by its share token.
+          schema:
+            type: string
+            maxLength: 100
       responses:
         "200":
           description: Published iCalendar programme feed
@@ -174,6 +202,7 @@ paths:
             text/calendar:
               schema: { type: string }
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
   /api/v1/events/{eventId}:

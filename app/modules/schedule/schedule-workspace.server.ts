@@ -137,6 +137,7 @@ export async function loadScheduleWorkspaceD1(
                COALESCE(content.duration_minutes, s.duration_minutes) AS durationMinutes,
                s.expected_attendance AS expectedAttendance,
                COALESCE(content.required_resources_json, s.required_resources_json) AS requiredResourcesJson,
+               s.visibility AS sourceVisibility,
                COALESCE(content.visibility, s.visibility) AS visibility,
                COALESCE(content.content_status, 'draft') AS contentStatus,
                COALESCE(content.content_revision, 1) AS contentRevision,

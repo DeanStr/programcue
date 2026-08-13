@@ -85,6 +85,9 @@ const policies = {
   public_itinerary_create: [
     { dimension: "ip", limit: 10, windowSeconds: 3_600, blockSeconds: 3_600 },
   ],
+  evaluation_unlock: [
+    { dimension: "ip", limit: 20, windowSeconds: 3_600, blockSeconds: 3_600 },
+  ],
 } as const satisfies Record<string, ReadonlyArray<RatePolicy>>;
 
 export type PublicAbuseAction = keyof typeof policies;

@@ -650,7 +650,7 @@ describe("organisation speaker CRM", () => {
     expect(directory.contacts).toEqual([]);
   });
 
-  it("does not expose an unaccepted speaker invitation as a CRM contact", async () => {
+  it("exposes an unaccepted event-roster invitation without granting participant access", async () => {
     const { testEnv, crm } = await service();
     const suffix = crypto.randomUUID();
     await testEnv.DB.batch([
@@ -677,7 +677,12 @@ describe("organisation speaker CRM", () => {
       { ...emptyFilters, query: "Pending CRM Speaker" },
       1,
     );
-    expect(directory.contacts).toEqual([]);
+    expect(directory.contacts).toEqual([
+      expect.objectContaining({
+        personId: `pending-person-${suffix}`,
+        eventCount: 1,
+      }),
+    ]);
     await expect(
       crm.createContact(administrator, {
         name: "Pending CRM Speaker",
@@ -686,13 +691,10 @@ describe("organisation speaker CRM", () => {
         organisationName: "",
         biography: "",
       }),
-    ).rejects.toMatchObject({
-      message: expect.stringContaining("connect them through an event"),
-      status: 409,
-    });
+    ).resolves.toMatchObject({ personId: `pending-person-${suffix}` });
   });
 
-  it("counts only accepted active speaker memberships in contact history", async () => {
+  it("counts an invited event-roster workflow before account acceptance", async () => {
     const { testEnv, crm } = await service();
     const suffix = crypto.randomUUID();
     const contact = await crm.createContact(administrator, {
@@ -733,7 +735,7 @@ describe("organisation speaker CRM", () => {
       { ...emptyFilters, query: "Membership History Speaker" },
       1,
     );
-    expect(directory.contacts[0]?.eventCount).toBe(0);
+    expect(directory.contacts[0]?.eventCount).toBe(1);
 
     await testEnv.DB.prepare(
       `UPDATE memberships SET accepted_at = unixepoch(),

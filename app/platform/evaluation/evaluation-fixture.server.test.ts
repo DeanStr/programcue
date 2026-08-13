@@ -3,12 +3,20 @@ import { describe, expect, it } from "vitest";
 
 import { SBEK_FIXTURE_PEOPLE } from "~/platform/demo/demo-identities";
 import { resetProductionEvaluationFixture } from "./evaluation-fixture.server";
+import {
+  evaluationSessionCookie,
+  readEvaluationSession,
+} from "./evaluation-session.server";
 
 function productionEnvironment(overrides: Partial<CloudflareEnvironment> = {}) {
   return {
     ...(env as unknown as CloudflareEnvironment),
     APP_ENV: "production",
     DEMO_MODE: "false",
+    EVALUATION_MODE: "true",
+    EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+    EVALUATION_SESSION_SECRET:
+      "evaluation-session-secret-with-more-than-thirty-two-characters",
     AUTH_EMAIL_FROM: "Program Cue <auth@programcue.com>",
     EMAIL_PROVIDER: "resend",
     RESEND_API_KEY: "test-resend-key",
@@ -58,29 +66,64 @@ describe("production evaluation fixture", () => {
     expect(organizer?.email).toBe("eval-organizer@programcue.com");
     expect(organizer?.emailVerified).toBe(0);
     const resetAudit = await environment.DB.prepare(
-      `SELECT action, actor_person_id AS actorPersonId, actor_id AS actorId
+      `SELECT action, actor_person_id AS actorPersonId, actor_id AS actorId,
+              json_extract(metadata_json, '$.status') AS resetStatus
          FROM audit_events
-        WHERE action IN ('demo.reset', 'evaluation.fixture.reset')
+        WHERE action IN (
+          'demo.reset',
+          'evaluation.fixture.reset',
+          'evaluation.fixture.reset.started'
+        )
         ORDER BY action`,
     ).all<{
       action: string;
       actorPersonId: string | null;
       actorId: string | null;
+      resetStatus: string | null;
     }>();
     expect(resetAudit.results).toEqual([
       {
         action: "demo.reset",
         actorPersonId: null,
         actorId: "production-evaluation-fixture-operator",
+        resetStatus: null,
       },
       {
         action: "evaluation.fixture.reset",
         actorPersonId: null,
         actorId: "production-evaluation-fixture-operator",
+        resetStatus: "completed",
+      },
+      {
+        action: "evaluation.fixture.reset.started",
+        actorPersonId: null,
+        actorId: "production-evaluation-fixture-operator",
+        resetStatus: "started",
       },
     ]);
     expect(environment.APP_ENV).toBe("production");
     expect(environment.DEMO_MODE).toBe("false");
+
+    const sessionCookie = await evaluationSessionCookie(
+      environment,
+      "organizer",
+    );
+    const sessionRequest = new Request("https://app.programcue.com/evaluate", {
+      headers: { cookie: sessionCookie.split(";", 1)[0]! },
+    });
+    await expect(
+      readEvaluationSession(sessionRequest, environment),
+    ).resolves.toMatchObject({ identityKey: "organizer" });
+
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2025",
+      verifiedDomains,
+    );
+
+    await expect(
+      readEvaluationSession(sessionRequest, environment),
+    ).resolves.toBeNull();
   });
 
   it("rejects reserved, duplicate and incomplete evaluator identities before reset", async () => {
@@ -119,6 +162,53 @@ describe("production evaluation fixture", () => {
       "SELECT name FROM events WHERE id = 'evt-foe-2025'",
     ).first<{ name: string }>();
     expect(event?.name).toBe("Provider preflight sentinel");
+  });
+
+  it("fails closed from the start of a reset that later cannot clear fixture storage", async () => {
+    const environment = productionEnvironment();
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2025",
+      verifiedDomains,
+    );
+    const sessionCookie = await evaluationSessionCookie(
+      environment,
+      "organizer",
+    );
+    const sessionRequest = new Request("https://app.programcue.com/evaluate", {
+      headers: { cookie: sessionCookie.split(";", 1)[0]! },
+    });
+    const unavailableFiles = {
+      list: async () => {
+        throw new Error("fixture storage unavailable");
+      },
+    } as unknown as R2Bucket;
+
+    await expect(
+      resetProductionEvaluationFixture(
+        productionEnvironment({ FILES: unavailableFiles }),
+        "Future of Events 2025",
+        verifiedDomains,
+      ),
+    ).rejects.toThrow(/fixture storage unavailable/u);
+
+    await expect(
+      evaluationSessionCookie(environment, "organizer"),
+    ).rejects.toMatchObject({ status: 503 });
+    await expect(
+      readEvaluationSession(sessionRequest, environment),
+    ).rejects.toMatchObject({ status: 503 });
+    const latestReset = await environment.DB.prepare(
+      `SELECT action
+         FROM audit_events
+        WHERE action IN (
+          'evaluation.fixture.reset',
+          'evaluation.fixture.reset.started'
+        )
+        ORDER BY rowid DESC
+        LIMIT 1`,
+    ).first<{ action: string }>();
+    expect(latestReset?.action).toBe("evaluation.fixture.reset.started");
   });
 
   it("refuses to repurpose canonical IDs whose production identity has drifted", async () => {

@@ -75,7 +75,7 @@ describe("evaluator demo routes", () => {
       roleAction({
         request: new Request("http://localhost/demo/role", {
           method: "POST",
-          body: new URLSearchParams({ identity: "committee_chair" }),
+          body: new URLSearchParams({ identity: "not-a-demo-identity" }),
         }),
         params: {},
         context: context(env as unknown as CloudflareEnvironment),

@@ -1,5 +1,6 @@
 import {
   isRouteErrorResponse,
+  Form,
   Link,
   Links,
   Meta,
@@ -14,6 +15,12 @@ import type { Route } from "./+types/root";
 import { BrandMark } from "~/components/brand-mark";
 import { installDraftRecoverySignOutCleanup } from "~/platform/drafts/draft-recovery";
 import { RouteProgress } from "~/components/ui/route-progress";
+import { getCloudflareContext } from "~/platform/cloudflare-context";
+import {
+  EVALUATION_IDENTITIES,
+  readEvaluationSession,
+} from "~/platform/evaluation/evaluation-session.server";
+import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 import "./styles/index.css";
 
 export const links: Route.LinksFunction = () => [
@@ -41,6 +48,20 @@ export const meta: Route.MetaFunction = () => [
   { name: "theme-color", content: "#0b1428" },
 ];
 
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const { env } = getCloudflareContext(context);
+  if (!requireRuntimeMode(env).evaluation) return { evaluation: null };
+  const session = await readEvaluationSession(request, env);
+  const identity = session?.identityKey
+    ? EVALUATION_IDENTITIES[session.identityKey]
+    : null;
+  return {
+    evaluation: identity
+      ? { name: identity.name, label: identity.label }
+      : null,
+  };
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -67,7 +88,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
+export default function App({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     document.body.dataset.hydrated = "true";
     const removeDraftCleanup = installDraftRecoverySignOutCleanup();
@@ -79,6 +100,24 @@ export default function App() {
   return (
     <>
       <RouteProgress />
+      {loaderData.evaluation ? (
+        <aside
+          className="pc-status-notice is-warning"
+          aria-label="Evaluation session"
+          style={{ borderRadius: 0, margin: 0, justifyContent: "center" }}
+        >
+          <strong>Evaluation:</strong> {loaderData.evaluation.label} ·{" "}
+          {loaderData.evaluation.name}
+          <Link className="btn small" to="/evaluate">
+            Change persona
+          </Link>
+          <Form method="post" action="/sign-out">
+            <button className="btn small" type="submit">
+              End session
+            </button>
+          </Form>
+        </aside>
+      ) : null}
       <Outlet />
       <Toaster
         closeButton

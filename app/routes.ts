@@ -9,6 +9,7 @@ export default [
   index("routes/home.tsx"),
   route("sign-in", "routes/sign-in.tsx"),
   route("sign-out", "routes/sign-out.ts"),
+  route("evaluate", "routes/evaluation-guide.tsx"),
   route("events/select", "routes/event-selector.tsx"),
   route("demo", "routes/demo-guide.tsx"),
   route("demo/role", "routes/demo-role.ts"),

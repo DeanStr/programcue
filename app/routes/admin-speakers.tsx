@@ -21,6 +21,10 @@ import {
   SpeakerService,
   type AdminSpeakerFilters,
 } from "~/modules/speakers/speaker-service.server";
+import {
+  SpeakerRosterImportError,
+  SpeakerRosterImportService,
+} from "~/modules/speakers/speaker-roster-import.server";
 import { SpeakerInvitationDeliveryError } from "~/modules/speakers/speaker-invitation.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -35,6 +39,9 @@ type ActionResult = {
       ReturnType<PersonDuplicateService["findLikelyDuplicates"]>
     >["matches"];
     truncated: boolean;
+  };
+  importPreview?: Awaited<ReturnType<SpeakerRosterImportService["preview"]>> & {
+    idempotencyKey: string;
   };
 };
 
@@ -57,6 +64,24 @@ function readinessFilter(value: string): AdminSpeakerFilters["readiness"] {
   throw new Response("Invalid speaker readiness filter", { status: 400 });
 }
 
+function workflowFilter(value: string): AdminSpeakerFilters["workflowStatus"] {
+  if (
+    value === "" ||
+    value === "prospect" ||
+    value === "invited" ||
+    value === "confirmed" ||
+    value === "declined" ||
+    value === "withdrawn"
+  ) {
+    return value;
+  }
+  throw new Response("Invalid speaker workflow filter", { status: 400 });
+}
+
+function workflowLabel(value: string) {
+  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   await ensureDemoSpeakerData(env);
@@ -70,6 +95,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     query: url.searchParams.get("query") ?? "",
     profileStatus: profileFilter(url.searchParams.get("profileStatus") ?? ""),
     readiness: readinessFilter(url.searchParams.get("readiness") ?? ""),
+    workflowStatus: workflowFilter(
+      url.searchParams.get("workflowStatus") ?? "",
+    ),
   };
   const requestedPage = filters.personId
     ? 1
@@ -86,6 +114,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     filters,
     focusedPersonId: filters.personId || null,
     manualSpeakerIdempotencyKey: crypto.randomUUID(),
+    workflowIdempotencyKeys: Object.fromEntries(
+      workspace.speakers.map((speaker) => [speaker.id, crypto.randomUUID()]),
+    ),
   };
 }
 
@@ -96,7 +127,101 @@ export async function action({ request, context }: Route.ActionArgs) {
     "administrator",
   ]);
   const form = await request.formData();
-  if (String(form.get("_intent") ?? "") !== "create_manual_speaker") {
+  const intent = String(form.get("_intent") ?? "");
+  const rosterImport = new SpeakerRosterImportService(env);
+  if (intent === "preview_roster_import") {
+    try {
+      const file = form.get("file");
+      if (!(file instanceof File) || file.size === 0) {
+        throw new SpeakerRosterImportError("Choose a CSV file to preview.");
+      }
+      if (file.size > 512_000) {
+        throw new SpeakerRosterImportError(
+          "Event speaker CSV files cannot exceed 512 KB.",
+        );
+      }
+      const preview = await rosterImport.preview(viewer, await file.text());
+      return data<ActionResult>({
+        ok: preview.invalid.length === 0,
+        message: `${preview.valid.length} valid speaker${preview.valid.length === 1 ? "" : "s"}; ${preview.invalid.length} invalid row${preview.invalid.length === 1 ? "" : "s"}. Nothing has been imported yet.`,
+        importPreview: { ...preview, idempotencyKey: crypto.randomUUID() },
+      });
+    } catch (error) {
+      if (error instanceof SpeakerRosterImportError) {
+        return data<ActionResult>(
+          { ok: false, message: error.message },
+          { status: error.status },
+        );
+      }
+      throw error;
+    }
+  }
+  if (intent === "confirm_roster_import") {
+    try {
+      const result = await rosterImport.confirm(
+        viewer,
+        String(form.get("csv") ?? ""),
+        form.get("idempotencyKey"),
+      );
+      return data<ActionResult>({
+        ok: true,
+        message: `${result.imported} speaker${result.imported === 1 ? "" : "s"} imported to this event roster. No invitation email was sent.`,
+      });
+    } catch (error) {
+      if (error instanceof SpeakerRosterImportError) {
+        return data<ActionResult>(
+          { ok: false, message: error.message },
+          { status: error.status },
+        );
+      }
+      if (error instanceof ZodError) {
+        return data<ActionResult>(
+          {
+            ok: false,
+            message: error.issues[0]?.message ?? "Review the import.",
+          },
+          { status: 422 },
+        );
+      }
+      throw error;
+    }
+  }
+  if (intent === "update_workflow_status") {
+    try {
+      const result = await new SpeakerService(env).updateSpeakerWorkflowStatus(
+        viewer,
+        String(form.get("personId") ?? ""),
+        {
+          idempotencyKey: form.get("idempotencyKey"),
+          status: form.get("status"),
+        },
+      );
+      return data<ActionResult>({
+        ok: true,
+        message: `Speaker workflow updated to ${result.status}.`,
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return data<ActionResult>(
+          {
+            ok: false,
+            message:
+              error.issues[0]?.message ?? "Choose a valid workflow status.",
+          },
+          { status: 422 },
+        );
+      }
+      if (error instanceof SpeakerAdminStateError) {
+        return data<ActionResult>(
+          { ok: false, message: error.message },
+          { status: error.status },
+        );
+      }
+      if (error instanceof Response) throw error;
+      throw error;
+    }
+  }
+  if (intent !== "create_manual_speaker") {
     return data<ActionResult>(
       { ok: false, message: "Unsupported speaker action." },
       { status: 400 },
@@ -199,6 +324,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
       query: filters.query,
       profileStatus: filters.profileStatus ?? "",
       readiness: filters.readiness ?? "",
+      workflowStatus: filters.workflowStatus ?? "",
       page: String(targetPage),
     }).toString();
   return (
@@ -263,6 +389,107 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           <span>{actionData.message}</span>
         </div>
       ) : null}
+      <details className="card pad mb pc-disclosure">
+        <summary>
+          <strong>Import event speakers from CSV</strong>{" "}
+          <span className="subtle">preview required; no email is sent</span>
+        </summary>
+        <Form method="post" encType="multipart/form-data" className="stack mt">
+          <input type="hidden" name="_intent" value="preview_roster_import" />
+          <label className="label">
+            Event speaker CSV
+            <input
+              className="field"
+              name="file"
+              type="file"
+              accept=".csv,text/csv"
+              required
+            />
+          </label>
+          <p className="help">
+            Required: name, email. Optional: title, company, bio and status.
+            Imported speakers start as prospects unless status is supplied.
+          </p>
+          <button
+            className="btn primary"
+            type="submit"
+            disabled={navigation.state !== "idle"}
+          >
+            Preview speaker import
+          </button>
+        </Form>
+        {actionData?.importPreview ? (
+          <div className="stack mt">
+            <h3>Import preview</h3>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Row</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Company</th>
+                    <th>Workflow</th>
+                    <th>Validation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {actionData.importPreview.valid.map((row) => (
+                    <tr key={row.rowNumber}>
+                      <td>{row.rowNumber}</td>
+                      <td>{row.name}</td>
+                      <td>{row.email}</td>
+                      <td>{row.organisationName || "—"}</td>
+                      <td>{workflowLabel(row.workflowStatus)}</td>
+                      <td>
+                        <span className="status success">Valid</span>
+                      </td>
+                    </tr>
+                  ))}
+                  {actionData.importPreview.invalid.map((row) => (
+                    <tr key={row.rowNumber}>
+                      <td>{row.rowNumber}</td>
+                      <td colSpan={4}>Invalid row</td>
+                      <td>
+                        <span className="status danger">
+                          {row.errors.join("; ")}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {actionData.importPreview.valid.length &&
+            !actionData.importPreview.invalid.length ? (
+              <Form method="post">
+                <input
+                  type="hidden"
+                  name="_intent"
+                  value="confirm_roster_import"
+                />
+                <input
+                  type="hidden"
+                  name="idempotencyKey"
+                  value={actionData.importPreview.idempotencyKey}
+                />
+                <input
+                  type="hidden"
+                  name="csv"
+                  value={actionData.importPreview.csv}
+                />
+                <button
+                  className="btn primary"
+                  type="submit"
+                  disabled={navigation.state !== "idle"}
+                >
+                  Confirm event roster import
+                </button>
+              </Form>
+            ) : null}
+          </div>
+        ) : null}
+      </details>
       <details className="card pad mb pc-disclosure">
         <summary>
           <strong>Invite a speaker</strong>{" "}
@@ -391,6 +618,21 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
             </select>
           </label>
           <label className="label">
+            Workflow
+            <select
+              className="select"
+              name="workflowStatus"
+              defaultValue={filters.workflowStatus}
+            >
+              <option value="">All workflow states</option>
+              <option value="prospect">Prospect</option>
+              <option value="invited">Invited</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="declined">Declined</option>
+              <option value="withdrawn">Withdrawn</option>
+            </select>
+          </label>
+          <label className="label">
             Readiness
             <select
               className="select"
@@ -425,6 +667,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
               <tr>
                 <th scope="col">Speaker</th>
                 <th scope="col">Profile</th>
+                <th scope="col">Workflow</th>
                 <th scope="col">Sessions</th>
                 <th scope="col">Tasks</th>
                 <th scope="col">File security</th>
@@ -478,6 +721,44 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                         status={speaker.profileStatus}
                       />
                     </td>
+                    <td data-label="Workflow">
+                      <Form method="post" className="form-row">
+                        <input
+                          type="hidden"
+                          name="_intent"
+                          value="update_workflow_status"
+                        />
+                        <input
+                          type="hidden"
+                          name="personId"
+                          value={speaker.id}
+                        />
+                        <input
+                          type="hidden"
+                          name="idempotencyKey"
+                          value={loaderData.workflowIdempotencyKeys[speaker.id]}
+                        />
+                        <select
+                          className="select"
+                          name="status"
+                          defaultValue={speaker.workflowStatus}
+                          aria-label={`Workflow status for ${speaker.name}`}
+                        >
+                          <option value="prospect">Prospect</option>
+                          <option value="invited">Invited</option>
+                          <option value="confirmed">Confirmed</option>
+                          <option value="declined">Declined</option>
+                          <option value="withdrawn">Withdrawn</option>
+                        </select>
+                        <button
+                          className="btn small"
+                          type="submit"
+                          disabled={navigation.state !== "idle"}
+                        >
+                          Save
+                        </button>
+                      </Form>
+                    </td>
                     <td data-label="Sessions">{speaker.sessionCount}</td>
                     <td data-label="Tasks">
                       <div className="pc-record-stack">
@@ -516,7 +797,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                 ))
               ) : (
                 <tr className="pc-table-empty-row">
-                  <td className="pc-table-empty-cell" colSpan={6}>
+                  <td className="pc-table-empty-cell" colSpan={7}>
                     <div className="pc-empty-state">
                       <UserRound aria-hidden className="pc-state-icon" />
                       <h2>No speaker identities</h2>

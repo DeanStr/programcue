@@ -35,6 +35,7 @@ function session(
     durationMinutes: 60,
     expectedAttendance: null,
     requiredResources: [],
+    sourceVisibility: "public",
     visibility: "public",
     contentStatus: "draft",
     contentRevision: 1,
@@ -423,11 +424,7 @@ describe("deterministic auto-placement", () => {
 
     expect(computeAutoPlacements(input).placements[0]).toMatchObject({
       startsAt: occupiedEnd,
-      endsAt: eventLocalTimeEpoch(
-        transitionDay,
-        "America/Toronto",
-        22,
-      ),
+      endsAt: eventLocalTimeEpoch(transitionDay, "America/Toronto", 22),
     });
   });
 });

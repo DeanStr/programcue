@@ -171,6 +171,13 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
       ),
       mapStatement(this.env, mappings, "submission_speakers", "person_id"),
       mapStatement(this.env, mappings, "session_speakers", "person_id"),
+      mapStatement(this.env, mappings, "event_speaker_workflows", "person_id"),
+      mapStatement(
+        this.env,
+        mappings,
+        "event_speaker_workflows",
+        "updated_by_person_id",
+      ),
       mapStatement(this.env, mappings, "public_itineraries", "person_id"),
       mapStatement(
         this.env,

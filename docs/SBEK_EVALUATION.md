@@ -19,9 +19,22 @@ Open `http://127.0.0.1:5180/demo`, continue as Jordan Alvarez and reset the
 complete event. Local capture proves application behavior, not external email
 delivery.
 
-Use `https://app.programcue.com` for the final evaluation. Production remains
-`APP_ENV=production` and `DEMO_MODE=false`; do not deploy an evaluation or demo
-runtime profile. Temporarily install these Worker secrets:
+Use `https://app.programcue.com` for the final evaluation. It remains the one
+production Worker with `APP_ENV=production` and `DEMO_MODE=false`; the checked-in
+profile explicitly sets `EVALUATION_MODE=true`. Install these two independent
+secrets for the evaluation period:
+
+- `EVALUATION_ACCESS_CODE`: the private code supplied to human and automated
+  evaluators, at least 16 characters.
+- `EVALUATION_SESSION_SECRET`: a random server-only signing value of at least 32
+  characters. Never give this value to an evaluator.
+
+```bash
+wrangler secret put EVALUATION_ACCESS_CODE -c wrangler.jsonc
+wrangler secret put EVALUATION_SESSION_SECRET -c wrangler.jsonc
+```
+
+Temporarily install these additional reset secrets before seeding:
 
 - `EVALUATION_FIXTURE_SECRET`: a random value of at least 32 characters.
 - `EVALUATION_RESEND_API_KEY`: a temporary full-access Resend key used only to
@@ -57,12 +70,22 @@ The fixture combines two useful data states:
   SBEK identities and begin without evaluator-created submissions,
   assignments, accepted-speaker access or tasks.
 
-This is additional production data, not a separate demo. Human evaluators can
-use every normal production feature. Production persona access uses Better
-Auth and real Resend magic links; there is no persona-switching cookie or
-`/demo` entry point. The reset leaves the four fixture addresses unverified;
-consuming each delivered magic link supplies the real email proof and creates
-the new session.
+This is additional production data, not a separate demo. Human evaluators open
+`https://app.programcue.com/evaluate`, enter the private access code and choose
+a fixed role card. Showcase roles open on useful populated work; separate clean
+scenario identities preserve the chained SBEK starting state. The signed
+eight-hour cookie contains only an allowlisted identity key and the latest
+fixture-reset generation, cannot grant membership and remains subject to every
+production authorisation check. Resetting the fixture invalidates all previously
+issued evaluator cookies. There
+is no `/demo`, provider simulation or human-accessible reset. Better Auth and
+real Resend magic links remain available for delivery/authentication acceptance,
+but are not required merely to review every seeded persona. Unlock attempts are
+IP-rate-limited. Missing or weak evaluator configuration returns production
+runtime unavailability rather than an ordinary bad-code response, and a missing
+fixture person is reported as reset-required unavailability rather than an
+anonymous session. Selecting the clean applicant establishes that fixed identity
+for the public application flow without marking its durable email as verified.
 
 ## Configure the external evaluator
 
@@ -94,15 +117,16 @@ and set `personaEmails` to the exact four production fixture addresses. Keep
     "speaker2": "<Marcus Okafor mailbox>",
     "reviewer": "<Sam Whitfield mailbox>"
   },
-  "submissionNotes": "Program Cue ordinary production deployment with a dedicated seeded Future of Events fixture. Authenticate through normal magic links. Organizer = Jordan Alvarez, speakers = Priya Raman and Marcus Okafor, reviewer = Sam Whitfield. The public programme is /public/programme/future-of-events-2025. Reset only before a new full run, never between chained scenarios."
+  "submissionNotes": "Program Cue production deployment with EVALUATION_MODE enabled for a dedicated seeded Future of Events fixture. Open /evaluate, enter the supplied access code and choose the matching fixed scenario identity before saving each browser state. Organizer = Jordan Alvarez, speakers = Priya Raman and Marcus Okafor, reviewer = Sam Whitfield. The public programme is /public/programme/future-of-events-2025. Reset only before a new full run, never between chained scenarios."
 }
 ```
 
 Do not authenticate the attendee persona: it is the genuinely anonymous
-browser state. Establish the other personas through `/sign-in`, consume each
-real magic link from its mailbox and save each browser state with the
-evaluator's auth command. The reviewer can authenticate before invitation but
-must remain unauthorized until Jordan explicitly grants the event relationship.
+browser state. For every other persona, let the evaluator auth command open a
+headed browser, navigate to `/evaluate`, enter the access code, choose the exact
+scenario card and save that browser state. The reviewer identity exists before
+invitation but remains unauthorized until Jordan explicitly grants and the
+reviewer accepts the event relationship.
 
 ```bash
 pnpm run sbek -- auth --persona organizer

@@ -1,4 +1,7 @@
-import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
+import {
+  requireRuntimeMode,
+  requiresProductionSecurity,
+} from "~/platform/runtime-environment.server";
 import { parseResourceEmbedOrigins } from "~/modules/resources/resource-embed-policy";
 
 const requiredProductionBindings = [
@@ -47,6 +50,11 @@ const requiredProductionValues = [
   "D1_REST_API_TOKEN",
 ] as const;
 
+const requiredProductionEvaluationValues = [
+  "EVALUATION_ACCESS_CODE",
+  "EVALUATION_SESSION_SECRET",
+] as const;
+
 const placeholderPattern =
   /(?:replace[_-]with|example\.invalid|\.example(?:\b|\/))/iu;
 
@@ -76,17 +84,44 @@ export function requireProductionRuntimeReadiness(
 ) {
   if (!requiresProductionSecurity(environment.APP_ENV)) return;
   const values = environment as unknown as Record<string, unknown>;
+  const runtime = requireRuntimeMode(environment);
+  const evaluationValues = runtime.evaluation
+    ? requiredProductionEvaluationValues
+    : [];
   const invalid = [
     ...requiredProductionBindings.filter((name) => !values[name]),
     ...requiredProductionValues.filter(
       (name) => !configuredString(values, name),
     ),
+    ...evaluationValues.filter((name) => !configuredString(values, name)),
   ];
   if (
     typeof values.BETTER_AUTH_SECRET === "string" &&
     values.BETTER_AUTH_SECRET.trim().length < 32
   ) {
     invalid.push("BETTER_AUTH_SECRET");
+  }
+  if (runtime.evaluation) {
+    if (
+      typeof values.EVALUATION_ACCESS_CODE === "string" &&
+      values.EVALUATION_ACCESS_CODE.trim().length < 16
+    ) {
+      invalid.push("EVALUATION_ACCESS_CODE");
+    }
+    if (
+      typeof values.EVALUATION_SESSION_SECRET === "string" &&
+      values.EVALUATION_SESSION_SECRET.trim().length < 32
+    ) {
+      invalid.push("EVALUATION_SESSION_SECRET");
+    }
+    if (
+      typeof values.EVALUATION_ACCESS_CODE === "string" &&
+      typeof values.EVALUATION_SESSION_SECRET === "string" &&
+      values.EVALUATION_ACCESS_CODE.trim() ===
+        values.EVALUATION_SESSION_SECRET.trim()
+    ) {
+      invalid.push("EVALUATION_ACCESS_CODE", "EVALUATION_SESSION_SECRET");
+    }
   }
   if (values.EMAIL_PROVIDER !== "resend") {
     invalid.push("EMAIL_PROVIDER");

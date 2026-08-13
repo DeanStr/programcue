@@ -114,7 +114,17 @@ export async function activateSbekDemoInvitation(
        )
        SELECT ?, ?, ?, ?, 'membership.demo_fixture_activated',
               'membership', ?, ?, ?, unixepoch()
-        WHERE changes() = 1`,
+        WHERE EXISTS (
+          SELECT 1 FROM memberships membership
+           WHERE membership.id = ?
+             AND membership.organisation_id = ?
+             AND membership.event_id = ?
+             AND membership.person_id = ?
+             AND membership.role = ?
+             AND membership.accepted_at IS NOT NULL
+             AND membership.revoked_at IS NULL
+             AND membership.last_operation_id = ?
+        )`,
     ).bind(
       crypto.randomUUID(),
       input.organisationId,
@@ -128,12 +138,15 @@ export async function activateSbekDemoInvitation(
         emailDelivery: "not_sent",
         fixture: "sbek",
       }),
+      input.membershipId,
+      input.organisationId,
+      input.eventId,
+      membership.personId,
+      input.role,
+      correlationId,
     ),
   ]);
-  if (
-    (activated.meta.changes ?? 0) !== 1 ||
-    (audited.meta.changes ?? 0) !== 1
-  ) {
+  if (activated.results.length !== 1 || (audited.meta.changes ?? 0) !== 1) {
     throw new SbekDemoActivationError(
       "The exact SBEK fixture invitation and activation audit could not be committed together.",
     );

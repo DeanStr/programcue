@@ -847,6 +847,16 @@ test("publishes speaker profiles and a read-only itinerary share link", async ({
     "Main Stage · keynote · Leadership",
   );
   await expect(itineraryItem).toContainText("Priya Shah");
+  const calendarExport = page.getByRole("link", { name: "Export itinerary" });
+  await expect(calendarExport).toBeVisible();
+  const calendarHref = await calendarExport.getAttribute("href");
+  expect(calendarHref).toContain("calendar.ics?itinerary=mine");
+  const calendarResponse = await page.request.get(calendarHref!);
+  expect(calendarResponse.ok()).toBeTruthy();
+  expect(calendarResponse.headers()["content-disposition"]).toContain(
+    "future-of-events-2025-itinerary.ics",
+  );
+  expect((await calendarResponse.text()).match(/^UID:/gmu)).toHaveLength(1);
   await page
     .getByRole("button", { name: "Create read-only share link" })
     .click();
@@ -862,6 +872,18 @@ test("publishes speaker profiles and a read-only itinerary share link", async ({
   await expect(
     page.getByRole("heading", { name: "Shared itinerary" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Export itinerary" }),
+  ).toBeVisible();
+  const sharedCalendarHref = await page
+    .getByRole("link", { name: "Export itinerary" })
+    .getAttribute("href");
+  expect(sharedCalendarHref).toContain("calendar.ics?share=");
+  const sharedCalendarResponse = await page.request.get(sharedCalendarHref!);
+  expect(sharedCalendarResponse.ok()).toBeTruthy();
+  expect((await sharedCalendarResponse.text()).match(/^UID:/gmu)).toHaveLength(
+    1,
+  );
   await expect(
     page.getByRole("button", { name: /add to|remove from itinerary/i }),
   ).toHaveCount(0);

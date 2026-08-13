@@ -214,6 +214,20 @@ describe("speaker profile service", () => {
     const created = await service.createManualSpeaker(admin, input);
     expect(created.delivery).toBe("queued");
     expect(queued).toHaveLength(1);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT workflow.status, workflow.source,
+                workflow.updated_by_person_id AS updatedByPersonId
+           FROM event_speaker_workflows workflow
+          WHERE workflow.event_id = ? AND workflow.person_id = ?`,
+      )
+        .bind(admin.eventId, created.personId)
+        .first(),
+    ).resolves.toEqual({
+      status: "invited",
+      source: "manual",
+      updatedByPersonId: admin.personId,
+    });
     await expect(service.createManualSpeaker(admin, input)).resolves.toEqual(
       created,
     );
@@ -433,7 +447,10 @@ describe("speaker profile service", () => {
     expect(result).toMatchObject({ personId, accepted: false });
     await expect(
       new SpeakerService(testEnv).getAdminSpeakerDetail(admin, personId),
-    ).rejects.toMatchObject({ status: 404 });
+    ).resolves.toMatchObject({
+      profile: { id: personId, name: "Person-owned name" },
+      profileShared: true,
+    });
     await expect(
       new SpeakerService(testEnv).getPortal({
         ...speaker,
@@ -836,6 +853,61 @@ describe("speaker profile service", () => {
       profileStatus: before.profile.profileStatus,
       revision: before.profile.revision,
     });
+  });
+
+  it("treats a roster workflow in another event as a shared profile association", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const token = crypto.randomUUID();
+    const otherEventId = `speaker-workflow-shared-event-${token}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           file_policy_json
+         ) VALUES (?, ?, 'Other roster event', ?, 'UTC', 1800000000,
+                   1800086400,
+                   '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')`,
+      ).bind(
+        otherEventId,
+        admin.organisationId,
+        `speaker-workflow-shared-event-${token}`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO event_speaker_workflows (
+           event_id, person_id, status, source, last_operation_id,
+           updated_by_person_id, created_at, updated_at
+         ) VALUES (?, ?, 'prospect', 'manual', ?, ?, unixepoch(), unixepoch())`,
+      ).bind(
+        otherEventId,
+        speaker.personId,
+        `speaker-workflow-shared:${token}`,
+        admin.personId,
+      ),
+    ]);
+    try {
+      const service = new SpeakerService(testEnv);
+      const before = await service.getAdminSpeakerDetail(
+        admin,
+        speaker.personId,
+      );
+      expect(before.profileShared).toBe(true);
+      await expect(
+        service.updateAdminSpeakerProfile(admin, speaker.personId, {
+          revision: before.profile.revision,
+          name: "Cross-event overwrite",
+          biography: "This must remain unchanged.",
+          pronunciation: "",
+          organisationName: "Wrong event",
+          jobTitle: "Wrong title",
+          profileStatus: "archived",
+        }),
+      ).rejects.toBeInstanceOf(SpeakerAdminStateError);
+    } finally {
+      await testEnv.DB.prepare("DELETE FROM events WHERE id = ?")
+        .bind(otherEventId)
+        .run();
+    }
   });
 
   it("pages the authoritative event speaker set and applies readiness filters server-side", async () => {

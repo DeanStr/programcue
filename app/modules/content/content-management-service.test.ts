@@ -223,7 +223,7 @@ describe("content management", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it("treats content review status as advisory and publishes the complete snapshot", async () => {
+  it("gates publication on approval and publishes the complete approved snapshot", async () => {
     const schedule = new ScheduleService(scheduleTestEnv);
     const content = new ContentManagementService(scheduleTestEnv);
     const versionId = await schedule.createDraft(viewer);
@@ -271,6 +271,41 @@ describe("content management", () => {
       workspace.sessions.find((session) => session.id === secondSession.id)
         ?.contentStatus,
     ).toBe("draft");
+    await expect(
+      schedule.publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toThrow("requires a public, approved content snapshot");
+
+    workspace = await schedule.getWorkspace(viewer);
+    const unapprovedSession = workspace.sessions.find(
+      (candidate) => candidate.id === secondSession.id,
+    )!;
+    await schedule.updateSessionContent(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: unapprovedSession.id,
+      sessionRevision: unapprovedSession.revision,
+      idempotencyKey: crypto.randomUUID(),
+      title: unapprovedSession.title,
+      description: "This second public session is ready for approval.",
+      format: unapprovedSession.format,
+      durationMinutes: unapprovedSession.durationMinutes,
+      trackId: unapprovedSession.trackId,
+      visibility: "public",
+      requiredResources: unapprovedSession.requiredResources,
+    });
+    detail = await content.getSession(viewer, secondSession.id);
+    await content.changeStatus(viewer, {
+      scheduleVersionId: versionId,
+      sessionId: secondSession.id,
+      scheduleRevision: detail.current.scheduleRevision,
+      contentRevision: detail.current.contentRevision,
+      status: "approved",
+      confirmed: true,
+    });
+    workspace = await schedule.getWorkspace(viewer);
     await schedule.publish(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,

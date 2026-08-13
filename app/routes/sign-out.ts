@@ -6,13 +6,22 @@ import { clearCurrentEventCookie } from "~/platform/auth/current-event.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { DEMO_IDENTITY_COOKIE } from "~/platform/demo/demo-identities";
+import {
+  clearEvaluationSessionCookie,
+  readEvaluationSession,
+} from "~/platform/evaluation/evaluation-session.server";
+import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
   if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405, headers: { allow: "POST" } });
+    return new Response("Method not allowed", {
+      status: 405,
+      headers: { allow: "POST" },
+    });
   }
   const { env } = getCloudflareContext(context);
-  if (String(env.DEMO_MODE) === "true") {
+  const runtime = requireRuntimeMode(env);
+  if (runtime.demo) {
     const headers = new Headers();
     headers.append(
       "set-cookie",
@@ -20,6 +29,13 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
     headers.append("set-cookie", clearCurrentEventCookie(env));
     return redirect("/demo", { status: 303, headers });
+  }
+
+  if (runtime.evaluation && (await readEvaluationSession(request, env))) {
+    const headers = new Headers();
+    headers.append("set-cookie", clearEvaluationSessionCookie());
+    headers.append("set-cookie", clearCurrentEventCookie(env));
+    return redirect("/evaluate", { status: 303, headers });
   }
 
   const formData = await request.formData();

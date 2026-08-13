@@ -116,6 +116,13 @@ export class CrmService {
                     WHERE speaker.person_id = person.id
                       AND event.organisation_id = ?
                       AND event.activation_status = 'active'
+                   UNION
+                   SELECT workflow.event_id
+                     FROM event_speaker_workflows workflow
+                     JOIN events event ON event.id = workflow.event_id
+                    WHERE workflow.person_id = person.id
+                      AND event.organisation_id = ?
+                      AND event.activation_status = 'active'
                  ) linked) AS eventCount,
               (SELECT COUNT(*) FROM session_speakers speaker
                 JOIN events event ON event.id = speaker.event_id
@@ -154,6 +161,7 @@ export class CrmService {
     )
       .bind(
         ...contactScopeBindings(viewer),
+        viewer.organisationId,
         viewer.organisationId,
         viewer.organisationId,
         viewer.organisationId,
@@ -403,11 +411,14 @@ export class CrmService {
                  AND membership.role = 'speaker'
                  AND membership.accepted_at IS NOT NULL
                  AND membership.revoked_at IS NULL
+            ) OR EXISTS (
+              SELECT 1 FROM event_speaker_workflows workflow
+               WHERE workflow.event_id = event.id AND workflow.person_id = ?
             ))
           GROUP BY event.id, event.name
           ORDER BY event.starts_at DESC, event.name`,
         )
-          .bind(personId, viewer.organisationId, personId)
+          .bind(personId, viewer.organisationId, personId, personId)
           .all<{
             eventId: string;
             eventName: string;

@@ -125,6 +125,21 @@ export function buildSchedulePublicationStatements(input: {
                JOIN sessions session
                  ON session.id = entry.session_id
                 AND session.event_id = entry.event_id
+                AND session.visibility = 'public'
+               JOIN schedule_session_contents content
+                 ON content.schedule_version_id = entry.schedule_version_id
+                AND content.event_id = entry.event_id
+                AND content.session_id = entry.session_id
+              WHERE entry.schedule_version_id = ? AND entry.event_id = ?
+                AND (content.visibility <> 'public'
+                     OR content.content_status <> 'approved')
+           )
+           AND NOT EXISTS (
+             SELECT 1
+               FROM schedule_entries entry
+               JOIN sessions session
+                 ON session.id = entry.session_id
+                AND session.event_id = entry.event_id
               WHERE entry.schedule_version_id = ? AND entry.event_id = ?
                 AND (
                   EXISTS (
@@ -145,6 +160,8 @@ export function buildSchedulePublicationStatements(input: {
       viewer.eventId,
       viewer.organisationId,
       workspace.event.revision,
+      parsed.scheduleVersionId,
+      viewer.eventId,
       parsed.scheduleVersionId,
       viewer.eventId,
       parsed.scheduleVersionId,

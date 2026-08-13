@@ -17,7 +17,11 @@ import {
   PublicProgrammeService,
   readCookie,
 } from "~/modules/programme/public-programme-service.server";
-import { createAuth } from "~/platform/auth/auth.server";
+import {
+  PUBLIC_ITINERARY_COOKIE,
+  itineraryCookie,
+  publicItineraryIdentity,
+} from "~/modules/programme/public-itinerary-identity.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
   AbuseProtectionConfigurationError,
@@ -31,8 +35,6 @@ import {
   publishedProgrammeCacheHeaders,
   publishedProgrammeNotModified,
 } from "~/platform/api/api-public-programme.server";
-
-const ITINERARY_COOKIE = "program_cue_itinerary";
 
 function surfaceFromRequest(request: Request): PublicProgrammeSurface {
   const segments = new URL(request.url).pathname
@@ -62,20 +64,6 @@ function surfaceFromRequest(request: Request): PublicProgrammeSurface {
     });
   }
   return candidate as Exclude<PublicProgrammeSurface, "overview">;
-}
-
-export function itineraryCookie(
-  token: string,
-  expiresAt: number | null,
-  requestUrl: string,
-  now = Math.floor(Date.now() / 1_000),
-) {
-  const secure = new URL(requestUrl).protocol === "https:" ? "; Secure" : "";
-  const lifetime =
-    expiresAt === null
-      ? ""
-      : `; Expires=${new Date(expiresAt * 1_000).toUTCString()}; Max-Age=${Math.max(0, expiresAt - now)}`;
-  return `${ITINERARY_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${lifetime}${secure}`;
 }
 
 /**
@@ -117,14 +105,6 @@ export function headers({
   const responseHeaders = new Headers(loaderHeaders);
   actionHeaders.forEach((value, name) => responseHeaders.set(name, value));
   return responseHeaders;
-}
-
-async function optionalPersonId(request: Request, env: CloudflareEnvironment) {
-  if (String(env.DEMO_MODE) === "true") return null;
-  const session = await createAuth(env).api.getSession({
-    headers: request.headers,
-  });
-  return session?.user.id ?? null;
 }
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
@@ -221,10 +201,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   }
   const shared = url.searchParams.has("share");
   const shareToken = url.searchParams.get("share") ?? "";
-  const personId =
-    embedded || shared ? null : await optionalPersonId(request, env);
-  const visitorToken = readCookie(request, ITINERARY_COOKIE);
-  const identity = { personId, visitorToken };
+  const visitorToken = readCookie(request, PUBLIC_ITINERARY_COOKIE);
+  const identity =
+    embedded || shared
+      ? { personId: null, visitorToken }
+      : await publicItineraryIdentity(request, env);
+  const { personId } = identity;
   const itineraryVerificationRequired =
     !embedded &&
     !shared &&
@@ -260,6 +242,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
           ? await service.itineraryIsSynced(programme, identity)
           : false,
       shared,
+      calendarExportQuery: shared
+        ? new URLSearchParams({ share: shareToken }).toString()
+        : new URLSearchParams({ itinerary: "mine" }).toString(),
     },
     {
       headers: {
@@ -300,8 +285,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (!programme)
     throw new Response("Published event programme not found", { status: 404 });
   try {
-    const personId = await optionalPersonId(request, env);
-    const visitorToken = readCookie(request, ITINERARY_COOKIE);
+    const { personId, visitorToken } = await publicItineraryIdentity(
+      request,
+      env,
+    );
     if (intent === "share") {
       if (personId && visitorToken) {
         await service.syncItinerary(programme, { personId, visitorToken });
