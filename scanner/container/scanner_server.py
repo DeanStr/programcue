@@ -23,6 +23,7 @@ DOWNLOAD_TIMEOUT_SECONDS = 600
 SCAN_TIMEOUT_SECONDS = 720
 CHUNK_BYTES = 1024 * 1024
 SCAN_DIRECTORY = Path("/tmp/program-cue-scans")
+READINESS_FILE = Path("/tmp/program-cue-scanner-ready")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$")
 SCAN_LOCK = threading.BoundedSemaphore(1)
 
@@ -37,6 +38,20 @@ class ObjectFetchError(Exception):
 
 class ClamScanError(Exception):
     """ClamAV could not produce a trustworthy verdict."""
+
+
+def clamav_ready() -> bool:
+    sockets = [Path("/run/clamav/clamd.sock"), Path("/tmp/clamd.sock")]
+    return READINESS_FILE.is_file() and any(path.exists() for path in sockets)
+
+
+def wait_for_clamav(timeout_seconds: float = 300) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if clamav_ready():
+            return True
+        time.sleep(0.25)
+    return clamav_ready()
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -260,8 +275,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
         if self.path not in {"/", "/health", "/ping"}:
             self._json(404, {"error": "Not found."})
             return
-        sockets = [Path("/run/clamav/clamd.sock"), Path("/tmp/clamd.sock")]
-        if not any(path.exists() for path in sockets):
+        if not clamav_ready():
             self._json(503, {"status": "starting"})
             return
         self._json(200, {"status": "ok", "engine": "clamav"})
@@ -282,6 +296,9 @@ class ScannerHandler(BaseHTTPRequestHandler):
             self._json(503, {"error": "The scanner is busy; retry this job."})
             return
         try:
+            if not wait_for_clamav():
+                self._json(503, {"error": "ClamAV is not ready."})
+                return
             try:
                 raw_body = self.rfile.read(int(content_length))
                 payload = json.loads(raw_body.decode("utf-8"))

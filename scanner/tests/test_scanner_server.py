@@ -1,6 +1,8 @@
 import importlib.util
 import pathlib
+import tempfile
 import unittest
+from unittest import mock
 
 
 MODULE_PATH = pathlib.Path(__file__).parents[1] / "container" / "scanner_server.py"
@@ -71,6 +73,29 @@ class ScannerServerContractTests(unittest.TestCase):
                 20,
                 "ClamAV 1.4.5/27720/Mon Aug 11 08:00:00 2026\n",
             )
+
+    def test_clamav_readiness_requires_marker_and_socket(self):
+        with tempfile.TemporaryDirectory() as directory:
+            readiness_file = pathlib.Path(directory) / "ready"
+            socket_file = pathlib.Path(directory) / "clamd.sock"
+            with (
+                mock.patch.object(scanner, "READINESS_FILE", readiness_file),
+                mock.patch.object(scanner, "Path", side_effect=lambda value: {
+                    "/run/clamav/clamd.sock": socket_file,
+                    "/tmp/clamd.sock": socket_file,
+                }.get(value, pathlib.Path(value))),
+            ):
+                self.assertFalse(scanner.clamav_ready())
+                readiness_file.touch()
+                self.assertFalse(scanner.clamav_ready())
+                socket_file.touch()
+                self.assertTrue(scanner.clamav_ready())
+
+    def test_wait_for_clamav_observes_readiness(self):
+        with mock.patch.object(scanner, "clamav_ready", side_effect=[False, True]):
+            with mock.patch.object(scanner.time, "sleep") as sleep:
+                self.assertTrue(scanner.wait_for_clamav(timeout_seconds=1))
+                sleep.assert_called_once_with(0.25)
 
 
 if __name__ == "__main__":
