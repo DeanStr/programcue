@@ -284,6 +284,9 @@ export class ReadinessService {
     const event = await this.env.DB.prepare(
       `
       SELECT id, timezone,
+             (SELECT COALESCE(MAX(sequence), 0)
+                FROM event_changes
+               WHERE event_id = events.id) AS baselineCursor,
              length(trim(COALESCE(description, ''))) > 0 AS detailsComplete,
              EXISTS (
                SELECT 1 FROM form_definitions form
@@ -332,6 +335,7 @@ export class ReadinessService {
         tasksComplete: number;
         communicationsComplete: number;
         publicationComplete: number;
+        baselineCursor: number;
       }>();
     if (!event) throw new Response("Event not found", { status: 404 });
 
@@ -339,15 +343,6 @@ export class ReadinessService {
     // Capture the cursor before the snapshot. Any mutation that commits while
     // the remaining reads run will therefore have a newer cursor and trigger a
     // subsequent client revalidation instead of being silently skipped.
-    const baselineCursor = await this.env.DB.prepare(
-      `
-      SELECT COALESCE(MAX(sequence), 0) AS total
-        FROM event_changes
-       WHERE event_id = ?
-    `,
-    )
-      .bind(viewer.eventId)
-      .first<CountRow>();
     const [
       taskResult,
       content,
@@ -624,7 +619,7 @@ export class ReadinessService {
       eventId: viewer.eventId,
       eventTimezone: event.timezone,
       generatedAt: now,
-      cursor: numeric(baselineCursor?.total),
+      cursor: numeric(event.baselineCursor),
       readiness: {
         percentage,
         status:

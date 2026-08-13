@@ -39,6 +39,29 @@ The scale fixture, index assertions and measurements are implemented, but a comp
 
 The interrupted trace is useful only as a diagnostic: submissions navigations took 118–157 ms, speaker navigations took 146–170 ms and the single completed Event Setup mutation response took 46.9 ms. Those values are not substituted for the harness's end-to-end first-use, p95 or final assertion results.
 
+## Production data-locality correction
+
+On 13 August 2026, retained production timing evidence isolated the dominant
+latency source to the database region: a Melbourne command-centre data request
+took 2,775 ms wall time while using only 33 ms of Worker CPU, and the event
+change feed took 1,669 ms wall time with 20 ms of CPU. The production D1 primary
+was in EEUR even though the intended users are primarily on the US West Coast.
+
+Smart Placement is now enabled and the quiesced 2.22 MB production database was
+cut over to a WNAM D1 primary. This removes Europe as the database round trip
+for the intended audience. The admin shell now reuses its already-authorised
+person ID instead of re-reading the Better Auth session, the home redirect uses
+the authorised event result instead of repeating authentication and membership
+queries, and the command-centre baseline cursor is captured in its existing
+event query. Content-hashed `/assets/*` responses use a one-year immutable cache
+policy; unversioned assets retain revalidation.
+
+The post-cutover health probe returned HTTP 200 from source revision `5e46b8f`,
+and Cloudflare reports the 2,224,128-byte database in WNAM with no pending
+migrations. These are topology and correctness checks, not representative US
+West percentile evidence. Smart Placement adapts from traffic, so field RUM and
+an authenticated US West admin journey remain the acceptance measurements.
+
 ## Interpretation and external acceptance
 
 All values here are local lab evidence, not production percentile claims. The public-filter measurement is a browser feedback proxy, not field INP. Event freshness uses the authoritative D1 commit timestamp, whose one-second resolution makes the local delta conservative but coarse. The single autosave sample proves a bounded real feedback path; it is not a durability claim for adverse networks.

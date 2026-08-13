@@ -123,6 +123,15 @@ export async function listAuthorisedEvents(
     env,
     unauthenticatedBehavior,
   );
+  return listAuthorisedEventsForPerson(env, person.personId, allowedRoles);
+}
+
+async function listAuthorisedEventsForPerson(
+  env: CloudflareEnvironment,
+  personId: string,
+  allowedRoles: ReadonlyArray<ViewerRole>,
+): Promise<AuthorisedEvent[]> {
+  if (allowedRoles.length === 0) return [];
   const placeholders = allowedRoles.map(() => "?").join(",");
   const results = await env.DB.prepare(
     `
@@ -164,7 +173,7 @@ export async function listAuthorisedEvents(
               CASE WHEN membership.event_id = e.id THEN 0 ELSE 1 END
   `,
   )
-    .bind(person.personId, ...allowedRoles)
+    .bind(personId, ...allowedRoles)
     .all<
       Omit<AuthorisedEvent, "invitationPending" | "pendingInvitationRole"> & {
         invitationPending: number | boolean;
@@ -366,7 +375,7 @@ export async function loadCurrentEventAdminShellContext(
   allowedRoles: ReadonlyArray<ViewerRole>,
 ): Promise<CurrentEventAdminShellContext> {
   const [eventOptions, row] = await Promise.all([
-    listAuthorisedEvents(request, env, allowedRoles),
+    listAuthorisedEventsForPerson(env, viewer.personId, allowedRoles),
     env.DB.prepare(
       `
       WITH current_event AS (

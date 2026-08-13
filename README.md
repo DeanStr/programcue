@@ -125,9 +125,9 @@ merge or release gate.
 The checked-in production profile targets `https://app.programcue.com` and is
 wired to the provisioned D1 database, private R2 buckets, Queues and Turnstile
 widget. `npm run deploy:check` passes for both the application and its dedicated
-file-scanner companion. The application remains intentionally non-deployable
-until the complete runtime secret inventory and production bootstrap values are
-supplied.
+file-scanner companion. The application and scanner are deployed; required
+runtime secrets remain outside Git and every release preflight verifies their
+presence before upload.
 
 For headless Wrangler access in this workspace, keep the temporary deployment
 token and account ID only in the ignored, mode-0600 `.env.cloudflare` file and
@@ -137,7 +137,9 @@ input during builds.
 
 The production resource inventory is:
 
-- D1 database `program-cue-db` and its UUID.
+- WNAM D1 database `program-cue-db-wnam`
+  (`ac812720-eefc-45d0-b6cf-0236ab8de8c8`). The former EEUR database is
+  retained temporarily as a rollback source and is not a deployment target.
 - Private R2 buckets `program-cue-files` and `program-cue-d1-backups`, plus R2
   S3 API credentials scoped to the files bucket.
 - Queue `program-cue-operations` and dead-letter queue

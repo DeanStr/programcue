@@ -4,8 +4,10 @@ import type { Route } from "./+types/home";
 import { BrandMark } from "~/components/brand-mark";
 import type { ViewerRole } from "~/platform/auth/authorize.server";
 import {
+  chooseInitialEvent,
+  currentEventCookie,
   listAuthorisedEvents,
-  requireCurrentEventRole,
+  selectedEventId,
 } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
@@ -22,15 +24,25 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   const events = await listAuthorisedEvents(request, env);
   if (events.length === 0) return { hasWorkspaceAccess: false as const };
-  const viewer = await requireCurrentEventRole(request, env, [
-    "owner",
-    "administrator",
-    "committee_chair",
-    "evaluator",
-    "speaker",
-    "submitter",
-  ]);
-  return redirect(landingPage[viewer.role]);
+  const selected = selectedEventId(request, env);
+  const eventId = selected ?? chooseInitialEvent(events, env.DEFAULT_EVENT_ID);
+  if (!eventId) throw redirect("/events/select?returnTo=%2F");
+  const event = events.find((candidate) => candidate.eventId === eventId);
+  if (!event) {
+    throw new Response("You do not have permission to manage this event", {
+      status: 403,
+      statusText: "Forbidden",
+    });
+  }
+  if (event.invitationPending) throw redirect("/events/select?returnTo=%2F");
+  return redirect(landingPage[event.role], {
+    headers: selected
+      ? undefined
+      : {
+          "set-cookie": currentEventCookie(event.eventId, env),
+          "cache-control": "private, no-store",
+        },
+  });
 }
 
 export const headers: Route.HeadersFunction = () => ({

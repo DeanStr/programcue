@@ -127,6 +127,35 @@ describe("current event context", () => {
     );
   });
 
+  it("reuses an already-authorised viewer when loading the admin shell", async () => {
+    const productionEnv = {
+      ...workerEnv,
+      APP_ENV: "production",
+      DEMO_MODE: "false",
+      EVALUATION_MODE: "false",
+    } as unknown as CloudflareEnvironment;
+    await expect(
+      loadCurrentEventAdminShellContext(
+        new Request("https://app.programcue.com/admin/event"),
+        productionEnv,
+        {
+          personId: "person-demo-admin",
+          name: "Olivia Bennett",
+          email: "olivia@example.com",
+          role: "administrator",
+          organisationId: "org-future-events",
+          eventId: "evt-foe-2025",
+          demo: false,
+        },
+        ["administrator"],
+      ),
+    ).resolves.toMatchObject({
+      eventOptions: expect.arrayContaining([
+        expect.objectContaining({ eventId: "evt-foe-2025" }),
+      ]),
+    });
+  });
+
   it("lists and resolves both event-specific and organisation-wide access", async () => {
     const events = await listAuthorisedEvents(demoRequest(), workerEnv, [
       "administrator",

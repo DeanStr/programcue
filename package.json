@@ -48,7 +48,7 @@
     "cf-typegen": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply program-cue-db --local -c wrangler.development.jsonc",
     "db:migrate:e2e": "node scripts/migrate-e2e.mjs",
-    "db:migrate:remote": "wrangler d1 migrations apply program-cue-db --remote -c wrangler.jsonc",
+    "db:migrate:remote": "wrangler d1 migrations apply program-cue-db-wnam --remote -c wrangler.jsonc",
     "db:bootstrap:production": "node scripts/bootstrap-production.mjs",
     "evaluation:fixture:reset": "node scripts/reset-production-evaluation-fixture.mjs",
     "backup:d1": "node scripts/export-d1-backup.mjs",

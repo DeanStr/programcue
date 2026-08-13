@@ -40,7 +40,7 @@ const result = spawnSync(
   [
     "d1",
     "export",
-    "program-cue-db",
+    "program-cue-db-wnam",
     "--remote",
     "--config",
     resolve("wrangler.jsonc"),
@@ -63,7 +63,7 @@ const bytes = await readFile(output);
 if (bytes.byteLength === 0) fail("Wrangler produced an empty D1 export");
 const manifest = {
   format: "program-cue-d1-logical-backup-v1",
-  database: "program-cue-db",
+  database: "program-cue-db-wnam",
   createdAt: new Date().toISOString(),
   bytes: bytes.byteLength,
   sha256: createHash("sha256").update(bytes).digest("hex"),

@@ -1089,6 +1089,25 @@ describe("production authentication routes", () => {
     }
   });
 
+  it("establishes the sole event while routing home without repeating authentication", async () => {
+    const testEnv = validatedProductionEnv();
+    const { cookie } = await sessionCookie("person-demo-admin");
+    const response = await homeLoader({
+      request: new Request("http://localhost/", {
+        headers: { cookie },
+      }),
+      params: {},
+      context: context(testEnv),
+    } as never);
+
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).status).toBe(302);
+    expect((response as Response).headers.get("location")).toBe("/admin/event");
+    expect((response as Response).headers.get("set-cookie")).toContain(
+      "__Host-program_cue_event=evt-foe-2025",
+    );
+  });
+
   it("keeps an authenticated identity without memberships outside private workspaces", async () => {
     const personId = `person-no-access-${crypto.randomUUID()}`;
     await env.DB.prepare(

@@ -53,10 +53,10 @@ The acceptance export briefly made production D1 unavailable and one minute of t
 
 1. Stop consequential mutations and Queue consumers for the affected environment.
 2. Record the incident timestamp, current D1 bookmark, active operation IDs, latest successful Workflow instance ID and latest logical-export manifest in the incident log. Verify the manifest SHA-256, byte count and object ETag against the downloaded private R2 object before using it.
-3. Use `wrangler d1 time-travel info program-cue-db --timestamp=<RFC3339> -c wrangler.jsonc` to resolve the intended restore point.
+3. Use `wrangler d1 time-travel info program-cue-db-wnam --timestamp=<RFC3339> -c wrangler.jsonc` to resolve the intended restore point.
 4. Export the current damaged state before changing it.
 5. Review the affected interval and obtain explicit incident-owner approval.
-6. Run `wrangler d1 time-travel restore program-cue-db --bookmark=<bookmark> -c wrangler.jsonc`. This is destructive and must remain interactive.
+6. Run `wrangler d1 time-travel restore program-cue-db-wnam --bookmark=<bookmark> -c wrangler.jsonc`. This is destructive and must remain interactive.
 7. Apply any newer immutable migrations, then run health, tenant-isolation, operation-state, file-version and published-programme checks.
 8. Reconcile R2, Resend, calendar, Airtable, Accelevents and outbound-webhook side effects by their durable operation/idempotency records before resuming consumers.
 9. Retain the pre-restore bookmark printed by Cloudflare so the restore itself can be undone.

@@ -64,6 +64,37 @@ test("Wrangler profiles have no structural configuration issues", () => {
   assert.deepEqual(issues, []);
 });
 
+test("production operator commands target the configured WNAM database", async () => {
+  const configs = readDeploymentConfigs();
+  const databaseName = configs.production.d1_databases[0].database_name;
+  const packageJson = JSON.parse(
+    await readFile(resolve(repositoryRoot, "package.json"), "utf8"),
+  );
+  const exportSource = await readFile(
+    resolve(repositoryRoot, "scripts/export-d1-backup.mjs"),
+    "utf8",
+  );
+
+  assert.equal(databaseName, "program-cue-db-wnam");
+  assert.match(
+    packageJson.scripts["db:migrate:remote"],
+    /program-cue-db-wnam/u,
+  );
+  assert.match(exportSource, /"program-cue-db-wnam"/u);
+  assert.doesNotMatch(exportSource, /"program-cue-db"/u);
+});
+
+test("only content-hashed application assets receive immutable caching", async () => {
+  const headers = await readFile(
+    resolve(repositoryRoot, "public/_headers"),
+    "utf8",
+  );
+  assert.equal(
+    headers,
+    "/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n",
+  );
+});
+
 test("file scanner has one fail-closed EU production pool configuration", () => {
   const scanner = readScannerConfig();
   assert.deepEqual(validateScannerConfig(scanner), []);
