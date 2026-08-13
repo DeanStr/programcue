@@ -232,9 +232,11 @@ overridden `PROGRAM_CUE_E2E_PORT` automatically gives the site an isolated port
 
 The production bootstrap is intentionally one-time and requires an empty,
 migrated application database. It atomically creates the first Better Auth
-person, organisation-wide owner membership and explicitly slugged initial event; it
-does not enable public sign-up or install a permanent bootstrap endpoint. After
-deployment, that owner requests their first magic link at `/sign-in`.
+person, organisation-wide owner membership and explicitly slugged initial event;
+it does not install a permanent bootstrap endpoint. Ordinary email, Google and
+Microsoft identity creation remains available after bootstrap, but signup alone
+creates no organisation, event, membership or participant access. After
+deployment, the bootstrap owner requests their first magic link at `/sign-in`.
 
 `BETTER_AUTH_SECRET` must contain at least 32 characters.
 `CALENDAR_CREDENTIALS_KEY`, `INTEGRATION_CREDENTIALS_KEY` and

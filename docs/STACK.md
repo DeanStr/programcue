@@ -58,7 +58,7 @@ Route handlers own HTTP concerns. Deterministic rules and state transitions live
 
 ## External acceptance boundaries
 
-- Turnstile, the Resend domain/owner magic-link path, Google/Microsoft sign-in/calendar connection and private-R2 clean/EICAR scanner verdicts have production evidence. Browser multipart signing/CORS, tracked provider delivery, Airtable/Accelevents and external AI-provider paths remain acceptance boundaries.
+- Turnstile, the Resend domain/owner magic-link path, tracked Resend delivered/bounced receipts, Google/Microsoft sign-in and calendar create/update/cancel lifecycles, and private-R2 clean/EICAR scanner verdicts have production evidence. Browser multipart signing/CORS, a fresh provider-error callback, Airtable/Accelevents and external AI-provider paths remain acceptance boundaries.
 - The deployed backup Workflow code has written a checksum-manifested private-R2 object, retained logs are queryable and that exact object passed an isolated remote-D1 restore. The next autonomous post-fix cron, condition-specific alert delivery, trace continuity and measured RPO/RTO remain outstanding.
 - The local performance harness and 10,000-record fixture are implemented. Deployed p75 RUM, production-like scale and cost evidence remain required.
 - Automated Playwright/axe and visual coverage does not replace manual screen-reader, keyboard-only, contrast and zoom acceptance.
