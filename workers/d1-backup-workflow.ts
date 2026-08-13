@@ -462,28 +462,10 @@ export async function requestD1ExportState(
   return parseD1ExportEnvelope(payload);
 }
 
-function publicExportState(state: D1ExportState) {
-  return state.phase === "complete"
-    ? {
-        phase: state.phase,
-        bookmark: state.bookmark,
-        filename: state.filename,
-      }
-    : state;
-}
-
 export async function downloadD1Export(
-  configuration: BackupConfiguration,
-  bookmark: string,
+  state: Extract<D1ExportState, { phase: "complete" }>,
   fetcher: Fetcher = fetch,
 ) {
-  const state = await requestD1ExportState(configuration, bookmark, fetcher);
-  if (state.phase !== "complete") {
-    throw new Error(
-      "Cloudflare reported that the D1 export was no longer ready to download.",
-    );
-  }
-
   let response: Response;
   try {
     response = await fetcher(state.signedUrl, {
@@ -851,15 +833,13 @@ export async function runD1BackupWorkflow(
     }
 
     let state = await step.do("initiate D1 logical export", API_RETRY, () =>
-      requestD1ExportState(configuration).then(publicExportState),
+      requestD1ExportState(configuration),
     );
     let pollCount = 0;
     while (state.phase === "pending" && pollCount < MAX_EXPORT_POLLS) {
       await step.sleep("wait before D1 export poll", EXPORT_POLL_DELAY);
       state = await step.do("poll D1 logical export", API_RETRY, () =>
-        requestD1ExportState(configuration, state.bookmark).then(
-          publicExportState,
-        ),
+        requestD1ExportState(configuration, state.bookmark),
       );
       pollCount += 1;
     }
@@ -883,7 +863,11 @@ export async function runD1BackupWorkflow(
         // The response body must be created inside this retryable callback.
         // Reusing a stream returned by an earlier durable step would reuse a
         // consumed/locked body when this storage attempt is retried.
-        const dump = await downloadD1Export(configuration, state.bookmark);
+        // A completed D1 export returns its signed URL once. Re-polling the
+        // bookmark here consumes an empty terminal response, so carry the
+        // validated short-lived URL from the durable poll into this retryable
+        // download step instead.
+        const dump = await downloadD1Export(state);
         return storeBackupStream(environment.BACKUPS, dump, {
           backupKey,
           backupDate: expectedDate,

@@ -337,49 +337,42 @@ describe("scheduled D1 backup Workflow boundaries", () => {
       }),
     ).rejects.toThrow("export request timed out");
 
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(
-        Response.json(
-          envelope({
-            status: "complete",
-            result: { filename: "export.sql", signed_url: signedUrl },
-          }),
-        ),
-      )
-      .mockRejectedValueOnce(timeout);
+    const fetcher = vi.fn().mockRejectedValueOnce(timeout);
     await expect(
-      downloadD1Export(configuration, "bookmark-one", fetcher),
+      downloadD1Export(
+        {
+          phase: "complete",
+          bookmark: "bookmark-one",
+          filename: "export.sql",
+          signedUrl,
+        },
+        fetcher,
+      ),
     ).rejects.toThrow("export download timed out");
-    expect(fetcher.mock.calls[1]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(fetcher.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("re-polls readiness and returns the signed export as a stream without buffering", async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(
-        Response.json(
-          envelope({
-            status: "complete",
-            result: { filename: "export.sql", signed_url: signedUrl },
-          }),
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response("CREATE TABLE evidence(id TEXT);", { status: 200 }),
-      );
+  it("downloads the completed signed export as a stream without polling again", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(
+      new Response("CREATE TABLE evidence(id TEXT);", { status: 200 }),
+    );
 
     const stream = await downloadD1Export(
-      configuration,
-      "00000001-00000001-00004af0-4c272e70e7f7dc1d621ce046b88ad6c7",
+      {
+        phase: "complete",
+        bookmark:
+          "00000001-00000001-00004af0-4c272e70e7f7dc1d621ce046b88ad6c7",
+        filename: "export.sql",
+        signedUrl,
+      },
       fetcher,
     );
     expect(stream).toBeInstanceOf(ReadableStream);
     expect(await new Response(stream).text()).toBe(
       "CREATE TABLE evidence(id TEXT);",
     );
-    expect(fetcher.mock.calls[1]?.[1]).toMatchObject({ redirect: "error" });
-    expect(fetcher.mock.calls[1]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ redirect: "error" });
+    expect(fetcher.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("streams bytes to private R2 and writes an immutable verifiable manifest", async () => {
@@ -526,7 +519,7 @@ describe("scheduled D1 backup Workflow boundaries", () => {
         backupDate: "2026-08-11",
         workflowInstanceId: "d1-backup-2026-08-11",
       });
-      expect(apiCalls).toBe(3);
+      expect(apiCalls).toBe(2);
       expect(step.sleep).toHaveBeenCalledWith(
         "wait before D1 export poll",
         "10 seconds",
