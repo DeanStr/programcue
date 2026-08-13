@@ -31,6 +31,9 @@ const SURFACES = [
   { role: "administrator", path: "/admin/communications/compose" },
   { role: "administrator", path: "/admin/speakers/person-demo-speaker" },
   { role: "administrator", path: "/admin/crm" },
+  { role: "administrator", path: "/admin/crm/pipeline" },
+  { role: "administrator", path: "/admin/resources" },
+  { role: "administrator", path: "/api/docs" },
   { role: "administrator", path: "/public/programme/future-of-events-2025" },
 ] as const;
 
@@ -72,7 +75,34 @@ for (const viewport of VIEWPORTS) {
     for (const surface of SURFACES) {
       await selectDemoRole(page, surface.role);
       await openHydrated(page, surface.path);
+      if (surface.path === "/api/docs") {
+        const copyButtons = page.locator("button.scalar-code-copy");
+        await expect(copyButtons.first()).toHaveAttribute(
+          "aria-label",
+          "Copy code",
+        );
+        expect(
+          await copyButtons.evaluateAll((buttons) =>
+            buttons.every(
+              (button) => button.getAttribute("aria-label") === "Copy code",
+            ),
+          ),
+        ).toBe(true);
+      }
       await expectNoViolations(page, `${surface.path} @ ${viewport.label}`);
     }
   });
 }
+
+test("API reference remains accessible with its persisted dark theme", async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("colorMode", "dark"));
+  await openHydrated(page, "/api/docs");
+  await expect(page.locator("body")).toHaveClass(/dark-mode/);
+  await expect(page.locator("button.scalar-code-copy").first()).toHaveAttribute(
+    "aria-label",
+    "Copy code",
+  );
+  await expectNoViolations(page, "/api/docs @ persisted dark theme");
+});

@@ -101,9 +101,9 @@ test("admin child-route errors preserve navigation and event context", async ({
   await expect(
     page.getByRole("complementary", { name: "Primary navigation" }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Switch event" })).toContainText(
-    "Future of Events 2025",
-  );
+  await expect(
+    page.getByRole("button", { name: "Switch event" }),
+  ).toContainText("Future of Events 2025");
 });
 
 test("shared form errors connect labels, help and corrective links", async ({
@@ -260,12 +260,52 @@ test("resource authoring exposes the rich editor and formatting state", async ({
   page,
 }) => {
   await waitForInterface(page, "/admin/resources");
-  await expect(
-    page.locator('[contenteditable="true"][aria-label="Page content"]'),
-  ).toBeVisible();
+  const editor = page.getByRole("textbox", { name: "Page content" });
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveAttribute("contenteditable", "true");
+  await expect(editor).toHaveAttribute("aria-multiline", "true");
   await expect(page.getByRole("button", { name: "Bold" })).toHaveAttribute(
     "aria-pressed",
   );
+});
+
+test("CRM horizontal regions expose a keyboard scrolling target", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/admin/crm");
+  const directory = page.getByRole("region", {
+    name: "Speaker contact directory",
+  });
+  await directory.focus();
+  await expect(directory).toBeFocused();
+
+  await waitForInterface(page, "/admin/crm/pipeline");
+  const pipeline = page.getByRole("region", {
+    name: "Speaker sourcing stages",
+  });
+  await pipeline.focus();
+  await expect(pipeline).toBeFocused();
+});
+
+test("custom toggles retain their complete track at desktop and phone widths", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 375, height: 800 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await waitForInterface(page, "/admin/event");
+    const toggle = page.locator('label.toggle input[type="checkbox"]').first();
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveCSS("width", "38px");
+    await expect(toggle).toHaveCSS("height", "22px");
+    expect(
+      await toggle.evaluate((element) =>
+        getComputedStyle(element, "::after").getPropertyValue("width"),
+      ),
+    ).toBe("18px");
+  }
 });
 
 test("server-rendered timestamps hydrate in a non-UTC browser timezone", async ({

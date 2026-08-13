@@ -24,6 +24,7 @@ export function RichResourceEditor({
     immediatelyRender: false,
     editorProps: {
       attributes: {
+        role: "textbox",
         "aria-label": "Page content",
         "aria-multiline": "true",
       },

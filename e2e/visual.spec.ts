@@ -399,6 +399,9 @@ test.describe.serial(
         name: "Speaker sourcing stages",
       });
       await expect(board).toBeInViewport();
+      await board.focus();
+      await expect(board).toBeFocused();
+      await board.evaluate((element) => element.blur());
       const finalStage = board.getByRole("heading", {
         name: "Declined",
         exact: true,

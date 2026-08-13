@@ -171,6 +171,7 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
       <section
         className="crm-pipeline-board"
         aria-label="Speaker sourcing stages"
+        tabIndex={0}
       >
         {loaderData.columns.map((column) => (
           <div className="card pad crm-pipeline-column" key={column.stage}>

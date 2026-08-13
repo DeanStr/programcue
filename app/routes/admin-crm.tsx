@@ -359,7 +359,12 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
         ) : null}
 
         <Form method="get" action="/admin/crm/outreach" className="mt">
-          <div className="table-wrap">
+          <div
+            className="table-wrap"
+            role="region"
+            aria-label="Speaker contact directory"
+            tabIndex={0}
+          >
             <table className="data-table">
               <thead>
                 <tr>

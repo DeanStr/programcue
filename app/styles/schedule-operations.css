@@ -90,7 +90,8 @@
   font-weight: var(--weight-bold);
 }
 .schedule-room-board > .schedule-drop {
-  transition: background 0.15s ease,
+  transition:
+    background 0.15s ease,
     box-shadow 0.15s ease;
 }
 .schedule-room-board > .schedule-drop.is-over {
@@ -197,7 +198,8 @@
   display: block;
   color: inherit;
   text-decoration: none;
-  transition: transform 0.15s ease,
+  transition:
+    transform 0.15s ease,
     box-shadow 0.15s ease;
 }
 .command-metric-link:hover {
@@ -356,6 +358,18 @@
   box-sizing: border-box;
   padding-top: var(--space-10);
   background: var(--surface);
+}
+body.light-mode .program-cue-api-reference .scalar-api-reference {
+  /* Scalar's current light defaults miss 4.5:1 for secondary text. Keep the
+     embedded reference within Program Cue's verified text contrast scale. */
+  --scalar-color-2: var(--text-secondary);
+  --scalar-color-3: var(--text-tertiary);
+  --scalar-color-blue: var(--state-info-text);
+  --scalar-color-orange: var(--state-warn-text);
+}
+body.dark-mode .program-cue-api-reference .scalar-api-reference {
+  /* Scalar's tertiary dark text is 4.4:1 on its default background. */
+  --scalar-color-3: var(--scalar-color-2);
 }
 .api-reference-back {
   position: absolute;
