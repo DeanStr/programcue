@@ -7,11 +7,18 @@ import {
 import { z } from "zod";
 
 import {
+  classifyScannerContainerFailure,
   constantTimeTokenMatch,
   MAX_SCANNER_REQUEST_BYTES,
+  SCANNER_BUSY_ATTEMPT_LIMIT,
+  scannerCapacityDelaySeconds,
+  scannerCapacityShouldWait,
+  scannerContainerInstanceName,
   SCANNER_PROVIDER,
+  scannerWorkflowDuplicateStatusIsAcceptable,
   signScannerCallback,
   type ScannerContractConfiguration,
+  type ScannerContainerFailure,
   type ScannerJob,
   validateScannerJob,
   workflowInstanceId,
@@ -58,6 +65,9 @@ const containerScanResultSchema = z.discriminatedUnion("verdict", [
 
 type ContainerScanResult = z.infer<typeof containerScanResultSchema>;
 
+type ContainerScanAttempt =
+  { kind: "verdict"; result: ContainerScanResult } | ScannerContainerFailure;
+
 interface ScannerRuntime {
   callbackSecret: string;
   contract: ScannerContractConfiguration;
@@ -65,16 +75,14 @@ interface ScannerRuntime {
   sourceRevision: string;
 }
 
-const SCAN_STEP = {
-  retries: { limit: 3, delay: "15 seconds", backoff: "linear" },
-  timeout: "13 minutes",
+const SCAN_ATTEMPT_STEP = {
+  retries: { limit: 3, delay: "15 seconds", backoff: "exponential" },
+  timeout: "30 minutes",
 } as const;
-
 const CALLBACK_STEP = {
   retries: { limit: 8, delay: "10 seconds", backoff: "exponential" },
   timeout: "2 minutes",
 } as const;
-const SCANNER_CONTAINER_INSTANCE = "primary-v4";
 
 export class FileScannerContainer extends Container<ScannerEnvironment> {
   defaultPort = 8080;
@@ -82,7 +90,10 @@ export class FileScannerContainer extends Container<ScannerEnvironment> {
   pingEndpoint = "scanner/ping";
   sleepAfter = "15m";
   enableInternet = false;
-  allowedHosts = [this.env.R2_OBJECT_HOST ?? "invalid.invalid", "database.clamav.net"];
+  allowedHosts = [
+    this.env.R2_OBJECT_HOST ?? "invalid.invalid",
+    "database.clamav.net",
+  ];
   envVars = {
     EXPECTED_R2_HOST: this.env.R2_OBJECT_HOST ?? "",
     EXPECTED_R2_BUCKET: this.env.R2_BUCKET_NAME ?? "",
@@ -261,7 +272,10 @@ async function readBoundedResponseText(
 function scannerHeaders(headers?: HeadersInit) {
   const output = new Headers(headers);
   output.set("cache-control", "no-store");
-  output.set("content-security-policy", "default-src 'none'; frame-ancestors 'none'");
+  output.set(
+    "content-security-policy",
+    "default-src 'none'; frame-ancestors 'none'",
+  );
   output.set("referrer-policy", "no-referrer");
   output.set("x-content-type-options", "nosniff");
   return output;
@@ -299,23 +313,32 @@ function structuredLog(
 async function scanInContainer(
   environment: ScannerEnvironment,
   job: ScannerJob,
-) {
-  const container = environment.CLAMAV.getByName(SCANNER_CONTAINER_INSTANCE);
+): Promise<ContainerScanAttempt> {
+  const instanceName = await scannerContainerInstanceName(job.jobId);
+  const container = environment.CLAMAV.getByName(instanceName);
   const response = await container.fetch("http://scanner/scan", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jobId: job.jobId, object: job.object }),
   });
   const rawBody = await readBoundedResponseText(response, 16_384);
-  if (!response.ok) {
-    throw new Error(`ClamAV container returned HTTP ${response.status}.`);
+  if (response.ok) {
+    return {
+      kind: "verdict",
+      result: containerScanResultSchema.parse(JSON.parse(rawBody)),
+    };
   }
-  return containerScanResultSchema.parse(JSON.parse(rawBody));
+  const failure = classifyScannerContainerFailure(response.status, rawBody);
+  if (failure) return failure;
+  // An unsupported container response is ambiguous and must be retried or
+  // fail closed; it must never be interpreted as a scan verdict.
+  throw new Error(`ClamAV container returned HTTP ${response.status}.`);
 }
 
-function callbackPayload(job: ScannerJob, scan: ContainerScanResult | null) {
+function callbackPayload(job: ScannerJob, scan: ContainerScanAttempt | null) {
   const base = {
     jobId: job.jobId,
+    attempt: job.attempt,
     eventId: job.eventId,
     versionId: job.versionId,
     assetId: job.assetId,
@@ -333,16 +356,34 @@ function callbackPayload(job: ScannerJob, scan: ContainerScanResult | null) {
       result: { engine: "clamav" },
     };
   }
+  if (scan.kind === "terminal_error") {
+    return {
+      ...base,
+      verdict: "error" as const,
+      error: scan.error,
+      result: { engine: "clamav", reason: scan.reason },
+    };
+  }
+  if (scan.kind !== "verdict") {
+    return {
+      ...base,
+      verdict: "error" as const,
+      error:
+        "Scanner capacity remained unavailable for the permitted wait window.",
+      result: { engine: "clamav", reason: scan.code },
+    };
+  }
+  const result = scan.result;
   return {
     ...base,
-    verdict: scan.verdict,
+    verdict: result.verdict,
     result: {
-      engine: scan.engine,
-      engineVersion: scan.engineVersion,
-      signatureVersion: scan.signatureVersion,
-      scannedBytes: scan.scannedBytes,
-      durationMs: scan.durationMs,
-      ...(scan.verdict === "infected" ? { threats: scan.threats } : {}),
+      engine: result.engine,
+      engineVersion: result.engineVersion,
+      signatureVersion: result.signatureVersion,
+      scannedBytes: result.scannedBytes,
+      durationMs: result.durationMs,
+      ...(result.verdict === "infected" ? { threats: result.threats } : {}),
     },
   };
 }
@@ -381,20 +422,53 @@ export class FileScanWorkflow extends WorkflowEntrypoint<
   ScannerEnvironment,
   ScannerJob
 > {
-  async run(
-    event: Readonly<WorkflowEvent<ScannerJob>>,
-    step: WorkflowStep,
-  ) {
+  async run(event: Readonly<WorkflowEvent<ScannerJob>>, step: WorkflowStep) {
     const runtime = requireRuntime(this.env);
     const job = validateScannerJob(event.payload, runtime.contract);
-    let scan: ContainerScanResult | null = null;
+    let scan: ContainerScanAttempt | null = null;
+    let notReadyAttempt = 0;
     try {
-      scan = await step.do("scan quarantined R2 object", SCAN_STEP, () =>
-        scanInContainer(this.env, job),
-      );
+      for (
+        let capacityAttempt = 1;
+        capacityAttempt <= SCANNER_BUSY_ATTEMPT_LIMIT;
+        capacityAttempt += 1
+      ) {
+        const result = await step.do(
+          `scan quarantined R2 object attempt ${capacityAttempt}`,
+          SCAN_ATTEMPT_STEP,
+          () => scanInContainer(this.env, job),
+        );
+        if (result.kind !== "capacity_wait") {
+          scan = result;
+          break;
+        }
+        scan = result;
+        if (result.code === "scanner_not_ready") notReadyAttempt += 1;
+        const waitAttempt =
+          result.code === "scanner_not_ready"
+            ? notReadyAttempt
+            : capacityAttempt;
+        structuredLog("warning", "scanner-capacity-wait", {
+          jobId: job.jobId,
+          attempt: job.attempt,
+          workflowInstanceId: event.instanceId,
+          sourceRevision: runtime.sourceRevision,
+          capacityAttempt,
+          waitAttempt,
+          reason: result.code,
+        });
+        if (!scannerCapacityShouldWait(result.code, waitAttempt)) break;
+        if (capacityAttempt < SCANNER_BUSY_ATTEMPT_LIMIT) {
+          await step.sleep(
+            `wait for scanner capacity attempt ${capacityAttempt}`,
+            `${scannerCapacityDelaySeconds(waitAttempt)} seconds`,
+          );
+        }
+      }
     } catch (error) {
       structuredLog("error", "scan-failed", {
         jobId: job.jobId,
+        attempt: job.attempt,
         workflowInstanceId: event.instanceId,
         sourceRevision: runtime.sourceRevision,
         errorName: boundedErrorName(error),
@@ -403,20 +477,20 @@ export class FileScanWorkflow extends WorkflowEntrypoint<
     }
     const payload = callbackPayload(job, scan);
     await step.do("deliver signed Program Cue verdict", CALLBACK_STEP, () =>
-      deliverCallback(
-        job,
-        payload,
-        runtime.callbackSecret,
-        event.instanceId,
-      ),
+      deliverCallback(job, payload, runtime.callbackSecret, event.instanceId),
     );
     structuredLog("info", "completed", {
       jobId: job.jobId,
+      attempt: job.attempt,
       workflowInstanceId: event.instanceId,
       sourceRevision: runtime.sourceRevision,
       verdict: payload.verdict,
     });
-    return { jobId: job.jobId, verdict: payload.verdict };
+    return {
+      jobId: job.jobId,
+      attempt: job.attempt,
+      verdict: payload.verdict,
+    };
   }
 }
 
@@ -437,8 +511,11 @@ async function acceptScan(
     return jsonResponse({ error: "Unauthorized." }, { status: 401 });
   }
   const mediaType =
-    request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ??
-    "";
+    request.headers
+      .get("content-type")
+      ?.split(";", 1)[0]
+      ?.trim()
+      .toLowerCase() ?? "";
   if (mediaType !== "application/json") {
     return jsonResponse(
       { error: "Content-Type must be application/json." },
@@ -451,39 +528,63 @@ async function acceptScan(
     job = validateScannerJob(JSON.parse(rawBody), runtime.contract);
   } catch (error) {
     if (error instanceof RangeError) {
-      return jsonResponse({ error: "Request body is too large." }, { status: 413 });
+      return jsonResponse(
+        { error: "Request body is too large." },
+        { status: 413 },
+      );
     }
     return jsonResponse(
       { error: "Request body is not a valid scanner job." },
       { status: 400 },
     );
   }
-  if (request.headers.get("idempotency-key") !== job.jobId) {
+  if (
+    request.headers.get("idempotency-key") !==
+    `${job.jobId}:attempt:${job.attempt}`
+  ) {
     return jsonResponse(
-      { error: "Idempotency-Key must match jobId." },
+      { error: "Idempotency-Key must match the job attempt." },
       { status: 400 },
     );
   }
 
-  const instanceId = await workflowInstanceId(job.jobId);
+  const instanceId = await workflowInstanceId(
+    `${job.jobId}:attempt:${job.attempt}`,
+  );
   const created = await environment.FILE_SCAN_WORKFLOW.createBatch([
     { id: instanceId, params: job },
   ]);
+  if (created.length > 1) {
+    throw new Error("Scanner Workflow creation returned an invalid result.");
+  }
+  let duplicateStatus: string | undefined;
   if (created.length === 0) {
     const existing = await environment.FILE_SCAN_WORKFLOW.get(instanceId);
-    const status = await existing.status();
-    if (status.status === "errored" || status.status === "terminated") {
-      await existing.restart();
+    duplicateStatus = (await existing.status()).status;
+    if (!scannerWorkflowDuplicateStatusIsAcceptable(duplicateStatus)) {
+      structuredLog("error", "duplicate-workflow-unavailable", {
+        jobId: job.jobId,
+        attempt: job.attempt,
+        workflowInstanceId: instanceId,
+        workflowStatus: duplicateStatus,
+        sourceRevision: runtime.sourceRevision,
+      });
+      return jsonResponse(
+        { error: "The existing scanner Workflow attempt is unavailable." },
+        { status: 503 },
+      );
     }
   }
   structuredLog("info", "accepted", {
     jobId: job.jobId,
+    attempt: job.attempt,
     workflowInstanceId: instanceId,
     sourceRevision: runtime.sourceRevision,
     duplicate: created.length === 0,
+    ...(duplicateStatus ? { workflowStatus: duplicateStatus } : {}),
   });
   return jsonResponse(
-    { accepted: true, jobId: job.jobId },
+    { accepted: true, jobId: job.jobId, attempt: job.attempt },
     { status: 202 },
   );
 }

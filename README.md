@@ -126,9 +126,10 @@ The production resource inventory is:
   binding `AI`, and Workflow `program-cue-d1-backup`; Wrangler creates these
   from the checked-in bindings and migrations.
 - File-scanner Worker `program-cue-file-scanner`, Workflow
-  `program-cue-file-scans` and one EU-pinned `standard-2` Cloudflare Container
-  running the pinned ClamAV 1.4 LTS image. The container refreshes signatures
-  before becoming healthy and scales to zero after two idle minutes.
+  `program-cue-file-scans` and a four-slot EU-pinned pool of `standard-2`
+  Cloudflare Containers running the pinned ClamAV 1.4 LTS image. Each container
+  refreshes signatures before becoming healthy and scales to zero after fifteen
+  idle minutes.
 - A Resend sending domain and webhook, the provisioned Turnstile widget, and
   matching application/scanner credentials.
 - Google and Microsoft OAuth applications for participant sign-in and calendar

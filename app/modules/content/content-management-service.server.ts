@@ -1059,7 +1059,7 @@ export class ContentManagementService {
     const paths = new Set<string>();
     const entries: StoredZipEntry[] = [];
     for (const row of rows.results) {
-      const object = await bucket.get(row.objectKey);
+      const object = await bucket.head(row.objectKey);
       if (
         !object ||
         object.httpEtag !== row.objectEtag ||
@@ -1073,14 +1073,32 @@ export class ContentManagementService {
         input.groupBy === "session" ? row.sessionName : row.speakerName,
       );
       const filename = safeZipSegment(row.filename);
-      const path = uniqueZipPath(
-        paths,
-        group,
-        filename,
-        row.assetId.slice(-8),
-      );
+      const path = uniqueZipPath(paths, group, filename, row.assetId.slice(-8));
       paths.add(path);
-      entries.push({ path, object, modifiedAt: row.createdAt });
+      entries.push({
+        path,
+        expectedSize: row.sizeBytes,
+        modifiedAt: row.createdAt,
+        open: async () => {
+          const candidate = await bucket.get(row.objectKey, {
+            onlyIf: new Headers({ "if-match": row.objectEtag }),
+          });
+          if (
+            !candidate ||
+            !("body" in candidate) ||
+            candidate.httpEtag !== row.objectEtag ||
+            candidate.size !== row.sizeBytes
+          ) {
+            if (candidate && "body" in candidate) {
+              await candidate.body.cancel().catch(() => undefined);
+            }
+            throw new ContentManagementStateError(
+              `Private file ${row.filename} is missing or no longer matches its released version.`,
+            );
+          }
+          return candidate;
+        },
+      });
     }
     return new Response(createStoredZipStream(entries), {
       headers: {

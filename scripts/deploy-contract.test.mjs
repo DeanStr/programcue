@@ -64,7 +64,7 @@ test("Wrangler profiles have no structural configuration issues", () => {
   assert.deepEqual(issues, []);
 });
 
-test("file scanner has one fail-closed EU production configuration", () => {
+test("file scanner has one fail-closed EU production pool configuration", () => {
   const scanner = readScannerConfig();
   assert.deepEqual(validateScannerConfig(scanner), []);
 
@@ -72,7 +72,7 @@ test("file scanner has one fail-closed EU production configuration", () => {
   scanner.vars.R2_OBJECT_HOST = "attacker.example";
   assert.deepEqual(validateScannerConfig(scanner), [
     "Scanner R2_OBJECT_HOST must match the production file boundary.",
-    "Scanner must use one EU-pinned standard-2 ClamAV container.",
+    "Scanner must use a four-instance EU-pinned standard-2 ClamAV pool.",
   ]);
 });
 

@@ -9,6 +9,7 @@ import {
 export const scanResultSchema = z
   .object({
     jobId: z.string().min(1).max(200),
+    attempt: z.number().int().positive(),
     eventId: z.string().min(1).max(160),
     versionId: z.string().min(1).max(160),
     assetId: z.string().min(1).max(160),
@@ -135,6 +136,8 @@ export class FileScanResultService {
               WHERE operation.id = ? AND operation.event_id = file_versions.event_id
                 AND operation.type = 'file.scan.dispatch'
                 AND operation.status = 'running'
+                AND operation.attempt_count = ?
+                AND json_extract(operation.result_json, '$.scanAttempt') = ?
                 AND (
                   (
                     operation.claim_token IS NULL
@@ -172,23 +175,30 @@ export class FileScanResultService {
         input.objectEtag,
         input.sizeBytes,
         input.jobId,
+        input.attempt,
+        input.attempt,
         input.jobId,
       ),
       this.env.DB.prepare(
         `
         UPDATE operation_jobs
-           SET status = 'completed', progress_completed = 1,
-               progress_failed = 0,
+           SET status = CASE WHEN ? = 'failed' THEN 'failed' ELSE 'completed' END,
+               progress_completed = CASE WHEN ? = 'failed' THEN 0 ELSE 1 END,
+               progress_failed = CASE WHEN ? = 'failed' THEN 1 ELSE 0 END,
                result_json = json_object(
                  'accepted', true,
                  'callbackReceived', true,
-                 'scanStatus', ?
+                 'scanStatus', ?,
+                 'scanAttempt', ?
                ),
-               last_error = NULL, claim_token = NULL,
+               last_error = CASE WHEN ? = 'failed' THEN ? ELSE NULL END,
+               claim_token = NULL,
                claim_expires_at = NULL, completed_at = unixepoch(),
                updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND type = 'file.scan.dispatch'
            AND status = 'running'
+           AND attempt_count = ?
+           AND json_extract(result_json, '$.scanAttempt') = ?
            AND (
              (claim_token IS NULL AND json_extract(result_json, '$.accepted') = 1)
              OR json_extract(result_json, '$.dispatchStarted') = 1
@@ -207,8 +217,16 @@ export class FileScanResultService {
       `,
       ).bind(
         input.status,
+        input.status,
+        input.status,
+        input.status,
+        input.attempt,
+        input.status,
+        input.error ?? null,
         input.jobId,
         input.eventId,
+        input.attempt,
+        input.attempt,
         input.jobId,
         row.id,
         row.assetId,
@@ -228,7 +246,7 @@ export class FileScanResultService {
                submitted_at = NULL, completed_at = NULL, completed_by_person_id = NULL,
                revision = revision + 1, last_operation_id = ?, updated_at = unixepoch()
          WHERE task.event_id = ? AND task.status = 'submitted'
-           AND ? IN ('infected', 'failed')
+           AND ? = 'infected'
            AND EXISTS (
              SELECT 1
                FROM task_evidence evidence
@@ -260,7 +278,7 @@ export class FileScanResultService {
         UPDATE task_evidence AS evidence
            SET status = 'rejected', reviewed_at = unixepoch()
          WHERE evidence.event_id = ? AND evidence.status = 'submitted'
-           AND evidence.file_asset_id = ? AND ? IN ('infected', 'failed')
+           AND evidence.file_asset_id = ? AND ? = 'infected'
            AND json_extract(evidence.evidence_json, '$.fileVersionId') = ?
            AND EXISTS (
              SELECT 1 FROM file_versions version
@@ -329,9 +347,13 @@ export class FileScanResultService {
       ),
       this.env.DB.prepare(
         `
-        UPDATE file_assets AS asset
+         UPDATE file_assets AS asset
            SET current_version_id = CASE WHEN ? = 'clean' THEN ? ELSE current_version_id END,
-               status = CASE WHEN ? = 'clean' THEN 'active' WHEN current_version_id IS NULL THEN 'rejected' ELSE status END,
+               status = CASE
+                 WHEN ? = 'clean' THEN 'active'
+                 WHEN ? = 'infected' AND current_version_id IS NULL THEN 'rejected'
+                 ELSE status
+               END,
                updated_at = unixepoch()
          WHERE asset.id = ? AND asset.event_id = ?
            AND EXISTS (
@@ -353,6 +375,7 @@ export class FileScanResultService {
       ).bind(
         input.status,
         row.id,
+        input.status,
         input.status,
         row.assetId,
         input.eventId,
@@ -416,6 +439,7 @@ export class FileScanResultService {
     const input = scanResultSchema.parse(rawInput);
     const scanResultJson = JSON.stringify({
       callbackId: input.callbackId,
+      attempt: input.attempt,
       result: input.result,
     });
     if (!scanResultJson) {
@@ -437,9 +461,11 @@ export class FileScanResultService {
       );
     }
     const dispatch = await this.env.DB.prepare(
-      `SELECT status, claim_token AS claimToken,
+      `SELECT status, attempt_count AS attemptCount,
+              claim_token AS claimToken,
               json_extract(result_json, '$.accepted') AS accepted,
-              json_extract(result_json, '$.dispatchStarted') AS dispatchStarted
+              json_extract(result_json, '$.dispatchStarted') AS dispatchStarted,
+              json_extract(result_json, '$.scanAttempt') AS scanAttempt
          FROM operation_jobs
         WHERE id = ? AND event_id = ? AND type = 'file.scan.dispatch'
           AND json_extract(payload_json, '$.operationId') = ?
@@ -461,19 +487,31 @@ export class FileScanResultService {
       )
       .first<{
         status: string;
+        attemptCount: number;
         claimToken: string | null;
         accepted: number | null;
         dispatchStarted: number | null;
+        scanAttempt: number | null;
       }>();
     if (!dispatch) {
       throw new FileScanStateError(
         "The scanner callback does not match a durable dispatch.",
       );
     }
+    if (
+      dispatch.attemptCount !== input.attempt ||
+      dispatch.scanAttempt !== input.attempt
+    ) {
+      throw new FileScanStateError(
+        "The scanner callback belongs to a stale dispatch attempt.",
+      );
+    }
     if (row.scanStatus !== "pending") {
-      if (dispatch.status !== "completed") {
+      const expectedDispatchStatus =
+        row.scanStatus === "failed" ? "failed" : "completed";
+      if (dispatch.status !== expectedDispatchStatus) {
         throw new FileScanStateError(
-          "The completed scan is not linked to a completed dispatch.",
+          "The settled scan is not linked to the matching dispatch outcome.",
         );
       }
       return classifyScanReplay(row, input, scanResultJson);

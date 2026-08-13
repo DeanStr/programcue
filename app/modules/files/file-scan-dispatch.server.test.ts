@@ -326,7 +326,12 @@ describe("file scan queue dispatch", () => {
       idempotencyKey: `file.scan.dispatch:${versionId}`,
     };
     await persistQueuedScan(message);
-    const scanner = vi.fn(async () => new Response(null, { status: 202 }));
+    const scanner = vi.fn(
+      async (
+        _input: Parameters<typeof fetch>[0],
+        _init?: Parameters<typeof fetch>[1],
+      ) => new Response(null, { status: 202 }),
+    );
     vi.stubGlobal("fetch", scanner);
 
     await expect(
@@ -362,11 +367,35 @@ describe("file scan queue dispatch", () => {
       processFileScanDispatch(message, env as unknown as CloudflareEnvironment),
     ).resolves.toEqual({ duplicate: false, awaitingCallback: true });
     expect(scanner).toHaveBeenCalledTimes(2);
+    const dispatchedAttempts = scanner.mock.calls.map(([, init]) => ({
+      idempotencyKey: new Headers(init?.headers).get("idempotency-key"),
+      body: JSON.parse(String(init?.body)) as {
+        jobId: string;
+        attempt: number;
+      },
+    }));
+    expect(dispatchedAttempts).toEqual([
+      {
+        idempotencyKey: `${message.operationId}:attempt:1`,
+        body: expect.objectContaining({
+          jobId: message.operationId,
+          attempt: 1,
+        }),
+      },
+      {
+        idempotencyKey: `${message.operationId}:attempt:2`,
+        body: expect.objectContaining({
+          jobId: message.operationId,
+          attempt: 2,
+        }),
+      },
+    ]);
 
     await new FileService(
       env as unknown as CloudflareEnvironment,
     ).recordScanResult({
       jobId: message.operationId,
+      attempt: 2,
       eventId: message.eventId,
       versionId: message.versionId,
       assetId: message.assetId,
@@ -424,6 +453,7 @@ describe("file scan queue dispatch", () => {
         env as unknown as CloudflareEnvironment,
       ).recordScanResult({
         jobId: message.operationId,
+        attempt: 1,
         eventId: message.eventId,
         versionId: message.versionId,
         assetId: message.assetId,

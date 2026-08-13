@@ -5,11 +5,9 @@ import { unstable_readConfig } from "wrangler";
 const SCANNER_CONFIG_FILE = "./scanner/wrangler.jsonc";
 const expectedVariables = Object.freeze({
   APP_ENV: "production",
-  EXPECTED_CALLBACK_URL:
-    "https://app.programcue.com/api/webhooks/file-scanner",
+  EXPECTED_CALLBACK_URL: "https://app.programcue.com/api/webhooks/file-scanner",
   R2_BUCKET_NAME: "program-cue-files",
-  R2_OBJECT_HOST:
-    "327c60945460c16be8ecdbbc7fa35447.r2.cloudflarestorage.com",
+  R2_OBJECT_HOST: "327c60945460c16be8ecdbbc7fa35447.r2.cloudflarestorage.com",
 });
 
 function sameMembers(actual = [], expected = []) {
@@ -79,12 +77,12 @@ export function validateScannerConfig(config) {
     container?.name !== "program-cue-clamav" ||
     container?.class_name !== "FileScannerContainer" ||
     !container?.image?.endsWith("/scanner/container/Dockerfile") ||
-    container?.max_instances !== 1 ||
+    container?.max_instances !== 4 ||
     container?.instance_type !== "standard-2" ||
     container?.constraints?.jurisdiction !== "eu" ||
     !sameMembers(container?.constraints?.regions, ["EEUR", "WEUR"])
   ) {
-    add("Scanner must use one EU-pinned standard-2 ClamAV container.");
+    add("Scanner must use a four-instance EU-pinned standard-2 ClamAV pool.");
   }
   const durableObject = config.durable_objects?.bindings?.[0];
   if (
@@ -100,7 +98,9 @@ export function validateScannerConfig(config) {
     migration?.tag !== "v1" ||
     !sameMembers(migration?.new_sqlite_classes, ["FileScannerContainer"])
   ) {
-    add("Scanner Durable Object migration v1 must create FileScannerContainer.");
+    add(
+      "Scanner Durable Object migration v1 must create FileScannerContainer.",
+    );
   }
   if (
     config.observability?.enabled !== true ||
@@ -125,7 +125,10 @@ function run() {
     process.exitCode = 1;
     return;
   }
-  console.log("File-scanner deployment configuration passed fail-fast validation.");
+  console.log(
+    "File-scanner deployment configuration passed fail-fast validation.",
+  );
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) run();
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1])
+  run();

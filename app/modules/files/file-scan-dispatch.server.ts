@@ -8,7 +8,9 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import { readBoundedResponseText } from "~/platform/http/read-response";
 import { presignR2S3Request } from "./r2-s3-signing.server";
 
-const FILE_SCAN_CALLBACK_LEASE_SECONDS = 15 * 60;
+// Covers the Workflow's roughly three-hour capacity window plus its bounded
+// scan and callback retries without making a healthy in-flight scan retryable.
+const FILE_SCAN_CALLBACK_LEASE_SECONDS = 6 * 60 * 60;
 
 export const fileScanQueueMessageSchema = z.object({
   type: z.literal("file.scan.dispatch"),
@@ -287,7 +289,7 @@ export async function processFileScanDispatch(
           status IN ('queued','queue_failed','retrying','failed')
           OR (status = 'running' AND claim_expires_at <= unixepoch())
         )
-      RETURNING id`,
+      RETURNING attempt_count AS attemptCount`,
   )
     .bind(
       claimToken,
@@ -297,7 +299,7 @@ export async function processFileScanDispatch(
       message.idempotencyKey,
       JSON.stringify(message),
     )
-    .first();
+    .first<{ attemptCount: number }>();
   if (!claimed) {
     const settled = await env.DB.prepare(
       `SELECT status, claim_expires_at AS claimExpiresAt FROM operation_jobs
@@ -326,7 +328,7 @@ export async function processFileScanDispatch(
 
   try {
     const eligible = await env.DB.prepare(
-      `SELECT version.id
+      `SELECT version.id, version.scan_status AS scanStatus
          FROM file_versions version
          JOIN file_assets asset
            ON asset.id = version.asset_id AND asset.event_id = version.event_id
@@ -341,7 +343,7 @@ export async function processFileScanDispatch(
           AND version.size_bytes = ?
           AND version.upload_status = 'uploaded'
           AND version.signature_status = 'valid'
-          AND version.scan_status = 'pending'
+          AND version.scan_status IN ('pending','failed')
           AND version.released_at IS NULL AND version.replaced_at IS NULL
           AND version.deleted_at IS NULL
           AND asset.status IN ('pending','active')
@@ -360,7 +362,7 @@ export async function processFileScanDispatch(
         message.objectEtag,
         message.sizeBytes,
       )
-      .first();
+      .first<{ scanStatus: "pending" | "failed" }>();
     if (!eligible) {
       const result = JSON.stringify({
         accepted: false,
@@ -446,6 +448,44 @@ export async function processFileScanDispatch(
     ) {
       throw new FileScanDispatchIntegrityError();
     }
+    if (eligible.scanStatus === "failed") {
+      const reset = await env.DB.prepare(
+        `UPDATE file_versions
+            SET scan_status = 'pending', scan_provider = NULL,
+                scan_result_json = NULL, scan_error = NULL,
+                scanned_at = NULL, released_at = NULL
+          WHERE id = ? AND event_id = ? AND asset_id = ?
+            AND object_key = ? AND object_etag = ? AND size_bytes = ?
+            AND upload_status = 'uploaded' AND signature_status = 'valid'
+            AND scan_status = 'failed' AND deleted_at IS NULL
+            AND EXISTS (
+              SELECT 1 FROM operation_jobs operation
+               WHERE operation.id = ? AND operation.event_id = file_versions.event_id
+                 AND operation.organisation_id = ?
+                 AND operation.type = 'file.scan.dispatch'
+                 AND operation.status = 'running' AND operation.claim_token = ?
+                 AND operation.payload_json = ?
+            )`,
+      )
+        .bind(
+          message.versionId,
+          message.eventId,
+          message.assetId,
+          message.objectKey,
+          message.objectEtag,
+          message.sizeBytes,
+          message.operationId,
+          message.organisationId,
+          claimToken,
+          JSON.stringify(message),
+        )
+        .run();
+      if ((reset.meta.changes ?? 0) !== 1) {
+        throw new Error(
+          "The failed file scan changed before it could be retried.",
+        );
+      }
+    }
     const configuration = requireScannerConfiguration(env);
     const downloadUrl = await presignR2S3Request({
       env,
@@ -453,7 +493,10 @@ export async function processFileScanDispatch(
       objectKey: message.objectKey,
       expiresSeconds: 900,
     });
-    const dispatchStartedResult = JSON.stringify({ dispatchStarted: true });
+    const dispatchStartedResult = JSON.stringify({
+      dispatchStarted: true,
+      scanAttempt: claimed.attemptCount,
+    });
     const markedStarted = await env.DB.prepare(
       `UPDATE operation_jobs
           SET result_json = ?, last_error = NULL, updated_at = unixepoch()
@@ -490,10 +533,11 @@ export async function processFileScanDispatch(
       headers: {
         authorization: `Bearer ${configuration.token}`,
         "content-type": "application/json",
-        "idempotency-key": message.operationId,
+        "idempotency-key": `${message.operationId}:attempt:${claimed.attemptCount}`,
       },
       body: JSON.stringify({
         jobId: message.operationId,
+        attempt: claimed.attemptCount,
         eventId: message.eventId,
         versionId: message.versionId,
         assetId: message.assetId,
@@ -515,7 +559,11 @@ export async function processFileScanDispatch(
         `Scanner dispatch failed with HTTP ${response.status}${details ? `: ${details}` : "."}`,
       );
     }
-    const result = JSON.stringify({ accepted: true, status: response.status });
+    const result = JSON.stringify({
+      accepted: true,
+      status: response.status,
+      scanAttempt: claimed.attemptCount,
+    });
     const results = await env.DB.batch([
       env.DB.prepare(
         `UPDATE operation_jobs

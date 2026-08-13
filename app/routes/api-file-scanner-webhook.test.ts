@@ -9,7 +9,9 @@ import {
   completeTestDirectUpload,
   testFileScanCallbackIdentity,
 } from "~/modules/files/direct-upload.test-helper";
+import { processFileScanDispatch } from "~/modules/files/file-scan-dispatch.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { OperationService } from "~/platform/operations/operation-service.server";
 import { action } from "./api-file-scanner-webhook";
 
 const scannerSecret =
@@ -111,12 +113,14 @@ function png(name: string) {
 
 function callbackIdentity(identity: {
   jobId: string;
+  attempt: number;
   assetId: string;
   objectEtag: string;
   sizeBytes: number;
 }) {
   return {
     jobId: identity.jobId,
+    attempt: identity.attempt,
     assetId: identity.assetId,
     object: { etag: identity.objectEtag, sizeBytes: identity.sizeBytes },
   };
@@ -206,9 +210,13 @@ describe("authenticated file scanner callback", () => {
   });
 
   it("records an explicit scanner error without releasing the quarantined bytes", async () => {
+    const queueSend = vi.fn(async () => undefined);
     const testEnvironment = {
       ...(env as unknown as CloudflareEnvironment),
       FILE_SCANNER_WEBHOOK_SECRET: scannerSecret,
+      OPERATIONS_QUEUE: {
+        send: queueSend,
+      } as unknown as Queue,
     } as ScannerTestEnvironment;
     const upload = await completeTestDirectUpload(
       testEnvironment,
@@ -227,16 +235,17 @@ describe("authenticated file scanner callback", () => {
       administrator.eventId,
       upload.versionId,
     );
+    const errorPayload = {
+      ...callbackIdentity(scanIdentity),
+      eventId: administrator.eventId,
+      versionId: upload.versionId,
+      provider: "managed-scanner",
+      verdict: "error" as const,
+      error: "Provider could not inspect the archive.",
+      result: { providerCode: "inspection_failed" },
+    };
     const response = await action({
-      request: await scannerRequest({
-        ...callbackIdentity(scanIdentity),
-        eventId: administrator.eventId,
-        versionId: upload.versionId,
-        provider: "managed-scanner",
-        verdict: "error",
-        error: "Provider could not inspect the archive.",
-        result: { providerCode: "inspection_failed" },
-      }),
+      request: await scannerRequest(errorPayload),
       params: {},
       context: context(testEnvironment),
     } as never);
@@ -254,7 +263,80 @@ describe("authenticated file scanner callback", () => {
       scanStatus: "failed",
       scanError: "Provider could not inspect the archive.",
       releasedAt: null,
-      assetStatus: "rejected",
+      assetStatus: "pending",
+    });
+    await expect(
+      env.DB.prepare(
+        `SELECT status, progress_completed AS progressCompleted,
+                progress_failed AS progressFailed, last_error AS lastError
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(scanIdentity.jobId)
+        .first(),
+    ).resolves.toEqual({
+      status: "failed",
+      progressCompleted: 0,
+      progressFailed: 1,
+      lastError: "Provider could not inspect the archive.",
+    });
+
+    await new OperationService(testEnvironment).retry(
+      administrator,
+      scanIdentity.jobId,
+    );
+    await expect(
+      env.DB.prepare(
+        `SELECT version.scan_status AS scanStatus,
+                asset.status AS assetStatus, operation.status AS operationStatus
+           FROM file_versions version
+           JOIN file_assets asset
+             ON asset.id = version.asset_id AND asset.event_id = version.event_id
+           JOIN operation_jobs operation ON operation.id = ?
+          WHERE version.id = ?`,
+      )
+        .bind(scanIdentity.jobId, upload.versionId)
+        .first(),
+    ).resolves.toEqual({
+      scanStatus: "failed",
+      assetStatus: "pending",
+      operationStatus: "queued",
+    });
+    expect(queueSend).toHaveBeenCalledOnce();
+
+    const queued = await env.DB.prepare(
+      "SELECT payload_json AS payloadJson FROM operation_jobs WHERE id = ?",
+    )
+      .bind(scanIdentity.jobId)
+      .first<{ payloadJson: string }>();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ accepted: true }), { status: 202 }),
+    );
+    await processFileScanDispatch(
+      JSON.parse(queued!.payloadJson),
+      testEnvironment,
+    );
+    const staleCallback = await action({
+      request: await scannerRequest(errorPayload),
+      params: {},
+      context: context(testEnvironment),
+    } as never);
+    expect(staleCallback.status).toBe(409);
+    await expect(
+      env.DB.prepare(
+        `SELECT version.scan_status AS scanStatus,
+                asset.status AS assetStatus, operation.status AS operationStatus
+           FROM file_versions version
+           JOIN file_assets asset
+             ON asset.id = version.asset_id AND asset.event_id = version.event_id
+           JOIN operation_jobs operation ON operation.id = ?
+          WHERE version.id = ?`,
+      )
+        .bind(scanIdentity.jobId, upload.versionId)
+        .first(),
+    ).resolves.toEqual({
+      scanStatus: "pending",
+      assetStatus: "pending",
+      operationStatus: "running",
     });
   });
 

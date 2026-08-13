@@ -36,7 +36,7 @@
       "name": "program-cue-clamav",
       "class_name": "FileScannerContainer",
       "image": "./container/Dockerfile",
-      "max_instances": 1,
+      "max_instances": 4,
       "instance_type": "standard-2",
       "constraints": {
         "regions": ["EEUR", "WEUR"],

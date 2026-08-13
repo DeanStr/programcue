@@ -96,6 +96,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const payload = scannerCallbackPayloadSchema.parse(JSON.parse(rawBody));
     const result = await new FileService(env).recordScanResult({
       jobId: payload.jobId,
+      attempt: payload.attempt,
       eventId: payload.eventId,
       versionId: payload.versionId,
       assetId: payload.assetId,

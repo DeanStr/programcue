@@ -80,7 +80,8 @@ export async function testFileScanCallbackIdentity(
   versionId: string,
 ) {
   const row = await env.DB.prepare(
-    `SELECT operation.id AS jobId, version.asset_id AS assetId,
+    `SELECT operation.id AS jobId, operation.attempt_count AS attemptCount,
+            version.asset_id AS assetId,
             version.object_etag AS objectEtag,
             version.size_bytes AS sizeBytes
        FROM file_versions version
@@ -93,6 +94,7 @@ export async function testFileScanCallbackIdentity(
     .bind(versionId, eventId)
     .first<{
       jobId: string;
+      attemptCount: number;
       assetId: string;
       objectEtag: string | null;
       sizeBytes: number;
@@ -102,6 +104,7 @@ export async function testFileScanCallbackIdentity(
   }
   return {
     jobId: row.jobId,
+    attempt: Math.max(1, row.attemptCount),
     assetId: row.assetId,
     objectEtag: row.objectEtag,
     sizeBytes: row.sizeBytes,
@@ -116,7 +119,11 @@ export async function acceptTestFileScanDispatch(
   const identity = await testFileScanCallbackIdentity(env, eventId, versionId);
   const accepted = await env.DB.prepare(
     `UPDATE operation_jobs
-        SET status = 'running', result_json = json_object('accepted', true),
+        SET status = 'running', attempt_count = attempt_count + 1,
+            result_json = json_object(
+              'accepted', true,
+              'scanAttempt', attempt_count + 1
+            ),
             claim_token = NULL, claim_expires_at = unixepoch() + 900,
             started_at = COALESCE(started_at, unixepoch()),
             updated_at = unixepoch()
@@ -128,5 +135,5 @@ export async function acceptTestFileScanDispatch(
   if ((accepted.meta.changes ?? 0) !== 1) {
     throw new Error("The direct-upload test scan dispatch was not accepted.");
   }
-  return identity;
+  return testFileScanCallbackIdentity(env, eventId, versionId);
 }

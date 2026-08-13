@@ -92,12 +92,6 @@ class ScannerServerContractTests(unittest.TestCase):
                 socket_file.touch()
                 self.assertTrue(scanner.clamav_ready())
 
-    def test_wait_for_clamav_observes_readiness(self):
-        with mock.patch.object(scanner, "clamav_ready", side_effect=[False, True]):
-            with mock.patch.object(scanner.time, "sleep") as sleep:
-                self.assertTrue(scanner.wait_for_clamav(timeout_seconds=1))
-                sleep.assert_called_once_with(0.25)
-
     def test_download_passes_exact_identity_to_r2_binding_proxy(self):
         object_input = self.job()["object"]
         object_input["sizeBytes"] = 4
@@ -151,6 +145,48 @@ class ScannerServerContractTests(unittest.TestCase):
         with mock.patch.object(scanner, "clamav_ready", return_value=False):
             handler.do_GET()
             handler._json.assert_called_once_with(503, {"status": "starting"})
+
+    def test_busy_scan_is_an_explicit_retryable_capacity_response(self):
+        handler = object.__new__(scanner.ScannerHandler)
+        handler._json = mock.Mock()
+        handler.path = "/scan"
+        handler.headers = {
+            "Content-Type": "application/json",
+            "Content-Length": "2",
+        }
+
+        with mock.patch.object(scanner.SCAN_LOCK, "acquire", return_value=False):
+            handler.do_POST()
+
+        handler._json.assert_called_once_with(
+            503,
+            {
+                "code": "scanner_busy",
+                "error": "The scanner is busy; retry this job.",
+            },
+            {"Retry-After": "15"},
+        )
+
+    def test_unready_scan_returns_capacity_without_holding_the_request(self):
+        handler = object.__new__(scanner.ScannerHandler)
+        handler._json = mock.Mock()
+        handler.path = "/scan"
+        handler.headers = {
+            "Content-Type": "application/json",
+            "Content-Length": "2",
+        }
+
+        with mock.patch.object(scanner, "clamav_ready", return_value=False):
+            handler.do_POST()
+
+        handler._json.assert_called_once_with(
+            503,
+            {
+                "code": "scanner_not_ready",
+                "error": "ClamAV is not ready.",
+            },
+            {"Retry-After": "15"},
+        )
 
 
 if __name__ == "__main__":

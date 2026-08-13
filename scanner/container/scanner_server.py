@@ -16,7 +16,7 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 MAX_FILE_BYTES = 1_073_741_824
 MAX_REQUEST_BYTES = 24_000
@@ -45,15 +45,6 @@ class ClamScanError(Exception):
 def clamav_ready() -> bool:
     sockets = [Path("/run/clamav/clamd.sock"), Path("/tmp/clamd.sock")]
     return READINESS_FILE.is_file() and any(path.exists() for path in sockets)
-
-
-def wait_for_clamav(timeout_seconds: float = 300) -> bool:
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        if clamav_ready():
-            return True
-        time.sleep(0.25)
-    return clamav_ready()
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -281,13 +272,20 @@ class ScannerHandler(BaseHTTPRequestHandler):
     server_version = "ProgramCueScanner/1"
     sys_version = ""
 
-    def _json(self, status: int, payload: dict[str, Any]) -> None:
+    def _json(
+        self,
+        status: int,
+        payload: dict[str, Any],
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -309,18 +307,38 @@ class ScannerHandler(BaseHTTPRequestHandler):
             return
         content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
         if content_type != "application/json":
-            self._json(415, {"error": "Content-Type must be application/json."})
+            self._json(415, {
+                "code": "invalid_request",
+                "error": "Content-Type must be application/json.",
+            })
             return
         content_length = self.headers.get("Content-Length", "")
         if not content_length.isdigit() or int(content_length) > MAX_REQUEST_BYTES:
-            self._json(413, {"error": "Request body is too large."})
+            self._json(413, {
+                "code": "invalid_request",
+                "error": "Request body is too large.",
+            })
             return
         if not SCAN_LOCK.acquire(blocking=False):
-            self._json(503, {"error": "The scanner is busy; retry this job."})
+            self._json(
+                503,
+                {
+                    "code": "scanner_busy",
+                    "error": "The scanner is busy; retry this job.",
+                },
+                {"Retry-After": "15"},
+            )
             return
         try:
-            if not wait_for_clamav():
-                self._json(503, {"error": "ClamAV is not ready."})
+            if not clamav_ready():
+                self._json(
+                    503,
+                    {
+                        "code": "scanner_not_ready",
+                        "error": "ClamAV is not ready.",
+                    },
+                    {"Retry-After": "15"},
+                )
                 return
             try:
                 raw_body = self.rfile.read(int(content_length))
@@ -332,7 +350,10 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 )
                 self._json(200, result)
             except (ContractError, UnicodeError, json.JSONDecodeError):
-                self._json(400, {"error": "The scan job is invalid."})
+                self._json(400, {
+                    "code": "invalid_request",
+                    "error": "The scan job is invalid.",
+                })
             except ObjectFetchError as error:
                 print(
                     json.dumps(
@@ -346,9 +367,15 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     ),
                     flush=True,
                 )
-                self._json(422, {"error": "The private object could not be verified."})
+                self._json(422, {
+                    "code": "object_verification_failed",
+                    "error": "The private object could not be verified.",
+                })
             except ClamScanError:
-                self._json(503, {"error": "ClamAV could not produce a verdict."})
+                self._json(503, {
+                    "code": "clamav_unavailable",
+                    "error": "ClamAV could not produce a verdict.",
+                })
             except Exception as error:  # fail closed; do not disclose object URLs
                 print(
                     json.dumps(
@@ -362,7 +389,10 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     ),
                     flush=True,
                 )
-                self._json(500, {"error": "The container scan failed."})
+                self._json(500, {
+                    "code": "scan_failed",
+                    "error": "The container scan failed.",
+                })
         finally:
             SCAN_LOCK.release()
 

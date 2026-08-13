@@ -106,8 +106,9 @@ function endOfCentralDirectory(entries: number, size: number, offset: number) {
 
 export type StoredZipEntry = {
   path: string;
-  object: R2ObjectBody;
+  expectedSize: number;
   modifiedAt: number;
+  open: () => Promise<R2ObjectBody>;
 };
 
 export function createStoredZipStream(entries: StoredZipEntry[]) {
@@ -123,25 +124,17 @@ export function createStoredZipStream(entries: StoredZipEntry[]) {
   let entryIndex = 0;
   let offset = 0;
   let current: CurrentEntry | null = null;
-  let phase: "header" | "body" | "descriptor" | "central" | "end" =
-    "header";
+  let phase: "header" | "body" | "descriptor" | "central" | "end" = "header";
   const central: Uint8Array[] = [];
   let centralIndex = 0;
   let centralOffset = 0;
+  let cancelled = false;
+  let cancellationReason: unknown;
 
   async function cancelBodies(reason?: unknown) {
-    const cancellations: Promise<unknown>[] = [];
     if (current) {
-      cancellations.push(current.reader.cancel(reason));
+      await current.reader.cancel(reason).catch(() => undefined);
     }
-    for (
-      let index = entryIndex + (current ? 1 : 0);
-      index < entries.length;
-      index += 1
-    ) {
-      cancellations.push(entries[index]!.object.body.cancel(reason));
-    }
-    await Promise.allSettled(cancellations);
   }
 
   return new ReadableStream<Uint8Array>({
@@ -159,13 +152,26 @@ export function createStoredZipStream(entries: StoredZipEntry[]) {
             if (name.length === 0 || name.length > 0xffff) {
               throw new Error("A ZIP entry has an invalid path length.");
             }
+            const object = await entry.open();
+            if (cancelled) {
+              await object.body
+                .cancel(cancellationReason)
+                .catch(() => undefined);
+              return;
+            }
+            if (object.size !== entry.expectedSize) {
+              await object.body.cancel().catch(() => undefined);
+              throw new Error(
+                `Private file ${entry.path} changed during ZIP generation.`,
+              );
+            }
             current = {
               entry,
               name,
               offset,
               crc: 0xffffffff,
               size: 0,
-              reader: entry.object.body.getReader(),
+              reader: object.body.getReader(),
             };
             const header = localHeader(name, entry.modifiedAt);
             offset += header.length;
@@ -180,7 +186,7 @@ export function createStoredZipStream(entries: StoredZipEntry[]) {
             if (result.done) {
               current.reader.releaseLock();
               current.crc = (current.crc ^ 0xffffffff) >>> 0;
-              if (current.size !== current.entry.object.size) {
+              if (current.size !== current.entry.expectedSize) {
                 throw new Error(
                   `Private file ${current.entry.path} changed during ZIP generation.`,
                 );
@@ -190,7 +196,7 @@ export function createStoredZipStream(entries: StoredZipEntry[]) {
             }
             if (
               current.size + result.value.length >
-              current.entry.object.size
+              current.entry.expectedSize
             ) {
               throw new Error(
                 `Private file ${current.entry.path} changed during ZIP generation.`,
@@ -251,6 +257,8 @@ export function createStoredZipStream(entries: StoredZipEntry[]) {
       }
     },
     async cancel(reason) {
+      cancelled = true;
+      cancellationReason = reason;
       await cancelBodies(reason);
     },
   });

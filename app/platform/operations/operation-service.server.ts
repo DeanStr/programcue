@@ -17,6 +17,7 @@ export type {
   OperationListItem,
 } from "./operation-read-service.server";
 import { CommunicationDeliveryService } from "~/modules/communications/communication-delivery-service.server";
+import { fileScanQueueMessageSchema } from "~/modules/files/file-scan-dispatch.server";
 import { TaskBulkService } from "~/modules/tasks/task-bulk-service.server";
 
 const STALE_QUEUED_OPERATION_SECONDS = 60;
@@ -302,6 +303,15 @@ export class OperationService {
       }
       message = { ...savedMessage };
       delete message.includeFailed;
+    }
+    if (operation.type === "file.scan.dispatch") {
+      const parsed = fileScanQueueMessageSchema.safeParse(savedMessage);
+      if (!parsed.success) {
+        throw new OperationStateError(
+          "The saved file-scan operation is invalid and cannot be retried.",
+        );
+      }
+      message = parsed.data;
     }
     const restartCalendarFanout =
       operation.type === "schedule.calendar_fanout" &&

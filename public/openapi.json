@@ -7210,6 +7210,11 @@
                 "minLength": 1,
                 "maxLength": 200
               },
+              "attempt": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
               "eventId": {
                 "type": "string",
                 "minLength": 1,
@@ -7256,6 +7261,7 @@
             },
             "required": [
               "jobId",
+              "attempt",
               "eventId",
               "versionId",
               "assetId",
@@ -7272,6 +7278,11 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 200
+              },
+              "attempt": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "eventId": {
                 "type": "string",
@@ -7319,6 +7330,7 @@
             },
             "required": [
               "jobId",
+              "attempt",
               "eventId",
               "versionId",
               "assetId",
@@ -7335,6 +7347,11 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 200
+              },
+              "attempt": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "eventId": {
                 "type": "string",
@@ -7387,6 +7404,7 @@
             },
             "required": [
               "jobId",
+              "attempt",
               "eventId",
               "versionId",
               "assetId",

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  classifyScannerContainerFailure,
   constantTimeTokenMatch,
+  scannerCapacityDelaySeconds,
+  scannerCapacityShouldWait,
+  scannerContainerInstanceName,
+  scannerWorkflowDuplicateStatusIsAcceptable,
   signScannerCallback,
   validateScannerJob,
   workflowInstanceId,
@@ -16,6 +21,7 @@ const configuration = {
 function job() {
   return {
     jobId: "file-scan-dispatch:version-1",
+    attempt: 1,
     eventId: "event-1",
     versionId: "version-1",
     assetId: "asset-1",
@@ -59,6 +65,95 @@ describe("file scanner provider contract", () => {
     expect(first).not.toContain("version-1");
   });
 
+  it("routes jobs deterministically across the fixed scanner pool", async () => {
+    const first = await scannerContainerInstanceName(
+      "file-scan-dispatch:version-1",
+    );
+    const repeated = await scannerContainerInstanceName(
+      "file-scan-dispatch:version-1",
+    );
+    expect(first).toBe(repeated);
+    expect(first).toMatch(/^scanner-slot-[0-3]$/u);
+    expect(first).not.toContain("version-1");
+  });
+
+  it("caps scanner-capacity retry delays at five minutes", () => {
+    expect([1, 2, 3, 4, 5, 6, 20].map(scannerCapacityDelaySeconds)).toEqual([
+      15, 30, 60, 120, 240, 300, 300,
+    ]);
+    for (const invalid of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => scannerCapacityDelaySeconds(invalid)).toThrow(RangeError);
+    }
+  });
+
+  it("uses separate bounded wait budgets for busy and unready scanners", () => {
+    expect(scannerCapacityShouldWait("scanner_busy", 39)).toBe(true);
+    expect(scannerCapacityShouldWait("scanner_busy", 40)).toBe(false);
+    expect(scannerCapacityShouldWait("scanner_not_ready", 5)).toBe(true);
+    expect(scannerCapacityShouldWait("scanner_not_ready", 6)).toBe(false);
+    expect(() => scannerCapacityShouldWait("scanner_busy", 0)).toThrow(
+      RangeError,
+    );
+  });
+
+  it("accepts duplicates only while the existing Workflow can still satisfy them", () => {
+    for (const status of ["queued", "running", "waiting", "complete"]) {
+      expect(scannerWorkflowDuplicateStatusIsAcceptable(status)).toBe(true);
+    }
+    for (const status of [
+      "paused",
+      "waitingForPause",
+      "errored",
+      "terminated",
+      "unknown",
+      "unexpected",
+    ]) {
+      expect(scannerWorkflowDuplicateStatusIsAcceptable(status)).toBe(false);
+    }
+  });
+
+  it("waits only for explicit capacity responses and fails permanent input errors immediately", () => {
+    expect(
+      classifyScannerContainerFailure(
+        503,
+        JSON.stringify({
+          code: "scanner_busy",
+          error: "The scanner is busy; retry this job.",
+        }),
+      ),
+    ).toEqual({ kind: "capacity_wait", code: "scanner_busy" });
+    expect(
+      classifyScannerContainerFailure(
+        422,
+        JSON.stringify({
+          code: "object_verification_failed",
+          error: "The private object could not be verified.",
+        }),
+      ),
+    ).toEqual({
+      kind: "terminal_error",
+      error: "The private object could not be verified.",
+      reason: "object_verification_failed",
+    });
+    expect(
+      classifyScannerContainerFailure(
+        503,
+        JSON.stringify({
+          code: "clamav_unavailable",
+          error: "ClamAV could not produce a verdict.",
+        }),
+      ),
+    ).toBeNull();
+    expect(classifyScannerContainerFailure(503, "not-json")).toBeNull();
+  });
+
+  it("gives each dispatch attempt a distinct Workflow identity", async () => {
+    const jobId = "file-scan-dispatch:version-1";
+    const first = await workflowInstanceId(`${jobId}:attempt:1`);
+    const retry = await workflowInstanceId(`${jobId}:attempt:2`);
+    expect(first).not.toBe(retry);
+  });
+
   it("signs the exact callback body using the application contract", async () => {
     const rawBody = JSON.stringify({ verdict: "clean" });
     const signed = await signScannerCallback({
@@ -75,11 +170,11 @@ describe("file scanner provider contract", () => {
   });
 
   it("compares bearer credentials without depending on their length", async () => {
-    await expect(constantTimeTokenMatch("same-token", "same-token")).resolves.toBe(
-      true,
-    );
     await expect(
-      constantTimeTokenMatch("wrong", "same-token"),
-    ).resolves.toBe(false);
+      constantTimeTokenMatch("same-token", "same-token"),
+    ).resolves.toBe(true);
+    await expect(constantTimeTokenMatch("wrong", "same-token")).resolves.toBe(
+      false,
+    );
   });
 });
