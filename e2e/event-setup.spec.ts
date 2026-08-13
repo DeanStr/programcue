@@ -167,6 +167,49 @@ test("uncommitted record drafts block save and remain protected during navigatio
   await expect(save).toBeEnabled();
 });
 
+test("repository workflows remain blocked until exact Event Setup edits are saved or discarded", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await openRecordPanel(page, "Programme tracks");
+
+  const venue = page.getByLabel("Venue");
+  const originalVenue = await venue.inputValue();
+  const trackName = page.getByLabel("Leadership track name");
+  const originalTrackName = await trackName.inputValue();
+  const configure = page.getByRole("button", {
+    name: /Configure|Revalidate/,
+  });
+
+  await venue.fill(`${originalVenue} — unsaved`);
+  await trackName.fill(`${originalTrackName} unsaved`);
+
+  await expect(configure).toBeDisabled();
+  await expect(
+    page.getByText(
+      "Save or discard the current Event Setup edits before changing repository authority.",
+    ),
+  ).toBeVisible();
+
+  await venue.fill(originalVenue);
+  await page
+    .getByLabel(`${originalTrackName} unsaved track name`)
+    .fill(originalTrackName);
+
+  await expect(configure).toBeEnabled();
+  await expect(
+    page.getByText(
+      "Save or discard the current Event Setup edits before changing repository authority.",
+    ),
+  ).toBeHidden();
+
+  await page.getByRole("link", { name: "Submissions", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Leave without saving?" }),
+  ).toBeHidden();
+  await expect(page).toHaveURL(/\/admin\/submissions/);
+});
+
 test("tracks added by keyboard and button survive reload and reach the schedule builder", async ({
   page,
   request,

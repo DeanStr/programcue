@@ -132,13 +132,13 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const canManageAiAssessments =
     canPrepareReviewerReminders && aiReviewAssessmentsSupported;
   const aiAssessmentService = new AiReviewAssessmentService(env);
-  const [aiReviewAssessments, failedAiReviewAssessmentAttempts] =
+  const [aiReviewAssessments, aiReviewAssessmentGenerationAttempts] =
     await Promise.all([
       aiReviewAssessmentsSupported
         ? aiAssessmentService.listForEvent(viewer)
         : Promise.resolve([]),
       canManageAiAssessments
-        ? aiAssessmentService.listFailedGenerationAttempts(viewer)
+        ? aiAssessmentService.listGenerationAttempts(viewer)
         : Promise.resolve([]),
     ]);
   const search = new URL(request.url).searchParams;
@@ -298,7 +298,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     aiReviewAssessmentsSupported,
     reviewerReminderTemplates: reviewerReminderTemplateRows.results,
     aiReviewAssessments,
-    failedAiReviewAssessmentAttempts,
+    aiReviewAssessmentGenerationAttempts,
     submissions: sortedSubmissions.map((submission) => ({
       ...submission,
       aiAssessmentGenerationIntent: crypto.randomUUID(),
@@ -326,6 +326,23 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const values = await request.formData();
   const service = new EvaluationService(env);
   try {
+    if (values.get("intent") === "reconcile-ai-review-assessment") {
+      const result = await new AiReviewAssessmentService(
+        env,
+      ).reconcileGenerationAttempt(viewer, {
+        operationId: values.get("operationId"),
+      });
+      return result.status === "completed"
+        ? {
+            ok: true,
+            message: `Recovered AI first-pass assessment saved at ${result.assessment.score.toFixed(1)} / 5.`,
+          }
+        : {
+            ok: true,
+            message:
+              "The expired AI attempt was reconciled as failed. Review its failure before explicitly retrying.",
+          };
+    }
     if (values.get("intent") === "generate-ai-review-assessment") {
       const assessment = await new AiReviewAssessmentService(env).generate(
         viewer,

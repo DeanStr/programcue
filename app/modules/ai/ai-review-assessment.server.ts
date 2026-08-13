@@ -42,6 +42,12 @@ const generationInputSchema = z
     }
   });
 
+const generationReconciliationInputSchema = z
+  .object({
+    operationId: z.string().trim().min(1).max(200),
+  })
+  .strict();
+
 const GENERATION_LEASE_SECONDS = 5 * 60;
 
 const overrideInputSchema = z
@@ -249,7 +255,7 @@ type GenerationOperationRow = {
   claimExpiresAt: number | null;
 };
 
-export type FailedAiReviewAssessmentAttempt = {
+type AiReviewAssessmentGenerationAttemptBase = {
   operationId: string;
   roundId: string;
   submissionId: string;
@@ -259,10 +265,22 @@ export type FailedAiReviewAssessmentAttempt = {
   provider: ProviderKey;
   providerLabel: AiModelProvider["providerName"];
   model: string;
-  lastError: string;
-  providerRequestId: string | null;
-  failedAt: number;
+  retryOfOperationId: string | null;
 };
+
+export type AiReviewAssessmentGenerationAttempt =
+  | (AiReviewAssessmentGenerationAttemptBase & {
+      status: "running";
+      requestedByName: string;
+      startedAt: number;
+      recoveryRequired: boolean;
+    })
+  | (AiReviewAssessmentGenerationAttemptBase & {
+      status: "failed";
+      lastError: string;
+      providerRequestId: string | null;
+      failedAt: number;
+    });
 
 export class AiReviewAssessmentConflictError extends Error {
   constructor(
@@ -430,11 +448,16 @@ export class AiReviewAssessmentService {
 
   private async assertViewerEvent(viewer: Viewer) {
     const event = await this.env.DB.prepare(
-      `SELECT id, repository_provider AS repositoryProvider
+      `SELECT id, repository_provider AS repositoryProvider,
+              participant_retention_completed_at AS retentionCompletedAt
          FROM events WHERE id = ? AND organisation_id = ?`,
     )
       .bind(viewer.eventId, viewer.organisationId)
-      .first<{ id: string; repositoryProvider: string }>();
+      .first<{
+        id: string;
+        repositoryProvider: string;
+        retentionCompletedAt: number | null;
+      }>();
     if (!event) {
       throw new Error("Event not found in the authorised organisation.");
     }
@@ -446,6 +469,7 @@ export class AiReviewAssessmentService {
     if (event.repositoryProvider !== "d1") {
       throw new Error("The event repository provider is invalid.");
     }
+    return event;
   }
 
   private assessmentQuery(where: string) {
@@ -499,71 +523,197 @@ export class AiReviewAssessmentService {
     return rows.results.map(assessmentFromRow);
   }
 
-  async listFailedGenerationAttempts(
+  async listGenerationAttempts(
     viewer: Viewer,
-  ): Promise<FailedAiReviewAssessmentAttempt[]> {
+  ): Promise<AiReviewAssessmentGenerationAttempt[]> {
     assertAssessmentAdministrator(viewer);
-    await this.assertViewerEvent(viewer);
+    const event = await this.assertViewerEvent(viewer);
+    if (event.retentionCompletedAt !== null) return [];
     const rows = await this.env.DB.prepare(
       `SELECT operation.id, operation.payload_json AS payloadJson,
+              operation.status,
               operation.result_json AS resultJson,
               operation.last_error AS lastError,
-              operation.completed_at AS failedAt
+              operation.requested_by_person_id AS requestedByPersonId,
+              requester.display_name AS requestedByName,
+              operation.started_at AS startedAt,
+              operation.claim_token AS claimToken,
+              operation.claim_expires_at AS claimExpiresAt,
+              operation.completed_at AS completedAt,
+              completed_assessment.id AS completedAssessmentId
          FROM operation_jobs operation
          JOIN events event
            ON event.id = operation.event_id AND event.organisation_id = ?
+         LEFT JOIN people requester
+           ON requester.id = operation.requested_by_person_id
+         LEFT JOIN ai_review_assessments completed_assessment
+           ON completed_assessment.event_id = operation.event_id
+          AND completed_assessment.id =
+                json_extract(operation.payload_json, '$.assessmentId')
         WHERE operation.event_id = ?
           AND operation.type = 'ai.review_assessment.generate'
-          AND operation.status = 'failed'
-        ORDER BY operation.completed_at DESC, operation.id DESC`,
+        ORDER BY operation.created_at DESC, operation.id DESC`,
     )
       .bind(viewer.organisationId, viewer.eventId)
       .all<{
         id: string;
         payloadJson: string;
+        status: string;
         resultJson: string | null;
         lastError: string | null;
-        failedAt: number | null;
+        requestedByPersonId: string | null;
+        requestedByName: string | null;
+        startedAt: number | null;
+        claimToken: string | null;
+        claimExpiresAt: number | null;
+        completedAt: number | null;
+        completedAssessmentId: string | null;
       }>();
-    const failedAttempts = rows.results.map((row) => {
-      if (!row.resultJson || !row.lastError || row.failedAt === null) {
+    const attempts = rows.results.map((row) => ({
+      ...row,
+      payload: parseGenerationOperationPayload(row.payloadJson, row.id),
+    }));
+    const failedResults = new Map<
+      string,
+      z.infer<typeof failedGenerationResultSchema>
+    >();
+    for (const attempt of attempts) {
+      if (attempt.status === "completed") {
+        if (
+          !attempt.resultJson ||
+          attempt.completedAt === null ||
+          !attempt.completedAssessmentId
+        ) {
+          throw new Error(
+            `Completed AI assessment operation ${attempt.id} is missing its durable result or persisted assessment.`,
+          );
+        }
+        const result = parseCompletedGenerationResult(
+          attempt.resultJson,
+          attempt.id,
+        );
+        if (
+          result.assessmentId !== attempt.payload.assessmentId ||
+          result.assessmentId !== attempt.completedAssessmentId
+        ) {
+          throw new Error(
+            `Completed AI assessment operation ${attempt.id} has an inconsistent assessment identity.`,
+          );
+        }
+        continue;
+      }
+      if (attempt.status === "running") {
+        if (
+          !attempt.requestedByPersonId ||
+          !attempt.requestedByName ||
+          attempt.startedAt === null ||
+          !attempt.claimToken ||
+          attempt.claimExpiresAt === null
+        ) {
+          throw new Error(
+            `Running AI assessment operation ${attempt.id} is missing its requester, start time or provider claim.`,
+          );
+        }
+        if (attempt.resultJson) {
+          const staged = parseStagedGenerationResult(
+            attempt.resultJson,
+            attempt.id,
+          );
+          if (staged.assessmentId !== attempt.payload.assessmentId) {
+            throw new Error(
+              `Running AI assessment operation ${attempt.id} has an inconsistent staged assessment identity.`,
+            );
+          }
+        }
+        continue;
+      }
+      if (attempt.status !== "failed") {
         throw new Error(
-          `Failed AI assessment operation ${row.id} is missing its durable failure evidence.`,
+          `AI assessment operation ${attempt.id} has unsupported ${attempt.status} status.`,
         );
       }
-      const payload = parseGenerationOperationPayload(row.payloadJson, row.id);
-      const failure = parseFailedGenerationResult(row.resultJson, row.id);
-      return {
-        id: row.id,
-        lastError: row.lastError,
-        failedAt: row.failedAt,
-        payload,
-        failure,
-      };
-    });
-    const retriedOperationIds = new Set(
-      failedAttempts.flatMap(({ payload }) =>
-        payload.retryOfOperationId ? [payload.retryOfOperationId] : [],
-      ),
+      if (
+        !attempt.resultJson ||
+        !attempt.lastError ||
+        attempt.completedAt === null
+      ) {
+        throw new Error(
+          `Failed AI assessment operation ${attempt.id} is missing its durable failure evidence.`,
+        );
+      }
+      failedResults.set(
+        attempt.id,
+        parseFailedGenerationResult(attempt.resultJson, attempt.id),
+      );
+    }
+
+    const attemptById = new Map(
+      attempts.map((attempt) => [attempt.id, attempt]),
     );
-    const latestByTarget = new Map<string, FailedAiReviewAssessmentAttempt>();
-    for (const {
-      id,
-      lastError,
-      failedAt,
-      payload,
-      failure,
-    } of failedAttempts) {
-      // Failed attempts form a durable retry chain. Choose its leaf rather
-      // than relying on second-resolution timestamps and random UUID order.
-      if (retriedOperationIds.has(id)) continue;
-      if (latestByTarget.has(payload.targetKey)) {
+    const retryByParentId = new Map<string, (typeof attempts)[number]>();
+    for (const attempt of attempts) {
+      const parentId = attempt.payload.retryOfOperationId;
+      if (!parentId) continue;
+      const parent = attemptById.get(parentId);
+      if (!parent) {
         throw new Error(
-          `AI assessment target ${payload.targetKey} has multiple failed retry leaves.`,
+          `AI assessment retry operation ${attempt.id} references missing operation ${parentId}.`,
         );
       }
-      latestByTarget.set(payload.targetKey, {
-        operationId: id,
+      if (parent.payload.targetKey !== attempt.payload.targetKey) {
+        throw new Error(
+          `AI assessment retry operation ${attempt.id} references a different assessment target.`,
+        );
+      }
+      if (parent.status !== "failed") {
+        throw new Error(
+          `AI assessment retry operation ${attempt.id} references a non-failed operation.`,
+        );
+      }
+      if (retryByParentId.has(parentId)) {
+        throw new Error(
+          `AI assessment operation ${parentId} has multiple retry children.`,
+        );
+      }
+      retryByParentId.set(parentId, attempt);
+    }
+    const traversedOperationIds = new Set<string>();
+    for (const attempt of attempts) {
+      if (traversedOperationIds.has(attempt.id)) continue;
+      const pathOperationIds = new Set<string>();
+      let current: (typeof attempts)[number] | undefined = attempt;
+      while (current && !traversedOperationIds.has(current.id)) {
+        if (pathOperationIds.has(current.id)) {
+          throw new Error(
+            `AI assessment retry chain for target ${attempt.payload.targetKey} contains a cycle.`,
+          );
+        }
+        pathOperationIds.add(current.id);
+        current = retryByParentId.get(current.id);
+      }
+      for (const operationId of pathOperationIds) {
+        traversedOperationIds.add(operationId);
+      }
+    }
+
+    const leafByTarget = new Map<string, (typeof attempts)[number]>();
+    for (const attempt of attempts) {
+      // All attempt states form one durable retry chain. Choose its leaf so a
+      // running or completed retry suppresses its failed parent.
+      if (retryByParentId.has(attempt.id)) continue;
+      const { payload } = attempt;
+      if (leafByTarget.has(payload.targetKey)) {
+        throw new Error(
+          `AI assessment target ${payload.targetKey} has multiple retry leaves.`,
+        );
+      }
+      leafByTarget.set(payload.targetKey, attempt);
+    }
+    const visibleAttempts: AiReviewAssessmentGenerationAttempt[] = [];
+    for (const attempt of leafByTarget.values()) {
+      const { payload } = attempt;
+      const base = {
+        operationId: attempt.id,
         roundId: payload.roundId,
         submissionId: payload.submissionId,
         roundRevision: payload.roundRevision,
@@ -572,12 +722,36 @@ export class AiReviewAssessmentService {
         provider: payload.provider,
         providerLabel: providerLabels[payload.provider],
         model: payload.model,
-        lastError,
+        retryOfOperationId: payload.retryOfOperationId,
+      } satisfies AiReviewAssessmentGenerationAttemptBase;
+      if (attempt.status === "completed") continue;
+      if (attempt.status === "running") {
+        visibleAttempts.push({
+          ...base,
+          status: "running",
+          requestedByName: attempt.requestedByName!,
+          startedAt: attempt.startedAt!,
+          recoveryRequired:
+            attempt.resultJson !== null ||
+            attempt.claimExpiresAt! <= epochSeconds(this.now()),
+        });
+        continue;
+      }
+      const failure = failedResults.get(attempt.id);
+      if (!failure) {
+        throw new Error(
+          `Failed AI assessment operation ${attempt.id} was not validated.`,
+        );
+      }
+      visibleAttempts.push({
+        ...base,
+        status: "failed",
+        lastError: attempt.lastError!,
         providerRequestId: failure.providerRequestId ?? null,
-        failedAt,
+        failedAt: attempt.completedAt!,
       });
     }
-    return [...latestByTarget.values()];
+    return visibleAttempts;
   }
 
   private async getById(viewer: Viewer, assessmentId: string) {
@@ -1525,6 +1699,98 @@ export class AiReviewAssessmentService {
       return { kind: "claimed", claimToken };
     }
     return { kind: "existing", operation };
+  }
+
+  private async assertReconciliationScope(
+    viewer: Viewer,
+    operation: GenerationOperationRow,
+  ) {
+    if (
+      operation.organisationId !== viewer.organisationId ||
+      operation.eventId !== viewer.eventId ||
+      operation.type !== "ai.review_assessment.generate" ||
+      !operation.requestedByPersonId
+    ) {
+      throw new AiReviewAssessmentIntentConflictError();
+    }
+    const payload = parseGenerationOperationPayload(
+      operation.payloadJson,
+      operation.id,
+    );
+    const [requestHash, targetKey] = await Promise.all([
+      this.generationRequestHash(payload, payload),
+      this.generationTargetKey(payload),
+    ]);
+    if (
+      payload.generationIntentId !== operation.id ||
+      payload.requestHash !== requestHash ||
+      payload.targetKey !== targetKey ||
+      operation.idempotencyKey !==
+        generationAttemptIdempotencyKey(
+          operation.id,
+          targetKey,
+          payload.retryOfOperationId,
+        )
+    ) {
+      throw new AiReviewAssessmentIntentConflictError();
+    }
+    return payload;
+  }
+
+  async reconcileGenerationAttempt(viewer: Viewer, rawInput: unknown) {
+    assertAssessmentAdministrator(viewer);
+    const event = await this.assertViewerEvent(viewer);
+    if (event.retentionCompletedAt !== null) {
+      throw new AiReviewAssessmentStateError(
+        "Participant retention has completed for this event, so AI assessment attempts cannot be reconciled.",
+      );
+    }
+    const input = generationReconciliationInputSchema.parse(rawInput);
+    const operation = await this.loadExactGenerationOperation(
+      input.operationId,
+    );
+    if (!operation) {
+      throw new AiReviewAssessmentStateError(
+        "The AI assessment attempt is no longer available to reconcile.",
+      );
+    }
+    const payload = await this.assertReconciliationScope(viewer, operation);
+    try {
+      const assessment = await this.settleGenerationOperation(
+        viewer,
+        operation,
+        payload,
+      );
+      return { status: "completed" as const, assessment };
+    } catch (error) {
+      if (!(error instanceof AiReviewAssessmentStateError)) throw error;
+      const settled = await this.loadExactGenerationOperation(operation.id);
+      if (!settled) {
+        throw new Error(
+          `AI assessment operation ${operation.id} disappeared during reconciliation.`,
+        );
+      }
+      const settledPayload = await this.assertReconciliationScope(
+        viewer,
+        settled,
+      );
+      if (settled.status === "completed") {
+        const assessment = await this.settleGenerationOperation(
+          viewer,
+          settled,
+          settledPayload,
+        );
+        return { status: "completed" as const, assessment };
+      }
+      if (settled.status !== "failed") throw error;
+      if (!settled.resultJson) {
+        throw new Error(
+          `Failed AI assessment operation ${operation.id} has no result.`,
+        );
+      }
+      parseFailedGenerationResult(settled.resultJson, settled.id);
+      return { status: "failed" as const, operationId: settled.id };
+    }
   }
 
   async generate(viewer: Viewer, rawInput: unknown) {

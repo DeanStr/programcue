@@ -1,4 +1,4 @@
-import { Form } from "react-router";
+import { Form, Link } from "react-router";
 
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { useConfirm } from "~/components/ui/confirm-dialog";
@@ -160,6 +160,7 @@ export function EvaluationSubmissionQueue() {
     activeRound,
     assignmentTargets,
     bulkAssignableSubmissions,
+    navigation,
   } = useEvaluationAdminModel();
   const { confirm, dialog } = useConfirm();
   const selectedResultsRound = loaderData.plan?.rounds.find(
@@ -288,9 +289,9 @@ export function EvaluationSubmissionQueue() {
                     assessment.roundId === loaderData.resultsRoundId &&
                     assessment.submissionId === submission.id,
                 );
-                const failedAiAssessment =
+                const aiAssessmentGenerationAttempt =
                   selectedResultsRound &&
-                  loaderData.failedAiReviewAssessmentAttempts.find(
+                  loaderData.aiReviewAssessmentGenerationAttempts.find(
                     (attempt) =>
                       attempt.roundId === selectedResultsRound.id &&
                       attempt.submissionId === submission.id &&
@@ -300,6 +301,25 @@ export function EvaluationSubmissionQueue() {
                       attempt.scorecardVersion ===
                         selectedResultsRound.scorecardVersion,
                   );
+                const pendingAiGeneration =
+                  navigation.state !== "idle" &&
+                  [
+                    "generate-ai-review-assessment",
+                    "retry-ai-review-assessment",
+                  ].includes(String(navigation.formData?.get("intent"))) &&
+                  navigation.formData?.get("roundId") ===
+                    selectedResultsRound?.id &&
+                  navigation.formData?.get("submissionId") === submission.id;
+                const pendingAiRetry =
+                  pendingAiGeneration &&
+                  navigation.formData?.get("intent") ===
+                    "retry-ai-review-assessment";
+                const pendingAiReconciliation =
+                  navigation.state !== "idle" &&
+                  navigation.formData?.get("intent") ===
+                    "reconcile-ai-review-assessment" &&
+                  navigation.formData?.get("operationId") ===
+                    aiAssessmentGenerationAttempt?.operationId;
                 const terminal = [
                   "accepted",
                   "waitlisted",
@@ -448,7 +468,109 @@ export function EvaluationSubmissionQueue() {
                               ) : null}
                             </div>
                           </details>
-                        ) : failedAiAssessment &&
+                        ) : (pendingAiGeneration ||
+                            aiAssessmentGenerationAttempt?.status ===
+                              "running") &&
+                          loaderData.canManageAiAssessments &&
+                          loaderData.resultsRoundId &&
+                          selectedResultsRound &&
+                          ["active", "closed"].includes(
+                            selectedResultsRound.status,
+                          ) &&
+                          submission.reviewableInCurrentCycle ? (
+                          <div className="stack mt">
+                            <div className="validation-item info" role="status">
+                              <strong>
+                                {pendingAiReconciliation
+                                  ? "Reconciling AI first pass"
+                                  : pendingAiGeneration
+                                    ? pendingAiRetry
+                                      ? "Starting AI first pass retry"
+                                      : "Starting AI first pass"
+                                    : aiAssessmentGenerationAttempt?.status ===
+                                          "running" &&
+                                        aiAssessmentGenerationAttempt.retryOfOperationId
+                                      ? "AI first pass retry running"
+                                      : "AI first pass running"}
+                              </strong>
+                              <span>
+                                {aiAssessmentGenerationAttempt?.status ===
+                                "running"
+                                  ? `Started by ${aiAssessmentGenerationAttempt.requestedByName}.`
+                                  : "Submitting the request from this page."}
+                              </span>
+                              {aiAssessmentGenerationAttempt?.status ===
+                              "running" ? (
+                                <small>
+                                  {aiAssessmentGenerationAttempt.providerLabel}{" "}
+                                  {aiAssessmentGenerationAttempt.model} ·
+                                  Started{" "}
+                                  <EventDateTime
+                                    epochSeconds={
+                                      aiAssessmentGenerationAttempt.startedAt
+                                    }
+                                    timeZone={loaderData.eventTimezone}
+                                  />
+                                </small>
+                              ) : null}
+                            </div>
+                            {aiAssessmentGenerationAttempt?.status ===
+                            "running" ? (
+                              <>
+                                {aiAssessmentGenerationAttempt.recoveryRequired ? (
+                                  <div
+                                    className="validation-item warn"
+                                    role="status"
+                                  >
+                                    <strong>
+                                      AI attempt needs reconciliation
+                                    </strong>
+                                    <span>
+                                      Recover its saved result or mark its
+                                      expired provider claim failed before an
+                                      explicit retry. Reconciliation never sends
+                                      another provider request.
+                                    </span>
+                                  </div>
+                                ) : null}
+                                <div className="cluster">
+                                  {aiAssessmentGenerationAttempt.recoveryRequired ? (
+                                    <Form method="post">
+                                      <input
+                                        type="hidden"
+                                        name="intent"
+                                        value="reconcile-ai-review-assessment"
+                                      />
+                                      <input
+                                        type="hidden"
+                                        name="operationId"
+                                        value={
+                                          aiAssessmentGenerationAttempt.operationId
+                                        }
+                                      />
+                                      <button
+                                        className="btn small"
+                                        type="submit"
+                                        disabled={pendingAiReconciliation}
+                                      >
+                                        {pendingAiReconciliation
+                                          ? "Reconciling…"
+                                          : "Reconcile AI attempt"}
+                                      </button>
+                                    </Form>
+                                  ) : null}
+                                  <Link
+                                    className="btn small"
+                                    to={`/admin/operations?operation=${encodeURIComponent(aiAssessmentGenerationAttempt.operationId)}`}
+                                  >
+                                    View operation
+                                  </Link>
+                                </div>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : aiAssessmentGenerationAttempt?.status ===
+                            "failed" &&
                           loaderData.canManageAiAssessments &&
                           loaderData.resultsRoundId &&
                           selectedResultsRound &&
@@ -459,12 +581,14 @@ export function EvaluationSubmissionQueue() {
                           <div className="stack mt">
                             <div className="validation-item warn">
                               <strong>AI first pass failed</strong>
-                              <span>{failedAiAssessment.lastError}</span>
+                              <span>
+                                {aiAssessmentGenerationAttempt.lastError}
+                              </span>
                               <small>
-                                {failedAiAssessment.providerLabel}{" "}
-                                {failedAiAssessment.model}
-                                {failedAiAssessment.providerRequestId
-                                  ? ` · Provider request ${failedAiAssessment.providerRequestId}`
+                                {aiAssessmentGenerationAttempt.providerLabel}{" "}
+                                {aiAssessmentGenerationAttempt.model}
+                                {aiAssessmentGenerationAttempt.providerRequestId
+                                  ? ` · Provider request ${aiAssessmentGenerationAttempt.providerRequestId}`
                                   : ""}
                               </small>
                             </div>
@@ -482,7 +606,9 @@ export function EvaluationSubmissionQueue() {
                               <input
                                 type="hidden"
                                 name="failedOperationId"
-                                value={failedAiAssessment.operationId}
+                                value={
+                                  aiAssessmentGenerationAttempt.operationId
+                                }
                               />
                               <input
                                 type="hidden"
@@ -522,7 +648,7 @@ export function EvaluationSubmissionQueue() {
                                         "This creates a separate provider attempt and retains the failed operation. The earlier request may have been accepted or charged even though Program Cue received no usable result, so another provider charge or duplicate result is possible.",
                                       records: [
                                         `${submission.title} · ${selectedResultsRound.name}`,
-                                        `Failed attempt: ${failedAiAssessment.operationId}`,
+                                        `Failed attempt: ${aiAssessmentGenerationAttempt.operationId}`,
                                       ],
                                       confirmLabel: "Retry first pass",
                                       tone: "primary",

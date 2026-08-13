@@ -480,6 +480,39 @@ describe("scheduled D1 backup Workflow boundaries", () => {
     ).resolves.toEqual(manifest);
   });
 
+  it("cancels an existing recovery body when the fresh export cannot be digested", async () => {
+    let existingBodyCancelled = false;
+    const existingBody = new ReadableStream<Uint8Array>({
+      cancel() {
+        existingBodyCancelled = true;
+      },
+    });
+    const bucket = {
+      get: vi.fn().mockResolvedValue({
+        body: existingBody,
+        etag: "existing-etag",
+        uploaded: new Date("2026-08-13T02:17:00Z"),
+      }),
+    } as unknown as R2Bucket;
+    const brokenSource = new TransformStream<Uint8Array, Uint8Array>();
+    const sourceWriter = brokenSource.writable.getWriter();
+
+    const stored = storeBackupStream(bucket, brokenSource.readable, {
+      backupKey: "d1-logical/2026-08-13/program-cue-2026-08-13.sql",
+      backupDate: "2026-08-13",
+      databaseId: configuration.databaseId,
+      bookmark: "bookmark-recovery",
+      workflowInstanceId: "d1-backup-2026-08-13",
+      expectedBytes: 100,
+    });
+    const rejected = expect(stored).rejects.toThrow(
+      "Fresh export stream failed",
+    );
+    await sourceWriter.abort(new Error("Fresh export stream failed."));
+    await rejected;
+    expect(existingBodyCancelled).toBe(true);
+  });
+
   it("does not pull the complete export while the R2 consumer is paused", async () => {
     const chunkCount = 128;
     let sourcePulls = 0;

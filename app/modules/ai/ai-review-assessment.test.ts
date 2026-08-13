@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
+import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AiReviewAssessmentConflictError,
@@ -357,9 +358,10 @@ describe("persisted AI first-pass review assessments", () => {
     ).rejects.toThrow(/acknowledge.*duplicate provider request or charge/i);
     expect(create).toHaveBeenCalledTimes(1);
 
-    const failedAttempts = await service.listFailedGenerationAttempts(admin);
+    const failedAttempts = await service.listGenerationAttempts(admin);
     expect(failedAttempts).toEqual([
       expect.objectContaining({
+        status: "failed",
         operationId: failedInput.generationIntentId,
         roundId: ROUND_ID,
         submissionId: SUBMISSION_ID,
@@ -368,7 +370,7 @@ describe("persisted AI first-pass review assessments", () => {
       }),
     ]);
     await expect(
-      service.listFailedGenerationAttempts(committeeChair),
+      service.listGenerationAttempts(committeeChair),
     ).rejects.toMatchObject({ status: 403 });
 
     const retryInput = {
@@ -454,6 +456,14 @@ describe("persisted AI first-pass review assessments", () => {
 
     const firstRetry = service.generate(admin, retry());
     await retryStarted;
+    await expect(service.listGenerationAttempts(admin)).resolves.toEqual([
+      expect.objectContaining({
+        status: "running",
+        retryOfOperationId: failedInput.generationIntentId,
+        requestedByName: expect.any(String),
+        submissionId: SUBMISSION_ID,
+      }),
+    ]);
     await expect(service.generate(admin, retry())).rejects.toThrow(
       /already running/i,
     );
@@ -466,6 +476,104 @@ describe("persisted AI first-pass review assessments", () => {
       providerResponseId: "single-retry-response",
     });
     expect(create).toHaveBeenCalledTimes(2);
+    await expect(service.listGenerationAttempts(admin)).resolves.toEqual([]);
+  });
+
+  it("fails fast when a completed operation has no persisted assessment", async () => {
+    const service = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+      {
+        provider: workersAiProvider(async () =>
+          structuredResponse(validAssessment(), "missing-assessment-response"),
+        ),
+      },
+    );
+    const generated = await service.generate(admin, generationInput());
+    await env.DB.prepare("DELETE FROM ai_review_assessments WHERE id = ?")
+      .bind(generated.id)
+      .run();
+
+    await expect(service.listGenerationAttempts(admin)).rejects.toThrow(
+      /completed.*missing.*persisted assessment/i,
+    );
+  });
+
+  it("omits retained AI attempt history after its assessments are deleted", async () => {
+    const retainedEventId = `retained-ai-event-${crypto.randomUUID()}`;
+    const retainedViewer = { ...admin, eventId: retainedEventId };
+    await env.DB.prepare(
+      `INSERT INTO events (
+         id, organisation_id, name, slug, timezone, starts_at, ends_at,
+         participant_retention_completed_at, file_policy_json
+       ) VALUES (?, ?, 'Retained AI event', ?, 'UTC', 1, 2, unixepoch(), ?)`,
+    )
+      .bind(
+        retainedEventId,
+        admin.organisationId,
+        retainedEventId,
+        CANONICAL_EVENT_FILE_POLICY_JSON,
+      )
+      .run();
+    await env.DB.prepare(
+      `INSERT INTO operation_jobs (
+         id, organisation_id, event_id, requested_by_person_id, type,
+         idempotency_key, correlation_id, status, payload_json,
+         result_json, progress_total, progress_completed, completed_at
+       ) VALUES (?, ?, ?, ?, 'ai.review_assessment.generate', ?, ?,
+                 'completed', '{}', '{}', 1, 1, unixepoch())`,
+    )
+      .bind(
+        `retained-ai-operation-${crypto.randomUUID()}`,
+        admin.organisationId,
+        retainedEventId,
+        admin.personId,
+        `retained-ai-intent-${crypto.randomUUID()}`,
+        crypto.randomUUID(),
+      )
+      .run();
+    const service = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+    );
+
+    try {
+      await expect(
+        service.listGenerationAttempts(retainedViewer),
+      ).resolves.toEqual([]);
+    } finally {
+      await env.DB.prepare("DELETE FROM events WHERE id = ?")
+        .bind(retainedEventId)
+        .run();
+    }
+  });
+
+  it("fails fast when durable retry lineage references a missing parent", async () => {
+    const service = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+      {
+        provider: workersAiProvider(async () => {
+          throw new AiProviderError("Workers AI request failed.", 503);
+        }),
+      },
+    );
+    const failedInput = generationInput();
+    await expect(service.generate(admin, failedInput)).rejects.toThrow(
+      /request failed/i,
+    );
+    await env.DB.prepare(
+      `UPDATE operation_jobs
+          SET payload_json = json_set(
+                payload_json,
+                '$.retryOfOperationId',
+                'missing-ai-assessment-operation'
+              )
+        WHERE id = ?`,
+    )
+      .bind(failedInput.generationIntentId)
+      .run();
+
+    await expect(service.listGenerationAttempts(admin)).rejects.toThrow(
+      /references missing operation/i,
+    );
   });
 
   it("rejects a stale retry once the failed operation has a retry child", async () => {
@@ -506,7 +614,7 @@ describe("persisted AI first-pass review assessments", () => {
     ).rejects.toThrow(/newer retry already exists/i);
     expect(create).toHaveBeenCalledTimes(2);
 
-    const [latestFailure] = await service.listFailedGenerationAttempts(admin);
+    const [latestFailure] = await service.listGenerationAttempts(admin);
     if (!latestFailure) throw new Error("Expected the failed retry leaf.");
     expect(latestFailure.operationId).toBe(firstRetryInput.generationIntentId);
     await expect(
@@ -566,15 +674,16 @@ describe("persisted AI first-pass review assessments", () => {
       .run();
 
     await expect(
-      service.generate(admin, {
-        ...generationInput(),
-        retryFailedOperationId: initialInput.generationIntentId,
-        duplicateRiskAcknowledged: true,
+      service.reconcileGenerationAttempt(admin, {
+        operationId: interruptedRetry.generationIntentId,
       }),
-    ).rejects.toThrow(/outcome is indeterminate/i);
+    ).resolves.toEqual({
+      status: "failed",
+      operationId: interruptedRetry.generationIntentId,
+    });
     expect(create).toHaveBeenCalledTimes(2);
 
-    const [latestFailure] = await service.listFailedGenerationAttempts(admin);
+    const [latestFailure] = await service.listGenerationAttempts(admin);
     expect(latestFailure?.operationId).toBe(
       interruptedRetry.generationIntentId,
     );
@@ -631,6 +740,7 @@ describe("persisted AI first-pass review assessments", () => {
         effectiveScore: 3.5,
       }),
     ]);
+    await expect(service.listGenerationAttempts(admin)).resolves.toEqual([]);
 
     await expect(
       service.override(admin, {
@@ -839,8 +949,13 @@ describe("persisted AI first-pass review assessments", () => {
       phase: "provider_completed",
     });
 
-    const recovered = await service.generate(admin, input);
-    expect(recovered.providerResponseId).toBe("staged-provider-response");
+    const recovered = await service.reconcileGenerationAttempt(admin, {
+      operationId: input.generationIntentId,
+    });
+    expect(recovered).toMatchObject({
+      status: "completed",
+      assessment: { providerResponseId: "staged-provider-response" },
+    });
     expect(create).toHaveBeenCalledTimes(1);
     expect(
       await env.DB.prepare("SELECT status FROM operation_jobs WHERE id = ?")

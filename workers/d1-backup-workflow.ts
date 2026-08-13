@@ -175,7 +175,14 @@ async function digestReadableStream(source: ReadableStream<Uint8Array>) {
   const digestStream = new (crypto as CloudflareStreamingCrypto).DigestStream(
     "SHA-256",
   );
-  await source.pipeTo(digestStream);
+  const digest = digestStream.digest;
+  void digest.catch(() => undefined);
+  try {
+    await source.pipeTo(digestStream);
+  } catch (error) {
+    await digest.catch(() => undefined);
+    throw error;
+  }
   const written = digestStream.bytesWritten;
   if (
     typeof written === "bigint" &&
@@ -187,7 +194,7 @@ async function digestReadableStream(source: ReadableStream<Uint8Array>) {
   }
   return {
     bytes: typeof written === "bigint" ? Number(written) : written,
-    sha256: digestHex(await digestStream.digest),
+    sha256: digestHex(await digest),
   };
 }
 
@@ -548,11 +555,17 @@ export async function storeBackupStream(
     // A prior attempt may have committed the immutable object before its
     // manifest. Compare the two streams sequentially without coupling their
     // consumers or buffering either body in Worker memory.
-    const sourceDigest = await digestReadableStream(source);
-    if (sourceDigest.bytes !== input.expectedBytes) {
-      throw new Error(
-        "The D1 export body did not match its declared content length.",
-      );
+    let sourceDigest: Awaited<ReturnType<typeof digestReadableStream>>;
+    try {
+      sourceDigest = await digestReadableStream(source);
+      if (sourceDigest.bytes !== input.expectedBytes) {
+        throw new Error(
+          "The D1 export body did not match its declared content length.",
+        );
+      }
+    } catch (error) {
+      await existing.body.cancel(error).catch(() => undefined);
+      throw error;
     }
     const existingDigest = await digestReadableStream(
       existing.body as ReadableStream<Uint8Array>,

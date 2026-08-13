@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Form,
   Link,
@@ -24,6 +24,28 @@ import type { EventSetup } from "~/modules/events/event-repository.server";
 import type { IncompleteEventSummary } from "~/modules/events/event-repository-recovery.server";
 import type { action, ActionResponse } from "~/routes/event-setup";
 
+const eventSetupBaselineExcludedFields = new Set([
+  "_intent",
+  "revision",
+  "rooms",
+  "tracks",
+  "sessionFormats",
+]);
+
+function serialiseEventSetupFields(form: HTMLFormElement) {
+  const fields: [string, string][] = [];
+  for (const [name, value] of new FormData(form)) {
+    if (eventSetupBaselineExcludedFields.has(name)) continue;
+    if (typeof value !== "string") {
+      throw new Error(
+        `Event Setup field ${name} unexpectedly contains a file. Files require an explicit dirty-state comparison.`,
+      );
+    }
+    fields.push([name, value]);
+  }
+  return JSON.stringify(fields);
+}
+
 export function EventSetupForm({
   event,
   incompleteEvents,
@@ -41,6 +63,8 @@ export function EventSetupForm({
     ActionResponse | undefined;
   const inviteFetcher = useFetcher<typeof action>();
   const repositoryFetcher = useFetcher<typeof action>();
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const savedFieldValuesRef = useRef<string | null>(null);
   const navigate = useNavigate();
   const navigation = useNavigation();
   const { confirm, dialog } = useConfirm();
@@ -107,9 +131,9 @@ export function EventSetupForm({
 
   // Rooms, tracks and formats live in client state and reach the server only
   // through the serialised hidden inputs above, so leaving the page discarded
-  // them silently. The named fields are uncontrolled, so a form-level input
-  // event is what marks them edited.
-  const [fieldsTouched, setFieldsTouched] = useState(false);
+  // them silently. The named fields are uncontrolled, so each form-level input
+  // event compares their current values with the exact loaded baseline.
+  const [namedFieldsChanged, setNamedFieldsChanged] = useState(false);
   const savedStructure = useMemo(
     () => JSON.stringify([event.rooms, event.tracks, event.sessionFormats]),
     [event.revision],
@@ -126,9 +150,26 @@ export function EventSetupForm({
     Object.values(recordDraftValues).some((value) => value.trim()) ||
     newRoomDraftPresent;
   const hasUnsavedChanges =
-    fieldsTouched ||
+    namedFieldsChanged ||
     currentStructure !== savedStructure ||
     pendingRecordDraftPresent;
+
+  const captureEventSetupForm = useCallback((form: HTMLFormElement | null) => {
+    formRef.current = form;
+    if (form && savedFieldValuesRef.current === null) {
+      savedFieldValuesRef.current = serialiseEventSetupFields(form);
+    }
+  }, []);
+
+  const updateNamedFieldDirtyState = useCallback((form: HTMLFormElement) => {
+    const savedValues = savedFieldValuesRef.current;
+    if (savedValues === null) {
+      throw new Error(
+        "The Event Setup form received input before its saved baseline was captured.",
+      );
+    }
+    setNamedFieldsChanged(serialiseEventSetupFields(form) !== savedValues);
+  }, []);
 
   const handleRecordDraftStateChange = useCallback(
     (draftKey: string, value: string) =>
@@ -137,7 +178,10 @@ export function EventSetupForm({
   );
 
   useEffect(() => {
-    setFieldsTouched(false);
+    const form = formRef.current;
+    if (!form) return;
+    savedFieldValuesRef.current = serialiseEventSetupFields(form);
+    setNamedFieldsChanged(false);
   }, [event.revision]);
 
   useBeforeUnload(
@@ -229,9 +273,10 @@ export function EventSetupForm({
         />
       ) : null}
       <Form
+        ref={captureEventSetupForm}
         method="post"
         onInput={(inputEvent) => {
-          setFieldsTouched(true);
+          updateNamedFieldDirtyState(inputEvent.currentTarget);
           const input = inputEvent.target as HTMLInputElement;
           const draftKey = input.dataset.eventRecordDraft;
           if (draftKey) handleRecordDraftStateChange(draftKey, input.value);
@@ -462,9 +507,14 @@ export function EventSetupForm({
               <EventFilePolicyPanel event={event} actionData={actionData} />
               <EventRepositoryPanel
                 event={event}
-                onConfigureAirtable={() => setAirtableOpen(true)}
-                onMigrateRepository={() => setMigrationOpen(true)}
+                onConfigureAirtable={() => {
+                  if (!hasUnsavedChanges) setAirtableOpen(true);
+                }}
+                onMigrateRepository={() => {
+                  if (!hasUnsavedChanges) setMigrationOpen(true);
+                }}
                 canManageFileRetention={canManageFileRetention}
+                hasUnsavedChanges={hasUnsavedChanges}
               />
             </div>
           </section>
@@ -647,7 +697,9 @@ export function EventSetupForm({
               <button
                 type="submit"
                 className="btn primary"
-                disabled={repositoryFetcher.state !== "idle"}
+                disabled={
+                  repositoryFetcher.state !== "idle" || hasUnsavedChanges
+                }
               >
                 {repositoryFetcher.state === "submitting"
                   ? "Validating…"
@@ -729,7 +781,9 @@ export function EventSetupForm({
                   <button
                     type="submit"
                     className="btn primary"
-                    disabled={repositoryFetcher.state !== "idle"}
+                    disabled={
+                      repositoryFetcher.state !== "idle" || hasUnsavedChanges
+                    }
                   >
                     {repositoryFetcher.state === "submitting"
                       ? "Reconciling…"
@@ -784,7 +838,9 @@ export function EventSetupForm({
                 <button
                   type="submit"
                   className="btn primary"
-                  disabled={repositoryFetcher.state !== "idle"}
+                  disabled={
+                    repositoryFetcher.state !== "idle" || hasUnsavedChanges
+                  }
                 >
                   {repositoryFetcher.state === "submitting"
                     ? "Comparing…"

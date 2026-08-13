@@ -639,12 +639,15 @@ export function EventRepositoryPanel({
   onConfigureAirtable,
   onMigrateRepository,
   canManageFileRetention,
+  hasUnsavedChanges,
 }: {
   event: EventSetup;
   onConfigureAirtable: () => void;
   onMigrateRepository: () => void;
   canManageFileRetention: boolean;
+  hasUnsavedChanges: boolean;
 }) {
+  const unsavedHelpId = "event-repository-unsaved-help";
   return (
     <>
       <section className="card pad">
@@ -692,6 +695,8 @@ export function EventRepositoryPanel({
               type="button"
               className="btn small"
               onClick={onConfigureAirtable}
+              disabled={hasUnsavedChanges}
+              aria-describedby={hasUnsavedChanges ? unsavedHelpId : undefined}
             >
               {event.repositoryConnection ? "Revalidate" : "Configure"}
             </button>
@@ -699,7 +704,13 @@ export function EventRepositoryPanel({
         </div>
         {event.repositoryConnection?.status === "connected" ? (
           <div className="mt">
-            <button type="button" className="btn" onClick={onMigrateRepository}>
+            <button
+              type="button"
+              className="btn"
+              onClick={onMigrateRepository}
+              disabled={hasUnsavedChanges}
+              aria-describedby={hasUnsavedChanges ? unsavedHelpId : undefined}
+            >
               Preview migration to{" "}
               {event.repositoryProvider === "d1" ? "Airtable" : "D1"}
             </button>
@@ -710,6 +721,16 @@ export function EventRepositoryPanel({
               recommended D1 provider.
             </p>
           </div>
+        ) : null}
+        {hasUnsavedChanges ? (
+          <p
+            className="validation-item warn mt"
+            id={unsavedHelpId}
+            role="status"
+          >
+            Save or discard the current Event Setup edits before changing
+            repository authority.
+          </p>
         ) : null}
         {event.repositoryLockedAt ? (
           <p className="help mt">
