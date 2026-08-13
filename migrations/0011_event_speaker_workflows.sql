@@ -51,7 +51,8 @@ SELECT roster.event_id, roster.person_id,
               AND speaker.participation_status = 'confirmed'
          ) THEN 'confirmed'
          ELSE 'invited'
-       END,
+       END
+       ,
        'backfill',
        'speaker-workflow-backfill:' || roster.event_id || ':' || roster.person_id,
        NULL,
@@ -81,7 +82,8 @@ BEGIN
        WHERE speaker.event_id = NEW.event_id
          AND speaker.person_id = NEW.person_id
          AND speaker.participation_status = 'confirmed'
-    ) THEN 'confirmed' ELSE 'invited' END,
+    ) THEN 'confirmed' ELSE 'invited' END
+    ,
     'membership',
     'speaker-workflow-membership:' || NEW.event_id || ':' || NEW.person_id,
     NULL,
@@ -108,7 +110,8 @@ BEGIN
        WHERE speaker.event_id = NEW.event_id
          AND speaker.person_id = NEW.person_id
          AND speaker.participation_status = 'confirmed'
-    ) THEN 'confirmed' ELSE 'invited' END,
+    ) THEN 'confirmed' ELSE 'invited' END
+    ,
     'membership',
     'speaker-workflow-membership:' || NEW.event_id || ':' || NEW.person_id,
     NULL,
@@ -127,7 +130,8 @@ BEGIN
     NEW.event_id,
     NEW.person_id,
     CASE WHEN NEW.participation_status = 'confirmed'
-         THEN 'confirmed' ELSE 'invited' END,
+         THEN 'confirmed' ELSE 'invited' END
+    ,
     'session',
     'speaker-workflow-session:' || NEW.event_id || ':' || NEW.person_id,
     NULL,
