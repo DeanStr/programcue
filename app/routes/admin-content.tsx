@@ -1,5 +1,12 @@
 import { ArchiveRestore, Download, Files, ShieldCheck } from "lucide-react";
-import { data, Form, Link, useActionData, useNavigation } from "react-router";
+import {
+  data,
+  Form,
+  Link,
+  useActionData,
+  useFetcher,
+  useNavigation,
+} from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-content";
@@ -7,6 +14,7 @@ import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import {
   ContentManagementService,
   ContentManagementStateError,
+  type ContentFileVersion,
 } from "~/modules/content/content-management-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -25,7 +33,24 @@ async function administrator(
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await administrator(request, context);
-  return new ContentManagementService(env).getDashboard(viewer);
+  const rawPage = new URL(request.url).searchParams.get("filesPage");
+  if (
+    rawPage !== null &&
+    (!/^[1-9]\d*$/.test(rawPage) || !Number.isSafeInteger(Number(rawPage)))
+  ) {
+    throw new Response("filesPage must be a positive integer", { status: 400 });
+  }
+  try {
+    return await new ContentManagementService(env).getDashboard(
+      viewer,
+      rawPage === null ? 1 : Number(rawPage),
+    );
+  } catch (error) {
+    if (error instanceof ContentManagementStateError) {
+      throw new Response(error.message, { status: error.status });
+    }
+    throw error;
+  }
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -85,6 +110,89 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+type FileVersionPage =
+  | {
+      ok: true;
+      versions: ContentFileVersion[];
+      page: number;
+      total: number;
+      hasPrevious: boolean;
+      hasNext: boolean;
+    }
+  | { ok: false; message: string };
+
+function FileVersionHistory({
+  assetId,
+  versionCount,
+}: {
+  assetId: string;
+  versionCount: number;
+}) {
+  const fetcher = useFetcher<FileVersionPage>();
+  const page = fetcher.data?.ok ? fetcher.data.page : 1;
+
+  function loadPage(nextPage: number) {
+    void fetcher.load(
+      `/admin/content/files/${encodeURIComponent(assetId)}/versions?page=${nextPage}`,
+    );
+  }
+
+  return (
+    <details
+      onToggle={(event) => {
+        if (
+          event.currentTarget.open &&
+          !fetcher.data &&
+          fetcher.state === "idle"
+        ) {
+          loadPage(1);
+        }
+      }}
+    >
+      <summary>{versionCount} versions</summary>
+      {fetcher.state !== "idle" && !fetcher.data ? (
+        <p className="help">Loading version history…</p>
+      ) : fetcher.data?.ok ? (
+        <>
+          <ol>
+            {fetcher.data.versions.map((version) => (
+              <li key={version.id}>
+                v{version.versionNumber} · {version.scanStatus}
+                {version.current ? " · current" : ""}
+              </li>
+            ))}
+          </ol>
+          {fetcher.data.hasPrevious || fetcher.data.hasNext ? (
+            <div className="page-actions">
+              <button
+                className="btn small"
+                type="button"
+                disabled={!fetcher.data.hasPrevious || fetcher.state !== "idle"}
+                onClick={() => loadPage(page - 1)}
+              >
+                Previous versions
+              </button>
+              <span className="help">Page {page}</span>
+              <button
+                className="btn small"
+                type="button"
+                disabled={!fetcher.data.hasNext || fetcher.state !== "idle"}
+                onClick={() => loadPage(page + 1)}
+              >
+                Next versions
+              </button>
+            </div>
+          ) : null}
+        </>
+      ) : fetcher.data ? (
+        <p className="validation-item error" role="alert">
+          {fetcher.data.message}
+        </p>
+      ) : null}
+    </details>
+  );
 }
 
 export default function AdminContent({ loaderData }: Route.ComponentProps) {
@@ -200,7 +308,9 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
             <span className="pc-section-kicker">Private R2 inventory</span>
             <h2 id="content-files-title">Central files library</h2>
           </div>
-          <span className="pill">{loaderData.files.length} assets</span>
+          <span className="pill">
+            {loaderData.filesPagination.total} assets
+          </span>
         </div>
         <p className="help mb">
           Quarantined and historical metadata remains visible. Downloads and ZIP
@@ -260,18 +370,10 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
                           <small className="subtle">{asset.speakerName}</small>
                         </td>
                         <td>
-                          <details>
-                            <summary>{asset.versions.length} versions</summary>
-                            <ol>
-                              {asset.versions.map((version) => (
-                                <li key={version.id}>
-                                  v{version.versionNumber} ·{" "}
-                                  {version.scanStatus}
-                                  {version.current ? " · current" : ""}
-                                </li>
-                              ))}
-                            </ol>
-                          </details>
+                          <FileVersionHistory
+                            assetId={asset.id}
+                            versionCount={asset.versionCount}
+                          />
                         </td>
                         <td>
                           <DomainStatusBadge
@@ -317,6 +419,31 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
                 <ArchiveRestore aria-hidden size={15} /> Preview ZIP export
               </button>
             </div>
+            {loaderData.filesPagination.hasPrevious ||
+            loaderData.filesPagination.hasNext ? (
+              <nav className="page-actions" aria-label="Files pages">
+                {loaderData.filesPagination.hasPrevious ? (
+                  <Link
+                    className="btn"
+                    to={`?filesPage=${loaderData.filesPagination.page - 1}#content-files-title`}
+                  >
+                    Previous files
+                  </Link>
+                ) : null}
+                <span className="help">
+                  Page {loaderData.filesPagination.page} · up to{" "}
+                  {loaderData.filesPagination.pageSize} assets per page
+                </span>
+                {loaderData.filesPagination.hasNext ? (
+                  <Link
+                    className="btn"
+                    to={`?filesPage=${loaderData.filesPagination.page + 1}#content-files-title`}
+                  >
+                    Next files
+                  </Link>
+                ) : null}
+              </nav>
+            ) : null}
           </Form>
         ) : (
           <div className="pc-empty-state">

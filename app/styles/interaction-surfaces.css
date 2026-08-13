@@ -19,6 +19,7 @@ body.portal-open {
 }
 .sidebar-is-collapsed .brand > span:last-child,
 .sidebar-is-collapsed .nav-label,
+.sidebar-is-collapsed .nav-group-label,
 .sidebar-is-collapsed .demo-card {
   display: none;
 }

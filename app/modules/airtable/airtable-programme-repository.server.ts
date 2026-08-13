@@ -557,7 +557,6 @@ export class AirtableProgrammeRepository {
             AND track.is_public = 1
           WHERE entry.event_id = ? AND entry.schedule_version_id = ?
             AND content.visibility = 'public'
-            AND content.content_status = 'approved'
             AND session.status IN ('scheduled','published')
             AND session.visibility = 'public'
           ORDER BY entry.starts_at, entry.id`,
@@ -597,7 +596,6 @@ export class AirtableProgrammeRepository {
              ON session.id = relation.session_id AND session.event_id = relation.event_id
           WHERE content.event_id = ? AND entry.schedule_version_id = ?
             AND content.visibility = 'public'
-            AND content.content_status = 'approved'
             AND session.status IN ('scheduled','published')
             AND session.visibility = 'public'
             AND relation.visibility = 'public'

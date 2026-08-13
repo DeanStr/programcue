@@ -168,6 +168,10 @@ export default [
       "routes/admin-content-session.tsx",
     ),
     route(
+      "admin/content/files/:assetId/versions",
+      "routes/admin-content-file-versions.ts",
+    ),
+    route(
       "admin/content/files/:assetId",
       "routes/admin-content-file-download.ts",
     ),

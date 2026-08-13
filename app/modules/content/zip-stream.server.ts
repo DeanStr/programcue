@@ -111,63 +111,147 @@ export type StoredZipEntry = {
 };
 
 export function createStoredZipStream(entries: StoredZipEntry[]) {
+  type CurrentEntry = {
+    entry: StoredZipEntry;
+    name: Uint8Array;
+    offset: number;
+    crc: number;
+    size: number;
+    reader: ReadableStreamDefaultReader<Uint8Array>;
+  };
+
+  let entryIndex = 0;
+  let offset = 0;
+  let current: CurrentEntry | null = null;
+  let phase: "header" | "body" | "descriptor" | "central" | "end" =
+    "header";
+  const central: Uint8Array[] = [];
+  let centralIndex = 0;
+  let centralOffset = 0;
+
+  async function cancelBodies(reason?: unknown) {
+    const cancellations: Promise<unknown>[] = [];
+    if (current) {
+      cancellations.push(current.reader.cancel(reason));
+    }
+    for (
+      let index = entryIndex + (current ? 1 : 0);
+      index < entries.length;
+      index += 1
+    ) {
+      cancellations.push(entries[index]!.object.body.cancel(reason));
+    }
+    await Promise.allSettled(cancellations);
+  }
+
   return new ReadableStream<Uint8Array>({
-    async start(controller) {
+    async pull(controller) {
       try {
-        let offset = 0;
-        const central: Uint8Array[] = [];
-        for (const entry of entries) {
-          const name = encoder.encode(entry.path);
-          if (name.length === 0 || name.length > 0xffff) {
-            throw new Error("A ZIP entry has an invalid path length.");
-          }
-          const entryOffset = offset;
-          const header = localHeader(name, entry.modifiedAt);
-          controller.enqueue(header);
-          offset += header.length;
-          let crc = 0xffffffff;
-          let size = 0;
-          const reader = entry.object.body.getReader();
-          while (true) {
-            const result = await reader.read();
-            if (result.done) break;
-            crc = crc32(crc, result.value);
-            size += result.value.length;
-            controller.enqueue(result.value);
-            offset += result.value.length;
-          }
-          crc = (crc ^ 0xffffffff) >>> 0;
-          if (size !== entry.object.size) {
-            throw new Error(
-              `Private file ${entry.path} changed during ZIP generation.`,
-            );
-          }
-          const descriptor = dataDescriptor(crc, size);
-          controller.enqueue(descriptor);
-          offset += descriptor.length;
-          central.push(
-            centralHeader({
+        while (true) {
+          if (phase === "header") {
+            const entry = entries[entryIndex];
+            if (!entry) {
+              centralOffset = offset;
+              phase = "central";
+              continue;
+            }
+            const name = encoder.encode(entry.path);
+            if (name.length === 0 || name.length > 0xffff) {
+              throw new Error("A ZIP entry has an invalid path length.");
+            }
+            current = {
+              entry,
               name,
-              modifiedAt: entry.modifiedAt,
-              crc,
-              size,
-              offset: entryOffset,
-            }),
+              offset,
+              crc: 0xffffffff,
+              size: 0,
+              reader: entry.object.body.getReader(),
+            };
+            const header = localHeader(name, entry.modifiedAt);
+            offset += header.length;
+            phase = "body";
+            controller.enqueue(header);
+            return;
+          }
+
+          if (phase === "body") {
+            if (!current) throw new Error("The ZIP entry state is invalid.");
+            const result = await current.reader.read();
+            if (result.done) {
+              current.reader.releaseLock();
+              current.crc = (current.crc ^ 0xffffffff) >>> 0;
+              if (current.size !== current.entry.object.size) {
+                throw new Error(
+                  `Private file ${current.entry.path} changed during ZIP generation.`,
+                );
+              }
+              phase = "descriptor";
+              continue;
+            }
+            if (
+              current.size + result.value.length >
+              current.entry.object.size
+            ) {
+              throw new Error(
+                `Private file ${current.entry.path} changed during ZIP generation.`,
+              );
+            }
+            current.crc = crc32(current.crc, result.value);
+            current.size += result.value.length;
+            offset += result.value.length;
+            controller.enqueue(result.value);
+            return;
+          }
+
+          if (phase === "descriptor") {
+            if (!current) throw new Error("The ZIP entry state is invalid.");
+            const descriptor = dataDescriptor(current.crc, current.size);
+            central.push(
+              centralHeader({
+                name: current.name,
+                modifiedAt: current.entry.modifiedAt,
+                crc: current.crc,
+                size: current.size,
+                offset: current.offset,
+              }),
+            );
+            offset += descriptor.length;
+            entryIndex += 1;
+            current = null;
+            phase = "header";
+            controller.enqueue(descriptor);
+            return;
+          }
+
+          if (phase === "central") {
+            const header = central[centralIndex];
+            if (!header) {
+              phase = "end";
+              continue;
+            }
+            centralIndex += 1;
+            offset += header.length;
+            controller.enqueue(header);
+            return;
+          }
+
+          controller.enqueue(
+            endOfCentralDirectory(
+              entries.length,
+              offset - centralOffset,
+              centralOffset,
+            ),
           );
+          controller.close();
+          return;
         }
-        const centralOffset = offset;
-        for (const header of central) {
-          controller.enqueue(header);
-          offset += header.length;
-        }
-        const centralSize = offset - centralOffset;
-        controller.enqueue(
-          endOfCentralDirectory(entries.length, centralSize, centralOffset),
-        );
-        controller.close();
       } catch (error) {
+        await cancelBodies(error);
         controller.error(error);
       }
+    },
+    async cancel(reason) {
+      await cancelBodies(reason);
     },
   });
 }

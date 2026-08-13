@@ -284,6 +284,16 @@ export function SchedulePlannerWorkspace({
     () => new Map(workspace.sessions.map((session) => [session.id, session])),
     [workspace.sessions],
   );
+  const contentReviewAdvisories = useMemo(
+    () =>
+      workspace.entries.flatMap((entry) => {
+        const session = sessionById.get(entry.sessionId);
+        return session && session.contentStatus !== "approved"
+          ? [session]
+          : [];
+      }),
+    [sessionById, workspace.entries],
+  );
   const resourceInventory = useMemo(
     () =>
       [...new Set(workspace.rooms.flatMap((room) => room.resources))].sort(),
@@ -1181,6 +1191,33 @@ export function SchedulePlannerWorkspace({
             Publish version {workspace.version.versionNumber} with{" "}
             <strong>{workspace.entries.length} scheduled sessions</strong>.
           </p>
+          {contentReviewAdvisories.length ? (
+            <div className="validation-item warn">
+              <strong>
+                {contentReviewAdvisories.length} scheduled content record
+                {contentReviewAdvisories.length === 1 ? " is" : "s are"} not
+                marked Approved.
+              </strong>{" "}
+              Content review status is advisory. Confirming publication makes
+              this exact schedule-version snapshot authoritative; editorial
+              statuses stay unchanged, and public views continue to enforce
+              visibility.
+              <ul>
+                {contentReviewAdvisories.slice(0, 5).map((session) => (
+                  <li key={session.id}>
+                    {session.title} · {session.contentStatus.replaceAll("_", " ")}
+                  </li>
+                ))}
+                {contentReviewAdvisories.length > 5 ? (
+                  <li>{contentReviewAdvisories.length - 5} more</li>
+                ) : null}
+              </ul>
+            </div>
+          ) : (
+            <div className="validation-item ok">
+              Every scheduled content record is marked Approved.
+            </div>
+          )}
           <div
             className={`validation-item ${workspace.publicationConflicts.some((conflict) => conflict.severity === "blocking") ? "error" : workspace.publicationConflicts.length ? "warn" : "ok"}`}
           >

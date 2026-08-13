@@ -26,6 +26,7 @@ import {
 
 const MAX_ZIP_BYTES = 100 * 1024 * 1024;
 const CONTENT_HISTORY_PAGE_SIZE = 50;
+const FILE_LIBRARY_PAGE_SIZE = 50;
 
 const zipManifestEntrySchema = z.object({
   assetId: z.string().min(1).max(160),
@@ -109,6 +110,36 @@ function safeZipSegment(value: string) {
   );
 }
 
+function duplicateZipPath(group: string, filename: string, suffix: string) {
+  const extensionIndex = filename.lastIndexOf(".");
+  const suffixedFilename =
+    extensionIndex > 0 && extensionIndex < filename.length - 1
+      ? `${filename.slice(0, extensionIndex)}-${suffix}${filename.slice(extensionIndex)}`
+      : `${filename}-${suffix}`;
+  return `${group}/${suffixedFilename}`;
+}
+
+function uniqueZipPath(
+  paths: ReadonlySet<string>,
+  group: string,
+  filename: string,
+  assetSuffix: string,
+) {
+  const base = `${group}/${filename}`;
+  if (!paths.has(base)) return base;
+  let candidate = duplicateZipPath(group, filename, assetSuffix);
+  let collision = 2;
+  while (paths.has(candidate)) {
+    candidate = duplicateZipPath(
+      group,
+      filename,
+      `${assetSuffix}-${collision}`,
+    );
+    collision += 1;
+  }
+  return candidate;
+}
+
 function parseHistoryCursor(value: string | null) {
   if (value === null) return null;
   const match = /^(\d+):(\d+)$/.exec(value);
@@ -151,6 +182,7 @@ export type ContentFileAsset = {
   speakerName: string;
   sessionName: string;
   currentVersionId: string | null;
+  versionCount: number;
   versions: ContentFileVersion[];
 };
 
@@ -164,9 +196,15 @@ export class ContentManagementService {
     return this.env.FILES;
   }
 
-  async getDashboard(viewer: Viewer) {
+  async getDashboard(viewer: Viewer, filePage = 1) {
     requireAdministrator(viewer);
-    const [version, sessions, assets, versions] = await Promise.all([
+    if (!Number.isSafeInteger(filePage) || filePage < 1) {
+      throw new ContentManagementStateError(
+        "The files page must be a positive integer.",
+        400,
+      );
+    }
+    const [version, sessions, assets, fileCount] = await Promise.all([
       this.env.DB.prepare(
         `SELECT version.id, version.version_number AS versionNumber,
                 version.status, version.revision
@@ -236,6 +274,19 @@ export class ContentManagementService {
                 asset.target_id AS targetId, asset.asset_kind AS assetKind,
                 asset.status, asset.owner_person_id AS ownerPersonId,
                 asset.current_version_id AS currentVersionId,
+                current.id AS currentFileVersionId,
+                current.version_number AS currentVersionNumber,
+                current.original_filename AS currentFilename,
+                current.size_bytes AS currentSizeBytes,
+                current.upload_status AS currentUploadStatus,
+                current.signature_status AS currentSignatureStatus,
+                current.scan_status AS currentScanStatus,
+                current.released_at AS currentReleasedAt,
+                current.created_at AS currentCreatedAt,
+                (SELECT COUNT(*) FROM file_versions retained
+                  WHERE retained.event_id = asset.event_id
+                    AND retained.asset_id = asset.id
+                    AND retained.deleted_at IS NULL) AS versionCount,
                 COALESCE(owner.display_name, (
                   SELECT person.display_name
                     FROM task_instances task
@@ -267,14 +318,155 @@ export class ContentManagementService {
            JOIN events event
              ON event.id = asset.event_id AND event.organisation_id = ?
            LEFT JOIN people owner ON owner.id = asset.owner_person_id
+           LEFT JOIN file_versions current
+             ON current.id = asset.current_version_id
+            AND current.event_id = asset.event_id
+            AND current.asset_id = asset.id
+            AND current.deleted_at IS NULL
           WHERE asset.event_id = ? AND asset.status <> 'deleted'
-          ORDER BY asset.updated_at DESC, asset.id`,
+          ORDER BY asset.updated_at DESC, asset.id
+          LIMIT ? OFFSET ?`,
+      )
+        .bind(
+          viewer.organisationId,
+          viewer.eventId,
+          FILE_LIBRARY_PAGE_SIZE + 1,
+          (filePage - 1) * FILE_LIBRARY_PAGE_SIZE,
+        )
+        .all<
+          Omit<ContentFileAsset, "versions" | "versionCount"> & {
+            versionCount: number;
+            currentFileVersionId: string | null;
+            currentVersionNumber: number | null;
+            currentFilename: string | null;
+            currentSizeBytes: number | null;
+            currentUploadStatus: string | null;
+            currentSignatureStatus: string | null;
+            currentScanStatus: string | null;
+            currentReleasedAt: number | null;
+            currentCreatedAt: number | null;
+          }
+        >(),
+      this.env.DB.prepare(
+        `SELECT COUNT(*) AS total
+           FROM file_assets asset
+           JOIN events event
+             ON event.id = asset.event_id AND event.organisation_id = ?
+          WHERE asset.event_id = ? AND asset.status <> 'deleted'`,
       )
         .bind(viewer.organisationId, viewer.eventId)
-        .all<Omit<ContentFileAsset, "versions">>(),
+        .first<{ total: number }>(),
+    ]);
+    if (
+      !fileCount ||
+      !Number.isSafeInteger(fileCount.total) ||
+      fileCount.total < 0
+    ) {
+      throw new Error(
+        "The file library count query returned an invalid result.",
+      );
+    }
+    const totalFiles = fileCount.total;
+    if (filePage > 1 && assets.results.length === 0) {
+      throw new ContentManagementStateError(
+        "The requested files page does not exist.",
+        404,
+      );
+    }
+    return {
+      version: version ?? null,
+      sessions: sessions.results.map((session) => ({
+        ...session,
+        scheduled: Boolean(session.scheduled),
+        speakerNames: session.speakerNames?.split("||") ?? [],
+      })),
+      files: assets.results
+        .slice(0, FILE_LIBRARY_PAGE_SIZE)
+        .map(
+          ({
+            currentFileVersionId,
+            currentVersionNumber,
+            currentFilename,
+            currentSizeBytes,
+            currentUploadStatus,
+            currentSignatureStatus,
+            currentScanStatus,
+            currentReleasedAt,
+            currentCreatedAt,
+            ...asset
+          }) => {
+            if (asset.currentVersionId === null) {
+              return { ...asset, versions: [] };
+            }
+            if (
+              currentFileVersionId !== asset.currentVersionId ||
+              currentVersionNumber === null ||
+              currentFilename === null ||
+              currentSizeBytes === null ||
+              currentUploadStatus === null ||
+              currentSignatureStatus === null ||
+              currentScanStatus === null ||
+              currentCreatedAt === null
+            ) {
+              throw new Error(
+                `File asset ${asset.id} references unavailable current version ${asset.currentVersionId}.`,
+              );
+            }
+            return {
+              ...asset,
+              versions: [
+                {
+                  id: currentFileVersionId,
+                  versionNumber: currentVersionNumber,
+                  filename: currentFilename,
+                  sizeBytes: currentSizeBytes,
+                  uploadStatus: currentUploadStatus,
+                  signatureStatus: currentSignatureStatus,
+                  scanStatus: currentScanStatus,
+                  releasedAt: currentReleasedAt,
+                  createdAt: currentCreatedAt,
+                  current: true,
+                },
+              ],
+            };
+          },
+        ),
+      filesPagination: {
+        page: filePage,
+        pageSize: FILE_LIBRARY_PAGE_SIZE,
+        total: totalFiles,
+        hasPrevious: filePage > 1,
+        hasNext: assets.results.length > FILE_LIBRARY_PAGE_SIZE,
+      },
+    };
+  }
+
+  async getFileVersions(viewer: Viewer, assetId: string, page = 1) {
+    requireAdministrator(viewer);
+    if (!Number.isSafeInteger(page) || page < 1) {
+      throw new ContentManagementStateError(
+        "The file-version page must be a positive integer.",
+        400,
+      );
+    }
+    const [asset, versions] = await Promise.all([
       this.env.DB.prepare(
-        `SELECT version.id, version.asset_id AS assetId,
-                version.version_number AS versionNumber,
+        `SELECT COUNT(version.id) AS total
+           FROM file_assets asset
+           JOIN events event
+             ON event.id = asset.event_id AND event.organisation_id = ?
+           LEFT JOIN file_versions version
+             ON version.asset_id = asset.id
+            AND version.event_id = asset.event_id
+            AND version.deleted_at IS NULL
+          WHERE asset.id = ? AND asset.event_id = ?
+            AND asset.status <> 'deleted'
+          GROUP BY asset.id`,
+      )
+        .bind(viewer.organisationId, assetId, viewer.eventId)
+        .first<{ total: number }>(),
+      this.env.DB.prepare(
+        `SELECT version.id, version.version_number AS versionNumber,
                 version.original_filename AS filename,
                 version.size_bytes AS sizeBytes,
                 version.upload_status AS uploadStatus,
@@ -288,36 +480,43 @@ export class ContentManagementService {
              ON asset.id = version.asset_id AND asset.event_id = version.event_id
            JOIN events event
              ON event.id = version.event_id AND event.organisation_id = ?
-          WHERE version.event_id = ? AND version.deleted_at IS NULL
-          ORDER BY version.asset_id, version.version_number DESC`,
+          WHERE version.event_id = ? AND version.asset_id = ?
+            AND version.deleted_at IS NULL AND asset.status <> 'deleted'
+          ORDER BY version.version_number DESC, version.id
+          LIMIT ? OFFSET ?`,
       )
-        .bind(viewer.organisationId, viewer.eventId)
-        .all<
-          Omit<ContentFileVersion, "current"> & {
-            assetId: string;
-            current: number;
-          }
-        >(),
+        .bind(
+          viewer.organisationId,
+          viewer.eventId,
+          assetId,
+          FILE_LIBRARY_PAGE_SIZE + 1,
+          (page - 1) * FILE_LIBRARY_PAGE_SIZE,
+        )
+        .all<Omit<ContentFileVersion, "current"> & { current: number }>(),
     ]);
-    const versionsByAsset = new Map<string, ContentFileVersion[]>();
-    for (const row of versions.results) {
-      const { assetId, current, ...rest } = row;
-      versionsByAsset.set(assetId, [
-        ...(versionsByAsset.get(assetId) ?? []),
-        { ...rest, current: Boolean(current) },
-      ]);
+    if (!asset) {
+      throw new ContentManagementStateError(
+        "The file asset is unavailable or outside this event.",
+        404,
+      );
+    }
+    if (page > 1 && versions.results.length === 0) {
+      throw new ContentManagementStateError(
+        "The requested file-version page does not exist.",
+        404,
+      );
     }
     return {
-      version: version ?? null,
-      sessions: sessions.results.map((session) => ({
-        ...session,
-        scheduled: Boolean(session.scheduled),
-        speakerNames: session.speakerNames?.split("||") ?? [],
-      })),
-      files: assets.results.map((asset) => ({
-        ...asset,
-        versions: versionsByAsset.get(asset.id) ?? [],
-      })),
+      versions: versions.results
+        .slice(0, FILE_LIBRARY_PAGE_SIZE)
+        .map(({ current, ...version }) => ({
+          ...version,
+          current: Boolean(current),
+        })),
+      page,
+      total: asset.total,
+      hasPrevious: page > 1,
+      hasNext: versions.results.length > FILE_LIBRARY_PAGE_SIZE,
     };
   }
 
@@ -873,10 +1072,13 @@ export class ContentManagementService {
       const group = safeZipSegment(
         input.groupBy === "session" ? row.sessionName : row.speakerName,
       );
-      const base = `${group}/${safeZipSegment(row.filename)}`;
-      const path = paths.has(base)
-        ? `${group}/${safeZipSegment(row.filename)}-${row.assetId.slice(-8)}`
-        : base;
+      const filename = safeZipSegment(row.filename);
+      const path = uniqueZipPath(
+        paths,
+        group,
+        filename,
+        row.assetId.slice(-8),
+      );
       paths.add(path);
       entries.push({ path, object, modifiedAt: row.createdAt });
     }

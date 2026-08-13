@@ -68,7 +68,6 @@ export class PublicItineraryService {
          AND (p.expires_at IS NULL OR p.expires_at > unixepoch())
          AND se.schedule_version_id = ?
          AND session.status = 'published' AND content.visibility = 'public'
-         AND content.content_status = 'approved'
        ORDER BY se.starts_at, i.session_id
     `,
     )
@@ -145,7 +144,6 @@ export class PublicItineraryService {
          AND (itinerary.expires_at IS NULL OR itinerary.expires_at > unixepoch())
          AND entry.schedule_version_id = ?
          AND session.status = 'published' AND content.visibility = 'public'
-         AND content.content_status = 'approved'
        ORDER BY entry.starts_at
     `,
     )
@@ -278,7 +276,6 @@ export class PublicItineraryService {
            AND (source.expires_at IS NULL OR source.expires_at > unixepoch())
            AND entry.schedule_version_id = ?
            AND session.status = 'published' AND content.visibility = 'public'
-           AND content.content_status = 'approved'
       `,
       ).bind(target.id, programme.event.id, visitorHash, programme.version.id),
       this.env.DB.prepare(
@@ -353,8 +350,7 @@ export class PublicItineraryService {
               WHERE itinerary.event_id = ? AND itinerary.person_id = ?
                 AND (itinerary.expires_at IS NULL OR itinerary.expires_at > unixepoch())
                 AND entry.schedule_version_id = ?
-                AND session.status = 'published' AND content.visibility = 'public'
-                AND content.content_status = 'approved'`,
+                AND session.status = 'published' AND content.visibility = 'public'`,
           ).bind(
             sessionId,
             programme.event.id,
@@ -461,8 +457,7 @@ export class PublicItineraryService {
             WHERE p.event_id = ? AND p.visitor_key_hash = ?
               AND (p.expires_at IS NULL OR p.expires_at > unixepoch())
               AND entry.schedule_version_id = ?
-              AND s.status = 'published' AND content.visibility = 'public'
-              AND content.content_status = 'approved'`,
+              AND s.status = 'published' AND content.visibility = 'public'`,
         ).bind(
           sessionId,
           programme.event.id,
@@ -533,7 +528,6 @@ export class PublicItineraryService {
             WHERE item.itinerary_id = itinerary.id
               AND entry.schedule_version_id = ?
               AND session.status = 'published' AND content.visibility = 'public'
-              AND content.content_status = 'approved'
          )
        LIMIT 1
     `,

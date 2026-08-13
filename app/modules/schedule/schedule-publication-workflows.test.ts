@@ -183,14 +183,10 @@ describe("schedule publication workflows", () => {
       endsAt: startsAt + 3_600,
     });
     workspace = await service.getWorkspace(viewer);
-    await expect(
-      service.publish(viewer, {
-        scheduleVersionId: versionId,
-        scheduleRevision: workspace.version!.revision,
-      }),
-    ).rejects.toThrow(/approve content for .+ before publishing/i);
-    await approveScheduledTestContent(versionId);
-    workspace = await service.getWorkspace(viewer);
+    expect(
+      workspace.sessions.find((session) => session.id === "schedule-test-one")
+        ?.contentStatus,
+    ).toBe("draft");
     const publication = await service.publish(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,
@@ -722,7 +718,7 @@ describe("schedule publication workflows", () => {
     ).toEqual({ count: 0 });
   });
 
-  it("rechecks content approval inside the publication transaction", async () => {
+  it("rechecks missing content snapshots inside the publication transaction", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);
     let workspace = await service.getWorkspace(viewer);
@@ -739,18 +735,15 @@ describe("schedule publication workflows", () => {
       startsAt,
       endsAt: startsAt + 3_600,
     });
-    await approveScheduledTestContent(versionId);
     workspace = await service.getWorkspace(viewer);
 
-    class ApprovalRacingScheduleService extends ScheduleService {
+    class MissingSnapshotRacingScheduleService extends ScheduleService {
       override async getWorkspace(
         scope: Pick<Viewer, "organisationId" | "eventId">,
       ) {
         const loaded = await super.getWorkspace(scope);
         await env.DB.prepare(
-          `UPDATE schedule_session_contents
-              SET content_status = 'draft', approved_by_person_id = NULL,
-                  approved_at = NULL
+          `DELETE FROM schedule_session_contents
             WHERE schedule_version_id = ? AND event_id = ?
               AND session_id = 'schedule-test-one'`,
         )
@@ -761,11 +754,11 @@ describe("schedule publication workflows", () => {
     }
 
     await expect(
-      new ApprovalRacingScheduleService(scheduleTestEnv).publish(viewer, {
+      new MissingSnapshotRacingScheduleService(scheduleTestEnv).publish(viewer, {
         scheduleVersionId: versionId,
         scheduleRevision: workspace.version!.revision,
       }),
-    ).rejects.toThrow(/schedule changed/i);
+    ).rejects.toThrow(/missing one or more required frozen session-content snapshots/i);
     await expect(
       env.DB.prepare("SELECT status FROM schedule_versions WHERE id = ?")
         .bind(versionId)

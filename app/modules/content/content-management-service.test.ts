@@ -223,7 +223,7 @@ describe("content management", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it("blocks partial publication and exposes the complete approved programme", async () => {
+  it("treats content review status as advisory and publishes the complete snapshot", async () => {
     const schedule = new ScheduleService(scheduleTestEnv);
     const content = new ContentManagementService(scheduleTestEnv);
     const versionId = await schedule.createDraft(viewer);
@@ -263,42 +263,14 @@ describe("content management", () => {
       status: "approved",
       confirmed: true,
     });
-    workspace = await schedule.getWorkspace(viewer);
-    await expect(
-      schedule.publish(viewer, {
-        scheduleVersionId: versionId,
-        scheduleRevision: workspace.version!.revision,
-      }),
-    ).rejects.toThrow(/approve content for Second test session/i);
-
     const secondSession = workspace.sessions.find(
       (candidate) => candidate.id === "schedule-test-two",
     )!;
-    await schedule.updateSessionContent(viewer, {
-      scheduleVersionId: versionId,
-      scheduleRevision: workspace.version!.revision,
-      sessionId: secondSession.id,
-      sessionRevision: secondSession.revision,
-      idempotencyKey: crypto.randomUUID(),
-      title: secondSession.title,
-      description:
-        "The second scheduled session is also ready for publication.",
-      format: secondSession.format,
-      durationMinutes: secondSession.durationMinutes,
-      trackId: secondSession.trackId,
-      visibility: "public",
-      requiredResources: secondSession.requiredResources,
-    });
-    detail = await content.getSession(viewer, secondSession.id);
-    await content.changeStatus(viewer, {
-      scheduleVersionId: versionId,
-      sessionId: secondSession.id,
-      scheduleRevision: detail.current.scheduleRevision,
-      contentRevision: detail.current.contentRevision,
-      status: "approved",
-      confirmed: true,
-    });
     workspace = await schedule.getWorkspace(viewer);
+    expect(
+      workspace.sessions.find((session) => session.id === secondSession.id)
+        ?.contentStatus,
+    ).toBe("draft");
     await schedule.publish(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,
@@ -318,12 +290,34 @@ describe("content management", () => {
 
   it("exports only the exact current released file versions after confirmation", async () => {
     const content = new ContentManagementService(scheduleTestEnv);
-    const assetId = crypto.randomUUID();
-    const versionId = crypto.randomUUID();
+    const assetId = "contentzipassetaaaaaaaa";
+    const versionId = "content-zip-version-a";
+    const naturalCollisionAssetId = "contentzipnaturalcccccc";
+    const naturalCollisionVersionId = "content-zip-version-natural";
+    const duplicateAssetId = "contentzipzzzzbbbbbbbb";
+    const duplicateVersionId = "content-zip-version-b";
     const objectKey = `private/content-tests/${versionId}`;
+    const naturalCollisionObjectKey = `private/content-tests/${naturalCollisionVersionId}`;
+    const duplicateObjectKey = `private/content-tests/${duplicateVersionId}`;
     const bytes = new TextEncoder().encode("conference content");
+    const naturalCollisionBytes = new TextEncoder().encode(
+      "naturally suffixed content",
+    );
+    const duplicateBytes = new TextEncoder().encode("updated slide content");
     const object = await env.FILES.put(objectKey, bytes);
+    const naturalCollisionObject = await env.FILES.put(
+      naturalCollisionObjectKey,
+      naturalCollisionBytes,
+    );
+    const duplicateObject = await env.FILES.put(
+      duplicateObjectKey,
+      duplicateBytes,
+    );
     if (!object) throw new Error("The test R2 object was not created.");
+    if (!naturalCollisionObject)
+      throw new Error("The natural-collision R2 object was not created.");
+    if (!duplicateObject)
+      throw new Error("The duplicate test R2 object was not created.");
     await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO file_assets (
@@ -354,6 +348,68 @@ describe("content management", () => {
         `UPDATE file_assets SET current_version_id = ?, updated_at = unixepoch()
           WHERE id = ? AND event_id = ?`,
       ).bind(versionId, assetId, viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status, created_at, updated_at
+         ) VALUES (?, ?, ?, 'session', 'schedule-test-one',
+                   'supporting_document', 'active', unixepoch(), unixepoch())`,
+      ).bind(naturalCollisionAssetId, viewer.eventId, viewer.personId),
+      env.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status,
+           scan_status, released_at, created_by_person_id, created_at
+         ) VALUES (?, ?, ?, 1, ?, 'slides-bbbbbbbb.pdf', 'application/pdf',
+                   'application/pdf', ?, ?, 'uploaded', 'valid', 'clean',
+                   unixepoch(), ?, unixepoch())`,
+      ).bind(
+        naturalCollisionVersionId,
+        viewer.eventId,
+        naturalCollisionAssetId,
+        naturalCollisionObjectKey,
+        naturalCollisionBytes.byteLength,
+        naturalCollisionObject.httpEtag,
+        viewer.personId,
+      ),
+      env.DB.prepare(
+        `UPDATE file_assets SET current_version_id = ?, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      ).bind(
+        naturalCollisionVersionId,
+        naturalCollisionAssetId,
+        viewer.eventId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status, created_at, updated_at
+         ) VALUES (?, ?, ?, 'session', 'schedule-test-one',
+                   'other', 'active', unixepoch(), unixepoch())`,
+      ).bind(duplicateAssetId, viewer.eventId, viewer.personId),
+      env.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status,
+           scan_status, released_at, created_by_person_id, created_at
+         ) VALUES (?, ?, ?, 1, ?, 'slides.pdf', 'application/pdf',
+                   'application/pdf', ?, ?, 'uploaded', 'valid', 'clean',
+                   unixepoch(), ?, unixepoch())`,
+      ).bind(
+        duplicateVersionId,
+        viewer.eventId,
+        duplicateAssetId,
+        duplicateObjectKey,
+        duplicateBytes.byteLength,
+        duplicateObject.httpEtag,
+        viewer.personId,
+      ),
+      env.DB.prepare(
+        `UPDATE file_assets SET current_version_id = ?, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      ).bind(duplicateVersionId, duplicateAssetId, viewer.eventId),
     ]);
 
     const dashboard = await content.getDashboard(viewer);
@@ -364,7 +420,7 @@ describe("content management", () => {
       },
     );
     const preview = await content.previewZip(viewer, {
-      assetIds: [assetId],
+      assetIds: [assetId, naturalCollisionAssetId, duplicateAssetId],
       groupBy: "session",
     });
     const response = await content.downloadZip(viewer, {
@@ -377,6 +433,12 @@ describe("content management", () => {
     expect(new DataView(zip.buffer).getUint32(0, true)).toBe(0x04034b50);
     expect(new TextDecoder().decode(zip)).toContain(
       "Approved public session/slides.pdf",
+    );
+    expect(new TextDecoder().decode(zip)).toContain(
+      "Approved public session/slides-bbbbbbbb.pdf",
+    );
+    expect(new TextDecoder().decode(zip)).toContain(
+      "Approved public session/slides-bbbbbbbb-2.pdf",
     );
     expect(new TextDecoder().decode(zip)).toContain("conference content");
   });
@@ -458,6 +520,138 @@ describe("content management", () => {
     });
     expect(new TextDecoder().decode(await response.arrayBuffer())).toContain(
       "Approved public session/proposal.pdf",
+    );
+  });
+
+  it("bounds the file library and loads retained versions in separate pages", async () => {
+    const content = new ContentManagementService(scheduleTestEnv);
+    const initialFileTotal = (await content.getDashboard(viewer)).filesPagination
+      .total;
+    await env.DB.prepare(
+      `WITH RECURSIVE sequence(value) AS (
+         VALUES (1) UNION ALL SELECT value + 1 FROM sequence WHERE value < 55
+       )
+       INSERT INTO file_assets (
+         id, event_id, owner_person_id, target_type, target_id, asset_kind,
+         status, created_at, updated_at
+       )
+       SELECT printf('content-page-asset-%02d', value), ?, ?, 'task',
+              printf('content-page-task-%02d', value), 'other', 'active',
+              1700000000 + value, 1700000000 + value
+         FROM sequence`,
+    )
+      .bind(viewer.eventId, viewer.personId)
+      .run();
+    await env.DB.prepare(
+      `WITH RECURSIVE sequence(value) AS (
+         VALUES (1) UNION ALL SELECT value + 1 FROM sequence WHERE value < 52
+       )
+       INSERT INTO file_versions (
+         id, event_id, asset_id, version_number, object_key,
+         original_filename, declared_content_type, size_bytes,
+         upload_status, signature_status, scan_status, created_at
+       )
+       SELECT printf('content-page-version-%02d', value), ?,
+              'content-page-asset-55', value,
+              printf('content-page/object-%02d', value),
+              printf('slides-%02d.pdf', value), 'application/pdf', value,
+              'requested', 'pending', 'pending', 1700000000 + value
+         FROM sequence`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    await env.DB.prepare(
+      `UPDATE file_assets
+          SET current_version_id = 'content-page-version-52'
+        WHERE id = 'content-page-asset-55' AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+
+    const firstPage = await content.getDashboard(viewer, 1);
+    expect(firstPage.files).toHaveLength(50);
+    expect(firstPage.filesPagination).toEqual({
+      page: 1,
+      pageSize: 50,
+      total: initialFileTotal + 55,
+      hasPrevious: false,
+      hasNext: true,
+    });
+    expect(
+      firstPage.files.find((asset) => asset.id === "content-page-asset-55"),
+    ).toMatchObject({
+      id: "content-page-asset-55",
+      versionCount: 52,
+      versions: [
+        expect.objectContaining({ id: "content-page-version-52" }),
+      ],
+    });
+
+    const secondPage = await content.getDashboard(viewer, 2);
+    expect(secondPage.files).toHaveLength(initialFileTotal + 5);
+    expect(secondPage.filesPagination).toMatchObject({
+      page: 2,
+      hasPrevious: true,
+      hasNext: false,
+    });
+
+    const firstVersions = await content.getFileVersions(
+      viewer,
+      "content-page-asset-55",
+      1,
+    );
+    expect(firstVersions.versions).toHaveLength(50);
+    expect(firstVersions).toMatchObject({ total: 52, hasNext: true });
+    const secondVersions = await content.getFileVersions(
+      viewer,
+      "content-page-asset-55",
+      2,
+    );
+    expect(secondVersions.versions).toHaveLength(2);
+    expect(secondVersions).toMatchObject({ hasPrevious: true, hasNext: false });
+  });
+
+  it("rejects out-of-range file pages even when the bounded collection is empty", async () => {
+    const content = new ContentManagementService(scheduleTestEnv);
+    await env.DB.prepare("DELETE FROM file_assets WHERE event_id = ?")
+      .bind(viewer.eventId)
+      .run();
+
+    await expect(content.getDashboard(viewer, 2)).rejects.toMatchObject({
+      status: 404,
+    });
+
+    await env.DB.prepare(
+      `INSERT INTO file_assets (
+         id, event_id, owner_person_id, target_type, target_id, asset_kind,
+         status, created_at, updated_at
+       ) VALUES ('content-empty-version-asset', ?, ?, 'task',
+                 'content-empty-version-task', 'other', 'active',
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(viewer.eventId, viewer.personId)
+      .run();
+    await expect(
+      content.getFileVersions(viewer, "content-empty-version-asset", 2),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("fails instead of hiding an unresolved current file-version pointer", async () => {
+    const content = new ContentManagementService(scheduleTestEnv);
+    await env.DB.prepare(
+      `INSERT INTO file_assets (
+         id, event_id, owner_person_id, target_type, target_id, asset_kind,
+         current_version_id, status, created_at, updated_at
+       ) VALUES ('content-dangling-current-asset', ?, ?, 'task',
+                 'content-dangling-current-task', 'other',
+                 'content-missing-current-version', 'active',
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(viewer.eventId, viewer.personId)
+      .run();
+
+    await expect(content.getDashboard(viewer)).rejects.toThrow(
+      /references unavailable current version content-missing-current-version/i,
     );
   });
 });

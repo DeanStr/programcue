@@ -27,7 +27,6 @@ import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Link,
-  NavLink,
   useFetcher,
   useLocation,
   useNavigate,
@@ -68,6 +67,48 @@ export const NAV_ITEMS = [
   ["settings", Settings, "Settings"],
   ["operations", Activity, "Operations"],
 ] as const satisfies ReadonlyArray<AdminNavigationItem>;
+
+const NAV_GROUPS = [
+  {
+    label: "Core work",
+    ids: [
+      "command",
+      "event",
+      "submissions",
+      "review",
+      "speakers",
+      "schedule",
+      "communications",
+      "tasks",
+      "programme",
+    ],
+  },
+  {
+    label: "Manage",
+    ids: ["integrations", "operations", "settings"],
+  },
+] as const;
+
+export function primaryNavigationGroups(
+  items: ReadonlyArray<AdminNavigationItem>,
+) {
+  const available = new Map(items.map((item) => [item[0], item]));
+  return NAV_GROUPS.map((group) => ({
+    label: group.label,
+    items: group.ids.flatMap((id) => {
+      const item = available.get(id);
+      return item ? [item] : [];
+    }),
+  })).filter((group) => group.items.length > 0);
+}
+
+export function primaryNavigationItemActive(id: string, pathname: string) {
+  const section = pathname.split("/").filter(Boolean)[1] ?? "command";
+  if (section === id) return true;
+  if (id === "speakers") return section === "crm" || section === "resources";
+  if (id === "programme") return section === "content";
+  return false;
+}
 export type AdminShellDialog =
   | "command"
   | "event"
@@ -297,6 +338,7 @@ export function AdminShell({
       : NAV_ITEMS.filter(
           ([id]) => id !== "crm" || viewer.canCreateEvents || viewer.demo,
         );
+  const navigationGroups = primaryNavigationGroups(navigationItems);
   const demoRoleLabel = `${viewer.role.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase())} demo`;
   const viewArea = savedViewArea(location.pathname);
   const currentHref = `${location.pathname}${location.search}${location.hash}`;
@@ -404,20 +446,34 @@ export function AdminShell({
           <span>Program Cue</span>
         </Link>
         <nav className="nav">
-          {navigationItems.map(([id, Icon, label]) => (
-            <NavLink
-              key={id}
-              to={`/admin/${id}`}
-              className={({ isActive }) => (isActive ? "active" : undefined)}
-              /* The label span is display:none at and below 1024px, which
-                 leaves the link with no accessible name at all. */
-              aria-label={label}
-            >
-              <span className="nav-icon">
-                <Icon aria-hidden size={16} strokeWidth={1.8} />
-              </span>
-              <span className="nav-label">{label}</span>
-            </NavLink>
+          {navigationGroups.map((group) => (
+            <div className="nav-group" key={group.label}>
+              <span className="nav-group-label">{group.label}</span>
+              {group.items.map(([id, Icon, label]) => (
+                <Link
+                  key={id}
+                  to={`/admin/${id}`}
+                  className={
+                    primaryNavigationItemActive(id, location.pathname)
+                      ? "active"
+                      : undefined
+                  }
+                  aria-current={
+                    primaryNavigationItemActive(id, location.pathname)
+                      ? "page"
+                      : undefined
+                  }
+                  /* The label span is display:none at and below 1024px, which
+                     leaves the link with no accessible name at all. */
+                  aria-label={label}
+                >
+                  <span className="nav-icon">
+                    <Icon aria-hidden size={16} strokeWidth={1.8} />
+                  </span>
+                  <span className="nav-label">{label}</span>
+                </Link>
+              ))}
+            </div>
           ))}
         </nav>
         <div className="sidebar-bottom">
@@ -524,18 +580,32 @@ export function AdminShell({
       {mobileNavOpen ? (
         <Dialog title="Navigation" onClose={() => setMobileNavOpen(false)}>
           <nav aria-label="Primary" className="pc-mobile-nav">
-            {navigationItems.map(([id, Icon, label]) => (
-              <NavLink
-                key={id}
-                to={`/admin/${id}`}
-                className={({ isActive }) => (isActive ? "active" : undefined)}
-                onClick={() => setMobileNavOpen(false)}
-              >
-                <span className="nav-icon">
-                  <Icon aria-hidden size={17} strokeWidth={1.8} />
-                </span>
-                {label}
-              </NavLink>
+            {navigationGroups.map((group) => (
+              <div className="pc-mobile-nav-group" key={group.label}>
+                <span className="nav-group-label">{group.label}</span>
+                {group.items.map(([id, Icon, label]) => (
+                  <Link
+                    key={id}
+                    to={`/admin/${id}`}
+                    className={
+                      primaryNavigationItemActive(id, location.pathname)
+                        ? "active"
+                        : undefined
+                    }
+                    aria-current={
+                      primaryNavigationItemActive(id, location.pathname)
+                        ? "page"
+                        : undefined
+                    }
+                    onClick={() => setMobileNavOpen(false)}
+                  >
+                    <span className="nav-icon">
+                      <Icon aria-hidden size={17} strokeWidth={1.8} />
+                    </span>
+                    {label}
+                  </Link>
+                ))}
+              </div>
             ))}
           </nav>
         </Dialog>

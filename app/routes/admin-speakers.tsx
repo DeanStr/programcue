@@ -213,6 +213,9 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="page-actions">
+          <Link className="btn" to="/admin/crm">
+            Speaker Network
+          </Link>
           <Link className="btn" to="/admin/resources">
             <BookOpen aria-hidden size={15} /> Resources
           </Link>

@@ -119,7 +119,6 @@ export class CalendarAdministrationService {
          JOIN schedule_session_contents content
            ON content.schedule_version_id = sv.id AND content.event_id = sv.event_id
           AND content.session_id = s.id
-          AND content.content_status = 'approved'
          JOIN session_speakers ss
            ON ss.session_id = s.id AND ss.event_id = s.event_id
          JOIN people p ON p.id = ss.person_id

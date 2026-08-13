@@ -57,6 +57,71 @@ test("skip navigation and command palette preserve keyboard focus", async ({
   ).toBeVisible();
 });
 
+test("administrator navigation groups core work without hiding programme tools", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/admin/programme");
+  const navigation = page.getByRole("complementary", {
+    name: "Primary navigation",
+  });
+  await expect(
+    navigation.getByText("Core work", { exact: true }),
+  ).toBeVisible();
+  await expect(navigation.getByText("Manage", { exact: true })).toBeVisible();
+  await navigation.getByRole("button", { name: "Collapse navigation" }).click();
+  await expect(navigation.getByText("Core work", { exact: true })).toBeHidden();
+  await expect(navigation.getByText("Manage", { exact: true })).toBeHidden();
+  await navigation.getByRole("button", { name: "Expand navigation" }).click();
+  await expect(
+    navigation.getByRole("link", { name: "Content & files" }),
+  ).toHaveCount(0);
+  await expect(
+    navigation.getByRole("link", { name: "Speaker Network" }),
+  ).toHaveCount(0);
+  await expect(navigation.getByRole("link", { name: "Resources" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("link", { name: "Content review" }),
+  ).toHaveAttribute("href", "/admin/content#content-review-title");
+  await expect(
+    page.getByRole("link", { name: "File library" }),
+  ).toHaveAttribute("href", "/admin/content#content-files-title");
+
+  await waitForInterface(page, "/admin/content");
+  await expect(
+    page
+      .getByRole("complementary", { name: "Primary navigation" })
+      .getByRole("link", { name: "Programme" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  await waitForInterface(page, "/admin/speakers");
+  await expect(
+    page.getByRole("link", { name: "Speaker Network" }),
+  ).toHaveAttribute("href", "/admin/crm");
+  await expect(page.getByRole("link", { name: "Resources" })).toHaveAttribute(
+    "href",
+    "/admin/resources",
+  );
+
+  await waitForInterface(page, "/admin/crm");
+  await expect(
+    page
+      .getByRole("complementary", { name: "Primary navigation" })
+      .getByRole("link", { name: "Speakers" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const mobileNavigation = page.getByRole("dialog", { name: "Navigation" });
+  const mobileCoreHeading = mobileNavigation.getByText("Core work", {
+    exact: true,
+  });
+  await expect(mobileCoreHeading).toBeVisible();
+  await expect(mobileCoreHeading).toHaveCSS("color", "rgb(71, 85, 105)");
+  await expect(mobileCoreHeading).toHaveCSS("opacity", "1");
+});
+
 test("route announcements describe page changes but ignore same-page actions", async ({
   page,
 }) => {

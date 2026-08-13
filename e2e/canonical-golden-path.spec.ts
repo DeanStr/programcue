@@ -362,6 +362,9 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await expect(placement.getByLabel("Duration (minutes)")).toHaveValue("60");
 
     await placement.getByLabel("Duration (minutes)").fill("45");
+    await expect(placement.locator('input[name="endsAt"]')).toHaveValue(
+      String(Number(await start.inputValue()) + 45 * 60),
+    );
     const finalResizeRequest = waitForScheduleMutation(page);
     await placement
       .getByRole("button", { name: "Move or resize session" })
@@ -373,17 +376,16 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     const contentRow = page.locator("article.list-row", {
       hasText: SUBMISSION_TITLE,
     });
-    await contentRow.getByRole("link", { name: "Review history" }).click();
-    await page.getByLabel("Next status").selectOption("approved");
-    await page
-      .getByRole("checkbox", { name: /apply this exact status/i })
-      .check();
-    await page.getByRole("button", { name: "Change status" }).click();
-    await expect(page.getByLabel("Approved status").first()).toBeVisible();
+    await expect(contentRow.getByLabel("Draft status")).toBeVisible();
 
     await waitForInterface(page, "/admin/schedule");
     await page.getByRole("button", { name: "Publish schedule" }).click();
     const publication = page.getByRole("dialog", { name: "Publish schedule" });
+    await expect(publication).toContainText("not marked Approved");
+    await expect(publication).toContainText(
+      "Confirming publication makes this exact schedule-version snapshot authoritative",
+    );
+    await expect(publication).toContainText("editorial statuses stay unchanged");
     await expect(publication).toContainText("revalidated before publication");
     await publication
       .getByRole("button", { name: "Confirm publication" })

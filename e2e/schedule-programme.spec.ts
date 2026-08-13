@@ -542,6 +542,33 @@ test.describe("mutable schedule authoring", () => {
     ).toBeVisible();
   });
 
+  test("loads retained file versions only when their disclosure opens", async ({
+    page,
+    request,
+  }) => {
+    const fixture = await request.post("/demo/fixtures/golden-path", {
+      form: {
+        intent: "seed_task_evidence",
+        confirm: "seed-golden-path-browser-fixture",
+      },
+      headers: { origin: e2eOrigin },
+    });
+    expect(fixture.ok(), await fixture.text()).toBeTruthy();
+
+    await waitForInterface(page, "/admin/content");
+    const library = page.getByRole("region", { name: "Central files library" });
+    const disclosure = library.locator("details").first();
+    await expect(disclosure).not.toHaveAttribute("open", "");
+    await expect(disclosure.locator("li")).toHaveCount(0);
+
+    const historyResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname.includes("/versions"),
+    );
+    await disclosure.locator("summary").click();
+    expect((await historyResponse).ok()).toBeTruthy();
+    await expect(disclosure.locator("li").first()).toContainText(/v\d+/);
+  });
+
   test("configures resources and commits a pointer resize through the authoritative schedule", async ({
     page,
   }) => {

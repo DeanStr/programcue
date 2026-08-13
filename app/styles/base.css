@@ -122,8 +122,21 @@ a {
 .nav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-3);
   overflow: auto;
+}
+.nav-group {
+  display: grid;
+  gap: var(--space-1);
+}
+.nav-group-label {
+  color: var(--nav-text);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.08em;
+  opacity: 0.65;
+  padding: 0 var(--space-3);
+  text-transform: uppercase;
 }
 .nav a {
   display: flex;

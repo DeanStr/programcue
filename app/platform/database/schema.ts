@@ -2018,6 +2018,11 @@ export const fileAssets = sqliteTable(
       table.ownerPersonId,
       table.status,
     ),
+    index("idx_file_assets_event_updated").on(
+      table.eventId,
+      desc(table.updatedAt),
+      table.id,
+    ),
     uniqueIndex("ux_file_assets_logical_active")
       .on(
         table.eventId,

@@ -19,7 +19,7 @@ Status terms:
 | 1 — submissions                            | Immutable form versions, the browser-only form-js editor/renderer, React Hook Form/Zod validation, conditional fields, intent-bound exact-replay anonymous/verified drafts, expiring co-speaker claims, public direct-session intake, server-paged TanStack submissions grid and durable confirmation work are connected.                                                                                                                                                                                                                                                                                                                                                                                                                                           | Submission-verification delivery and draft-ownership acceptance remain external.       |
 | 2 — evaluation                             | Teams/invitations, multi-round plans, mixed weighted rubrics, submission and session targets, assignments, anonymised review, D1 autosave/recovery, recusal, moderation/reopen, final decisions and atomic accepted-session creation are connected.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Live invitation/decision delivery and evaluator acceptance are external.               |
 | 3 — participants/tasks/resources/files     | Submitters and speakers share one routed participant shell with Overview, Applications, Sessions, Tasks, Files, Resources and Profile. Applications aggregate owned and claimed proposals plus startable published forms. Route-owned mutations, session-labelled deliverables, versioned resources/acknowledgements, dependency-aware task plans, acceptance-time automatic onboarding, bulk preview/confirm, safe completion undo, event-owned file policy, Uppy direct R2 multipart resume, quarantine/scanner reconciliation and retention/legal hold are connected. A fail-closed ClamAV Container companion implements the deployed production scan contract.                                                                                                 | End-to-end R2/scanner verdict and provider-side erasure acceptance are external.       |
-| 4 — schedule/public programme              | Configured formats/durations/tracks/rooms/resources, breaks, authoritative conflicts, FullCalendar list/day/week editing, keyboard alternatives, pointer move/resize, unassign/undo, draft notes/session-content recovery, attributed immutable content history, explicit approval/restoration, immutable version snapshots, publication and exact approved published public/API/calendar views are connected.                                                                                                                                                                                                                                                                                                                                                      | Production performance and live calendar delivery are external.                        |
+| 4 — schedule/public programme              | Configured formats/durations/tracks/rooms/resources, breaks, authoritative conflicts, FullCalendar list/day/week editing, keyboard alternatives, pointer move/resize, unassign/undo, draft notes/session-content recovery, attributed immutable content history, advisory editorial review/restoration, immutable version snapshots, publication and exact published public/API/calendar views are connected.                                                                                                                                                                                                                                                                                                                                                      | Production performance and live calendar delivery are external.                        |
 | 5 — communications/calendars               | Versioned React Email templates, verified-sender provisioning, a revisioned D1 draft composer, same-row draft-to-delivery transition, content/source/sender-bound preview/confirm, scheduled sends, per-trigger-isolated automatic reminders/escalations, strict Resend or Mailpit selection, monotonic receipt reconciliation, account-bound Google/Microsoft OAuth and refresh, email-ICS/provider lifecycle and retryable Queue fan-out are connected. MSW contracts cover provider request boundaries. Live Google and Microsoft consent each persisted a connected production account.                                                                                                                                                                         | Tracked communication delivery and live calendar invitation lifecycle remain external. |
 | 6 — operations/realtime/adjacent workflows | D1 readiness, command search, saved views, blank event creation, event clone, CSV import/export, bulk session/task changes, durable operations/items, retry/cancel/skip, an audit-guarded transactional outbound-webhook outbox with scheduled undispatched recovery, WebSocket invalidation and bounded polling are connected.                                                                                                                                                                                                                                                                                                                                                                                                                                     | Deployed logs, traces, alerts and production support exercises are external.           |
 | 7 — API, integrations and agent            | Thirty-two deployed, documented REST paths expose published, participant and administration resources plus atomic idempotent commands and authenticated provider callbacks; registered Zod 4 command schemas are emitted deterministically into the synchronized OpenAPI YAML/JSON. Full-domain Airtable authority, confirmation-bound Accelevents preview/dry-run/export/retry/reconciliation CSV, and a Cloudflare Agents SDK assistant with contextual/standalone proposal approval are connected.                                                                                                                                                                                                                                                               | Live Airtable, Accelevents and model-provider acceptance remain external.              |
@@ -96,19 +96,24 @@ schedule tests verify this AIA-08 production slice.
   records the exact title, description, track, format, duration, visibility
   and resources. An administrator can inspect prior values and restore any
   retained revision as a new Draft without deleting later history.
-- **Approval boundary (CNT-13):** Draft, In review, Approved and Changes
-  requested are explicit revision-checked states. Editing or restoring always
-  returns content to Draft. Publication fails with the affected sessions when
-  any scheduled content is not Approved and rechecks this in the publication
-  transaction. Public programme HTML, embeds, APIs, itineraries, ICS output,
-  calendar invitation targets and Airtable publication snapshots include only
-  Approved content from the published schedule version.
-- **Central library (CNT-14):** The administrator Content & files route lists
-  every event file asset and retained version. Individual and ZIP downloads
+- **Publication boundary (CNT-13):** Draft, In review, Approved and Changes
+  requested remain explicit revision-checked editorial states. Editing or
+  restoring returns content to Draft. The publication preview reports
+  scheduled records not marked Approved, while explicit publication makes
+  the exact immutable schedule-version snapshot authoritative without changing
+  those editorial states. Missing scheduled snapshots
+  fail fast and are rechecked atomically. Public programme HTML, embeds, APIs,
+  itineraries, ICS output, calendar invitation targets and Airtable
+  publication snapshots read that complete published snapshot without an
+  editorial-status filter.
+- **Central library (CNT-14):** The administrator Content & files route reads
+  at most 50 event assets and their current versions per page. Retained version
+  metadata is loaded only when its disclosure opens and remains bounded to 50
+  versions per request. Individual and ZIP downloads
   require the current released, signature-valid, clean R2 object. ZIP export
   previews an exact bounded manifest, requires confirmation, revalidates each
-  version and ETag, and streams stored entries without loading the archive into
-  Worker memory.
+  version and ETag, preserves duplicate filename extensions and pull-streams
+  stored entries with response-cancellation propagation.
 - **Scope boundary:** This is session programme content and existing private
   file delivery, not a general-purpose CMS. Live R2/scanner acceptance remains
   external.
@@ -148,6 +153,25 @@ The reproducible gates are:
 npm run check:core
 npm run check
 ```
+
+The isolated `codex/review-fixes` candidate passed `npm run check` on 13
+August 2026 in 322.1 seconds. The gate covered 18 configuration contracts;
+44 Node files with 222 tests; 135 Worker/D1 files with 1,001 tests; the Agents
+Durable Object test; 4 scanner tests; production client/SSR builds; migration
+parity at 92 application tables, 103 indexes and 77 triggers; a 124,721-byte
+clean-room recovery drill; OpenAPI synchronization at 33 paths and 454
+internal references; and 178/181 Playwright cases across desktop, mobile and
+laptop Chromium plus Firefox/WebKit smoke coverage. The three skips remain the
+two opt-in performance measurements and the mobile duplicate of the
+desktop-owned 200%-equivalent visual pass. The browser evidence includes
+advisory content review at publication, bounded lazy file-version loading and
+the grouped administrator navigation. This is local candidate evidence, not a
+committed release or deployed acceptance.
+
+After the subsequent fail-fast file-library invariant correction, the current
+worktree passed `npm run check:core` in 227.1 seconds with 222 Node tests and
+1,002 Worker/D1 tests. A dangling current-version pointer is now explicit
+corruption instead of being rendered as an asset with no available version.
 
 The isolated `codex/cfp-landing-improvements` worktree passed `npm run check` on 12 August 2026 after review corrections. The core gate covered 14 configuration contracts; 41 Node files with 201 tests; 126 Workerd files with 915 tests; the Agents Durable Object test; 4 scanner tests; production client/SSR builds; migration parity at 89 application tables, 97 indexes and 73 triggers; a 114,046-byte clean-room recovery drill; and synchronized OpenAPI documents at 32 paths and 442 internal references. The five-shard browser gate passed 164/167 Playwright tests across desktop/mobile/laptop Chromium plus Firefox/WebKit smoke coverage; the three skips remain intentional. The applicant journey exercises the public landing, verified email, an intercepted public-profile import, draft persistence and final submission; reviewed desktop/mobile CFP and form-builder snapshots plus the representative WCAG A/AA sweep pass. The generated demo hero is bundled locally. A live Sessionize response through the deployed Worker remains external acceptance and is not claimed.
 

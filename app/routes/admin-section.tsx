@@ -67,6 +67,12 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
           <Link className="btn primary" to="/admin/schedule">
             Open schedule
           </Link>
+          <Link className="btn" to="/admin/content#content-review-title">
+            Content review
+          </Link>
+          <Link className="btn" to="/admin/content#content-files-title">
+            File library
+          </Link>
         </div>
       </div>
       <div className="grid grid-4 mb">

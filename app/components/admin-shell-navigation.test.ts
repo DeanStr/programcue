@@ -6,6 +6,9 @@ import {
   adminCommandSearchKey,
   adminPageBreadcrumbs,
   canOpenAdminAssistant,
+  NAV_ITEMS,
+  primaryNavigationGroups,
+  primaryNavigationItemActive,
 } from "./admin-shell";
 import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
 
@@ -88,5 +91,50 @@ describe("administrator navigation context", () => {
     expect(canOpenAdminAssistant("owner")).toBe(true);
     expect(canOpenAdminAssistant("administrator")).toBe(true);
     expect(canOpenAdminAssistant("committee_chair")).toBe(false);
+  });
+
+  it("keeps the primary workflow visible and leaves contextual tools out of the sidebar", () => {
+    const groups = primaryNavigationGroups(NAV_ITEMS);
+    expect(groups.map((group) => group.label)).toEqual(["Core work", "Manage"]);
+    expect(groups[0]?.items.map(([id]) => id)).toEqual([
+      "command",
+      "event",
+      "submissions",
+      "review",
+      "speakers",
+      "schedule",
+      "communications",
+      "tasks",
+      "programme",
+    ]);
+    expect(groups[1]?.items.map(([id]) => id)).toEqual([
+      "integrations",
+      "operations",
+      "settings",
+    ]);
+    expect(groups.flatMap((group) => group.items).map(([id]) => id)).not.toEqual(
+      expect.arrayContaining(["content", "resources", "crm"]),
+    );
+  });
+
+  it("marks a contextual tool's visible parent as the current workflow", () => {
+    expect(primaryNavigationItemActive("programme", "/admin/content")).toBe(
+      true,
+    );
+    expect(
+      primaryNavigationItemActive(
+        "programme",
+        "/admin/content/sessions/session-1",
+      ),
+    ).toBe(true);
+    expect(primaryNavigationItemActive("speakers", "/admin/crm/pipeline")).toBe(
+      true,
+    );
+    expect(primaryNavigationItemActive("speakers", "/admin/resources")).toBe(
+      true,
+    );
+    expect(primaryNavigationItemActive("programme", "/admin/schedule")).toBe(
+      false,
+    );
   });
 });

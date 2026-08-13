@@ -80,6 +80,7 @@
   }
   .brand span,
   .nav .nav-label,
+  .nav .nav-group-label,
   .sidebar-bottom {
     display: none;
   }
@@ -491,6 +492,10 @@
   display: grid;
   gap: var(--space-1);
 }
+.pc-mobile-nav .nav-group-label {
+  color: var(--text-secondary);
+  opacity: 1;
+}
 .pc-mobile-nav a {
   display: flex;
   align-items: center;
@@ -510,6 +515,13 @@
 }
 .pc-mobile-nav .nav-icon {
   color: var(--muted);
+}
+.pc-mobile-nav-group {
+  display: grid;
+  gap: var(--space-1);
+}
+.pc-mobile-nav-group + .pc-mobile-nav-group {
+  margin-top: var(--space-4);
 }
 .pc-mobile-nav a.active .nav-icon {
   color: var(--brand-600);

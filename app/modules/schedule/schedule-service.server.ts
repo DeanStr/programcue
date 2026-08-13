@@ -442,6 +442,26 @@ export class ScheduleService {
       .first<{ title: string }>();
   }
 
+  private async hasMissingScheduledContentSnapshot(
+    viewer: ScheduleEventScope,
+    scheduleVersionId: string,
+  ) {
+    const missing = await this.env.DB.prepare(
+      `SELECT 1 AS missing
+         FROM schedule_entries entry
+         LEFT JOIN schedule_session_contents content
+           ON content.schedule_version_id = entry.schedule_version_id
+          AND content.event_id = entry.event_id
+          AND content.session_id = entry.session_id
+        WHERE entry.schedule_version_id = ? AND entry.event_id = ?
+          AND content.session_id IS NULL
+        LIMIT 1`,
+    )
+      .bind(scheduleVersionId, viewer.eventId)
+      .first<{ missing: number }>();
+    return missing?.missing === 1;
+  }
+
   async getWorkspace(viewer: ScheduleEventScope): Promise<ScheduleWorkspace> {
     if (this.projectionDepth === 0) await this.airtable.assertReadable(viewer);
     return loadScheduleWorkspaceD1(this.env, viewer);
@@ -1017,27 +1037,6 @@ export class ScheduleService {
       );
     }
 
-    const sessionsById = new Map(
-      workspace.sessions.map((session) => [session.id, session]),
-    );
-    const unapprovedSessions = workspace.entries
-      .map((entry) => {
-        const session = sessionsById.get(entry.sessionId);
-        if (!session) {
-          throw new ScheduleConfigurationError(
-            `Scheduled session ${entry.sessionId} is unavailable from the authoritative workspace.`,
-          );
-        }
-        return session;
-      })
-      .filter((session) => session.contentStatus !== "approved");
-    if (unapprovedSessions.length > 0) {
-      throw new SchedulePublicationBlockedError(
-        [],
-        `Approve content for ${unapprovedSessions.map((session) => session.title).join(", ")} before publishing.`,
-      );
-    }
-
     const detectedConflicts = detectWorkspaceConflicts(workspace);
     const allConflicts = detectedConflicts.map(({ conflict }) => conflict);
     const blockingConflicts = allConflicts.filter(
@@ -1121,6 +1120,16 @@ export class ScheduleService {
       if (command) {
         const replay = await this.replayPublication(viewer, command);
         if (replay) return replay;
+      }
+      if (
+        await this.hasMissingScheduledContentSnapshot(
+          viewer,
+          parsed.scheduleVersionId,
+        )
+      ) {
+        throw new ScheduleConfigurationError(
+          "The active schedule version is missing one or more required frozen session-content snapshots.",
+        );
       }
       const newlyUnconfirmedSpeaker =
         await this.findUnconfirmedScheduledSpeaker(
