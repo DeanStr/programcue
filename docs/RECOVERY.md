@@ -39,7 +39,11 @@ npm run backup:d1 -- --output=/secure/backups/program-cue-$(date -u +%Y%m%dT%H%M
 
 The command refuses to overwrite a file and writes a mode-0600 SHA-256 manifest beside it. It remains an independent pre-change/incident export path; it does not replace the scheduled Workflow.
 
-The scheduled logical-export objective is a maximum 24-hour logical-backup RPO once the Workflow is deployed and monitored. D1 Time Travel provides plan-window restore points independently. No production backup run, alert, restore exercise or measured RPO/RTO has been completed from this workspace, so those remain explicit release-acceptance evidence rather than an implementation claim.
+The scheduled logical-export objective is a maximum 24-hour logical-backup RPO once the Workflow is deployed and monitored. D1 Time Travel provides plan-window restore points independently.
+
+Production evidence from 13 August 2026: Workflow instances for 11, 12 and 13 August all failed at `initiate D1 logical export` with Cloudflare HTTP 401/code 10000. The 13 August cron fired on schedule at 02:17 UTC and failed one second after starting, confirming that scheduling is healthy and the then-installed runtime credential was the blocker. That credential had been verified only for D1 Read, while a one-off operator credential with D1 Write completed the export. A new account-owned token restricted to this account and D1 Write was installed as `D1_REST_API_TOKEN` on 13 August and expires on 13 August 2027. The next date-keyed cron instance must still prove scheduled execution. Until that succeeds and missing/failed-run alerts exist, the 24-hour logical-backup RPO is not met.
+
+The same operator run exported a 137,334-byte mode-0600 SQL file with a matching SHA-256 manifest, imported it into an isolated Oceania D1 database and compared it with production. All 93 application-table row counts matched; both databases returned zero foreign-key violations and `quick_check=ok`; and their 102 indexes, 77 triggers and 94 total non-SQLite tables matched. The isolated database and local plaintext were deleted after validation. This proves a non-destructive production logical-export restore drill, not a production point-in-time restore, R2 object recovery, alert delivery or measured incident RTO.
 
 ## Point-in-time incident recovery
 
