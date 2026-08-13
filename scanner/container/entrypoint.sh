@@ -18,16 +18,19 @@ rm -f "$readiness_file"
     sleep 1
   done
 
-  version=$(clamdscan --version)
-  signature_date=${version##*/}
-  signature_epoch=$(date --date="$signature_date" +%s)
-  now=$(date +%s)
-  if [ "$signature_epoch" -gt $((now + 86400)) ] || \
-    [ $((now - signature_epoch)) -gt "$maximum_signature_age_seconds" ]; then
-    echo "The baked ClamAV signature database is outside the seven-day freshness window." >&2
-    exit 1
+  if version=$(clamdscan --version); then
+    signature_date=${version##*/}
+    signature_epoch=$(date --date="$signature_date" +%s)
+    now=$(date +%s)
+    if [ "$signature_epoch" -le $((now + 86400)) ] && \
+      [ $((now - signature_epoch)) -le "$maximum_signature_age_seconds" ]; then
+      : > "$readiness_file"
+    else
+      echo "The baked ClamAV signature database is outside the seven-day freshness window." >&2
+    fi
+  else
+    echo "The ClamAV signature version could not be verified." >&2
   fi
-  : > "$readiness_file"
 
   # The deployment image contains a fresh, verified database so a transient
   # mirror failure never blocks a cold start. Keep checking the allowlisted
