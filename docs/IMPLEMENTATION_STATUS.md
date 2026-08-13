@@ -28,7 +28,7 @@ The old static browser application, legacy JavaScript Worker delegation and `src
 
 ## Public website
 
-**Production foundation; deployment acceptance outstanding:** A separate
+**Production foundation; deployed acceptance:** A separate
 static-asset Worker serves the anonymous `programcue.com` home, privacy, terms
 and not-found surfaces without application data bindings, cookies, scripts,
 analytics or an authorisation dependency. The homepage presents the combined
@@ -40,9 +40,16 @@ anchor integrity, the declared Google scopes and Limited Use statement, and the
 absence of production data bindings. Focused Playwright coverage exercises the
 real Worker at desktop/mobile widths for reachability, keyboard skip navigation,
 WCAG A/AA checks, 320-pixel containment and reviewed homepage/privacy visuals.
-Attaching the production Custom Domains, verifying the deployed headers and
-assets, and completing Google's external OAuth review remain deployment
-acceptance and are not claimed by the repository evidence.
+Release `303912c` is deployed as `program-cue-site` Worker version
+`b2b428fb-f1ec-4fcf-ab33-829cd59eb4a4` with both production Custom Domains.
+Live anonymous checks returned 200 for home, privacy, terms, robots and sitemap;
+the not-found surface returned 404; `www` and plain HTTP canonicalised in one
+301 to the secure apex URL; and HTML responses carried the checked CSP and
+HSTS. Cloudflare's zone-level managed robots policy prepends content signals
+that allow ordinary search indexing while reserving AI training, then preserves
+the repository's allow-all and sitemap directives. The separate application
+health boundary remained HTTP 200 with `no-store`; this release did not deploy
+or bind application data. Google's external OAuth review remains provider-side.
 
 Open identity creation is now connected through email magic links, Google and
 Microsoft without changing authorisation. A brand-new identity is redirected to
