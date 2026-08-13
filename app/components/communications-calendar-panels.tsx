@@ -27,6 +27,24 @@ export function CommunicationRecipientIdentity({
   );
 }
 
+function connectedProviderConnections(
+  connections: CommunicationsCentreLoaderData["connections"],
+  personId: string,
+) {
+  const providers = new Set<string>();
+  return connections.filter((connection) => {
+    if (
+      connection.personId !== personId ||
+      connection.status !== "connected" ||
+      providers.has(connection.provider)
+    ) {
+      return false;
+    }
+    providers.add(connection.provider);
+    return true;
+  });
+}
+
 function lifecycleKey(
   target: CommunicationsCentreLoaderData["calendarTargets"][number],
   method: "REQUEST" | "CANCEL",
@@ -235,6 +253,10 @@ export function CalendarAdministration({
                   !target.invitationId ||
                   (target.method === "CANCEL" &&
                     target.invitationStatus === "cancelled");
+                const providerConnections = connectedProviderConnections(
+                  loaderData.connections,
+                  target.personId,
+                );
                 return (
                   <tr key={`${target.sessionId}:${target.personId}`}>
                     <td className="pc-record-primary-cell" data-label="Session">
@@ -261,16 +283,16 @@ export function CalendarAdministration({
                               provider="email_ics"
                               working={working}
                             />
-                            {target.activeProvider &&
-                            target.activeConnectionId ? (
+                            {providerConnections.map((connection) => (
                               <CalendarAction
+                                key={connection.id}
                                 target={target}
                                 method="REQUEST"
-                                provider={target.activeProvider}
-                                connectionId={target.activeConnectionId}
+                                provider={connection.provider}
+                                connectionId={connection.id}
                                 working={working}
                               />
-                            ) : null}
+                            ))}
                           </>
                         ) : target.invitationProvider ? (
                           <CalendarAction

@@ -6,6 +6,8 @@ import {
   CommunicationDraftPreview,
   deliveryActionLabel,
 } from "./communication-draft-preview";
+import { CalendarAdministration } from "./communications-calendar-panels";
+import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 
 describe("communications presentation", () => {
   it("uses grammatically correct delivery labels", () => {
@@ -55,5 +57,77 @@ describe("communications presentation", () => {
 
     expect(markup).toContain('sandbox=""');
     expect(markup).toContain('referrerPolicy="no-referrer"');
+  });
+
+  it("offers every connected calendar provider owned by a scheduled speaker", () => {
+    const loaderData = {
+      connections: [
+        {
+          id: "google-connection",
+          personId: "speaker",
+          personName: "Test Speaker",
+          email: "speaker@example.com",
+          provider: "google",
+          accountReference: "google-account",
+          status: "connected",
+          expiresAt: null,
+          lastSyncedAt: null,
+          updatedAt: 1,
+        },
+        {
+          id: "microsoft-connection",
+          personId: "speaker",
+          personName: "Test Speaker",
+          email: "speaker@example.com",
+          provider: "microsoft",
+          accountReference: "microsoft-account",
+          status: "connected",
+          expiresAt: null,
+          lastSyncedAt: null,
+          updatedAt: 2,
+        },
+      ],
+      calendarTargets: [
+        {
+          sessionId: "acceptance-session",
+          sessionTitle: "Calendar provider acceptance",
+          personId: "speaker",
+          personName: "Test Speaker",
+          email: "speaker@example.com",
+          invitationId: null,
+          method: null,
+          invitationStatus: null,
+          sequenceNumber: null,
+          invitationConnectionId: null,
+          invitationProvider: null,
+          rsvpStatus: null,
+          activeConnectionId: "google-connection",
+          activeProvider: "google",
+        },
+      ],
+      eventTimezone: "UTC",
+    } as unknown as CommunicationsCentreLoaderData;
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <CalendarAdministration
+              loaderData={loaderData}
+              working={false}
+              pendingIntent={null}
+            />
+          ),
+        },
+      ],
+      { initialEntries: ["/"] },
+    );
+
+    const markup = renderToStaticMarkup(<RouterProvider router={router} />);
+
+    expect(markup).toContain("Send to Google");
+    expect(markup).toContain("Send to Microsoft");
+    expect(markup).toContain('value="google-connection"');
+    expect(markup).toContain('value="microsoft-connection"');
   });
 });
