@@ -1386,6 +1386,40 @@ describe("published programme and itinerary", () => {
     ).toEqual({ expiresAt: null });
   });
 
+  it("keeps the fixed production evaluation fixture itinerary interactive", async () => {
+    const service = new PublicProgrammeService({
+      ...(env as unknown as CloudflareEnvironment),
+      DEMO_MODE: "false",
+      EVALUATION_MODE: "true",
+    } as CloudflareEnvironment);
+    const programme = await service.getPublished("future-of-events-2025");
+    expect(programme).not.toBeNull();
+
+    const now = Math.floor(Date.now() / 1_000);
+    const sessionId = programme!.sessions[0].id;
+    const { expiresAt } = await service.updateItinerary(
+      programme!,
+      { personId: "person-demo-admin", visitorToken: null },
+      sessionId,
+      "add",
+    );
+
+    expect(expiresAt).toBeGreaterThanOrEqual(now + 365 * 86_400);
+    await expect(
+      service.itinerary(programme!, {
+        personId: "person-demo-admin",
+        visitorToken: null,
+      }),
+    ).resolves.toEqual([sessionId]);
+
+    await service.updateItinerary(
+      programme!,
+      { personId: "person-demo-admin", visitorToken: null },
+      sessionId,
+      "remove",
+    );
+  });
+
   it("keeps the itinerary cookie through the event-relative retention deadline", () => {
     const now = 1_800_000_000;
     const expiresAt = now + 3 * 365 * 86_400;

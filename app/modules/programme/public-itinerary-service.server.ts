@@ -1,4 +1,5 @@
 import { eventLocalEndOfDayEpoch } from "~/modules/schedule/schedule-time";
+import { DEMO_EVENT_ID } from "~/platform/demo/demo-identities";
 import type { PublishedProgramme } from "./public-programme-service.server";
 
 const encoder = new TextEncoder();
@@ -158,18 +159,26 @@ export class PublicItineraryService {
 
   private itineraryExpiresAt(programme: PublishedProgramme) {
     // The fixed demo programme is durable reference data rather than a live event.
-    // Production itineraries retain the event-relative expiry without extension.
+    // The canonical production evaluation fixture is also fixed in 2025, so
+    // keep it usable during evaluation without weakening expiry for real events.
+    const now = Math.floor(Date.now() / 1_000);
+    const evaluationFixture =
+      String(this.env.EVALUATION_MODE) === "true" &&
+      programme.event.id === DEMO_EVENT_ID;
     const expiresAt =
       String(this.env.DEMO_MODE) === "true"
         ? null
-        : eventLocalEndOfDayEpoch(
-            Math.floor(
-              Date.parse(`${programme.event.endDate}T00:00:00Z`) / 1_000,
-            ),
-            programme.event.timezone,
-          ) +
-          365 * 86_400;
-    if (expiresAt !== null && expiresAt <= Math.floor(Date.now() / 1_000)) {
+        : Math.max(
+            eventLocalEndOfDayEpoch(
+              Math.floor(
+                Date.parse(`${programme.event.endDate}T00:00:00Z`) / 1_000,
+              ),
+              programme.event.timezone,
+            ) +
+              365 * 86_400,
+            evaluationFixture ? now + 365 * 86_400 : 0,
+          );
+    if (expiresAt !== null && expiresAt <= now) {
       throw new PublishedProgrammeItineraryExpiredError();
     }
     return expiresAt;
