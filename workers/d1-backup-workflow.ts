@@ -469,7 +469,6 @@ export async function downloadD1Export(
   let response: Response;
   try {
     response = await fetcher(state.signedUrl, {
-      redirect: "error",
       signal: AbortSignal.timeout(EXPORT_DOWNLOAD_TIMEOUT_MS),
     });
   } catch (error) {
@@ -482,6 +481,9 @@ export async function downloadD1Export(
     throw new Error(
       `The signed D1 export download failed (${response.status}).`,
     );
+  }
+  if (response.redirected) {
+    validateSignedDownloadUrl(response.url);
   }
   return response.body;
 }

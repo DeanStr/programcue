@@ -371,7 +371,6 @@ describe("scheduled D1 backup Workflow boundaries", () => {
     expect(await new Response(stream).text()).toBe(
       "CREATE TABLE evidence(id TEXT);",
     );
-    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ redirect: "error" });
     expect(fetcher.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
