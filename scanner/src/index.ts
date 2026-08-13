@@ -74,7 +74,7 @@ const CALLBACK_STEP = {
   retries: { limit: 8, delay: "10 seconds", backoff: "exponential" },
   timeout: "2 minutes",
 } as const;
-const SCANNER_CONTAINER_INSTANCE = "primary-v2";
+const SCANNER_CONTAINER_INSTANCE = "primary-v3";
 
 export class FileScannerContainer extends Container<ScannerEnvironment> {
   defaultPort = 8080;
