@@ -62,7 +62,7 @@ export function SpeakerShell({
           )}
           <span>Program Cue</span>
         </NavLink>
-        <div>
+        <div className="speaker-event-context">
           <div className="event-title">{event.name}</div>
           <div className="subtle tiny">
             {[event.dateLabel, event.locationLabel].filter(Boolean).join(" · ")}
@@ -83,7 +83,7 @@ export function SpeakerShell({
         </div>
         <div className="right">
           <span className="avatar">{initials}</span>
-          <span>
+          <span className="speaker-viewer-identity">
             <strong>{name}</strong>
             <small className="subtle speaker-viewer-email">
               {viewer.email}

@@ -285,6 +285,11 @@ authentication secret.
 The initial dedicated-secret release moves anonymous cookies and stored hashes
 to `v2`; migration `0018` removes only legacy unversioned anonymous rows, while
 signed-in and newly created `v2` itineraries remain intact.
+Rotating `ANONYMOUS_ITINERARY_SECRET` is an intentional destructive reset while
+the product is pre-release: existing anonymous cookies stop verifying and their
+event-scoped database rows can no longer be found. Signed-in itineraries are
+unaffected. Coordinate any required rotation with removal of the unreachable
+anonymous rows; do not retain a previous-key compatibility fallback.
 `CALENDAR_CREDENTIALS_KEY`, `INTEGRATION_CREDENTIALS_KEY` and
 `WEBHOOK_CREDENTIALS_KEY` must each be an independently generated,
 base64-encoded 32-byte AES-GCM key. Workers AI is the provisioned default;

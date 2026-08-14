@@ -234,6 +234,45 @@ describe("published pages", () => {
     assert.ok(reports(issues, "placeholder text"));
   });
 
+  test("call-for-speakers terminology is required", () => {
+    const missingIssues = brokenSite(({ read, write }) =>
+      write(
+        "index.html",
+        read("index.html").replaceAll(/call for speakers/gi, "proposal intake"),
+      ),
+    );
+    assert.ok(reports(missingIssues, 'must use "call for speakers"'));
+
+    const hyphenatedIssues = brokenSite(({ read, write }) =>
+      write(
+        "index.html",
+        read("index.html").replaceAll(
+          /call for speakers/gi,
+          "call-for-speakers",
+        ),
+      ),
+    );
+    assert.ok(!reports(hyphenatedIssues, 'must use "call for speakers"'));
+  });
+
+  test("call-for-papers variants are rejected throughout the site", () => {
+    for (const rejected of [
+      "call for papers",
+      "calls for papers",
+      "call\n for\n papers",
+      "call-for-papers",
+      "calls-for-papers",
+    ]) {
+      const issues = brokenSite(({ read, write }) =>
+        write(
+          "terms.html",
+          read("terms.html").replace("</main>", `<p>${rejected}</p></main>`),
+        ),
+      );
+      assert.ok(reports(issues, 'terms.html must not use "call for papers"'));
+    }
+  });
+
   test("blocking crawlers in robots.txt is rejected", () => {
     const issues = brokenSite(({ write }) =>
       write("robots.txt", "User-agent: *\nDisallow: /\n"),

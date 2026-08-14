@@ -19,6 +19,9 @@
   font-size: var(--text-lg);
   font-weight: var(--weight-extrabold);
 }
+.speaker-event-context {
+  min-width: 0;
+}
 .speaker-top .right {
   margin-left: auto;
   display: flex;

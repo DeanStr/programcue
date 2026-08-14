@@ -420,6 +420,29 @@ The common-laptop visual-coverage candidate passed `npm run check` on 12 August 
 
 An uncommitted test-economy change in the isolated `codex/test-pruning` worktree was reviewed on 14 August 2026. It retains representative desktop/mobile snapshots for eight major application shells and layout families plus the three laptop layouts with distinct residual risk: Form Builder's visual editor, Schedule Planner's canvas and the authoritative communications preview. Interaction states, accessibility and containment remain owned by focused browser suites. The application browser inventory falls from 199 to 127 invocations, the static-site inventory from 16 to 12 and checked-in application snapshots from 107 to 20. Focused validation passed 51 configuration contracts, generated TypeScript, all 19 retained visual cases, all 12 static-site cases, 20 CRM service tests, the CRM handoff route boundary and both Speaker CRM browser journeys. The full repository gate has not been run; this is local change evidence, not release evidence.
 
+The isolated review-recommendation candidate on 14 August 2026 corrects the
+public site's resolved call-for-speakers terminology in visible and social
+metadata copy. Its static-site release contract requires that terminology and
+rejects both singular and plural call-for-papers wording. Seven reviewed visual
+baselines restore only distinctive residual-risk layouts: evaluation
+administration at desktop and mobile widths, Tasks & Readiness at common-laptop
+and mobile widths, programme administration on desktop and the public Speaker
+Gallery and participant Profile on mobile. Review of the new evaluation
+baseline also exposed and corrected the single-round desktop imbalance: one
+round now uses the available width, two use two columns and larger plans cap at
+three. The Profile baseline exposed the participant header's ineffective
+mobile identity-hiding selector; naming that identity region explicitly now
+leaves practical width for event context across participant pages. Grouping the
+six responsive captures into one test per project limits the default-running
+application browser inventory to 130 invocations (132 listed, including two
+intentionally skipped performance cases), with 27 snapshots rather than
+restoring the former exhaustive inventory. Generated TypeScript, all 31
+affected Vitest cases, all 54 configuration contracts, all 14 static-site
+browser cases, the three new visual invocations and both affected Speaker
+Dashboard cases passed; the production application build used by those visual
+cases also passed. The complete repository gate has not been run, so this
+remains local candidate evidence rather than release evidence.
+
 The automated repository gate is complete for the deployed source revision. A real magic-link flow proves the authentication delivery boundary, while the production acceptance evidence below separately proves tracked Resend delivery/bounce and Google/Microsoft calendar create, update and cancellation. Other external-provider paths remain bounded by their own evidence. The role matrix covers representative owner, administrator, chair, evaluator, submitter, speaker, pending/revoked/expired and cross-organisation states.
 
 ### Design system overhaul evidence
