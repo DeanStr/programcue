@@ -1,4 +1,4 @@
-import { useRef, type ReactNode, type Ref } from "react";
+import { useRef, useState, type ReactNode, type Ref } from "react";
 
 import {
   descriptionSnippet,
@@ -157,13 +157,16 @@ export function PublicSessionDetails({
   session,
   model,
   detailRef,
+  onClose,
 }: {
   session: PublishedSession;
   model: PublicProgrammeModel;
   detailRef?: Ref<HTMLElement>;
+  onClose: () => void;
 }) {
   return (
     <article
+      id="public-session-detail"
       className="card pad public-surface-detail"
       aria-labelledby="public-session-detail-title"
       ref={detailRef}
@@ -174,7 +177,12 @@ export function PublicSessionDetails({
           <span className="pc-page-eyebrow">Session detail</span>
           <h2 id="public-session-detail-title">{session.title}</h2>
         </div>
-        <SessionTags session={session} />
+        <div className="page-actions">
+          <SessionTags session={session} />
+          <button type="button" className="btn small" onClick={onClose}>
+            Close session details
+          </button>
+        </div>
       </div>
       <div className="public-surface-detail-body">
         <div>
@@ -283,19 +291,37 @@ export function PublicAgendaSurface({
   model: PublicProgrammeModel;
 }) {
   const detailRef = useRef<HTMLElement>(null);
+  const returnFocusRef = useRef<HTMLButtonElement | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(true);
   const activeDay =
     model.day === "All days" ? (model.days[0] ?? "All days") : model.day;
   const sessions = model.visible.filter(
     (session) =>
       formatDay(session.startsAt, model.programme.event.timezone) === activeDay,
   );
-  const selectedSession =
-    sessions.find((session) => session.id === model.selected?.id) ??
-    sessions[0] ??
-    null;
-  const openSessionDetails = (sessionId: string) => {
+  const selectedSession = detailsOpen
+    ? (sessions.find((session) => session.id === model.selected?.id) ??
+      sessions[0] ??
+      null)
+    : null;
+  const openSessionDetails = (
+    sessionId: string,
+    trigger: HTMLButtonElement,
+  ) => {
+    returnFocusRef.current = trigger;
+    setDetailsOpen(true);
     model.setSelectedId(sessionId);
     requestAnimationFrame(() => detailRef.current?.focus());
+  };
+  const closeSessionDetails = () => {
+    const fallbackFocus = selectedSession
+      ? document.getElementById(`agenda-session-trigger-${selectedSession.id}`)
+      : null;
+    const returnFocus = returnFocusRef.current?.isConnected
+      ? returnFocusRef.current
+      : fallbackFocus;
+    setDetailsOpen(false);
+    requestAnimationFrame(() => returnFocus?.focus());
   };
   return (
     <section className="public-surface" aria-labelledby="public-agenda-title">
@@ -327,11 +353,15 @@ export function PublicAgendaSurface({
               </div>
               <h2 className="agenda-card-title">
                 <button
+                  id={`agenda-session-trigger-${session.id}`}
                   type="button"
                   className="agenda-card-trigger"
-                  aria-pressed={session.id === selectedSession?.id}
+                  aria-expanded={session.id === selectedSession?.id}
+                  aria-controls="public-session-detail"
                   aria-label={`View details for ${session.title}`}
-                  onClick={() => openSessionDetails(session.id)}
+                  onClick={(event) =>
+                    openSessionDetails(session.id, event.currentTarget)
+                  }
                 >
                   {session.title}
                   <span className="agenda-card-action" aria-hidden="true">
@@ -360,6 +390,7 @@ export function PublicAgendaSurface({
           session={selectedSession}
           model={model}
           detailRef={detailRef}
+          onClose={closeSessionDetails}
         />
       ) : null}
     </section>
@@ -466,7 +497,9 @@ function SpeakerDirectoryCard({
           <PublicSpeakerMetadata speaker={speaker} />
         </span>
       </button>
-      {speaker.biography ? <p>{descriptionSnippet(speaker.biography)}</p> : null}
+      {speaker.biography ? (
+        <p>{descriptionSnippet(speaker.biography)}</p>
+      ) : null}
       <span className="help">
         {speaker.sessionIds.length} public session
         {speaker.sessionIds.length === 1 ? "" : "s"}

@@ -306,7 +306,9 @@ schedule tests verify this AIA-08 production slice.
   preserves duplicate filename extensions and conditionally opens and
   pull-streams only the current stored entry with response-cancellation
   through a dedicated binary resource route rather than a document action.
-  propagation.
+  A speaker-scoped task file is attributed to its linked session only when
+  exactly one event session matches that speaker; ambiguous relationships stay
+  visibly unassigned instead of selecting an arbitrary session.
 - **Scope boundary:** This is session programme content and existing private
   file delivery, not a general-purpose CMS. Live R2/scanner acceptance remains
   external.
@@ -315,8 +317,8 @@ schedule tests verify this AIA-08 production slice.
 
 - **Production slice (EMB-01/04/09/12/13/14):** The anonymous public programme now exposes the published D1/Airtable snapshot through the existing service at the sessions overview, `/speakers`, `/agenda`, `/schedule` and `/gallery` surfaces. Surface selection uses the matched React Router parameter, so framework `.data` revalidation URLs cannot be mistaken for a public surface and return a false 404. Sessions and chronological itinerary cards include complete public metadata; speakers are surname-ordered; gallery search and the keyboard-accessible detail panel use the same published speaker/session graph.
 - **Data boundary:** Public D1 and Airtable projections require a published schedule version, public published sessions/relationships, public content snapshots and published profiles. Editorial status is advisory and does not filter a published representation. Approval provenance remains a database invariant and inconsistent read state fails explicitly; the administrator UI never fabricates a missing approver. Missing content or a non-public snapshot for a source-public session fails explicitly, and Airtable staging applies the same visibility boundary before provider writes. Headshot URLs still require released-clean current-version predicates. Only Priya Shah, Alex Morgan, Priya Raman and Marcus Okafor may use explicitly allowlisted bundled portraits on the canonical event, and only in local demo or production evaluation mode; any non-deleted real headshot asset suppresses that person's bundle. Anonymous itinerary rows use an event-specific HMAC of a signed, expiry-bound browser identifier, preventing database-level correlation across events and organisations while retaining one browser cookie. The portraits are presentation-only data, not participant upload infrastructure or an ordinary production fallback.
-- **Accessibility evidence:** Description and biography expansion controls expose `aria-expanded`/`aria-controls`; the gallery card supports pointer and keyboard activation, has an explicit close control, preserves search state and returns focus to the opener. Focused unit, Worker and anonymous Chromium coverage verifies these behaviors.
-- **Scope boundary:** Organizer embed configuration, live edit propagation, iCal export and participant upload infrastructure remain outside this workstream. Point-in-time consistency benefits from the single published snapshot read but is not claimed as live propagation.
+- **Accessibility evidence:** Description and biography expansion controls expose `aria-expanded`/`aria-controls`; the gallery card supports pointer and keyboard activation, has an explicit close control, preserves search state and returns focus to the opener. Agenda session details likewise expose an explicit close action and restore focus to the exact trigger. Itinerary calendar export reports that the browser download was requested instead of leaving activation silent. Focused unit, Worker and anonymous Chromium coverage verifies these behaviors.
+- **Scope boundary:** Additional per-surface embed types, live edit propagation and participant upload infrastructure remain outside this workstream. Point-in-time consistency benefits from the single published snapshot read but is not claimed as live propagation.
 
 ## Requirements traceability
 

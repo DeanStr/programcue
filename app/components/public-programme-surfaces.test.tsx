@@ -6,7 +6,10 @@ import type {
   PublishedSession,
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
-import { PublicSpeakerGallerySurface } from "./public-programme-surfaces";
+import {
+  PublicAgendaSurface,
+  PublicSpeakerGallerySurface,
+} from "./public-programme-surfaces";
 import {
   PublicSpeakerAvatar,
   SaveSessionButton,
@@ -67,6 +70,31 @@ function model(overrides: Partial<PublicProgrammeModel> = {}) {
 }
 
 describe("public programme speaker surfaces", () => {
+  it("exposes an explicit agenda detail close action", () => {
+    const agendaProgramme = {
+      ...programme,
+      sessions: [session],
+      speakers: [speaker],
+    } as PublishedProgramme;
+    const markup = renderToStaticMarkup(
+      <PublicAgendaSurface
+        model={model({
+          programme: agendaProgramme,
+          day: "All days",
+          days: ["Tuesday, May 20"],
+          visible: [session],
+          selected: session,
+          setSelectedId: vi.fn(),
+          speakerById: new Map([[speaker.id, speaker]]),
+        })}
+      />,
+    );
+
+    expect(markup).toContain("Close session details");
+    expect(markup).toContain('aria-controls="public-session-detail"');
+    expect(markup).toContain('aria-expanded="true"');
+  });
+
   it("keeps contextual speaker avatars decorative", () => {
     const photoMarkup = renderToStaticMarkup(
       <PublicSpeakerAvatar speaker={speaker} size={32} />,

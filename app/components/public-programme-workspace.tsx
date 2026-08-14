@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { CalendarDays, MapPin, Search } from "lucide-react";
 import { Link } from "react-router";
 
@@ -498,6 +498,8 @@ function ProgrammeSessionList({ model }: { model: PublicProgrammeModel }) {
 }
 
 function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
+  const [calendarDownloadRequested, setCalendarDownloadRequested] =
+    useState(false);
   const {
     fetcher,
     shared,
@@ -587,7 +589,12 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
           </div>
           {!shared ? (
             <div className="page-actions mt">
-              <a className="btn primary" href={calendarExportHref} download>
+              <a
+                className="btn primary"
+                href={calendarExportHref}
+                download
+                onClick={() => setCalendarDownloadRequested(true)}
+              >
                 <CalendarDays aria-hidden size={15} /> Export itinerary
               </a>
               <fetcher.Form method="post">
@@ -602,10 +609,20 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
               </fetcher.Form>
             </div>
           ) : (
-            <a className="btn primary mt" href={calendarExportHref} download>
+            <a
+              className="btn primary mt"
+              href={calendarExportHref}
+              download
+              onClick={() => setCalendarDownloadRequested(true)}
+            >
               <CalendarDays aria-hidden size={15} /> Export itinerary
             </a>
           )}
+          {calendarDownloadRequested ? (
+            <p className="validation-item ok mt" role="status">
+              Calendar download requested. Check your browser downloads.
+            </p>
+          ) : null}
           {loaderData.itinerarySynced && !shared ? (
             <p className="help">
               Synced to your signed-in account across devices.

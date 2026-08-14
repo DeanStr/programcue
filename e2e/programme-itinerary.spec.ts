@@ -91,6 +91,14 @@ test("publishes speaker profiles and a read-only itinerary share link", async ({
     "future-of-events-2027-itinerary.ics",
   );
   expect((await calendarResponse.text()).match(/^UID:/gmu)).toHaveLength(1);
+  const download = page.waitForEvent("download");
+  await calendarExport.click();
+  await download;
+  await expect(
+    page.getByRole("status").filter({
+      hasText: "Calendar download requested. Check your browser downloads.",
+    }),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "Create read-only share link" })
     .click();

@@ -34,6 +34,82 @@ async function placeSession(
 }
 
 describe("content management", () => {
+  it("attributes a speaker task file to its one linked session", async () => {
+    const content = new ContentManagementService(scheduleTestEnv);
+    const personId = "content-session-speaker";
+    const sessionId = "content-session-attribution";
+    const taskId = "content-session-task";
+    const assetId = "content-session-asset";
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO people (id, email, display_name, created_at, updated_at)
+         VALUES (?, 'content-session-speaker@example.com', 'Session Speaker',
+                 unixepoch(), unixepoch())`,
+      ).bind(personId),
+      env.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, track_id, title, slug, format, duration_minutes,
+           status, visibility, revision, created_at, updated_at
+         ) VALUES (?, ?, 'schedule-test-track', 'Session-linked presentation',
+                   'session-linked-presentation', 'presentation', 45,
+                   'unscheduled', 'public', 1, unixepoch(), unixepoch())`,
+      ).bind(sessionId, viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, participation_status,
+           participation_confirmed_at, visibility
+         ) VALUES (?, ?, ?, 0, 'confirmed', unixepoch(), 'public')`,
+      ).bind(sessionId, viewer.eventId, personId),
+      env.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, owner_person_id, title,
+           task_type, impact, status, readiness_state, readiness_percent,
+           revision, created_at, updated_at
+         ) VALUES (?, ?, 'speaker', ?, ?, 'Upload Session Presentation',
+                   'file_upload', 'high', 'submitted', 'on_track', 100, 1,
+                   unixepoch(), unixepoch())`,
+      ).bind(taskId, viewer.eventId, personId, personId),
+      env.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status, created_at, updated_at
+         ) VALUES (?, ?, ?, 'task', ?, 'task_evidence', 'active',
+                   unixepoch(), unixepoch())`,
+      ).bind(assetId, viewer.eventId, personId, taskId),
+    ]);
+
+    const dashboard = await content.getDashboard(viewer);
+    expect(dashboard.files.find((asset) => asset.id === assetId)).toMatchObject(
+      {
+        speakerName: "Session Speaker",
+        sessionName: "Session-linked presentation",
+      },
+    );
+
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, track_id, title, slug, format, duration_minutes,
+           status, visibility, revision, created_at, updated_at
+         ) VALUES ('content-second-session', ?, 'schedule-test-track',
+                   'Another linked session', 'another-linked-session',
+                   'presentation', 45, 'unscheduled', 'public', 1,
+                   unixepoch(), unixepoch())`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, participation_status,
+           participation_confirmed_at, visibility
+         ) VALUES ('content-second-session', ?, ?, 0, 'confirmed',
+                   unixepoch(), 'public')`,
+      ).bind(viewer.eventId, personId),
+    ]);
+    const ambiguousDashboard = await content.getDashboard(viewer);
+    expect(
+      ambiguousDashboard.files.find((asset) => asset.id === assetId),
+    ).toMatchObject({ sessionName: "Unassigned" });
+  });
+
   it("fails fast when approval provenance is incomplete", () => {
     const invalidStates = [
       {
@@ -111,7 +187,9 @@ describe("content management", () => {
       confirmed: true,
     });
     expect(approved.status).toBe("approved");
-    expect((await content.getSession(viewer, session.id)).current).toMatchObject({
+    expect(
+      (await content.getSession(viewer, session.id)).current,
+    ).toMatchObject({
       approvedByName: expect.any(String),
       approvalSource: "editorial",
     });
