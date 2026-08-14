@@ -154,7 +154,8 @@ export async function requireApiKey(
   const keyHash = await sha256(token);
   const key = await env.DB.prepare(
     `
-    SELECT id, organisation_id AS organisationId, event_id AS eventId, scopes_json AS scopesJson
+    SELECT id, organisation_id AS organisationId, event_id AS eventId,
+           scopes_json AS scopesJson, last_used_at AS lastUsedAt
       FROM api_keys
      WHERE key_hash = ?
        AND revoked_at IS NULL
@@ -168,6 +169,7 @@ export async function requireApiKey(
       organisationId: string;
       eventId: string | null;
       scopesJson: string;
+      lastUsedAt: number | null;
     }>();
   if (!key)
     throw new ApiError(
@@ -211,11 +213,17 @@ export async function requireApiKey(
     if (!event) throw new ApiError(404, "EVENT_NOT_FOUND", "Event not found");
   }
 
-  await env.DB.prepare(
-    "UPDATE api_keys SET last_used_at = unixepoch() WHERE id = ?",
-  )
-    .bind(key.id)
-    .run();
+  const now = Math.floor(Date.now() / 1_000);
+  if (key.lastUsedAt === null || key.lastUsedAt < now - 300) {
+    await env.DB.prepare(
+      `UPDATE api_keys
+          SET last_used_at = ?
+        WHERE id = ?
+          AND (last_used_at IS NULL OR last_used_at < ? - 300)`,
+    )
+      .bind(now, key.id, now)
+      .run();
+  }
   return {
     keyId: key.id,
     organisationId: key.organisationId,

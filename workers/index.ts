@@ -29,6 +29,7 @@ import {
 } from "../app/platform/maintenance-mode.server";
 import { requireProductionRuntimeReadiness } from "../app/platform/runtime-readiness.server";
 import { handleProgramCueQueueMessage } from "./communications-queue";
+import { processWithConcurrency } from "./queue/bounded-concurrency";
 import { D1_BACKUP_CRON, scheduleDailyD1Backup } from "./d1-backup-workflow";
 
 export { EventChannel } from "./event-channel";
@@ -61,7 +62,7 @@ declare global {
     TURNSTILE_SECRET_KEY?: string;
     FILE_SCANNER_WEBHOOK_SECRET?: string;
     FILE_SCANNER_API_URL?: string;
-    FILE_SCANNER_API_TOKEN?: string;
+    FILE_SCANNER_DISPATCH_SECRET?: string;
     RESOURCE_EMBED_ORIGINS?: string;
     R2_ACCOUNT_ID?: string;
     R2_BUCKET_NAME?: string;
@@ -163,6 +164,14 @@ function invalidRuntimeConfiguration(
   return secure(response, request, env, "production");
 }
 
+function operationalIdentifier(value: unknown) {
+  return typeof value === "string" &&
+    value.length <= 128 &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value)
+    ? value
+    : null;
+}
+
 export async function rejectUnsupportedQueueMessage(
   message: Message,
   env: CloudflareEnvironment,
@@ -174,12 +183,6 @@ export async function rejectUnsupportedQueueMessage(
     idempotencyKey?: unknown;
     type?: unknown;
   } | null;
-  const operationalIdentifier = (value: unknown) =>
-    typeof value === "string" &&
-    value.length <= 128 &&
-    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value)
-      ? value
-      : null;
   const operationId = operationalIdentifier(body?.operationId);
   const eventId = operationalIdentifier(body?.eventId);
   const organisationId = operationalIdentifier(body?.organisationId);
@@ -195,7 +198,34 @@ export async function rejectUnsupportedQueueMessage(
     operationType &&
     idempotencyKey
   ) {
-    const [update, audit] = await env.DB.batch([
+    const auditEventId = crypto.randomUUID();
+    const [audit, update] = await env.DB.batch([
+      env.DB.prepare(
+        `
+        INSERT INTO audit_events (
+          id, organisation_id, event_id, action, entity_type, entity_id,
+          metadata_json, created_at
+        )
+        SELECT ?, operation.organisation_id, operation.event_id,
+               'operation.unsupported', 'operation', operation.id, ?, unixepoch()
+          FROM operation_jobs operation
+         WHERE operation.id = ? AND operation.event_id = ?
+           AND operation.organisation_id = ? AND operation.type = ?
+           AND operation.idempotency_key = ?
+           AND operation.status IN (
+             'queued','queue_failed','received','retrying','partially_failed'
+           )
+           AND operation.claim_token IS NULL
+      `,
+      ).bind(
+        auditEventId,
+        JSON.stringify({ type: operationType, failure }),
+        operationId,
+        eventId,
+        organisationId,
+        operationType,
+        idempotencyKey,
+      ),
       env.DB.prepare(
         `
       UPDATE operation_jobs
@@ -206,6 +236,15 @@ export async function rejectUnsupportedQueueMessage(
          AND type = ? AND idempotency_key = ?
          AND status IN ('queued','queue_failed','received','retrying','partially_failed')
          AND claim_token IS NULL
+         AND EXISTS (
+           SELECT 1 FROM audit_events audit
+            WHERE audit.id = ?
+              AND audit.organisation_id = operation_jobs.organisation_id
+              AND audit.event_id = operation_jobs.event_id
+              AND audit.action = 'operation.unsupported'
+              AND audit.entity_type = 'operation'
+              AND audit.entity_id = operation_jobs.id
+         )
     `,
       ).bind(
         failure,
@@ -214,22 +253,7 @@ export async function rejectUnsupportedQueueMessage(
         organisationId,
         operationType,
         idempotencyKey,
-      ),
-      env.DB.prepare(
-        `
-        INSERT INTO audit_events (
-          id, organisation_id, event_id, action, entity_type, entity_id,
-          metadata_json, created_at
-        )
-        SELECT ?, ?, ?, 'operation.unsupported', 'operation', ?, ?, unixepoch()
-         WHERE changes() = 1
-      `,
-      ).bind(
-        crypto.randomUUID(),
-        organisationId,
-        eventId,
-        operationId,
-        JSON.stringify({ type: operationType, failure }),
+        auditEventId,
       ),
     ]);
     if ((update.meta.changes ?? 0) > 0) {
@@ -263,6 +287,11 @@ export async function rejectUnsupportedQueueMessage(
         );
       }
     } else {
+      if ((audit.meta.changes ?? 0) !== 0) {
+        throw new Error(
+          "The unsupported operation audit was written without its terminal state.",
+        );
+      }
       console.warn(
         JSON.stringify({
           level: "warning",
@@ -383,11 +412,24 @@ export default {
       );
       throw error;
     }
-    for (const message of batch.messages) {
+    await processWithConcurrency(batch.messages, 4, async (message) => {
+      const body = message.body as { type?: unknown } | null;
+      const operationType = operationalIdentifier(body?.type) ?? "invalid";
+      const enqueuedAt = message.timestamp.getTime();
+      console.info(
+        JSON.stringify({
+          level: "info",
+          sourceRevision: sourceRevisionForLog(env),
+          subsystem: "queue",
+          event: "message-started",
+          operationType,
+          queueAgeMs: Math.max(0, Date.now() - enqueuedAt),
+        }),
+      );
       if (!(await handleProgramCueQueueMessage(message, env))) {
         await rejectUnsupportedQueueMessage(message, env);
       }
-    }
+    });
   },
 
   scheduled(controller, env, ctx) {

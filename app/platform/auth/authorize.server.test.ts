@@ -575,6 +575,59 @@ describe("event role authorization", () => {
     expect(auditAfter?.count).toBe(Number(auditBefore?.count ?? 0) + 1);
   });
 
+  it("does not accept an invitation when its required audit insert is suppressed", async () => {
+    const auditBefore = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM audit_events
+        WHERE entity_id = ? AND action = 'membership.accepted'`,
+    )
+      .bind(adminMembershipId)
+      .first<{ count: number }>();
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE memberships
+            SET accepted_at = NULL, invitation_expires_at = unixepoch() + 300,
+                last_operation_id = NULL
+          WHERE id = ?`,
+      ).bind(adminMembershipId),
+      env.DB.prepare(
+        `CREATE TRIGGER suppress_membership_acceptance_audit
+         BEFORE INSERT ON audit_events
+         WHEN NEW.action = 'membership.accepted'
+         BEGIN
+           SELECT RAISE(IGNORE);
+         END`,
+      ),
+    ]);
+    try {
+      await expect(
+        acceptEventInvitation(
+          invitationAcceptanceRequest(),
+          env as unknown as CloudflareEnvironment,
+          eventId,
+          ["administrator"],
+        ),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        env.DB.prepare(
+          `SELECT accepted_at AS acceptedAt,
+                  (SELECT COUNT(*) FROM audit_events
+                    WHERE entity_id = ?
+                      AND action = 'membership.accepted') AS auditCount
+             FROM memberships WHERE id = ?`,
+        )
+          .bind(adminMembershipId, adminMembershipId)
+          .first(),
+      ).resolves.toEqual({
+        acceptedAt: null,
+        auditCount: auditBefore?.count ?? 0,
+      });
+    } finally {
+      await env.DB.prepare(
+        "DROP TRIGGER IF EXISTS suppress_membership_acceptance_audit",
+      ).run();
+    }
+  });
+
   it("denies an expired pending invitation without accepting or auditing it", async () => {
     const before = await env.DB.prepare(
       `

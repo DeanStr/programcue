@@ -44,7 +44,8 @@ export default defineProject({
           TURNSTILE_SECRET_KEY: "test-turnstile-secret",
           FILE_SCANNER_WEBHOOK_SECRET: "test-file-scanner-secret",
           FILE_SCANNER_API_URL: "https://scanner.example.test/jobs",
-          FILE_SCANNER_API_TOKEN: "test-scanner-api-token",
+          FILE_SCANNER_DISPATCH_SECRET:
+            "test-scanner-dispatch-secret-at-least-32-characters",
           RESOURCE_EMBED_ORIGINS: "https://example.com,https://docs.google.com",
           R2_ACCOUNT_ID: "test-account-id",
           R2_BUCKET_NAME: "program-cue-test-files",

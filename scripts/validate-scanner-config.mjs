@@ -56,7 +56,9 @@ export function validateScannerConfig(config) {
   }
   if (
     Object.keys(variables).some((name) =>
-      ["SCANNER_API_TOKEN", "PROGRAM_CUE_CALLBACK_SECRET"].includes(name),
+      ["PROGRAM_CUE_DISPATCH_SECRET", "PROGRAM_CUE_CALLBACK_SECRET"].includes(
+        name,
+      ),
     )
   ) {
     add("Scanner credentials must be Cloudflare secrets, not variables.");

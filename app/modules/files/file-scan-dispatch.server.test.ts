@@ -13,6 +13,31 @@ import {
 } from "./file-scan-dispatch.server";
 import { FileService } from "./file-service.server";
 
+async function dispatchSignatureIsValid(init: RequestInit | undefined) {
+  const headers = new Headers(init?.headers);
+  const timestamp = headers.get("x-program-cue-dispatch-timestamp");
+  const signature = headers.get("x-program-cue-dispatch-signature");
+  if (!timestamp || !signature?.startsWith("v1,") || !init?.body) return false;
+  const supplied = Uint8Array.from(atob(signature.slice(3)), (character) =>
+    character.charCodeAt(0),
+  );
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(
+      (env as unknown as CloudflareEnvironment).FILE_SCANNER_DISPATCH_SECRET,
+    ),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+  return crypto.subtle.verify(
+    "HMAC",
+    key,
+    supplied,
+    new TextEncoder().encode(`${timestamp}.${String(init.body)}`),
+  );
+}
+
 async function persistQueuedScan(message: FileScanQueueMessage) {
   await env.DB.batch([
     env.DB.prepare(
@@ -93,7 +118,7 @@ describe("file scan queue dispatch", () => {
       "scanner credentials",
       {
         FILE_SCANNER_API_URL: "https://scanner.programcue.test",
-        FILE_SCANNER_API_TOKEN: undefined,
+        FILE_SCANNER_DISPATCH_SECRET: undefined,
       },
       "scanner-credentials",
     ],
@@ -101,7 +126,8 @@ describe("file scan queue dispatch", () => {
       "callback endpoint",
       {
         FILE_SCANNER_API_URL: "https://scanner.programcue.test",
-        FILE_SCANNER_API_TOKEN: "scanner-test-token-long-enough",
+        FILE_SCANNER_DISPATCH_SECRET:
+          "scanner-test-dispatch-secret-long-enough",
         BETTER_AUTH_URL: undefined,
       },
       "callback-endpoint",
@@ -110,26 +136,30 @@ describe("file scan queue dispatch", () => {
       "queue binding",
       {
         FILE_SCANNER_API_URL: "https://scanner.programcue.test",
-        FILE_SCANNER_API_TOKEN: "scanner-test-token-long-enough",
+        FILE_SCANNER_DISPATCH_SECRET:
+          "scanner-test-dispatch-secret-long-enough",
         BETTER_AUTH_URL: "https://programcue.test",
         OPERATIONS_QUEUE: undefined,
       },
       "queue-binding",
     ],
-  ])("classifies missing %s configuration safely", (_label, overrides, reason) => {
-    let failure: unknown;
-    try {
-      assertFileScanDispatchConfigured({
-        ...(env as unknown as CloudflareEnvironment),
-        ...overrides,
-      } as CloudflareEnvironment);
-    } catch (error) {
-      failure = error;
-    }
+  ])(
+    "classifies missing %s configuration safely",
+    (_label, overrides, reason) => {
+      let failure: unknown;
+      try {
+        assertFileScanDispatchConfigured({
+          ...(env as unknown as CloudflareEnvironment),
+          ...overrides,
+        } as CloudflareEnvironment);
+      } catch (error) {
+        failure = error;
+      }
 
-    expect(failure).toBeInstanceOf(FileScanDispatchConfigurationError);
-    expect(failure).toMatchObject({ reason });
-  });
+      expect(failure).toBeInstanceOf(FileScanDispatchConfigurationError);
+      expect(failure).toMatchObject({ reason });
+    },
+  );
 
   it("delays a duplicate delivery while the exact operation has an active lease", async () => {
     const versionId = crypto.randomUUID();
@@ -260,7 +290,7 @@ describe("file scan queue dispatch", () => {
     ).resolves.toEqual({ action: "file.scan.dispatch_skipped" });
   });
 
-  it("fails closed before presigning when R2 no longer matches the queued object", async () => {
+  it("fails closed before dispatch when R2 no longer matches the queued object", async () => {
     const versionId = crypto.randomUUID();
     const assetId = crypto.randomUUID();
     const bytes = new Uint8Array([1, 2, 3, 4]);
@@ -440,15 +470,58 @@ describe("file scan queue dispatch", () => {
         }),
       },
     ]);
+    await expect(
+      env.DB.prepare(
+        `SELECT id, json_extract(metadata_json, '$.attempt') AS attempt
+           FROM audit_events
+          WHERE id IN (?, ?)
+          ORDER BY attempt`,
+      )
+        .bind(
+          `file-scan-dispatched:${versionId}:attempt:1`,
+          `file-scan-dispatched:${versionId}:attempt:2`,
+        )
+        .all(),
+    ).resolves.toMatchObject({
+      results: [
+        {
+          id: `file-scan-dispatched:${versionId}:attempt:1`,
+          attempt: 1,
+        },
+        {
+          id: `file-scan-dispatched:${versionId}:attempt:2`,
+          attempt: 2,
+        },
+      ],
+    });
+    for (const [, init] of scanner.mock.calls) {
+      const headers = new Headers(init?.headers);
+      const body = JSON.parse(String(init?.body)) as {
+        organisationId: string;
+        expiresAt: number;
+        object: { key: string };
+      };
+      expect(headers.has("authorization")).toBe(false);
+      expect(await dispatchSignatureIsValid(init)).toBe(true);
+      expect(body).toMatchObject({
+        organisationId: message.organisationId,
+        object: { key: message.objectKey },
+      });
+      expect(body.expiresAt).toBe(
+        Number(headers.get("x-program-cue-dispatch-timestamp")) + 300,
+      );
+    }
 
     await new FileService(
       env as unknown as CloudflareEnvironment,
     ).recordScanResult({
       jobId: message.operationId,
       attempt: 2,
+      organisationId: message.organisationId,
       eventId: message.eventId,
       versionId: message.versionId,
       assetId: message.assetId,
+      objectKey: message.objectKey,
       objectEtag: message.objectEtag,
       sizeBytes: message.sizeBytes,
       provider: "test-scanner",
@@ -504,9 +577,11 @@ describe("file scan queue dispatch", () => {
       ).recordScanResult({
         jobId: message.operationId,
         attempt: 1,
+        organisationId: message.organisationId,
         eventId: message.eventId,
         versionId: message.versionId,
         assetId: message.assetId,
+        objectKey: message.objectKey,
         objectEtag: message.objectEtag,
         sizeBytes: message.sizeBytes,
         provider: "test-scanner",
@@ -541,7 +616,7 @@ describe("file scan queue dispatch", () => {
     });
     await expect(
       env.DB.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE id = ?")
-        .bind(`file-scan-dispatched:${versionId}`)
+        .bind(`file-scan-dispatched:${versionId}:attempt:1`)
         .first(),
     ).resolves.toEqual({ count: 1 });
     await expect(env.FILES.delete(objectKey)).resolves.toBeUndefined();

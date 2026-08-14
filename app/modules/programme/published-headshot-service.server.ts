@@ -239,6 +239,75 @@ export class PublishedHeadshotService {
     }));
   }
 
+  async withPublishedPageHeadshotUrls(
+    event: Pick<PublishedProgramme["event"], "id" | "slug">,
+    version: Pick<PublishedProgramme["version"], "id">,
+    speakers: PublishedSpeaker[],
+  ) {
+    if (!speakers.length) return [];
+    const placeholders = speakers.map(() => "?").join(", ");
+    const rows = await this.env.DB.prepare(
+      `
+      SELECT DISTINCT person.id AS personId
+        FROM schedule_versions published_version
+        JOIN schedule_entries entry
+          ON entry.schedule_version_id = published_version.id
+         AND entry.event_id = published_version.event_id
+        JOIN sessions session
+          ON session.id = entry.session_id AND session.event_id = entry.event_id
+        JOIN schedule_session_contents content
+          ON content.schedule_version_id = entry.schedule_version_id
+         AND content.event_id = entry.event_id
+         AND content.session_id = entry.session_id
+        JOIN session_speakers relation
+          ON relation.session_id = entry.session_id
+         AND relation.event_id = entry.event_id
+        JOIN people person ON person.id = relation.person_id
+        JOIN file_assets asset
+          ON asset.event_id = entry.event_id
+         AND asset.target_type = 'person'
+         AND asset.target_id = person.id
+         AND asset.asset_kind = 'headshot'
+         AND asset.status = 'active'
+        JOIN file_versions file_version
+          ON file_version.id = asset.current_version_id
+         AND file_version.asset_id = asset.id
+         AND file_version.event_id = asset.event_id
+       WHERE published_version.id = ? AND published_version.event_id = ?
+         AND published_version.status = 'published'
+         AND session.status = 'published' AND session.visibility = 'public'
+         AND content.visibility = 'public'
+         AND relation.visibility = 'public'
+         AND person.profile_status = 'published'
+         AND file_version.upload_status = 'uploaded'
+         AND file_version.signature_status = 'valid'
+         AND file_version.scan_status = 'clean'
+         AND file_version.released_at IS NOT NULL
+         AND file_version.replaced_at IS NULL
+         AND file_version.deleted_at IS NULL
+         AND file_version.object_etag IS NOT NULL
+         AND file_version.detected_content_type IN ('image/jpeg', 'image/png', 'image/webp')
+         AND person.id IN (${placeholders})
+    `,
+    )
+      .bind(version.id, event.id, ...speakers.map((speaker) => speaker.id))
+      .all<{ personId: string }>();
+    const personIds = new Set(rows.results.map((row) => row.personId));
+    const assetPersonIds = await this.currentPublicHeadshotPersonIds(
+      event.id,
+      version.id,
+      speakers.map((speaker) => speaker.id),
+    );
+    return speakers.map((speaker) => ({
+      ...speaker,
+      imageUrl: personIds.has(speaker.id)
+        ? publishedHeadshotPath(event.slug, speaker.id)
+        : assetPersonIds.has(speaker.id)
+          ? null
+          : this.bundledFixtureHeadshot(event, speaker.id),
+    }));
+  }
+
   async findPublishedHeadshot(
     slug: string,
     personId: string,

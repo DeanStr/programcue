@@ -44,7 +44,7 @@ const requiredProductionValues = [
   "INTEGRATION_CREDENTIALS_KEY",
   "WEBHOOK_CREDENTIALS_KEY",
   "TURNSTILE_SECRET_KEY",
-  "FILE_SCANNER_API_TOKEN",
+  "FILE_SCANNER_DISPATCH_SECRET",
   "FILE_SCANNER_WEBHOOK_SECRET",
   "R2_ACCESS_KEY_ID",
   "R2_SECRET_ACCESS_KEY",
@@ -115,6 +115,22 @@ export function requireProductionRuntimeReadiness(
       values.ANONYMOUS_ITINERARY_SECRET.trim()
   ) {
     invalid.push("BETTER_AUTH_SECRET", "ANONYMOUS_ITINERARY_SECRET");
+  }
+  for (const name of [
+    "FILE_SCANNER_DISPATCH_SECRET",
+    "FILE_SCANNER_WEBHOOK_SECRET",
+  ] as const) {
+    if (typeof values[name] === "string" && values[name].trim().length < 32) {
+      invalid.push(name);
+    }
+  }
+  if (
+    typeof values.FILE_SCANNER_DISPATCH_SECRET === "string" &&
+    typeof values.FILE_SCANNER_WEBHOOK_SECRET === "string" &&
+    values.FILE_SCANNER_DISPATCH_SECRET.trim() ===
+      values.FILE_SCANNER_WEBHOOK_SECRET.trim()
+  ) {
+    invalid.push("FILE_SCANNER_DISPATCH_SECRET", "FILE_SCANNER_WEBHOOK_SECRET");
   }
   if (runtime.evaluation) {
     if (

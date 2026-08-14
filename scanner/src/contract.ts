@@ -10,6 +10,7 @@ export const SCANNER_BUSY_ATTEMPT_LIMIT = 40;
 // Five sleeps allow the container's five-minute cold-start window plus margin,
 // but persistent readiness failure surfaces in under eight minutes.
 export const SCANNER_NOT_READY_ATTEMPT_LIMIT = 6;
+export const SCANNER_DISPATCH_MAXIMUM_AGE_SECONDS = 300;
 
 const scannerContainerErrorSchema = z
   .object({
@@ -46,12 +47,14 @@ export const scannerJobSchema = z
   .object({
     jobId: boundedIdentifier,
     attempt: z.number().int().positive(),
+    organisationId: z.string().min(1).max(160),
     eventId: z.string().min(1).max(160),
     versionId: z.string().min(1).max(160),
     assetId: z.string().min(1).max(160),
+    expiresAt: z.number().int().positive(),
     object: z
       .object({
-        url: z.string().url().max(8_192),
+        key: z.string().min(1).max(1_024),
         sizeBytes: z.number().int().positive().max(MAX_SCANNED_FILE_BYTES),
         etag: z.string().min(1).max(200),
       })
@@ -69,8 +72,6 @@ export type ScannerJob = z.infer<typeof scannerJobSchema>;
 
 export interface ScannerContractConfiguration {
   callbackUrl: string;
-  r2BucketName: string;
-  r2ObjectHost: string;
 }
 
 function requireExactHttpsUrl(rawValue: string, name: string) {
@@ -104,33 +105,71 @@ export function validateScannerJob(
   if (callback.toString() !== expectedCallback.toString()) {
     throw new Error("The callback URL is not the configured Program Cue URL.");
   }
+  if (!job.object.key.startsWith("private/"))
+    throw new Error("The object key is outside private R2 storage.");
+  return job;
+}
 
-  const objectUrl = requireExactHttpsUrl(job.object.url, "Object URL");
-  if (objectUrl.hostname !== configuration.r2ObjectHost) {
+function base64Bytes(value: string) {
+  try {
+    return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+export async function verifyScannerDispatch(input: {
+  rawBody: string;
+  headers: Headers;
+  secret: string;
+  configuration: ScannerContractConfiguration;
+  nowSeconds?: number;
+}) {
+  const timestampRaw = input.headers
+    .get("x-program-cue-dispatch-timestamp")
+    ?.trim();
+  if (!timestampRaw || !/^\d{10}$/u.test(timestampRaw))
+    throw new Error("The scanner dispatch timestamp is invalid.");
+  const timestamp = Number(timestampRaw);
+  const now = input.nowSeconds ?? Math.floor(Date.now() / 1_000);
+  if (Math.abs(now - timestamp) > SCANNER_DISPATCH_MAXIMUM_AGE_SECONDS)
     throw new Error(
-      "The object URL is not hosted by the configured R2 account.",
+      "The scanner dispatch timestamp is outside the accepted window.",
     );
-  }
-  const bucketPrefix = `/${encodeURIComponent(configuration.r2BucketName)}/`;
-  if (!objectUrl.pathname.startsWith(bucketPrefix)) {
+
+  const signature = input.headers
+    .get("x-program-cue-dispatch-signature")
+    ?.trim();
+  if (!signature?.startsWith("v1,"))
+    throw new Error("The scanner dispatch signature is invalid.");
+  const supplied = base64Bytes(signature.slice(3));
+  if (supplied?.byteLength !== 32)
+    throw new Error("The scanner dispatch signature is invalid.");
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(input.secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    key,
+    supplied,
+    new TextEncoder().encode(`${timestampRaw}.${input.rawBody}`),
+  );
+  if (!valid) throw new Error("The scanner dispatch signature is invalid.");
+
+  const job = validateScannerJob(
+    JSON.parse(input.rawBody),
+    input.configuration,
+  );
+  if (job.expiresAt < now || job.expiresAt < timestamp)
+    throw new Error("The scanner dispatch has expired.");
+  if (job.expiresAt > timestamp + SCANNER_DISPATCH_MAXIMUM_AGE_SECONDS)
     throw new Error(
-      "The object URL is not scoped to the private files bucket.",
+      "The scanner dispatch expiry is outside the accepted window.",
     );
-  }
-  if (
-    objectUrl.searchParams.get("X-Amz-Algorithm") !== "AWS4-HMAC-SHA256" ||
-    !objectUrl.searchParams.has("X-Amz-Signature")
-  ) {
-    throw new Error("The object URL is not an R2 signed request.");
-  }
-  const expiry = objectUrl.searchParams.get("X-Amz-Expires") ?? "";
-  if (
-    !/^\d{1,4}$/u.test(expiry) ||
-    Number(expiry) < 1 ||
-    Number(expiry) > 3_600
-  ) {
-    throw new Error("The R2 signed request has an invalid expiry.");
-  }
   return job;
 }
 
@@ -255,22 +294,4 @@ export async function signScannerCallback(input: {
     timestamp,
     signature: `v1,${base64(signature)}`,
   };
-}
-
-export async function constantTimeTokenMatch(
-  supplied: string,
-  expected: string,
-) {
-  const encoder = new TextEncoder();
-  const [suppliedDigest, expectedDigest] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(supplied)),
-    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
-  ]);
-  const left = new Uint8Array(suppliedDigest);
-  const right = new Uint8Array(expectedDigest);
-  let difference = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    difference |= left[index] ^ right[index];
-  }
-  return difference === 0;
 }

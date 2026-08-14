@@ -8,7 +8,6 @@ import { z } from "zod";
 
 import {
   classifyScannerContainerFailure,
-  constantTimeTokenMatch,
   MAX_SCANNER_REQUEST_BYTES,
   SCANNER_BUSY_ATTEMPT_LIMIT,
   scannerCapacityDelaySeconds,
@@ -21,6 +20,7 @@ import {
   type ScannerContainerFailure,
   type ScannerJob,
   validateScannerJob,
+  verifyScannerDispatch,
   workflowInstanceId,
 } from "./contract";
 
@@ -34,7 +34,7 @@ interface ScannerEnvironment {
   EXPECTED_CALLBACK_URL?: string;
   R2_BUCKET_NAME?: string;
   R2_OBJECT_HOST?: string;
-  SCANNER_API_TOKEN?: string;
+  PROGRAM_CUE_DISPATCH_SECRET?: string;
   PROGRAM_CUE_CALLBACK_SECRET?: string;
   SOURCE_REVISION?: string;
 }
@@ -71,7 +71,7 @@ type ContainerScanAttempt =
 interface ScannerRuntime {
   callbackSecret: string;
   contract: ScannerContractConfiguration;
-  scannerApiToken: string;
+  dispatchSecret: string;
   sourceRevision: string;
 }
 
@@ -208,18 +208,25 @@ function requireRuntime(environment: ScannerEnvironment): ScannerRuntime {
   if (!/^[0-9a-f]{7,64}$/iu.test(sourceRevision)) {
     throw new Error("SOURCE_REVISION must be a Git revision.");
   }
+  const callbackSecret = requiredValue(
+    environment.PROGRAM_CUE_CALLBACK_SECRET,
+    "PROGRAM_CUE_CALLBACK_SECRET",
+    32,
+  );
+  const dispatchSecret = requiredValue(
+    environment.PROGRAM_CUE_DISPATCH_SECRET,
+    "PROGRAM_CUE_DISPATCH_SECRET",
+    32,
+  );
+  if (callbackSecret === dispatchSecret) {
+    throw new Error(
+      "PROGRAM_CUE_CALLBACK_SECRET and PROGRAM_CUE_DISPATCH_SECRET must be independent.",
+    );
+  }
   return {
-    callbackSecret: requiredValue(
-      environment.PROGRAM_CUE_CALLBACK_SECRET,
-      "PROGRAM_CUE_CALLBACK_SECRET",
-      32,
-    ),
-    contract: { callbackUrl, r2BucketName, r2ObjectHost },
-    scannerApiToken: requiredValue(
-      environment.SCANNER_API_TOKEN,
-      "SCANNER_API_TOKEN",
-      32,
-    ),
+    callbackSecret,
+    contract: { callbackUrl },
+    dispatchSecret,
     sourceRevision,
   };
 }
@@ -319,10 +326,20 @@ async function scanInContainer(
     job.attempt,
   );
   const container = environment.CLAMAV.getByName(instanceName);
+  const objectUrl = new URL(
+    `https://${requiredValue(environment.R2_OBJECT_HOST, "R2_OBJECT_HOST")}/${encodeURIComponent(requiredValue(environment.R2_BUCKET_NAME, "R2_BUCKET_NAME"))}/${encodeURIComponent(job.object.key)}`,
+  );
   const response = await container.fetch("http://scanner/scan", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jobId: job.jobId, object: job.object }),
+    body: JSON.stringify({
+      jobId: job.jobId,
+      object: {
+        url: objectUrl.toString(),
+        sizeBytes: job.object.sizeBytes,
+        etag: job.object.etag,
+      },
+    }),
   });
   const rawBody = await readBoundedResponseText(response, 16_384);
   if (response.ok) {
@@ -342,10 +359,12 @@ function callbackPayload(job: ScannerJob, scan: ContainerScanAttempt | null) {
   const base = {
     jobId: job.jobId,
     attempt: job.attempt,
+    organisationId: job.organisationId,
     eventId: job.eventId,
     versionId: job.versionId,
     assetId: job.assetId,
     object: {
+      key: job.object.key,
       etag: job.object.etag,
       sizeBytes: job.object.sizeBytes,
     },
@@ -497,22 +516,11 @@ export class FileScanWorkflow extends WorkflowEntrypoint<
   }
 }
 
-async function authenticated(request: Request, expectedToken: string) {
-  const authorization = request.headers.get("authorization") ?? "";
-  if (!authorization.startsWith("Bearer ")) return false;
-  const supplied = authorization.slice("Bearer ".length);
-  if (!supplied || supplied.length > 1_024) return false;
-  return constantTimeTokenMatch(supplied, expectedToken);
-}
-
 async function acceptScan(
   request: Request,
   environment: ScannerEnvironment,
   runtime: ScannerRuntime,
 ) {
-  if (!(await authenticated(request, runtime.scannerApiToken))) {
-    return jsonResponse({ error: "Unauthorized." }, { status: 401 });
-  }
   const mediaType =
     request.headers
       .get("content-type")
@@ -528,7 +536,12 @@ async function acceptScan(
   let job: ScannerJob;
   try {
     const rawBody = await readBoundedText(request, MAX_SCANNER_REQUEST_BYTES);
-    job = validateScannerJob(JSON.parse(rawBody), runtime.contract);
+    job = await verifyScannerDispatch({
+      rawBody,
+      headers: request.headers,
+      secret: runtime.dispatchSecret,
+      configuration: runtime.contract,
+    });
   } catch (error) {
     if (error instanceof RangeError) {
       return jsonResponse(
@@ -537,8 +550,8 @@ async function acceptScan(
       );
     }
     return jsonResponse(
-      { error: "Request body is not a valid scanner job." },
-      { status: 400 },
+      { error: "Request body or dispatch authentication is invalid." },
+      { status: 401 },
     );
   }
   if (

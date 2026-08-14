@@ -89,7 +89,8 @@ export class ApiKeyService {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first();
-    if (!event) throw new Response("This event could not be found.", { status: 404 });
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
   }
 
   async list(viewer: Viewer): Promise<ApiKeyListItem[]> {
@@ -136,8 +137,34 @@ export class ApiKeyService {
         ? null
         : Math.floor(Date.now() / 1_000) + input.expiresInDays * 86_400;
     let created: D1Result;
+    let audited: D1Result;
+    const auditEventId = crypto.randomUUID();
     try {
-      [created] = await this.env.DB.batch([
+      [audited, created] = await this.env.DB.batch([
+        this.env.DB.prepare(
+          `
+        INSERT INTO audit_events (
+          id, organisation_id, event_id, actor_person_id, action,
+          entity_type, entity_id, metadata_json, created_at
+        ) SELECT ?, e.organisation_id, e.id, ?, 'api_key.created',
+                 'api_key', ?, ?, unixepoch()
+            FROM events e
+           WHERE e.id = ? AND e.organisation_id = ?
+             AND e.activation_status = 'active'
+        `,
+        ).bind(
+          auditEventId,
+          viewer.personId,
+          id,
+          JSON.stringify({
+            name: input.name,
+            prefix,
+            scopes: input.scopes,
+            expiresAt,
+          }),
+          viewer.eventId,
+          viewer.organisationId,
+        ),
         this.env.DB.prepare(
           `
         INSERT INTO api_keys (
@@ -148,6 +175,13 @@ export class ApiKeyService {
          FROM events e
          WHERE e.id = ? AND e.organisation_id = ?
            AND e.activation_status = 'active'
+           AND EXISTS (
+             SELECT 1 FROM audit_events audit
+              WHERE audit.id = ? AND audit.action = 'api_key.created'
+                AND audit.organisation_id = e.organisation_id
+                AND audit.event_id = e.id
+                AND audit.entity_type = 'api_key' AND audit.entity_id = ?
+           )
         `,
         ).bind(
           id,
@@ -159,27 +193,7 @@ export class ApiKeyService {
           viewer.personId,
           viewer.eventId,
           viewer.organisationId,
-        ),
-        this.env.DB.prepare(
-          `
-        INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
-          entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'api_key.created', 'api_key', ?, ?, unixepoch()
-          WHERE EXISTS (SELECT 1 FROM api_keys WHERE id = ?)
-        `,
-        ).bind(
-          crypto.randomUUID(),
-          viewer.organisationId,
-          viewer.eventId,
-          viewer.personId,
-          id,
-          JSON.stringify({
-            name: input.name,
-            prefix,
-            scopes: input.scopes,
-            expiresAt,
-          }),
+          auditEventId,
           id,
         ),
       ]);
@@ -194,7 +208,7 @@ export class ApiKeyService {
       }
       throw error;
     }
-    if ((created.meta.changes ?? 0) !== 1)
+    if ((created.meta.changes ?? 0) !== 1 || (audited.meta.changes ?? 0) !== 1)
       throw new Error("API key could not be created for this event.");
     return {
       id,
@@ -208,34 +222,48 @@ export class ApiKeyService {
 
   async revoke(viewer: Viewer, id: string) {
     await this.assertEvent(viewer);
-    const [revoked] = await this.env.DB.batch([
+    const auditEventId = crypto.randomUUID();
+    const [audited, revoked] = await this.env.DB.batch([
       this.env.DB.prepare(
         `
-        UPDATE api_keys SET revoked_at = unixepoch()
-         WHERE id = ? AND organisation_id = ? AND event_id = ? AND revoked_at IS NULL
+        INSERT INTO audit_events (
+          id, organisation_id, event_id, actor_person_id, action,
+          entity_type, entity_id, metadata_json, created_at
+        )
+        SELECT ?, api_key.organisation_id, api_key.event_id, ?, 'api_key.revoked',
+               'api_key', api_key.id, '{}', unixepoch()
+          FROM api_keys api_key
+         WHERE api_key.id = ? AND api_key.organisation_id = ?
+           AND api_key.event_id = ? AND api_key.revoked_at IS NULL
       `,
       ).bind(
+        auditEventId,
+        viewer.personId,
         z.string().uuid().parse(id),
         viewer.organisationId,
         viewer.eventId,
       ),
       this.env.DB.prepare(
         `
-        INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
-          entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'api_key.revoked', 'api_key', ?, '{}', unixepoch()
-          WHERE changes() = 1
+        UPDATE api_keys SET revoked_at = unixepoch()
+         WHERE id = ? AND organisation_id = ? AND event_id = ? AND revoked_at IS NULL
+           AND EXISTS (
+             SELECT 1 FROM audit_events audit
+              WHERE audit.id = ? AND audit.action = 'api_key.revoked'
+                AND audit.organisation_id = api_keys.organisation_id
+                AND audit.event_id = api_keys.event_id
+                AND audit.entity_type = 'api_key'
+                AND audit.entity_id = api_keys.id
+           )
       `,
       ).bind(
-        crypto.randomUUID(),
+        z.string().uuid().parse(id),
         viewer.organisationId,
         viewer.eventId,
-        viewer.personId,
-        id,
+        auditEventId,
       ),
     ]);
-    if ((revoked.meta.changes ?? 0) !== 1)
+    if ((revoked.meta.changes ?? 0) !== 1 || (audited.meta.changes ?? 0) !== 1)
       throw new Error("Active API key not found.");
   }
 }

@@ -81,7 +81,9 @@ export async function testFileScanCallbackIdentity(
 ) {
   const row = await env.DB.prepare(
     `SELECT operation.id AS jobId, operation.attempt_count AS attemptCount,
+            operation.organisation_id AS organisationId,
             version.asset_id AS assetId,
+            version.object_key AS objectKey,
             version.object_etag AS objectEtag,
             version.size_bytes AS sizeBytes
        FROM file_versions version
@@ -95,7 +97,9 @@ export async function testFileScanCallbackIdentity(
     .first<{
       jobId: string;
       attemptCount: number;
+      organisationId: string;
       assetId: string;
+      objectKey: string;
       objectEtag: string | null;
       sizeBytes: number;
     }>();
@@ -105,7 +109,9 @@ export async function testFileScanCallbackIdentity(
   return {
     jobId: row.jobId,
     attempt: Math.max(1, row.attemptCount),
+    organisationId: row.organisationId,
     assetId: row.assetId,
+    objectKey: row.objectKey,
     objectEtag: row.objectEtag,
     sizeBytes: row.sizeBytes,
   };

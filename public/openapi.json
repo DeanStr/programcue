@@ -7253,6 +7253,11 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "organisationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
               "eventId": {
                 "type": "string",
                 "minLength": 1,
@@ -7271,6 +7276,11 @@
               "object": {
                 "type": "object",
                 "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
                   "etag": {
                     "type": "string",
                     "minLength": 1,
@@ -7282,7 +7292,7 @@
                     "maximum": 1073741824
                   }
                 },
-                "required": ["etag", "sizeBytes"],
+                "required": ["key", "etag", "sizeBytes"],
                 "additionalProperties": false
               },
               "provider": {
@@ -7300,6 +7310,7 @@
             "required": [
               "jobId",
               "attempt",
+              "organisationId",
               "eventId",
               "versionId",
               "assetId",
@@ -7322,6 +7333,11 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "organisationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
               "eventId": {
                 "type": "string",
                 "minLength": 1,
@@ -7340,6 +7356,11 @@
               "object": {
                 "type": "object",
                 "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
                   "etag": {
                     "type": "string",
                     "minLength": 1,
@@ -7351,7 +7372,7 @@
                     "maximum": 1073741824
                   }
                 },
-                "required": ["etag", "sizeBytes"],
+                "required": ["key", "etag", "sizeBytes"],
                 "additionalProperties": false
               },
               "provider": {
@@ -7369,6 +7390,7 @@
             "required": [
               "jobId",
               "attempt",
+              "organisationId",
               "eventId",
               "versionId",
               "assetId",
@@ -7391,6 +7413,11 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "organisationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
               "eventId": {
                 "type": "string",
                 "minLength": 1,
@@ -7409,6 +7436,11 @@
               "object": {
                 "type": "object",
                 "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
                   "etag": {
                     "type": "string",
                     "minLength": 1,
@@ -7420,7 +7452,7 @@
                     "maximum": 1073741824
                   }
                 },
-                "required": ["etag", "sizeBytes"],
+                "required": ["key", "etag", "sizeBytes"],
                 "additionalProperties": false
               },
               "provider": {
@@ -7443,6 +7475,7 @@
             "required": [
               "jobId",
               "attempt",
+              "organisationId",
               "eventId",
               "versionId",
               "assetId",

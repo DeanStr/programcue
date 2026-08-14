@@ -152,6 +152,27 @@ describe("service readiness", () => {
     }
   });
 
+  it("requires independent scanner dispatch and callback secrets", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const production = completeProductionEnvironment();
+    for (const overrides of [
+      { FILE_SCANNER_DISPATCH_SECRET: "too-short" },
+      { FILE_SCANNER_WEBHOOK_SECRET: "too-short" },
+      {
+        FILE_SCANNER_DISPATCH_SECRET: production.FILE_SCANNER_WEBHOOK_SECRET,
+      },
+    ]) {
+      const response = await health({
+        ...production,
+        ...overrides,
+      } as unknown as CloudflareEnvironment);
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "RUNTIME_CONFIGURATION_INVALID" },
+      });
+    }
+  });
+
   it("accepts complete local production bindings without calling providers", async () => {
     const response = await health(completeProductionEnvironment());
     expect(response.status).toBe(200);
@@ -207,8 +228,10 @@ function completeProductionEnvironment() {
     INTEGRATION_CREDENTIALS_KEY: "integration-key",
     WEBHOOK_CREDENTIALS_KEY: "webhook-key",
     TURNSTILE_SECRET_KEY: "turnstile-secret",
-    FILE_SCANNER_API_TOKEN: "scanner-token",
-    FILE_SCANNER_WEBHOOK_SECRET: "scanner-webhook-secret",
+    FILE_SCANNER_DISPATCH_SECRET:
+      "scanner-dispatch-secret-at-least-32-characters",
+    FILE_SCANNER_WEBHOOK_SECRET:
+      "scanner-webhook-secret-at-least-32-characters",
     R2_ACCESS_KEY_ID: "r2-access-key",
     R2_SECRET_ACCESS_KEY: "r2-secret-key",
     D1_REST_API_TOKEN: "d1-api-token",

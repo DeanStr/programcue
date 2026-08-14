@@ -2,31 +2,31 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifyScannerContainerFailure,
-  constantTimeTokenMatch,
   scannerCapacityDelaySeconds,
   scannerCapacityShouldWait,
   scannerContainerInstanceName,
   scannerWorkflowDuplicateStatusIsAcceptable,
   signScannerCallback,
   validateScannerJob,
+  verifyScannerDispatch,
   workflowInstanceId,
 } from "./contract";
 
 const configuration = {
   callbackUrl: "https://app.programcue.com/api/webhooks/file-scanner",
-  r2BucketName: "program-cue-files",
-  r2ObjectHost: "327c60945460c16be8ecdbbc7fa35447.r2.cloudflarestorage.com",
 };
 
 function job() {
   return {
     jobId: "file-scan-dispatch:version-1",
     attempt: 1,
+    organisationId: "organisation-1",
     eventId: "event-1",
     versionId: "version-1",
     assetId: "asset-1",
+    expiresAt: 1_800_000_300,
     object: {
-      url: `https://${configuration.r2ObjectHost}/program-cue-files/private%2Fobject?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=900&X-Amz-Signature=abc123`,
+      key: "private/object",
       sizeBytes: 1_073_741_824,
       etag: '"object-etag"',
     },
@@ -38,16 +38,13 @@ function job() {
 }
 
 describe("file scanner provider contract", () => {
-  it("accepts only the configured private R2 and callback boundaries", () => {
+  it("accepts only private object keys and the configured callback boundary", () => {
     expect(validateScannerJob(job(), configuration)).toEqual(job());
 
-    const wrongHost = job();
-    wrongHost.object.url = wrongHost.object.url.replace(
-      configuration.r2ObjectHost,
-      "attacker.example",
-    );
-    expect(() => validateScannerJob(wrongHost, configuration)).toThrow(
-      /configured R2 account/u,
+    const publicObject = job();
+    publicObject.object.key = "public/object";
+    expect(() => validateScannerJob(publicObject, configuration)).toThrow(
+      /outside private R2 storage/u,
     );
 
     const wrongCallback = job();
@@ -181,12 +178,54 @@ describe("file scanner provider contract", () => {
     });
   });
 
-  it("compares bearer credentials without depending on their length", async () => {
-    await expect(
-      constantTimeTokenMatch("same-token", "same-token"),
-    ).resolves.toBe(true);
-    await expect(constantTimeTokenMatch("wrong", "same-token")).resolves.toBe(
+  it("authenticates the exact dispatch envelope and rejects tampering or expiry", async () => {
+    const timestamp = "1800000000";
+    const rawBody = JSON.stringify(job());
+    const secret = "dispatch-secret-with-at-least-thirty-two-characters";
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
       false,
+      ["sign"],
     );
+    const digest = await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode(`${timestamp}.${rawBody}`),
+    );
+    const signature = btoa(String.fromCharCode(...new Uint8Array(digest)));
+    const headers = new Headers({
+      "x-program-cue-dispatch-timestamp": timestamp,
+      "x-program-cue-dispatch-signature": `v1,${signature}`,
+    });
+
+    await expect(
+      verifyScannerDispatch({
+        rawBody,
+        headers,
+        secret,
+        configuration,
+        nowSeconds: 1_800_000_001,
+      }),
+    ).resolves.toEqual(job());
+    await expect(
+      verifyScannerDispatch({
+        rawBody: `${rawBody} `,
+        headers,
+        secret,
+        configuration,
+        nowSeconds: 1_800_000_001,
+      }),
+    ).rejects.toThrow(/signature/u);
+    await expect(
+      verifyScannerDispatch({
+        rawBody,
+        headers,
+        secret,
+        configuration,
+        nowSeconds: 1_800_000_301,
+      }),
+    ).rejects.toThrow(/timestamp/u);
   });
 });

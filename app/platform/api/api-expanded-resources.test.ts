@@ -153,6 +153,113 @@ describe("expanded public API contract", () => {
     });
   });
 
+  it("uses database keyset cursors for public session pages", async () => {
+    await ensureDemoProgramme(testEnv);
+    const fullSnapshot = vi.spyOn(
+      PublicProgrammeService.prototype,
+      "getPublished",
+    );
+    const base =
+      "https://programcue.test/api/v1/public/events/future-of-events-2027/sessions?limit=2";
+    const firstResponse = await publicSessionsLoader({
+      request: new Request(base),
+      params: { slug: "future-of-events-2027" },
+      context: routeContext(),
+    } as never);
+    const first = (await firstResponse.json()) as {
+      sessions: Array<{ id: string }>;
+      nextCursor: string;
+    };
+    expect(first.sessions).toHaveLength(2);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    expect(fullSnapshot).not.toHaveBeenCalled();
+
+    const nextUrl = new URL(base);
+    nextUrl.searchParams.set("cursor", first.nextCursor);
+    const secondResponse = await publicSessionsLoader({
+      request: new Request(nextUrl),
+      params: { slug: "future-of-events-2027" },
+      context: routeContext(),
+    } as never);
+    const second = (await secondResponse.json()) as {
+      sessions: Array<{ id: string }>;
+    };
+    expect(second.sessions).toHaveLength(2);
+    expect(second.sessions.map((session) => session.id)).not.toEqual(
+      first.sessions.map((session) => session.id),
+    );
+
+    await testEnv.DB.prepare(
+      `INSERT INTO event_changes (
+         event_id, entity_type, entity_id, change_type, created_at
+       ) VALUES ('evt-foe-2025', 'event', 'evt-foe-2025', 'updated', unixepoch())`,
+    ).run();
+    const stale = await publicSessionsLoader({
+      request: new Request(nextUrl),
+      params: { slug: "future-of-events-2027" },
+      context: routeContext(),
+    } as never);
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({
+      error: { code: "PUBLICATION_CHANGED" },
+    });
+    fullSnapshot.mockRestore();
+  });
+
+  it("does not expose a speaker through a private-session filter", async () => {
+    await ensureDemoProgramme(testEnv);
+    const programme = await new PublicProgrammeService(testEnv).getPublished(
+      "future-of-events-2027",
+    );
+    const speaker = programme?.speakers[0];
+    expect(speaker).toBeDefined();
+    const privateSessionId = `private-filter-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO sessions (
+         id, event_id, track_id, title, slug, description, format,
+         duration_minutes, expected_attendance, required_resources_json,
+         status, visibility, revision, created_at, updated_at
+       )
+       SELECT ?, event_id, track_id, 'Private filter session', ?, NULL, format,
+              duration_minutes, expected_attendance, required_resources_json,
+              'published', 'private', 1, unixepoch(), unixepoch()
+         FROM sessions WHERE id = ? AND event_id = ?`,
+    )
+      .bind(
+        privateSessionId,
+        privateSessionId,
+        programme!.sessions[0]!.id,
+        programme!.event.id,
+      )
+      .run();
+    try {
+      await testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES (?, ?, ?, 0, 'confirmed', unixepoch(), 'public')`,
+      )
+        .bind(privateSessionId, programme!.event.id, speaker!.id)
+        .run();
+      const url = new URL(
+        "https://programcue.test/api/v1/public/events/future-of-events-2027/speakers",
+      );
+      url.searchParams.set("sessionId", privateSessionId);
+      url.searchParams.set("limit", "100");
+      const response = await publicSpeakersLoader({
+        request: new Request(url),
+        params: { slug: "future-of-events-2027" },
+        context: routeContext(),
+      } as never);
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ speakers: [] });
+    } finally {
+      await testEnv.DB.prepare("DELETE FROM sessions WHERE id = ?")
+        .bind(privateSessionId)
+        .run();
+    }
+  });
+
   it("keeps every new cacheable route free of request-specific correlation data", async () => {
     await ensureDemoProgramme(testEnv);
     const routes = [

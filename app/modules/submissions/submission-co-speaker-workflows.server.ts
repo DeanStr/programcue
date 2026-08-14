@@ -800,7 +800,7 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
       })
       .parse(rawInput);
     const operationId = crypto.randomUUID();
-    const [updated] = await this.env.DB.batch([
+    const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `UPDATE people
             SET display_name = ?, biography = ?, profile_revision = profile_revision + 1,
@@ -858,9 +858,34 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
         applicant.personId,
         operationId,
       ),
+      this.env.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type,
+           correlation_id, created_at
+         )
+         SELECT ?, 'person', ?, 'updated', ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM people
+             WHERE id = ? AND profile_revision = ? AND last_operation_id = ?
+          )
+         RETURNING sequence`,
+      ).bind(
+        form.eventId,
+        applicant.personId,
+        operationId,
+        applicant.personId,
+        input.revision + 1,
+        operationId,
+      ),
     ]);
+    const [updated] = results;
     if ((updated.meta.changes ?? 0) !== 1) {
       throw new SubmissionRevisionConflictError();
+    }
+    if (!results[3]?.results[0]) {
+      throw new Error(
+        "The committed speaker profile change cursor was not recorded.",
+      );
     }
   }
 

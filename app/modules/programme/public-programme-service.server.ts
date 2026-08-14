@@ -121,7 +121,7 @@ export function assertPublishedSpeakerGraphIntegrity(
   }
 }
 
-function parsePublishedSpeakerArray(
+export function parsePublishedSpeakerArray(
   versionId: string,
   sessionId: string,
   field: "speaker IDs" | "speaker names",
@@ -149,6 +149,33 @@ function parsePublishedSpeakerArray(
     throw new PublishedProgrammeSpeakerInvariantError(
       versionId,
       `session ${sessionId} returned invalid ${field}`,
+    );
+  }
+  return parsed;
+}
+
+export function parsePublishedSpeakerSessionIds(
+  versionId: string,
+  speakerId: string,
+  value: string,
+) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new PublishedProgrammeSpeakerInvariantError(
+      versionId,
+      `speaker ${speakerId} returned malformed session IDs`,
+    );
+  }
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length === 0 ||
+    parsed.some((entry) => typeof entry !== "string")
+  ) {
+    throw new PublishedProgrammeSpeakerInvariantError(
+      versionId,
+      `speaker ${speakerId} returned invalid session IDs`,
     );
   }
   return parsed;
@@ -527,7 +554,31 @@ export class PublicProgrammeService {
       `
       SELECT p.id, p.display_name AS displayName, p.biography, p.pronunciation,
              p.organisation_name AS organisationName, p.job_title AS jobTitle,
-             GROUP_CONCAT(ss.session_id, '||') AS sessionIds
+             (
+               SELECT json_group_array(ordered.sessionId)
+                 FROM (
+                   SELECT linked_session.id AS sessionId
+                     FROM session_speakers linked_speaker
+                     JOIN sessions linked_session
+                       ON linked_session.id = linked_speaker.session_id
+                      AND linked_session.event_id = linked_speaker.event_id
+                     JOIN schedule_entries linked_entry
+                       ON linked_entry.session_id = linked_session.id
+                      AND linked_entry.event_id = linked_session.event_id
+                     JOIN schedule_session_contents linked_content
+                       ON linked_content.schedule_version_id = linked_entry.schedule_version_id
+                      AND linked_content.event_id = linked_entry.event_id
+                      AND linked_content.session_id = linked_session.id
+                    WHERE linked_speaker.person_id = p.id
+                      AND linked_session.event_id = ?
+                      AND linked_entry.schedule_version_id = ?
+                      AND linked_session.status = 'published'
+                      AND linked_session.visibility = 'public'
+                      AND linked_content.visibility = 'public'
+                      AND linked_speaker.visibility = 'public'
+                    ORDER BY linked_entry.starts_at, linked_session.id
+                 ) ordered
+             ) AS sessionIds
         FROM people p
         JOIN session_speakers ss ON ss.person_id = p.id
         JOIN sessions s ON s.id = ss.session_id AND s.event_id = ss.event_id
@@ -546,7 +597,7 @@ export class PublicProgrammeService {
        GROUP BY p.id
        ORDER BY p.display_name COLLATE NOCASE, p.id
     `,
-    ).bind(event.id, version.id);
+    ).bind(event.id, version.id, event.id, version.id);
     // Session rows repeat mutable speaker identity fields. Read the integrity
     // count and both graph projections in one D1 transaction so a concurrent
     // profile edit cannot produce a mixed-before-and-after public response.
@@ -572,7 +623,11 @@ export class PublicProgrammeService {
     const publishedSpeakers = speakers.map((speaker) => ({
       ...speaker,
       imageUrl: null,
-      sessionIds: speaker.sessionIds.split("||"),
+      sessionIds: parsePublishedSpeakerSessionIds(
+        version.id,
+        speaker.id,
+        speaker.sessionIds,
+      ),
     }));
     return withPublicContentRevision({
       event,

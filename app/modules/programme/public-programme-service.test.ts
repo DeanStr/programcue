@@ -713,6 +713,43 @@ describe("published programme and itinerary", () => {
     }
   });
 
+  it("keeps speaker session IDs and the publication revision independent of relation insertion order", async () => {
+    const service = new PublicProgrammeService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const before = await service.getPublished("future-of-events-2027");
+    const beforeSpeaker = before!.speakers.find(
+      (speaker) => speaker.id === "person-demo-speaker",
+    );
+    expect(beforeSpeaker!.sessionIds).toHaveLength(3);
+
+    await env.DB.batch([
+      env.DB.prepare(
+        `DELETE FROM session_speakers
+          WHERE event_id = 'evt-foe-2025'
+            AND person_id = 'person-demo-speaker'`,
+      ),
+      ...["demo-session-5", "demo-session-3", "demo-session-1"].map(
+        (sessionId) =>
+          env.DB.prepare(
+            `INSERT INTO session_speakers (
+               session_id, event_id, person_id, position, role_label,
+               participation_status, participation_confirmed_at, visibility
+             ) VALUES (?, 'evt-foe-2025', 'person-demo-speaker', 0, 'Speaker',
+                       'confirmed', unixepoch(), 'public')`,
+          ).bind(sessionId),
+      ),
+    ]);
+
+    const after = await service.getPublished("future-of-events-2027");
+    const afterSpeaker = after!.speakers.find(
+      (speaker) => speaker.id === "person-demo-speaker",
+    );
+    expect(afterSpeaker!.sessionIds).toEqual(beforeSpeaker!.sessionIds);
+    expect(JSON.stringify(after)).toBe(JSON.stringify(before));
+    expect(after!.contentRevision).toBe(before!.contentRevision);
+  });
+
   it("does not expose stale publication state for an inactive event", async () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,

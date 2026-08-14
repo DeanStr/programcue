@@ -10,9 +10,11 @@ export const scanResultSchema = z
   .object({
     jobId: z.string().min(1).max(200),
     attempt: z.number().int().positive(),
+    organisationId: z.string().min(1).max(160),
     eventId: z.string().min(1).max(160),
     versionId: z.string().min(1).max(160),
     assetId: z.string().min(1).max(160),
+    objectKey: z.string().min(1).max(1_024),
     objectEtag: z.string().min(1).max(200),
     sizeBytes: z.number().int().positive().max(1_073_741_824),
     provider: z
@@ -119,8 +121,59 @@ export class FileScanResultService {
     row: ScanRow,
     scanResultJson: string,
   ) {
-    const scanOperationId = `file-scan:${row.id}`;
+    const scanOperationId = `file-scan:${row.id}:attempt:${input.attempt}`;
     const results = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `
+        INSERT OR IGNORE INTO audit_events (
+          id, organisation_id, event_id, actor_id, action,
+          entity_type, entity_id, correlation_id, metadata_json, created_at
+        )
+        SELECT ?, event.organisation_id, version.event_id, ?, ?,
+               'file_version', version.id, ?, ?, unixepoch()
+          FROM file_versions version
+          JOIN events event
+            ON event.id = version.event_id AND event.organisation_id = ?
+         WHERE version.id = ? AND version.event_id = ?
+           AND version.asset_id = ? AND version.object_key = ?
+           AND version.object_etag = ? AND version.size_bytes = ?
+           AND version.scan_status = 'pending'
+           AND version.upload_status = 'uploaded'
+           AND version.signature_status = 'valid'
+           AND version.deleted_at IS NULL
+           AND EXISTS (
+             SELECT 1 FROM operation_jobs operation
+              WHERE operation.id = ?
+                AND operation.organisation_id = event.organisation_id
+                AND operation.event_id = version.event_id
+                AND operation.type = 'file.scan.dispatch'
+                AND operation.status = 'running'
+                AND operation.attempt_count = ?
+                AND json_extract(operation.result_json, '$.scanAttempt') = ?
+                AND json_extract(operation.payload_json, '$.objectKey') = version.object_key
+           )
+      `,
+      ).bind(
+        scanOperationId,
+        `scanner:${input.provider}`,
+        `file.scan.${input.status}`,
+        scanOperationId,
+        JSON.stringify({
+          assetId: row.assetId,
+          callbackId: input.callbackId,
+          verdict: input.status,
+        }),
+        input.organisationId,
+        row.id,
+        input.eventId,
+        row.assetId,
+        input.objectKey,
+        input.objectEtag,
+        input.sizeBytes,
+        input.jobId,
+        input.attempt,
+        input.attempt,
+      ),
       this.env.DB.prepare(
         `
         UPDATE file_versions
@@ -132,8 +185,18 @@ export class FileScanResultService {
            AND upload_status = 'uploaded' AND signature_status = 'valid'
            AND deleted_at IS NULL
            AND EXISTS (
+             SELECT 1 FROM audit_events verdict_audit
+              WHERE verdict_audit.id = ?
+                AND verdict_audit.organisation_id = ?
+                AND verdict_audit.event_id = file_versions.event_id
+                AND verdict_audit.action = ?
+                AND verdict_audit.entity_type = 'file_version'
+                AND verdict_audit.entity_id = file_versions.id
+           )
+           AND EXISTS (
              SELECT 1 FROM operation_jobs operation
               WHERE operation.id = ? AND operation.event_id = file_versions.event_id
+                AND operation.organisation_id = ?
                 AND operation.type = 'file.scan.dispatch'
                 AND operation.status = 'running'
                 AND operation.attempt_count = ?
@@ -146,9 +209,11 @@ export class FileScanResultService {
                   OR json_extract(operation.result_json, '$.dispatchStarted') = 1
                 )
                 AND json_extract(operation.payload_json, '$.operationId') = ?
+                AND json_extract(operation.payload_json, '$.organisationId') = ?
                 AND json_extract(operation.payload_json, '$.eventId') = file_versions.event_id
                 AND json_extract(operation.payload_json, '$.versionId') = file_versions.id
                 AND json_extract(operation.payload_json, '$.assetId') = file_versions.asset_id
+                AND json_extract(operation.payload_json, '$.objectKey') = file_versions.object_key
                 AND json_extract(operation.payload_json, '$.objectEtag') = file_versions.object_etag
                 AND json_extract(operation.payload_json, '$.sizeBytes') = file_versions.size_bytes
            )
@@ -174,10 +239,15 @@ export class FileScanResultService {
         row.assetId,
         input.objectEtag,
         input.sizeBytes,
+        scanOperationId,
+        input.organisationId,
+        `file.scan.${input.status}`,
         input.jobId,
+        input.organisationId,
         input.attempt,
         input.attempt,
         input.jobId,
+        input.organisationId,
       ),
       this.env.DB.prepare(
         `
@@ -195,7 +265,8 @@ export class FileScanResultService {
                claim_token = NULL,
                claim_expires_at = NULL, completed_at = unixepoch(),
                updated_at = unixepoch()
-         WHERE id = ? AND event_id = ? AND type = 'file.scan.dispatch'
+         WHERE id = ? AND event_id = ? AND organisation_id = ?
+           AND type = 'file.scan.dispatch'
            AND status = 'running'
            AND attempt_count = ?
            AND json_extract(result_json, '$.scanAttempt') = ?
@@ -204,8 +275,10 @@ export class FileScanResultService {
              OR json_extract(result_json, '$.dispatchStarted') = 1
            )
            AND json_extract(payload_json, '$.operationId') = ?
+           AND json_extract(payload_json, '$.organisationId') = ?
            AND json_extract(payload_json, '$.versionId') = ?
            AND json_extract(payload_json, '$.assetId') = ?
+           AND json_extract(payload_json, '$.objectKey') = ?
            AND json_extract(payload_json, '$.objectEtag') = ?
            AND json_extract(payload_json, '$.sizeBytes') = ?
            AND EXISTS (
@@ -225,14 +298,43 @@ export class FileScanResultService {
         input.error ?? null,
         input.jobId,
         input.eventId,
+        input.organisationId,
         input.attempt,
         input.attempt,
         input.jobId,
+        input.organisationId,
         row.id,
         row.assetId,
+        input.objectKey,
         input.objectEtag,
         input.sizeBytes,
         row.id,
+        row.assetId,
+        input.status,
+        input.provider,
+        scanResultJson,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type,
+           correlation_id, created_at
+         )
+         SELECT ?, 'file_version', ?, 'updated', ?, unixepoch()
+          WHERE changes() = 1
+            AND EXISTS (
+              SELECT 1 FROM file_versions version
+               WHERE version.id = ? AND version.event_id = ?
+                 AND version.asset_id = ? AND version.scan_status = ?
+                 AND version.scan_provider = ?
+                 AND version.scan_result_json = ?
+            )
+         RETURNING sequence`,
+      ).bind(
+        input.eventId,
+        row.id,
+        scanOperationId,
+        row.id,
+        input.eventId,
         row.assetId,
         input.status,
         input.provider,
@@ -383,42 +485,12 @@ export class FileScanResultService {
         input.status,
         input.status,
       ),
-      this.env.DB.prepare(
-        `
-        INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_id, action,
-          entity_type, entity_id, correlation_id, metadata_json, created_at
-        )
-        SELECT ?, event.organisation_id, asset.event_id, ?, ?,
-               'file_version', version.id, ?, ?, unixepoch()
-          FROM file_versions version
-          JOIN file_assets asset
-            ON asset.id = version.asset_id AND asset.event_id = version.event_id
-          JOIN events event ON event.id = asset.event_id
-         WHERE version.id = ? AND version.event_id = ?
-           AND version.scan_status = ? AND version.scan_provider = ?
-           AND version.scan_result_json = ?
-      `,
-      ).bind(
-        scanOperationId,
-        `scanner:${input.provider}`,
-        `file.scan.${input.status}`,
-        scanOperationId,
-        JSON.stringify({
-          assetId: row.assetId,
-          callbackId: input.callbackId,
-          verdict: input.status,
-        }),
-        row.id,
-        input.eventId,
-        input.status,
-        input.provider,
-        scanResultJson,
-      ),
     ]);
     if (
       (results[0]?.meta.changes ?? 0) === 1 &&
-      (results[1]?.meta.changes ?? 0) === 1
+      (results[1]?.meta.changes ?? 0) === 1 &&
+      (results[2]?.meta.changes ?? 0) === 1 &&
+      (results[3]?.meta.changes ?? 0) === 1
     ) {
       return {
         applied: true,
@@ -426,7 +498,12 @@ export class FileScanResultService {
         status: input.status,
       } as const;
     }
-    if ((results[0]?.meta.changes ?? 0) === 1) {
+    if (
+      (results[0]?.meta.changes ?? 0) !== 0 ||
+      (results[1]?.meta.changes ?? 0) !== 0 ||
+      (results[2]?.meta.changes ?? 0) !== 0 ||
+      (results[3]?.meta.changes ?? 0) !== 0
+    ) {
       throw new FileScanStateError(
         "The scan result changed the file without completing its durable dispatch.",
       );
@@ -453,6 +530,7 @@ export class FileScanResultService {
     if (
       input.jobId !== `file-scan-dispatch:${row.id}` ||
       input.assetId !== row.assetId ||
+      input.objectKey !== row.objectKey ||
       input.objectEtag !== row.objectEtag ||
       input.sizeBytes !== row.sizeBytes
     ) {
@@ -467,21 +545,27 @@ export class FileScanResultService {
               json_extract(result_json, '$.dispatchStarted') AS dispatchStarted,
               json_extract(result_json, '$.scanAttempt') AS scanAttempt
          FROM operation_jobs
-        WHERE id = ? AND event_id = ? AND type = 'file.scan.dispatch'
+        WHERE id = ? AND event_id = ? AND organisation_id = ?
+          AND type = 'file.scan.dispatch'
           AND json_extract(payload_json, '$.operationId') = ?
+          AND json_extract(payload_json, '$.organisationId') = ?
           AND json_extract(payload_json, '$.eventId') = ?
           AND json_extract(payload_json, '$.versionId') = ?
           AND json_extract(payload_json, '$.assetId') = ?
+          AND json_extract(payload_json, '$.objectKey') = ?
           AND json_extract(payload_json, '$.objectEtag') = ?
           AND json_extract(payload_json, '$.sizeBytes') = ?`,
     )
       .bind(
         input.jobId,
         input.eventId,
+        input.organisationId,
         input.jobId,
+        input.organisationId,
         input.eventId,
         input.versionId,
         input.assetId,
+        input.objectKey,
         input.objectEtag,
         input.sizeBytes,
       )

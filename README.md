@@ -200,7 +200,7 @@ wrangler secret put MICROSOFT_AUTH_CLIENT_SECRET
 wrangler secret put INTEGRATION_CREDENTIALS_KEY
 wrangler secret put WEBHOOK_CREDENTIALS_KEY
 wrangler secret put TURNSTILE_SECRET_KEY
-wrangler secret put FILE_SCANNER_API_TOKEN
+wrangler secret put FILE_SCANNER_DISPATCH_SECRET
 wrangler secret put FILE_SCANNER_WEBHOOK_SECRET
 wrangler secret put R2_ACCESS_KEY_ID
 wrangler secret put R2_SECRET_ACCESS_KEY
@@ -226,14 +226,16 @@ Worker, Workflow, Container application and `scanner.programcue.com` Custom
 Domain were provisioned on 11 August 2026. Its temporary
 deployment token requires account-level Workers Scripts Write and Containers
 Edit plus the existing `programcue.com` Worker-route authority. Configure
-`SCANNER_API_TOKEN` on the scanner with the exact value used for the
-application's `FILE_SCANNER_API_TOKEN`; likewise, configure
+`PROGRAM_CUE_DISPATCH_SECRET` on the scanner with the exact value used for the
+application's `FILE_SCANNER_DISPATCH_SECRET`; likewise, configure
 `PROGRAM_CUE_CALLBACK_SECRET` with the application's
 `FILE_SCANNER_WEBHOOK_SECRET`. Both pairs are independently random values of at
-least 32 characters. The scanner endpoint persists an idempotent Workflow before
-returning `202`, validates that the signed object URL belongs to the private
-files bucket, and returns only an HMAC-signed verdict. A failed, expired or
-ambiguous scan leaves the file quarantined.
+least 32 characters, and the dispatch secret must differ from the callback
+secret. The application signs the exact, short-lived scan envelope; the scanner
+verifies that signature before persisting an idempotent Workflow, then reads the
+bound private R2 object only after its key, ETag and size match the envelope. It
+returns only an HMAC-signed verdict bound to the same organisation and object.
+A failed, expired or ambiguous scan leaves the file quarantined.
 
 The public website is deployed separately with `npm run deploy:site`. It is a
 static-asset Worker in `site/` with no D1, R2, Queue, Durable Object or AI

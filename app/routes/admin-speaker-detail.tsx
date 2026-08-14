@@ -27,7 +27,11 @@ import {
 } from "~/modules/speakers/speaker-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import {
+  notifyRouteChange,
+  recordRouteChange,
+  type CommittedRealtimeFailure,
+} from "~/platform/realtime/route-realtime.server";
 
 export const meta: Route.MetaFunction = ({ loaderData }) => [
   {
@@ -98,6 +102,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
     const speakerService = new SpeakerService(env);
     let result: { webhookWarning: string | null };
+    let realtimeFailure: CommittedRealtimeFailure | null;
     let successMessage: string;
     if (intent === "save_speaker_scoped_profile") {
       result = await speakerService.updateAdminScopedSpeakerProfile(
@@ -116,6 +121,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           travelPreferences: form.get("travelPreferences"),
         },
       );
+      realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "person",
+        entityId: params.personId,
+        changeType: "updated",
+      });
       successMessage =
         "Organisation and event speaker details saved. The participant-owned public identity was unchanged.";
     } else {
@@ -136,13 +146,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         },
       );
       result = canonicalResult;
+      realtimeFailure = await notifyRouteChange(
+        env,
+        viewer,
+        canonicalResult.changeCursor,
+        params.personId,
+      );
       successMessage = `Profile saved. It is now ${statusPresentation("content", canonicalResult.profileStatus).label.toLowerCase()}.`;
     }
-    const realtimeFailure = await recordRouteChange(env, viewer, {
-      entityType: "person",
-      entityId: params.personId,
-      changeType: "updated",
-    });
     const warning = [result.webhookWarning, realtimeFailure?.message]
       .filter(Boolean)
       .join(" ");

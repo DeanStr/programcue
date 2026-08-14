@@ -261,8 +261,41 @@ async function resolveEventRole(
       }>();
 
     if (invitation) {
-      const acceptanceOperationId = `membership-accepted:${crypto.randomUUID()}`;
-      const [accepted] = await env.DB.batch([
+      const auditEventId = crypto.randomUUID();
+      const [audited, accepted] = await env.DB.batch([
+        env.DB.prepare(
+          `
+          INSERT INTO audit_events (
+            id, organisation_id, event_id, actor_person_id, action,
+            entity_type, entity_id, metadata_json, created_at
+          )
+          SELECT ?, m.organisation_id, event.id, ?, 'membership.accepted',
+                 'membership', m.id, ?, unixepoch()
+            FROM memberships m
+            JOIN events event
+              ON event.id = ? AND event.organisation_id = m.organisation_id
+             AND event.activation_status = 'active'
+           WHERE m.id = ? AND m.accepted_at IS NULL
+             AND m.invited_at IS NOT NULL
+             AND m.organisation_id = ? AND m.person_id = ? AND m.role = ?
+             AND (
+               m.event_id = event.id
+               OR (m.event_id IS NULL
+                   AND m.role IN ('owner', 'administrator'))
+             )
+             AND m.revoked_at IS NULL
+             AND m.invitation_expires_at > unixepoch()
+        `,
+        ).bind(
+          auditEventId,
+          personId,
+          JSON.stringify({ role: invitation.role }),
+          eventId,
+          invitation.id,
+          invitation.organisationId,
+          personId,
+          invitation.role,
+        ),
         env.DB.prepare(
           `
           UPDATE memberships
@@ -276,49 +309,38 @@ async function resolveEventRole(
              )
              AND revoked_at IS NULL
              AND invitation_expires_at > unixepoch()
+             AND EXISTS (
+               SELECT 1 FROM audit_events audit
+                WHERE audit.id = ?
+                  AND audit.organisation_id = memberships.organisation_id
+                  AND audit.event_id = ?
+                  AND audit.action = 'membership.accepted'
+                  AND audit.entity_type = 'membership'
+                  AND audit.entity_id = memberships.id
+             )
           RETURNING id, organisation_id AS organisationId, event_id AS eventId, role
         `,
         ).bind(
-          acceptanceOperationId,
+          auditEventId,
           invitation.id,
           invitation.organisationId,
           personId,
           invitation.role,
           eventId,
-        ),
-        env.DB.prepare(
-          `
-          INSERT INTO audit_events (
-            id, organisation_id, event_id, actor_person_id, action,
-            entity_type, entity_id, metadata_json, created_at
-          )
-          SELECT ?, m.organisation_id, event.id, ?, 'membership.accepted',
-                 'membership', m.id, ?, unixepoch()
-            FROM memberships m
-            JOIN events event
-              ON event.id = ? AND event.organisation_id = m.organisation_id
-             AND event.activation_status = 'active'
-           WHERE m.id = ? AND m.accepted_at IS NOT NULL
-             AND m.organisation_id = ? AND m.person_id = ? AND m.role = ?
-             AND (
-               m.event_id = event.id
-               OR (m.event_id IS NULL
-                   AND m.role IN ('owner', 'administrator'))
-             )
-             AND m.revoked_at IS NULL AND m.last_operation_id = ?
-        `,
-        ).bind(
-          crypto.randomUUID(),
-          personId,
-          JSON.stringify({ role: invitation.role }),
+          auditEventId,
           eventId,
-          invitation.id,
-          invitation.organisationId,
-          personId,
-          invitation.role,
-          acceptanceOperationId,
         ),
       ]);
+      const acceptedCount = accepted.results.length;
+      const auditCount = audited.meta.changes ?? 0;
+      if (!(
+        (acceptedCount === 1 && auditCount === 1) ||
+        (acceptedCount === 0 && auditCount === 0)
+      )) {
+        throw new Error(
+          "Invitation acceptance did not preserve its required audit boundary.",
+        );
+      }
       membership =
         (accepted.results[0] as typeof membership | undefined) ??
         (await env.DB.prepare(
@@ -336,6 +358,15 @@ async function resolveEventRole(
              AND m.role IN (${rolePlaceholders})
              AND m.accepted_at IS NOT NULL
              AND m.revoked_at IS NULL
+             AND EXISTS (
+               SELECT 1 FROM audit_events audit
+                WHERE audit.id = m.last_operation_id
+                  AND audit.organisation_id = m.organisation_id
+                  AND audit.event_id = ?
+                  AND audit.action = 'membership.accepted'
+                  AND audit.entity_type = 'membership'
+                  AND audit.entity_id = m.id
+             )
            LIMIT 1
         `,
         )
@@ -346,6 +377,7 @@ async function resolveEventRole(
             restrictedOrganisationId,
             restrictedOrganisationId,
             ...allowedRoles,
+            eventId,
           )
           .first<{
             id: string;

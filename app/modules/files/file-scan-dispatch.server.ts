@@ -6,7 +6,6 @@ import {
 } from "../../../workers/queue/claim-infrastructure";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { readBoundedResponseText } from "~/platform/http/read-response";
-import { presignR2S3Request } from "./r2-s3-signing.server";
 
 // Covers the Workflow's roughly three-hour capacity window plus its bounded
 // scan and callback retries without making a healthy in-flight scan retryable.
@@ -87,10 +86,10 @@ function requireScannerConfiguration(env: CloudflareEnvironment) {
       "FILE_SCANNER_API_URL must use HTTPS.",
       "scanner-endpoint",
     );
-  const token = env.FILE_SCANNER_API_TOKEN?.trim();
-  if (!token || token.length < 16)
+  const dispatchSecret = env.FILE_SCANNER_DISPATCH_SECRET?.trim();
+  if (!dispatchSecret || dispatchSecret.length < 32)
     throw new FileScanDispatchConfigurationError(
-      "FILE_SCANNER_API_TOKEN must contain at least 16 characters.",
+      "FILE_SCANNER_DISPATCH_SECRET must contain at least 32 characters.",
       "scanner-credentials",
     );
   const callbackBase = env.BETTER_AUTH_URL?.trim();
@@ -117,7 +116,36 @@ function requireScannerConfiguration(env: CloudflareEnvironment) {
       "The scanner callback URL must use HTTPS outside local development.",
       "callback-endpoint",
     );
-  return { endpoint, token, callback };
+  return { endpoint, dispatchSecret, callback };
+}
+
+function base64(bytes: ArrayBuffer) {
+  const view = new Uint8Array(bytes);
+  let binary = "";
+  for (let offset = 0; offset < view.length; offset += 8_192) {
+    binary += String.fromCharCode(...view.subarray(offset, offset + 8_192));
+  }
+  return btoa(binary);
+}
+
+async function signScannerDispatch(
+  rawBody: string,
+  timestamp: number,
+  secret: string,
+) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`${timestamp}.${rawBody}`),
+  );
+  return `v1,${base64(signature)}`;
 }
 
 /**
@@ -389,21 +417,6 @@ export async function processFileScanDispatch(
       });
       const results = await env.DB.batch([
         env.DB.prepare(
-          `UPDATE operation_jobs
-              SET status = 'completed', progress_completed = 1,
-                  progress_failed = 0, result_json = ?, last_error = NULL,
-                  claim_token = NULL, claim_expires_at = NULL,
-                  completed_at = unixepoch(), updated_at = unixepoch()
-            WHERE id = ? AND event_id = ? AND organisation_id = ?
-              AND claim_token = ? AND status = 'running'`,
-        ).bind(
-          result,
-          message.operationId,
-          message.eventId,
-          message.organisationId,
-          claimToken,
-        ),
-        env.DB.prepare(
           `INSERT OR IGNORE INTO audit_events (
              id, organisation_id, event_id, action, entity_type, entity_id,
              correlation_id, metadata_json, created_at
@@ -412,7 +425,7 @@ export async function processFileScanDispatch(
             WHERE EXISTS (
               SELECT 1 FROM operation_jobs
                WHERE id = ? AND event_id = ? AND organisation_id = ?
-                 AND status = 'completed' AND result_json = ?
+                 AND status = 'running' AND claim_token = ?
             )`,
         ).bind(
           `file-scan-dispatch-skipped:${message.versionId}`,
@@ -427,10 +440,36 @@ export async function processFileScanDispatch(
           message.operationId,
           message.eventId,
           message.organisationId,
+          claimToken,
+        ),
+        env.DB.prepare(
+          `UPDATE operation_jobs
+              SET status = 'completed', progress_completed = 1,
+                  progress_failed = 0, result_json = ?, last_error = NULL,
+                  claim_token = NULL, claim_expires_at = NULL,
+                  completed_at = unixepoch(), updated_at = unixepoch()
+            WHERE id = ? AND event_id = ? AND organisation_id = ?
+              AND claim_token = ? AND status = 'running'
+              AND EXISTS (
+                SELECT 1 FROM audit_events audit
+                 WHERE audit.id = ?
+                   AND audit.organisation_id = operation_jobs.organisation_id
+                   AND audit.event_id = operation_jobs.event_id
+                   AND audit.action = 'file.scan.dispatch_skipped'
+                   AND audit.entity_type = 'file_version'
+                   AND audit.entity_id = ?
+              )`,
+        ).bind(
           result,
+          message.operationId,
+          message.eventId,
+          message.organisationId,
+          claimToken,
+          `file-scan-dispatch-skipped:${message.versionId}`,
+          message.versionId,
         ),
       ]);
-      if ((results[0].meta.changes ?? 0) !== 1) {
+      if ((results[1].meta.changes ?? 0) !== 1) {
         const settled = await env.DB.prepare(
           `SELECT status FROM operation_jobs
             WHERE id = ? AND event_id = ? AND organisation_id = ?
@@ -506,12 +545,6 @@ export async function processFileScanDispatch(
       }
     }
     const configuration = requireScannerConfiguration(env);
-    const downloadUrl = await presignR2S3Request({
-      env,
-      method: "GET",
-      objectKey: message.objectKey,
-      expiresSeconds: 900,
-    });
     const dispatchStartedResult = JSON.stringify({
       dispatchStarted: true,
       scanAttempt: claimed.attemptCount,
@@ -547,29 +580,39 @@ export async function processFileScanDispatch(
       if (settled?.status === "completed") return { duplicate: true };
       throw new QueueClaimLeaseLostError();
     }
+    const dispatchTimestamp = Math.floor(Date.now() / 1_000);
+    const rawDispatch = JSON.stringify({
+      jobId: message.operationId,
+      attempt: claimed.attemptCount,
+      organisationId: message.organisationId,
+      eventId: message.eventId,
+      versionId: message.versionId,
+      assetId: message.assetId,
+      expiresAt: dispatchTimestamp + 300,
+      object: {
+        key: message.objectKey,
+        sizeBytes: message.sizeBytes,
+        etag: message.objectEtag,
+      },
+      callback: {
+        url: configuration.callback.toString(),
+        authentication: "program-cue-hmac-sha256-v1",
+      },
+    });
+    const dispatchSignature = await signScannerDispatch(
+      rawDispatch,
+      dispatchTimestamp,
+      configuration.dispatchSecret,
+    );
     const response = await fetch(configuration.endpoint, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${configuration.token}`,
         "content-type": "application/json",
         "idempotency-key": `${message.operationId}:attempt:${claimed.attemptCount}`,
+        "x-program-cue-dispatch-timestamp": String(dispatchTimestamp),
+        "x-program-cue-dispatch-signature": dispatchSignature,
       },
-      body: JSON.stringify({
-        jobId: message.operationId,
-        attempt: claimed.attemptCount,
-        eventId: message.eventId,
-        versionId: message.versionId,
-        assetId: message.assetId,
-        object: {
-          url: downloadUrl,
-          sizeBytes: message.sizeBytes,
-          etag: message.objectEtag,
-        },
-        callback: {
-          url: configuration.callback.toString(),
-          authentication: "program-cue-hmac-sha256-v1",
-        },
-      }),
+      body: rawDispatch,
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) {
@@ -583,16 +626,8 @@ export async function processFileScanDispatch(
       status: response.status,
       scanAttempt: claimed.attemptCount,
     });
+    const dispatchAuditId = `file-scan-dispatched:${message.versionId}:attempt:${claimed.attemptCount}`;
     const results = await env.DB.batch([
-      env.DB.prepare(
-        `UPDATE operation_jobs
-            SET status = 'running', progress_completed = 0,
-                progress_failed = 0, result_json = ?, last_error = NULL,
-                claim_token = NULL,
-                claim_expires_at = unixepoch() + ${FILE_SCAN_CALLBACK_LEASE_SECONDS},
-                completed_at = NULL, updated_at = unixepoch()
-          WHERE id = ? AND event_id = ? AND claim_token = ? AND status = 'running'`,
-      ).bind(result, message.operationId, message.eventId, claimToken),
       env.DB.prepare(
         `INSERT OR IGNORE INTO audit_events (
            id, organisation_id, event_id, action, entity_type, entity_id,
@@ -603,7 +638,7 @@ export async function processFileScanDispatch(
             SELECT 1 FROM operation_jobs
              WHERE id = ? AND event_id = ? AND organisation_id = ?
                AND (
-                 (status = 'running' AND claim_token IS NULL AND result_json = ?)
+                 (status = 'running' AND claim_token = ?)
                  OR (
                    status = 'completed'
                    AND json_extract(result_json, '$.callbackReceived') = 1
@@ -611,19 +646,49 @@ export async function processFileScanDispatch(
                )
           )`,
       ).bind(
-        `file-scan-dispatched:${message.versionId}`,
+        dispatchAuditId,
         message.organisationId,
         message.eventId,
         message.versionId,
         message.operationId,
-        JSON.stringify({ assetId: message.assetId }),
+        JSON.stringify({
+          assetId: message.assetId,
+          attempt: claimed.attemptCount,
+        }),
         message.operationId,
         message.eventId,
         message.organisationId,
+        claimToken,
+      ),
+      env.DB.prepare(
+        `UPDATE operation_jobs
+            SET status = 'running', progress_completed = 0,
+                progress_failed = 0, result_json = ?, last_error = NULL,
+                claim_token = NULL,
+                claim_expires_at = unixepoch() + ${FILE_SCAN_CALLBACK_LEASE_SECONDS},
+                completed_at = NULL, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND organisation_id = ?
+            AND claim_token = ? AND status = 'running'
+            AND EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = ?
+                 AND audit.organisation_id = operation_jobs.organisation_id
+                 AND audit.event_id = operation_jobs.event_id
+                 AND audit.action = 'file.scan.dispatched'
+                 AND audit.entity_type = 'file_version'
+                 AND audit.entity_id = ?
+            )`,
+      ).bind(
         result,
+        message.operationId,
+        message.eventId,
+        message.organisationId,
+        claimToken,
+        dispatchAuditId,
+        message.versionId,
       ),
     ]);
-    if ((results[0].meta.changes ?? 0) !== 1) {
+    if ((results[1].meta.changes ?? 0) !== 1) {
       const settled = await env.DB.prepare(
         `SELECT status, result_json AS resultJson, claim_token AS claimToken
            FROM operation_jobs

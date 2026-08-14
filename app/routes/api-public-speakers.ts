@@ -1,11 +1,9 @@
 import type { Route } from "./+types/api-public-speakers";
-import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import {
+  getPublicSpeakerPage,
   publishedProgrammeCacheHeaders,
   publishedProgrammeNotModified,
-  publicSpeakerPage,
   publicSpeakerQuerySchema,
-  requirePublishedProgramme,
 } from "~/platform/api/api-public-programme.server";
 import { parseStrictQuery } from "~/platform/api/api-pagination.server";
 import {
@@ -20,17 +18,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const requestCorrelationId = correlationId(request);
   try {
     const input = parseStrictQuery(request, publicSpeakerQuerySchema);
-    const programme = requirePublishedProgramme(
-      await new PublicProgrammeService(env).getPublished(params.slug ?? ""),
-    );
+    const page = await getPublicSpeakerPage(env, params.slug ?? "", input);
     const headers = {
-      ...(await publishedProgrammeCacheHeaders(request, programme)),
+      ...(await publishedProgrammeCacheHeaders(request, page)),
       "access-control-allow-origin": "*",
     };
     if (publishedProgrammeNotModified(request, headers.etag)) {
       return new Response(null, { status: 304, headers });
     }
-    return apiSuccess(await publicSpeakerPage(programme, input), 200, {
+    return apiSuccess(page.body, 200, {
       ...headers,
     });
   } catch (error) {

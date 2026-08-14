@@ -3,29 +3,59 @@ import { describe, expect, it } from "vitest";
 import { EventChannel } from "../../../workers/event-channel";
 import type { EventChangeSummary } from "./realtime-types";
 
-function request(path: string, organisationId: string, eventId: string, init: RequestInit = {}) {
+function request(
+  path: string,
+  organisationId: string,
+  eventId: string,
+  init: RequestInit = {},
+) {
   const headers = new Headers(init.headers);
   headers.set("x-program-cue-organisation-id", organisationId);
   headers.set("x-program-cue-event-id", eventId);
-  return new Request(`https://event-channel.internal${path}`, { ...init, headers });
+  return new Request(`https://event-channel.internal${path}`, {
+    ...init,
+    headers,
+  });
 }
 
-function fakeState(deliveries: string[], initialValues: ReadonlyArray<readonly [string, unknown]> = []) {
+function fakeState(
+  deliveries: string[],
+  initialValues: ReadonlyArray<readonly [string, unknown]> = [],
+) {
   const values = new Map<string, unknown>(initialValues);
   const state = {
     storage: {
       get: async <T>(key: string) => values.get(key) as T | undefined,
-      put: async <T>(key: string, value: T) => { values.set(key, value); },
+      put: async <T>(key: string, value: T) => {
+        values.set(key, value);
+      },
+      transaction: async <T>(
+        callback: (transaction: {
+          get<V>(key: string): Promise<V | undefined>;
+          put<V>(key: string, value: V): Promise<void>;
+        }) => Promise<T>,
+      ) =>
+        callback({
+          get: async <V>(key: string) => values.get(key) as V | undefined,
+          put: async <V>(key: string, value: V) => {
+            values.set(key, value);
+          },
+        }),
     },
-    blockConcurrencyWhile: async <T>(callback: () => Promise<T>) => callback(),
     setWebSocketAutoResponse() {},
     getWebSockets() {
-      return [{
-        send(value: string) { deliveries.push(value); },
-        close() {},
-      }];
+      return [
+        {
+          send(value: string) {
+            deliveries.push(value);
+          },
+          close() {},
+        },
+      ];
     },
-    acceptWebSocket(socket: WebSocket) { socket.accept(); },
+    acceptWebSocket(socket: WebSocket) {
+      socket.accept();
+    },
   } as unknown as DurableObjectState;
   return { state, values };
 }
@@ -63,19 +93,23 @@ describe("event channel isolation", () => {
       committedAt: 1_800_000_000,
     };
 
-    const published = await channel.fetch(request("/publish", "org-1", "event-1", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(summary),
-    }));
+    const published = await channel.fetch(
+      request("/publish", "org-1", "event-1", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(summary),
+      }),
+    );
     expect(published.status).toBe(200);
     expect(deliveries.map((value) => JSON.parse(value))).toEqual([summary]);
 
-    const mismatch = await channel.fetch(request("/publish", "org-1", "event-2", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...summary, eventId: "event-2", cursor: 43 }),
-    }));
+    const mismatch = await channel.fetch(
+      request("/publish", "org-1", "event-2", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...summary, eventId: "event-2", cursor: 43 }),
+      }),
+    );
     expect(mismatch.status).toBe(409);
     expect(deliveries).toHaveLength(1);
   });
@@ -94,15 +128,21 @@ describe("event channel isolation", () => {
       correlationId: null,
       committedAt: 1_800_000_000,
     };
-    const publish = () => channel.fetch(request("/publish", "org-1", "event-1", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(summary),
-    }));
+    const publish = () =>
+      channel.fetch(
+        request("/publish", "org-1", "event-1", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(summary),
+        }),
+      );
 
     await publish();
     const duplicate = await publish();
-    expect(await duplicate.json()).toMatchObject({ accepted: false, cursor: 3 });
+    expect(await duplicate.json()).toMatchObject({
+      accepted: false,
+      cursor: 3,
+    });
     expect(deliveries).toHaveLength(1);
   });
 
@@ -150,9 +190,11 @@ describe("event channel isolation", () => {
     const { state, values } = fakeState(deliveries, [["latestCursor", 11]]);
     const channel = new EventChannel(state, fakeEnvironment(5));
 
-    const connected = await channel.fetch(request("/connect", "org-1", "event-1", {
-      headers: { upgrade: "websocket" },
-    }));
+    const connected = await channel.fetch(
+      request("/connect", "org-1", "event-1", {
+        headers: { upgrade: "websocket" },
+      }),
+    );
     expect(connected.status).toBe(101);
     expect(values.get("latestCursor")).toBe(5);
 
@@ -166,14 +208,78 @@ describe("event channel isolation", () => {
       correlationId: null,
       committedAt: 1_800_000_001,
     };
-    const published = await channel.fetch(request("/publish", "org-1", "event-1", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(summary),
-    }));
+    const published = await channel.fetch(
+      request("/publish", "org-1", "event-1", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(summary),
+      }),
+    );
 
-    expect(await published.json()).toMatchObject({ accepted: true, cursor: 6, delivered: 1 });
+    expect(await published.json()).toMatchObject({
+      accepted: true,
+      cursor: 6,
+      delivered: 1,
+    });
     expect(deliveries.map((value) => JSON.parse(value))).toEqual([summary]);
+    connected.webSocket?.accept();
+    connected.webSocket?.close(1000, "Test complete");
+  });
+
+  it("does not regress the cursor when a publish completes during connect verification", async () => {
+    const deliveries: string[] = [];
+    const { state, values } = fakeState(deliveries, [
+      ["identity", { organisationId: "org-1", eventId: "event-1" }],
+      ["latestCursor", 5],
+    ]);
+    let resolveConnect!: (value: { cursor: number }) => void;
+    const connectCursor = new Promise<{ cursor: number }>((resolve) => {
+      resolveConnect = resolve;
+    });
+    const environment = {
+      DB: {
+        prepare(sql: string) {
+          return {
+            bind() {
+              return {
+                first: () =>
+                  sql.includes("priorCursor")
+                    ? Promise.resolve({ priorCursor: 5 })
+                    : connectCursor,
+              };
+            },
+          };
+        },
+      },
+    } as unknown as CloudflareEnvironment;
+    const channel = new EventChannel(state, environment);
+    const connecting = channel.fetch(
+      request("/connect", "org-1", "event-1", {
+        headers: { upgrade: "websocket" },
+      }),
+    );
+    await Promise.resolve();
+    const published = await channel.fetch(
+      request("/publish", "org-1", "event-1", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "event-change",
+          eventId: "event-1",
+          cursor: 6,
+          entityType: "event",
+          entityId: "event-1",
+          changeType: "updated",
+          correlationId: null,
+          committedAt: 1_800_000_000,
+        } satisfies EventChangeSummary),
+      }),
+    );
+    expect(published.status).toBe(200);
+    resolveConnect({ cursor: 5 });
+    const connected = await connecting;
+    expect(connected.status).toBe(101);
+    expect(values.get("latestCursor")).toBe(6);
     connected.webSocket?.accept();
     connected.webSocket?.close(1000, "Test complete");
   });

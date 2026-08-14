@@ -12,9 +12,12 @@ const privateCursorSchema = z
 
 const publicCursorSchema = z
   .object({
-    version: z.literal(2),
+    version: z.literal(3),
     collectionRevision: z.string().regex(/^[a-f0-9]{64}$/u),
-    offset: z.number().int().nonnegative(),
+    sort: z
+      .array(z.union([z.string().max(200), z.number().int()]))
+      .min(1)
+      .max(4),
   })
   .strict();
 
@@ -62,8 +65,11 @@ export function decodePrivateCursor(value: string) {
   return result.data;
 }
 
-export function encodePublicCursor(collectionRevision: string, offset: number) {
-  return encode({ version: 2, collectionRevision, offset });
+export function encodePublicCursor(
+  collectionRevision: string,
+  sort: Array<string | number>,
+) {
+  return encode({ version: 3, collectionRevision, sort });
 }
 
 export function decodePublicCursor(value: string, collectionRevision: string) {
@@ -82,7 +88,7 @@ export function decodePublicCursor(value: string, collectionRevision: string) {
       "The published collection or its filters changed; restart pagination without a cursor",
     );
   }
-  return result.data.offset;
+  return result.data.sort;
 }
 
 export function parseStrictQuery<T>(

@@ -1,5 +1,6 @@
 export const nodeOnlyTestFiles = [
   "scanner/src/contract.test.ts",
+  "workers/queue/bounded-concurrency.test.ts",
   "site/src/e2e-port.test.ts",
   "site/src/index.test.ts",
   "e2e/support/reset-demo-submissions.unit.ts",

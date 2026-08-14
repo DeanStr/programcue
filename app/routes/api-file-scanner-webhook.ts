@@ -97,9 +97,11 @@ export async function action({ request, context }: Route.ActionArgs) {
     const result = await new FileService(env).recordScanResult({
       jobId: payload.jobId,
       attempt: payload.attempt,
+      organisationId: payload.organisationId,
       eventId: payload.eventId,
       versionId: payload.versionId,
       assetId: payload.assetId,
+      objectKey: payload.object.key,
       objectEtag: payload.object.etag,
       sizeBytes: payload.object.sizeBytes,
       provider: payload.provider,

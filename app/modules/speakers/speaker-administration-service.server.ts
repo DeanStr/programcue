@@ -1467,7 +1467,7 @@ export class SpeakerAdministrationService {
       },
       auditEventId,
     );
-    const [updated, eventProfile] = await this.env.DB.batch([
+    const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `
         UPDATE people
@@ -1556,8 +1556,28 @@ export class SpeakerAdministrationService {
         input.revision + 1,
         operationId,
       ),
+      this.env.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type,
+           correlation_id, created_at
+         )
+         SELECT ?, 'person', ?, 'updated', ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM people
+             WHERE id = ? AND profile_revision = ? AND last_operation_id = ?
+          )
+         RETURNING sequence`,
+      ).bind(
+        viewer.eventId,
+        personId,
+        operationId,
+        personId,
+        input.revision + 1,
+        operationId,
+      ),
       ...webhook.statements,
     ]);
+    const [updated, eventProfile] = results;
     if ((updated.meta.changes ?? 0) !== 1)
       throw new ParticipantProfileConflictError(
         "This speaker profile changed after the page loaded. Refresh before saving again.",
@@ -1565,6 +1585,12 @@ export class SpeakerAdministrationService {
     if ((eventProfile.meta.changes ?? 0) !== 1) {
       throw new Error(
         "The event-scoped travel preferences were not committed with the speaker profile.",
+      );
+    }
+    const change = results[3]?.results[0] as { sequence: number } | undefined;
+    if (!change) {
+      throw new Error(
+        "The committed speaker profile change cursor was not recorded.",
       );
     }
     const deliveries = await webhookService.dispatchPreparedEvent(webhook);
@@ -1576,6 +1602,7 @@ export class SpeakerAdministrationService {
       )
         ? "The profile was saved, but one or more outbound webhooks need a queue retry."
         : null,
+      changeCursor: Number(change.sequence),
     };
   }
 

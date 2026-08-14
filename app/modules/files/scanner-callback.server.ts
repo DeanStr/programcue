@@ -9,11 +9,13 @@ type ScannerEnvironment = CloudflareEnvironment & {
 const scannerCallbackBaseShape = {
   jobId: z.string().min(1).max(200),
   attempt: z.number().int().positive(),
+  organisationId: z.string().min(1).max(160),
   eventId: z.string().min(1).max(160),
   versionId: z.string().min(1).max(160),
   assetId: z.string().min(1).max(160),
   object: z
     .object({
+      key: z.string().min(1).max(1_024),
       etag: z.string().min(1).max(200),
       sizeBytes: z.number().int().positive().max(1_073_741_824),
     })

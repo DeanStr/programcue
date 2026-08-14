@@ -56,6 +56,40 @@ describe("event API key lifecycle", () => {
       viewer.eventId,
     );
     expect(principal.organisationId).toBe(viewer.organisationId);
+    const firstUse = await env.DB.prepare(
+      "SELECT last_used_at AS lastUsedAt FROM api_keys WHERE id = ?",
+    )
+      .bind(created.id)
+      .first<{ lastUsedAt: number }>();
+    await env.DB.prepare(
+      `CREATE TRIGGER reject_unnecessary_api_key_usage_write
+       BEFORE UPDATE OF last_used_at ON api_keys
+       WHEN OLD.id = '${created.id}'
+       BEGIN
+         SELECT RAISE(ABORT, 'recent API key usage must not enter the write path');
+       END`,
+    ).run();
+    try {
+      await requireApiKey(
+        new Request(`https://example.test/api/v1/events/${viewer.eventId}`, {
+          headers: { authorization: `Bearer ${created.token}` },
+        }),
+        env as unknown as CloudflareEnvironment,
+        "schedule:publish",
+        viewer.eventId,
+      );
+    } finally {
+      await env.DB.prepare(
+        "DROP TRIGGER IF EXISTS reject_unnecessary_api_key_usage_write",
+      ).run();
+    }
+    await expect(
+      env.DB.prepare(
+        "SELECT last_used_at AS lastUsedAt FROM api_keys WHERE id = ?",
+      )
+        .bind(created.id)
+        .first(),
+    ).resolves.toEqual(firstUse);
 
     await service.revoke(viewer, created.id);
     await expect(
@@ -89,6 +123,38 @@ describe("event API key lifecycle", () => {
       .bind(created.id)
       .first<{ count: number }>();
     expect(auditAfterRetry?.count).toBe(auditBeforeRetry?.count);
+  });
+
+  it("does not create an API key when its required audit insert is suppressed", async () => {
+    const name = `Unaudited key ${crypto.randomUUID().slice(0, 8)}`;
+    await env.DB.prepare(
+      `CREATE TRIGGER suppress_api_key_creation_audit
+       BEFORE INSERT ON audit_events
+       WHEN NEW.action = 'api_key.created'
+       BEGIN
+         SELECT RAISE(IGNORE);
+       END`,
+    ).run();
+    try {
+      await expect(
+        new ApiKeyService(env as unknown as CloudflareEnvironment).create(
+          viewer,
+          { name, scopes: ["tasks:read"], expiresInDays: null },
+        ),
+      ).rejects.toThrow(/could not be created/u);
+      await expect(
+        env.DB.prepare(
+          `SELECT COUNT(*) AS count FROM api_keys
+            WHERE event_id = ? AND name = ?`,
+        )
+          .bind(viewer.eventId, name)
+          .first(),
+      ).resolves.toEqual({ count: 0 });
+    } finally {
+      await env.DB.prepare(
+        "DROP TRIGGER IF EXISTS suppress_api_key_creation_audit",
+      ).run();
+    }
   });
 
   it("does not allow one tenant to list another tenant's keys", async () => {

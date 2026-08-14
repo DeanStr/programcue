@@ -114,15 +114,22 @@ function png(name: string) {
 function callbackIdentity(identity: {
   jobId: string;
   attempt: number;
+  organisationId: string;
   assetId: string;
+  objectKey: string;
   objectEtag: string;
   sizeBytes: number;
 }) {
   return {
     jobId: identity.jobId,
     attempt: identity.attempt,
+    organisationId: identity.organisationId,
     assetId: identity.assetId,
-    object: { etag: identity.objectEtag, sizeBytes: identity.sizeBytes },
+    object: {
+      key: identity.objectKey,
+      etag: identity.objectEtag,
+      sizeBytes: identity.sizeBytes,
+    },
   };
 }
 
@@ -194,7 +201,7 @@ describe("authenticated file scanner callback", () => {
       await env.DB.prepare(
         "SELECT COUNT(*) AS count FROM audit_events WHERE id = ?",
       )
-        .bind(`file-scan:${upload.versionId}`)
+        .bind(`file-scan:${upload.versionId}:attempt:${scanIdentity.attempt}`)
         .first(),
     ).toEqual({ count: 1 });
 
@@ -340,6 +347,66 @@ describe("authenticated file scanner callback", () => {
     });
   });
 
+  it("does not release a file when the required verdict audit is suppressed", async () => {
+    const testEnvironment = {
+      ...(env as unknown as CloudflareEnvironment),
+      FILE_SCANNER_WEBHOOK_SECRET: scannerSecret,
+    } as ScannerTestEnvironment;
+    const upload = await completeTestDirectUpload(
+      testEnvironment,
+      speaker,
+      {
+        targetType: "person",
+        targetId: speaker.personId,
+        assetKind: "headshot",
+      },
+      png(`scanner-audit-${crypto.randomUUID()}.png`),
+    );
+    const scanIdentity = await acceptTestFileScanDispatch(
+      testEnvironment,
+      speaker.eventId,
+      upload.versionId,
+    );
+    await env.DB.prepare(
+      `CREATE TRIGGER suppress_file_verdict_audit
+       BEFORE INSERT ON audit_events
+       WHEN NEW.action = 'file.scan.clean'
+       BEGIN
+         SELECT RAISE(IGNORE);
+       END`,
+    ).run();
+    try {
+      const response = await action({
+        request: await scannerRequest(
+          {
+            ...callbackIdentity(scanIdentity),
+            eventId: speaker.eventId,
+            versionId: upload.versionId,
+            provider: "managed-scanner",
+            verdict: "clean",
+            result: { engine: "clamav" },
+          },
+          { callbackId: `callback-${crypto.randomUUID()}` },
+        ),
+        params: {},
+        context: context(testEnvironment),
+      } as never);
+      expect(response.status).toBe(409);
+      await expect(
+        env.DB.prepare(
+          `SELECT scan_status AS scanStatus, released_at AS releasedAt
+             FROM file_versions WHERE id = ?`,
+        )
+          .bind(upload.versionId)
+          .first(),
+      ).resolves.toEqual({ scanStatus: "pending", releasedAt: null });
+    } finally {
+      await env.DB.prepare(
+        "DROP TRIGGER IF EXISTS suppress_file_verdict_audit",
+      ).run();
+    }
+  });
+
   it("does not release a clean verdict when the quarantined R2 object is missing", async () => {
     const testEnvironment = {
       ...(env as unknown as CloudflareEnvironment),
@@ -434,6 +501,7 @@ describe("authenticated file scanner callback", () => {
       request: await scannerRequest({
         ...verdict,
         object: {
+          key: identity.objectKey,
           etag: '"different-object"',
           sizeBytes: identity.sizeBytes,
         },

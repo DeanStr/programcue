@@ -112,13 +112,6 @@ def validate_scan_request(
     bucket_prefix = f"/{urllib.parse.quote(expected_bucket, safe='')}/"
     if not parsed.path.startswith(bucket_prefix):
         raise ContractError("The object URL is outside the configured R2 bucket.")
-    query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
-    if (
-        query.get("X-Amz-Algorithm") != ["AWS4-HMAC-SHA256"]
-        or not query.get("X-Amz-Signature", [""])[0]
-    ):
-        raise ContractError("The object URL is not a signed R2 request.")
-
     return {
         "jobId": job_id,
         "object": {

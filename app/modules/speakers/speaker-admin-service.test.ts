@@ -269,6 +269,13 @@ describe("speaker profile service", () => {
       jobTitle: before.profile.jobTitle,
     });
 
+    const changesBefore = await testEnv.DB.prepare(
+      `SELECT COUNT(*) AS count FROM event_changes
+        WHERE event_id = ? AND entity_type = 'person' AND entity_id = ?`,
+    )
+      .bind(admin.eventId, speaker.personId)
+      .first<{ count: number }>();
+
     const saved = await service.updateAdminSpeakerProfile(
       admin,
       speaker.personId,
@@ -288,7 +295,16 @@ describe("speaker profile service", () => {
     expect(saved).toMatchObject({
       revision: before.profile.revision + 1,
       profileStatus: "published",
+      changeCursor: expect.any(Number),
     });
+
+    const changesAfter = await testEnv.DB.prepare(
+      `SELECT COUNT(*) AS count FROM event_changes
+        WHERE event_id = ? AND entity_type = 'person' AND entity_id = ?`,
+    )
+      .bind(admin.eventId, speaker.personId)
+      .first<{ count: number }>();
+    expect(changesAfter?.count).toBe((changesBefore?.count ?? 0) + 1);
 
     const after = await service.getAdminSpeakerDetail(admin, speaker.personId);
     expect(after.profile).toMatchObject({
