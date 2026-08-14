@@ -240,7 +240,8 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     !embedded || visibleEmbedControls.has(control);
   const showEmbedField = (field: (typeof embedOptions.fields)[number]) =>
     !embedded || visibleEmbedFields.has(field);
-  const showSpeakers = !embedded || embedOptions.showSpeakers;
+  const showSpeakerDirectory = !embedded || embedOptions.showSpeakerDirectory;
+  const showSpeakerDetails = showEmbedField("speaker-details");
   useEffect(() => {
     if (!embedded) return;
     const publishHeight = () => {
@@ -269,14 +270,24 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
         (session) => session.slug === slug,
       );
       if (linked) setSelectedId(linked.id);
-    } else if (showSpeakers && location.hash.startsWith("#speaker-")) {
+    } else if (
+      showSpeakerDirectory &&
+      showSpeakerDetails &&
+      location.hash.startsWith("#speaker-")
+    ) {
       const personId = location.hash.slice("#speaker-".length);
       const linked = programme.speakers.find(
         (speaker) => speaker.id === personId,
       );
       if (linked) setSelectedSpeakerId(linked.id);
     }
-  }, [location.hash, programme.sessions, programme.speakers, showSpeakers]);
+  }, [
+    location.hash,
+    programme.sessions,
+    programme.speakers,
+    showSpeakerDetails,
+    showSpeakerDirectory,
+  ]);
   const normalisedQuery = query.trim().toLocaleLowerCase();
   const sessionsMatchingFacets = useMemo(
     () =>
@@ -372,8 +383,10 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
           .includes(normalisedGalleryQuery),
     );
   }, [embedded, speakerSurfaceSource, standaloneGalleryQuery]);
-  const selectedSpeaker =
-    visibleSpeakers.find((speaker) => speaker.id === selectedSpeakerId) ?? null;
+  const selectedSpeaker = showSpeakerDetails
+    ? (visibleSpeakers.find((speaker) => speaker.id === selectedSpeakerId) ??
+      null)
+    : null;
   const selectedSpeakerSessions = selectedSpeaker
     ? programme.sessions.filter(
         (session) =>
@@ -434,6 +447,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   }, [selectedSpeaker, selectedSpeakerId]);
 
   function openSpeakerProfile(speakerId: string, trigger: HTMLElement) {
+    if (!showSpeakerDetails) return;
     speakerProfileReturnFocusRef.current = trigger;
     setSelectedSpeakerId(speakerId);
   }
@@ -597,7 +611,8 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     speakerProfileRef,
     showControl,
     showEmbedField,
-    showSpeakers,
+    showSpeakerDirectory,
+    showSpeakerDetails,
     visible,
     filtersActive,
     clearableFiltersActive,

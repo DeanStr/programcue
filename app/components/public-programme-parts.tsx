@@ -6,6 +6,7 @@ import {
 } from "~/modules/programme/programme-presentation";
 import {
   initials,
+  sessionSpeakerDetails,
   speakerAffiliation,
   type PublicProgrammeModel,
 } from "./public-programme-model";
@@ -106,7 +107,8 @@ export function SessionSpeakerLines({
   session: PublishedSession;
   model: PublicProgrammeModel;
 }) {
-  if (!session.speakerIds.length) {
+  const speakers = sessionSpeakerDetails(session, model.speakerById);
+  if (!speakers.length) {
     return (
       <span className="programme-row-speakers">
         <span className="speaker subtle">Speaker to be announced</span>
@@ -115,12 +117,13 @@ export function SessionSpeakerLines({
   }
   return (
     <span className="programme-row-speakers">
-      {session.speakerIds.map((speakerId, index) => {
-        const speaker = model.speakerById.get(speakerId)!;
+      {speakers.map((speaker) => {
         const affiliation = speakerAffiliation(speaker);
         return (
-          <span className="programme-row-speaker" key={speakerId}>
-            {model.showEmbedField("images") && speaker.imageUrl ? (
+          <span className="programme-row-speaker" key={speaker.id}>
+            {model.showSpeakerDetails &&
+            model.showEmbedField("images") &&
+            speaker.imageUrl ? (
               <img
                 className="avatar sm"
                 src={speaker.imageUrl}
@@ -129,13 +132,15 @@ export function SessionSpeakerLines({
                 height={28}
                 loading="lazy"
               />
-            ) : model.showEmbedField("images") ? (
+            ) : model.showSpeakerDetails && model.showEmbedField("images") ? (
               <span className="avatar sm" aria-hidden="true">
-                {initials(session.speakerNames[index]!)}
+                {initials(speaker.displayName)}
               </span>
             ) : null}
-            <span className="speaker">{session.speakerNames[index]}</span>
-            {model.showEmbedField("affiliations") && affiliation ? (
+            <span className="speaker">{speaker.displayName}</span>
+            {model.showSpeakerDetails &&
+            model.showEmbedField("affiliations") &&
+            affiliation ? (
               <small className="subtle programme-row-affiliation">
                 {" "}
                 <span aria-hidden="true">— </span>

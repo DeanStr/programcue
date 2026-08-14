@@ -7,7 +7,7 @@ import {
   parseProgrammeEmbedFields,
   parseProgrammeEmbedHeight,
   parseProgrammeEmbedSearchParameters,
-  parseProgrammeEmbedSpeakers,
+  parseProgrammeEmbedSpeakerDirectory,
   parseProgrammeEmbedSurface,
   programmeEmbedFilterOptions,
   programmeEmbedUrl,
@@ -66,7 +66,7 @@ describe("programme embed configuration", () => {
       accent: "#0d9488",
       controls: ["search", "day"] as const,
       density: "compact" as const,
-      showSpeakers: false,
+      showSpeakerDirectory: false,
       fields: ["time", "description"] as const,
     };
     expect(
@@ -76,7 +76,7 @@ describe("programme embed configuration", () => {
         fields: [...configuration.fields],
       }),
     ).toBe(
-      "https://events.example.com/embed/future-of-events-2027/sessions?day=2025-05-21&track=AI+%26+Innovation&format=breakout&room=Room+303&query=better+data&accent=%230d9488&controls=search%2Cday&density=compact&speakers=hide&fields=time%2Cdescription",
+      "https://events.example.com/embed/future-of-events-2027/sessions?day=2025-05-21&track=AI+%26+Innovation&format=breakout&room=Room+303&query=better+data&accent=%230d9488&controls=search%2Cday&density=compact&directory=hide&fields=time%2Cdescription",
     );
   });
 
@@ -92,7 +92,7 @@ describe("programme embed configuration", () => {
       programmeEmbedUrl("https://events.example.com", "event", {
         ...defaultProgrammeEmbedConfiguration(),
         surface: "gallery",
-        showSpeakers: false,
+        showSpeakerDirectory: false,
       }),
     ).toBe("https://events.example.com/embed/event/gallery");
   });
@@ -109,6 +109,9 @@ describe("programme embed configuration", () => {
       "description",
     ]);
     expect(parseProgrammeEmbedFields("none")).toEqual([]);
+    expect(parseProgrammeEmbedFields("speaker-details")).toEqual([
+      "speaker-details",
+    ]);
     expect(() => parseProgrammeEmbedFields("time,time")).toThrow(
       /unique comma-separated selection/i,
     );
@@ -128,10 +131,17 @@ describe("programme embed configuration", () => {
     expect(() => parseProgrammeEmbedDensity("dense")).toThrow(
       /comfortable or compact/i,
     );
-    expect(() => parseProgrammeEmbedSpeakers("maybe")).toThrow(/show or hide/i);
+    expect(() => parseProgrammeEmbedSpeakerDirectory("maybe")).toThrow(
+      /show or hide/i,
+    );
     expect(() =>
       parseProgrammeEmbedSearchParameters(
         new URLSearchParams("fields=time,unknown"),
+      ),
+    ).toThrow(/supported public fields/i);
+    expect(() =>
+      parseProgrammeEmbedSearchParameters(
+        new URLSearchParams("fields=time,speakers"),
       ),
     ).toThrow(/supported public fields/i);
   });
@@ -146,6 +156,9 @@ describe("programme embed configuration", () => {
       parseProgrammeEmbedSearchParameters(
         new URLSearchParams("densitty=compact"),
       ),
+    ).toThrow(/unsupported parameter/i);
+    expect(() =>
+      parseProgrammeEmbedSearchParameters(new URLSearchParams("speakers=hide")),
     ).toThrow(/unsupported parameter/i);
     expect(() =>
       parseProgrammeEmbedSearchParameters(
@@ -185,9 +198,9 @@ describe("programme embed configuration", () => {
     expect(() =>
       programmeEmbedUrl("https://events.example.com", "event", {
         ...defaultProgrammeEmbedConfiguration(),
-        showSpeakers: "false" as never,
+        showSpeakerDirectory: "false" as never,
       }),
-    ).toThrow(/speaker visibility must be a boolean/i);
+    ).toThrow(/speaker directory visibility must be a boolean/i);
     expect(() =>
       programmeEmbedUrl("https://events.example.com", "event", {
         ...defaultProgrammeEmbedConfiguration(),

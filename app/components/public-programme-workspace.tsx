@@ -39,7 +39,7 @@ import {
  * and the surface modules only render their own content.
  */
 function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
-  const { programme, loaderData, shared, saved, showSpeakers } = model;
+  const { programme, loaderData, shared, saved } = model;
   const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
   const slug = programme.event.slug;
   const overviewSurface =
@@ -53,19 +53,15 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
       active: overviewSurface,
       routed: false,
     },
-    ...(showSpeakers
-      ? [
-          {
-            key: "speakers",
-            label: "Speakers",
-            href: overviewSurface
-              ? "#speakers"
-              : publicProgrammeSurfacePath(slug, "speakers"),
-            active: loaderData.surface === "speakers",
-            routed: false,
-          },
-        ]
-      : []),
+    {
+      key: "speakers",
+      label: "Speakers",
+      href: overviewSurface
+        ? "#speakers"
+        : publicProgrammeSurfacePath(slug, "speakers"),
+      active: loaderData.surface === "speakers",
+      routed: false,
+    },
     {
       key: "agenda",
       label: "Day agenda",
@@ -80,17 +76,13 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
       active: loaderData.surface === "schedule",
       routed: true,
     },
-    ...(showSpeakers
-      ? [
-          {
-            key: "gallery",
-            label: "Speaker Gallery",
-            href: publicProgrammeSurfacePath(slug, "gallery"),
-            active: loaderData.surface === "gallery",
-            routed: true,
-          },
-        ]
-      : []),
+    {
+      key: "gallery",
+      label: "Speaker Gallery",
+      href: publicProgrammeSurfacePath(slug, "gallery"),
+      active: loaderData.surface === "gallery",
+      routed: true,
+    },
   ];
   const itineraryHref = overviewSurface
     ? "#itinerary"
@@ -278,40 +270,46 @@ export function PublicSpeakerCard({
       key={speaker.id}
     >
       <div className="public-speaker-card-identity">
-        {model.showEmbedField("images") ? (
+        {model.showSpeakerDetails && model.showEmbedField("images") ? (
           <PublicSpeakerAvatar speaker={speaker} size={56} />
         ) : null}
         <div>
           <h3>{speaker.displayName}</h3>
-          {model.showEmbedField("affiliations") && affiliation ? (
+          {model.showSpeakerDetails &&
+          model.showEmbedField("affiliations") &&
+          affiliation ? (
             <p className="help">{affiliation}</p>
           ) : null}
         </div>
       </div>
-      {model.showEmbedField("biography") && speaker.biography ? (
+      {model.showSpeakerDetails &&
+      model.showEmbedField("biography") &&
+      speaker.biography ? (
         <p className="public-speaker-card-bio">
           {descriptionSnippet(speaker.biography)}
         </p>
       ) : null}
-      <div className="public-speaker-card-foot">
-        {model.showEmbedField("sessions") ? (
-          <span className="help">
-            {speaker.sessionIds.length} session
-            {speaker.sessionIds.length === 1 ? "" : "s"}
-          </span>
-        ) : null}
-        <a
-          className="btn small"
-          id={`speaker-profile-link-${speaker.id}`}
-          href="#programme-speaker-profile"
-          aria-label={`View profile and sessions for ${speaker.displayName}`}
-          onClick={(event) =>
-            model.openSpeakerProfile(speaker.id, event.currentTarget)
-          }
-        >
-          View profile and sessions
-        </a>
-      </div>
+      {model.showSpeakerDetails ? (
+        <div className="public-speaker-card-foot">
+          {model.showEmbedField("sessions") ? (
+            <span className="help">
+              {speaker.sessionIds.length} session
+              {speaker.sessionIds.length === 1 ? "" : "s"}
+            </span>
+          ) : null}
+          <a
+            className="btn small"
+            id={`speaker-profile-link-${speaker.id}`}
+            href="#programme-speaker-profile"
+            aria-label={`View profile and sessions for ${speaker.displayName}`}
+            onClick={(event) =>
+              model.openSpeakerProfile(speaker.id, event.currentTarget)
+            }
+          >
+            View profile and sessions
+          </a>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -729,7 +727,7 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
     speakerById,
     embedded,
     shared,
-    showSpeakers,
+    showSpeakerDirectory,
     selectedConflicts,
     sessionDetailRef,
   } = model;
@@ -792,7 +790,7 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
           </p>
         </>
       ) : null}
-      {model.showEmbedField("speakers") ? (
+      {model.showSpeakerDetails ? (
         <>
           <h3>{selected.speakerIds.length === 1 ? "Speaker" : "Speakers"}</h3>
           <div className="session-detail-speakers">
@@ -825,10 +823,10 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
                         ) : null}
                       </div>
                     </div>
-                    {speaker.biography ? (
+                    {model.showEmbedField("biography") && speaker.biography ? (
                       <p>{descriptionSnippet(speaker.biography)}</p>
                     ) : null}
-                    {showSpeakers ? (
+                    {showSpeakerDirectory ? (
                       <a
                         className="session-detail-profile-link"
                         href={`#speaker-${speakerId}`}
@@ -850,7 +848,16 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
             )}
           </div>
         </>
-      ) : null}
+      ) : (
+        <>
+          <h3>{selected.speakerIds.length === 1 ? "Speaker" : "Speakers"}</h3>
+          <p className="public-session-speaker-names">
+            {selected.speakerNames.length
+              ? selected.speakerNames.join(", ")
+              : "Speaker to be announced."}
+          </p>
+        </>
+      )}
       <div className="divider" />
       <Link
         className="btn small"
@@ -918,7 +925,7 @@ function ItineraryVerificationPrompt({
 
 function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
   const {
-    showSpeakers,
+    showSpeakerDirectory,
     visibleSpeakers,
     selectedSpeaker,
     selectedSpeakerSessions,
@@ -932,7 +939,7 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
       id="speakers"
       className="public-speakers-section"
       aria-labelledby="speakers-title"
-      hidden={!showSpeakers}
+      hidden={!showSpeakerDirectory}
     >
       {/* A section is named by its heading. The eyebrow above this one said
           "Meet the programme", which is the heading again in smaller caps and

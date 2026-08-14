@@ -187,6 +187,9 @@ export async function readResponsesApiStream(
     Number.isFinite(declaredLength) &&
     declaredLength > AI_PROVIDER_RESPONSE_MAX_BYTES
   ) {
+    await response.body
+      ?.cancel("AI provider response body limit exceeded")
+      .catch(() => {});
     throw new AiProviderError(
       `${providerName} returned an oversized streaming response.`,
       response.status,
@@ -205,6 +208,7 @@ export async function readResponsesApiStream(
   let buffer = "";
   let receivedBytes = 0;
   let completed: unknown = null;
+  let accepted = false;
   const handleBlock = (block: string) => {
     const encoded = block
       .split(/\r?\n/u)
@@ -254,40 +258,46 @@ export async function readResponsesApiStream(
       );
     }
   };
-  while (true) {
-    const { value, done } = await reader.read();
-    receivedBytes += value?.byteLength ?? 0;
-    if (receivedBytes > AI_PROVIDER_RESPONSE_MAX_BYTES) {
-      await reader
-        .cancel("AI provider response body limit exceeded")
-        .catch(() => {});
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      receivedBytes += value?.byteLength ?? 0;
+      if (receivedBytes > AI_PROVIDER_RESPONSE_MAX_BYTES) {
+        throw new AiProviderError(
+          `${providerName} returned an oversized streaming response.`,
+          response.status,
+          providerRequestId,
+        );
+      }
+      buffer += decoder.decode(value, { stream: !done });
+      const blocks = buffer.split(/\r?\n\r?\n/u);
+      buffer = blocks.pop() ?? "";
+      for (const block of blocks) handleBlock(block);
+      if (done) break;
+    }
+    if (buffer.trim()) handleBlock(buffer);
+    const parsed = aiProviderResponseSchema.safeParse(completed);
+    if (!parsed.success) {
       throw new AiProviderError(
-        `${providerName} returned an oversized streaming response.`,
+        `${providerName} streaming completed without a valid Responses API result.`,
         response.status,
         providerRequestId,
       );
     }
-    buffer += decoder.decode(value, { stream: !done });
-    const blocks = buffer.split(/\r?\n\r?\n/u);
-    buffer = blocks.pop() ?? "";
-    for (const block of blocks) handleBlock(block);
-    if (done) break;
-  }
-  if (buffer.trim()) handleBlock(buffer);
-  const parsed = aiProviderResponseSchema.safeParse(completed);
-  if (!parsed.success) {
-    throw new AiProviderError(
-      `${providerName} streaming completed without a valid Responses API result.`,
+    const result = requireCompletedResponsesApiResult(
+      parsed.data,
+      providerName,
       response.status,
       providerRequestId,
     );
+    accepted = true;
+    return result;
+  } finally {
+    if (!accepted) {
+      await reader.cancel("AI provider stream rejected").catch(() => {});
+    }
+    reader.releaseLock();
   }
-  return requireCompletedResponsesApiResult(
-    parsed.data,
-    providerName,
-    response.status,
-    providerRequestId,
-  );
 }
 
 export class OpenAiResponsesProvider {

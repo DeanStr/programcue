@@ -468,23 +468,22 @@ describe("OpenAI Responses provider boundary", () => {
         },
       ],
     };
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(
-        [
-          `data: ${JSON.stringify({ type: "response.output_text.delta", delta: "Grounded " })}`,
-          `data: ${JSON.stringify({ type: "response.output_text.delta", delta: "answer" })}`,
-          `data: ${JSON.stringify({ type: "response.completed", response: completed })}`,
-          "data: [DONE]",
-          "",
-        ].join("\n\n"),
-        {
-          headers: {
-            "content-type": "text/event-stream",
-            "x-request-id": "openai-stream-request-test",
-          },
+    const providerResponse = new Response(
+      [
+        `data: ${JSON.stringify({ type: "response.output_text.delta", delta: "Grounded " })}`,
+        `data: ${JSON.stringify({ type: "response.output_text.delta", delta: "answer" })}`,
+        `data: ${JSON.stringify({ type: "response.completed", response: completed })}`,
+        "data: [DONE]",
+        "",
+      ].join("\n\n"),
+      {
+        headers: {
+          "content-type": "text/event-stream",
+          "x-request-id": "openai-stream-request-test",
         },
-      ),
+      },
     );
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(providerResponse);
     const deltas: string[] = [];
     const response = await new OpenAiResponsesProvider(
       providerConfiguration,
@@ -497,10 +496,73 @@ describe("OpenAI Responses provider boundary", () => {
     });
     expect(deltas.join("")).toBe("Grounded answer");
     expect(response).toMatchObject({ id: "resp-stream-test" });
+    expect(providerResponse.body?.locked).toBe(false);
     expect(JSON.parse(String(fetcher.mock.calls[0]![1]?.body))).toMatchObject({
       stream: true,
       store: false,
     });
+  });
+
+  it("cancels and unlocks a rejected Responses API stream", async () => {
+    let cancellationReason: unknown = null;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("data: not-json\n\n"));
+      },
+      cancel(reason) {
+        cancellationReason = reason;
+      },
+    });
+    const provider = new OpenAiResponsesProvider(
+      providerConfiguration,
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      ),
+    );
+
+    await expect(
+      provider.create({
+        instructions: "Return a result.",
+        input: "Hello",
+        safetyIdentifier: "pc_stream_rejection_test",
+        onTextDelta: () => {},
+      }),
+    ).rejects.toThrow("OpenAI returned an invalid streaming event.");
+    expect(cancellationReason).toBe("AI provider stream rejected");
+    expect(body.locked).toBe(false);
+  });
+
+  it("cancels a Responses API stream rejected by its declared size", async () => {
+    let cancellationReason: unknown = null;
+    const body = new ReadableStream<Uint8Array>({
+      cancel(reason) {
+        cancellationReason = reason;
+      },
+    });
+    const provider = new OpenAiResponsesProvider(
+      providerConfiguration,
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(body, {
+          headers: {
+            "content-length": String(AI_PROVIDER_RESPONSE_MAX_BYTES + 1),
+            "content-type": "text/event-stream",
+          },
+        }),
+      ),
+    );
+
+    await expect(
+      provider.create({
+        instructions: "Return a result.",
+        input: "Hello",
+        safetyIdentifier: "pc_stream_size_test",
+        onTextDelta: () => {},
+      }),
+    ).rejects.toThrow("OpenAI returned an oversized streaming response.");
+    expect(cancellationReason).toBe("AI provider response body limit exceeded");
+    expect(body.locked).toBe(false);
   });
 
   it("normalises transport failures as explicit provider errors", async () => {

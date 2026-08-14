@@ -49,7 +49,7 @@ const fieldLabels: Record<ProgrammeEmbedField, string> = {
   track: "Track",
   format: "Format",
   description: "Descriptions",
-  speakers: "Speaker detail blocks and profile links",
+  "speaker-details": "Speaker detail blocks and profile links",
   affiliations: "Job title and company",
   images: "Speaker photos",
   biography: "Biographies and pronunciation",
@@ -374,12 +374,12 @@ export function ProgrammeEmbedBuilder({
               <label className="choice">
                 <input
                   type="checkbox"
-                  checked={configuration.showSpeakers}
+                  checked={configuration.showSpeakerDirectory}
                   onChange={(event) =>
-                    update("showSpeakers", event.target.checked)
+                    update("showSpeakerDirectory", event.target.checked)
                   }
                 />
-                Include the speaker directory and profile links
+                Include the speaker directory
               </label>
             ) : null}
           </fieldset>

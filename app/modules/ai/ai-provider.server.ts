@@ -196,6 +196,9 @@ async function readAnthropicStream(
     Number.isFinite(declaredLength) &&
     declaredLength > AI_PROVIDER_RESPONSE_MAX_BYTES
   ) {
+    await response.body
+      ?.cancel("AI provider response body limit exceeded")
+      .catch(() => {});
     throw new AiProviderError(
       "Anthropic returned an oversized streaming response.",
       response.status,
@@ -216,6 +219,7 @@ async function readAnthropicStream(
   let id: string | null = null;
   let model: string | null = null;
   let stopped = false;
+  let accepted = false;
   const blocks = new Map<number, AnthropicBlock>();
   const partialToolInputs = new Map<number, string>();
   const handle = (block: string) => {
@@ -315,40 +319,46 @@ async function readAnthropicStream(
       stopped = true;
     }
   };
-  while (true) {
-    const { value, done } = await reader.read();
-    receivedBytes += value?.byteLength ?? 0;
-    if (receivedBytes > AI_PROVIDER_RESPONSE_MAX_BYTES) {
-      await reader
-        .cancel("AI provider response body limit exceeded")
-        .catch(() => {});
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      receivedBytes += value?.byteLength ?? 0;
+      if (receivedBytes > AI_PROVIDER_RESPONSE_MAX_BYTES) {
+        throw new AiProviderError(
+          "Anthropic returned an oversized streaming response.",
+          response.status,
+          providerRequestId,
+        );
+      }
+      buffer += decoder.decode(value, { stream: !done });
+      const events = buffer.split(/\r?\n\r?\n/u);
+      buffer = events.pop() ?? "";
+      for (const event of events) handle(event);
+      if (done) break;
+    }
+    if (buffer.trim()) handle(buffer);
+    if (!stopped || !id || !model) {
       throw new AiProviderError(
-        "Anthropic returned an oversized streaming response.",
+        "Anthropic streaming ended without a complete attributed message.",
         response.status,
         providerRequestId,
       );
     }
-    buffer += decoder.decode(value, { stream: !done });
-    const events = buffer.split(/\r?\n\r?\n/u);
-    buffer = events.pop() ?? "";
-    for (const event of events) handle(event);
-    if (done) break;
+    const result = normalizeAnthropicMessage({
+      id,
+      model,
+      content: [...blocks.entries()]
+        .sort(([left], [right]) => left - right)
+        .map(([, block]) => block),
+    });
+    accepted = true;
+    return result;
+  } finally {
+    if (!accepted) {
+      await reader.cancel("AI provider stream rejected").catch(() => {});
+    }
+    reader.releaseLock();
   }
-  if (buffer.trim()) handle(buffer);
-  if (!stopped || !id || !model) {
-    throw new AiProviderError(
-      "Anthropic streaming ended without a complete attributed message.",
-      response.status,
-      providerRequestId,
-    );
-  }
-  return normalizeAnthropicMessage({
-    id,
-    model,
-    content: [...blocks.entries()]
-      .sort(([left], [right]) => left - right)
-      .map(([, block]) => block),
-  });
 }
 
 export class AnthropicMessagesProvider implements AiModelProvider {

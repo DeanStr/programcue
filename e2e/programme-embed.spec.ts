@@ -46,14 +46,12 @@ test("configures, previews and copies a constrained programme embed", async ({
   await visitorControls.getByLabel("Format", { exact: true }).uncheck();
   await visitorControls.getByLabel("Room", { exact: true }).uncheck();
   await page.getByLabel("Density").selectOption("compact");
-  await page
-    .getByLabel("Include the speaker directory and profile links")
-    .uncheck();
+  await page.getByLabel("Include the speaker directory").uncheck();
 
   const preview = page.locator(".programme-embed-preview iframe");
   await expect(preview).toHaveAttribute(
     "src",
-    /\/embed\/future-of-events-2027\/sessions\?day=2027-05-21.*track=AI\+%26\+Innovation.*format=breakout.*room=Room\+303.*query=Building.*controls=search.*density=compact.*speakers=hide/,
+    /\/embed\/future-of-events-2027\/sessions\?day=2027-05-21.*track=AI\+%26\+Innovation.*format=breakout.*room=Room\+303.*query=Building.*controls=search.*density=compact.*directory=hide/,
   );
   const previewFrame = preview.contentFrame();
   await previewFrame.locator("body[data-hydrated='true']").waitFor();
@@ -68,11 +66,11 @@ test("configures, previews and copies a constrained programme embed", async ({
   await expect(previewFrame.locator("#speakers")).toBeHidden();
 
   await expect(page.getByLabel("Iframe code")).toHaveValue(
-    /controls=search.*density=compact.*speakers=hide/,
+    /controls=search.*density=compact.*directory=hide/,
   );
   await page.getByRole("button", { name: "Widget", exact: true }).click();
   await expect(page.getByLabel("Auto-resizing widget code")).toHaveValue(
-    /programcue-widget\.js.*data-surface="sessions".*data-day="2027-05-21".*data-track="AI &amp; Innovation".*data-format="breakout".*data-room="Room 303".*data-query="Building".*data-controls="search".*data-density="compact".*data-speakers="hide"/s,
+    /programcue-widget\.js.*data-surface="sessions".*data-day="2027-05-21".*data-track="AI &amp; Innovation".*data-format="breakout".*data-room="Room 303".*data-query="Building".*data-controls="search".*data-density="compact".*data-directory="hide"/s,
   );
 
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -155,6 +153,80 @@ test("previews every public widget type and applies granular field selection", a
   await expect(page.getByLabel("Auto-resizing widget code")).toHaveValue(
     /data-surface="agenda".*data-fields=/s,
   );
+
+  await page.getByLabel("Speaker detail blocks and profile links").uncheck();
+
+  await page.getByLabel("Public surface").selectOption("sessions");
+  let fieldFrame = preview.contentFrame();
+  await fieldFrame.locator("body[data-hydrated='true']").waitFor();
+  await expect(
+    fieldFrame.locator(".programme-row .speaker").first(),
+  ).toBeVisible();
+  await expect(fieldFrame.locator(".programme-row .avatar")).toHaveCount(0);
+  await expect(
+    fieldFrame.locator("#speakers .public-speaker-card h3").first(),
+  ).toBeVisible();
+  await expect(
+    fieldFrame.locator("#speakers .public-speaker-card .avatar"),
+  ).toHaveCount(0);
+  await expect(
+    fieldFrame.locator("#speakers .public-speaker-card-bio"),
+  ).toHaveCount(0);
+  await expect(
+    fieldFrame.locator("#speakers .public-speaker-card-foot"),
+  ).toHaveCount(0);
+  await expect(
+    fieldFrame.getByRole("link", { name: /View profile and sessions/i }),
+  ).toHaveCount(0);
+
+  for (const surface of ["agenda", "schedule"] as const) {
+    await page.getByLabel("Public surface").selectOption(surface);
+    fieldFrame = preview.contentFrame();
+    await fieldFrame.locator("body[data-hydrated='true']").waitFor();
+    await expect(
+      fieldFrame.locator(".public-session-speaker-names").first(),
+    ).toBeVisible();
+    await expect(fieldFrame.locator(".public-session-speakers")).toHaveCount(0);
+    if (surface === "agenda") {
+      await expect(
+        fieldFrame.locator(
+          ".public-surface-detail .public-session-speaker-names",
+        ),
+      ).toBeVisible();
+    }
+  }
+
+  await page.getByLabel("Public surface").selectOption("speakers");
+  fieldFrame = preview.contentFrame();
+  await fieldFrame.locator("body[data-hydrated='true']").waitFor();
+  await expect(
+    fieldFrame.locator("div.public-speaker-directory-trigger").first(),
+  ).toBeVisible();
+  await expect(
+    fieldFrame.locator("button.public-speaker-directory-trigger"),
+  ).toHaveCount(0);
+  await expect(
+    fieldFrame.locator(".public-speaker-directory-card img"),
+  ).toHaveCount(0);
+  await expect(
+    fieldFrame.locator(".public-speaker-directory-card .help"),
+  ).toHaveCount(0);
+  await expect(fieldFrame.getByRole("dialog")).toHaveCount(0);
+
+  await page.getByLabel("Public surface").selectOption("gallery");
+  fieldFrame = preview.contentFrame();
+  await fieldFrame.locator("body[data-hydrated='true']").waitFor();
+  await expect(
+    fieldFrame.locator("article.speaker-gallery-card").first(),
+  ).toBeVisible();
+  await expect(fieldFrame.locator("button.speaker-gallery-card")).toHaveCount(
+    0,
+  );
+  await expect(fieldFrame.locator(".speaker-gallery-card img")).toHaveCount(0);
+  await expect(
+    fieldFrame.locator(".speaker-gallery-card-sessions"),
+  ).toHaveCount(0);
+  await expect(fieldFrame.getByRole("dialog")).toHaveCount(0);
 });
 
 test("rejects unsupported embed configuration instead of silently falling back", async ({
@@ -347,7 +419,7 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
             data-accent="#0d9488"
             data-controls="search"
             data-density="compact"
-            data-fields="location,track,format,speakers"></script>
+            data-fields="location,track,format,speaker-details"></script>
         `,
     }),
   );
@@ -355,7 +427,7 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
   const frame = page.locator("#programme-widget iframe");
   await expect(frame).toHaveAttribute(
     "src",
-    /\/embed\/future-of-events-2027\/agenda\?day=2027-05-21&accent=%230d9488&controls=search&density=compact&fields=location%2Ctrack%2Cformat%2Cspeakers$/,
+    /\/embed\/future-of-events-2027\/agenda\?day=2027-05-21&accent=%230d9488&controls=search&density=compact&fields=location%2Ctrack%2Cformat%2Cspeaker-details$/,
   );
   await frame.contentFrame().locator("body[data-hydrated='true']").waitFor();
   await expect(
@@ -436,7 +508,7 @@ test("keeps omitted fields out of session and speaker detail views", async ({
 }) => {
   await waitForInterface(
     page,
-    "/embed/future-of-events-2027/sessions?fields=sessions,speakers",
+    "/embed/future-of-events-2027/sessions?fields=sessions,speaker-details",
   );
 
   const sessionDetail = page.locator(".session-detail-panel");

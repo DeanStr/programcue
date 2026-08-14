@@ -22,7 +22,7 @@ export const PROGRAMME_EMBED_FIELDS = [
   "track",
   "format",
   "description",
-  "speakers",
+  "speaker-details",
   "affiliations",
   "images",
   "biography",
@@ -43,7 +43,7 @@ const PROGRAMME_EMBED_QUERY_PARAMETERS = [
   "accent",
   "controls",
   "density",
-  "speakers",
+  "directory",
   "fields",
 ] as const;
 
@@ -56,7 +56,7 @@ type ProgrammeEmbedSearchConfiguration = {
   accent: string | null;
   controls: ProgrammeEmbedControl[];
   density: ProgrammeEmbedDensity;
-  showSpeakers: boolean;
+  showSpeakerDirectory: boolean;
   fields: ProgrammeEmbedField[];
 };
 
@@ -70,7 +70,7 @@ export type ProgrammeEmbedConfiguration = {
   accent: string;
   controls: ProgrammeEmbedControl[];
   density: ProgrammeEmbedDensity;
-  showSpeakers: boolean;
+  showSpeakerDirectory: boolean;
   fields: ProgrammeEmbedField[];
   height: number;
 };
@@ -102,7 +102,7 @@ export function defaultProgrammeEmbedConfiguration(): ProgrammeEmbedConfiguratio
     accent: "",
     controls: [...PROGRAMME_EMBED_CONTROLS],
     density: "comfortable",
-    showSpeakers: true,
+    showSpeakerDirectory: true,
     fields: [...PROGRAMME_EMBED_FIELDS],
     height: 720,
   };
@@ -212,11 +212,13 @@ export function parseProgrammeEmbedDensity(
   );
 }
 
-export function parseProgrammeEmbedSpeakers(raw: string | null): boolean {
+export function parseProgrammeEmbedSpeakerDirectory(
+  raw: string | null,
+): boolean {
   if (raw === null || raw === "show") return true;
   if (raw === "hide") return false;
   throw new ProgrammeEmbedConfigurationError(
-    "Embed speakers must be show or hide.",
+    "Embed speaker directory must be show or hide.",
   );
 }
 
@@ -263,7 +265,9 @@ export function parseProgrammeEmbedSearchParameters(
     accent: optionalNonEmptyEmbedParameter(searchParams, "accent"),
     controls: parseProgrammeEmbedControls(searchParams.get("controls")),
     density: parseProgrammeEmbedDensity(searchParams.get("density")),
-    showSpeakers: parseProgrammeEmbedSpeakers(searchParams.get("speakers")),
+    showSpeakerDirectory: parseProgrammeEmbedSpeakerDirectory(
+      searchParams.get("directory"),
+    ),
     fields: parseProgrammeEmbedFields(searchParams.get("fields")),
   };
 }
@@ -303,9 +307,9 @@ function assertProgrammeEmbedConfiguration(
   parseProgrammeEmbedFields(
     configuration.fields.length ? configuration.fields.join(",") : "none",
   );
-  if (typeof configuration.showSpeakers !== "boolean") {
+  if (typeof configuration.showSpeakerDirectory !== "boolean") {
     throw new ProgrammeEmbedConfigurationError(
-      "Embed speaker visibility must be a boolean.",
+      "Embed speaker directory visibility must be a boolean.",
     );
   }
   if (configuration.day) {
@@ -361,8 +365,11 @@ export function programmeEmbedUrl(
   if (configuration.density !== "comfortable") {
     url.searchParams.set("density", configuration.density);
   }
-  if (configuration.surface === "sessions" && !configuration.showSpeakers) {
-    url.searchParams.set("speakers", "hide");
+  if (
+    configuration.surface === "sessions" &&
+    !configuration.showSpeakerDirectory
+  ) {
+    url.searchParams.set("directory", "hide");
   }
   if (!hasDefaultFields(configuration.fields)) {
     url.searchParams.set(
@@ -448,8 +455,9 @@ export function programmeWidgetSnippet({
       configuration.density === "comfortable" ? "" : configuration.density,
     ],
     [
-      "data-speakers",
-      configuration.surface === "sessions" && !configuration.showSpeakers
+      "data-directory",
+      configuration.surface === "sessions" &&
+      !configuration.showSpeakerDirectory
         ? "hide"
         : "",
     ],

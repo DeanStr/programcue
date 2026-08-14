@@ -322,7 +322,8 @@ function StreamingAssistantForm({
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let receivedTerminalEvent = false;
+      let receivedResultEvent = false;
+      let accepted = false;
       const handleBlock = (block: string) => {
         const eventName = block
           .split(/\r?\n/u)
@@ -339,31 +340,40 @@ function StreamingAssistantForm({
         if (eventName === "delta" && typeof payload.delta === "string") {
           setPartial((current) => current + payload.delta);
         } else if (eventName === "result") {
-          receivedTerminalEvent = true;
+          receivedResultEvent = true;
           setResult(payload as unknown as AiAssistantResult);
         } else if (
           eventName === "error" &&
           typeof payload.message === "string"
         ) {
-          receivedTerminalEvent = true;
-          setError(payload.message);
+          throw new Error(payload.message);
         }
       };
-      while (true) {
-        const { value, done } = await reader.read();
-        buffer += decoder.decode(value, { stream: !done });
-        const blocks = buffer.split(/\r?\n\r?\n/u);
-        buffer = blocks.pop() ?? "";
-        for (const block of blocks) handleBlock(block);
-        if (done) break;
-      }
-      if (buffer.trim()) handleBlock(buffer);
-      if (!receivedTerminalEvent) {
-        throw new Error(
-          "The assistant stream ended before Program Cue returned a final result.",
-        );
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          buffer += decoder.decode(value, { stream: !done });
+          const blocks = buffer.split(/\r?\n\r?\n/u);
+          buffer = blocks.pop() ?? "";
+          for (const block of blocks) handleBlock(block);
+          if (done) break;
+        }
+        if (buffer.trim()) handleBlock(buffer);
+        if (!receivedResultEvent) {
+          throw new Error(
+            "The assistant stream ended before Program Cue returned a final result.",
+          );
+        }
+        accepted = true;
+      } finally {
+        if (!accepted) {
+          await reader.cancel("Assistant stream rejected").catch(() => {});
+        }
+        reader.releaseLock();
       }
     } catch (streamError) {
+      setPartial("");
+      setResult(null);
       setError(
         streamError instanceof Error
           ? streamError.message

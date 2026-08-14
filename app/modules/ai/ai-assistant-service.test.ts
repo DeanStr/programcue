@@ -496,14 +496,13 @@ describe("organisation AI provider boundary", () => {
       'event: message_stop\ndata: {"type":"message_stop"}',
       "",
     ].join("\n\n");
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(body, {
-        headers: {
-          "content-type": "text/event-stream",
-          "request-id": "anthropic-request-stream",
-        },
-      }),
-    );
+    const providerResponse = new Response(body, {
+      headers: {
+        "content-type": "text/event-stream",
+        "request-id": "anthropic-request-stream",
+      },
+    });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(providerResponse);
     const deltas: string[] = [];
     const result = await new AnthropicMessagesProvider(
       { apiKey: "test-anthropic-key-with-more-than-twenty-characters" },
@@ -521,11 +520,50 @@ describe("organisation AI provider boundary", () => {
       model: "claude-sonnet-4-6",
       output_text: "Anthropic stream",
     });
+    expect(providerResponse.body?.locked).toBe(false);
+  });
+
+  it("cancels and unlocks a rejected Anthropic stream", async () => {
+    let cancellationReason: unknown = null;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("data: not-json\n\n"));
+      },
+      cancel(reason) {
+        cancellationReason = reason;
+      },
+    });
+    const provider = new AnthropicMessagesProvider(
+      { apiKey: "test-anthropic-key-with-more-than-twenty-characters" },
+      "claude-sonnet-4-6",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      ),
+    );
+
+    await expect(
+      provider.create({
+        instructions: "Answer concisely.",
+        input: "Stream a result.",
+        safetyIdentifier: "pc_stream_rejection_test",
+        onTextDelta: () => {},
+      }),
+    ).rejects.toThrow("Anthropic returned invalid streaming JSON.");
+    expect(cancellationReason).toBe("AI provider stream rejected");
+    expect(body.locked).toBe(false);
   });
 
   it("rejects an oversized Anthropic stream before consuming it", async () => {
+    let cancellationReason: unknown = null;
+    const body = new ReadableStream<Uint8Array>({
+      cancel(reason) {
+        cancellationReason = reason;
+      },
+    });
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response('data: {"type":"message_stop"}\n\n', {
+      new Response(body, {
         headers: {
           "content-length": String(AI_PROVIDER_RESPONSE_MAX_BYTES + 1),
           "content-type": "text/event-stream",
@@ -547,5 +585,7 @@ describe("organisation AI provider boundary", () => {
         onTextDelta: () => {},
       }),
     ).rejects.toThrow("Anthropic returned an oversized streaming response.");
+    expect(cancellationReason).toBe("AI provider response body limit exceeded");
+    expect(body.locked).toBe(false);
   });
 });

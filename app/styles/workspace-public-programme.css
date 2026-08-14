@@ -1215,6 +1215,10 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+.public-speaker-directory-trigger.is-static:hover strong {
+  color: inherit;
+  text-decoration: none;
+}
 .public-speaker-directory-trigger > span:last-child {
   min-width: 0;
 }
@@ -1346,6 +1350,11 @@
 .speaker-gallery-card:focus-visible {
   border-color: var(--accent-line);
   box-shadow: var(--elev-3);
+}
+.speaker-gallery-card.is-static:hover {
+  border-color: var(--line);
+  box-shadow: var(--elev-1);
+  transform: none;
 }
 .speaker-gallery-card .public-speaker-photo {
   border-radius: 0;

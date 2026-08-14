@@ -156,6 +156,24 @@ function PublicSessionSpeakers({
   );
 }
 
+function PublicSessionSpeakerNames({
+  session,
+  model,
+}: {
+  session: PublishedSession;
+  model: PublicProgrammeModel;
+}) {
+  const speakers = sessionSpeakerDetails(session, model.speakerById);
+  return speakers.length ? (
+    <p className="public-session-speaker-names">
+      <span className="sr-only">Speakers: </span>
+      {speakers.map((speaker) => speaker.displayName).join(", ")}
+    </p>
+  ) : (
+    <p className="subtle">Speaker to be announced</p>
+  );
+}
+
 export function PublicSessionDetails({
   session,
   model,
@@ -202,14 +220,16 @@ export function PublicSessionDetails({
                 "Description not provided."}
             </p>
           ) : null}
-          {model.showEmbedField("speakers") ? (
-            <>
-              <h3 className="public-surface-detail-subhead">
-                {session.speakerIds.length === 1 ? "Speaker" : "Speakers"}
-              </h3>
+          <>
+            <h3 className="public-surface-detail-subhead">
+              {session.speakerIds.length === 1 ? "Speaker" : "Speakers"}
+            </h3>
+            {model.showSpeakerDetails ? (
               <PublicSessionSpeakers session={session} model={model} />
-            </>
-          ) : null}
+            ) : (
+              <PublicSessionSpeakerNames session={session} model={model} />
+            )}
+          </>
         </div>
         <aside className="public-surface-detail-facts">
           <dl className="public-detail-list">
@@ -443,7 +463,14 @@ export function PublicAgendaSurface({
                         ) || "Description not provided."}
                       </p>
                     ) : null}
-                    <PublicSessionSpeakers session={session} model={model} />
+                    {model.showSpeakerDetails ? (
+                      <PublicSessionSpeakers session={session} model={model} />
+                    ) : (
+                      <PublicSessionSpeakerNames
+                        session={session}
+                        model={model}
+                      />
+                    )}
                   </article>
                 ))}
               </div>
@@ -550,7 +577,14 @@ export function PublicScheduleSurface({
                     {model.showEmbedField("description") ? (
                       <SessionCardDescription session={session} model={model} />
                     ) : null}
-                    <PublicSessionSpeakers session={session} model={model} />
+                    {model.showSpeakerDetails ? (
+                      <PublicSessionSpeakers session={session} model={model} />
+                    ) : (
+                      <PublicSessionSpeakerNames
+                        session={session}
+                        model={model}
+                      />
+                    )}
                   </div>
                 </li>
               ))}
@@ -571,31 +605,47 @@ function SpeakerDirectoryCard({
   speaker: PublishedSpeaker;
   model: PublicProgrammeModel;
 }) {
+  const identity = (
+    <>
+      {model.showSpeakerDetails && model.showEmbedField("images") ? (
+        <PublicSpeakerPhoto speaker={speaker} />
+      ) : null}
+      <span>
+        <strong>{speaker.displayName}</strong>
+        {model.showSpeakerDetails && model.showEmbedField("affiliations") ? (
+          <PublicSpeakerMetadata speaker={speaker} />
+        ) : null}
+      </span>
+    </>
+  );
   return (
     <article className="card pad public-speaker-directory-card">
-      <button
-        type="button"
-        className="public-speaker-directory-trigger"
-        id={`public-speaker-card-${speaker.id}`}
-        aria-label={`Open speaker details for ${speaker.displayName}`}
-        onClick={(event) =>
-          model.openSpeakerProfile(speaker.id, event.currentTarget)
-        }
-      >
-        {model.showEmbedField("images") ? (
-          <PublicSpeakerPhoto speaker={speaker} />
-        ) : null}
-        <span>
-          <strong>{speaker.displayName}</strong>
-          {model.showEmbedField("affiliations") ? (
-            <PublicSpeakerMetadata speaker={speaker} />
-          ) : null}
-        </span>
-      </button>
-      {model.showEmbedField("biography") && speaker.biography ? (
+      {model.showSpeakerDetails ? (
+        <button
+          type="button"
+          className="public-speaker-directory-trigger"
+          id={`public-speaker-card-${speaker.id}`}
+          aria-label={`Open speaker details for ${speaker.displayName}`}
+          onClick={(event) =>
+            model.openSpeakerProfile(speaker.id, event.currentTarget)
+          }
+        >
+          {identity}
+        </button>
+      ) : (
+        <div
+          className="public-speaker-directory-trigger is-static"
+          id={`public-speaker-card-${speaker.id}`}
+        >
+          {identity}
+        </div>
+      )}
+      {model.showSpeakerDetails &&
+      model.showEmbedField("biography") &&
+      speaker.biography ? (
         <p>{descriptionSnippet(speaker.biography)}</p>
       ) : null}
-      {model.showEmbedField("sessions") ? (
+      {model.showSpeakerDetails && model.showEmbedField("sessions") ? (
         <span className="help">
           {speaker.sessionIds.length} public session
           {speaker.sessionIds.length === 1 ? "" : "s"}
@@ -615,7 +665,11 @@ export function PublicSpeakersSurface({
       <SurfaceHeading
         title="Speakers"
         id="public-speakers-title"
-        description="Meet the people presenting this event."
+        description={
+          model.showSpeakerDetails
+            ? "Meet the people presenting this event. Open a card for biography and session details."
+            : "Meet the people presenting this event."
+        }
         count={`${model.directorySpeakers.length} speakers`}
       >
         {!model.embedded && model.showControl("search") ? (
@@ -661,7 +715,26 @@ function SpeakerGalleryCard({
   speaker: PublishedSpeaker;
   model: PublicProgrammeModel;
 }) {
-  return (
+  const content = (
+    <>
+      {model.showSpeakerDetails && model.showEmbedField("images") ? (
+        <PublicSpeakerPhoto speaker={speaker} />
+      ) : null}
+      <span className="speaker-gallery-card-copy">
+        <strong>{speaker.displayName}</strong>
+        {model.showSpeakerDetails && model.showEmbedField("affiliations") ? (
+          <PublicSpeakerMetadata speaker={speaker} />
+        ) : null}
+        {model.showSpeakerDetails && model.showEmbedField("sessions") ? (
+          <span className="speaker-gallery-card-sessions">
+            {speaker.sessionIds.length} session
+            {speaker.sessionIds.length === 1 ? "" : "s"}
+          </span>
+        ) : null}
+      </span>
+    </>
+  );
+  return model.showSpeakerDetails ? (
     <button
       type="button"
       className="speaker-gallery-card"
@@ -671,22 +744,15 @@ function SpeakerGalleryCard({
         model.openSpeakerProfile(speaker.id, event.currentTarget)
       }
     >
-      {model.showEmbedField("images") ? (
-        <PublicSpeakerPhoto speaker={speaker} />
-      ) : null}
-      <span className="speaker-gallery-card-copy">
-        <strong>{speaker.displayName}</strong>
-        {model.showEmbedField("affiliations") ? (
-          <PublicSpeakerMetadata speaker={speaker} />
-        ) : null}
-        {model.showEmbedField("sessions") ? (
-          <span className="speaker-gallery-card-sessions">
-            {speaker.sessionIds.length} session
-            {speaker.sessionIds.length === 1 ? "" : "s"}
-          </span>
-        ) : null}
-      </span>
+      {content}
     </button>
+  ) : (
+    <article
+      className="speaker-gallery-card is-static"
+      id={`speaker-gallery-card-${speaker.id}`}
+    >
+      {content}
+    </article>
   );
 }
 
@@ -814,7 +880,11 @@ export function PublicSpeakerGallerySurface({
       <SurfaceHeading
         title="Speaker Gallery"
         id="speaker-gallery-title"
-        description="Browse the published speaker community by name. Open a card for biography and session details."
+        description={
+          model.showSpeakerDetails
+            ? "Browse the published speaker community by name. Open a card for biography and session details."
+            : "Browse the published speaker community by name."
+        }
         count={`${model.gallerySpeakers.length} speakers`}
       >
         {!model.embedded && model.showControl("search") ? (

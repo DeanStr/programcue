@@ -51,7 +51,7 @@
     "accent",
     "controls",
     "density",
-    "speakers",
+    "directory",
     "fields",
   ].forEach(function copyFilter(name) {
     var value = script.dataset[name];

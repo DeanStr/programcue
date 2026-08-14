@@ -67,6 +67,7 @@ function model(overrides: Partial<PublicProgrammeModel> = {}) {
     toggleSpeakerBiography: vi.fn(),
     showControl: () => true,
     showEmbedField: () => true,
+    showSpeakerDetails: true,
     ...overrides,
   } as unknown as PublicProgrammeModel;
 }
@@ -95,6 +96,34 @@ describe("public programme speaker surfaces", () => {
     expect(markup).toContain("Close session details");
     expect(markup).toContain('aria-controls="public-session-detail"');
     expect(markup).toContain('aria-expanded="true"');
+  });
+
+  it("keeps plain speaker names in accessible text when details are hidden", () => {
+    const agendaProgramme = {
+      ...programme,
+      sessions: [session],
+      speakers: [speaker],
+    } as PublishedProgramme;
+    const markup = renderToStaticMarkup(
+      <PublicAgendaSurface
+        model={model({
+          programme: agendaProgramme,
+          day: "All days",
+          days: ["Tuesday, May 20"],
+          visible: [session],
+          selected: session,
+          setSelectedId: vi.fn(),
+          speakerById: new Map([[speaker.id, speaker]]),
+          showSpeakerDetails: false,
+        })}
+      />,
+    );
+
+    expect(markup).toContain(
+      '<span class="sr-only">Speakers: </span>Priya Shah',
+    );
+    expect(markup).not.toContain('aria-label="Speakers"');
+    expect(markup).not.toContain('class="public-session-speakers"');
   });
 
   it("keeps contextual speaker avatars decorative", () => {
@@ -175,6 +204,23 @@ describe("public programme speaker surfaces", () => {
     expect(markup).toContain("EventLab");
     expect(markup).toContain("/images/demo-speakers/priya-shah.webp");
     expect(markup).toContain('loading="lazy"');
+  });
+
+  it("renders speaker surfaces as non-expanding cards when details are hidden", () => {
+    const markup = renderToStaticMarkup(
+      <PublicSpeakerGallerySurface
+        model={model({ showSpeakerDetails: false })}
+      />,
+    );
+
+    expect(markup).toContain("Priya Shah");
+    expect(markup).toContain('class="speaker-gallery-card is-static"');
+    expect(markup).not.toContain("Open speaker details");
+    expect(markup).not.toContain('type="button"');
+    expect(markup).not.toContain('role="dialog"');
+    expect(markup).not.toContain("EventLab");
+    expect(markup).not.toContain("1 session");
+    expect(markup).not.toContain("<img");
   });
 
   it("renders gallery detail biography and every public session field", () => {
