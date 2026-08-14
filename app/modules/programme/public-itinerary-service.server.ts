@@ -155,6 +155,8 @@ export class PublicItineraryService {
          AND current_version.event_id = entry.event_id
          AND current_version.status = 'published'
        WHERE itinerary.event_id = ? AND itinerary.share_token_hash = ?
+         AND (itinerary.person_id IS NOT NULL
+              OR itinerary.visitor_key_hash LIKE 'v2.%')
          AND (itinerary.expires_at IS NULL OR itinerary.expires_at > unixepoch())
          AND entry.schedule_version_id = ?
          AND session.status = 'published' AND content.visibility = 'public'
@@ -172,7 +174,7 @@ export class PublicItineraryService {
 
   private itineraryExpiresAt(programme: PublishedProgramme) {
     // The fixed demo programme is durable reference data rather than a live event.
-    // The canonical production evaluation fixture is also fixed in 2025, so
+    // The canonical production evaluation fixture is also fixed reference data, so
     // keep it usable during evaluation without weakening expiry for real events.
     const now = Math.floor(Date.now() / 1_000);
     const evaluationFixture =

@@ -29,7 +29,7 @@ test.beforeEach(async ({ page }) => {
   ]);
   // Opening the public route establishes the deterministic demo publication that
   // both admin views read; production mode never executes this seed path.
-  await waitForInterface(page, "/public/programme/future-of-events-2025");
+  await waitForInterface(page, "/public/programme/future-of-events-2027");
 });
 
 test("schedule and programme render the event calendar date and timezone", async ({
@@ -39,13 +39,13 @@ test("schedule and programme render the event calendar date and timezone", async
     "Thursday, May 20–Saturday, May 22",
   );
   await expect(page.locator(".hero")).not.toContainText("Wednesday, May 19");
-  await waitForInterface(page, "/public/programme/future-of-events-2025");
+  await waitForInterface(page, "/public/programme/future-of-events-2027");
   await expect(page.locator(".public-top .brand")).toHaveAttribute(
     "href",
-    "/public/programme/future-of-events-2025",
+    "/public/programme/future-of-events-2027",
   );
   const calendar = await page.request.get(
-    "/api/v1/public/events/future-of-events-2025/calendar.ics",
+    "/api/v1/public/events/future-of-events-2027/calendar.ics",
   );
   expect(calendar.ok()).toBeTruthy();
   const unfoldedCalendar = (await calendar.text()).replace(/\r?\n[ \t]/g, "");
@@ -56,7 +56,7 @@ test("schedule and programme render the event calendar date and timezone", async
   expect(sessionUrls).toHaveLength(5);
   for (const sessionUrl of sessionUrls) {
     expect(sessionUrl).toMatch(
-      /^https?:\/\/[^/]+\/public\/programme\/future-of-events-2025#session-[a-z0-9-]+$/,
+      /^https?:\/\/[^/]+\/public\/programme\/future-of-events-2027#session-[a-z0-9-]+$/,
     );
   }
   const linkedSession = new URL(sessionUrls.at(-1)!);
@@ -127,7 +127,7 @@ test("schedule and programme render the event calendar date and timezone", async
   await waitForInterface(page, "/admin/programme");
   await expect(
     page.getByRole("link", { name: "Public programme" }),
-  ).toHaveAttribute("href", "/public/programme/future-of-events-2025");
+  ).toHaveAttribute("href", "/public/programme/future-of-events-2027");
   await expect(
     page.getByText("Event timezone · America/Toronto"),
   ).toBeVisible();
@@ -135,7 +135,7 @@ test("schedule and programme render the event calendar date and timezone", async
     page.getByText(/May 20, 2027.*9:00 AM.*(?:EDT|GMT-4)/).first(),
   ).toBeVisible();
   await expect(page.getByLabel("Iframe code")).toHaveValue(
-    new RegExp(`<iframe src="${e2eOrigin}/embed/future-of-events-2025`),
+    new RegExp(`<iframe src="${e2eOrigin}/embed/future-of-events-2027`),
   );
   await expect(page.getByLabel("Iframe code")).not.toHaveValue(/accent=/);
   await expect(page.getByRole("link", { name: "Static JSON" })).toHaveAttribute(
@@ -155,7 +155,7 @@ test("schedule and programme render the event calendar date and timezone", async
 
 test("focuses the exact named schedule record", async ({ page }) => {
   const response = await page.request.get(
-    "/api/v1/public/events/future-of-events-2025/programme",
+    "/api/v1/public/events/future-of-events-2027/programme",
   );
   expect(response.ok()).toBeTruthy();
   const programme = (await response.json()) as {
@@ -218,7 +218,7 @@ test.describe("mutable schedule authoring", () => {
     await expect(preview.locator("pre")).toContainText(`SUMMARY:${title}`);
 
     const publicProgramme = await page.request.get(
-      "/api/v1/public/events/future-of-events-2025/programme",
+      "/api/v1/public/events/future-of-events-2027/programme",
     );
     expect(publicProgramme.ok()).toBeTruthy();
     expect(JSON.stringify(await publicProgramme.json())).not.toContain(title);
@@ -492,7 +492,7 @@ test.describe("mutable schedule authoring", () => {
     }
 
     const publicProgramme = await page.request.get(
-      "/api/v1/public/events/future-of-events-2025/programme",
+      "/api/v1/public/events/future-of-events-2027/programme",
     );
     expect(publicProgramme.ok()).toBeTruthy();
     const publicProgrammeBody = JSON.stringify(await publicProgramme.json());

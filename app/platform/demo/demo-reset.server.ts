@@ -327,7 +327,7 @@ async function resetMutableIdentity(env: CloudflareEnvironment) {
     ).bind(DEMO_ORGANISATION_ID),
     env.DB.prepare(
       `UPDATE events
-          SET name = 'Future of Events 2027', slug = 'future-of-events-2025',
+          SET name = 'Future of Events 2027', slug = 'future-of-events-2027',
               timezone = 'America/Toronto',
               starts_at = unixepoch('2027-05-20T00:00:00Z'),
               ends_at = unixepoch('2027-05-22T23:59:59Z'),

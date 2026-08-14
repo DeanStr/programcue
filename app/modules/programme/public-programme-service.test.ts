@@ -27,11 +27,24 @@ describe("published programme and itinerary", () => {
     vi.unstubAllGlobals();
   });
 
+  it("does not retain the pre-release 2025 public-slug alias", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const service = new PublicProgrammeService(testEnv);
+
+    await expect(
+      service.getPublished("future-of-events-2025"),
+    ).resolves.toBeNull();
+    await expect(
+      service.getPublished("future-of-events-2027"),
+    ).resolves.not.toBeNull();
+  });
+
   it("serves published public content while editorial review remains advisory", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
     const service = new PublicProgrammeService(testEnv);
-    const baseline = await service.getPublished("future-of-events-2025");
+    const baseline = await service.getPublished("future-of-events-2027");
     expect(
       baseline?.sessions.some((session) => session.id === "demo-session-1"),
     ).toBe(true);
@@ -43,12 +56,12 @@ describe("published programme and itinerary", () => {
           AND event_id = 'evt-foe-2025' AND session_id = 'demo-session-1'`,
     ).run();
     try {
-      const programme = await service.getPublished("future-of-events-2025");
+      const programme = await service.getPublished("future-of-events-2027");
       expect(
         programme?.sessions.some((session) => session.id === "demo-session-1"),
       ).toBe(true);
       await expect(
-        service.getPublishedLandingSummary("future-of-events-2025", 8),
+        service.getPublishedLandingSummary("future-of-events-2027", 8),
       ).resolves.not.toBeNull();
     } finally {
       await testEnv.DB.prepare(
@@ -72,7 +85,7 @@ describe("published programme and itinerary", () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     const selected = programme!.sessions[0]!;
     const omitted = programme!.sessions[1]!;
     const { token } = await service.updateItinerary(
@@ -90,19 +103,19 @@ describe("published programme and itinerary", () => {
     ).split(";")[0]!;
     const response = await publicCalendarLoader({
       request: new Request(
-        "https://programcue.test/api/v1/public/events/future-of-events-2025/calendar.ics?itinerary=mine",
+        "https://programcue.test/api/v1/public/events/future-of-events-2027/calendar.ics?itinerary=mine",
         {
           headers: {
             cookie,
           },
         },
       ),
-      params: { slug: "future-of-events-2025" },
+      params: { slug: "future-of-events-2027" },
       context,
     } as never);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-disposition")).toContain(
-      "future-of-events-2025-itinerary.ics",
+      "future-of-events-2027-itinerary.ics",
     );
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     const calendar = await response.text();
@@ -196,14 +209,14 @@ describe("published programme and itinerary", () => {
       await itineraryCookie(
         testEnv,
         visitorToken,
-        "https://app.programcue.com/public/programme/future-of-events-2025",
+        "https://app.programcue.com/public/programme/future-of-events-2027",
       )
     ).split(";", 1)[0]!;
 
     await expect(
       publicItineraryIdentity(
         new Request(
-          "https://app.programcue.com/public/programme/future-of-events-2025",
+          "https://app.programcue.com/public/programme/future-of-events-2027",
           {
             headers: {
               cookie: `${evaluationCookie}; ${betterAuthCookie}; ${visitorCookie}`,
@@ -221,7 +234,7 @@ describe("published programme and itinerary", () => {
     await expect(
       publicItineraryIdentity(
         new Request(
-          "https://app.programcue.com/public/programme/future-of-events-2025",
+          "https://app.programcue.com/public/programme/future-of-events-2027",
           { headers: { cookie: betterAuthCookie } },
         ),
         testEnv,
@@ -241,9 +254,9 @@ describe("published programme and itinerary", () => {
     });
     const rejected = await publicProgrammePageLoader({
       request: new Request(
-        "https://programcue.test/public/programme/future-of-events-2025?share=",
+        "https://programcue.test/public/programme/future-of-events-2027?share=",
       ),
-      params: { slug: "future-of-events-2025" },
+      params: { slug: "future-of-events-2027" },
       context,
     } as never).catch((error: unknown) => error);
 
@@ -291,10 +304,10 @@ describe("published programme and itinerary", () => {
     });
     const response = await publicProgrammeLoader({
       request: new Request(
-        "https://programcue.test/api/v1/public/events/future-of-events-2025/programme",
+        "https://programcue.test/api/v1/public/events/future-of-events-2027/programme",
         { headers: { "x-correlation-id": "caller-specific-value" } },
       ),
-      params: { slug: "future-of-events-2025" },
+      params: { slug: "future-of-events-2027" },
       context,
     } as never);
     expect(response.headers.get("cache-control")).toContain("public");
@@ -316,15 +329,15 @@ describe("published programme and itinerary", () => {
     const args = (format: string) =>
       ({
         request: new Request(
-          `https://programcue.test/api/v1/public/events/future-of-events-2025/programme?format=${format}`,
+          `https://programcue.test/api/v1/public/events/future-of-events-2027/programme?format=${format}`,
         ),
-        params: { slug: "future-of-events-2025" },
+        params: { slug: "future-of-events-2027" },
         context,
       }) as never;
 
     const json = await publicProgrammeLoader(args("json"));
     expect(json.headers.get("content-disposition")).toContain(
-      "future-of-events-2025-programme.json",
+      "future-of-events-2027-programme.json",
     );
     await expect(json.json()).resolves.toMatchObject({
       sessions: expect.any(Array),
@@ -335,7 +348,7 @@ describe("published programme and itinerary", () => {
     const html = await publicProgrammeLoader(args("html"));
     expect(html.headers.get("content-type")).toContain("text/html");
     expect(html.headers.get("content-disposition")).toContain(
-      "future-of-events-2025-programme.html",
+      "future-of-events-2027-programme.html",
     );
     expect(await html.text()).toContain("<!doctype html>");
 
@@ -350,7 +363,7 @@ describe("published programme and itinerary", () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     expect(programme?.version.id).toBe("demo-schedule-published");
     expect(programme?.event).toMatchObject({
       startDate: "2027-05-20",
@@ -467,7 +480,7 @@ describe("published programme and itinerary", () => {
       ).bind(publicSessionId),
     ]);
     const orderedSession = (await service.getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     ))!.sessions.find((session) => session.id === publicSessionId)!;
     expect(orderedSession.speakerIds.slice(-2)).toEqual([
       "programme-speaker-early",
@@ -498,7 +511,7 @@ describe("published programme and itinerary", () => {
       ).bind(publicSessionId),
     ]);
     const withoutPrivateProfile = await service.getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     );
     const publicSession = withoutPrivateProfile!.sessions.find(
       (session) => session.id === publicSessionId,
@@ -513,7 +526,7 @@ describe("published programme and itinerary", () => {
       `INSERT INTO sessions (id, event_id, title, slug, format, duration_minutes, status, visibility, revision, created_at, updated_at) VALUES ('private-unpublished-session', 'evt-foe-2025', 'Private draft', 'private-draft', 'other', 30, 'unscheduled', 'private', 1, unixepoch(), unixepoch())`,
     ).run();
     expect(
-      (await service.getPublished("future-of-events-2025"))?.sessions.some(
+      (await service.getPublished("future-of-events-2027"))?.sessions.some(
         (session) => session.id === "private-unpublished-session",
       ),
     ).toBe(false);
@@ -526,7 +539,7 @@ describe("published programme and itinerary", () => {
       DEMO_MODE: "false",
       EVALUATION_MODE: "false",
     } as unknown as CloudflareEnvironment).getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     );
     expect(
       production?.speakers.find(
@@ -564,7 +577,7 @@ describe("published programme and itinerary", () => {
       ),
     ]);
     const evaluation = await evaluationService.getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     );
     expect(
       evaluation?.speakers.find(
@@ -604,7 +617,7 @@ describe("published programme and itinerary", () => {
     ]);
 
     const withPendingUpload = await evaluationService.getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     );
     expect(
       withPendingUpload?.speakers.find(
@@ -667,7 +680,7 @@ describe("published programme and itinerary", () => {
         ),
       ]);
 
-      const programme = await service.getPublished("future-of-events-2025");
+      const programme = await service.getPublished("future-of-events-2027");
       expect(programme).not.toBeNull();
       expect(programme!.speakers).toEqual(
         expect.arrayContaining(
@@ -693,10 +706,10 @@ describe("published programme and itinerary", () => {
 
     try {
       await expect(
-        service.getPublished("future-of-events-2025"),
+        service.getPublished("future-of-events-2027"),
       ).resolves.toBeNull();
       await expect(
-        service.getPublishedLandingSummary("future-of-events-2025", 8),
+        service.getPublishedLandingSummary("future-of-events-2027", 8),
       ).resolves.toBeNull();
     } finally {
       await env.DB.prepare(
@@ -714,7 +727,7 @@ describe("published programme and itinerary", () => {
       "UPDATE sessions SET visibility = 'private' WHERE id = 'demo-session-1'",
     ).run();
     try {
-      const programme = await service.getPublished("future-of-events-2025");
+      const programme = await service.getPublished("future-of-events-2027");
       expect(
         programme?.sessions.some((session) => session.id === "demo-session-1"),
       ).toBe(false);
@@ -745,7 +758,7 @@ describe("published programme and itinerary", () => {
     ).run();
     try {
       await expect(
-        service.getPublished("future-of-events-2025"),
+        service.getPublished("future-of-events-2027"),
       ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
     } finally {
       await env.DB.prepare(
@@ -763,13 +776,13 @@ describe("published programme and itinerary", () => {
       env as unknown as CloudflareEnvironment,
     );
     const withoutSpeakers = await service.getPublishedLandingSummary(
-      "future-of-events-2025",
+      "future-of-events-2027",
       0,
     );
     expect(withoutSpeakers).toEqual({ speakers: [] });
 
     const preview = await service.getPublishedLandingSummary(
-      "future-of-events-2025",
+      "future-of-events-2027",
       1,
     );
     expect(preview?.speakers).toHaveLength(1);
@@ -787,7 +800,7 @@ describe("published programme and itinerary", () => {
     expect(preview?.speakers[0]).not.toHaveProperty("biography");
     expect(preview?.speakers[0]).not.toHaveProperty("sessionIds");
     await expect(
-      service.getPublishedLandingSummary("future-of-events-2025", 9),
+      service.getPublishedLandingSummary("future-of-events-2027", 9),
     ).rejects.toThrow(RangeError);
   });
 
@@ -795,7 +808,7 @@ describe("published programme and itinerary", () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
-    await service.getPublished("future-of-events-2025");
+    await service.getPublished("future-of-events-2027");
     const suffix = crypto.randomUUID();
     const eventId = `airtable-public-${suffix}`;
     const versionId = `airtable-public-version-${suffix}`;
@@ -852,10 +865,10 @@ describe("published programme and itinerary", () => {
 
     try {
       await expect(
-        service.getPublished("future-of-events-2025"),
+        service.getPublished("future-of-events-2027"),
       ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
       await expect(
-        service.getPublishedLandingSummary("future-of-events-2025", 8),
+        service.getPublishedLandingSummary("future-of-events-2027", 8),
       ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
     } finally {
       await env.DB.prepare(
@@ -878,7 +891,7 @@ describe("published programme and itinerary", () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
-    const before = await service.getPublished("future-of-events-2025");
+    const before = await service.getPublished("future-of-events-2027");
     expect(before?.event.id).toBe("evt-foe-2025");
 
     await env.DB.prepare(
@@ -892,13 +905,13 @@ describe("published programme and itinerary", () => {
         `
       INSERT INTO events (id, organisation_id, name, slug, timezone, starts_at, ends_at, file_policy_json)
       VALUES ('programme-collision-event', 'programme-collision-org', 'Collision Event',
-              'future-of-events-2025', 'UTC', 100, 200,
+              'future-of-events-2027', 'UTC', 100, 200,
               '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')
     `,
       ).run(),
     ).rejects.toThrow(/UNIQUE constraint failed: events\.slug/);
 
-    const after = await service.getPublished("future-of-events-2025");
+    const after = await service.getPublished("future-of-events-2027");
     expect(after?.event.id).toBe(before?.event.id);
     expect(after?.version.id).toBe(before?.version.id);
   });

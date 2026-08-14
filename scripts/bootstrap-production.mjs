@@ -201,7 +201,7 @@ async function main() {
   );
   const eventName = required(values, "event-name");
   const eventSlug = validateSlug(required(values, "event-slug"), "Event slug");
-  if (eventSlug === "future-of-events-2025") {
+  if (eventSlug === "future-of-events-2027") {
     fail("The production event slug must not reuse the canonical demo slug.");
   }
   const timezone = required(values, "timezone");

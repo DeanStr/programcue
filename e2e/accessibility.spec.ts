@@ -274,7 +274,7 @@ test("representative shells remain usable at a 200 percent equivalent layout vie
   for (const path of [
     "/admin/submissions",
     "/apply/form",
-    "/public/programme/future-of-events-2025",
+    "/public/programme/future-of-events-2027",
     "/participant/dashboard",
     "/participant/tasks",
     "/admin/communications/compose",
@@ -317,7 +317,7 @@ test("representative surfaces have one primary main landmark and unique ids", as
     "/admin/event",
     "/admin/review",
     "/apply/form",
-    "/public/programme/future-of-events-2025",
+    "/public/programme/future-of-events-2027",
     "/participant/resources",
     "/participant/tasks",
     "/admin/communications/compose",

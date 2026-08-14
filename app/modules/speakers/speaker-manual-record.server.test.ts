@@ -146,9 +146,16 @@ describe("manual speaker roster records", () => {
     });
     await expect(
       productionEnv.DB.prepare(
-        `SELECT person.job_title AS jobTitle,
-                person.organisation_name AS organisationName,
-                person.biography,
+        `SELECT person.display_name AS canonicalName,
+                person.job_title AS canonicalJobTitle,
+                person.organisation_name AS canonicalOrganisationName,
+                person.biography AS canonicalBiography,
+                profile.display_name AS name,
+                profile.job_title AS jobTitle,
+                profile.organisation_name AS organisationName,
+                profile.biography,
+                profile.source AS profileSource,
+                contact.source AS contactSource,
                 membership.invited_at AS invitedAt,
                 membership.invitation_expires_at AS invitationExpiresAt,
                 workflow.status,
@@ -163,6 +170,12 @@ describe("manual speaker roster records", () => {
                     AND operation.correlation_id = audit.correlation_id
                 ) AS communicationCount
            FROM people person
+           JOIN organisation_contacts contact
+             ON contact.organisation_id = ? AND contact.person_id = person.id
+            AND contact.status = 'active'
+           JOIN organisation_contact_profiles profile
+             ON profile.organisation_id = contact.organisation_id
+            AND profile.person_id = contact.person_id
            JOIN memberships membership
              ON membership.person_id = person.id AND membership.event_id = ?
             AND membership.role = 'speaker'
@@ -175,17 +188,155 @@ describe("manual speaker roster records", () => {
             AND audit.action = 'speaker.admin.added'
           WHERE person.email = ? COLLATE NOCASE`,
       )
-        .bind(admin.eventId, email)
+        .bind(admin.organisationId, admin.eventId, email)
         .first(),
     ).resolves.toEqual({
+      canonicalName: email,
+      canonicalJobTitle: null,
+      canonicalOrganisationName: null,
+      canonicalBiography: null,
+      name: "Production Prospect",
       jobTitle: "Director",
       organisationName: "Signal Works",
       biography: "Runs event operations.",
+      profileSource: "manual",
+      contactSource: "manual",
       invitedAt: null,
       invitationExpiresAt: null,
       status: "prospect",
       operationCount: 0,
       communicationCount: 0,
+    });
+  });
+
+  it("stores organiser enrichment beside an existing participant-owned profile", async () => {
+    const suffix = crypto.randomUUID();
+    const personId = `existing-profile-${suffix}`;
+    const email = `existing-profile-${suffix}@example.com`;
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, biography, organisation_name, job_title,
+           email_verified, profile_status, created_at, updated_at
+         ) VALUES (?, ?, 'Participant Name', 'Participant biography',
+                   'Participant Company', 'Participant Title', 1, 'published',
+                   unixepoch(), unixepoch())`,
+      ).bind(personId, email),
+      testEnv.DB.prepare(
+        `INSERT INTO organisation_contacts (
+           organisation_id, person_id, source, status, created_by_person_id,
+           created_at, updated_at
+         ) VALUES (?, ?, 'event', 'active', ?, unixepoch(), unixepoch())`,
+      ).bind(admin.organisationId, personId, admin.personId),
+    ]);
+
+    await expect(
+      new SpeakerService(testEnv).addManualSpeakerRecord(admin, {
+        idempotencyKey: `existing-profile:${suffix}`,
+        name: "Organiser Name",
+        email,
+        jobTitle: "Organiser Title",
+        organisationName: "Organiser Company",
+        biography: "Organiser biography",
+      }),
+    ).resolves.toMatchObject({
+      personId,
+      createdIdentity: false,
+      createdRosterAssociation: true,
+    });
+
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT person.display_name AS canonicalName,
+                person.biography AS canonicalBiography,
+                person.organisation_name AS canonicalOrganisationName,
+                person.job_title AS canonicalJobTitle,
+                profile.display_name AS scopedName,
+                profile.biography AS scopedBiography,
+                profile.organisation_name AS scopedOrganisationName,
+                profile.job_title AS scopedJobTitle,
+                profile.source
+           FROM people person
+           JOIN organisation_contact_profiles profile
+             ON profile.organisation_id = ? AND profile.person_id = person.id
+          WHERE person.id = ?`,
+      )
+        .bind(admin.organisationId, personId)
+        .first(),
+    ).resolves.toEqual({
+      canonicalName: "Participant Name",
+      canonicalBiography: "Participant biography",
+      canonicalOrganisationName: "Participant Company",
+      canonicalJobTitle: "Participant Title",
+      scopedName: "Organiser Name",
+      scopedBiography: "Organiser biography",
+      scopedOrganisationName: "Organiser Company",
+      scopedJobTitle: "Organiser Title",
+      source: "manual",
+    });
+  });
+
+  it("does not erase existing scoped enrichment omitted from manual roster entry", async () => {
+    const suffix = crypto.randomUUID();
+    const personId = `existing-enrichment-${suffix}`;
+    const email = `existing-enrichment-${suffix}@example.com`;
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, profile_status,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, 0, 'draft', unixepoch(), unixepoch())`,
+      ).bind(personId, email, email),
+      testEnv.DB.prepare(
+        `INSERT INTO organisation_contacts (
+           organisation_id, person_id, source, status, created_by_person_id,
+           created_at, updated_at
+         ) VALUES (?, ?, 'import', 'active', ?, unixepoch(), unixepoch())`,
+      ).bind(admin.organisationId, personId, admin.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO organisation_contact_profiles (
+           organisation_id, person_id, display_name, biography,
+           organisation_name, job_title, source, created_by_person_id,
+           updated_by_person_id, created_at, updated_at
+         ) VALUES (?, ?, 'Existing name', 'Existing biography',
+                   'Existing company', 'Existing title', 'import', ?, ?,
+                   unixepoch(), unixepoch())`,
+      ).bind(admin.organisationId, personId, admin.personId, admin.personId),
+    ]);
+
+    await expect(
+      new SpeakerService(testEnv).addManualSpeakerRecord(admin, {
+        idempotencyKey: `existing-enrichment:${suffix}`,
+        name: "Roster name",
+        email,
+        jobTitle: "",
+        organisationName: "",
+        biography: "",
+      }),
+    ).resolves.toMatchObject({
+      personId,
+      createdIdentity: false,
+      createdRosterAssociation: true,
+    });
+
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT display_name AS name, biography,
+                organisation_name AS organisationName,
+                job_title AS jobTitle, source
+           FROM organisation_contact_profiles
+          WHERE organisation_id = ? AND person_id = ?`,
+      )
+        .bind(admin.organisationId, personId)
+        .first(),
+    ).resolves.toEqual({
+      name: "Roster name",
+      biography: "Existing biography",
+      organisationName: "Existing company",
+      jobTitle: "Existing title",
+      source: "manual",
     });
   });
 
@@ -454,6 +605,49 @@ describe("manual speaker roster records", () => {
         )
         .first(),
     ).resolves.toEqual({ memberships: 0, workflows: 0, audits: 0 });
+  });
+
+  it("refuses to reactivate a merged organisation contact", async () => {
+    const suffix = crypto.randomUUID();
+    const personId = `merged-record-${suffix}`;
+    const email = `merged-record-${suffix}@example.com`;
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, profile_status,
+           created_at, updated_at
+         ) VALUES (?, ?, 'Merged record', 0, 'draft', unixepoch(), unixepoch())`,
+      ).bind(personId, email),
+      testEnv.DB.prepare(
+        `INSERT INTO organisation_contacts (
+           organisation_id, person_id, source, status, merged_into_person_id,
+           created_by_person_id, created_at, updated_at
+         ) VALUES (?, ?, 'manual', 'merged', ?, ?, unixepoch(), unixepoch())`,
+      ).bind(admin.organisationId, personId, admin.personId, admin.personId),
+    ]);
+
+    await expect(
+      new SpeakerService(testEnv).addManualSpeakerRecord(admin, {
+        idempotencyKey: `merged-record:${suffix}`,
+        name: "Merged record",
+        email,
+        jobTitle: "",
+        organisationName: "",
+        biography: "",
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM memberships
+             WHERE event_id = ? AND person_id = ?) AS memberships,
+           (SELECT COUNT(*) FROM event_speaker_workflows
+             WHERE event_id = ? AND person_id = ?) AS workflows`,
+      )
+        .bind(admin.eventId, personId, admin.eventId, personId)
+        .first(),
+    ).resolves.toEqual({ memberships: 0, workflows: 0 });
   });
 
   it("converges on a concurrent active roster association without rewriting it", async () => {

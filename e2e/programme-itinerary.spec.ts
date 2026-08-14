@@ -21,14 +21,14 @@ test.beforeEach(async ({ page }) => {
   ]);
   // Opening the public route establishes the deterministic demo publication that
   // both admin views read; production mode never executes this seed path.
-  await waitForInterface(page, "/public/programme/future-of-events-2025");
+  await waitForInterface(page, "/public/programme/future-of-events-2027");
 });
 
 test("keeps personal itinerary state private and disables it in embeds", async ({
   page,
 }) => {
   const publicResponse = await page.goto(
-    "/public/programme/future-of-events-2025",
+    "/public/programme/future-of-events-2027",
   );
   expect(publicResponse?.headers()["cache-control"]).toBe("private, no-store");
   await page.locator("body[data-hydrated='true']").waitFor();
@@ -36,7 +36,7 @@ test("keeps personal itinerary state private and disables it in embeds", async (
     page.getByRole("heading", { name: "My itinerary" }),
   ).toBeVisible();
 
-  const embedResponse = await page.goto("/embed/future-of-events-2025");
+  const embedResponse = await page.goto("/embed/future-of-events-2027");
   expect(embedResponse?.headers()["cache-control"]).toContain("public");
   await page.locator("body[data-hydrated='true']").waitFor();
   await expect(page.getByRole("heading", { name: "My itinerary" })).toHaveCount(
@@ -46,7 +46,7 @@ test("keeps personal itinerary state private and disables it in embeds", async (
     page.getByRole("button", { name: /(?:add to|remove from) itinerary/i }),
   ).toHaveCount(0);
 
-  const mutation = await page.request.post("/embed/future-of-events-2025", {
+  const mutation = await page.request.post("/embed/future-of-events-2027", {
     form: { intent: "add", sessionId: "not-used" },
     headers: { origin: e2eOrigin },
   });
@@ -57,7 +57,7 @@ test("keeps personal itinerary state private and disables it in embeds", async (
 test("publishes speaker profiles and a read-only itinerary share link", async ({
   page,
 }) => {
-  await waitForInterface(page, "/public/programme/future-of-events-2025");
+  await waitForInterface(page, "/public/programme/future-of-events-2027");
   await page.getByRole("link", { name: "Speakers" }).click();
   await expect(
     page.getByRole("heading", { name: "Speakers", exact: true }),
@@ -88,7 +88,7 @@ test("publishes speaker profiles and a read-only itinerary share link", async ({
   const calendarResponse = await page.request.get(calendarHref!);
   expect(calendarResponse.ok()).toBeTruthy();
   expect(calendarResponse.headers()["content-disposition"]).toContain(
-    "future-of-events-2025-itinerary.ics",
+    "future-of-events-2027-itinerary.ics",
   );
   expect((await calendarResponse.text()).match(/^UID:/gmu)).toHaveLength(1);
   await page

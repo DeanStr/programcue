@@ -480,7 +480,7 @@ describe("blank event creation", () => {
         {
           creationIntentId: crypto.randomUUID(),
           name: "Duplicate event",
-          slug: "future-of-events-2025",
+          slug: "future-of-events-2027",
           timezone: "UTC",
           startDate: "2027-01-01",
           endDate: "2027-01-02",

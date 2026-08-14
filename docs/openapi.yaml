@@ -2,7 +2,11 @@ openapi: 3.1.0
 info:
   title: Program Cue API
   version: 0.4.0
-  description: Public programme feeds, participant self-service, scoped integration APIs and authenticated event invalidations for Program Cue.
+  description: >-
+    Public programme feeds, participant self-service, scoped integration APIs
+    and authenticated event invalidations for Program Cue. Worker-level 503
+    responses, including maintenance mode, retain the structured Error envelope
+    and a request correlation ID for every versioned endpoint.
 servers:
   - url: /
     description: Current Program Cue deployment

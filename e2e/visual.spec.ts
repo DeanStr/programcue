@@ -27,7 +27,7 @@ const SURFACES: readonly Surface[] = [
   { name: "communications", path: "/admin/communications" },
   {
     name: "public-programme",
-    path: "/public/programme/future-of-events-2025",
+    path: "/public/programme/future-of-events-2027",
   },
   { name: "public-application", path: "/apply/form" },
   {

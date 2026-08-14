@@ -31,6 +31,8 @@ export default defineProject({
           BETTER_AUTH_URL: "http://localhost",
           BETTER_AUTH_SECRET:
             "test-only-secret-with-at-least-thirty-two-characters",
+          ANONYMOUS_ITINERARY_SECRET:
+            "test-only-itinerary-secret-with-at-least-thirty-two-characters",
           AUTH_EMAIL_FROM: "Program Cue Test <test@example.com>",
           EMAIL_PROVIDER: "resend",
           RESEND_API_KEY: "test-resend-key",

@@ -321,7 +321,7 @@ describe("content management", () => {
 
     const programme = await new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
-    ).getPublished("future-of-events-2025");
+    ).getPublished("future-of-events-2027");
     expect(programme?.sessions.map((session) => session.id)).toEqual([
       approvedSession.id,
       secondSession.id,

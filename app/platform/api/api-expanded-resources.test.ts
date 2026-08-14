@@ -80,7 +80,7 @@ describe("expanded public API contract", () => {
   it("returns only published records with RFC 3339 timestamps and stable pagination", async () => {
     await ensureDemoProgramme(testEnv);
     const programme = await new PublicProgrammeService(testEnv).getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     );
     expect(programme).not.toBeNull();
     const first = await publicSessionPage(programme!, {
@@ -176,14 +176,14 @@ describe("expanded public API contract", () => {
     for (const route of routes) {
       const response = await route.loader({
         request: new Request(
-          `https://programcue.test/api/v1/public/events/future-of-events-2025${route.suffix}`,
+          `https://programcue.test/api/v1/public/events/future-of-events-2027${route.suffix}`,
           {
             headers: {
               "x-correlation-id": "74a367c9-21d1-4e2b-8da8-5b955c395fa8",
             },
           },
         ),
-        params: { slug: "future-of-events-2025" },
+        params: { slug: "future-of-events-2027" },
         context: routeContext(),
       } as never);
       expect(response.status).toBe(200);
@@ -201,10 +201,10 @@ describe("expanded public API contract", () => {
       );
       const revalidated = await route.loader({
         request: new Request(
-          `https://programcue.test/api/v1/public/events/future-of-events-2025${route.suffix}`,
+          `https://programcue.test/api/v1/public/events/future-of-events-2027${route.suffix}`,
           { headers: { "if-none-match": etag! } },
         ),
-        params: { slug: "future-of-events-2025" },
+        params: { slug: "future-of-events-2027" },
         context: routeContext(),
       } as never);
       expect(revalidated.status).toBe(304);
@@ -215,10 +215,10 @@ describe("expanded public API contract", () => {
   it("changes the public validator when live published speaker content changes", async () => {
     await ensureDemoProgramme(testEnv);
     const url =
-      "https://programcue.test/api/v1/public/events/future-of-events-2025/speakers?limit=100";
+      "https://programcue.test/api/v1/public/events/future-of-events-2027/speakers?limit=100";
     const initial = await publicSpeakersLoader({
       request: new Request(url),
-      params: { slug: "future-of-events-2025" },
+      params: { slug: "future-of-events-2027" },
       context: routeContext(),
     } as never);
     const initialBody = (await initial.json()) as {
@@ -246,7 +246,7 @@ describe("expanded public API contract", () => {
         request: new Request(url, {
           headers: { "if-none-match": initial.headers.get("etag")! },
         }),
-        params: { slug: "future-of-events-2025" },
+        params: { slug: "future-of-events-2027" },
         context: routeContext(),
       } as never);
       expect(revalidated.status).toBe(200);
@@ -276,14 +276,14 @@ describe("expanded public API contract", () => {
   it("keeps the D1 validator stable when only wall-clock time advances", async () => {
     await ensureDemoProgramme(testEnv);
     const url =
-      "https://programcue.test/api/v1/public/events/future-of-events-2025/speakers?limit=100";
+      "https://programcue.test/api/v1/public/events/future-of-events-2027/speakers?limit=100";
     const clock = vi
       .spyOn(Date, "now")
       .mockReturnValue(Date.parse("2026-08-10T10:00:00Z"));
     try {
       const initial = await publicSpeakersLoader({
         request: new Request(url),
-        params: { slug: "future-of-events-2025" },
+        params: { slug: "future-of-events-2027" },
         context: routeContext(),
       } as never);
       const initialEtag = initial.headers.get("etag");
@@ -294,7 +294,7 @@ describe("expanded public API contract", () => {
         request: new Request(url, {
           headers: { "if-none-match": initialEtag! },
         }),
-        params: { slug: "future-of-events-2025" },
+        params: { slug: "future-of-events-2027" },
         context: routeContext(),
       } as never);
       expect(revalidated.status).toBe(304);
@@ -307,9 +307,9 @@ describe("expanded public API contract", () => {
   it("rejects undeclared calendar-feed query parameters in the API envelope", async () => {
     const response = await publicCalendarLoader({
       request: new Request(
-        "https://programcue.test/api/v1/public/events/future-of-events-2025/calendar.ics?unexpected=true",
+        "https://programcue.test/api/v1/public/events/future-of-events-2027/calendar.ics?unexpected=true",
       ),
-      params: { slug: "future-of-events-2025" },
+      params: { slug: "future-of-events-2027" },
       context: routeContext(),
     } as never);
     expect(response.status).toBe(422);

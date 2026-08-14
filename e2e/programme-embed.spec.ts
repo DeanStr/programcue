@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
   ]);
   // Opening the public route establishes the deterministic demo publication that
   // both admin views read; production mode never executes this seed path.
-  await waitForInterface(page, "/public/programme/future-of-events-2025");
+  await waitForInterface(page, "/public/programme/future-of-events-2027");
 });
 
 test("configures, previews and copies a constrained programme embed", async ({
@@ -106,7 +106,7 @@ test("rejects unsupported embed configuration instead of silently falling back",
   page,
 }) => {
   const invalidControls = await page.request.get(
-    "/embed/future-of-events-2025?controls=search,unknown",
+    "/embed/future-of-events-2027?controls=search,unknown",
   );
   expect(invalidControls.status()).toBe(400);
   expect(await invalidControls.text()).toContain(
@@ -114,7 +114,7 @@ test("rejects unsupported embed configuration instead of silently falling back",
   );
 
   const staleFormat = await page.request.get(
-    "/embed/future-of-events-2025?format=not-published",
+    "/embed/future-of-events-2027?format=not-published",
   );
   expect(staleFormat.status()).toBe(400);
   expect(await staleFormat.text()).toContain(
@@ -123,7 +123,7 @@ test("rejects unsupported embed configuration instead of silently falling back",
 
   for (const name of ["day", "track", "format", "room", "accent"]) {
     const emptyValue = await page.request.get(
-      `/embed/future-of-events-2025?${name}=`,
+      `/embed/future-of-events-2027?${name}=`,
     );
     expect(emptyValue.status()).toBe(400);
     expect(await emptyValue.text()).toContain(
@@ -132,7 +132,7 @@ test("rejects unsupported embed configuration instead of silently falling back",
   }
 
   const unknownParameter = await page.request.get(
-    "/embed/future-of-events-2025?densitty=compact",
+    "/embed/future-of-events-2027?densitty=compact",
   );
   expect(unknownParameter.status()).toBe(400);
   expect(await unknownParameter.text()).toContain(
@@ -140,7 +140,7 @@ test("rejects unsupported embed configuration instead of silently falling back",
   );
 
   const duplicateParameter = await page.request.get(
-    "/embed/future-of-events-2025?density=compact&density=comfortable",
+    "/embed/future-of-events-2027?density=compact&density=comfortable",
   );
   expect(duplicateParameter.status()).toBe(400);
   expect(await duplicateParameter.text()).toContain(
@@ -157,7 +157,7 @@ test("widget preserves empty options for rejection and fails on an empty height"
       body: `
         <div id="programme-widget"></div>
         <script src="${e2eOrigin}/programcue-widget.js"
-          data-programcue-event="future-of-events-2025"
+          data-programcue-event="future-of-events-2027"
           data-target="#programme-widget"
           data-controls=""></script>
       `,
@@ -165,14 +165,14 @@ test("widget preserves empty options for rejection and fails on an empty height"
   );
   const rejectedEmbed = page.waitForResponse(
     (response) =>
-      response.url().includes("/embed/future-of-events-2025?controls=") &&
+      response.url().includes("/embed/future-of-events-2027?controls=") &&
       response.status() === 400,
   );
   await page.goto(`${e2eOrigin}/__programcue-widget-empty-option`);
   await rejectedEmbed;
   await expect(page.locator("#programme-widget iframe")).toHaveAttribute(
     "src",
-    /\/embed\/future-of-events-2025\?controls=$/,
+    /\/embed\/future-of-events-2027\?controls=$/,
   );
 
   await page.route(`${e2eOrigin}/__programcue-widget-empty-height`, (route) =>
@@ -181,7 +181,7 @@ test("widget preserves empty options for rejection and fails on an empty height"
       body: `
         <div id="programme-widget"></div>
         <script src="${e2eOrigin}/programcue-widget.js"
-          data-programcue-event="future-of-events-2025"
+          data-programcue-event="future-of-events-2027"
           data-target="#programme-widget"
           data-height=""></script>
       `,
@@ -200,16 +200,16 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
   page,
 }) => {
   const jsonExport = await page.request.get(
-    "/api/v1/public/events/future-of-events-2025/programme?format=json",
+    "/api/v1/public/events/future-of-events-2027/programme?format=json",
   );
   expect(jsonExport.ok()).toBeTruthy();
   expect(jsonExport.headers()["content-disposition"]).toContain(
-    "future-of-events-2025-programme.json",
+    "future-of-events-2027-programme.json",
   );
   expect((await jsonExport.json()).speakers.length).toBeGreaterThan(0);
 
   const htmlExport = await page.request.get(
-    "/api/v1/public/events/future-of-events-2025/programme?format=html",
+    "/api/v1/public/events/future-of-events-2027/programme?format=html",
   );
   expect(htmlExport.ok()).toBeTruthy();
   expect(htmlExport.headers()["content-type"]).toContain("text/html");
@@ -225,7 +225,7 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
       body: `
           <main><div id="programme-widget"></div></main>
           <script src="${e2eOrigin}/programcue-widget.js"
-            data-programcue-event="future-of-events-2025"
+            data-programcue-event="future-of-events-2027"
             data-target="#programme-widget"
             data-day="2027-05-21"
             data-accent="#0d9488"
@@ -238,7 +238,7 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
   const frame = page.locator("#programme-widget iframe");
   await expect(frame).toHaveAttribute(
     "src",
-    /\/embed\/future-of-events-2025\?day=2027-05-21&accent=%230d9488&controls=search&density=compact$/,
+    /\/embed\/future-of-events-2027\?day=2027-05-21&accent=%230d9488&controls=search&density=compact$/,
   );
   await frame.contentFrame().locator("body[data-hydrated='true']").waitFor();
   await expect(
@@ -258,7 +258,7 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
 test("keeps programme detail panels inside the active embed filters", async ({
   page,
 }) => {
-  await waitForInterface(page, "/embed/future-of-events-2025?day=2027-05-21");
+  await waitForInterface(page, "/embed/future-of-events-2027?day=2027-05-21");
   const firstVisibleTitle = await page
     .locator(".programme-row h3")
     .first()
@@ -294,7 +294,7 @@ test("keeps programme detail panels inside the active embed filters", async ({
 
   await waitForInterface(
     page,
-    "/embed/future-of-events-2025?query=no-published-record-matches-this",
+    "/embed/future-of-events-2027?query=no-published-record-matches-this",
   );
   await expect(
     page.getByRole("heading", { name: "No matching sessions" }),

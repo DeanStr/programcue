@@ -30,7 +30,7 @@ describe("published programme and itinerary", () => {
       env as unknown as CloudflareEnvironment,
     );
     const programme = await programmeService.getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     );
     expect(programme).not.toBeNull();
     const service = new PublicProgrammeService({
@@ -89,7 +89,7 @@ describe("published programme and itinerary", () => {
       ...(env as unknown as CloudflareEnvironment),
       DEMO_MODE: "false",
     } as CloudflareEnvironment);
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     expect(programme).not.toBeNull();
     const activeProgramme = {
       ...programme!,
@@ -154,7 +154,7 @@ describe("published programme and itinerary", () => {
       env as unknown as CloudflareEnvironment,
     );
     const currentProgramme = await programmeService.getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     );
     expect(currentProgramme).not.toBeNull();
     const originalEvent = await env.DB.prepare(
@@ -168,11 +168,11 @@ describe("published programme and itinerary", () => {
         .bind(4_071_081_599, currentProgramme!.event.id)
         .run();
       const programme = await programmeService.getPublished(
-        "future-of-events-2025",
+        "future-of-events-2027",
       );
       expect(programme).not.toBeNull();
       const request = new Request(
-        "https://programcue.test/public/programme/future-of-events-2025",
+        "https://programcue.test/public/programme/future-of-events-2027",
         {
           method: "POST",
           headers: {
@@ -189,7 +189,7 @@ describe("published programme and itinerary", () => {
 
       const response = await publicProgrammePageAction({
         request,
-        params: { slug: "future-of-events-2025" },
+        params: { slug: "future-of-events-2027" },
         context,
       } as never);
 
@@ -232,9 +232,9 @@ describe("published programme and itinerary", () => {
 
     const page = await publicProgrammePageLoader({
       request: new Request(
-        "https://programcue.test/public/programme/future-of-events-2025",
+        "https://programcue.test/public/programme/future-of-events-2027",
       ),
-      params: { slug: "future-of-events-2025" },
+      params: { slug: "future-of-events-2027" },
       context,
     } as never);
     if (page instanceof Response) {
@@ -247,11 +247,11 @@ describe("published programme and itinerary", () => {
 
     const programme = await new PublicProgrammeService(
       evaluationEnv,
-    ).getPublished("future-of-events-2025");
+    ).getPublished("future-of-events-2027");
     expect(programme).not.toBeNull();
     const response = await publicProgrammePageAction({
       request: new Request(
-        "https://programcue.test/public/programme/future-of-events-2025",
+        "https://programcue.test/public/programme/future-of-events-2027",
         {
           method: "POST",
           headers: {
@@ -264,7 +264,7 @@ describe("published programme and itinerary", () => {
           }),
         },
       ),
-      params: { slug: "future-of-events-2025" },
+      params: { slug: "future-of-events-2027" },
       context,
     } as never);
     if (response instanceof Response) {
@@ -304,7 +304,7 @@ describe("published programme and itinerary", () => {
       ...(env as unknown as CloudflareEnvironment),
       DEMO_MODE: "false",
     } as CloudflareEnvironment);
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     expect(programme).not.toBeNull();
     const activeProgramme = {
       ...programme!,
@@ -457,7 +457,7 @@ describe("published programme and itinerary", () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     expect(programme).not.toBeNull();
     const sessionId = programme!.sessions[0].id;
     const { token } = await service.updateItinerary(
@@ -543,7 +543,7 @@ describe("published programme and itinerary", () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     expect(programme).not.toBeNull();
     const [personalSession, anonymousSession] = programme!.sessions;
     expect(personalSession).toBeDefined();
@@ -612,11 +612,47 @@ describe("published programme and itinerary", () => {
     );
   });
 
+  it("does not retain legacy anonymous share links after the secret reset", async () => {
+    const service = new PublicProgrammeService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const programme = await service.getPublished("future-of-events-2027");
+    expect(programme).not.toBeNull();
+    const sessionId = programme!.sessions[0]!.id;
+    const { token } = await service.updateItinerary(
+      programme!,
+      { personId: null, visitorToken: null },
+      sessionId,
+      "add",
+    );
+    const shareToken = await service.shareItinerary(programme!, {
+      personId: null,
+      visitorToken: token,
+    });
+    const visitorHash = await eventVisitorKeyHash(
+      env as unknown as CloudflareEnvironment,
+      token!,
+      programme!.event.id,
+    );
+    const downgraded = await env.DB.prepare(
+      `UPDATE public_itineraries
+          SET visitor_key_hash = 'legacy-unversioned-hash'
+        WHERE event_id = ? AND person_id IS NULL AND visitor_key_hash = ?`,
+    )
+      .bind(programme!.event.id, visitorHash)
+      .run();
+    expect(downgraded.meta.changes).toBe(1);
+
+    await expect(
+      service.sharedItinerary(programme!, shareToken),
+    ).rejects.toBeInstanceOf(PublishedProgrammeItineraryNotFoundError);
+  });
+
   it("does not disclose itinerary items whose session is no longer public", async () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     expect(programme).not.toBeNull();
     const sessionId = programme!.sessions[0]!.id;
     const { token } = await service.updateItinerary(
@@ -666,7 +702,7 @@ describe("published programme and itinerary", () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     expect(programme).not.toBeNull();
     const activeProgramme = {
       ...programme!,
@@ -719,7 +755,7 @@ describe("published programme and itinerary", () => {
     )
       .bind("evt-foe-2025")
       .run();
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     expect(programme).not.toBeNull();
     await expect(
       service.updateItinerary(
@@ -735,7 +771,7 @@ describe("published programme and itinerary", () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     expect(programme).not.toBeNull();
 
     const sessionId = programme!.sessions[0].id;
@@ -774,7 +810,7 @@ describe("published programme and itinerary", () => {
       DEMO_MODE: "false",
       EVALUATION_MODE: "true",
     } as CloudflareEnvironment);
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     expect(programme).not.toBeNull();
 
     const now = Math.floor(Date.now() / 1_000);
@@ -813,6 +849,9 @@ describe("published programme and itinerary", () => {
     );
     const expiresAt = now + 5 * 365 * 86_400;
     expect(cookie).not.toContain(`program_cue_itinerary=${browserId};`);
+    expect(decodeURIComponent(cookie.split(";")[0]!.split("=")[1]!)).toMatch(
+      /^v2\./u,
+    );
     expect(cookie).toContain(`Max-Age=${5 * 365 * 86_400}`);
     expect(cookie).toContain(
       `Expires=${new Date(expiresAt * 1_000).toUTCString()}`,
@@ -858,5 +897,84 @@ describe("published programme and itinerary", () => {
         "program_cue_itinerary",
       ),
     ).toBeNull();
+  });
+
+  it("keeps anonymous itinerary identity independent from authentication rotation", async () => {
+    const browserId = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+    const itinerarySecret =
+      "stable-anonymous-itinerary-secret-with-at-least-thirty-two-characters";
+    const originalEnvironment = {
+      ...(env as unknown as CloudflareEnvironment),
+      BETTER_AUTH_SECRET:
+        "original-authentication-secret-with-at-least-thirty-two-characters",
+      ANONYMOUS_ITINERARY_SECRET: itinerarySecret,
+    } as unknown as CloudflareEnvironment;
+    const rotatedAuthenticationEnvironment = {
+      ...originalEnvironment,
+      BETTER_AUTH_SECRET:
+        "rotated-authentication-secret-with-at-least-thirty-two-characters",
+    } as CloudflareEnvironment;
+    const cookie = await itineraryCookie(
+      originalEnvironment,
+      browserId,
+      "https://programme.example/event",
+    );
+    const request = new Request("https://programme.example/event", {
+      headers: { cookie: cookie.split(";")[0]! },
+    });
+
+    await expect(
+      publicItineraryIdentity(
+        request,
+        rotatedAuthenticationEnvironment,
+        "evt-foe-2025",
+      ),
+    ).resolves.toEqual({ personId: null, visitorToken: browserId });
+    const originalHash = await eventVisitorKeyHash(
+      originalEnvironment,
+      browserId,
+      "evt-foe-2025",
+    );
+    const rotatedHash = await eventVisitorKeyHash(
+      rotatedAuthenticationEnvironment,
+      browserId,
+      "evt-foe-2025",
+    );
+    expect(originalHash).toMatch(/^v2\.[A-Za-z0-9_-]+$/u);
+    expect(rotatedHash).toBe(originalHash);
+  });
+
+  it("does not fall back to the authentication secret for anonymous itineraries", async () => {
+    const browserId = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+    const missingItinerarySecret = {
+      ...(env as unknown as CloudflareEnvironment),
+      BETTER_AUTH_SECRET:
+        "configured-authentication-secret-with-at-least-thirty-two-characters",
+      ANONYMOUS_ITINERARY_SECRET: undefined,
+    } as unknown as CloudflareEnvironment;
+
+    await expect(
+      itineraryCookie(
+        missingItinerarySecret,
+        browserId,
+        "https://programme.example/event",
+      ),
+    ).rejects.toThrow(/ANONYMOUS_ITINERARY_SECRET/u);
+  });
+
+  it("rejects authentication-secret reuse outside production readiness", async () => {
+    const browserId = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+    const reusedSecret =
+      "reused-authentication-secret-with-at-least-thirty-two-characters";
+    const environment = {
+      ...(env as unknown as CloudflareEnvironment),
+      APP_ENV: "development",
+      BETTER_AUTH_SECRET: reusedSecret,
+      ANONYMOUS_ITINERARY_SECRET: reusedSecret,
+    } as unknown as CloudflareEnvironment;
+
+    await expect(
+      itineraryCookie(environment, browserId, "http://localhost/programme"),
+    ).rejects.toThrow(/must be independent/u);
   });
 });

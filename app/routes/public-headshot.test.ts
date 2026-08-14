@@ -156,26 +156,26 @@ describe("published programme headshots", () => {
 
   it("derives a public URL only for the exact current clean and released headshot", async () => {
     const service = new PublicProgrammeService(testEnv);
-    const initial = await service.getPublished("future-of-events-2025");
+    const initial = await service.getPublished("future-of-events-2027");
     const speaker = initial!.speakers[0];
     await env.DB.prepare("UPDATE people SET image_url = ? WHERE id = ?")
       .bind("https://private.example.test/not-a-public-headshot", speaker.id)
       .run();
 
     expect(
-      (await service.getPublished("future-of-events-2025"))!.speakers.find(
+      (await service.getPublished("future-of-events-2027"))!.speakers.find(
         (candidate) => candidate.id === speaker.id,
       )?.imageUrl,
     ).toMatch(/^\/images\/demo-speakers\//u);
 
     const headshot = await createCleanHeadshot("evt-foe-2025", speaker.id);
     expect(
-      (await service.getPublished("future-of-events-2025"))!.speakers.find(
+      (await service.getPublished("future-of-events-2027"))!.speakers.find(
         (candidate) => candidate.id === speaker.id,
       )?.imageUrl,
-    ).toBe(publishedHeadshotPath("future-of-events-2025", speaker.id));
+    ).toBe(publishedHeadshotPath("future-of-events-2027", speaker.id));
 
-    const response = await responseFor("future-of-events-2025", speaker.id);
+    const response = await responseFor("future-of-events-2027", speaker.id);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/png");
     expect(response.headers.get("content-disposition")).toBe("inline");
@@ -209,18 +209,18 @@ describe("published programme headshots", () => {
     ]);
 
     expect(
-      (await service.getPublished("future-of-events-2025"))!.speakers.find(
+      (await service.getPublished("future-of-events-2027"))!.speakers.find(
         (candidate) => candidate.id === speaker.id,
       )?.imageUrl,
     ).toBeNull();
     expect(
-      (await responseFor("future-of-events-2025", speaker.id)).status,
+      (await responseFor("future-of-events-2027", speaker.id)).status,
     ).toBe(404);
   });
 
   it("does not expose a clean headshot after its speaker profile becomes private", async () => {
     const service = new PublicProgrammeService(testEnv);
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     const personId = programme!.speakers[0].id;
     await createCleanHeadshot("evt-foe-2025", personId);
     await env.DB.prepare(
@@ -230,18 +230,18 @@ describe("published programme headshots", () => {
       .run();
 
     expect(
-      (await service.getPublished("future-of-events-2025"))!.speakers.some(
+      (await service.getPublished("future-of-events-2027"))!.speakers.some(
         (speaker) => speaker.id === personId,
       ),
     ).toBe(false);
-    expect((await responseFor("future-of-events-2025", personId)).status).toBe(
+    expect((await responseFor("future-of-events-2027", personId)).status).toBe(
       404,
     );
   });
 
   it("does not expose an infected or quarantined current headshot", async () => {
     const service = new PublicProgrammeService(testEnv);
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     const personId = programme!.speakers[0].id;
     const headshot = await createCleanHeadshot("evt-foe-2025", personId);
     await env.DB.prepare(
@@ -253,18 +253,18 @@ describe("published programme headshots", () => {
       .run();
 
     expect(
-      (await service.getPublished("future-of-events-2025"))!.speakers.find(
+      (await service.getPublished("future-of-events-2027"))!.speakers.find(
         (speaker) => speaker.id === personId,
       )?.imageUrl,
     ).toBeNull();
-    expect((await responseFor("future-of-events-2025", personId)).status).toBe(
+    expect((await responseFor("future-of-events-2027", personId)).status).toBe(
       404,
     );
   });
 
   it("does not expose a clean headshot for an inactive event", async () => {
     const service = new PublicProgrammeService(testEnv);
-    const programme = await service.getPublished("future-of-events-2025");
+    const programme = await service.getPublished("future-of-events-2027");
     const personId = programme!.speakers[0].id;
     await createCleanHeadshot("evt-foe-2025", personId);
     await env.DB.prepare(
@@ -274,7 +274,7 @@ describe("published programme headshots", () => {
 
     try {
       expect(
-        (await responseFor("future-of-events-2025", personId)).status,
+        (await responseFor("future-of-events-2027", personId)).status,
       ).toBe(404);
     } finally {
       await env.DB.prepare(
@@ -286,7 +286,7 @@ describe("published programme headshots", () => {
 
   it("never resolves another event's private headshot through a public slug", async () => {
     const service = new PublicProgrammeService(testEnv);
-    const primary = await service.getPublished("future-of-events-2025");
+    const primary = await service.getPublished("future-of-events-2027");
     const personId = primary!.speakers[0].id;
     await createCleanHeadshot("evt-foe-2025", personId);
     const other = await createSecondPublishedEvent(personId);
@@ -296,7 +296,7 @@ describe("published programme headshots", () => {
       expect.objectContaining({ id: personId, imageUrl: null }),
     ]);
     expect((await responseFor(other.slug, personId)).status).toBe(404);
-    expect((await responseFor("future-of-events-2025", personId)).status).toBe(
+    expect((await responseFor("future-of-events-2027", personId)).status).toBe(
       200,
     );
   });

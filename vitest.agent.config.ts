@@ -38,6 +38,8 @@ export default defineProject({
           BETTER_AUTH_URL: "http://localhost",
           BETTER_AUTH_SECRET:
             "test-only-secret-with-at-least-thirty-two-characters",
+          ANONYMOUS_ITINERARY_SECRET:
+            "test-only-itinerary-secret-with-at-least-thirty-two-characters",
           AUTH_EMAIL_FROM: "Program Cue Test <test@example.com>",
           TEST_MIGRATIONS: await readD1Migrations(
             resolve(import.meta.dirname, "migrations"),

@@ -90,7 +90,7 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
         duplicate_person_warnings, file_policy_json, revision, last_updated_by_person_id,
         created_at, updated_at
       ) VALUES (
-        ?, ?, 'Future of Events 2027', 'future-of-events-2025', 'America/Toronto',
+        ?, ?, 'Future of Events 2027', 'future-of-events-2027', 'America/Toronto',
         unixepoch('2027-05-20T00:00:00Z'), unixepoch('2027-05-22T23:59:59Z'),
         'Metro Toronto Convention Centre', 'Toronto',
         'The conference for modern event professionals.', '#4f46e5', 'd1',

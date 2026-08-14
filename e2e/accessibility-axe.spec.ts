@@ -34,7 +34,7 @@ const SURFACES = [
   { role: "administrator", path: "/admin/crm/pipeline" },
   { role: "administrator", path: "/admin/resources" },
   { role: "administrator", path: "/api/docs" },
-  { role: "administrator", path: "/public/programme/future-of-events-2025" },
+  { role: "administrator", path: "/public/programme/future-of-events-2027" },
 ] as const;
 
 /* The suite previously ran only at 1440x1000, so rules that fire inside a
@@ -110,6 +110,6 @@ test("API reference remains accessible with its persisted dark theme", async ({
 test("public programme embeds retain contrast with a light event accent", async ({
   page,
 }) => {
-  await openHydrated(page, "/embed/future-of-events-2025?accent=%23ffffff");
+  await openHydrated(page, "/embed/future-of-events-2027?accent=%23ffffff");
   await expectNoViolations(page, "public programme @ light event accent");
 });

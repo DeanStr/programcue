@@ -28,6 +28,6 @@ test("admin, reviewer and public workflows render in the browser engine", async 
   await openHydrated(page, "/review/workbench");
   await expect(page.getByRole("main")).toContainText(/proposal|review/i);
 
-  await openHydrated(page, "/public/programme/future-of-events-2025");
+  await openHydrated(page, "/public/programme/future-of-events-2027");
   await expect(page.getByRole("main")).toContainText(/programme|session/i);
 });

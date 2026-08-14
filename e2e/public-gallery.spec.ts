@@ -14,7 +14,7 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
 }) => {
   await page.context().clearCookies();
 
-  await openAnonymous(page, "/public/programme/future-of-events-2025");
+  await openAnonymous(page, "/public/programme/future-of-events-2027");
   await expect(page.locator(".programme-row")).toHaveCount(5);
   const showMore = page
     .getByRole("button", {
@@ -34,14 +34,14 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
     .click();
   await expect(showMore).toBeVisible();
 
-  await openAnonymous(page, "/public/programme/future-of-events-2025/speakers");
+  await openAnonymous(page, "/public/programme/future-of-events-2027/speakers");
   await expect(
     page.getByRole("heading", { name: "Speakers", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Alex Morgan", { exact: true })).toBeVisible();
   await expect(page.getByText("Priya Shah", { exact: true })).toBeVisible();
 
-  await openAnonymous(page, "/public/programme/future-of-events-2025/agenda");
+  await openAnonymous(page, "/public/programme/future-of-events-2027/agenda");
   await expect(
     page.getByRole("heading", { name: "Agenda", exact: true }),
   ).toBeVisible();
@@ -66,13 +66,13 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await expect(agendaDetail).toBeFocused();
   await expect(agendaDetail).toContainText("AI in Event Operations");
 
-  await openAnonymous(page, "/public/programme/future-of-events-2025/schedule");
+  await openAnonymous(page, "/public/programme/future-of-events-2027/schedule");
   await expect(
     page.getByRole("heading", { name: "Schedule Itinerary", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".public-itinerary-card")).toHaveCount(3);
 
-  await openAnonymous(page, "/public/programme/future-of-events-2025/gallery");
+  await openAnonymous(page, "/public/programme/future-of-events-2027/gallery");
   await expect(
     page.getByRole("heading", { name: "Speaker Gallery", exact: true }),
   ).toBeVisible();
@@ -80,7 +80,7 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
     page.getByRole("link", { name: /My itinerary/ }),
   ).toHaveAttribute(
     "href",
-    "/public/programme/future-of-events-2025#itinerary",
+    "/public/programme/future-of-events-2027#itinerary",
   );
   const search = page.getByRole("searchbox", {
     name: "Search speaker gallery by name",
@@ -105,7 +105,7 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
     detail.getByRole("link", { name: "The Future of Attendee Engagement" }),
   ).toHaveAttribute(
     "href",
-    "/public/programme/future-of-events-2025#session-future-attendee-engagement",
+    "/public/programme/future-of-events-2027#session-future-attendee-engagement",
   );
   await detail.getByRole("button", { name: "Close speaker details" }).click();
   await expect(detail).toHaveCount(0);
@@ -128,7 +128,7 @@ test("mobile programme navigation closes after activation and reflows at 320px",
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await openAnonymous(page, "/public/programme/future-of-events-2025");
+  await openAnonymous(page, "/public/programme/future-of-events-2027");
 
   const mobileNavigation = page.locator(".public-mobile-nav");
   await mobileNavigation.getByText("Browse", { exact: true }).click();
@@ -142,7 +142,7 @@ test("mobile programme navigation closes after activation and reflows at 320px",
   ).toBeInViewport();
 
   await page.setViewportSize({ width: 320, height: 700 });
-  await openAnonymous(page, "/public/programme/future-of-events-2025");
+  await openAnonymous(page, "/public/programme/future-of-events-2027");
   const containment = await page.evaluate(() => ({
     viewportWidth: document.documentElement.clientWidth,
     documentWidth: document.documentElement.scrollWidth,

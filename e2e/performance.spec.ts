@@ -145,7 +145,7 @@ test.describe("explicit local performance evidence", () => {
     for (let index = 0; index < 5; index += 1) {
       await page.goto("about:blank");
       const response = await page.goto(
-        "/public/programme/future-of-events-2025",
+        "/public/programme/future-of-events-2027",
         {
           waitUntil: "domcontentloaded",
         },

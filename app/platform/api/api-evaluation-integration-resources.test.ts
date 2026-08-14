@@ -174,7 +174,7 @@ describe("evaluation and integration API reads", () => {
   it("rejects a cursor from a changed public collection, filter, or resource", async () => {
     await ensureDemoProgramme(testEnv);
     const programme = await new PublicProgrammeService(testEnv).getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     );
     const page = await publicSessionPage(programme!, { limit: 1 });
     await expect(
@@ -213,7 +213,7 @@ describe("evaluation and integration API reads", () => {
   it("keeps public cursors stable across freshness-only cache changes", async () => {
     await ensureDemoProgramme(testEnv);
     const programme = await new PublicProgrammeService(testEnv).getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     );
     const airtableProgramme = {
       ...programme!,

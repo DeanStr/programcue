@@ -1,5 +1,5 @@
 const encoder = new TextEncoder();
-const COOKIE_VERSION = "v1";
+const COOKIE_VERSION = "v2";
 const COOKIE_LIFETIME_SECONDS = 5 * 365 * 86_400;
 const BROWSER_ID_PATTERN =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}){2}$/u;
@@ -27,10 +27,15 @@ async function hmac(secret: string, value: string) {
 }
 
 function secret(env: CloudflareEnvironment) {
-  const value = String(env.BETTER_AUTH_SECRET ?? "").trim();
+  const value = String(env.ANONYMOUS_ITINERARY_SECRET ?? "").trim();
   if (value.length < 32) {
     throw new Error(
-      "Anonymous itineraries require BETTER_AUTH_SECRET with at least 32 characters.",
+      "Anonymous itineraries require ANONYMOUS_ITINERARY_SECRET with at least 32 characters.",
+    );
+  }
+  if (value === String(env.BETTER_AUTH_SECRET ?? "").trim()) {
+    throw new Error(
+      "ANONYMOUS_ITINERARY_SECRET must be independent from BETTER_AUTH_SECRET.",
     );
   }
   return value;
@@ -99,11 +104,9 @@ export async function eventVisitorKeyHash(
   if (!BROWSER_ID_PATTERN.test(browserId)) {
     throw new Error("The anonymous itinerary browser identifier is invalid.");
   }
-  if (!eventId.trim()) throw new Error("An event is required for an itinerary.");
-  return base64Url(
-    await hmac(
-      secret(env),
-      `itinerary-database\0${eventId}\0${browserId}`,
-    ),
-  );
+  if (!eventId.trim())
+    throw new Error("An event is required for an itinerary.");
+  return `${COOKIE_VERSION}.${base64Url(
+    await hmac(secret(env), `itinerary-database\0${eventId}\0${browserId}`),
+  )}`;
 }

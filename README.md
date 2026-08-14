@@ -11,8 +11,8 @@ Requirements: Node.js 22.18+ on the Node 22 line, or Node.js 24.11+, Python 3.9+
 ```bash
 IBM_TELEMETRY_DISABLED=true npm install
 cp .dev.vars.example .dev.vars
-node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
-# Paste the generated value into BETTER_AUTH_SECRET in .dev.vars.
+node -e "const { randomBytes } = require('node:crypto'); console.log('BETTER_AUTH_SECRET=' + randomBytes(48).toString('base64url')); console.log('ANONYMOUS_ITINERARY_SECRET=' + randomBytes(48).toString('base64url'))"
+# Paste both independently generated values into .dev.vars.
 npm run dev
 ```
 
@@ -55,11 +55,11 @@ Useful routes:
 - Schedule: `http://127.0.0.1:5173/admin/schedule`
 - Communications: `http://127.0.0.1:5173/admin/communications`
 - Participant workspace: `http://127.0.0.1:5173/participant/dashboard`
-- Public programme: `http://127.0.0.1:5173/public/programme/future-of-events-2025`
-- Public speakers: `http://127.0.0.1:5173/public/programme/future-of-events-2025/speakers`
-- Public agenda: `http://127.0.0.1:5173/public/programme/future-of-events-2025/agenda`
-- Public schedule itinerary: `http://127.0.0.1:5173/public/programme/future-of-events-2025/schedule`
-- Public Speaker Gallery: `http://127.0.0.1:5173/public/programme/future-of-events-2025/gallery`
+- Public programme: `http://127.0.0.1:5173/public/programme/future-of-events-2027`
+- Public speakers: `http://127.0.0.1:5173/public/programme/future-of-events-2027/speakers`
+- Public agenda: `http://127.0.0.1:5173/public/programme/future-of-events-2027/agenda`
+- Public schedule itinerary: `http://127.0.0.1:5173/public/programme/future-of-events-2027/schedule`
+- Public Speaker Gallery: `http://127.0.0.1:5173/public/programme/future-of-events-2027/gallery`
 - Public application: `http://127.0.0.1:5173/apply/form`
 - API reference: `http://127.0.0.1:5173/api/docs`
 - Design system: `http://127.0.0.1:5173/design/system`
@@ -185,6 +185,7 @@ update an individual secret only when it is deliberately rotated:
 
 ```bash
 wrangler secret put BETTER_AUTH_SECRET
+wrangler secret put ANONYMOUS_ITINERARY_SECRET
 wrangler secret put RESEND_API_KEY
 wrangler secret put RESEND_WEBHOOK_SECRET
 wrangler secret put CALENDAR_CREDENTIALS_KEY
@@ -277,7 +278,13 @@ npm run db:bootstrap:production -- \
   --yes
 ```
 
-`BETTER_AUTH_SECRET` must contain at least 32 characters.
+`BETTER_AUTH_SECRET` and `ANONYMOUS_ITINERARY_SECRET` must contain at least
+32 characters and must be independently generated. Missing, short or reused
+values fail production readiness; anonymous itineraries never fall back to the
+authentication secret.
+The initial dedicated-secret release moves anonymous cookies and stored hashes
+to `v2`; migration `0018` removes only legacy unversioned anonymous rows, while
+signed-in and newly created `v2` itineraries remain intact.
 `CALENDAR_CREDENTIALS_KEY`, `INTEGRATION_CREDENTIALS_KEY` and
 `WEBHOOK_CREDENTIALS_KEY` must each be an independently generated,
 base64-encoded 32-byte AES-GCM key. Workers AI is the provisioned default;

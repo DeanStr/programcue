@@ -18,7 +18,7 @@ export async function prepareVisualBaseline(request: APIRequestContext) {
     "/admin/tasks",
     "/admin/schedule",
     "/admin/submissions/form",
-    "/embed/future-of-events-2025",
+    "/embed/future-of-events-2027",
   ] as const) {
     const response = await request.get(path);
     expect(response.ok(), `${path} should initialise its visual fixture`).toBe(

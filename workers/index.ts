@@ -40,6 +40,7 @@ declare global {
     DEFAULT_EVENT_ID?: string;
     EMAIL_PROVIDER?: "resend" | "mailpit";
     BETTER_AUTH_SECRET?: string;
+    ANONYMOUS_ITINERARY_SECRET?: string;
     RESEND_API_KEY?: string;
     RESEND_WEBHOOK_SECRET?: string;
     MAILPIT_SEND_API_URL?: string;
@@ -299,7 +300,11 @@ export default {
       sourceRevision = requireSourceRevision(env);
       requireProductionRuntimeReadiness(env);
       if (requireMaintenanceMode(env)) {
-        return secure(maintenanceResponse(), request, env);
+        return secure(
+          maintenanceResponse(request, correlationId),
+          request,
+          env,
+        );
       }
     } catch (error) {
       return invalidRuntimeConfiguration(request, env, correlationId, error);

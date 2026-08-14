@@ -1,5 +1,7 @@
 # Required locally for signed application notices and authentication. Generate a unique 32+ character value.
 BETTER_AUTH_SECRET=
+# Required independently for anonymous itinerary cookies and database hashes.
+ANONYMOUS_ITINERARY_SECRET=
 
 # Optional remote provider credentials for the corresponding local workflow.
 # Base64-encoded 32-byte AES-GCM key used only to decrypt connected-calendar OAuth envelopes.

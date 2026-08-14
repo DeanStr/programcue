@@ -177,7 +177,7 @@ test("an unselected demo browser is anonymous on private routes", async ({
   await expect(page).toHaveURL(/\/admin\/schedule$/);
 
   const publicResponse = await page.goto(
-    "/public/programme/future-of-events-2025",
+    "/public/programme/future-of-events-2027",
   );
   expect(publicResponse?.ok()).toBeTruthy();
   await expect(

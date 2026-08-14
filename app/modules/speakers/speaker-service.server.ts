@@ -74,7 +74,7 @@ const speakerCommandIdempotencyKeySchema = z
 const manualSpeakerRecordSchema = z
   .object({
     idempotencyKey: speakerCommandIdempotencyKeySchema,
-    name: z.string().trim().min(1).max(120),
+    name: z.string().trim().min(2, "Enter the speaker's name.").max(120),
     email: z.string().trim().toLowerCase().email().max(254),
   })
   .extend({
@@ -285,6 +285,22 @@ export class SpeakerService {
       .first();
     if (!event) throw new Response("Event not found.", { status: 404 });
 
+    const mergedContact = await this.env.DB.prepare(
+      `SELECT 1
+         FROM people person
+         JOIN organisation_contacts contact ON contact.person_id = person.id
+        WHERE person.email = ? COLLATE NOCASE
+          AND contact.organisation_id = ? AND contact.status = 'merged'`,
+    )
+      .bind(input.email, viewer.organisationId)
+      .first();
+    if (mergedContact) {
+      throw new SpeakerAdminStateError(
+        "This email belongs to a merged Speaker Network contact. Use the primary contact instead.",
+        409,
+      );
+    }
+
     const proposedPersonId = routing?.personId ?? crypto.randomUUID();
     const evaluatorIdentityRequired = routing ? 1 : 0;
     const organisationViewer = organisationAdministratorViewer(viewer);
@@ -292,20 +308,11 @@ export class SpeakerService {
     await this.env.DB.batch([
       this.env.DB.prepare(
         `INSERT INTO people (
-           id, email, display_name, biography, organisation_name, job_title,
-           email_verified, profile_status, last_operation_id, created_at,
-           updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, 0, 'draft', ?, unixepoch(), unixepoch())
+           id, email, display_name, email_verified, profile_status,
+           last_operation_id, created_at, updated_at
+         ) VALUES (?, ?, ?, 0, 'draft', ?, unixepoch(), unixepoch())
          ON CONFLICT(email) DO NOTHING`,
-      ).bind(
-        proposedPersonId,
-        input.email,
-        input.name,
-        input.biography,
-        input.organisationName,
-        input.jobTitle,
-        commandId,
-      ),
+      ).bind(proposedPersonId, input.email, input.email, commandId),
       this.env.DB.prepare(
         `INSERT INTO memberships (
            id, organisation_id, event_id, person_id, role, invited_at,
@@ -354,6 +361,77 @@ export class SpeakerService {
         evaluatorIdentityRequired,
         proposedPersonId,
         ...organisationRelationshipBindings(organisationViewer),
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO organisation_contacts (
+           organisation_id, person_id, source, status, created_by_person_id,
+           created_at, updated_at
+         )
+         SELECT membership.organisation_id, membership.person_id, 'manual',
+                'active', ?, unixepoch(), unixepoch()
+           FROM memberships membership
+           JOIN people person ON person.id = membership.person_id
+          WHERE membership.organisation_id = ? AND membership.event_id = ?
+            AND membership.role = 'speaker'
+            AND membership.revoked_at IS NULL
+            AND membership.last_operation_id = ?
+            AND person.email = ? COLLATE NOCASE
+         ON CONFLICT(organisation_id, person_id) DO UPDATE SET
+           updated_at = unixepoch()
+         WHERE organisation_contacts.status = 'active'`,
+      ).bind(
+        viewer.personId,
+        viewer.organisationId,
+        viewer.eventId,
+        commandId,
+        input.email,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO organisation_contact_profiles (
+           organisation_id, person_id, display_name, biography,
+           organisation_name, job_title, source, created_by_person_id,
+           updated_by_person_id, last_operation_id, created_at, updated_at
+         )
+         SELECT membership.organisation_id, membership.person_id, ?, ?, ?, ?,
+                'manual', ?, ?, ?, unixepoch(), unixepoch()
+           FROM memberships membership
+           JOIN people person ON person.id = membership.person_id
+           JOIN organisation_contacts contact
+             ON contact.organisation_id = membership.organisation_id
+            AND contact.person_id = membership.person_id
+            AND contact.status = 'active'
+          WHERE membership.organisation_id = ? AND membership.event_id = ?
+            AND membership.role = 'speaker'
+            AND membership.revoked_at IS NULL
+            AND membership.last_operation_id = ?
+            AND person.email = ? COLLATE NOCASE
+         ON CONFLICT(organisation_id, person_id) DO UPDATE SET
+           display_name = excluded.display_name,
+           biography = CASE WHEN ? = 1 THEN excluded.biography
+                            ELSE organisation_contact_profiles.biography END,
+           organisation_name = CASE WHEN ? = 1 THEN excluded.organisation_name
+                                    ELSE organisation_contact_profiles.organisation_name END,
+           job_title = CASE WHEN ? = 1 THEN excluded.job_title
+                            ELSE organisation_contact_profiles.job_title END,
+           source = 'manual',
+           updated_by_person_id = excluded.updated_by_person_id,
+           last_operation_id = excluded.last_operation_id,
+           updated_at = unixepoch()`,
+      ).bind(
+        input.name,
+        input.biography || null,
+        input.organisationName || null,
+        input.jobTitle || null,
+        viewer.personId,
+        viewer.personId,
+        commandId,
+        viewer.organisationId,
+        viewer.eventId,
+        commandId,
+        input.email,
+        input.biography ? 1 : 0,
+        input.organisationName ? 1 : 0,
+        input.jobTitle ? 1 : 0,
       ),
       this.env.DB.prepare(
         `INSERT INTO event_speaker_workflows (
@@ -449,6 +527,14 @@ export class SpeakerService {
                AND workflow.person_id = membership.person_id
                AND workflow.last_operation_id = ?
                AND workflow.updated_by_person_id = ?
+              JOIN organisation_contacts contact
+                ON contact.organisation_id = membership.organisation_id
+               AND contact.person_id = membership.person_id
+               AND contact.status = 'active'
+              JOIN organisation_contact_profiles contact_profile
+                ON contact_profile.organisation_id = membership.organisation_id
+               AND contact_profile.person_id = membership.person_id
+               AND contact_profile.last_operation_id = ?
               JOIN audit_events audit
                 ON audit.organisation_id = membership.organisation_id
                AND audit.event_id = membership.event_id
@@ -511,6 +597,7 @@ export class SpeakerService {
         commandId,
         `${commandId}:workflow`,
         viewer.personId,
+        commandId,
         viewer.personId,
         commandId,
         input.email,

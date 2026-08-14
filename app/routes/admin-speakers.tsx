@@ -317,6 +317,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                 id="manual-speaker-name"
                 name="name"
                 required
+                minLength={2}
                 maxLength={120}
               />
               <small className="subtle" id="manual-speaker-name-help">

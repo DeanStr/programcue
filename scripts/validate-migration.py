@@ -674,6 +674,32 @@ def validate_canonical_demo_dates_forward_migration() -> None:
         raise SystemExit(
             "The generated canonical fixture schedule entry was not migrated"
         )
+    slug_migration = root.joinpath(
+        "migrations/0017_canonical_fixture_slug.sql"
+    ).read_text()
+    deployed.execute(
+        "UPDATE events SET slug = 'unexpected-fixture-slug' WHERE id = 'evt-foe-2025'"
+    )
+    try:
+        deployed.executescript(slug_migration)
+    except sqlite3.IntegrityError as error:
+        if "people.email" not in str(error):
+            raise
+    else:
+        raise SystemExit(
+            "The canonical fixture slug migration silently accepted unexpected drift"
+        )
+    deployed.execute(
+        "UPDATE events SET slug = 'future-of-events-2025' WHERE id = 'evt-foe-2025'"
+    )
+    deployed.executescript(slug_migration)
+    # Already-correct deployments are valid; only an unexpected third value is drift.
+    deployed.executescript(slug_migration)
+    slug = deployed.execute(
+        "SELECT slug FROM events WHERE id = 'evt-foe-2025'"
+    ).fetchone()
+    if slug != ("future-of-events-2027",):
+        raise SystemExit("The canonical fixture public slug was not migrated")
     deadline = deployed.execute(
         """
         SELECT datetime(form.closes_at, 'unixepoch'),
@@ -705,6 +731,225 @@ def validate_canonical_demo_dates_forward_migration() -> None:
         "2027-05-12 16:00:00",
     ):
         raise SystemExit("The existing canonical demo speaker deadlines were not migrated")
+
+    deployed.executescript(
+        """
+        INSERT INTO people (
+          id, email, display_name, email_verified, profile_status
+        ) VALUES (
+          'signed-itinerary-person', 'signed-itinerary@example.com',
+          'Signed itinerary person', 1, 'published'
+        );
+        INSERT INTO public_itineraries (
+          id, event_id, visitor_key_hash, created_at, updated_at
+        ) VALUES (
+          'anonymous-itinerary', 'evt-foe-2025', 'legacy-secret-hash', 1, 1
+        );
+        INSERT INTO public_itineraries (
+          id, event_id, person_id, created_at, updated_at
+        ) VALUES (
+          'signed-itinerary', 'evt-foe-2025', 'signed-itinerary-person', 1, 1
+        );
+        INSERT INTO public_itineraries (
+          id, event_id, visitor_key_hash, created_at, updated_at
+        ) VALUES (
+          'versioned-anonymous-itinerary', 'evt-foe-2025',
+          'v2.fresh-secret-hash', 1, 1
+        );
+        INSERT INTO public_itinerary_items (itinerary_id, session_id, created_at)
+        VALUES
+          ('anonymous-itinerary', 'demo-session-1', 1),
+          ('signed-itinerary', 'demo-session-1', 1),
+          ('versioned-anonymous-itinerary', 'demo-session-1', 1);
+        """
+    )
+    deployed.executescript(
+        root.joinpath(
+            "migrations/0018_anonymous_itinerary_secret_reset.sql"
+        ).read_text()
+    )
+    itinerary_counts = deployed.execute(
+        """
+        SELECT
+          (SELECT COUNT(*) FROM public_itineraries
+            WHERE person_id IS NULL),
+          (SELECT COUNT(*) FROM public_itineraries
+            WHERE person_id = 'signed-itinerary-person'),
+          (SELECT COUNT(*) FROM public_itinerary_items
+            WHERE itinerary_id = 'anonymous-itinerary'),
+          (SELECT COUNT(*) FROM public_itinerary_items
+            WHERE itinerary_id = 'signed-itinerary'),
+          (SELECT COUNT(*) FROM public_itineraries
+            WHERE id = 'versioned-anonymous-itinerary'),
+          (SELECT COUNT(*) FROM public_itinerary_items
+            WHERE itinerary_id = 'versioned-anonymous-itinerary')
+        """
+    ).fetchone()
+    if itinerary_counts != (1, 1, 0, 1, 1, 1):
+        raise SystemExit(
+            "The itinerary-secret reset did not remove only legacy anonymous itineraries"
+        )
+
+    deployed.executescript(
+        """
+        INSERT INTO people (
+          id, email, display_name, email_verified, profile_status,
+          profile_revision, last_operation_id, created_at, updated_at
+        ) VALUES
+          ('legacy-manual-actor', 'legacy-actor@example.com', 'Legacy actor',
+           1, 'published', 1, NULL, 1, 1),
+          ('legacy-manual-speaker', 'legacy-speaker@example.com',
+           'Organiser supplied name', 0, 'draft', 1,
+           'legacy-manual-command', 2, 2),
+          ('participant-updated-speaker', 'participant-updated@example.com',
+           'Participant supplied name', 1, 'published', 2,
+           'participant-profile-command', 3, 3);
+        UPDATE people
+           SET biography = 'Organiser supplied biography',
+               organisation_name = 'Organiser supplied company',
+               job_title = 'Organiser supplied title'
+         WHERE id = 'legacy-manual-speaker';
+        INSERT INTO audit_events (
+          id, organisation_id, event_id, actor_person_id, action,
+          entity_type, entity_id, correlation_id, metadata_json, created_at
+        ) VALUES
+          ('legacy-manual-audit', 'org-future-events', 'evt-foe-2025',
+           'legacy-manual-actor', 'speaker.admin.added', 'person',
+           'legacy-manual-speaker', 'legacy-manual-command',
+           '{"createdIdentity":true,"createdRosterAssociation":true}', 2),
+          ('participant-updated-audit', 'org-future-events', 'evt-foe-2025',
+           'legacy-manual-actor', 'speaker.admin.added', 'person',
+           'participant-updated-speaker', 'legacy-participant-command',
+           '{"createdIdentity":true,"createdRosterAssociation":true}', 3);
+        """
+    )
+    deployed.executescript(
+        root.joinpath(
+            "migrations/0019_manual_speaker_profile_ownership.sql"
+        ).read_text()
+    )
+    migrated_manual_profile = deployed.execute(
+        """
+        SELECT person.display_name, person.biography,
+               person.organisation_name, person.job_title,
+               contact.source, contact.status,
+               profile.display_name, profile.biography,
+               profile.organisation_name, profile.job_title, profile.source
+          FROM people person
+          JOIN organisation_contacts contact
+            ON contact.organisation_id = 'org-future-events'
+           AND contact.person_id = person.id
+          JOIN organisation_contact_profiles profile
+            ON profile.organisation_id = contact.organisation_id
+           AND profile.person_id = contact.person_id
+         WHERE person.id = 'legacy-manual-speaker'
+        """
+    ).fetchone()
+    if migrated_manual_profile != (
+        "legacy-speaker@example.com",
+        None,
+        None,
+        None,
+        "manual",
+        "active",
+        "Organiser supplied name",
+        "Organiser supplied biography",
+        "Organiser supplied company",
+        "Organiser supplied title",
+        "manual",
+    ):
+        raise SystemExit(
+            "The legacy manual-speaker profile was not moved to organisation scope"
+        )
+    participant_owned_profile = deployed.execute(
+        """
+        SELECT person.display_name,
+               (SELECT COUNT(*) FROM organisation_contacts contact
+                 WHERE contact.organisation_id = 'org-future-events'
+                   AND contact.person_id = person.id)
+          FROM people person
+         WHERE person.id = 'participant-updated-speaker'
+        """
+    ).fetchone()
+    if participant_owned_profile != ("Participant supplied name", 0):
+        raise SystemExit(
+            "The manual-speaker ownership migration changed a participant-owned profile"
+        )
+
+    manual_profile_migration = root.joinpath(
+        "migrations/0019_manual_speaker_profile_ownership.sql"
+    ).read_text()
+    deployed.executescript(
+        """
+        INSERT INTO people (
+          id, email, display_name, email_verified, profile_status,
+          profile_revision, last_operation_id, created_at, updated_at
+        ) VALUES (
+          'merged-manual-speaker', 'merged-manual@example.com',
+          'Organiser merged name', 0, 'draft', 1,
+          'merged-manual-command', 4, 4
+        );
+        INSERT INTO organisation_contacts (
+          organisation_id, person_id, source, status, merged_into_person_id,
+          created_by_person_id, created_at, updated_at
+        ) VALUES (
+          'org-future-events', 'merged-manual-speaker', 'manual', 'merged',
+          'legacy-manual-speaker', 'legacy-manual-actor', 4, 4
+        );
+        INSERT INTO audit_events (
+          id, organisation_id, event_id, actor_person_id, action,
+          entity_type, entity_id, correlation_id, metadata_json, created_at
+        ) VALUES (
+          'merged-manual-audit', 'org-future-events', 'evt-foe-2025',
+          'legacy-manual-actor', 'speaker.admin.added', 'person',
+          'merged-manual-speaker', 'merged-manual-command',
+          '{"createdIdentity":true,"createdRosterAssociation":true}', 4
+        );
+        """
+    )
+    try:
+        deployed.executescript(manual_profile_migration)
+    except sqlite3.IntegrityError as error:
+        if "people.email" not in str(error):
+            raise
+    else:
+        raise SystemExit(
+            "The manual-speaker ownership migration silently skipped a merged exact-provenance candidate"
+        )
+    deployed.executescript(
+        """
+        DELETE FROM organisation_contacts
+         WHERE organisation_id = 'org-future-events'
+           AND person_id = 'merged-manual-speaker';
+        DELETE FROM people WHERE id = 'merged-manual-speaker';
+
+        INSERT INTO people (
+          id, email, display_name, email_verified, profile_status,
+          profile_revision, last_operation_id, created_at, updated_at
+        ) VALUES (
+          'invalid-manual-speaker', 'invalid-manual@example.com', 'X',
+          0, 'draft', 1, 'invalid-manual-command', 5, 5
+        );
+        INSERT INTO audit_events (
+          id, organisation_id, event_id, actor_person_id, action,
+          entity_type, entity_id, correlation_id, metadata_json, created_at
+        ) VALUES (
+          'invalid-manual-audit', 'org-future-events', 'evt-foe-2025',
+          'legacy-manual-actor', 'speaker.admin.added', 'person',
+          'invalid-manual-speaker', 'invalid-manual-command',
+          '{"createdIdentity":true,"createdRosterAssociation":true}', 5
+        );
+        """
+    )
+    try:
+        deployed.executescript(manual_profile_migration)
+    except sqlite3.IntegrityError as error:
+        if "length(trim(display_name)) BETWEEN 2 AND 120" not in str(error):
+            raise
+    else:
+        raise SystemExit(
+            "The manual-speaker ownership migration silently skipped invalid exact-provenance enrichment"
+        )
 
 
 validate_canonical_demo_dates_forward_migration()

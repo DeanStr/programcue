@@ -444,12 +444,12 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       .click();
     await expectStatus(page, "Schedule published");
 
-    await waitForInterface(page, "/public/programme/future-of-events-2025");
+    await waitForInterface(page, "/public/programme/future-of-events-2027");
     await expect(
       page.locator(".programme-row").filter({ hasText: SUBMISSION_TITLE }),
     ).toBeVisible();
     const programme = await page.request.get(
-      "/api/v1/public/events/future-of-events-2025/programme",
+      "/api/v1/public/events/future-of-events-2027/programme",
     );
     expect(programme.ok()).toBeTruthy();
     const body = (await programme.json()) as {

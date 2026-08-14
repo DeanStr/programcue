@@ -73,7 +73,7 @@ async function terminalDryRun() {
 
 beforeEach(async () => {
   await new PublicProgrammeService(workerEnv).getPublished(
-    "future-of-events-2025",
+    "future-of-events-2027",
   );
   await workerEnv.DB.batch([
     workerEnv.DB.prepare("DELETE FROM integration_entity_mappings"),

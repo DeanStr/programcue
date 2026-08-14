@@ -30,7 +30,7 @@ import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 const EVALUATION_SENDER_ID = "sender-production-evaluation-fixture";
 const EVALUATION_ORGANISATION_SLUG = "future-events-association";
-const EVALUATION_EVENT_SLUG = "future-of-events-2025";
+const EVALUATION_EVENT_SLUG = "future-of-events-2027";
 const EVALUATION_ORGANIZER_MEMBERSHIP_ID =
   "membership-production-evaluation-organizer-org";
 const WORKERS_AI_MODEL = "@cf/openai/gpt-oss-120b";

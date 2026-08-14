@@ -11,15 +11,20 @@ const { inspectorPort, port, statePath } = resolveE2eRuntime();
 const e2ePort = String(port);
 
 const signingSecret = randomBytes(48).toString("base64url");
+const itinerarySecret = randomBytes(48).toString("base64url");
 const privateDirectory = await mkdtemp(join(tmpdir(), "program-cue-e2e-"));
 const variableFile = join(privateDirectory, "worker.env");
 // Keep the signing secret ephemeral even though the checked-in demo profile is
 // otherwise the real browser-test runtime. Mailpit remains its explicit local
 // capture provider; an unavailable provider still fails visibly.
-await writeFile(variableFile, `BETTER_AUTH_SECRET=${signingSecret}\n`, {
-  encoding: "utf8",
-  mode: 0o600,
-});
+await writeFile(
+  variableFile,
+  `BETTER_AUTH_SECRET=${signingSecret}\nANONYMOUS_ITINERARY_SECRET=${itinerarySecret}\n`,
+  {
+    encoding: "utf8",
+    mode: 0o600,
+  },
+);
 
 const wrangler = spawn(
   resolvePackageExecutable("wrangler", "wrangler"),

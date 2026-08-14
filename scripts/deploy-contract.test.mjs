@@ -64,6 +64,21 @@ test("Wrangler profiles have no structural configuration issues", () => {
   assert.deepEqual(issues, []);
 });
 
+test("local itinerary secrets cannot be checked into Wrangler profiles", () => {
+  const configs = readDeploymentConfigs();
+  configs.development.vars.ANONYMOUS_ITINERARY_SECRET = "checked-in-secret";
+
+  assert.ok(
+    validateDeploymentConfigs(configs).some(
+      ({ profile, kind, message }) =>
+        profile === "development" &&
+        kind === "configuration" &&
+        message ===
+          "Local signing secrets must come from an ignored .dev.vars file or ephemeral test injection.",
+    ),
+  );
+});
+
 test("production operator commands target the configured WNAM database", async () => {
   const configs = readDeploymentConfigs();
   const databaseName = configs.production.d1_databases[0].database_name;
@@ -327,6 +342,7 @@ test("README secret commands and local example cannot drift from the contract", 
       }),
   );
   assert.ok(localValues.has("BETTER_AUTH_SECRET"));
+  assert.ok(localValues.has("ANONYMOUS_ITINERARY_SECRET"));
   for (const [name, value] of localValues)
     assert.equal(value, "", `${name} must not have a checked-in example value`);
 });

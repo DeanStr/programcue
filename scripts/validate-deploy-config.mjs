@@ -796,7 +796,7 @@ function validateLocal(profile, config, issues) {
       ),
     );
   }
-  if (variables.BETTER_AUTH_SECRET) {
+  if (variables.BETTER_AUTH_SECRET || variables.ANONYMOUS_ITINERARY_SECRET) {
     issues.push(
       issue(
         profile,

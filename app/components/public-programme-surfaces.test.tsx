@@ -46,7 +46,7 @@ const session: PublishedSession = {
 };
 
 const programme = {
-  event: { slug: "future-of-events-2025", timezone: "America/Toronto" },
+  event: { slug: "future-of-events-2027", timezone: "America/Toronto" },
 } as PublishedProgramme;
 
 function model(overrides: Partial<PublicProgrammeModel> = {}) {
@@ -170,7 +170,7 @@ describe("public programme speaker surfaces", () => {
     expect(markup).toContain("Tuesday, May 20");
     expect(markup).toContain("9:00–9:45 AM");
     expect(markup).toContain(
-      'href="/public/programme/future-of-events-2025#session-future-attendee-engagement"',
+      'href="/public/programme/future-of-events-2027#session-future-attendee-engagement"',
     );
   });
 

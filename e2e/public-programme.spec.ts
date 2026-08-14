@@ -19,13 +19,13 @@ test.beforeEach(async ({ page }) => {
   ]);
   // Opening the public route establishes the deterministic demo publication that
   // both admin views read; production mode never executes this seed path.
-  await waitForInterface(page, "/public/programme/future-of-events-2025");
+  await waitForInterface(page, "/public/programme/future-of-events-2027");
 });
 
 test("public programme filters sessions by track, format and room", async ({
   page,
 }) => {
-  await waitForInterface(page, "/public/programme/future-of-events-2025");
+  await waitForInterface(page, "/public/programme/future-of-events-2027");
   const rows = page.locator(".programme-row");
   const total = await rows.count();
   expect(total).toBe(5);
@@ -88,7 +88,7 @@ test("public programme exposes speaker affiliations and a closable profile panel
   // Opening the organiser roster materialises the demo speaker's title and
   // organisation; the public surface only renders what D1 already holds.
   await waitForInterface(page, "/admin/speakers");
-  await waitForInterface(page, "/public/programme/future-of-events-2025");
+  await waitForInterface(page, "/public/programme/future-of-events-2027");
 
   // Each session-row affiliation remains attached to the matching speaker and
   // includes both title and organisation.
@@ -121,7 +121,7 @@ test("public programme exposes speaker affiliations and a closable profile panel
   // A shared profile URL has no opener recorded in component state, so close
   // falls back to its visible speaker-card link instead of dropping focus.
   await page.goto(
-    "/public/programme/future-of-events-2025#speaker-person-demo-speaker",
+    "/public/programme/future-of-events-2027#speaker-person-demo-speaker",
   );
   await page.locator("body[data-hydrated='true']").waitFor();
   await expect(profile).toBeVisible();

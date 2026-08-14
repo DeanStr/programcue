@@ -29,6 +29,7 @@ const requiredProductionValues = [
   "EMBED_FRAME_ANCESTORS",
   "RESOURCE_EMBED_ORIGINS",
   "BETTER_AUTH_SECRET",
+  "ANONYMOUS_ITINERARY_SECRET",
   "RESEND_API_KEY",
   "RESEND_WEBHOOK_SECRET",
   "CALENDAR_CREDENTIALS_KEY",
@@ -100,6 +101,20 @@ export function requireProductionRuntimeReadiness(
     values.BETTER_AUTH_SECRET.trim().length < 32
   ) {
     invalid.push("BETTER_AUTH_SECRET");
+  }
+  if (
+    typeof values.ANONYMOUS_ITINERARY_SECRET === "string" &&
+    values.ANONYMOUS_ITINERARY_SECRET.trim().length < 32
+  ) {
+    invalid.push("ANONYMOUS_ITINERARY_SECRET");
+  }
+  if (
+    typeof values.BETTER_AUTH_SECRET === "string" &&
+    typeof values.ANONYMOUS_ITINERARY_SECRET === "string" &&
+    values.BETTER_AUTH_SECRET.trim() ===
+      values.ANONYMOUS_ITINERARY_SECRET.trim()
+  ) {
+    invalid.push("BETTER_AUTH_SECRET", "ANONYMOUS_ITINERARY_SECRET");
   }
   if (runtime.evaluation) {
     if (

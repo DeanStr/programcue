@@ -34,7 +34,7 @@ describe("Accelevents integration service", () => {
   beforeEach(async () => {
     await new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
-    ).getPublished("future-of-events-2025");
+    ).getPublished("future-of-events-2027");
     await env.DB.batch([
       env.DB.prepare("DELETE FROM integration_entity_mappings"),
       env.DB.prepare("DELETE FROM integration_runs"),

@@ -265,7 +265,7 @@ Speaker Network/CRM bonus:
     "speaker2": "marcus.speaker@sbek-test.example.com",
     "reviewer": "sam.reviewer@sbek-test.example.com"
   },
-  "submissionNotes": "Program Cue production deployment with EVALUATION_MODE enabled for a dedicated seeded Future of Events fixture. Open /evaluate, enter the supplied access code and choose the matching fixed identity before saving each starting state. Organizer = Jordan Alvarez, speaker = Priya Raman, reviewer = Sam Whitfield; Marcus Okafor is an in-scenario co-speaker input, not a separately saved starting state. Return to /evaluate and select the target card whenever a scenario switches roles. The public programme is /public/programme/future-of-events-2025. When creating a blank D1 event, explicitly choose the available verified sender so that event's later communication workflow is ready. Reset only before a new full run, never between chained scenarios."
+  "submissionNotes": "Program Cue production deployment with EVALUATION_MODE enabled for a dedicated seeded Future of Events fixture. Open /evaluate, enter the supplied access code and choose the matching fixed identity before saving each starting state. Organizer = Jordan Alvarez, speaker = Priya Raman, reviewer = Sam Whitfield; Marcus Okafor is an in-scenario co-speaker input, not a separately saved starting state. Return to /evaluate and select the target card whenever a scenario switches roles. The public programme is /public/programme/future-of-events-2027. When creating a blank D1 event, explicitly choose the available verified sender so that event's later communication workflow is ready. Reset only before a new full run, never between chained scenarios."
 }
 ```
 
@@ -312,8 +312,9 @@ created during the optional scenario can explicitly copy a still-verified
 sender from another active event in the same organisation. That is sender reuse
 only; it neither copies templates nor claims a provider send.
 
-In the speaker roster, `Add speaker record` creates a `prospect` with profile
-data and sends nothing. Use the separate row action to persist an actual portal
+In the speaker roster, `Add speaker record` creates a `prospect`, stores the
+organiser-entered profile data in the organisation-scoped contact profile and
+sends nothing. Use the separate row action to persist an actual portal
 invitation and durable email operation. Do not report a roster record as an
 invitation.
 

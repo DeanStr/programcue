@@ -57,7 +57,7 @@ describe("schedule publication workflows", () => {
       .bind(viewer.personId, viewer.eventId)
       .run();
     const liveBefore = await publicProgramme.getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     );
     const sessionBefore = liveBefore?.sessions.find(
       (session) => session.id === "schedule-test-one",
@@ -87,7 +87,7 @@ describe("schedule publication workflows", () => {
         .bind("schedule-test-one", viewer.eventId)
         .first<{ status: string }>(),
       schedule.getWorkspace(viewer),
-      publicProgramme.getPublished("future-of-events-2025"),
+      publicProgramme.getPublished("future-of-events-2027"),
     ]);
     expect(sessionRow?.status).toBe("published");
     expect(
@@ -121,7 +121,7 @@ describe("schedule publication workflows", () => {
     });
     let [contentDraft, liveWhileContentDraft] = await Promise.all([
       schedule.getWorkspace(viewer),
-      publicProgramme.getPublished("future-of-events-2025"),
+      publicProgramme.getPublished("future-of-events-2027"),
     ]);
     expect(
       liveWhileContentDraft?.sessions.find(
@@ -147,7 +147,7 @@ describe("schedule publication workflows", () => {
       scheduleRevision: contentDraft.version!.revision,
     });
     const liveAfterPublication = await publicProgramme.getPublished(
-      "future-of-events-2025",
+      "future-of-events-2027",
     );
     expect(liveAfterPublication?.version.id).toBe(versionId);
     expect(

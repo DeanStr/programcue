@@ -67,12 +67,12 @@ describe("programme embed configuration", () => {
       showSpeakers: false,
     };
     expect(
-      programmeEmbedUrl("https://events.example.com", "future-of-events-2025", {
+      programmeEmbedUrl("https://events.example.com", "future-of-events-2027", {
         ...configuration,
         controls: [...configuration.controls],
       }),
     ).toBe(
-      "https://events.example.com/embed/future-of-events-2025?day=2025-05-21&track=AI+%26+Innovation&format=breakout&room=Room+303&query=better+data&accent=%230d9488&controls=search%2Cday&density=compact&speakers=hide",
+      "https://events.example.com/embed/future-of-events-2027?day=2025-05-21&track=AI+%26+Innovation&format=breakout&room=Room+303&query=better+data&accent=%230d9488&controls=search%2Cday&density=compact&speakers=hide",
     );
   });
 
@@ -80,10 +80,10 @@ describe("programme embed configuration", () => {
     expect(
       programmeEmbedUrl(
         "https://events.example.com",
-        "future-of-events-2025",
+        "future-of-events-2027",
         defaultProgrammeEmbedConfiguration(),
       ),
-    ).toBe("https://events.example.com/embed/future-of-events-2025");
+    ).toBe("https://events.example.com/embed/future-of-events-2027");
   });
 
   it("rejects malformed control, density and speaker options", () => {
@@ -176,7 +176,7 @@ describe("programme embed configuration", () => {
     };
     const url = programmeEmbedUrl(
       "https://events.example.com",
-      "future-of-events-2025",
+      "future-of-events-2027",
       configuration,
     );
     expect(programmeIframeSnippet(url, 'Programme "preview"', 640)).toContain(
@@ -188,7 +188,7 @@ describe("programme embed configuration", () => {
     expect(
       programmeWidgetSnippet({
         origin: "https://events.example.com",
-        eventSlug: "future-of-events-2025",
+        eventSlug: "future-of-events-2027",
         target: "programme-widget",
         title: "Programme",
         configuration,

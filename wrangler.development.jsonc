@@ -52,7 +52,7 @@
     "AUTH_EMAIL_FROM": "Program Cue Local <program-cue@localhost.test>",
     "EMAIL_PROVIDER": "mailpit",
     "MAILPIT_SEND_API_URL": "http://127.0.0.1:8025/api/v1/send",
-    "PUBLIC_EVENT_SLUG": "future-of-events-2025",
+    "PUBLIC_EVENT_SLUG": "future-of-events-2027",
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
     "CORS_ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173",
     "EMBED_FRAME_ANCESTORS": "*",

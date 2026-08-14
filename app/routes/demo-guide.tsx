@@ -126,7 +126,7 @@ const walkthrough: ReadonlyArray<DemoWalkthroughStep> = [
     phase: "publish",
     title: "Public programme",
     copy: "Try gallery filters, itinerary, calendar and embed links.",
-    href: "/public/programme/future-of-events-2025",
+    href: "/public/programme/future-of-events-2027",
     identityKey: "administrator",
   },
   {
@@ -481,7 +481,7 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
           ) : (
             <Link
               className="btn primary"
-              to="/public/programme/future-of-events-2025"
+              to="/public/programme/future-of-events-2027"
             >
               Browse anonymously <ArrowRight aria-hidden size={15} />
             </Link>

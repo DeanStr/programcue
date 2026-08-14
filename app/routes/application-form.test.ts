@@ -467,7 +467,7 @@ describe("public application mutations", () => {
       throw new Error("Expected the public application landing payload.");
     }
 
-    expect(result.programmeUrl).toBe("/public/programme/future-of-events-2025");
+    expect(result.programmeUrl).toBe("/public/programme/future-of-events-2027");
     expect(result.featuredSpeakers).toEqual([]);
   });
 

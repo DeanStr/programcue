@@ -412,19 +412,19 @@ export default function EvaluationGuide({ loaderData }: Route.ComponentProps) {
         <div className="page-actions">
           <Link
             className="btn primary"
-            to="/public/programme/future-of-events-2025"
+            to="/public/programme/future-of-events-2027"
           >
             Published programme <ExternalLink aria-hidden size={14} />
           </Link>
           <Link
             className="btn"
-            to="/public/programme/future-of-events-2025/schedule"
+            to="/public/programme/future-of-events-2027/schedule"
           >
             Schedule
           </Link>
           <Link
             className="btn"
-            to="/public/programme/future-of-events-2025/gallery"
+            to="/public/programme/future-of-events-2027/gallery"
           >
             Speaker gallery
           </Link>
