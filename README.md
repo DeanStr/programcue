@@ -322,8 +322,11 @@ organisation. It restores the canonical event, retires evaluator-created
 events, clears their private R2 data, removes only safe fixture-created people
 and fails on active work, retention, identity drift or cross-tenant state. The
 temporary reset credentials and evaluator address bindings are removed after
-seeding; the permanent evaluation access and signing secrets remain installed
-only for the evaluation period.
+seeding. After initial provisioning, the unlocked guide offers a typed,
+rate-limited routine reset that reuses only the persisted fixture identities and
+verified sender; it invalidates all saved evaluator sessions. The permanent
+evaluation access and signing secrets remain installed only for the evaluation
+period.
 
 Secret installation, mode-`0600` environment handling, reset and cleanup
 commands, exact personas and aliases, bounded evaluation exceptions, Codex/SBEK

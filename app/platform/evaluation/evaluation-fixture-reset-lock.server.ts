@@ -16,6 +16,7 @@ const EVALUATION_FIXTURE_RESET_LEASE_SECONDS = 30 * 60;
 export async function acquireEvaluationFixtureReset(
   env: CloudflareEnvironment,
   ownerToken: string,
+  expectedFixtureGeneration?: string,
 ) {
   const acquired = await env.DB.prepare(
     `INSERT INTO operation_jobs (
@@ -41,6 +42,10 @@ export async function acquireEvaluationFixtureReset(
        completed_at = NULL,
        updated_at = unixepoch()
      WHERE operation_jobs.type = excluded.type
+       AND (? IS NULL OR (
+         operation_jobs.status = 'completed'
+         AND json_extract(operation_jobs.result_json, '$.fixtureGeneration') = ?
+       ))
        AND (
          (operation_jobs.status IN ('completed', 'failed')
            AND operation_jobs.claim_token IS NULL)
@@ -59,16 +64,24 @@ export async function acquireEvaluationFixtureReset(
       JSON.stringify({ attemptId: ownerToken }),
       ownerToken,
       EVALUATION_FIXTURE_RESET_LEASE_SECONDS,
+      expectedFixtureGeneration ?? null,
+      expectedFixtureGeneration ?? null,
     )
     .run();
   if ((acquired.meta.changes ?? 0) === 1) return;
 
   const existing = await env.DB.prepare(
-    `SELECT type, status, claim_token AS claimToken
+    `SELECT type, status, claim_token AS claimToken,
+            json_extract(result_json, '$.fixtureGeneration') AS fixtureGeneration
        FROM operation_jobs WHERE id = ?`,
   )
     .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
-    .first<{ type: string; status: string; claimToken: string | null }>();
+    .first<{
+      type: string;
+      status: string;
+      claimToken: string | null;
+      fixtureGeneration: string | null;
+    }>();
   if (
     existing?.type === EVALUATION_FIXTURE_RESET_OPERATION_TYPE &&
     existing.status === "running" &&
@@ -76,6 +89,15 @@ export async function acquireEvaluationFixtureReset(
   ) {
     throw new Error(
       "A production evaluation fixture reset is already in progress.",
+    );
+  }
+  if (
+    expectedFixtureGeneration &&
+    existing?.type === EVALUATION_FIXTURE_RESET_OPERATION_TYPE &&
+    existing.fixtureGeneration !== expectedFixtureGeneration
+  ) {
+    throw new Error(
+      "Evaluation access expired because another fixture reset completed. Enter the access code again.",
     );
   }
   throw new Error(
@@ -147,6 +169,7 @@ export async function completeEvaluationFixtureReset(
   ownerToken: string,
   fixtureGeneration: string,
   metadata: Record<string, unknown>,
+  actorId = EVALUATION_FIXTURE_RESET_ACTOR_ID,
 ) {
   const completionMetadata = {
     ...metadata,
@@ -171,7 +194,7 @@ export async function completeEvaluationFixtureReset(
       fixtureGeneration,
       DEMO_ORGANISATION_ID,
       DEMO_EVENT_ID,
-      EVALUATION_FIXTURE_RESET_ACTOR_ID,
+      actorId,
       DEMO_EVENT_ID,
       JSON.stringify(completionMetadata),
       EVALUATION_FIXTURE_RESET_OPERATION_ID,

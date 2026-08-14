@@ -6,6 +6,12 @@ import { describe, expect, it } from "vitest";
 import { requireAuthenticatedPerson } from "~/platform/auth/authorize.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { resetProductionEvaluationFixture } from "~/platform/evaluation/evaluation-fixture.server";
+import {
+  acquireEvaluationFixtureReset,
+  completeEvaluationFixtureReset,
+  EVALUATION_FIXTURE_RESET_OPERATION_ID,
+} from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
 import { action, loader } from "./evaluation-guide";
 import { action as signOut } from "./sign-out";
 
@@ -30,7 +36,33 @@ function productionEnvironment() {
     EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
     EVALUATION_SESSION_SECRET:
       "evaluation-session-secret-with-more-than-thirty-two-characters",
+    AUTH_EMAIL_FROM: "Program Cue <auth@programcue.com>",
+    EMAIL_PROVIDER: "resend",
+    RESEND_API_KEY: "test-resend-key",
+    AI: {} as Ai,
   } as CloudflareEnvironment;
+}
+
+async function provisionEvaluationFixture(environment: CloudflareEnvironment) {
+  await resetProductionEvaluationFixture(
+    {
+      ...environment,
+      EVALUATOR_ORGANIZER_EMAIL: "eval-organizer@programcue.com",
+      EVALUATOR_SPEAKER_EMAIL: "eval-speaker@programcue.com",
+      EVALUATOR_SECOND_SPEAKER_EMAIL: "eval-speaker-2@programcue.com",
+      EVALUATOR_REVIEWER_EMAIL: "eval-reviewer@programcue.com",
+    } as CloudflareEnvironment,
+    "Future of Events 2027",
+    {
+      list: async () => [
+        {
+          id: "resend-domain-programcue",
+          name: "programcue.com",
+          status: "verified",
+        },
+      ],
+    },
+  );
 }
 
 function request(
@@ -61,6 +93,23 @@ function responseCookieHeader(response: Response) {
 
 async function recordFixtureReset(environment: CloudflareEnvironment) {
   const fixtureGeneration = crypto.randomUUID();
+  const resetLock = await environment.DB.prepare(
+    "SELECT id FROM operation_jobs WHERE id = ?",
+  )
+    .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
+    .first();
+  if (resetLock) {
+    const ownerToken = crypto.randomUUID();
+    await acquireEvaluationFixtureReset(environment, ownerToken);
+    await completeEvaluationFixtureReset(
+      environment,
+      ownerToken,
+      fixtureGeneration,
+      { testFixtureGeneration: true },
+      "test-operator",
+    );
+    return fixtureGeneration;
+  }
   await environment.DB.prepare(
     `INSERT INTO audit_events (
        id, organisation_id, event_id, actor_id, action,
@@ -267,6 +316,132 @@ describe("production evaluation guide", () => {
     }
     expect(unauthorised.status).toBe(302);
     expect(unauthorised.headers.get("location")).toBe("/evaluate");
+  });
+
+  it("resets provisioned evaluation data without reset-only secrets and returns to the unlocked role picker", async () => {
+    const environment = productionEnvironment();
+    await provisionEvaluationFixture(environment);
+    expect([
+      environment.EVALUATION_FIXTURE_SECRET,
+      environment.EVALUATION_RESEND_API_KEY,
+      environment.EVALUATOR_ORGANIZER_EMAIL,
+      environment.EVALUATOR_SPEAKER_EMAIL,
+      environment.EVALUATOR_SECOND_SPEAKER_EMAIL,
+      environment.EVALUATOR_REVIEWER_EMAIL,
+    ]).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    const unlocked = await action({
+      request: request({
+        _intent: "unlock",
+        accessCode: "evaluation-access-code-2026",
+      }),
+      params: {},
+      context: context(environment),
+    } as never);
+    const activated = await action({
+      request: request(
+        { _intent: "activate_account", identity: "sbek_applicant" },
+        { cookie: responseCookieHeader(unlocked as Response) },
+      ),
+      params: {},
+      context: context(environment),
+    } as never);
+    const oldCookies = responseCookieHeader(activated as Response);
+
+    const result = await action({
+      request: request(
+        {
+          _intent: "reset_fixture",
+          confirmation: "Future of Events 2027",
+        },
+        { cookie: oldCookies },
+      ),
+      params: {},
+      context: context(environment),
+    } as never);
+    if (result instanceof Response) {
+      throw new Error("Evaluator reset unexpectedly returned a redirect.");
+    }
+    expect(result.data).toEqual({
+      ok: true,
+      message: "Evaluation data reset. Choose a fresh starting persona.",
+    });
+    const newCookies = responseCookieHeader(
+      new Response(null, result.init ?? undefined),
+    );
+    await expect(
+      loader({
+        request: new Request("https://app.programcue.com/evaluate", {
+          headers: { cookie: oldCookies },
+        }),
+        params: {},
+        context: context(environment),
+      } as never),
+    ).resolves.toMatchObject({ unlocked: false, selected: null });
+    await expect(
+      loader({
+        request: new Request("https://app.programcue.com/evaluate", {
+          headers: { cookie: newCookies },
+        }),
+        params: {},
+        context: context(environment),
+      } as never),
+    ).resolves.toMatchObject({ unlocked: true, selected: null });
+    await expect(
+      environment.DB.prepare(
+        `SELECT id FROM memberships
+          WHERE id = 'membership-production-evaluation-applicant-event'`,
+      ).first(),
+    ).resolves.toBeNull();
+    const audit = await environment.DB.prepare(
+      `SELECT actor_id AS actorId, metadata_json AS metadataJson
+         FROM audit_events
+        WHERE action = 'evaluation.fixture.reset'
+        ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+    ).first<{ actorId: string; metadataJson: string }>();
+    expect(audit?.actorId).toBe("production-evaluation-access");
+    expect(JSON.parse(audit?.metadataJson ?? "{}")).toMatchObject({
+      authority: "evaluator",
+      identityKey: "sbek_applicant",
+      senderVerification: "persisted_sender_profile",
+      status: "completed",
+    });
+  });
+
+  it("requires the exact event name before an evaluator reset", async () => {
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    const environment = productionEnvironment();
+    await recordFixtureReset(environment);
+    const unlocked = await action({
+      request: request({
+        _intent: "unlock",
+        accessCode: "evaluation-access-code-2026",
+      }),
+      params: {},
+      context: context(environment),
+    } as never);
+    const result = await action({
+      request: request(
+        { _intent: "reset_fixture", confirmation: "Future of Events" },
+        { cookie: responseCookieHeader(unlocked as Response) },
+      ),
+      params: {},
+      context: context(environment),
+    } as never);
+    if (result instanceof Response) {
+      throw new Error("Invalid reset confirmation returned a redirect.");
+    }
+    expect(result.init?.status).toBe(409);
+    expect(result.data).toEqual({
+      ok: false,
+      message: "Type Future of Events 2027 exactly to reset the fixture.",
+    });
   });
 
   it("explicitly activates and audits the clean evaluator submitter account", async () => {

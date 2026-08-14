@@ -164,6 +164,18 @@ session generation only in the same D1 transaction that completes the owning
 operation. Live overlap is rejected; failed and expired attempts remain
 fail-closed while allowing a later operator reset to recover them.
 
+The current release candidate also exposes a destructive, collapsed reset on
+the unlocked `/evaluate` guide for starting a separate human or automated run.
+It requires the canonical event name, consumes a dedicated D1/IP rate limit and
+reuses the same fenced reset engine. Unlike initial operator provisioning, it
+reads the four already-provisioned safe fixture addresses and exact verified
+sender from D1 and never needs the deleted address bindings or full-access
+Resend domain key. The reset claim is conditional on the initiating session's
+already-validated fixture generation. Missing or drifted provisioning and a
+concurrently superseded session fail before destructive work.
+Completion audits the evaluator authority, invalidates every prior evaluator
+cookie and returns the initiating browser to an unlocked gate-only role picker.
+
 The seeded communications baseline now contains five published templates:
 speaker task reminder, reviewer reminder, speaker welcome, submission
 confirmation and proposal decision. Showcase tasks have due dates; task
