@@ -111,7 +111,7 @@ export async function scheduledSpeakerEnvironment() {
     env.DB.prepare(
       `UPDATE schedule_session_contents
           SET content_status = 'approved', approved_by_person_id = ?,
-              approved_at = unixepoch()
+              approved_at = unixepoch(), approval_source = 'editorial'
         WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
     ).bind(
       calendarTestViewer.personId,

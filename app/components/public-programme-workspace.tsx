@@ -252,11 +252,11 @@ export function PublicSpeakerCard({
           {affiliation ? <p className="help">{affiliation}</p> : null}
         </div>
       </div>
-      <p className="public-speaker-card-bio">
-        {speaker.biography
-          ? descriptionSnippet(speaker.biography)
-          : "Biography not provided."}
-      </p>
+      {speaker.biography ? (
+        <p className="public-speaker-card-bio">
+          {descriptionSnippet(speaker.biography)}
+        </p>
+      ) : null}
       <div className="public-speaker-card-foot">
         <span className="help">
           {speaker.sessionIds.length} session
@@ -846,7 +846,9 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
               Pronunciation · {selectedSpeaker.pronunciation}
             </p>
           ) : null}
-          <p>{selectedSpeaker.biography || "Biography not provided."}</p>
+          {selectedSpeaker.biography ? (
+            <p>{selectedSpeaker.biography}</p>
+          ) : null}
           <h3>
             Sessions{" "}
             <span className="status info">

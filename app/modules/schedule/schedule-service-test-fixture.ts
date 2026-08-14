@@ -109,7 +109,8 @@ export async function approveScheduledTestContent(
   const result = await env.DB.prepare(
     `UPDATE schedule_session_contents
         SET content_status = 'approved',
-            approved_by_person_id = ?, approved_at = unixepoch()
+            approved_by_person_id = ?, approved_at = unixepoch(),
+            approval_source = 'editorial'
       WHERE event_id = ? AND schedule_version_id = ?
         AND session_id IN (
           SELECT session_id FROM schedule_entries

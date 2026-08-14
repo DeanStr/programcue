@@ -15,10 +15,8 @@ import {
   PublishedProgrammeItineraryNotFoundError,
   PublishedProgrammeSessionNotFoundError,
   PublicProgrammeService,
-  readCookie,
 } from "~/modules/programme/public-programme-service.server";
 import {
-  PUBLIC_ITINERARY_COOKIE,
   itineraryCookie,
   publicItineraryIdentity,
 } from "~/modules/programme/public-itinerary-identity.server";
@@ -201,12 +199,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   }
   const shared = url.searchParams.has("share");
   const shareToken = url.searchParams.get("share") ?? "";
-  const visitorToken = readCookie(request, PUBLIC_ITINERARY_COOKIE);
   const identity =
     embedded || shared
-      ? { personId: null, visitorToken }
+      ? { personId: null, visitorToken: null }
       : await publicItineraryIdentity(request, env);
-  const { personId } = identity;
+  const { personId, visitorToken } = identity;
   const itineraryVerificationRequired =
     !embedded &&
     !shared &&
@@ -329,9 +326,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       { ok: true },
       {
         headers: {
-          "set-cookie": itineraryCookie(
+          "set-cookie": await itineraryCookie(
+            env,
             itinerary.token,
-            itinerary.expiresAt,
             request.url,
           ),
         },

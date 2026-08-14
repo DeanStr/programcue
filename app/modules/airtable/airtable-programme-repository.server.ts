@@ -514,11 +514,8 @@ export class AirtableProgrammeRepository {
       throw new AirtableRepositoryReconciliationError(
         "The schedule version cannot be staged for Airtable publication.",
       );
-    const invalidContent = await this.env.DB.prepare(
-      `SELECT entry.session_id AS sessionId,
-              CASE WHEN content.session_id IS NULL
-                   THEN 'missing or private'
-                   ELSE content.content_status END AS contentStatus
+    const missingContent = await this.env.DB.prepare(
+      `SELECT entry.session_id AS sessionId
          FROM schedule_entries entry
          JOIN sessions session
            ON session.id = entry.session_id AND session.event_id = entry.event_id
@@ -530,15 +527,15 @@ export class AirtableProgrammeRepository {
           AND content.event_id = entry.event_id
           AND content.visibility = 'public'
         WHERE entry.event_id = ? AND entry.schedule_version_id = ?
-          AND (content.session_id IS NULL OR content.content_status <> 'approved')
+          AND content.session_id IS NULL
         ORDER BY entry.session_id
         LIMIT 1`,
     )
       .bind(eventId, versionId)
-      .first<{ sessionId: string; contentStatus: string }>();
-    if (invalidContent) {
+      .first<{ sessionId: string }>();
+    if (missingContent) {
       throw new AirtableRepositoryReconciliationError(
-        `Session ${invalidContent.sessionId} has ${invalidContent.contentStatus} public content. Approve every public session before staging Airtable publication.`,
+        `Session ${missingContent.sessionId} is missing a public content snapshot.`,
       );
     }
     const [sessionRows, speakerRows] = await Promise.all([
@@ -584,7 +581,6 @@ export class AirtableProgrammeRepository {
             AND track.is_public = 1
           WHERE entry.event_id = ? AND entry.schedule_version_id = ?
             AND content.visibility = 'public'
-            AND content.content_status = 'approved'
             AND session.status IN ('scheduled','published')
             AND session.visibility = 'public'
           ORDER BY entry.starts_at, entry.id`,
@@ -624,7 +620,6 @@ export class AirtableProgrammeRepository {
              ON session.id = relation.session_id AND session.event_id = relation.event_id
           WHERE content.event_id = ? AND entry.schedule_version_id = ?
             AND content.visibility = 'public'
-            AND content.content_status = 'approved'
             AND session.status IN ('scheduled','published')
             AND session.visibility = 'public'
             AND relation.visibility = 'public'

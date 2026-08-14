@@ -226,6 +226,10 @@ test("event roster previews CSV speakers and exposes explicit workflow status", 
     page.getByRole("heading", { name: "Import preview" }),
   ).toBeVisible();
   await expect(page.getByRole("cell", { name: "Priya Raman" })).toBeVisible();
+  const priyaPreview = page.getByRole("row", { name: /Priya Raman/ });
+  await expect(priyaPreview).toContainText("Principal Engineer");
+  await expect(priyaPreview).toContainText("Latticework Systems");
+  await expect(priyaPreview).toContainText("imported details already match");
   await expect(
     page.getByRole("cell", { name: "Prospect" }).first(),
   ).toBeVisible();

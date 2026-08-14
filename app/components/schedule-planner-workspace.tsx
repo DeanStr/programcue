@@ -284,14 +284,23 @@ export function SchedulePlannerWorkspace({
     () => new Map(workspace.sessions.map((session) => [session.id, session])),
     [workspace.sessions],
   );
-  const contentPublicationBlockers = useMemo(
+  const contentReviewAdvisories = useMemo(
+    () =>
+      workspace.entries.flatMap((entry) => {
+        const session = sessionById.get(entry.sessionId);
+        return session && session.contentStatus !== "approved"
+          ? [session]
+          : [];
+      }),
+    [sessionById, workspace.entries],
+  );
+  const publicContentVisibilityBlockers = useMemo(
     () =>
       workspace.entries.flatMap((entry) => {
         const session = sessionById.get(entry.sessionId);
         return session &&
           session.sourceVisibility === "public" &&
-          (session.visibility !== "public" ||
-            session.contentStatus !== "approved")
+          session.visibility !== "public"
           ? [session]
           : [];
       }),
@@ -1189,7 +1198,7 @@ export function SchedulePlannerWorkspace({
                 />
                 <button
                   className="btn primary"
-                  disabled={contentPublicationBlockers.length > 0}
+                  disabled={publicContentVisibilityBlockers.length > 0}
                 >
                   Confirm publication
                 </button>
@@ -1203,39 +1212,61 @@ export function SchedulePlannerWorkspace({
           </p>
           <p className="help">
             Confirming publication makes this exact schedule-version snapshot
-            authoritative. Approved content statuses stay unchanged.
+            authoritative. Editorial statuses stay unchanged.
           </p>
-          {contentPublicationBlockers.length ? (
+          {publicContentVisibilityBlockers.length ? (
             <div className="validation-item error">
               <strong>
-                {contentPublicationBlockers.length} scheduled public content
-                record
-                {contentPublicationBlockers.length === 1
-                  ? " cannot"
-                  : "s cannot"}
-                {" be published."}
+                {publicContentVisibilityBlockers.length} scheduled public
+                content record
+                {publicContentVisibilityBlockers.length === 1
+                  ? " is"
+                  : "s are"} private or hidden.
               </strong>{" "}
-              Every public session requires a public, Approved content snapshot.
-              Correct each listed session, then return here to publish this
-              exact schedule-version snapshot.
+              Public sessions require public content snapshots. Correct each
+              listed session before publishing.
               <ul>
-                {contentPublicationBlockers.slice(0, 5).map((session) => (
-                  <li key={session.id}>
-                    {session.title} ·{" "}
-                    {session.visibility === "public"
-                      ? session.contentStatus.replaceAll("_", " ")
-                      : session.visibility}
-                  </li>
-                ))}
-                {contentPublicationBlockers.length > 5 ? (
-                  <li>{contentPublicationBlockers.length - 5} more</li>
+                {publicContentVisibilityBlockers
+                  .slice(0, 5)
+                  .map((session) => (
+                    <li key={session.id}>
+                      {session.title} · {session.visibility}
+                    </li>
+                  ))}
+                {publicContentVisibilityBlockers.length > 5 ? (
+                  <li>{publicContentVisibilityBlockers.length - 5} more</li>
                 ) : null}
               </ul>
             </div>
           ) : (
             <div className="validation-item ok">
-              Every scheduled public session has a public, Approved content
-              snapshot.
+              Every scheduled public session has a public content snapshot.
+            </div>
+          )}
+          {contentReviewAdvisories.length ? (
+            <div className="validation-item warn">
+              <strong>
+                {contentReviewAdvisories.length} scheduled content
+                record
+                {contentReviewAdvisories.length === 1 ? " is" : "s are"} not
+                marked Approved.
+              </strong>{" "}
+              Editorial status is advisory. Publication uses the exact public
+              snapshot and leaves these statuses unchanged.
+              <ul>
+                {contentReviewAdvisories.slice(0, 5).map((session) => (
+                  <li key={session.id}>
+                    {session.title} · {session.contentStatus.replaceAll("_", " ")}
+                  </li>
+                ))}
+                {contentReviewAdvisories.length > 5 ? (
+                  <li>{contentReviewAdvisories.length - 5} more</li>
+                ) : null}
+              </ul>
+            </div>
+          ) : (
+            <div className="validation-item ok">
+              Every scheduled content record is marked Approved.
             </div>
           )}
           <div

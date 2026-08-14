@@ -158,7 +158,7 @@ export abstract class ScheduleSessionResourcesWorkflow extends ScheduleContentWo
             SET required_resources_json = ?, content_status = 'draft',
                 content_revision = content_revision + 1,
                 last_edited_by_person_id = ?, approved_by_person_id = NULL,
-                approved_at = NULL, last_operation_id = ?,
+                approved_at = NULL, approval_source = NULL, last_operation_id = ?,
                 updated_at = unixepoch()
           WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?
             AND content_revision = ?

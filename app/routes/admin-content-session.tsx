@@ -170,13 +170,15 @@ export default function AdminContentSession({
           {current.description || "No public description has been written."}
         </p>
         <p className="help">
-          Approval is required before public schedule publication. Public
-          programme, embed and API output include only approved content from
-          the published snapshot. Saving an edit returns this status to Draft.
+          Editorial status is advisory. Publishing uses the exact public
+          schedule snapshot without changing this status. Saving an edit
+          returns this status to Draft.
         </p>
-        {current.approvedAt ? (
+        {current.contentStatus === "approved" ? (
           <p className="help">
-            Approved by {current.approvedByName ?? "a previous administrator"}{" "}
+            {current.approvalSource === "legacy_publication"
+              ? "Legacy publication; editorial review was not recorded "
+              : `Approved by ${current.approvedByName} `}
             <EventDateTime
               epochSeconds={current.approvedAt}
               timeZone={current.timezone}

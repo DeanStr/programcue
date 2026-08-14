@@ -1,6 +1,7 @@
 import { eventLocalEndOfDayEpoch } from "~/modules/schedule/schedule-time";
 import { DEMO_EVENT_ID } from "~/platform/demo/demo-identities";
 import type { PublishedProgramme } from "./public-programme-service.server";
+import { eventVisitorKeyHash } from "./public-itinerary-token.server";
 
 const encoder = new TextEncoder();
 const EXPIRED_ITINERARY_CLEANUP_LIMIT = 100;
@@ -46,7 +47,11 @@ export class PublicItineraryService {
   async itinerary(programme: PublishedProgramme, identity: ItineraryIdentity) {
     if (!identity.personId && !identity.visitorToken) return [] as string[];
     const visitorHash = identity.visitorToken
-      ? await sha256(identity.visitorToken)
+      ? await eventVisitorKeyHash(
+          this.env,
+          identity.visitorToken,
+          programme.event.id,
+        )
       : null;
     const rows = await this.env.DB.prepare(
       `
@@ -90,7 +95,11 @@ export class PublicItineraryService {
   ) {
     if (!identity.personId) return false;
     if (!identity.visitorToken) return true;
-    const visitorHash = await sha256(identity.visitorToken);
+    const visitorHash = await eventVisitorKeyHash(
+      this.env,
+      identity.visitorToken,
+      programme.event.id,
+    );
     const anonymous = await this.env.DB.prepare(
       `SELECT id FROM public_itineraries
         WHERE event_id = ? AND visitor_key_hash = ? AND person_id IS NULL
@@ -106,7 +115,11 @@ export class PublicItineraryService {
     visitorToken: string | null,
   ) {
     if (!visitorToken) return false;
-    const visitorHash = await sha256(visitorToken);
+    const visitorHash = await eventVisitorKeyHash(
+      this.env,
+      visitorToken,
+      programme.event.id,
+    );
     return Boolean(
       await this.env.DB.prepare(
         `SELECT 1 FROM public_itineraries
@@ -191,7 +204,11 @@ export class PublicItineraryService {
     if (!identity.personId)
       throw new Error("A signed-in person is required to sync an itinerary.");
     if (!identity.visitorToken) return;
-    const visitorHash = await sha256(identity.visitorToken);
+    const visitorHash = await eventVisitorKeyHash(
+      this.env,
+      identity.visitorToken,
+      programme.event.id,
+    );
     const expiresAt = this.itineraryExpiresAt(programme);
     const [source, target] = await Promise.all([
       this.env.DB.prepare(
@@ -387,7 +404,11 @@ export class PublicItineraryService {
     let existing: { id: string; expiresAt: number | null } | null = null;
     let expiredExistingId: string | null = null;
     if (identity.visitorToken) {
-      const candidateHash = await sha256(identity.visitorToken);
+      const candidateHash = await eventVisitorKeyHash(
+        this.env,
+        identity.visitorToken,
+        programme.event.id,
+      );
       existing = await this.env.DB.prepare(
         `SELECT id, expires_at AS expiresAt FROM public_itineraries
             WHERE event_id = ? AND visitor_key_hash = ?`,
@@ -398,34 +419,19 @@ export class PublicItineraryService {
         existing !== null &&
         (existing.expiresAt === null ||
           existing.expiresAt > Math.floor(Date.now() / 1_000));
-      const recognizedInAnotherEvent = !existingIsActive
-        ? Boolean(
-            await this.env.DB.prepare(
-              `SELECT 1 FROM public_itineraries
-                  WHERE visitor_key_hash = ?
-                    AND event_id <> ?
-                    AND (expires_at IS NULL OR expires_at > unixepoch())
-                  LIMIT 1`,
-            )
-              .bind(candidateHash, programme.event.id)
-              .first(),
-          )
-        : false;
-      if (existingIsActive || recognizedInAnotherEvent) {
-        token = identity.visitorToken;
-        visitorHash = candidateHash;
-        if (!existingIsActive) {
-          expiredExistingId = existing?.id ?? null;
-          existing = null;
-        }
-      } else {
-        token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
-        visitorHash = await sha256(token);
+      token = identity.visitorToken;
+      visitorHash = candidateHash;
+      if (!existingIsActive) {
+        expiredExistingId = existing?.id ?? null;
         existing = null;
       }
     } else {
       token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
-      visitorHash = await sha256(token);
+      visitorHash = await eventVisitorKeyHash(
+        this.env,
+        token,
+        programme.event.id,
+      );
     }
     const itineraryId = existing?.id ?? crypto.randomUUID();
     if (intent === "add") {
@@ -487,22 +493,7 @@ export class PublicItineraryService {
         .bind(itineraryId, sessionId)
         .run();
     }
-    const cookieRetention = await this.env.DB.prepare(
-      `SELECT CASE
-                WHEN SUM(CASE WHEN expires_at IS NULL THEN 1 ELSE 0 END) > 0
-                  THEN NULL
-                ELSE MAX(expires_at)
-              END AS expiresAt
-         FROM public_itineraries
-        WHERE visitor_key_hash = ?
-          AND (expires_at IS NULL OR expires_at > unixepoch())`,
-    )
-      .bind(visitorHash)
-      .first<{ expiresAt: number | null }>();
-    if (!cookieRetention) {
-      throw new Error("Itinerary cookie retention query returned no result.");
-    }
-    return { token, expiresAt: cookieRetention.expiresAt };
+    return { token: intent === "add" ? token : null, expiresAt };
   }
 
   async shareItinerary(
@@ -510,7 +501,11 @@ export class PublicItineraryService {
     identity: ItineraryIdentity,
   ) {
     const visitorHash = identity.visitorToken
-      ? await sha256(identity.visitorToken)
+      ? await eventVisitorKeyHash(
+          this.env,
+          identity.visitorToken,
+          programme.event.id,
+        )
       : null;
     const itinerary = await this.env.DB.prepare(
       `

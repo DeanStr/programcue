@@ -334,6 +334,18 @@ describe("Airtable authoritative room repository", () => {
         .first<{ sessionId: string; title: string }>();
       expect(frozenContent).not.toBeNull();
       await env.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET content_status = 'in_review', approved_by_person_id = NULL,
+                approved_at = NULL, approval_source = NULL
+          WHERE event_id = ? AND session_id = ?
+            AND schedule_version_id IN (
+              SELECT id FROM schedule_versions
+               WHERE event_id = ? AND status = 'published'
+            )`,
+      )
+        .bind(viewer.eventId, frozenContent!.sessionId, viewer.eventId)
+        .run();
+      await env.DB.prepare(
         `UPDATE sessions SET title = 'Mutable title after publication',
                              updated_at = unixepoch()
           WHERE id = ? AND event_id = ?`,

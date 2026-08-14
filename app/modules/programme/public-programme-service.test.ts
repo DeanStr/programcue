@@ -16,6 +16,7 @@ import {
   itineraryCookie,
   publicItineraryIdentity,
 } from "./public-itinerary-identity.server";
+import { eventVisitorKeyHash } from "./public-itinerary-token.server";
 import {
   assertPublishedSpeakerGraphIntegrity,
   PublicProgrammeService,
@@ -32,7 +33,7 @@ describe("published programme and itinerary", () => {
     vi.unstubAllGlobals();
   });
 
-  it("fails fast when a published programme contains unapproved public content", async () => {
+  it("serves published public content while editorial review remains advisory", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
     const service = new PublicProgrammeService(testEnv);
@@ -43,23 +44,25 @@ describe("published programme and itinerary", () => {
     await testEnv.DB.prepare(
       `UPDATE schedule_session_contents
           SET content_status = 'in_review', approved_by_person_id = NULL,
-              approved_at = NULL
+              approved_at = NULL, approval_source = NULL
         WHERE schedule_version_id = 'demo-schedule-published'
           AND event_id = 'evt-foe-2025' AND session_id = 'demo-session-1'`,
     ).run();
     try {
-      await expect(
-        service.getPublished("future-of-events-2025"),
-      ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
+      const programme = await service.getPublished("future-of-events-2025");
+      expect(
+        programme?.sessions.some((session) => session.id === "demo-session-1"),
+      ).toBe(true);
       await expect(
         service.getPublishedLandingSummary("future-of-events-2025", 8),
-      ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
+      ).resolves.not.toBeNull();
     } finally {
       await testEnv.DB.prepare(
         `UPDATE schedule_session_contents
             SET content_status = 'approved',
-                approved_by_person_id = 'person-demo-admin',
-                approved_at = unixepoch()
+                approved_by_person_id = NULL,
+                approved_at = unixepoch(),
+                approval_source = 'legacy_publication'
           WHERE schedule_version_id = 'demo-schedule-published'
             AND event_id = 'evt-foe-2025' AND session_id = 'demo-session-1'`,
       ).run();
@@ -84,12 +87,19 @@ describe("published programme and itinerary", () => {
       selected.id,
       "add",
     );
+    const cookie = (
+      await itineraryCookie(
+        env as unknown as CloudflareEnvironment,
+        token!,
+        "https://programcue.test",
+      )
+    ).split(";")[0]!;
     const response = await publicCalendarLoader({
       request: new Request(
         "https://programcue.test/api/v1/public/events/future-of-events-2025/calendar.ics?itinerary=mine",
         {
           headers: {
-            cookie: `program_cue_itinerary=${encodeURIComponent(token!)}`,
+            cookie,
           },
         },
       ),
@@ -721,7 +731,7 @@ describe("published programme and itinerary", () => {
     expect(after?.version.id).toBe(before?.version.id);
   });
 
-  it("persists an anonymous itinerary by a hashed browser token", async () => {
+  it("persists an anonymous itinerary by an event-specific keyed browser hash", async () => {
     const programmeService = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
@@ -903,49 +913,18 @@ describe("published programme and itinerary", () => {
     }
   });
 
-  it("rotates an unrecognized visitor cookie instead of accepting a fixed bearer token", async () => {
-    const programmeService = new PublicProgrammeService(
-      env as unknown as CloudflareEnvironment,
-    );
-    const programme = await programmeService.getPublished(
-      "future-of-events-2025",
-    );
-    expect(programme).not.toBeNull();
-    const service = new PublicProgrammeService({
-      ...(env as unknown as CloudflareEnvironment),
-      DEMO_MODE: "false",
-    } as CloudflareEnvironment);
-    const activeProgramme = {
-      ...programme!,
-      event: { ...programme!.event, endDate: "2099-05-22" },
-    };
+  it("rejects an unsigned visitor cookie instead of accepting a fixed bearer token", async () => {
     const attackerSelectedToken = `fixed-${crypto.randomUUID()}`;
-    const result = await service.updateItinerary(
-      activeProgramme,
-      { personId: null, visitorToken: attackerSelectedToken },
-      activeProgramme.sessions[0]!.id,
-      "add",
-    );
-    expect(result.token).not.toBe(attackerSelectedToken);
-    expect(result.token).toMatch(/^[0-9a-f-]{72}$/u);
-
-    const fixedHash = Array.from(
-      new Uint8Array(
-        await crypto.subtle.digest(
-          "SHA-256",
-          new TextEncoder().encode(attackerSelectedToken),
-        ),
-      ),
-      (byte) => byte.toString(16).padStart(2, "0"),
-    ).join("");
     await expect(
-      env.DB.prepare(
-        `SELECT 1 FROM public_itineraries
-          WHERE event_id = ? AND visitor_key_hash = ?`,
-      )
-        .bind(activeProgramme.event.id, fixedHash)
-        .first(),
-    ).resolves.toBeNull();
+      publicItineraryIdentity(
+        new Request("https://programcue.test/public/programme/event", {
+          headers: {
+            cookie: `program_cue_itinerary=${encodeURIComponent(attackerSelectedToken)}`,
+          },
+        }),
+        env as unknown as CloudflareEnvironment,
+      ),
+    ).resolves.toEqual({ personId: null, visitorToken: null });
   });
 
   it("reuses one browser token without losing itineraries from another event", async () => {
@@ -968,17 +947,22 @@ describe("published programme and itinerary", () => {
     );
 
     const suffix = crypto.randomUUID();
+    const secondOrganisationId = `itinerary-org-${suffix}`;
     const secondEventId = `itinerary-event-${suffix}`;
     const secondSessionId = `itinerary-session-${suffix}`;
     await env.DB.batch([
       env.DB.prepare(
+        `INSERT INTO organisations (id, name, slug)
+         VALUES (?, 'Second itinerary organisation', ?)`,
+      ).bind(secondOrganisationId, `itinerary-org-${suffix}`),
+      env.DB.prepare(
         `INSERT INTO events (
           id, organisation_id, name, slug, timezone, starts_at, ends_at,
           file_policy_json
-        ) VALUES (?, 'org-future-events', 'Second itinerary event', ?, 'UTC',
+        ) VALUES (?, ?, 'Second itinerary event', ?, 'UTC',
                   4070908800, 4071081599,
                   '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}')`,
-      ).bind(secondEventId, `itinerary-event-${suffix}`),
+      ).bind(secondEventId, secondOrganisationId, `itinerary-event-${suffix}`),
       env.DB.prepare(
         `INSERT INTO sessions (
           id, event_id, title, slug, format, duration_minutes, status,
@@ -1007,7 +991,7 @@ describe("published programme and itinerary", () => {
       ],
     };
 
-    const { token: reusedToken, expiresAt: sharedCookieExpiry } =
+    const { token: reusedToken, expiresAt: secondItineraryExpiry } =
       await service.updateItinerary(
         secondProgramme,
         { personId: null, visitorToken: token },
@@ -1015,8 +999,8 @@ describe("published programme and itinerary", () => {
         "add",
       );
     expect(reusedToken).toBe(token);
-    expect(sharedCookieExpiry).toBe(
-      Math.floor(Date.parse("2099-05-23T03:59:59Z") / 1_000) + 365 * 86_400,
+    expect(secondItineraryExpiry).toBe(
+      Math.floor(Date.parse("2099-01-02T23:59:59Z") / 1_000) + 365 * 86_400,
     );
     expect(
       await service.itinerary(activeProgramme, {
@@ -1024,14 +1008,39 @@ describe("published programme and itinerary", () => {
         visitorToken: reusedToken,
       }),
     ).toEqual([firstSessionId]);
+    const [firstVisitorHash, secondVisitorHash] = await Promise.all([
+      eventVisitorKeyHash(
+        env as unknown as CloudflareEnvironment,
+        token!,
+        activeProgramme.event.id,
+      ),
+      eventVisitorKeyHash(
+        env as unknown as CloudflareEnvironment,
+        token!,
+        secondEventId,
+      ),
+    ]);
+    expect(firstVisitorHash).not.toBe(secondVisitorHash);
+    await expect(
+      env.DB.prepare(
+        `SELECT COUNT(*) AS total FROM public_itineraries
+          WHERE (event_id = ? AND visitor_key_hash = ?)
+             OR (event_id = ? AND visitor_key_hash = ?)`,
+      )
+        .bind(
+          activeProgramme.event.id,
+          firstVisitorHash,
+          secondEventId,
+          secondVisitorHash,
+        )
+        .first<{ total: number }>(),
+    ).resolves.toEqual({ total: 2 });
     await env.DB.prepare(
       `UPDATE public_itineraries
           SET expires_at = unixepoch() - 1
-        WHERE event_id = ? AND visitor_key_hash = (
-          SELECT visitor_key_hash FROM public_itineraries WHERE event_id = ?
-        )`,
+        WHERE event_id = ?`,
     )
-      .bind(activeProgramme.event.id, secondEventId)
+      .bind(activeProgramme.event.id)
       .run();
     expect(
       await service.itinerary(activeProgramme, {
@@ -1054,9 +1063,9 @@ describe("published programme and itinerary", () => {
     ).toEqual([firstSessionId]);
     const secondItinerary = await env.DB.prepare(
       `SELECT visitor_key_hash AS visitorHash, expires_at AS expiresAt
-         FROM public_itineraries WHERE event_id = ?`,
+         FROM public_itineraries WHERE event_id = ? AND visitor_key_hash = ?`,
     )
-      .bind(secondEventId)
+      .bind(secondEventId, secondVisitorHash)
       .first<{ visitorHash: string; expiresAt: number | null }>();
     expect(secondItinerary).not.toBeNull();
     expect(secondItinerary!.expiresAt).toBeGreaterThan(
@@ -1069,7 +1078,7 @@ describe("published programme and itinerary", () => {
       )
         .bind(activeProgramme.event.id, secondItinerary!.visitorHash)
         .first<{ total: number }>(),
-    ).toEqual({ total: 1 });
+    ).toEqual({ total: 0 });
   });
 
   it("shares a read-only itinerary and syncs anonymous selections to a signed-in person", async () => {
@@ -1281,7 +1290,7 @@ describe("published programme and itinerary", () => {
     }
   });
 
-  it("rotates an expired itinerary token without exposing or mutating its items", async () => {
+  it("reuses the signed browser identity while replacing an expired event row", async () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
@@ -1316,17 +1325,11 @@ describe("published programme and itinerary", () => {
       sessionId,
       "add",
     );
-    expect(replacementToken).not.toBe(expiredToken);
+    expect(replacementToken).toBe(expiredToken);
     expect(
       await service.itinerary(activeProgramme, {
         personId: null,
         visitorToken: expiredToken,
-      }),
-    ).toEqual([]);
-    expect(
-      await service.itinerary(activeProgramme, {
-        personId: null,
-        visitorToken: replacementToken,
       }),
     ).toEqual([sessionId]);
   });
@@ -1362,12 +1365,11 @@ describe("published programme and itinerary", () => {
       sessionId,
       "add",
     );
-    const visitorHash = Array.from(
-      new Uint8Array(
-        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token!)),
-      ),
-      (byte) => byte.toString(16).padStart(2, "0"),
-    ).join("");
+    const visitorHash = await eventVisitorKeyHash(
+      env as unknown as CloudflareEnvironment,
+      token!,
+      programme!.event.id,
+    );
 
     expect(
       await service.itinerary(programme!, {
@@ -1420,24 +1422,52 @@ describe("published programme and itinerary", () => {
     );
   });
 
-  it("keeps the itinerary cookie through the event-relative retention deadline", () => {
+  it("signs the shared browser cookie and rejects tampering", async () => {
     const now = 1_800_000_000;
-    const expiresAt = now + 3 * 365 * 86_400;
-    const cookie = itineraryCookie(
-      "visitor token",
-      expiresAt,
+    const browserId = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+    const cookie = await itineraryCookie(
+      env as unknown as CloudflareEnvironment,
+      browserId,
       "https://programme.example/event",
       now,
     );
-    expect(cookie).toContain("program_cue_itinerary=visitor%20token");
-    expect(cookie).toContain(`Max-Age=${expiresAt - now}`);
+    const expiresAt = now + 5 * 365 * 86_400;
+    expect(cookie).not.toContain(`program_cue_itinerary=${browserId};`);
+    expect(cookie).toContain(`Max-Age=${5 * 365 * 86_400}`);
     expect(cookie).toContain(
       `Expires=${new Date(expiresAt * 1_000).toUTCString()}`,
     );
     expect(cookie).toContain("; Secure");
+    const requestWithCookie = new Request("https://programme.example/event", {
+      headers: { cookie: cookie.split(";")[0]! },
+    });
+    await expect(
+      publicItineraryIdentity(
+        requestWithCookie,
+        env as unknown as CloudflareEnvironment,
+      ),
+    ).resolves.toEqual({ personId: null, visitorToken: browserId });
+    const encodedValue = cookie.split(";")[0]!.split("=")[1]!;
+    const signedValue = decodeURIComponent(encodedValue);
+    const tampered = `${signedValue.slice(0, -1)}${signedValue.endsWith("a") ? "b" : "a"}`;
+    await expect(
+      publicItineraryIdentity(
+        new Request("https://programme.example/event", {
+          headers: {
+            cookie: `program_cue_itinerary=${encodeURIComponent(tampered)}`,
+          },
+        }),
+        env as unknown as CloudflareEnvironment,
+      ),
+    ).resolves.toEqual({ personId: null, visitorToken: null });
     expect(
-      itineraryCookie("demo-token", null, "http://localhost/programme", now),
-    ).not.toMatch(/Expires=|Max-Age=|; Secure/);
+      await itineraryCookie(
+        env as unknown as CloudflareEnvironment,
+        browserId,
+        "http://localhost/programme",
+        now,
+      ),
+    ).not.toContain("; Secure");
     expect(
       readCookie(
         new Request("https://programme.example/event", {

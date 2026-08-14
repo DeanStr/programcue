@@ -82,6 +82,34 @@ function workflowLabel(value: string) {
   return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
 }
 
+function rosterProfileActionLabel(
+  action: Awaited<
+    ReturnType<SpeakerRosterImportService["preview"]>
+  >["valid"][number]["profileAction"],
+) {
+  switch (action) {
+    case "create_identity_and_profile":
+      return "New neutral identity and organisation profile";
+    case "create_organisation_profile":
+      return "Canonical profile retained; organisation profile created";
+    case "update_organisation_profile":
+      return "Canonical profile retained; organisation profile updated";
+    case "retain_organisation_profile":
+      return "Canonical retained; imported details already match";
+  }
+}
+
+function omittedRosterProfileLabel(
+  action: Awaited<
+    ReturnType<SpeakerRosterImportService["preview"]>
+  >["valid"][number]["profileAction"],
+) {
+  return action === "update_organisation_profile" ||
+    action === "retain_organisation_profile"
+    ? "Not supplied (retained)"
+    : "Not supplied (left empty)";
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   await ensureDemoSpeakerData(env);
@@ -162,6 +190,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         viewer,
         String(form.get("csv") ?? ""),
         form.get("idempotencyKey"),
+        form.get("previewFingerprint"),
       );
       return data<ActionResult>({
         ok: true,
@@ -428,7 +457,10 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                     <th>Row</th>
                     <th>Name</th>
                     <th>Email</th>
+                    <th>Title</th>
                     <th>Company</th>
+                    <th>Biography</th>
+                    <th>Profile result</th>
                     <th>Workflow</th>
                     <th>Validation</th>
                   </tr>
@@ -439,8 +471,38 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                       <td>{row.rowNumber}</td>
                       <td>{row.name}</td>
                       <td>{row.email}</td>
-                      <td>{row.organisationName || "—"}</td>
-                      <td>{workflowLabel(row.workflowStatus)}</td>
+                      <td>
+                        {row.jobTitleSupplied
+                          ? row.jobTitle || "Clear"
+                          : omittedRosterProfileLabel(row.profileAction)}
+                      </td>
+                      <td>
+                        {row.organisationNameSupplied
+                          ? row.organisationName || "Clear"
+                          : omittedRosterProfileLabel(row.profileAction)}
+                      </td>
+                      <td>
+                        {row.biographySupplied ? (
+                          row.biography ? (
+                            <details>
+                              <summary>Review biography</summary>
+                              <p>{row.biography}</p>
+                            </details>
+                          ) : (
+                            "Clear"
+                          )
+                        ) : (
+                          omittedRosterProfileLabel(row.profileAction)
+                        )}
+                      </td>
+                      <td>{rosterProfileActionLabel(row.profileAction)}</td>
+                      <td>
+                        {workflowLabel(row.workflowStatus)} (
+                        {row.workflowAction === "retain"
+                          ? "retained"
+                          : "will be set"}
+                        )
+                      </td>
                       <td>
                         <span className="status success">Valid</span>
                       </td>
@@ -449,7 +511,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                   {actionData.importPreview.invalid.map((row) => (
                     <tr key={row.rowNumber}>
                       <td>{row.rowNumber}</td>
-                      <td colSpan={4}>Invalid row</td>
+                      <td colSpan={7}>Invalid row</td>
                       <td>
                         <span className="status danger">
                           {row.errors.join("; ")}
@@ -472,6 +534,11 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                   type="hidden"
                   name="idempotencyKey"
                   value={actionData.importPreview.idempotencyKey}
+                />
+                <input
+                  type="hidden"
+                  name="previewFingerprint"
+                  value={actionData.importPreview.previewFingerprint}
                 />
                 <input
                   type="hidden"

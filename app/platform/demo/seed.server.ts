@@ -227,14 +227,15 @@ export async function ensureDemoProgramme(env: CloudflareEnvironment) {
           env.DB.prepare(
             `UPDATE schedule_session_contents
                   SET description = ?, content_status = 'approved',
-                      approved_by_person_id = ?,
+                      approved_by_person_id = NULL,
                       approved_at = COALESCE(approved_at, unixepoch()),
+                      approval_source = 'legacy_publication',
                       updated_at = unixepoch()
                 WHERE schedule_version_id = 'demo-schedule-published'
                   AND event_id = ? AND session_id = ?
                   AND visibility = 'public'
                   AND (description IS NULL OR length(description) <= 180)`,
-          ).bind(description, DEMO_ADMIN_ID, DEMO_EVENT_ID, sessionId),
+          ).bind(description, DEMO_EVENT_ID, sessionId),
       ),
     );
     await env.DB.prepare(

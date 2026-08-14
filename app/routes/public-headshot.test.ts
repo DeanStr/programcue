@@ -131,7 +131,8 @@ async function createSecondPublishedEvent(personId: string) {
   ]);
   await env.DB.prepare(
     `UPDATE schedule_session_contents
-        SET content_status = 'approved', approved_at = unixepoch()
+        SET content_status = 'approved', approved_by_person_id = NULL,
+            approved_at = unixepoch(), approval_source = 'legacy_publication'
       WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
   )
     .bind(versionId, eventId, sessionId)

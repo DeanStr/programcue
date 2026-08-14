@@ -775,7 +775,8 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
                    description, track_id, format, duration_minutes,
                    required_resources_json, visibility, content_status,
                    content_revision, last_edited_by_person_id,
-                   approved_by_person_id, approved_at, created_at, updated_at
+                   approved_by_person_id, approved_at, approval_source,
+                   created_at, updated_at
               FROM schedule_session_contents
              WHERE event_id = ?
              ORDER BY schedule_version_id, session_id`,
@@ -802,6 +803,7 @@ export const AIRTABLE_EVENT_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
         last_edited_by_person_id: nullableText,
         approved_by_person_id: nullableText,
         approved_at: nullableInteger,
+        approval_source: z.enum(["editorial", "legacy_publication"]).nullable(),
         ...timestamps,
       })
       .strict(),

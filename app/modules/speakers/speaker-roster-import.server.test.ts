@@ -17,6 +17,20 @@ const admin: Viewer = {
   demo: true,
 };
 
+async function confirmPreviewedRoster(
+  service: SpeakerRosterImportService,
+  csv: string,
+  idempotencyKey: string,
+) {
+  const preview = await service.preview(admin, csv);
+  return service.confirm(
+    admin,
+    csv,
+    idempotencyKey,
+    preview.previewFingerprint,
+  );
+}
+
 describe("event speaker roster CSV import", () => {
   it("preserves system provenance on a status-less import and then promotes confirmed participation", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
@@ -76,8 +90,8 @@ describe("event speaker roster CSV import", () => {
     ]);
     try {
       await expect(
-        new SpeakerRosterImportService(testEnv).confirm(
-          admin,
+        confirmPreviewedRoster(
+          new SpeakerRosterImportService(testEnv),
           `name,email\nDerived workflow speaker,${insertedEmail}`,
           `workflow-statusless-import:${suffix}`,
         ),
@@ -264,24 +278,33 @@ describe("event speaker roster CSV import", () => {
         email,
         jobTitle: "Principal Engineer",
         organisationName: "Northstar Labs",
+        profileAction: "create_identity_and_profile",
         workflowStatus: "prospect",
       }),
     ]);
 
     const idempotencyKey = `speaker-import:${suffix}`;
-    await expect(service.confirm(admin, csv, idempotencyKey)).resolves.toEqual({
-      imported: 1,
-    });
-    await expect(service.confirm(admin, csv, idempotencyKey)).resolves.toEqual({
-      imported: 1,
-    });
+    await expect(
+      service.confirm(admin, csv, idempotencyKey, preview.previewFingerprint),
+    ).resolves.toEqual({ imported: 1 });
+    await expect(
+      service.confirm(admin, csv, idempotencyKey, preview.previewFingerprint),
+    ).resolves.toEqual({ imported: 1 });
 
     const imported = await testEnv.DB.prepare(
-      `SELECT person.id, person.display_name AS name, person.job_title AS jobTitle,
-              person.organisation_name AS organisationName,
+      `SELECT person.id, person.display_name AS canonicalName,
+              person.biography AS canonicalBiography,
+              person.job_title AS canonicalJobTitle,
+              person.organisation_name AS canonicalOrganisationName,
+              profile.display_name AS name, profile.biography,
+              profile.job_title AS jobTitle,
+              profile.organisation_name AS organisationName,
+              profile.last_operation_id AS profileOperationId,
               membership.invited_at AS invitedAt,
               workflow.status AS workflowStatus
          FROM people person
+         JOIN organisation_contact_profiles profile
+           ON profile.person_id = person.id AND profile.organisation_id = ?
          JOIN memberships membership
            ON membership.person_id = person.id AND membership.event_id = ?
           AND membership.role = 'speaker'
@@ -290,19 +313,31 @@ describe("event speaker roster CSV import", () => {
           AND workflow.person_id = membership.person_id
         WHERE person.email = ? COLLATE NOCASE`,
     )
-      .bind(admin.eventId, email)
+      .bind(admin.organisationId, admin.eventId, email)
       .first<{
         id: string;
+        canonicalName: string;
+        canonicalBiography: string | null;
+        canonicalJobTitle: string | null;
+        canonicalOrganisationName: string | null;
         name: string;
+        biography: string;
         jobTitle: string;
         organisationName: string;
+        profileOperationId: string;
         invitedAt: number | null;
         workflowStatus: string;
       }>();
     expect(imported).toMatchObject({
+      canonicalName: email,
+      canonicalBiography: null,
+      canonicalJobTitle: null,
+      canonicalOrganisationName: null,
       name: "Robin Vega",
+      biography: "Builds reliable event systems.",
       jobTitle: "Principal Engineer",
       organisationName: "Northstar Labs",
+      profileOperationId: expect.any(String),
       invitedAt: null,
       workflowStatus: "prospect",
     });
@@ -364,8 +399,18 @@ describe("event speaker roster CSV import", () => {
       updatedByPersonId: admin.personId,
     });
 
+    const defaultReimportPreview = await service.preview(admin, csv);
+    expect(defaultReimportPreview.valid[0]).toMatchObject({
+      workflowAction: "retain",
+      workflowStatus: "confirmed",
+    });
     await expect(
-      service.confirm(admin, csv, `speaker-reimport-default:${suffix}`),
+      service.confirm(
+        admin,
+        csv,
+        `speaker-reimport-default:${suffix}`,
+        defaultReimportPreview.previewFingerprint,
+      ),
     ).resolves.toEqual({ imported: 1 });
     await expect(
       testEnv.DB.prepare(
@@ -381,7 +426,11 @@ describe("event speaker roster CSV import", () => {
       `Robin Vega,${email},Principal Engineer,Northstar Labs,Builds reliable event systems.,declined`,
     ].join("\n");
     await expect(
-      service.confirm(admin, statusCsv, `speaker-reimport:${suffix}`),
+      confirmPreviewedRoster(
+        service,
+        statusCsv,
+        `speaker-reimport:${suffix}`,
+      ),
     ).resolves.toEqual({ imported: 1 });
     await expect(
       testEnv.DB.prepare(
@@ -395,6 +444,115 @@ describe("event speaker roster CSV import", () => {
       status: "declined",
       source: "import",
       revision: 4,
+    });
+
+    await testEnv.DB.prepare(
+      `UPDATE organisation_contacts
+          SET status = 'merged', merged_into_person_id = ?, updated_at = unixepoch()
+        WHERE organisation_id = ? AND person_id = ?`,
+    )
+      .bind(admin.personId, admin.organisationId, imported!.id)
+      .run();
+    await expect(
+      service.confirm(admin, csv, idempotencyKey, preview.previewFingerprint),
+    ).resolves.toEqual({ imported: 1 });
+  });
+
+  it("updates organisation-scoped enrichment while retaining an existing canonical profile", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const personId = `roster-existing-${suffix}`;
+    const email = `roster-existing-${suffix}@example.com`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, biography, organisation_name, job_title,
+           email_verified, profile_status, created_at, updated_at
+         ) VALUES (?, ?, 'Person-owned name', 'Person-owned biography',
+                   'Person-owned company', 'Person-owned title', 1, 'published',
+                   unixepoch(), unixepoch())`,
+      ).bind(personId, email),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, accepted_at, created_at
+         ) VALUES (?, ?, NULL, ?, 'administrator', unixepoch(), unixepoch())`,
+      ).bind(`roster-existing-membership-${suffix}`, admin.organisationId, personId),
+    ]);
+    const service = new SpeakerRosterImportService(testEnv);
+    const csv = [
+      "name,email,title,company,bio",
+      `Event name,${email},Event title,Event company,Event biography`,
+    ].join("\n");
+    const preview = await service.preview(admin, csv);
+    expect(preview.valid[0]).toMatchObject({
+      profileAction: "create_organisation_profile",
+    });
+    await expect(
+      service.confirm(
+        admin,
+        csv,
+        `roster-existing:${suffix}`,
+        preview.previewFingerprint,
+      ),
+    ).resolves.toEqual({ imported: 1 });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT display_name AS name, biography,
+                organisation_name AS organisationName, job_title AS jobTitle
+           FROM people WHERE id = ?`,
+      )
+        .bind(personId)
+        .first(),
+    ).resolves.toEqual({
+      name: "Person-owned name",
+      biography: "Person-owned biography",
+      organisationName: "Person-owned company",
+      jobTitle: "Person-owned title",
+    });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT display_name AS name, biography,
+                organisation_name AS organisationName, job_title AS jobTitle,
+                source
+           FROM organisation_contact_profiles
+          WHERE organisation_id = ? AND person_id = ?`,
+      )
+        .bind(admin.organisationId, personId)
+        .first(),
+    ).resolves.toEqual({
+      name: "Event name",
+      biography: "Event biography",
+      organisationName: "Event company",
+      jobTitle: "Event title",
+      source: "import",
+    });
+
+    const nameOnlyCsv = `name,email\nUpdated event name,${email}`;
+    const nameOnlyPreview = await service.preview(admin, nameOnlyCsv);
+    expect(nameOnlyPreview.valid[0]).toMatchObject({
+      profileAction: "update_organisation_profile",
+    });
+    await service.confirm(
+      admin,
+      nameOnlyCsv,
+      `roster-existing-name-only:${suffix}`,
+      nameOnlyPreview.previewFingerprint,
+    );
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT display_name AS name, biography,
+                organisation_name AS organisationName, job_title AS jobTitle
+           FROM organisation_contact_profiles
+          WHERE organisation_id = ? AND person_id = ?`,
+      )
+        .bind(admin.organisationId, personId)
+        .first(),
+    ).resolves.toEqual({
+      name: "Updated event name",
+      biography: "Event biography",
+      organisationName: "Event company",
+      jobTitle: "Event title",
     });
   });
 
@@ -469,14 +627,22 @@ describe("event speaker roster CSV import", () => {
         return result;
       }
     })(testEnv);
+    const csv = `name,email\nRaced Identity,${email}`;
+    const preview = await new SpeakerRosterImportService(testEnv).preview(
+      admin,
+      csv,
+    );
 
     await expect(
       service.confirm(
         admin,
-        `name,email\nRaced Identity,${email}`,
+        csv,
         `speaker-race:${suffix}`,
+        preview.previewFingerprint,
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(
+      "The event roster changed while this import was being applied.",
+    );
     const linked = await testEnv.DB.prepare(
       `SELECT COUNT(*) AS count
          FROM event_speaker_workflows workflow

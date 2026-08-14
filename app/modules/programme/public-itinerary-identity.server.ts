@@ -2,28 +2,40 @@ import { createAuth } from "~/platform/auth/auth.server";
 import { selectedEvaluationPerson } from "~/platform/evaluation/evaluation-session.server";
 import type { ItineraryIdentity } from "./public-itinerary-service.server";
 import { readCookie } from "./public-programme-service.server";
+import {
+  signItineraryBrowserCookie,
+  verifyItineraryBrowserCookie,
+} from "./public-itinerary-token.server";
 
 export const PUBLIC_ITINERARY_COOKIE = "program_cue_itinerary";
 
-export function itineraryCookie(
+export async function itineraryCookie(
+  env: CloudflareEnvironment,
   token: string,
-  expiresAt: number | null,
   requestUrl: string,
   now = Math.floor(Date.now() / 1_000),
 ) {
   const secure = new URL(requestUrl).protocol === "https:" ? "; Secure" : "";
-  const lifetime =
-    expiresAt === null
-      ? ""
-      : `; Expires=${new Date(expiresAt * 1_000).toUTCString()}; Max-Age=${Math.max(0, expiresAt - now)}`;
-  return `${PUBLIC_ITINERARY_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${lifetime}${secure}`;
+  const signed = await signItineraryBrowserCookie(env, token, now);
+  const lifetime = `; Expires=${new Date(signed.expiresAt * 1_000).toUTCString()}; Max-Age=${signed.expiresAt - now}`;
+  return `${PUBLIC_ITINERARY_COOKIE}=${encodeURIComponent(signed.value)}; Path=/; HttpOnly; SameSite=Lax${lifetime}${secure}`;
+}
+
+async function readItineraryBrowserId(
+  request: Request,
+  env: CloudflareEnvironment,
+) {
+  return verifyItineraryBrowserCookie(
+    env,
+    readCookie(request, PUBLIC_ITINERARY_COOKIE),
+  );
 }
 
 export async function publicItineraryIdentity(
   request: Request,
   env: CloudflareEnvironment,
 ): Promise<ItineraryIdentity> {
-  const visitorToken = readCookie(request, PUBLIC_ITINERARY_COOKIE);
+  const visitorToken = await readItineraryBrowserId(request, env);
   if (String(env.DEMO_MODE) === "true") {
     return { personId: null, visitorToken };
   }

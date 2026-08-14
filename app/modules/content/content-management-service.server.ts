@@ -72,6 +72,72 @@ export class ContentManagementStateError extends Error {
   }
 }
 
+type ContentApprovalProvenance = {
+  sessionId: string;
+  contentStatus: ContentStatus;
+  approvedByPersonId: string | null;
+  approvedByName: string | null;
+  approvedAt: number | null;
+  approvalSource: "editorial" | "legacy_publication" | null;
+};
+
+type ValidContentApprovalProvenance =
+  | {
+      contentStatus: "approved";
+      approvedByPersonId: string;
+      approvedByName: string;
+      approvedAt: number;
+      approvalSource: "editorial";
+    }
+  | {
+      contentStatus: "approved";
+      approvedByPersonId: null;
+      approvedByName: null;
+      approvedAt: number;
+      approvalSource: "legacy_publication";
+    }
+  | {
+      contentStatus: Exclude<ContentStatus, "approved">;
+      approvedByPersonId: null;
+      approvedByName: null;
+      approvedAt: null;
+      approvalSource: null;
+    };
+
+export function assertContentApprovalProvenance(
+  content: ContentApprovalProvenance,
+): asserts content is ContentApprovalProvenance & ValidContentApprovalProvenance {
+  const editorialApprovalIsComplete =
+    content.contentStatus === "approved" &&
+    content.approvalSource === "editorial" &&
+    content.approvedByPersonId !== null &&
+    content.approvedByName !== null &&
+    content.approvedAt !== null;
+  const legacyApprovalIsComplete =
+    content.contentStatus === "approved" &&
+    content.approvalSource === "legacy_publication" &&
+    content.approvedByPersonId === null &&
+    content.approvedByName === null &&
+    content.approvedAt !== null;
+  const unapprovedStateIsComplete =
+    content.contentStatus !== "approved" &&
+    content.approvalSource === null &&
+    content.approvedByPersonId === null &&
+    content.approvedByName === null &&
+    content.approvedAt === null;
+
+  if (
+    !editorialApprovalIsComplete &&
+    !legacyApprovalIsComplete &&
+    !unapprovedStateIsComplete
+  ) {
+    throw new ContentManagementStateError(
+      `Session ${content.sessionId} has inconsistent approval provenance.`,
+      500,
+    );
+  }
+}
+
 function requireAdministrator(viewer: Viewer) {
   if (viewer.role !== "owner" && viewer.role !== "administrator") {
     throw new ContentManagementStateError(
@@ -537,6 +603,8 @@ export class ContentManagementService {
               content.description, content.content_status AS contentStatus,
               content.content_revision AS contentRevision,
               content.visibility, content.approved_at AS approvedAt,
+              content.approval_source AS approvalSource,
+              content.approved_by_person_id AS approvedByPersonId,
               approver.display_name AS approvedByName
          FROM schedule_session_contents content
          JOIN schedule_versions version
@@ -564,6 +632,8 @@ export class ContentManagementService {
         contentRevision: number;
         visibility: string;
         approvedAt: number | null;
+        approvalSource: "editorial" | "legacy_publication" | null;
+        approvedByPersonId: string | null;
         approvedByName: string | null;
       }>();
     if (!current) {
@@ -572,6 +642,7 @@ export class ContentManagementService {
         404,
       );
     }
+    assertContentApprovalProvenance(current);
     const revisions = await this.env.DB.prepare(
       `SELECT revision.id, revision.schedule_version_id AS scheduleVersionId,
               version.version_number AS scheduleVersionNumber,
@@ -749,6 +820,7 @@ export class ContentManagementService {
                 last_edited_by_person_id = ?,
                 approved_by_person_id = CASE WHEN ? = 'approved' THEN ? ELSE NULL END,
                 approved_at = CASE WHEN ? = 'approved' THEN unixepoch() ELSE NULL END,
+                approval_source = CASE WHEN ? = 'approved' THEN 'editorial' ELSE NULL END,
                 last_operation_id = ?, updated_at = unixepoch()
           WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?
             AND content_revision = ?
@@ -761,6 +833,7 @@ export class ContentManagementService {
         viewer.personId,
         input.status,
         viewer.personId,
+        input.status,
         input.status,
         operationId,
         input.scheduleVersionId,

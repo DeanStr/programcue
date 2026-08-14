@@ -50,7 +50,7 @@ describe("schedule publication workflows", () => {
     await env.DB.prepare(
       `UPDATE schedule_session_contents
           SET content_status = 'approved', approved_by_person_id = ?,
-              approved_at = unixepoch()
+              approved_at = unixepoch(), approval_source = 'editorial'
         WHERE schedule_version_id = 'schedule-test-published'
           AND event_id = ? AND session_id = 'schedule-test-one'`,
     )
@@ -165,7 +165,7 @@ describe("schedule publication workflows", () => {
     });
   });
 
-  it("requires content approval before publishing a conflict-free version", async () => {
+  it("publishes a conflict-free version while content review remains advisory", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);
     let workspace = await service.getWorkspace(viewer);
@@ -187,44 +187,6 @@ describe("schedule publication workflows", () => {
       workspace.sessions.find((session) => session.id === "schedule-test-one")
         ?.contentStatus,
     ).toBe("draft");
-    await expect(
-      service.publish(viewer, {
-        scheduleVersionId: versionId,
-        scheduleRevision: workspace.version!.revision,
-      }),
-    ).rejects.toThrow("requires a public, approved content snapshot");
-    await env.DB.prepare(
-      `UPDATE schedule_session_contents
-          SET visibility = 'private', content_status = 'approved',
-              approved_by_person_id = ?, approved_at = unixepoch()
-        WHERE event_id = ? AND schedule_version_id = ?
-          AND session_id = 'schedule-test-one'`,
-    )
-      .bind(viewer.personId, viewer.eventId, versionId)
-      .run();
-    workspace = await service.getWorkspace(viewer);
-    expect(
-      workspace.sessions.find((session) => session.id === "schedule-test-one"),
-    ).toMatchObject({
-      sourceVisibility: "public",
-      visibility: "private",
-      contentStatus: "approved",
-    });
-    await expect(
-      service.publish(viewer, {
-        scheduleVersionId: versionId,
-        scheduleRevision: workspace.version!.revision,
-      }),
-    ).rejects.toThrow("requires a public, approved content snapshot");
-    await env.DB.prepare(
-      `UPDATE schedule_session_contents SET visibility = 'public'
-        WHERE event_id = ? AND schedule_version_id = ?
-          AND session_id = 'schedule-test-one'`,
-    )
-      .bind(viewer.eventId, versionId)
-      .run();
-    await approveScheduledTestContent(versionId);
-    workspace = await service.getWorkspace(viewer);
     const publication = await service.publish(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,
@@ -484,7 +446,6 @@ describe("schedule publication workflows", () => {
       startsAt,
       endsAt: startsAt + 3_600,
     });
-    await approveScheduledTestContent(versionId);
     workspace = await service.getWorkspace(viewer);
 
     let raced = false;
@@ -519,7 +480,7 @@ describe("schedule publication workflows", () => {
         scheduleVersionId: versionId,
         scheduleRevision: workspace.version!.revision,
       }),
-    ).rejects.toThrow(/public, approved content snapshot.*private/i);
+    ).rejects.toThrow(/requires a public content snapshot.*private/i);
     expect(raced).toBe(true);
     await expect(
       env.DB.prepare(
@@ -914,7 +875,7 @@ describe("schedule publication workflows", () => {
     await env.DB.prepare(
       `UPDATE schedule_session_contents
           SET content_status = 'approved', approved_by_person_id = ?,
-              approved_at = unixepoch()
+              approved_at = unixepoch(), approval_source = 'editorial'
         WHERE schedule_version_id = ? AND event_id = ?
           AND session_id = 'schedule-test-one'`,
     )

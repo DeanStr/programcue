@@ -282,6 +282,7 @@ export const organisationContactProfiles = sqliteTable(
     source: text("source").notNull().$type<"import" | "manual">(),
     createdByPersonId: text("created_by_person_id").references(() => people.id),
     updatedByPersonId: text("updated_by_person_id").references(() => people.id),
+    lastOperationId: text("last_operation_id"),
     createdAt: integer("created_at").notNull().default(epochNow),
     updatedAt: integer("updated_at").notNull().default(epochNow),
   },
@@ -1656,6 +1657,9 @@ export const scheduleSessionContents = sqliteTable(
       () => people.id,
     ),
     approvedAt: integer("approved_at"),
+    approvalSource: text("approval_source").$type<
+      "editorial" | "legacy_publication"
+    >(),
     lastOperationId: text("last_operation_id"),
     createdAt: integer("created_at").notNull().default(epochNow),
     updatedAt: integer("updated_at").notNull().default(epochNow),

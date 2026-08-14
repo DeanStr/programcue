@@ -9,7 +9,10 @@ import {
   scheduleTestViewer as viewer,
 } from "~/modules/schedule/schedule-service-test-fixture";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
-import { ContentManagementService } from "./content-management-service.server";
+import {
+  assertContentApprovalProvenance,
+  ContentManagementService,
+} from "./content-management-service.server";
 
 beforeEach(prepareScheduleServiceTest);
 
@@ -31,6 +34,41 @@ async function placeSession(
 }
 
 describe("content management", () => {
+  it("fails fast when approval provenance is incomplete", () => {
+    const invalidStates = [
+      {
+        sessionId: "missing-approver",
+        contentStatus: "approved" as const,
+        approvedByPersonId: null,
+        approvedByName: null,
+        approvedAt: 100,
+        approvalSource: "editorial" as const,
+      },
+      {
+        sessionId: "missing-source",
+        contentStatus: "approved" as const,
+        approvedByPersonId: "reviewer",
+        approvedByName: "Editorial reviewer",
+        approvedAt: 100,
+        approvalSource: null,
+      },
+      {
+        sessionId: "stale-audit-state",
+        contentStatus: "draft" as const,
+        approvedByPersonId: null,
+        approvedByName: null,
+        approvedAt: 100,
+        approvalSource: null,
+      },
+    ];
+
+    for (const state of invalidStates) {
+      expect(() => assertContentApprovalProvenance(state)).toThrow(
+        `Session ${state.sessionId} has inconsistent approval provenance.`,
+      );
+    }
+  });
+
   it("records attributed immutable revisions, resets approval on edit and restores as a new draft", async () => {
     const schedule = new ScheduleService(scheduleTestEnv);
     const content = new ContentManagementService(scheduleTestEnv);
@@ -73,6 +111,10 @@ describe("content management", () => {
       confirmed: true,
     });
     expect(approved.status).toBe("approved");
+    expect((await content.getSession(viewer, session.id)).current).toMatchObject({
+      approvedByName: expect.any(String),
+      approvalSource: "editorial",
+    });
 
     workspace = await schedule.getWorkspace(viewer);
     session = workspace.sessions.find(
@@ -97,6 +139,7 @@ describe("content management", () => {
     expect(detail.current).toMatchObject({
       title: "Edited after approval",
       contentStatus: "draft",
+      approvalSource: null,
     });
     const approvedRevision = detail.revisions.find(
       (revision) => revision.contentStatus === "approved",
@@ -223,7 +266,7 @@ describe("content management", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it("gates publication on approval and publishes the complete approved snapshot", async () => {
+  it("keeps editorial status advisory while publishing the complete public snapshot", async () => {
     const schedule = new ScheduleService(scheduleTestEnv);
     const content = new ContentManagementService(scheduleTestEnv);
     const versionId = await schedule.createDraft(viewer);
@@ -254,7 +297,7 @@ describe("content management", () => {
       visibility: "public",
       requiredResources: approvedSession.requiredResources,
     });
-    let detail = await content.getSession(viewer, approvedSession.id);
+    const detail = await content.getSession(viewer, approvedSession.id);
     await content.changeStatus(viewer, {
       scheduleVersionId: versionId,
       sessionId: approvedSession.id,
@@ -271,41 +314,6 @@ describe("content management", () => {
       workspace.sessions.find((session) => session.id === secondSession.id)
         ?.contentStatus,
     ).toBe("draft");
-    await expect(
-      schedule.publish(viewer, {
-        scheduleVersionId: versionId,
-        scheduleRevision: workspace.version!.revision,
-      }),
-    ).rejects.toThrow("requires a public, approved content snapshot");
-
-    workspace = await schedule.getWorkspace(viewer);
-    const unapprovedSession = workspace.sessions.find(
-      (candidate) => candidate.id === secondSession.id,
-    )!;
-    await schedule.updateSessionContent(viewer, {
-      scheduleVersionId: versionId,
-      scheduleRevision: workspace.version!.revision,
-      sessionId: unapprovedSession.id,
-      sessionRevision: unapprovedSession.revision,
-      idempotencyKey: crypto.randomUUID(),
-      title: unapprovedSession.title,
-      description: "This second public session is ready for approval.",
-      format: unapprovedSession.format,
-      durationMinutes: unapprovedSession.durationMinutes,
-      trackId: unapprovedSession.trackId,
-      visibility: "public",
-      requiredResources: unapprovedSession.requiredResources,
-    });
-    detail = await content.getSession(viewer, secondSession.id);
-    await content.changeStatus(viewer, {
-      scheduleVersionId: versionId,
-      sessionId: secondSession.id,
-      scheduleRevision: detail.current.scheduleRevision,
-      contentRevision: detail.current.contentRevision,
-      status: "approved",
-      confirmed: true,
-    });
-    workspace = await schedule.getWorkspace(viewer);
     await schedule.publish(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,
@@ -321,6 +329,15 @@ describe("content management", () => {
     expect(
       programme?.speakers.flatMap((speaker) => speaker.sessionIds),
     ).toContain(secondSession.id);
+    await expect(
+      env.DB.prepare(
+        `SELECT content_status AS contentStatus
+           FROM schedule_session_contents
+          WHERE schedule_version_id = ? AND session_id = ?`,
+      )
+        .bind(versionId, secondSession.id)
+        .first(),
+    ).resolves.toEqual({ contentStatus: "draft" });
   });
 
   it("exports only the exact current released file versions after confirmation", async () => {

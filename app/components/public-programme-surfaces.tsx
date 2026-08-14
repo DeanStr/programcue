@@ -466,11 +466,7 @@ function SpeakerDirectoryCard({
           <PublicSpeakerMetadata speaker={speaker} />
         </span>
       </button>
-      <p>
-        {speaker.biography
-          ? descriptionSnippet(speaker.biography)
-          : "Biography not provided."}
-      </p>
+      {speaker.biography ? <p>{descriptionSnippet(speaker.biography)}</p> : null}
       <span className="help">
         {speaker.sessionIds.length} public session
         {speaker.sessionIds.length === 1 ? "" : "s"}
@@ -601,24 +597,24 @@ function SpeakerDetailPanel({
           </div>
         </div>
       </div>
-      <h3>Biography</h3>
-      <p id={biographyId}>
-        {biography
-          ? model.expandedSpeakerBiography
-            ? biography
-            : biographySnippet
-          : "Biography not provided."}
-      </p>
-      {biographyIsLong ? (
-        <button
-          type="button"
-          className="btn small"
-          aria-expanded={model.expandedSpeakerBiography}
-          aria-controls={biographyId}
-          onClick={model.toggleSpeakerBiography}
-        >
-          {model.expandedSpeakerBiography ? "Show less" : "Show more"}
-        </button>
+      {biography ? (
+        <>
+          <h3>Biography</h3>
+          <p id={biographyId}>
+            {model.expandedSpeakerBiography ? biography : biographySnippet}
+          </p>
+          {biographyIsLong ? (
+            <button
+              type="button"
+              className="btn small"
+              aria-expanded={model.expandedSpeakerBiography}
+              aria-controls={biographyId}
+              onClick={model.toggleSpeakerBiography}
+            >
+              {model.expandedSpeakerBiography ? "Show less" : "Show more"}
+            </button>
+          ) : null}
+        </>
       ) : null}
       <h3>
         Sessions{" "}
