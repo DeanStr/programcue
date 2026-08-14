@@ -59,12 +59,29 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await dayButtons.nth(1).press("Home");
   await expect(dayButtons.first()).toBeFocused();
   await expect(dayButtons.first()).toHaveAttribute("aria-pressed", "true");
-  await page
-    .getByRole("button", { name: "View details for AI in Event Operations" })
-    .click();
+  const expandedAgendaTrigger = page.locator(
+    ".agenda-card-trigger[aria-expanded='true']",
+  );
+  const expandedAgendaTriggerId =
+    await expandedAgendaTrigger.getAttribute("id");
+  expect(expandedAgendaTriggerId).toBeTruthy();
+  const initiallyExpandedAgendaTrigger = page.locator(
+    `#${expandedAgendaTriggerId}`,
+  );
+  await page.getByRole("button", { name: "Close session details" }).click();
+  await expect(initiallyExpandedAgendaTrigger).toBeFocused();
+  const agendaDetailTrigger = page.getByRole("button", {
+    name: "View details for AI in Event Operations",
+  });
+  await agendaDetailTrigger.click();
   const agendaDetail = page.locator(".public-surface-detail");
   await expect(agendaDetail).toBeFocused();
   await expect(agendaDetail).toContainText("AI in Event Operations");
+  await agendaDetail
+    .getByRole("button", { name: "Close session details" })
+    .click();
+  await expect(agendaDetail).toHaveCount(0);
+  await expect(agendaDetailTrigger).toBeFocused();
 
   await openAnonymous(page, "/public/programme/future-of-events-2027/schedule");
   await expect(

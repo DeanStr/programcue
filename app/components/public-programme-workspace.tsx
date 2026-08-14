@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { CalendarDays, Heart, MapPin, Search } from "lucide-react";
 import { Link } from "react-router";
 
@@ -183,14 +183,16 @@ function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
       <div className="hero-body">
         <h1>{programme.event.name}</h1>
         <p className="hero-meta">
-          <span>
-            <CalendarDays aria-hidden="true" size={15} />
+          {model.showEmbedField("time") ? (
             <span>
-              {formatProgrammeEventDay(programme.event.startDate)}–
-              {formatProgrammeEventDay(programme.event.endDate)}
+              <CalendarDays aria-hidden="true" size={15} />
+              <span>
+                {formatProgrammeEventDay(programme.event.startDate)}–
+                {formatProgrammeEventDay(programme.event.endDate)}
+              </span>
             </span>
-          </span>
-          {place ? (
+          ) : null}
+          {model.showEmbedField("location") && place ? (
             <span>
               <MapPin aria-hidden="true" size={15} />
               <span>{place}</span>
@@ -276,22 +278,28 @@ export function PublicSpeakerCard({
       key={speaker.id}
     >
       <div className="public-speaker-card-identity">
-        <PublicSpeakerAvatar speaker={speaker} size={56} />
+        {model.showEmbedField("images") ? (
+          <PublicSpeakerAvatar speaker={speaker} size={56} />
+        ) : null}
         <div>
           <h3>{speaker.displayName}</h3>
-          {affiliation ? <p className="help">{affiliation}</p> : null}
+          {model.showEmbedField("affiliations") && affiliation ? (
+            <p className="help">{affiliation}</p>
+          ) : null}
         </div>
       </div>
-      {speaker.biography ? (
+      {model.showEmbedField("biography") && speaker.biography ? (
         <p className="public-speaker-card-bio">
           {descriptionSnippet(speaker.biography)}
         </p>
       ) : null}
       <div className="public-speaker-card-foot">
-        <span className="help">
-          {speaker.sessionIds.length} session
-          {speaker.sessionIds.length === 1 ? "" : "s"}
-        </span>
+        {model.showEmbedField("sessions") ? (
+          <span className="help">
+            {speaker.sessionIds.length} session
+            {speaker.sessionIds.length === 1 ? "" : "s"}
+          </span>
+        ) : null}
         <a
           className="btn small"
           id={`speaker-profile-link-${speaker.id}`}
@@ -459,21 +467,36 @@ function ProgrammeSessionEntry({
       <button
         type="button"
         id={`session-${session.slug}`}
-        className={`programme-row${active ? " active" : ""}`}
+        className={`programme-row${active ? " active" : ""}${model.showEmbedField("time") ? "" : " without-time"}`}
         aria-pressed={active}
         onClick={() => model.openSessionDetail(session.id)}
       >
-        <span className="session-time">
-          <SessionTime session={session} timezone={programme.event.timezone} />
-        </span>
+        {model.showEmbedField("time") ? (
+          <span className="session-time">
+            <SessionTime
+              session={session}
+              timezone={programme.event.timezone}
+            />
+          </span>
+        ) : null}
         {/* Title first. The coloured pills used to render above it, so the
-            first thing the eye landed on in every row was the track. */}
+            first thing the eye landed on in every row was the track. They sit
+            with the place in the meta line now, still behind their own embed
+            field switches. */}
         <span className="session-main">
           <h3>{session.title}</h3>
           <SessionSpeakerLines session={session} model={model} />
           <span className="session-meta">
-            <SessionPlace session={session} />
-            <SessionTags session={session} />
+            {model.showEmbedField("location") ? (
+              <SessionPlace session={session} />
+            ) : null}
+            {model.showEmbedField("track") || model.showEmbedField("format") ? (
+              <SessionTags
+                session={session}
+                showTrack={model.showEmbedField("track")}
+                showFormat={model.showEmbedField("format")}
+              />
+            ) : null}
           </span>
         </span>
       </button>
@@ -483,26 +506,28 @@ function ProgrammeSessionEntry({
       {/* Clamped, not cut: a 32px button plus its gap used to be spent hiding
           about a line of text, five times down the same edge. The full
           description is in the row and the expander only unclamps it. */}
-      <div className="programme-entry-description">
-        <p
-          id={`session-description-${session.id}`}
-          className={expanded ? undefined : "is-clamped"}
-        >
-          {description || "Description not provided."}
-        </p>
-        {snippet && snippet !== description ? (
-          <button
-            type="button"
-            className="session-disclosure"
-            aria-expanded={expanded}
-            aria-controls={`session-description-${session.id}`}
-            aria-label={`${expanded ? "Show less" : "Show more"} of the ${session.title} description`}
-            onClick={() => model.toggleDescription(session.id)}
+      {model.showEmbedField("description") && (snippet || !description) ? (
+        <div className="programme-entry-description">
+          <p
+            id={`session-description-${session.id}`}
+            className={expanded ? undefined : "is-clamped"}
           >
-            {expanded ? "Show less" : "Show more"}
-          </button>
-        ) : null}
-      </div>
+            {description || "Description not provided."}
+          </p>
+          {snippet && snippet !== description ? (
+            <button
+              type="button"
+              className="session-disclosure"
+              aria-expanded={expanded}
+              aria-controls={`session-description-${session.id}`}
+              aria-label={`${expanded ? "Show less" : "Show more"} of the ${session.title} description`}
+              onClick={() => model.toggleDescription(session.id)}
+            >
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -546,6 +571,8 @@ function ProgrammeSessionList({ model }: { model: PublicProgrammeModel }) {
 }
 
 function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
+  const [calendarDownloadRequested, setCalendarDownloadRequested] =
+    useState(false);
   const {
     fetcher,
     shared,
@@ -635,7 +662,12 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
           </div>
           {!shared ? (
             <div className="page-actions mt">
-              <a className="btn primary" href={calendarExportHref} download>
+              <a
+                className="btn primary"
+                href={calendarExportHref}
+                download
+                onClick={() => setCalendarDownloadRequested(true)}
+              >
                 <CalendarDays aria-hidden size={15} /> Export itinerary
               </a>
               <fetcher.Form method="post">
@@ -650,10 +682,20 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
               </fetcher.Form>
             </div>
           ) : (
-            <a className="btn primary mt" href={calendarExportHref} download>
+            <a
+              className="btn primary mt"
+              href={calendarExportHref}
+              download
+              onClick={() => setCalendarDownloadRequested(true)}
+            >
               <CalendarDays aria-hidden size={15} /> Export itinerary
             </a>
           )}
+          {calendarDownloadRequested ? (
+            <p className="validation-item ok mt" role="status">
+              Calendar download requested. Check your browser downloads.
+            </p>
+          ) : null}
           {loaderData.itinerarySynced && !shared ? (
             <p className="help">
               Synced to your signed-in account across devices.
@@ -708,17 +750,27 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
     >
       <h2 id="session-detail-title">{selected.title}</h2>
       {/* One caption line, so the panel still stands on its own when it is
-          stacked under the list on a phone and the row is a screen away. */}
-      <p className="session-detail-when">
-        {formatDay(selected.startsAt, programme.event.timezone)} ·{" "}
-        {formatProgrammeTimeRange(
-          selected.startsAt,
-          selected.endsAt,
-          programme.event.timezone,
-        )}{" "}
-        · {selected.room}
-      </p>
-      <p className="session-detail-classification">{classification}</p>
+          stacked under the list on a phone and the row is a screen away. Each
+          half is still behind its own embed field switch. */}
+      {model.showEmbedField("time") || model.showEmbedField("location") ? (
+        <p className="session-detail-when">
+          {[
+            model.showEmbedField("time")
+              ? `${formatDay(selected.startsAt, programme.event.timezone)} · ${formatProgrammeTimeRange(
+                  selected.startsAt,
+                  selected.endsAt,
+                  programme.event.timezone,
+                )}`
+              : null,
+            model.showEmbedField("location") ? selected.room : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      ) : null}
+      {classification ? (
+        <p className="session-detail-classification">{classification}</p>
+      ) : null}
       {selectedConflicts.length ? (
         <p className="validation-item warn">
           <strong>Schedule conflict</strong>
@@ -730,60 +782,73 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
       {!embedded && !shared ? (
         <SaveSessionButton session={selected} model={model} variant="detail" />
       ) : null}
-      <h3>About this session</h3>
-      <p className="session-detail-description">
-        {selected.description || "A description is coming soon."}
-      </p>
-      <h3>{selected.speakerIds.length === 1 ? "Speaker" : "Speakers"}</h3>
-      <div className="session-detail-speakers">
-        {selected.speakerIds.length ? (
-          selected.speakerIds.map((speakerId, index) => {
-            const speaker = speakerById.get(speakerId)!;
-            const name = selected.speakerNames[index]!;
-            const affiliation = speakerAffiliation(speaker);
-            return (
-              <div className="session-detail-speaker" key={speakerId}>
-                <div className="session-detail-speaker-identity">
-                  {speaker.imageUrl ? (
-                    <img
-                      className="avatar"
-                      src={speaker.imageUrl}
-                      alt=""
-                      width={40}
-                      height={40}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <span className="avatar" aria-hidden="true">
-                      {initials(name)}
-                    </span>
-                  )}
-                  <div>
-                    <strong>{name}</strong>
-                    {affiliation ? <small>{affiliation}</small> : null}
+      {model.showEmbedField("description") ? (
+        <>
+          <h3>About this session</h3>
+          <p className="session-detail-description">
+            {selected.description || "A description is coming soon."}
+          </p>
+        </>
+      ) : null}
+      {model.showEmbedField("speakers") ? (
+        <>
+          <h3>{selected.speakerIds.length === 1 ? "Speaker" : "Speakers"}</h3>
+          <div className="session-detail-speakers">
+            {selected.speakerIds.length ? (
+              selected.speakerIds.map((speakerId, index) => {
+                const speaker = speakerById.get(speakerId)!;
+                const name = selected.speakerNames[index]!;
+                const affiliation = speakerAffiliation(speaker);
+                return (
+                  <div className="session-detail-speaker" key={speakerId}>
+                    <div className="session-detail-speaker-identity">
+                      {model.showEmbedField("images") && speaker.imageUrl ? (
+                        <img
+                          className="avatar"
+                          src={speaker.imageUrl}
+                          alt=""
+                          width={40}
+                          height={40}
+                          loading="lazy"
+                        />
+                      ) : model.showEmbedField("images") ? (
+                        <span className="avatar" aria-hidden="true">
+                          {initials(name)}
+                        </span>
+                      ) : null}
+                      <div>
+                        <strong>{name}</strong>
+                        {model.showEmbedField("affiliations") && affiliation ? (
+                          <small>{affiliation}</small>
+                        ) : null}
+                      </div>
+                    </div>
+                    {speaker.biography ? (
+                      <p>{descriptionSnippet(speaker.biography)}</p>
+                    ) : null}
+                    {showSpeakers ? (
+                      <a
+                        className="session-detail-profile-link"
+                        href={`#speaker-${speakerId}`}
+                        onClick={(event) =>
+                          model.openSpeakerProfile(
+                            speakerId,
+                            event.currentTarget,
+                          )
+                        }
+                      >
+                        View {name}’s profile
+                      </a>
+                    ) : null}
                   </div>
-                </div>
-                {speaker.biography ? (
-                  <p>{descriptionSnippet(speaker.biography)}</p>
-                ) : null}
-                {showSpeakers ? (
-                  <a
-                    className="session-detail-profile-link"
-                    href={`#speaker-${speakerId}`}
-                    onClick={(event) =>
-                      model.openSpeakerProfile(speakerId, event.currentTarget)
-                    }
-                  >
-                    View {name}’s profile
-                  </a>
-                ) : null}
-              </div>
-            );
-          })
-        ) : (
-          <p className="subtle">Speaker to be announced.</p>
-        )}
-      </div>
+                );
+              })
+            ) : (
+              <p className="subtle">Speaker to be announced.</p>
+            )}
+          </div>
+        </>
+      ) : null}
       <div className="divider" />
       <Link
         className="btn small"
@@ -904,13 +969,16 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
         >
           <div className="card-title">
             <div className="public-speaker-profile-identity">
-              <PublicSpeakerAvatar speaker={selectedSpeaker} size={72} />
+              {model.showEmbedField("images") ? (
+                <PublicSpeakerAvatar speaker={selectedSpeaker} size={72} />
+              ) : null}
               <div>
                 <span className="pill">Speaker profile</span>
                 <h2 id="programme-speaker-profile-name">
                   {selectedSpeaker.displayName}
                 </h2>
-                {speakerAffiliation(selectedSpeaker) ? (
+                {model.showEmbedField("affiliations") &&
+                speakerAffiliation(selectedSpeaker) ? (
                   <p className="help">{speakerAffiliation(selectedSpeaker)}</p>
                 ) : null}
               </div>
@@ -928,37 +996,59 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
               </button>
             </div>
           </div>
-          {selectedSpeaker.pronunciation ? (
+          {model.showEmbedField("biography") &&
+          selectedSpeaker.pronunciation ? (
             <p className="help">
               Pronunciation · {selectedSpeaker.pronunciation}
             </p>
           ) : null}
-          {selectedSpeaker.biography ? (
+          {model.showEmbedField("biography") && selectedSpeaker.biography ? (
             <p>{selectedSpeaker.biography}</p>
           ) : null}
-          <h3>
-            Sessions{" "}
-            <span className="status info">
-              {selectedSpeakerSessions.length}
-            </span>
-          </h3>
-          <div className="stack">
-            {selectedSpeakerSessions.length ? (
-              selectedSpeakerSessions.map((session) => (
-                <a
-                  href={`#session-${session.slug}`}
-                  key={session.id}
-                  onClick={() => setSelectedId(session.id)}
-                >
-                  {formatDay(session.startsAt, programme.event.timezone)} ·{" "}
-                  {formatTime(session.startsAt, programme.event.timezone)} ·{" "}
-                  {session.title} · {session.room}
-                </a>
-              ))
-            ) : (
-              <p className="subtle">No sessions match the current filters.</p>
-            )}
-          </div>
+          {model.showEmbedField("sessions") ? (
+            <>
+              <h3>
+                Sessions{" "}
+                <span className="status info">
+                  {selectedSpeakerSessions.length}
+                </span>
+              </h3>
+              <div className="stack">
+                {selectedSpeakerSessions.length ? (
+                  selectedSpeakerSessions.map((session) => (
+                    <a
+                      href={`#session-${session.slug}`}
+                      key={session.id}
+                      onClick={() => setSelectedId(session.id)}
+                    >
+                      {model.showEmbedField("time") ? (
+                        <>
+                          {formatDay(
+                            session.startsAt,
+                            programme.event.timezone,
+                          )}{" "}
+                          ·{" "}
+                          {formatTime(
+                            session.startsAt,
+                            programme.event.timezone,
+                          )}{" "}
+                          ·{" "}
+                        </>
+                      ) : null}
+                      {session.title}
+                      {model.showEmbedField("location") && session.room ? (
+                        <> · {session.room}</>
+                      ) : null}
+                    </a>
+                  ))
+                ) : (
+                  <p className="subtle">
+                    No sessions match the current filters.
+                  </p>
+                )}
+              </div>
+            </>
+          ) : null}
         </article>
       ) : null}
     </section>
@@ -998,6 +1088,9 @@ export function PublicProgrammeWorkspace({
         {!overviewSurface ? (
           <div className="public-surface-content">
             <ItineraryVerificationPrompt model={model} />
+            {embedded && embedOptions.controls.length ? (
+              <PublicProgrammeFilters model={model} />
+            ) : null}
             <PublicProgrammeSurfaceContent model={model} />
           </div>
         ) : (

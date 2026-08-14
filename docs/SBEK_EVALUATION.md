@@ -184,8 +184,8 @@ email-verification flag or create a Better Auth session. The secondary
 `Activate account and choose event` action first performs the same canonical
 activation, then opens `/events/select` with no preselected event; that list
 shows only accepted or pending real memberships inside the fixture organisation
-and invitation acceptance remains explicit. There is no `/demo`, provider
-simulation or human-accessible reset. Better Auth and real Resend magic links remain
+and invitation acceptance remains explicit. There is no `/demo` or provider
+simulation. Better Auth and real Resend magic links remain
 available for delivery/authentication acceptance, but are not required merely
 to review every seeded persona. Unlock attempts are IP-rate-limited. Missing or
 weak evaluator configuration returns production runtime unavailability rather
@@ -193,6 +193,19 @@ than an ordinary bad-code response, and a missing fixture person is reported as
 reset-required unavailability rather than an anonymous session. Sam remains
 unauthorised until the organiser performs and the reviewer accepts the real
 invitation workflow.
+
+After initial operator provisioning, an unlocked evaluator can expand
+`Reset evaluation data` on `/evaluate`, type `Future of Events 2027` and reset
+the dedicated fixture before a separate LLM or human run. This routine action
+uses the already-provisioned D1 identities and verified sender, not the removed
+four address secrets or temporary full-access Resend key. It retains the same
+tenant-dedication, active-work, retention, R2 and reset-owner fences, and is
+IP-rate-limited. It resets the whole shared evaluation workspace, invalidates
+everyone's saved evaluator cookies and returns the initiating browser to the
+unlocked role picker with no persona. Recapture all three starting states after
+it completes. If the persisted identities or sender have drifted, the action
+fails and an operator must repeat the separately authenticated provisioning
+procedure above.
 
 The only production Turnstile exception is creation of the first anonymous
 personal itinerary for the exact canonical fixture event while evaluation mode
@@ -306,8 +319,8 @@ next role.
 
 Stamp the candidate revision in `SOURCE_REVISION`, apply the remote migration,
 run `npm run deploy`, and verify `/api/v1/health` reports that exact revision.
-Only then install the temporary reset secrets, run one clean production fixture
-reset, remove those secrets and capture the three persona states. A D1 event
+Only then install the temporary reset secrets, run the initial clean production
+fixture reset, remove those secrets and capture the three persona states. A D1 event
 created during the optional scenario can explicitly copy a still-verified
 sender from another active event in the same organisation. That is sender reuse
 only; it neither copies templates nor claims a provider send.
@@ -381,10 +394,12 @@ pnpm run sbek -- plan --url https://app.programcue.com --scenarios CFP-S1
 # MCP start_scenario({ scenario_id: "CFP-S1" }) -> evidence -> done
 ```
 
-If the pilot mutates production, reinstall the reset-only secret and four
-evaluator-address secrets, create and install a new temporary full-access Resend
-key, reset, perform the full cleanup above, and recapture all three saved persona
-states. Every reset invalidates previously saved evaluator cookies. Restore the
+If the pilot mutates production, use `Reset evaluation data` on the unlocked
+guide and recapture all three saved persona states. Every reset invalidates
+previously saved evaluator cookies. Reinstall the reset-only secret and four
+evaluator-address secrets and create a new temporary full-access Resend key only
+when routine reset reports provisioning drift or the fixture has never been
+provisioned; perform the full cleanup above immediately afterward. Restore the
 intended `headless` setting, start a new full run, and only then begin the
 complete ordered evaluation.
 

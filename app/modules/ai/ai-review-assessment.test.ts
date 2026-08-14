@@ -55,6 +55,7 @@ function structuredResponse(
   return {
     id,
     model: "@cf/openai/gpt-oss-120b",
+    status: "completed",
     output: [
       {
         type: "message",
@@ -214,6 +215,10 @@ describe("persisted AI first-pass review assessments", () => {
     expect(create).toHaveBeenCalledTimes(1);
     const request = create.mock.calls[0]![0];
     expect(request.textFormat?.name).toBe("program_cue_ai_review_assessment");
+    expect(request.maxOutputTokens).toBe(4_000);
+    expect(request.textFormat?.schema).toMatchObject({
+      properties: { rationale: { maxLength: 2_000 } },
+    });
     expect(request.tools).toBeUndefined();
     expect(request.input).toContain("fragmented run-of-show decisions");
     expect(request.input).not.toContain("Alex Morgan");

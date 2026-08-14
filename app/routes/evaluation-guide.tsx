@@ -3,6 +3,7 @@ import {
   CalendarDays,
   ExternalLink,
   KeyRound,
+  RotateCcw,
   ShieldCheck,
 } from "lucide-react";
 import {
@@ -38,6 +39,7 @@ import {
   requireEvaluationMode,
   resolveEvaluationPerson,
 } from "~/platform/evaluation/evaluation-session.server";
+import { resetProductionEvaluationFixtureForEvaluator } from "~/platform/evaluation/evaluation-fixture.server";
 import {
   AbuseProtectionConfigurationError,
   AbuseRateLimitError,
@@ -45,7 +47,8 @@ import {
 } from "~/platform/http/public-abuse-protection.server";
 import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
 
-type ActionResult = { ok: false; message: string };
+type ActionResult =
+  { ok: true; message: string } | { ok: false; message: string };
 
 export const meta = () => [{ title: "Evaluation access · Program Cue" }];
 export const headers: Route.HeadersFunction = () => ({
@@ -169,6 +172,73 @@ export async function action({ request, context }: Route.ActionArgs) {
     headers.append("set-cookie", clearEvaluationSessionCookie());
     headers.append("set-cookie", clearCurrentEventCookie(env));
     return redirect("/evaluate", { status: 303, headers });
+  }
+
+  if (intent === "reset_fixture") {
+    const confirmation = form.get("confirmation");
+    if (confirmation !== EVALUATION_EVENT_NAME) {
+      return data<ActionResult>(
+        {
+          ok: false,
+          message: `Type ${EVALUATION_EVENT_NAME} exactly to reset the fixture.`,
+        },
+        { status: 409, headers: { "cache-control": "no-store" } },
+      );
+    }
+    try {
+      await enforcePublicRateLimit({
+        env,
+        request,
+        action: "evaluation_reset",
+        tenantId: EVALUATION_EVENT_ID,
+        email: "evaluation-reset",
+      });
+      await resetProductionEvaluationFixtureForEvaluator(
+        env,
+        confirmation,
+        session.identityKey,
+        session.fixtureGeneration,
+      );
+    } catch (error) {
+      if (error instanceof AbuseRateLimitError) {
+        return data<ActionResult>(
+          { ok: false, message: error.message },
+          {
+            status: 429,
+            headers: {
+              "cache-control": "no-store",
+              "retry-after": String(error.retryAfterSeconds),
+            },
+          },
+        );
+      }
+      if (error instanceof AbuseProtectionConfigurationError) {
+        return data<ActionResult>(
+          {
+            ok: false,
+            message: "Evaluation reset protection is temporarily unavailable.",
+          },
+          { status: 503, headers: { "cache-control": "no-store" } },
+        );
+      }
+      if (error instanceof Error) {
+        return data<ActionResult>(
+          { ok: false, message: error.message },
+          { status: 409, headers: { "cache-control": "no-store" } },
+        );
+      }
+      throw error;
+    }
+    const headers = new Headers({ "cache-control": "private, no-store" });
+    headers.append("set-cookie", await evaluationSessionCookie(env, null));
+    headers.append("set-cookie", clearCurrentEventCookie(env));
+    return data<ActionResult>(
+      {
+        ok: true,
+        message: "Evaluation data reset. Choose a fresh starting persona.",
+      },
+      { headers },
+    );
   }
 
   const identityKey = String(form.get("identity") ?? "");
@@ -305,6 +375,8 @@ export default function EvaluationGuide({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<ActionResult>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
+  const resetBusy =
+    busy && navigation.formData?.get("_intent") === "reset_fixture";
   if (!loaderData.unlocked) {
     return (
       <main className="design-board" id="main" style={{ minHeight: "100vh" }}>
@@ -321,7 +393,7 @@ export default function EvaluationGuide({ loaderData }: Route.ComponentProps) {
             Enter the access code supplied with the evaluation instructions. It
             unlocks only fixed identities in the dedicated evaluation fixture.
           </p>
-          {actionData ? (
+          {actionData && !actionData.ok ? (
             <p className="validation-item error" role="alert">
               {actionData.message}
             </p>
@@ -382,6 +454,16 @@ export default function EvaluationGuide({ loaderData }: Route.ComponentProps) {
           <div>
             <strong>Current persona: {loaderData.selected.label}</strong>
             <div>{loaderData.selected.name}</div>
+          </div>
+        </div>
+      ) : null}
+      {actionData ? (
+        <div
+          className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
+          role={actionData.ok ? "status" : "alert"}
+        >
+          <div className="pc-status-notice-copy">
+            <strong>{actionData.message}</strong>
           </div>
         </div>
       ) : null}
@@ -483,6 +565,46 @@ export default function EvaluationGuide({ loaderData }: Route.ComponentProps) {
             group="scenario"
             busy={busy}
           />
+        </div>
+      </details>
+
+      <details className="card pad mb pc-disclosure">
+        <summary>
+          <strong>Reset evaluation data</strong>{" "}
+          <span className="subtle">destructive</span>
+        </summary>
+        <div className="mt stack">
+          <p>
+            Restore the complete dedicated evaluation fixture before starting a
+            separate human or automated run. This removes evaluator-created
+            event data, invalidates every saved evaluator session and affects
+            anyone currently using this evaluation workspace.
+          </p>
+          <p className="subtle">
+            Reset is refused while fixture events have active external work or
+            when the provisioned identities, sender or tenant boundary have
+            drifted.
+          </p>
+          <Form method="post" className="stack">
+            <input type="hidden" name="_intent" value="reset_fixture" />
+            <label className="label">
+              Type {loaderData.eventName} to confirm
+              <input
+                className="field"
+                name="confirmation"
+                required
+                autoComplete="off"
+              />
+            </label>
+            <div>
+              <button className="btn danger" type="submit" disabled={busy}>
+                <RotateCcw aria-hidden size={15} />{" "}
+                {resetBusy
+                  ? "Resetting evaluation data…"
+                  : "Reset evaluation data"}
+              </button>
+            </div>
+          </Form>
         </div>
       </details>
     </main>

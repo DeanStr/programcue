@@ -54,10 +54,14 @@ const LABEL = process.argv[2] ?? "before";
 const ONLY = process.argv.slice(3);
 const OUT = path.resolve(".artifacts/design", LABEL);
 
+// 320 is the floor because a regression lived between 320 and 390 for a whole
+// redesign: the participant header reached 258px at 320px wide while looking
+// correct at every width this harness used to check.
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 1000 },
   { name: "laptop", width: 1280, height: 800 },
   { name: "mobile", width: 390, height: 844 },
+  { name: "narrow", width: 320, height: 720 },
 ];
 
 /** role: undefined = organiser/owner demo identity. */

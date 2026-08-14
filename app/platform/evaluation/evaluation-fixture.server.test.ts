@@ -11,7 +11,10 @@ import {
   EVALUATION_FIXTURE_RESET_OPERATION_ID,
   markEvaluationFixtureResetFailed,
 } from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
-import { resetProductionEvaluationFixture } from "./evaluation-fixture.server";
+import {
+  resetProductionEvaluationFixture,
+  resetProductionEvaluationFixtureForEvaluator,
+} from "./evaluation-fixture.server";
 import {
   evaluationSessionCookie,
   readEvaluationSession,
@@ -713,6 +716,55 @@ describe("production evaluation fixture", () => {
     );
   });
 
+  it("prevents a session revoked by another reset from claiming a routine reset", async () => {
+    const environment = productionEnvironment();
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    const prior = await environment.DB.prepare(
+      `SELECT json_extract(result_json, '$.fixtureGeneration') AS fixtureGeneration
+         FROM operation_jobs WHERE id = ?`,
+    )
+      .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
+      .first<{ fixtureGeneration: string }>();
+    if (!prior?.fixtureGeneration) {
+      throw new Error("The fixture reset did not publish a generation.");
+    }
+    const newerOwner = crypto.randomUUID();
+    const newerGeneration = crypto.randomUUID();
+    await acquireEvaluationFixtureReset(environment, newerOwner);
+    await completeEvaluationFixtureReset(
+      environment,
+      newerOwner,
+      newerGeneration,
+      { authority: "test-concurrent-reset" },
+    );
+
+    await expect(
+      acquireEvaluationFixtureReset(
+        environment,
+        crypto.randomUUID(),
+        prior.fixtureGeneration,
+      ),
+    ).rejects.toThrow(
+      "Evaluation access expired because another fixture reset completed. Enter the access code again.",
+    );
+    await expect(
+      environment.DB.prepare(
+        `SELECT status,
+                json_extract(result_json, '$.fixtureGeneration') AS fixtureGeneration
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
+        .first(),
+    ).resolves.toEqual({
+      status: "completed",
+      fixtureGeneration: newerGeneration,
+    });
+  });
+
   it("fails before reset when the fixed organisation-admin membership ID has drifted", async () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
@@ -1273,5 +1325,46 @@ describe("production evaluation fixture", () => {
         "DELETE FROM organisations WHERE id = 'evaluation-other-org'",
       ).run();
     }
+  });
+
+  it("fails before mutation when routine reset provisioning has drifted", async () => {
+    const environment = productionEnvironment();
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    const completionsBefore = await environment.DB.prepare(
+      `SELECT COUNT(*) AS count FROM audit_events
+        WHERE action = 'evaluation.fixture.reset'`,
+    ).first<{ count: number }>();
+    await environment.DB.prepare(
+      `DELETE FROM sender_profiles
+        WHERE id = 'sender-production-evaluation-fixture'`,
+    ).run();
+
+    await expect(
+      resetProductionEvaluationFixtureForEvaluator(
+        {
+          ...environment,
+          EVALUATOR_ORGANIZER_EMAIL: undefined,
+          EVALUATOR_SPEAKER_EMAIL: undefined,
+          EVALUATOR_SECOND_SPEAKER_EMAIL: undefined,
+          EVALUATOR_REVIEWER_EMAIL: undefined,
+          EVALUATION_RESEND_API_KEY: undefined,
+        } as CloudflareEnvironment,
+        "Future of Events 2027",
+        "organizer",
+        "test-generation-not-reached-before-provisioning-check",
+      ),
+    ).rejects.toThrow(
+      "The provisioned evaluation sender no longer matches AUTH_EMAIL_FROM. Run the operator fixture reset.",
+    );
+    await expect(
+      environment.DB.prepare(
+        `SELECT COUNT(*) AS count FROM audit_events
+          WHERE action = 'evaluation.fixture.reset'`,
+      ).first<{ count: number }>(),
+    ).resolves.toEqual(completionsBefore);
   });
 });

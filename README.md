@@ -285,6 +285,11 @@ authentication secret.
 The initial dedicated-secret release moves anonymous cookies and stored hashes
 to `v2`; migration `0018` removes only legacy unversioned anonymous rows, while
 signed-in and newly created `v2` itineraries remain intact.
+Rotating `ANONYMOUS_ITINERARY_SECRET` is an intentional destructive reset while
+the product is pre-release: existing anonymous cookies stop verifying and their
+event-scoped database rows can no longer be found. Signed-in itineraries are
+unaffected. Coordinate any required rotation with removal of the unreachable
+anonymous rows; do not retain a previous-key compatibility fallback.
 `CALENDAR_CREDENTIALS_KEY`, `INTEGRATION_CREDENTIALS_KEY` and
 `WEBHOOK_CREDENTIALS_KEY` must each be an independently generated,
 base64-encoded 32-byte AES-GCM key. Workers AI is the provisioned default;
@@ -317,8 +322,11 @@ organisation. It restores the canonical event, retires evaluator-created
 events, clears their private R2 data, removes only safe fixture-created people
 and fails on active work, retention, identity drift or cross-tenant state. The
 temporary reset credentials and evaluator address bindings are removed after
-seeding; the permanent evaluation access and signing secrets remain installed
-only for the evaluation period.
+seeding. After initial provisioning, the unlocked guide offers a typed,
+rate-limited routine reset that reuses only the persisted fixture identities and
+verified sender; it invalidates all saved evaluator sessions. The permanent
+evaluation access and signing secrets remain installed only for the evaluation
+period.
 
 Secret installation, mode-`0600` environment handling, reset and cleanup
 commands, exact personas and aliases, bounded evaluation exceptions, Codex/SBEK

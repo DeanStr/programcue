@@ -2,6 +2,7 @@ import {
   AiProviderError,
   aiProviderResponseSchema,
   openAiOutputText,
+  requireCompletedResponsesApiResult,
   type AiModelProvider,
   type OpenAiResponse,
   type OpenAiResponsesRequest,
@@ -77,10 +78,16 @@ export class WorkersAiResponsesProvider implements AiModelProvider {
         this.binding.aiGatewayLogId,
       );
     }
+    const completed = requireCompletedResponsesApiResult(
+      parsed.data,
+      this.providerName,
+      null,
+      this.binding.aiGatewayLogId,
+    );
     if (request.onTextDelta) {
-      const text = openAiOutputText(parsed.data);
+      const text = openAiOutputText(completed);
       if (text) request.onTextDelta(text);
     }
-    return parsed.data;
+    return completed;
   }
 }

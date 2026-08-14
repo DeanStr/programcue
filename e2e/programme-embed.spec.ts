@@ -38,10 +38,13 @@ test("configures, previews and copies a constrained programme embed", async ({
   await page.getByLabel("Initial format").selectOption("breakout");
   await page.getByLabel("Initial room").selectOption("Room 303");
   await page.getByLabel("Search text").fill("Building");
-  await page.getByLabel("Day", { exact: true }).uncheck();
-  await page.getByLabel("Track", { exact: true }).uncheck();
-  await page.getByLabel("Format", { exact: true }).uncheck();
-  await page.getByLabel("Room", { exact: true }).uncheck();
+  const visitorControls = page.getByRole("group", {
+    name: "Visible visitor controls",
+  });
+  await visitorControls.getByLabel("Day", { exact: true }).uncheck();
+  await visitorControls.getByLabel("Track", { exact: true }).uncheck();
+  await visitorControls.getByLabel("Format", { exact: true }).uncheck();
+  await visitorControls.getByLabel("Room", { exact: true }).uncheck();
   await page.getByLabel("Density").selectOption("compact");
   await page
     .getByLabel("Include the speaker directory and profile links")
@@ -50,7 +53,7 @@ test("configures, previews and copies a constrained programme embed", async ({
   const preview = page.locator(".programme-embed-preview iframe");
   await expect(preview).toHaveAttribute(
     "src",
-    /day=2027-05-21.*track=AI\+%26\+Innovation.*format=breakout.*room=Room\+303.*query=Building.*controls=search.*density=compact.*speakers=hide/,
+    /\/embed\/future-of-events-2027\/sessions\?day=2027-05-21.*track=AI\+%26\+Innovation.*format=breakout.*room=Room\+303.*query=Building.*controls=search.*density=compact.*speakers=hide/,
   );
   const previewFrame = preview.contentFrame();
   await previewFrame.locator("body[data-hydrated='true']").waitFor();
@@ -69,7 +72,7 @@ test("configures, previews and copies a constrained programme embed", async ({
   );
   await page.getByRole("button", { name: "Widget", exact: true }).click();
   await expect(page.getByLabel("Auto-resizing widget code")).toHaveValue(
-    /programcue-widget\.js.*data-day="2027-05-21".*data-track="AI &amp; Innovation".*data-format="breakout".*data-room="Room 303".*data-query="Building".*data-controls="search".*data-density="compact".*data-speakers="hide"/s,
+    /programcue-widget\.js.*data-surface="sessions".*data-day="2027-05-21".*data-track="AI &amp; Innovation".*data-format="breakout".*data-room="Room 303".*data-query="Building".*data-controls="search".*data-density="compact".*data-speakers="hide"/s,
   );
 
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -100,6 +103,58 @@ test("configures, previews and copies a constrained programme embed", async ({
     /data-height="640"/,
   );
   await expect(page.getByRole("button", { name: "Copy code" })).toBeEnabled();
+});
+
+test("previews every public widget type and applies granular field selection", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/admin/programme");
+  const preview = page.locator(".programme-embed-preview iframe");
+  const widgetTypes = [
+    ["speakers", "Speakers"],
+    ["agenda", "Agenda"],
+    ["schedule", "Schedule Itinerary"],
+    ["gallery", "Speaker Gallery"],
+    ["sessions", null],
+  ] as const;
+
+  for (const [surface, heading] of widgetTypes) {
+    await page.getByLabel("Public surface").selectOption(surface);
+    await expect(preview).toHaveAttribute(
+      "src",
+      new RegExp(`/embed/future-of-events-2027/${surface}`),
+    );
+    const frame = preview.contentFrame();
+    await frame.locator("body[data-hydrated='true']").waitFor();
+    if (heading) {
+      await expect(
+        frame.getByRole("heading", { name: heading, exact: true }),
+      ).toBeVisible();
+    } else {
+      await expect(frame.locator(".programme-row").first()).toBeVisible();
+    }
+  }
+
+  await page.getByLabel("Public surface").selectOption("agenda");
+  await page.getByLabel("Time and duration").uncheck();
+  await page.getByLabel("Room and location").uncheck();
+  await page.getByLabel("Descriptions").uncheck();
+  await expect(preview).toHaveAttribute("src", /fields=/);
+  const agendaFrame = preview.contentFrame();
+  await agendaFrame.locator("body[data-hydrated='true']").waitFor();
+  await expect(agendaFrame.locator(".agenda-card-title").first()).toBeVisible();
+  await expect(
+    agendaFrame.getByLabel("Search sessions, speakers, or topics"),
+  ).toBeVisible();
+  await expect(agendaFrame.getByLabel("Filter by day")).toBeVisible();
+  await expect(agendaFrame.locator(".agenda-card-time")).toHaveCount(0);
+  await expect(agendaFrame.locator(".session-place")).toHaveCount(0);
+  await expect(agendaFrame.locator(".agenda-card-description")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Widget", exact: true }).click();
+  await expect(page.getByLabel("Auto-resizing widget code")).toHaveValue(
+    /data-surface="agenda".*data-fields=/s,
+  );
 });
 
 test("rejects unsupported embed configuration instead of silently falling back", async ({
@@ -146,9 +201,25 @@ test("rejects unsupported embed configuration instead of silently falling back",
   expect(await duplicateParameter.text()).toContain(
     "Embed parameter density must appear at most once",
   );
+
+  const invalidFields = await page.request.get(
+    "/embed/future-of-events-2027/sessions?fields=time,sponsors",
+  );
+  expect(invalidFields.status()).toBe(400);
+  expect(await invalidFields.text()).toContain(
+    "Embed fields must be a unique comma-separated selection",
+  );
+
+  const invalidSurface = await page.request.get(
+    "/embed/future-of-events-2027/timeline",
+  );
+  expect(invalidSurface.status()).toBe(404);
+  expect(await invalidSurface.text()).toContain(
+    "Embed surface must be sessions, speakers, agenda, schedule or gallery",
+  );
 });
 
-test("widget preserves empty options for rejection and fails on an empty height", async ({
+test("widget preserves invalid options for rejection and fails before mounting", async ({
   page,
 }) => {
   await page.route(`${e2eOrigin}/__programcue-widget-empty-option`, (route) =>
@@ -165,14 +236,16 @@ test("widget preserves empty options for rejection and fails on an empty height"
   );
   const rejectedEmbed = page.waitForResponse(
     (response) =>
-      response.url().includes("/embed/future-of-events-2027?controls=") &&
+      response
+        .url()
+        .includes("/embed/future-of-events-2027/sessions?controls=") &&
       response.status() === 400,
   );
   await page.goto(`${e2eOrigin}/__programcue-widget-empty-option`);
   await rejectedEmbed;
   await expect(page.locator("#programme-widget iframe")).toHaveAttribute(
     "src",
-    /\/embed\/future-of-events-2027\?controls=$/,
+    /\/embed\/future-of-events-2027\/sessions\?controls=$/,
   );
 
   await page.route(`${e2eOrigin}/__programcue-widget-empty-height`, (route) =>
@@ -192,6 +265,48 @@ test("widget preserves empty options for rejection and fails on an empty height"
   await expect(widgetError).resolves.toHaveProperty(
     "message",
     "Program Cue widget data-height must be an integer from 160 to 20000.",
+  );
+  await expect(page.locator("#programme-widget iframe")).toHaveCount(0);
+
+  await page.route(
+    `${e2eOrigin}/__programcue-widget-invalid-surface`,
+    (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `
+        <div id="programme-widget"></div>
+        <script src="${e2eOrigin}/programcue-widget.js"
+          data-programcue-event="future-of-events-2027"
+          data-target="#programme-widget"
+          data-surface="timeline"></script>
+      `,
+      }),
+  );
+  const surfaceError = page.waitForEvent("pageerror");
+  await page.goto(`${e2eOrigin}/__programcue-widget-invalid-surface`);
+  await expect(surfaceError).resolves.toHaveProperty(
+    "message",
+    "Program Cue widget data-surface must be sessions, speakers, agenda, schedule or gallery.",
+  );
+  await expect(page.locator("#programme-widget iframe")).toHaveCount(0);
+
+  await page.route(`${e2eOrigin}/__programcue-widget-empty-surface`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `
+        <div id="programme-widget"></div>
+        <script src="${e2eOrigin}/programcue-widget.js"
+          data-programcue-event="future-of-events-2027"
+          data-target="#programme-widget"
+          data-surface=""></script>
+      `,
+    }),
+  );
+  const emptySurfaceError = page.waitForEvent("pageerror");
+  await page.goto(`${e2eOrigin}/__programcue-widget-empty-surface`);
+  await expect(emptySurfaceError).resolves.toHaveProperty(
+    "message",
+    "Program Cue widget data-surface must be sessions, speakers, agenda, schedule or gallery.",
   );
   await expect(page.locator("#programme-widget iframe")).toHaveCount(0);
 });
@@ -227,10 +342,12 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
           <script src="${e2eOrigin}/programcue-widget.js"
             data-programcue-event="future-of-events-2027"
             data-target="#programme-widget"
+            data-surface="agenda"
             data-day="2027-05-21"
             data-accent="#0d9488"
             data-controls="search"
-            data-density="compact"></script>
+            data-density="compact"
+            data-fields="location,track,format,speakers"></script>
         `,
     }),
   );
@@ -238,7 +355,7 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
   const frame = page.locator("#programme-widget iframe");
   await expect(frame).toHaveAttribute(
     "src",
-    /\/embed\/future-of-events-2027\?day=2027-05-21&accent=%230d9488&controls=search&density=compact$/,
+    /\/embed\/future-of-events-2027\/agenda\?day=2027-05-21&accent=%230d9488&controls=search&density=compact&fields=location%2Ctrack%2Cformat%2Cspeakers$/,
   );
   await frame.contentFrame().locator("body[data-hydrated='true']").waitFor();
   await expect(
@@ -247,7 +364,13 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
   await expect(
     frame.contentFrame().locator(".public-filters select"),
   ).toHaveCount(0);
-  await expect(frame.contentFrame().locator(".programme-row")).toHaveCount(2);
+  await expect(frame.contentFrame().locator(".agenda-card")).toHaveCount(2);
+  await expect(frame.contentFrame().locator(".agenda-card-time")).toHaveCount(
+    0,
+  );
+  await expect(
+    frame.contentFrame().locator(".agenda-card-description"),
+  ).toHaveCount(0);
   await expect
     .poll(async () =>
       Number.parseInt(await frame.evaluate((node) => node.style.height), 10),
@@ -306,4 +429,80 @@ test("keeps programme detail panels inside the active embed filters", async ({
   await expect(page.getByText("Speaker profile", { exact: true })).toHaveCount(
     0,
   );
+});
+
+test("keeps omitted fields out of session and speaker detail views", async ({
+  page,
+}) => {
+  await waitForInterface(
+    page,
+    "/embed/future-of-events-2027/sessions?fields=sessions,speakers",
+  );
+
+  const sessionDetail = page.locator(".session-detail-panel");
+  await expect(sessionDetail.locator(".session-detail-when")).toHaveCount(0);
+  await expect(sessionDetail.locator(".session-place")).toHaveCount(0);
+
+  await page
+    .locator("#speakers > .grid article")
+    .filter({ hasText: "Priya Shah" })
+    .getByRole("link", { name: "View profile and sessions" })
+    .click();
+  const speakerProfile = page.locator("#speakers article[aria-live='polite']");
+  await expect(speakerProfile).not.toContainText("Pronunciation");
+  const linkedSession = speakerProfile.locator(".stack a").first();
+  await expect(linkedSession).toBeVisible();
+  await expect(linkedSession).not.toContainText(/\b(?:AM|PM|Room)\b/);
+
+  await waitForInterface(
+    page,
+    "/embed/future-of-events-2027/sessions?fields=sessions",
+  );
+  await expect(
+    page.locator(".session-detail-panel").getByRole("link", {
+      name: /View .+ profile/,
+    }),
+  ).toHaveCount(0);
+
+  await waitForInterface(
+    page,
+    "/embed/future-of-events-2027/sessions?fields=none",
+  );
+  await expect(page.locator(".programme-row h3").first()).toBeVisible();
+  await expect(page.locator(".programme-row .speaker").first()).toBeVisible();
+  await expect(page.locator(".programme-row .avatar")).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page
+        .locator(".programme-row")
+        .first()
+        .evaluate(
+          (element) =>
+            getComputedStyle(element).gridTemplateColumns.split(" ").length,
+        ),
+    )
+    .toBe(1);
+
+  await waitForInterface(
+    page,
+    "/embed/future-of-events-2027/schedule?fields=none",
+  );
+  await expect
+    .poll(() =>
+      page
+        .locator(".public-itinerary-card")
+        .first()
+        .evaluate(
+          (element) =>
+            getComputedStyle(element).gridTemplateColumns.split(" ").length,
+        ),
+    )
+    .toBe(1);
+
+  await waitForInterface(
+    page,
+    "/embed/future-of-events-2027/agenda?fields=none",
+  );
+  await expect(page.locator(".programme-day-divider")).toHaveCount(2);
+  await expect(page.locator(".agenda-board")).toHaveCount(2);
 });

@@ -283,6 +283,7 @@ describe("organisation AI provider boundary", () => {
 
   it("maps Workers AI Responses calls without provider fallback", async () => {
     const run = vi.fn().mockResolvedValue({
+      status: "completed",
       output: [
         {
           type: "message",
@@ -330,6 +331,7 @@ describe("organisation AI provider boundary", () => {
     const raw = {
       id: "workers-buffered-1",
       model: "@cf/openai/gpt-oss-120b",
+      status: "completed",
       output: [
         {
           type: "message",
@@ -358,6 +360,37 @@ describe("organisation AI provider boundary", () => {
       "@cf/openai/gpt-oss-120b",
       expect.not.objectContaining({ stream: true }),
     );
+  });
+
+  it("fails fast when Workers AI exhausts the response budget", async () => {
+    const run = vi.fn().mockResolvedValue({
+      id: "workers-incomplete-1",
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+      output: [
+        {
+          type: "message",
+          content: [{ type: "output_text", text: '{"score":4' }],
+        },
+      ],
+    });
+    const provider = new WorkersAiResponsesProvider(
+      { aiGatewayLogId: "workers-log-incomplete", run },
+      "@cf/openai/gpt-oss-120b",
+    );
+
+    await expect(
+      provider.create({
+        instructions: "Return a structured result.",
+        input: "Assess this proposal.",
+        safetyIdentifier: "pc_test",
+      }),
+    ).rejects.toMatchObject({
+      name: "AiProviderError",
+      providerRequestId: "workers-log-incomplete",
+      message:
+        "Workers AI response status was incomplete (max_output_tokens); no result was accepted.",
+    });
   });
 
   it("maps strict Anthropic tool calls and results through the shared contract", async () => {

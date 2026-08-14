@@ -62,10 +62,10 @@ export function SpeakerShell({
           )}
           <span>Program Cue</span>
         </NavLink>
-        {/* Event identity is two lines of context, not four stacked lines of
-            mixed context and controls. "Switch event" and support are actions,
-            so they sit with the other actions on the right. */}
-        <div className="speaker-event">
+        {/* Event identity is context, not controls: "Switch event" and support
+            are actions, so they sit with the other actions on the right. The
+            class name is main's, which its responsive rules already target. */}
+        <div className="speaker-event-context">
           <div className="event-title">{event.name}</div>
           <div className="subtle tiny">
             {[event.dateLabel, event.locationLabel].filter(Boolean).join(" · ")}
@@ -87,7 +87,7 @@ export function SpeakerShell({
           ) : null}
           <span className="speaker-identity">
             <span className="avatar">{initials}</span>
-            <span>
+            <span className="speaker-viewer-identity">
               <strong>{name}</strong>
               <small className="subtle speaker-viewer-email">
                 {viewer.email}

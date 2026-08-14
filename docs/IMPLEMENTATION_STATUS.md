@@ -164,6 +164,18 @@ session generation only in the same D1 transaction that completes the owning
 operation. Live overlap is rejected; failed and expired attempts remain
 fail-closed while allowing a later operator reset to recover them.
 
+The current release candidate also exposes a destructive, collapsed reset on
+the unlocked `/evaluate` guide for starting a separate human or automated run.
+It requires the canonical event name, consumes a dedicated D1/IP rate limit and
+reuses the same fenced reset engine. Unlike initial operator provisioning, it
+reads the four already-provisioned safe fixture addresses and exact verified
+sender from D1 and never needs the deleted address bindings or full-access
+Resend domain key. The reset claim is conditional on the initiating session's
+already-validated fixture generation. Missing or drifted provisioning and a
+concurrently superseded session fail before destructive work.
+Completion audits the evaluator authority, invalidates every prior evaluator
+cookie and returns the initiating browser to an unlocked gate-only role picker.
+
 The seeded communications baseline now contains five published templates:
 speaker task reminder, reviewer reminder, speaker welcome, submission
 confirmation and proposal decision. Showcase tasks have due dates; task
@@ -251,17 +263,24 @@ omit participant identity, identifying references and attachments server-side.
 One immutable provider-attributed AI first-pass score/rationale may be generated
 for an exact round, rubric and submitted snapshot; a human override is stored
 and audited separately, and missing/invalid provider behavior fails without a
-simulated score. A failed generation remains durable and is never retried
-automatically; an explicit acknowledged retry creates a separately idempotent,
-linked attempt and prevents another concurrent attempt for the same target.
+simulated score. Responses providers now reject explicit non-completed statuses
+before parsing output, and the bounded rationale has a response budget that
+allows for GPT-OSS reasoning tokens. A failed generation remains durable and is
+never retried automatically; an explicit acknowledged retry creates a separately
+idempotent, linked attempt and prevents another concurrent attempt for the same
+target.
 Focused Worker coverage exercises review advancement,
 archived-cycle decisions, late co-speaker claim/profile/session/task propagation
 and AI persistence/idempotency. The ABS-S2/S3 Chromium workflow exercises cycle
 creation, round/rubric edit and deletion, reviewer pools/progress/reminder
 draft preparation, result sorting/export, server-side blinding, an explicit
-decision override and confirmed co-speaker invitation. Real Workers AI
-generation and the invited person's claim remain provider/persona acceptance
-rather than local-browser evidence.
+decision override and confirmed co-speaker invitation. On 14 August 2026, a
+synthetic live Workers AI probe against the selected
+`@cf/openai/gpt-oss-120b` contract returned `incomplete` with
+`max_output_tokens` under an intentionally tiny budget and returned completed,
+schema-valid assessment JSON under the corrected 4,000-token budget. The
+application-path correction is not deployed evidence; a real assessment retry
+and the invited person's claim remain provider/persona acceptance.
 
 ### Deterministic auto-placement evidence
 
@@ -299,7 +318,9 @@ schedule tests verify this AIA-08 production slice.
   preserves duplicate filename extensions and conditionally opens and
   pull-streams only the current stored entry with response-cancellation
   through a dedicated binary resource route rather than a document action.
-  propagation.
+  A speaker-scoped task file is attributed to its linked session only when
+  exactly one event session matches that speaker; ambiguous relationships stay
+  visibly unassigned instead of selecting an arbitrary session.
 - **Scope boundary:** This is session programme content and existing private
   file delivery, not a general-purpose CMS. Live R2/scanner acceptance remains
   external.
@@ -308,8 +329,9 @@ schedule tests verify this AIA-08 production slice.
 
 - **Production slice (EMB-01/04/09/12/13/14):** The anonymous public programme now exposes the published D1/Airtable snapshot through the existing service at the sessions overview, `/speakers`, `/agenda`, `/schedule` and `/gallery` surfaces. Surface selection uses the matched React Router parameter, so framework `.data` revalidation URLs cannot be mistaken for a public surface and return a false 404. Sessions and chronological itinerary cards include complete public metadata; speakers are surname-ordered; gallery search and the keyboard-accessible detail panel use the same published speaker/session graph.
 - **Data boundary:** Public D1 and Airtable projections require a published schedule version, public published sessions/relationships, public content snapshots and published profiles. Editorial status is advisory and does not filter a published representation. Approval provenance remains a database invariant and inconsistent read state fails explicitly; the administrator UI never fabricates a missing approver. Missing content or a non-public snapshot for a source-public session fails explicitly, and Airtable staging applies the same visibility boundary before provider writes. Headshot URLs still require released-clean current-version predicates. Only Priya Shah, Alex Morgan, Priya Raman and Marcus Okafor may use explicitly allowlisted bundled portraits on the canonical event, and only in local demo or production evaluation mode; any non-deleted real headshot asset suppresses that person's bundle. Anonymous itinerary rows use an event-specific HMAC of a signed, expiry-bound browser identifier, preventing database-level correlation across events and organisations while retaining one browser cookie. The portraits are presentation-only data, not participant upload infrastructure or an ordinary production fallback.
-- **Accessibility evidence:** Description and biography expansion controls expose `aria-expanded`/`aria-controls`; the gallery card supports pointer and keyboard activation, has an explicit close control, preserves search state and returns focus to the opener. Focused unit, Worker and anonymous Chromium coverage verifies these behaviors.
-- **Scope boundary:** Organizer embed configuration, live edit propagation, iCal export and participant upload infrastructure remain outside this workstream. Point-in-time consistency benefits from the single published snapshot read but is not claimed as live propagation.
+- **Accessibility evidence:** Description and biography expansion controls expose `aria-expanded`/`aria-controls`; the gallery card supports pointer and keyboard activation, has an explicit close control, preserves search state and returns focus to the opener. Agenda session details likewise expose an explicit close action and restore focus to the exact trigger. Itinerary calendar export reports that the browser download was requested instead of leaving activation silent. Focused unit, Worker and anonymous Chromium coverage verifies these behaviors.
+- **Embed builder:** The page-local builder generates and previews sessions, speakers, agenda, schedule and gallery widgets from the same published snapshot. Session titles and speaker names remain the identifying minimum; one strict field allowlist controls time, location, track, format, descriptions, speaker detail blocks/profile links, affiliations, images, biographies/pronunciation and linked sessions/counts. Generated iframe and auto-resizing widget snippets preserve the chosen surface and fields, while malformed values fail explicitly.
+- **Scope boundary:** Saved/named embed records, arbitrary CSS, XML output, status filters, live edit propagation and participant upload infrastructure remain outside this workstream. Point-in-time consistency benefits from the single published snapshot read but is not claimed as live propagation.
 
 ## Requirements traceability
 
@@ -409,6 +431,29 @@ The reviewed Airtable event-activation worktree passed `npm run check` on 12 Aug
 The common-laptop visual-coverage candidate passed `npm run check` on 12 August 2026 in its isolated worktree. The five-shard browser gate passed 161/164 Playwright tests; the three skips remain the two opt-in performance measurements and the mobile duplicate of the desktop-owned 200%-equivalent visual pass. That candidate added eight 1280 × 720 visual cases for Command Centre, Review Workbench, Form Builder, evaluation administration, Schedule Planner, the authoritative communications preview, expanded task-plan controls and the Speaker CRM sourcing board. Each case verified the intended viewport, critical visible work area, document containment and a reviewed screenshot. This coverage also caught and corrected a generic breakpoint override so the reviewer queue, source and rubric remain three-pane at 1280 pixels and collapse only at the reviewer-specific breakpoint.
 
 An uncommitted test-economy change in the isolated `codex/test-pruning` worktree was reviewed on 14 August 2026. It retains representative desktop/mobile snapshots for eight major application shells and layout families plus the three laptop layouts with distinct residual risk: Form Builder's visual editor, Schedule Planner's canvas and the authoritative communications preview. Interaction states, accessibility and containment remain owned by focused browser suites. The application browser inventory falls from 199 to 127 invocations, the static-site inventory from 16 to 12 and checked-in application snapshots from 107 to 20. Focused validation passed 51 configuration contracts, generated TypeScript, all 19 retained visual cases, all 12 static-site cases, 20 CRM service tests, the CRM handoff route boundary and both Speaker CRM browser journeys. The full repository gate has not been run; this is local change evidence, not release evidence.
+
+The isolated review-recommendation candidate on 14 August 2026 corrects the
+public site's resolved call-for-speakers terminology in visible and social
+metadata copy. Its static-site release contract requires that terminology and
+rejects both singular and plural call-for-papers wording. Seven reviewed visual
+baselines restore only distinctive residual-risk layouts: evaluation
+administration at desktop and mobile widths, Tasks & Readiness at common-laptop
+and mobile widths, programme administration on desktop and the public Speaker
+Gallery and participant Profile on mobile. Review of the new evaluation
+baseline also exposed and corrected the single-round desktop imbalance: one
+round now uses the available width, two use two columns and larger plans cap at
+three. The Profile baseline exposed the participant header's ineffective
+mobile identity-hiding selector; naming that identity region explicitly now
+leaves practical width for event context across participant pages. Grouping the
+six responsive captures into one test per project limits the default-running
+application browser inventory to 130 invocations (132 listed, including two
+intentionally skipped performance cases), with 27 snapshots rather than
+restoring the former exhaustive inventory. Generated TypeScript, all 31
+affected Vitest cases, all 54 configuration contracts, all 14 static-site
+browser cases, the three new visual invocations and both affected Speaker
+Dashboard cases passed; the production application build used by those visual
+cases also passed. The complete repository gate has not been run, so this
+remains local candidate evidence rather than release evidence.
 
 The automated repository gate is complete for the deployed source revision. A real magic-link flow proves the authentication delivery boundary, while the production acceptance evidence below separately proves tracked Resend delivery/bounce and Google/Microsoft calendar create, update and cancellation. Other external-provider paths remain bounded by their own evidence. The role matrix covers representative owner, administrator, chair, evaluator, submitter, speaker, pending/revoked/expired and cross-organisation states.
 

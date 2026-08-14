@@ -380,8 +380,36 @@
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
   }
+  .speaker-event-context {
+    flex: 1 1 auto;
+    padding-left: var(--space-3);
+  }
   .speaker-top .event-title {
     font-size: var(--text-sm);
+  }
+  /* The wordmark is redundant next to the mark itself once space is tight,
+     and the dates are on the page below. */
+  .speaker-top .brand span {
+    display: none;
+  }
+  .speaker-event-context .subtle {
+    display: none;
+  }
+}
+
+/* Below this the four header controls leave the event name about 55px, which
+   truncates "Future of Events 2027" to "Futur…" and tells a speaker nothing.
+   The name takes its own row instead: two short rows beat one unreadable one. */
+@media (max-width: 430px) {
+  .speaker-top {
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
+  }
+  .speaker-event-context {
+    order: 3;
+    flex: 1 0 100%;
+    padding-left: 0;
+    border-left: 0;
   }
   .resource-grid {
     grid-template-columns: 1fr;

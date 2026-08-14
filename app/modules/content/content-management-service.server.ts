@@ -314,6 +314,18 @@ export class ContentManagementService {
                       AND session.event_id = task.event_id
                     WHERE asset.target_type = 'task' AND task.id = asset.target_id
                       AND task.event_id = asset.event_id),
+                  (SELECT MIN(session.title)
+                     FROM task_instances task
+                     JOIN session_speakers speaker
+                       ON task.target_type = 'speaker'
+                      AND speaker.person_id = task.target_id
+                      AND speaker.event_id = task.event_id
+                     JOIN sessions session
+                       ON session.id = speaker.session_id
+                      AND session.event_id = speaker.event_id
+                    WHERE asset.target_type = 'task' AND task.id = asset.target_id
+                      AND task.event_id = asset.event_id
+                   HAVING COUNT(DISTINCT session.id) = 1),
                   (SELECT session.title FROM sessions session
                     WHERE asset.target_type = 'submission'
                       AND session.source_submission_id = asset.target_id

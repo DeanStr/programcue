@@ -29,6 +29,7 @@ import {
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 const EVALUATION_SENDER_ID = "sender-production-evaluation-fixture";
+const EVALUATION_ACCESS_ACTOR_ID = "production-evaluation-access";
 const EVALUATION_ORGANISATION_SLUG = "future-events-association";
 const EVALUATION_EVENT_SLUG = "future-of-events-2027";
 const EVALUATION_ORGANIZER_MEMBERSHIP_ID =
@@ -62,6 +63,14 @@ const fixtureEmailSchema = z
 export type EvaluationFixtureEmails = z.infer<typeof fixtureEmailSchema>;
 
 type DomainReader = Pick<ResendDomainProvider, "list">;
+
+type EvaluationFixtureResetAuthority =
+  | { kind: "operator"; domains?: DomainReader }
+  | {
+      kind: "evaluator";
+      identityKey: string | null;
+      fixtureGeneration: string;
+    };
 
 export type ProductionEvaluationFixtureEvidence = {
   fixturePeople: number;
@@ -566,6 +575,76 @@ async function verifiedSender(
   };
 }
 
+async function persistedFixtureConfiguration(env: CloudflareEnvironment) {
+  const configuration = requireEmailProviderConfiguration(env);
+  if (configuration.provider !== "resend") {
+    throw new Error("The production evaluation fixture requires Resend.");
+  }
+  const configuredSender = parseSender(env.AUTH_EMAIL_FROM);
+  const identities = await env.DB.prepare(
+    `SELECT id, email
+       FROM people
+      WHERE id IN (?, ?, ?, ?)`,
+  )
+    .bind(
+      SBEK_FIXTURE_PEOPLE.organizer.personId,
+      SBEK_FIXTURE_PEOPLE.speaker.personId,
+      SBEK_FIXTURE_PEOPLE.speaker2.personId,
+      SBEK_FIXTURE_PEOPLE.reviewer.personId,
+    )
+    .all<{ id: string; email: string }>();
+  const byId = new Map(identities.results.map((row) => [row.id, row.email]));
+  let emails: EvaluationFixtureEmails;
+  try {
+    emails = fixtureEmailSchema.parse({
+      organizer: byId.get(SBEK_FIXTURE_PEOPLE.organizer.personId),
+      speaker: byId.get(SBEK_FIXTURE_PEOPLE.speaker.personId),
+      speaker2: byId.get(SBEK_FIXTURE_PEOPLE.speaker2.personId),
+      reviewer: byId.get(SBEK_FIXTURE_PEOPLE.reviewer.personId),
+    });
+  } catch {
+    throw new Error(
+      "The provisioned evaluator identities are missing, unsafe or no longer distinct. Run the operator fixture reset.",
+    );
+  }
+  const persistedSender = await env.DB.prepare(
+    `SELECT from_name AS fromName, from_email AS fromEmail,
+            provider_sender_id AS providerSenderId
+       FROM sender_profiles
+      WHERE id = ? AND event_id = ? AND provider = 'resend'
+        AND status = 'verified'`,
+  )
+    .bind(EVALUATION_SENDER_ID, DEMO_EVENT_ID)
+    .first<{
+      fromName: string;
+      fromEmail: string;
+      providerSenderId: string | null;
+    }>();
+  if (
+    !persistedSender ||
+    persistedSender.fromName !== configuredSender.name ||
+    persistedSender.fromEmail.toLowerCase() !== configuredSender.address ||
+    !persistedSender.providerSenderId?.trim()
+  ) {
+    throw new Error(
+      "The provisioned evaluation sender no longer matches AUTH_EMAIL_FROM. Run the operator fixture reset.",
+    );
+  }
+  return {
+    emails,
+    sender: {
+      name: configuredSender.name,
+      address: configuredSender.address,
+      domainName: configuredSender.domain,
+      providerDomain: {
+        id: persistedSender.providerSenderId,
+        name: configuredSender.domain,
+        status: "verified",
+      },
+    },
+  };
+}
+
 function evaluationDomainReader(env: CloudflareEnvironment) {
   const apiKey = env.EVALUATION_RESEND_API_KEY?.trim() ?? "";
   if (apiKey.length < 20) {
@@ -690,6 +769,30 @@ export async function resetProductionEvaluationFixture(
   confirmation: unknown,
   domains?: DomainReader,
 ) {
+  return resetProductionEvaluationFixtureWithAuthority(env, confirmation, {
+    kind: "operator",
+    domains,
+  });
+}
+
+export async function resetProductionEvaluationFixtureForEvaluator(
+  env: CloudflareEnvironment,
+  confirmation: unknown,
+  identityKey: string | null,
+  fixtureGeneration: string,
+) {
+  return resetProductionEvaluationFixtureWithAuthority(env, confirmation, {
+    kind: "evaluator",
+    identityKey,
+    fixtureGeneration,
+  });
+}
+
+async function resetProductionEvaluationFixtureWithAuthority(
+  env: CloudflareEnvironment,
+  confirmation: unknown,
+  authority: EvaluationFixtureResetAuthority,
+) {
   const runtime = requireRuntimeMode(env);
   if (
     runtime.appEnvironment !== "production" ||
@@ -712,12 +815,22 @@ export async function resetProductionEvaluationFixture(
   if (!env.AI)
     throw new Error("Required Cloudflare binding AI is unavailable.");
 
-  const emails = productionFixtureEmails(env);
+  const configuration =
+    authority.kind === "operator"
+      ? {
+          emails: productionFixtureEmails(env),
+          sender: await verifiedSender(
+            env,
+            authority.domains ?? evaluationDomainReader(env),
+          ),
+        }
+      : await persistedFixtureConfiguration(env);
+  const { emails, sender } = configuration;
   const fixtureScope = await assertDedicatedFixtureIdentity(env, emails);
-  const sender = await verifiedSender(
-    env,
-    domains ?? evaluationDomainReader(env),
-  );
+  const actorId =
+    authority.kind === "operator"
+      ? EVALUATION_FIXTURE_RESET_ACTOR_ID
+      : EVALUATION_ACCESS_ACTOR_ID;
   const retainedEventWithCompletedRetention = await env.DB.prepare(
     `SELECT id FROM events
       WHERE organisation_id = ? AND id <> ?
@@ -740,14 +853,18 @@ export async function resetProductionEvaluationFixture(
   const fixtureAttemptId = crypto.randomUUID();
   let retiredEventCount = 0;
 
-  await acquireEvaluationFixtureReset(env, fixtureAttemptId);
+  await acquireEvaluationFixtureReset(
+    env,
+    fixtureAttemptId,
+    authority.kind === "evaluator" ? authority.fixtureGeneration : undefined,
+  );
   try {
     await assertEvaluationFixtureResetOwner(env, fixtureAttemptId);
     const seeded = await resetDemoEvent(
       demoSeedEnvironment(env),
       null,
       confirmation,
-      EVALUATION_FIXTURE_RESET_ACTOR_ID,
+      actorId,
       async () => {
         await assertEvaluationFixtureResetOwner(env, fixtureAttemptId);
         const started = await env.DB.prepare(
@@ -768,7 +885,7 @@ export async function resetProductionEvaluationFixture(
             fixtureAttemptId,
             DEMO_ORGANISATION_ID,
             DEMO_EVENT_ID,
-            EVALUATION_FIXTURE_RESET_ACTOR_ID,
+            actorId,
             DEMO_EVENT_ID,
             JSON.stringify({
               status: "started",
@@ -776,6 +893,13 @@ export async function resetProductionEvaluationFixture(
               senderDomain: sender.domainName,
               aiProvider: "workers_ai",
               aiModel: WORKERS_AI_MODEL,
+              authority: authority.kind,
+              identityKey:
+                authority.kind === "evaluator" ? authority.identityKey : null,
+              senderVerification:
+                authority.kind === "operator"
+                  ? "live_resend_domain"
+                  : "persisted_sender_profile",
             }),
             EVALUATION_FIXTURE_RESET_OPERATION_ID,
             EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
@@ -950,9 +1074,17 @@ export async function resetProductionEvaluationFixture(
         senderDomain: sender.domainName,
         aiProvider: "workers_ai",
         aiModel: WORKERS_AI_MODEL,
+        authority: authority.kind,
+        identityKey:
+          authority.kind === "evaluator" ? authority.identityKey : null,
+        senderVerification:
+          authority.kind === "operator"
+            ? "live_resend_domain"
+            : "persisted_sender_profile",
         retiredEventCount,
         removedAuxiliaryPersonCount: fixtureScope.auxiliaryPeople.length,
       },
+      actorId,
     );
     return { ...seeded, evidence };
   } catch (error) {

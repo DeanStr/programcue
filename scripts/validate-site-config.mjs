@@ -30,6 +30,8 @@ const LIMITED_USE_STATEMENT =
   "The use of information received from Google Workspace APIs will adhere to the Google User Data Policy, including the Limited Use requirements.";
 const PRODUCT_DESCRIPTION =
   "Program Cue keeps submissions, reviews, speakers, communications and scheduling connected, so your team can see what needs action and move confidently from the first proposal to publication.";
+const REQUIRED_PRODUCT_TERMINOLOGY = /\bcall(?:\s+|-)for(?:\s+|-)speakers\b/i;
+const REJECTED_PRODUCT_TERMINOLOGY = /\bcalls?(?:\s+|-)for(?:\s+|-)papers\b/i;
 const ACCOUNT_ACTION = "Sign in or create an account";
 const SOCIAL_CARD = "social-card.png";
 const BRAND_MARK = "brand-mark.svg";
@@ -239,6 +241,8 @@ export function validateSitePages(assetRoot = ASSET_ROOT) {
       if (text.includes(marker))
         add(`${file} contains placeholder text: "${marker}".`);
     }
+    if (REJECTED_PRODUCT_TERMINOLOGY.test(html))
+      add(`${file} must not use "call for papers" terminology.`);
     if (/content="[^"]*no(index|follow)/i.test(html))
       add(`${file} must not carry a noindex or nofollow robots directive.`);
     if (!/<html lang="/.test(html))
@@ -290,6 +294,8 @@ export function validateSitePages(assetRoot = ASSET_ROOT) {
   const home = sources.get("index.html");
   const homeMarkup = home.replace(/\s+/g, " ");
   const homeText = documentText(home);
+  if (!REQUIRED_PRODUCT_TERMINOLOGY.test(home))
+    add('Home page must use "call for speakers" terminology.');
   if (!homeText.includes(PRODUCT_DESCRIPTION))
     add("Home page must describe Program Cue in the approved wording.");
   if (!home.includes(`href="${SIGN_IN_URL}"`))

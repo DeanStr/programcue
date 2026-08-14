@@ -454,7 +454,7 @@
   }
 }
 @media (max-width: 760px) {
-  .speaker-top .right > span:last-child {
+  .speaker-viewer-identity {
     display: none;
   }
   .speaker-portal-head {

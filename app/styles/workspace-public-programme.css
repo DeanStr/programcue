@@ -609,6 +609,9 @@
   text-align: left;
   align-items: start;
 }
+.programme-row.without-time {
+  grid-template-columns: minmax(0, 1fr);
+}
 .session-time {
   display: grid;
   gap: 2px;
@@ -900,6 +903,10 @@
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: var(--space-4);
 }
+.public-agenda-days {
+  display: grid;
+  gap: var(--space-6);
+}
 .agenda-card {
   display: flex;
   flex-direction: column;
@@ -997,6 +1004,9 @@
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--elev-1);
+}
+.public-itinerary-card.without-time {
+  grid-template-columns: minmax(0, 1fr);
 }
 /* The save control belongs to the session, so it sits on the title line rather
    than at the far edge of a wide row with a dead zone between them. */

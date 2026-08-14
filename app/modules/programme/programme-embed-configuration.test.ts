@@ -4,9 +4,11 @@ import {
   defaultProgrammeEmbedConfiguration,
   parseProgrammeEmbedControls,
   parseProgrammeEmbedDensity,
+  parseProgrammeEmbedFields,
   parseProgrammeEmbedHeight,
   parseProgrammeEmbedSearchParameters,
   parseProgrammeEmbedSpeakers,
+  parseProgrammeEmbedSurface,
   programmeEmbedFilterOptions,
   programmeEmbedUrl,
   programmeIframeSnippet,
@@ -65,14 +67,16 @@ describe("programme embed configuration", () => {
       controls: ["search", "day"] as const,
       density: "compact" as const,
       showSpeakers: false,
+      fields: ["time", "description"] as const,
     };
     expect(
       programmeEmbedUrl("https://events.example.com", "future-of-events-2027", {
         ...configuration,
         controls: [...configuration.controls],
+        fields: [...configuration.fields],
       }),
     ).toBe(
-      "https://events.example.com/embed/future-of-events-2027?day=2025-05-21&track=AI+%26+Innovation&format=breakout&room=Room+303&query=better+data&accent=%230d9488&controls=search%2Cday&density=compact&speakers=hide",
+      "https://events.example.com/embed/future-of-events-2027/sessions?day=2025-05-21&track=AI+%26+Innovation&format=breakout&room=Room+303&query=better+data&accent=%230d9488&controls=search%2Cday&density=compact&speakers=hide&fields=time%2Cdescription",
     );
   });
 
@@ -83,10 +87,37 @@ describe("programme embed configuration", () => {
         "future-of-events-2027",
         defaultProgrammeEmbedConfiguration(),
       ),
-    ).toBe("https://events.example.com/embed/future-of-events-2027");
+    ).toBe("https://events.example.com/embed/future-of-events-2027/sessions");
+    expect(
+      programmeEmbedUrl("https://events.example.com", "event", {
+        ...defaultProgrammeEmbedConfiguration(),
+        surface: "gallery",
+        showSpeakers: false,
+      }),
+    ).toBe("https://events.example.com/embed/event/gallery");
   });
 
-  it("rejects malformed control, density and speaker options", () => {
+  it("accepts only explicit widget surfaces and allowlisted visible fields", () => {
+    expect(parseProgrammeEmbedSurface(undefined)).toBe("sessions");
+    expect(parseProgrammeEmbedSurface("gallery")).toBe("gallery");
+    expect(() => parseProgrammeEmbedSurface("timeline")).toThrow(
+      /surface must be sessions, speakers, agenda, schedule or gallery/i,
+    );
+    expect(parseProgrammeEmbedFields("time,location,description")).toEqual([
+      "time",
+      "location",
+      "description",
+    ]);
+    expect(parseProgrammeEmbedFields("none")).toEqual([]);
+    expect(() => parseProgrammeEmbedFields("time,time")).toThrow(
+      /unique comma-separated selection/i,
+    );
+    expect(() => parseProgrammeEmbedFields("time,sponsors")).toThrow(
+      /unique comma-separated selection/i,
+    );
+  });
+
+  it("rejects malformed control, field, density and speaker options", () => {
     expect(() => parseProgrammeEmbedControls("search,search")).toThrow(
       /unique comma-separated selection/i,
     );
@@ -98,6 +129,11 @@ describe("programme embed configuration", () => {
       /comfortable or compact/i,
     );
     expect(() => parseProgrammeEmbedSpeakers("maybe")).toThrow(/show or hide/i);
+    expect(() =>
+      parseProgrammeEmbedSearchParameters(
+        new URLSearchParams("fields=time,unknown"),
+      ),
+    ).toThrow(/supported public fields/i);
   });
 
   it("rejects empty, unknown and duplicate request parameters", () => {
@@ -153,8 +189,20 @@ describe("programme embed configuration", () => {
       }),
     ).toThrow(/speaker visibility must be a boolean/i);
     expect(() =>
+      programmeEmbedUrl("https://events.example.com", "event", {
+        ...defaultProgrammeEmbedConfiguration(),
+        surface: "timeline" as never,
+      }),
+    ).toThrow(/surface must be sessions/i);
+    expect(() =>
+      programmeEmbedUrl("https://events.example.com", "event", {
+        ...defaultProgrammeEmbedConfiguration(),
+        fields: ["sponsors" as never],
+      }),
+    ).toThrow(/supported public fields/i);
+    expect(() =>
       programmeIframeSnippet(
-        "https://events.example.com/embed/event",
+        "https://events.example.com/embed/event/sessions",
         "Event",
         159,
       ),
@@ -171,13 +219,15 @@ describe("programme embed configuration", () => {
   it("escapes copied iframe and widget attributes", () => {
     const configuration = {
       ...defaultProgrammeEmbedConfiguration(),
+      surface: "gallery" as const,
       query: 'accessibility & "inclusion"',
+      fields: ["images", "biography"] as const,
       height: 640,
     };
     const url = programmeEmbedUrl(
       "https://events.example.com",
       "future-of-events-2027",
-      configuration,
+      { ...configuration, fields: [...configuration.fields] },
     );
     expect(programmeIframeSnippet(url, 'Programme "preview"', 640)).toContain(
       "query=accessibility+%26+%22inclusion%22",
@@ -191,8 +241,17 @@ describe("programme embed configuration", () => {
         eventSlug: "future-of-events-2027",
         target: "programme-widget",
         title: "Programme",
-        configuration,
+        configuration: { ...configuration, fields: [...configuration.fields] },
       }),
     ).toContain('data-query="accessibility &amp; &quot;inclusion&quot;"');
+    expect(
+      programmeWidgetSnippet({
+        origin: "https://events.example.com",
+        eventSlug: "future-of-events-2027",
+        target: "programme-widget",
+        title: "Programme",
+        configuration: { ...configuration, fields: [...configuration.fields] },
+      }),
+    ).toContain('data-surface="gallery"');
   });
 });

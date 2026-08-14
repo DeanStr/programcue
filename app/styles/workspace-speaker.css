@@ -19,10 +19,23 @@
   font-size: var(--text-lg);
   font-weight: var(--weight-extrabold);
 }
-.speaker-event {
+.speaker-event-context {
   min-width: 0;
   padding-left: var(--space-5);
   border-left: 1px solid var(--line);
+}
+/* One line, always. An event name is arbitrary customer text, and without a
+   truncation rule "Future of Events 2027" set one word per line at 320px and
+   pushed the header to 258px — a third of the viewport before any content. */
+.speaker-top .event-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.speaker-event-context .subtle {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .speaker-top .right {
   margin-left: auto;

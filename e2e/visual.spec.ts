@@ -169,6 +169,37 @@ async function waitForSurfaceReady(page: Page, name: string) {
     await expect(
       page.getByRole("heading", { name: "Template versions" }),
     ).toBeVisible();
+  } else if (name === "evaluation-admin") {
+    await expect(
+      page.getByRole("navigation", {
+        name: "Evaluation administration sections",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        name: "Submission results and assignments",
+      }),
+    ).toBeVisible();
+  } else if (name === "tasks-readiness") {
+    await expect(
+      page.getByRole("heading", { name: "Filter assigned work" }),
+    ).toBeVisible();
+    await expect(page.locator(".tasks-layout")).toBeVisible();
+  } else if (name === "programme-admin") {
+    await expect(
+      page.getByRole("heading", { name: "Current programme records" }),
+    ).toBeVisible();
+    await expect(page.locator(".programme-embed-builder")).toBeVisible();
+  } else if (name === "public-speaker-gallery") {
+    await expect(
+      page.getByRole("searchbox", { name: "Search speaker gallery by name" }),
+    ).toBeVisible();
+    await expect(page.locator(".speaker-gallery-grid")).toBeVisible();
+  } else if (name === "speaker-profile") {
+    await expect(page.locator("#profile")).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Display name" }),
+    ).toBeVisible();
   }
 }
 
@@ -279,6 +310,18 @@ test.describe.serial(
       await captureLaptopViewport(page, "form-builder");
     });
 
+    test("Tasks & Readiness keeps assigned work and plan controls legible", async ({
+      page,
+    }) => {
+      await openHydrated(page, "/admin/tasks");
+      await waitForSurfaceReady(page, "tasks-readiness");
+      await expect(
+        page.getByRole("heading", { name: "Tasks & readiness", level: 1 }),
+      ).toBeInViewport();
+      await expect(page.locator(".tasks-layout")).toBeInViewport();
+      await captureLaptopViewport(page, "tasks-readiness");
+    });
+
     test("Schedule Planner keeps the focused planning canvas visible", async ({
       page,
     }) => {
@@ -380,4 +423,70 @@ test.describe.serial("responsive visual inventory", () => {
       await expectDocumentContained(page, surface.name);
     });
   }
+
+  test("distinctive high-risk surfaces retain reviewed visual baselines", async ({
+    page,
+  }, testInfo) => {
+    let surfaces: readonly Surface[];
+    if (testInfo.project.name === "desktop-chromium") {
+      surfaces = [
+        { name: "evaluation-admin", path: "/admin/review" },
+        { name: "programme-admin", path: "/admin/programme" },
+      ];
+    } else if (testInfo.project.name === "mobile-chromium") {
+      surfaces = [
+        { name: "evaluation-admin", path: "/admin/review" },
+        { name: "tasks-readiness", path: "/admin/tasks" },
+        {
+          name: "public-speaker-gallery",
+          path: "/public/programme/future-of-events-2027/gallery",
+        },
+        {
+          name: "speaker-profile",
+          path: "/participant/profile",
+          role: "speaker",
+        },
+      ];
+    } else {
+      throw new Error(
+        `High-risk visual surfaces are not configured for Playwright project "${testInfo.project.name}".`,
+      );
+    }
+
+    for (const surface of surfaces) {
+      if (surface.role) await selectDemoRole(page, surface.role);
+      await openHydrated(page, surface.path);
+      await expect(
+        page.getByRole("heading", { level: 1 }).first(),
+      ).toBeVisible();
+      if (
+        testInfo.project.name === "mobile-chromium" &&
+        surface.name === "evaluation-admin"
+      ) {
+        await page.getByRole("button", { name: /Proposal queue/ }).click();
+      }
+      await waitForSurfaceReady(page, surface.name);
+      // Locator screenshots stitch long pages from viewport-sized tiles.
+      // Normalize already-covered fixed navigation so it is not repeated at
+      // every stitch boundary; the dashboard baseline owns the speaker nav.
+      const fullPageCaptureCss =
+        testInfo.project.name === "mobile-chromium" &&
+        surface.name === "evaluation-admin"
+          ? ".pc-admin-section-nav { position: static !important; }"
+          : testInfo.project.name === "mobile-chromium" &&
+              surface.role === "speaker"
+            ? ".speaker-nav { visibility: hidden !important; }"
+            : null;
+      const fullPageCaptureStyle = fullPageCaptureCss
+        ? await page.addStyleTag({ content: fullPageCaptureCss })
+        : null;
+      try {
+        await captureState(page, page.locator("body"), surface.name);
+      } finally {
+        await fullPageCaptureStyle?.evaluate((style) =>
+          style.parentNode?.removeChild(style),
+        );
+      }
+    }
+  });
 });

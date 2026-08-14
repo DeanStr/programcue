@@ -4,6 +4,8 @@ import { useState } from "react";
 import {
   defaultProgrammeEmbedConfiguration,
   PROGRAMME_EMBED_CONTROLS,
+  PROGRAMME_EMBED_FIELDS,
+  PROGRAMME_EMBED_SURFACES,
   parseProgrammeEmbedHeight,
   ProgrammeEmbedConfigurationError,
   programmeEmbedFilterOptions,
@@ -12,6 +14,8 @@ import {
   programmeWidgetSnippet,
   type ProgrammeEmbedConfiguration,
   type ProgrammeEmbedControl,
+  type ProgrammeEmbedField,
+  type ProgrammeEmbedSurface,
 } from "~/modules/programme/programme-embed-configuration";
 
 type EmbedSession = {
@@ -29,6 +33,27 @@ const controlLabels: Record<ProgrammeEmbedControl, string> = {
   track: "Track",
   format: "Format",
   room: "Room",
+};
+
+const surfaceLabels: Record<ProgrammeEmbedSurface, string> = {
+  sessions: "Programme / session list",
+  speakers: "Speakers list",
+  agenda: "Agenda",
+  schedule: "Schedule itinerary",
+  gallery: "Speaker gallery",
+};
+
+const fieldLabels: Record<ProgrammeEmbedField, string> = {
+  time: "Time and duration",
+  location: "Room and location",
+  track: "Track",
+  format: "Format",
+  description: "Descriptions",
+  speakers: "Speaker detail blocks and profile links",
+  affiliations: "Job title and company",
+  images: "Speaker photos",
+  biography: "Biographies and pronunciation",
+  sessions: "Linked sessions and counts",
 };
 
 export function ProgrammeEmbedBuilder({
@@ -63,8 +88,8 @@ export function ProgrammeEmbedBuilder({
     timezone,
   );
   const previewUrl = programmeEmbedUrl(publicOrigin, publicSlug, configuration);
-  const target = `programcue-${publicSlug}`;
-  const title = `${eventName} programme`;
+  const target = `programcue-${publicSlug}-${configuration.surface}`;
+  const title = `${eventName} ${surfaceLabels[configuration.surface]}`;
   let parsedHeight: number | null = null;
   let heightError: string | null = null;
   try {
@@ -111,6 +136,17 @@ export function ProgrammeEmbedBuilder({
     );
   }
 
+  function toggleField(field: ProgrammeEmbedField) {
+    update(
+      "fields",
+      configuration.fields.includes(field)
+        ? configuration.fields.filter((value) => value !== field)
+        : PROGRAMME_EMBED_FIELDS.filter(
+            (value) => value === field || configuration.fields.includes(value),
+          ),
+    );
+  }
+
   async function copyCode() {
     if (!navigator.clipboard?.writeText) {
       setCopyState("failed");
@@ -151,6 +187,29 @@ export function ProgrammeEmbedBuilder({
 
       <div className="programme-embed-builder-layout">
         <div className="programme-embed-configuration">
+          <fieldset className="pc-plain-fieldset stack">
+            <legend className="label">Widget type</legend>
+            <p className="help">
+              Each option renders its corresponding published public surface.
+            </p>
+            <label className="label">
+              Public surface
+              <select
+                className="select"
+                value={configuration.surface}
+                onChange={(event) =>
+                  update("surface", event.target.value as ProgrammeEmbedSurface)
+                }
+              >
+                {PROGRAMME_EMBED_SURFACES.map((surface) => (
+                  <option key={surface} value={surface}>
+                    {surfaceLabels[surface]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </fieldset>
+
           <fieldset className="pc-plain-fieldset stack">
             <legend className="label">Initial filters</legend>
             <p className="help">
@@ -311,16 +370,38 @@ export function ProgrammeEmbedBuilder({
                 ) : null}
               </label>
             </div>
-            <label className="choice">
-              <input
-                type="checkbox"
-                checked={configuration.showSpeakers}
-                onChange={(event) =>
-                  update("showSpeakers", event.target.checked)
-                }
-              />
-              Include the speaker directory and profile links
-            </label>
+            {configuration.surface === "sessions" ? (
+              <label className="choice">
+                <input
+                  type="checkbox"
+                  checked={configuration.showSpeakers}
+                  onChange={(event) =>
+                    update("showSpeakers", event.target.checked)
+                  }
+                />
+                Include the speaker directory and profile links
+              </label>
+            ) : null}
+          </fieldset>
+
+          <fieldset className="pc-plain-fieldset stack">
+            <legend className="label">Visible fields</legend>
+            <p className="help">
+              Session titles and speaker names remain visible. Choose which
+              supporting published details appear where they apply.
+            </p>
+            <div className="programme-embed-control-grid">
+              {PROGRAMME_EMBED_FIELDS.map((field) => (
+                <label className="choice" key={field}>
+                  <input
+                    type="checkbox"
+                    checked={configuration.fields.includes(field)}
+                    onChange={() => toggleField(field)}
+                  />
+                  {fieldLabels[field]}
+                </label>
+              ))}
+            </div>
           </fieldset>
         </div>
 

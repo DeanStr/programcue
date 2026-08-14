@@ -174,8 +174,8 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       : null;
   const saved = loaderData.itinerary;
   const [query, setQuery] = useState(embedOptions.query);
-  const [directoryQuery, setDirectoryQuery] = useState("");
-  const [galleryQuery, setGalleryQuery] = useState("");
+  const [standaloneDirectoryQuery, setStandaloneDirectoryQuery] = useState("");
+  const [standaloneGalleryQuery, setStandaloneGalleryQuery] = useState("");
   const days = useMemo(
     () => [
       ...new Set(
@@ -235,8 +235,11 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const speakerProfileRef = useRef<HTMLElement | null>(null);
   const speakerProfileReturnFocusRef = useRef<HTMLElement | null>(null);
   const visibleEmbedControls = new Set(embedOptions.controls);
+  const visibleEmbedFields = new Set(embedOptions.fields);
   const showControl = (control: (typeof embedOptions.controls)[number]) =>
     !embedded || visibleEmbedControls.has(control);
+  const showEmbedField = (field: (typeof embedOptions.fields)[number]) =>
+    !embedded || visibleEmbedFields.has(field);
   const showSpeakers = !embedded || embedOptions.showSpeakers;
   useEffect(() => {
     if (!embedded) return;
@@ -340,26 +343,35 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
         .includes(normalisedQuery);
     return matchesFacets && matchesQuery;
   });
+  const directoryQuery = embedded ? query : standaloneDirectoryQuery;
+  const setDirectoryQuery = embedded ? setQuery : setStandaloneDirectoryQuery;
+  const galleryQuery = embedded ? query : standaloneGalleryQuery;
+  const setGalleryQuery = embedded ? setQuery : setStandaloneGalleryQuery;
+  const speakerSurfaceSource = embedded ? visibleSpeakers : orderedSpeakers;
   const directorySpeakers = useMemo(() => {
-    const normalisedDirectoryQuery = directoryQuery.trim().toLocaleLowerCase();
-    return orderedSpeakers.filter(
+    const normalisedDirectoryQuery = embedded
+      ? ""
+      : standaloneDirectoryQuery.trim().toLocaleLowerCase();
+    return speakerSurfaceSource.filter(
       (speaker) =>
         !normalisedDirectoryQuery ||
         speaker.displayName
           .toLocaleLowerCase()
           .includes(normalisedDirectoryQuery),
     );
-  }, [directoryQuery, orderedSpeakers]);
+  }, [embedded, speakerSurfaceSource, standaloneDirectoryQuery]);
   const gallerySpeakers = useMemo(() => {
-    const normalisedGalleryQuery = galleryQuery.trim().toLocaleLowerCase();
-    return orderedSpeakers.filter(
+    const normalisedGalleryQuery = embedded
+      ? ""
+      : standaloneGalleryQuery.trim().toLocaleLowerCase();
+    return speakerSurfaceSource.filter(
       (speaker) =>
         !normalisedGalleryQuery ||
         speaker.displayName
           .toLocaleLowerCase()
           .includes(normalisedGalleryQuery),
     );
-  }, [galleryQuery, orderedSpeakers]);
+  }, [embedded, speakerSurfaceSource, standaloneGalleryQuery]);
   const selectedSpeaker =
     visibleSpeakers.find((speaker) => speaker.id === selectedSpeakerId) ?? null;
   const selectedSpeakerSessions = selectedSpeaker
@@ -584,6 +596,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     openSessionDetail,
     speakerProfileRef,
     showControl,
+    showEmbedField,
     showSpeakers,
     visible,
     filtersActive,

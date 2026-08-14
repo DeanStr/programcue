@@ -12,10 +12,16 @@ export function EvaluationRoundsPanel() {
   const { confirm, dialog } = useConfirm();
   const plan = loaderData.plan;
   if (!plan) return null;
+  const roundGridClass =
+    plan.rounds.length === 1
+      ? "grid mb"
+      : plan.rounds.length === 2
+        ? "grid grid-2 mb"
+        : "grid grid-3 mb";
   return (
     <>
       {dialog}
-      <div className="grid grid-3 mb">
+      <div className={roundGridClass}>
         {plan.rounds.map((round) => (
           <section
             id={`evaluation-round-${round.id}`}

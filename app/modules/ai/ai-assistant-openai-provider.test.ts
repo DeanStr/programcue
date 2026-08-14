@@ -73,6 +73,7 @@ function toolResponse(
   return providerJson({
     id,
     model: providerConfiguration.model,
+    status: "completed",
     output: [
       {
         type: "reasoning",
@@ -94,6 +95,7 @@ function textResponse(text: string, id = crypto.randomUUID()) {
   return providerJson({
     id,
     model: providerConfiguration.model,
+    status: "completed",
     output: [
       {
         type: "message",
@@ -394,10 +396,69 @@ describe("OpenAI Responses provider boundary", () => {
     });
   });
 
+  it("rejects an incomplete non-streaming Responses result", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      providerJson({
+        id: "resp-incomplete-test",
+        model: providerConfiguration.model,
+        status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" },
+        output: [],
+      }),
+    );
+    const provider = new OpenAiResponsesProvider(
+      providerConfiguration,
+      fetcher,
+    );
+
+    await expect(
+      provider.create({
+        instructions: "Return a result.",
+        input: "Hello",
+        safetyIdentifier: "pc_test",
+      }),
+    ).rejects.toMatchObject({
+      name: "AiProviderError",
+      providerRequestId: "openai-request-test",
+      message:
+        "OpenAI response status was incomplete (max_output_tokens); no result was accepted.",
+    });
+  });
+
+  it("retains the provider detail from a failed Responses result", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      providerJson({
+        id: "resp-failed-test",
+        model: providerConfiguration.model,
+        status: "failed",
+        error: { message: "Model execution failed before completion." },
+        output: [],
+      }),
+    );
+    const provider = new OpenAiResponsesProvider(
+      providerConfiguration,
+      fetcher,
+    );
+
+    await expect(
+      provider.create({
+        instructions: "Return a result.",
+        input: "Hello",
+        safetyIdentifier: "pc_test",
+      }),
+    ).rejects.toMatchObject({
+      name: "AiProviderError",
+      providerRequestId: "openai-request-test",
+      message:
+        "OpenAI response status was failed (Model execution failed before completion.); no result was accepted.",
+    });
+  });
+
   it("consumes Responses API text deltas and still validates the completed response", async () => {
     const completed = {
       id: "resp-stream-test",
       model: providerConfiguration.model,
+      status: "completed",
       output: [
         {
           type: "message",
