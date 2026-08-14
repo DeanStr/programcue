@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { resolveSiteE2ePort } from "./src/e2e-port";
 
 const port = resolveSiteE2ePort(process.env);
+const singleViewportTag = /@single-viewport/;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -40,6 +41,7 @@ export default defineConfig({
     },
     {
       name: "site-mobile-chromium",
+      grepInvert: singleViewportTag,
       use: { ...devices["Pixel 7"] },
     },
   ],

@@ -20,57 +20,62 @@ async function expectContained(page: Page, label: string) {
   ).toBeLessThanOrEqual(dimensions.clientWidth);
 }
 
-test("published pages and the account journey are reachable", async ({
-  page,
-}) => {
-  for (const path of PUBLISHED_PAGES) {
-    await openReady(page, path);
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  }
+test(
+  "published pages and the account journey are reachable",
+  { tag: "@single-viewport" },
+  async ({ page }) => {
+    for (const path of PUBLISHED_PAGES) {
+      await openReady(page, path);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    }
 
-  await openReady(page, "/");
-  const accountAction = page
-    .getByRole("link", { name: "Sign in or create an account" })
-    .first();
-  await expect(accountAction).toHaveAttribute(
-    "href",
-    "https://app.programcue.com/sign-in",
-  );
-  await expect(page.getByText("Illustrative event workspace")).toBeVisible();
-});
-
-test("the local Worker enforces the static-site security contract", async ({
-  page,
-  request,
-}) => {
-  const response = await page.goto("/");
-  const policy = response?.headers()["content-security-policy"] ?? "";
-  expect(policy).toContain("script-src 'none'");
-  expect(policy).toContain("connect-src 'none'");
-  expect(response?.headers()["set-cookie"]).toBeUndefined();
-  await expect(page.locator("script")).toHaveCount(0);
-
-  const writeResponse = await request.post("/", { data: "not allowed" });
-  expect(writeResponse.status()).toBe(405);
-  expect(writeResponse.headers().allow).toBe("GET, HEAD");
-});
-
-test("the official favicon retains its adaptive brand colours", async ({
-  page,
-}) => {
-  for (const scheme of ["light", "dark"] as const) {
-    await page.emulateMedia({ colorScheme: scheme });
-    await openReady(page, "/brand-mark.svg");
-    await expect(page.locator(".ink").first()).toHaveCSS(
-      "fill",
-      scheme === "dark" ? "rgb(249, 250, 251)" : "rgb(17, 24, 39)",
+    await openReady(page, "/");
+    const accountAction = page
+      .getByRole("link", { name: "Sign in or create an account" })
+      .first();
+    await expect(accountAction).toHaveAttribute(
+      "href",
+      "https://app.programcue.com/sign-in",
     );
-    await expect(page.locator(".accent")).toHaveCSS(
-      "fill",
-      scheme === "dark" ? "rgb(129, 140, 248)" : "rgb(79, 70, 229)",
-    );
-  }
-});
+    await expect(page.getByText("Illustrative event workspace")).toBeVisible();
+  },
+);
+
+test(
+  "the local Worker enforces the static-site security contract",
+  { tag: "@single-viewport" },
+  async ({ page, request }) => {
+    const response = await page.goto("/");
+    const policy = response?.headers()["content-security-policy"] ?? "";
+    expect(policy).toContain("script-src 'none'");
+    expect(policy).toContain("connect-src 'none'");
+    expect(response?.headers()["set-cookie"]).toBeUndefined();
+    await expect(page.locator("script")).toHaveCount(0);
+
+    const writeResponse = await request.post("/", { data: "not allowed" });
+    expect(writeResponse.status()).toBe(405);
+    expect(writeResponse.headers().allow).toBe("GET, HEAD");
+  },
+);
+
+test(
+  "the official favicon retains its adaptive brand colours",
+  { tag: "@single-viewport" },
+  async ({ page }) => {
+    for (const scheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await openReady(page, "/brand-mark.svg");
+      await expect(page.locator(".ink").first()).toHaveCSS(
+        "fill",
+        scheme === "dark" ? "rgb(249, 250, 251)" : "rgb(17, 24, 39)",
+      );
+      await expect(page.locator(".accent")).toHaveCSS(
+        "fill",
+        scheme === "dark" ? "rgb(129, 140, 248)" : "rgb(79, 70, 229)",
+      );
+    }
+  },
+);
 
 test("public pages have no detectable WCAG A or AA violations", async ({
   page,
@@ -105,16 +110,18 @@ test("responsive documents remain contained", async ({ page }, testInfo) => {
   }
 });
 
-test("keyboard visitors can skip directly to the page content", async ({
-  page,
-}) => {
-  await openReady(page, "/");
-  await page.keyboard.press("Tab");
-  const skipLink = page.getByRole("link", { name: "Skip to main content" });
-  await expect(skipLink).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/#main$/);
-});
+test(
+  "keyboard visitors can skip directly to the page content",
+  { tag: "@single-viewport" },
+  async ({ page }) => {
+    await openReady(page, "/");
+    await page.keyboard.press("Tab");
+    const skipLink = page.getByRole("link", { name: "Skip to main content" });
+    await expect(skipLink).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/#main$/);
+  },
+);
 
 test("homepage retains its responsive marketing hierarchy", async ({
   page,

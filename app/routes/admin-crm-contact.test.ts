@@ -19,12 +19,12 @@ function context() {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Speaker Network event handoff", () => {
-  it("opens the roster at the handed-off prospect without sending an invitation", async () => {
+  it("opens the roster at the handed-off prospect and selects the target event", async () => {
     await ensureDemoData(env as unknown as CloudflareEnvironment);
     const handoff = vi
       .spyOn(CrmService.prototype, "addContactToEvent")
       .mockResolvedValue({
-        eventId: "evt-foe-2025",
+        eventId: "evt-handoff-target",
         personId: "person-demo-speaker",
         workflowStatus: "prospect",
         created: true,
@@ -42,7 +42,7 @@ describe("Speaker Network event handoff", () => {
           },
           body: new URLSearchParams({
             _intent: "add_to_event",
-            eventId: "evt-foe-2025",
+            eventId: "evt-handoff-target",
             idempotencyKey: "crm-delivery-test",
           }),
         },
@@ -58,14 +58,16 @@ describe("Speaker Network event handoff", () => {
     expect(result.headers.get("location")).toBe(
       "/admin/speakers?person=person-demo-speaker",
     );
-    expect(result.headers.get("set-cookie")).toContain("program_cue_event=");
+    expect(result.headers.get("set-cookie")).toContain(
+      "program_cue_event=evt-handoff-target",
+    );
     expect(handoff).toHaveBeenCalledWith(
       expect.objectContaining({
         organisationId: "org-future-events",
         personId: "person-demo-admin",
       }),
       "person-demo-speaker",
-      "evt-foe-2025",
+      "evt-handoff-target",
       "crm-delivery-test",
     );
   });

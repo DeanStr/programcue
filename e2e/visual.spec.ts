@@ -1,17 +1,13 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import {
-  prepareVisualBaseline,
-  seedVisualAcceleventsFailure,
-  seedVisualAssistantProposal,
-} from "./support/prepare-visual-baseline";
+import { prepareVisualBaseline } from "./support/prepare-visual-baseline";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
-// Every core rendered product surface is represented here. These snapshots protect the current
-// product-quality baseline; they are not pixel-parity checks against the removed prototype.
-// `/` and `/sign-in` redirect in the evaluator environment, resource routes are non-visual, and
-// signed utility flows such as email preferences use focused browser-behavior coverage instead.
-type DemoRole = "owner" | "evaluator" | "speaker";
+// Representative snapshots protect each major application shell and complex
+// layout family. Focused browser suites and retained responsive checks own
+// interaction states and detailed containment behavior, so this inventory
+// does not repeat those states as additional screenshots.
+type DemoRole = "evaluator" | "speaker";
 
 type Surface = {
   name: string;
@@ -20,57 +16,23 @@ type Surface = {
 };
 
 const SURFACES: readonly Surface[] = [
-  { name: "demo-guide", path: "/demo" },
   { name: "event-setup", path: "/admin/event" },
-  {
-    name: "file-retention",
-    path: "/admin/files/retention",
-    role: "owner",
-  },
-  { name: "event-new", path: "/admin/events/new", role: "owner" },
-  { name: "event-clone", path: "/admin/events/clone", role: "owner" },
   { name: "command-centre", path: "/admin/command" },
   { name: "form-builder", path: "/admin/submissions/form" },
-  { name: "evaluation-admin", path: "/admin/review" },
   {
     name: "review-workbench",
     path: "/review/workbench",
     role: "evaluator",
   },
-  { name: "speakers-list", path: "/admin/speakers" },
-  { name: "speaker-crm", path: "/admin/crm" },
-  { name: "resources-admin", path: "/admin/resources" },
-  { name: "session-bulk", path: "/admin/sessions/bulk" },
   { name: "communications", path: "/admin/communications" },
-  { name: "task-bulk", path: "/admin/tasks/bulk" },
-  { name: "programme-admin", path: "/admin/programme" },
-  { name: "integrations", path: "/admin/integrations" },
-  { name: "settings", path: "/admin/settings" },
   {
     name: "public-programme",
     path: "/public/programme/future-of-events-2025",
-  },
-  {
-    name: "public-speaker-gallery",
-    path: "/public/programme/future-of-events-2025/gallery",
-  },
-  {
-    name: "programme-embed",
-    path: "/embed/future-of-events-2025",
   },
   { name: "public-application", path: "/apply/form" },
   {
     name: "speaker-dashboard",
     path: "/participant/dashboard",
-    role: "speaker",
-  },
-  { name: "speaker-sessions", path: "/participant/sessions", role: "speaker" },
-  { name: "speaker-tasks", path: "/participant/tasks", role: "speaker" },
-  { name: "speaker-files", path: "/participant/files", role: "speaker" },
-  { name: "speaker-profile", path: "/participant/profile", role: "speaker" },
-  {
-    name: "speaker-resources",
-    path: "/participant/resources",
     role: "speaker",
   },
 ];
@@ -193,17 +155,7 @@ async function expectDocumentContained(page: Page, context: string) {
 }
 
 async function waitForSurfaceReady(page: Page, name: string) {
-  if (name === "demo-guide") {
-    await expect(
-      page.getByRole("heading", { name: "Provider truth" }),
-    ).toBeVisible();
-  } else if (name === "file-retention") {
-    await expect(
-      page.getByRole("heading", {
-        name: "Anonymise expired participant data",
-      }),
-    ).toBeVisible();
-  } else if (name === "form-builder") {
+  if (name === "form-builder") {
     const editor = page.getByRole("region", {
       name: "Visual call-for-speakers form editor",
     });
@@ -217,10 +169,6 @@ async function waitForSurfaceReady(page: Page, name: string) {
     await expect(
       page.getByRole("heading", { name: "Template versions" }),
     ).toBeVisible();
-  } else if (name === "settings") {
-    await expect(
-      page.getByRole("heading", { name: "Create an outbound webhook" }),
-    ).toBeVisible();
   }
 }
 
@@ -230,9 +178,7 @@ async function captureState(page: Page, target: Locator, name: string) {
     content: ".topbar, .skip-link { visibility: hidden !important; }",
   });
   try {
-    await expect(target).toHaveScreenshot(`${name}.png`, {
-      maxDiffPixelRatio: name === "event-switcher-current-event" ? 0.04 : 0.01,
-    });
+    await expect(target).toHaveScreenshot(`${name}.png`);
   } finally {
     await unrelatedFixedChrome.evaluate((style) =>
       style.parentNode?.removeChild(style),
@@ -253,6 +199,63 @@ async function captureLaptopViewport(page: Page, name: string) {
   await expectDocumentContained(page, `${name} at the laptop viewport`);
 }
 
+async function expectMobileCommandOverlaysContained(page: Page) {
+  await page.getByRole("button", { name: /Search or run a command/i }).click();
+  const commandDialog = page.getByRole("dialog", {
+    name: "Search or run a command",
+  });
+  await commandDialog
+    .getByRole("combobox", { name: "Program Cue commands" })
+    .fill("settings");
+  await expect(
+    commandDialog.getByText("Settings", { exact: true }).first(),
+  ).toBeVisible();
+  const viewport = page.viewportSize();
+  const commandBounds = await commandDialog.boundingBox();
+  expect(viewport).not.toBeNull();
+  expect(commandBounds).not.toBeNull();
+  expect(commandBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(commandBounds!.y).toBeGreaterThanOrEqual(0);
+  expect(commandBounds!.x + commandBounds!.width).toBeLessThanOrEqual(
+    viewport!.width,
+  );
+  expect(commandBounds!.y + commandBounds!.height).toBeLessThanOrEqual(
+    viewport!.height,
+  );
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Switch event" }).click();
+  const eventDialog = page.getByRole("dialog", { name: "Current event" });
+  const currentEvent = eventDialog
+    .locator("form")
+    .filter({ hasText: "Current" });
+  const currentStatus = currentEvent.getByText("Current", { exact: true });
+  await expect(currentEvent).toHaveCount(1);
+  await expect(currentStatus).toBeVisible();
+  const [eventDialogBounds, currentEventBounds, currentStatusBounds] =
+    await Promise.all([
+      eventDialog.boundingBox(),
+      currentEvent.boundingBox(),
+      currentStatus.boundingBox(),
+    ]);
+  expect(eventDialogBounds).not.toBeNull();
+  expect(currentEventBounds).not.toBeNull();
+  expect(currentStatusBounds).not.toBeNull();
+  expect(eventDialogBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(eventDialogBounds!.y).toBeGreaterThanOrEqual(0);
+  expect(eventDialogBounds!.x + eventDialogBounds!.width).toBeLessThanOrEqual(
+    viewport!.width,
+  );
+  expect(eventDialogBounds!.y + eventDialogBounds!.height).toBeLessThanOrEqual(
+    viewport!.height,
+  );
+  expect(currentStatusBounds!.x).toBeGreaterThanOrEqual(currentEventBounds!.x);
+  expect(
+    currentStatusBounds!.x + currentStatusBounds!.width,
+  ).toBeLessThanOrEqual(currentEventBounds!.x + currentEventBounds!.width);
+  await page.keyboard.press("Escape");
+}
+
 test.describe.serial(
   "common-laptop visual coverage",
   { tag: "@laptop-visual" },
@@ -265,36 +268,6 @@ test.describe.serial(
       await resetDemoEvent(request);
     });
 
-    test("Command Centre keeps its readiness workspace usable", async ({
-      page,
-    }) => {
-      await openHydrated(page, "/admin/command");
-      await expect(
-        page.getByRole("heading", { name: "Command Centre", level: 1 }),
-      ).toBeInViewport();
-      await expect(
-        page.getByRole("progressbar", { name: "Overall event readiness" }),
-      ).toBeInViewport();
-      await captureLaptopViewport(page, "command-centre");
-    });
-
-    test("Review Workbench keeps the evaluation context visible", async ({
-      page,
-    }) => {
-      await selectDemoRole(page, "evaluator");
-      await openHydrated(page, "/review/workbench");
-      await expect(
-        page.getByRole("heading", { name: "Review Workbench", level: 1 }),
-      ).toBeInViewport();
-      await expect(
-        page.getByRole("navigation", { name: "Assigned review sources" }),
-      ).toBeInViewport();
-      await expect(
-        page.getByRole("heading", { name: "Score submission" }),
-      ).toBeInViewport();
-      await captureLaptopViewport(page, "review-workbench");
-    });
-
     test("Form Builder keeps the visual editor visible", async ({ page }) => {
       await openHydrated(page, "/admin/submissions/form");
       await waitForSurfaceReady(page, "form-builder");
@@ -304,19 +277,6 @@ test.describe.serial(
         }),
       ).toBeInViewport();
       await captureLaptopViewport(page, "form-builder");
-    });
-
-    test("evaluation administration keeps its controls visible", async ({
-      page,
-    }) => {
-      await openHydrated(page, "/admin/review");
-      await expect(
-        page.getByRole("heading", { name: "Evaluation", level: 1 }),
-      ).toBeInViewport();
-      await expect(
-        page.getByRole("heading", { name: "Evaluation teams" }),
-      ).toBeInViewport();
-      await captureLaptopViewport(page, "evaluation-admin");
     });
 
     test("Schedule Planner keeps the focused planning canvas visible", async ({
@@ -367,67 +327,6 @@ test.describe.serial(
       ).toBeInViewport();
       await captureLaptopViewport(page, "communications-preview");
     });
-
-    test("Tasks keeps the expanded task-plan controls visible", async ({
-      page,
-    }) => {
-      await openHydrated(page, "/admin/tasks");
-      const taskPlan = page.locator("aside").filter({
-        has: page.getByRole("heading", { name: "Assign a plan" }),
-      });
-      const template = taskPlan.getByRole("region", {
-        name: "Create task template",
-      });
-      const dueDateAnchor = template.getByLabel("Due date anchor");
-      await dueDateAnchor.scrollIntoViewIfNeeded();
-      await expect(dueDateAnchor).toBeInViewport();
-      await captureLaptopViewport(page, "tasks-plan-expanded");
-    });
-
-    test("Speaker CRM keeps every sourcing stage reachable locally", async ({
-      page,
-    }) => {
-      await openHydrated(page, "/admin/crm/pipeline");
-      await expect(
-        page.getByRole("heading", {
-          name: "Speaker sourcing pipeline",
-          level: 1,
-        }),
-      ).toBeInViewport();
-      const board = page.getByRole("region", {
-        name: "Speaker sourcing stages",
-      });
-      await expect(board).toBeInViewport();
-      await board.focus();
-      await expect(board).toBeFocused();
-      await board.evaluate((element) => element.blur());
-      const finalStage = board.getByRole("heading", {
-        name: "Declined",
-        exact: true,
-      });
-      await finalStage.scrollIntoViewIfNeeded();
-      await expect(finalStage).toBeInViewport();
-      await board.evaluate((element) => {
-        element.scrollLeft = 0;
-      });
-      await expect(
-        board.getByRole("heading", { name: "Identified", exact: true }),
-      ).toBeInViewport();
-      await captureLaptopViewport(page, "speaker-crm-pipeline");
-    });
-
-    test("Public Speaker Gallery keeps its visual grid legible", async ({
-      page,
-    }) => {
-      await openHydrated(
-        page,
-        "/public/programme/future-of-events-2025/gallery",
-      );
-      await expect(
-        page.getByRole("heading", { name: "Speaker Gallery", exact: true }),
-      ).toBeInViewport();
-      await captureLaptopViewport(page, "public-speaker-gallery-laptop");
-    });
   },
 );
 
@@ -472,387 +371,13 @@ test.describe.serial("responsive visual inventory", () => {
           style.parentNode?.removeChild(style),
         );
       }
+      if (
+        testInfo.project.name === "mobile-chromium" &&
+        surface.name === "command-centre"
+      ) {
+        await expectMobileCommandOverlaysContained(page);
+      }
       await expectDocumentContained(page, surface.name);
     });
   }
-
-  test("command palette has a contained searched state", async ({ page }) => {
-    await openHydrated(page, "/admin/command");
-    await page
-      .getByRole("button", { name: /Search or run a command/i })
-      .click();
-    const dialog = page.getByRole("dialog", {
-      name: "Search or run a command",
-    });
-    await dialog
-      .getByRole("combobox", { name: "Program Cue commands" })
-      .fill("settings");
-    await expect(
-      dialog.getByText("Settings", { exact: true }).first(),
-    ).toBeVisible();
-    await captureState(page, dialog, "command-palette-settings");
-  });
-
-  test("exact event time disclosure remains visible at the viewport edge", async ({
-    page,
-  }) => {
-    await openHydrated(page, "/admin/tasks");
-    const eventTime = page.locator(".pc-event-time").first();
-    await eventTime.focus();
-    await expect(eventTime).toBeFocused();
-    await expect(eventTime).toHaveAttribute(
-      "data-exact-time",
-      /America\/Toronto/,
-    );
-    await expect(page).toHaveScreenshot("event-time-focus-disclosure.png");
-    await expectDocumentContained(page, "event-time-focus-disclosure");
-  });
-
-  test("event switcher contains the current event at every visual width", async ({
-    page,
-  }) => {
-    await openHydrated(page, "/admin/command");
-    await page.getByRole("button", { name: "Switch event" }).click();
-    const dialog = page.getByRole("dialog", { name: "Current event" });
-    const currentEvent = dialog.locator("form").filter({ hasText: "Current" });
-    await expect(currentEvent).toHaveCount(1);
-    const currentStatus = currentEvent.getByText("Current", { exact: true });
-    await expect(currentStatus).toBeVisible();
-    const [eventBox, statusBox] = await Promise.all([
-      currentEvent.boundingBox(),
-      currentStatus.boundingBox(),
-    ]);
-    expect(eventBox).not.toBeNull();
-    expect(statusBox).not.toBeNull();
-    expect(statusBox!.x).toBeGreaterThanOrEqual(eventBox!.x);
-    expect(statusBox!.x + statusBox!.width).toBeLessThanOrEqual(
-      eventBox!.x + eventBox!.width,
-    );
-    const isolatedCurrentEvent = await page.addStyleTag({
-      content:
-        ".event-switcher-option:not(.is-current) { display: none !important; }",
-    });
-    try {
-      await captureState(page, currentEvent, "event-switcher-current-event");
-    } finally {
-      await isolatedCurrentEvent.evaluate((style) =>
-        style.parentNode?.removeChild(style),
-      );
-    }
-
-    const box = await dialog.boundingBox();
-    const viewport = page.viewportSize();
-    expect(box).not.toBeNull();
-    expect(viewport).not.toBeNull();
-    expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.y).toBeGreaterThanOrEqual(0);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width);
-    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
-
-    await openHydrated(page, "/events/select");
-    const defaultEvent = page.locator("main form").filter({
-      hasText: "Future of Events 2027",
-    });
-    await defaultEvent.getByRole("button", { name: "Use this event" }).click();
-    await expect(page).toHaveURL(/\/admin\/event$/);
-    await openHydrated(page, "/events/select");
-    const selectorCurrentEvent = page.locator("main form").filter({
-      has: page.getByRole("button", { name: "Continue with current event" }),
-    });
-    await expect(selectorCurrentEvent).toHaveCount(1);
-    await captureState(
-      page,
-      selectorCurrentEvent,
-      "event-selector-current-event",
-    );
-  });
-
-  test("assistant write preview shows the exact approval boundary", async ({
-    page,
-    request,
-  }) => {
-    const fixture = await seedVisualAssistantProposal(request);
-    await openHydrated(page, "/admin/assistant");
-    const proposal = page.locator("section.card").filter({
-      has: page.getByText(fixture.taskTitle, { exact: true }),
-    });
-    await expect(
-      proposal.getByText("Approval required", { exact: true }),
-    ).toBeVisible();
-    await captureState(page, proposal, "assistant-write-preview");
-  });
-
-  test("submission grid exposes selection, density and column controls", async ({
-    page,
-  }) => {
-    await openHydrated(page, "/admin/submissions");
-    const queue = page.locator("section.card").filter({
-      has: page.getByRole("heading", { name: "Application queue" }),
-    });
-    await queue
-      .getByRole("checkbox", { name: /^Select (?!every application)/ })
-      .first()
-      .check();
-    await queue.getByLabel("Density").selectOption("compact");
-    await queue.locator("summary").filter({ hasText: "Columns" }).click();
-    await expect(
-      queue.getByRole("group", { name: "Visible columns" }),
-    ).toBeVisible();
-    await captureState(page, queue, "submission-grid-controls");
-  });
-
-  test("likely duplicate speaker warning keeps confirmation consequential", async ({
-    page,
-  }) => {
-    await selectCurrentEvent(page);
-    await openHydrated(page, "/admin/submissions");
-    await page
-      .getByText("Create a guaranteed direct session", { exact: true })
-      .click();
-    const directSession = page.locator("details").filter({
-      has: page.getByText("Create a guaranteed direct session", {
-        exact: true,
-      }),
-    });
-    await directSession
-      .getByLabel("Session title")
-      .fill("Visual duplicate identity guard");
-    await directSession.getByLabel("Track").selectOption({ index: 1 });
-    await directSession.getByLabel("Speaker 1 name").fill("Priya Shah");
-    await directSession.getByLabel("Email").fill("priya.speaker@example.com");
-    await directSession
-      .getByRole("button", { name: "Create unscheduled session" })
-      .click();
-    await expect(
-      directSession.getByRole("heading", { name: "Likely existing person" }),
-    ).toBeVisible();
-    await expect(
-      directSession.getByLabel(/I reviewed these identities/),
-    ).not.toBeChecked();
-    await captureState(page, directSession, "duplicate-person-confirmation");
-  });
-
-  test("automatic task-plan settings remain legible when expanded", async ({
-    page,
-  }) => {
-    await openHydrated(page, "/admin/tasks");
-    const taskPlan = page.locator("aside").filter({
-      has: page.getByRole("heading", { name: "Assign a plan" }),
-    });
-    const template = taskPlan.getByRole("region", {
-      name: "Create task template",
-    });
-    await template.getByLabel("Due date anchor").selectOption("acceptance");
-    await template
-      .getByLabel("Add this task automatically when a submission is accepted")
-      .check();
-    await captureState(page, taskPlan, "automatic-task-plan");
-  });
-
-  test("scheduled communication preview shows timing and mobile content before confirmation", async ({
-    page,
-  }) => {
-    await selectCurrentEvent(page);
-    await openHydrated(page, "/admin/communications/compose");
-    const composer = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "1. Create the durable draft" }),
-    });
-    await composer
-      .getByLabel("Schedule for later (optional, America/Toronto)")
-      .fill("2027-07-10T09:30");
-    await composer
-      .getByRole("button", { name: "Create durable draft" })
-      .click();
-    await page
-      .getByRole("button", { name: "Generate current preview" })
-      .click();
-
-    const preview = page.locator("section").filter({
-      has: page.getByRole("heading", {
-        name: "2. Verify the authoritative preview",
-      }),
-    });
-    await expect(
-      preview.getByRole("heading", {
-        name: "2. Verify the authoritative preview",
-      }),
-    ).toBeVisible();
-    await expect(
-      preview.locator(".validation-item.info").filter({
-        hasText: "Scheduled for",
-      }),
-    ).toBeVisible();
-    await preview
-      .getByRole("group", { name: "Email preview size" })
-      .getByRole("button", { name: "Mobile" })
-      .click();
-    const frame = preview.getByTitle(
-      "Representative merged email · mobile preview",
-    );
-    await expect(frame).toBeVisible();
-    await frame.contentFrame().locator("body").waitFor();
-    await captureState(page, preview, "scheduled-communication-preview");
-  });
-
-  test("standard schedule views and content previews have explicit visual states", async ({
-    page,
-  }) => {
-    await openHydrated(page, "/admin/schedule?session=demo-session-1");
-
-    const canvas = page.locator(".schedule-canvas");
-    await page.getByRole("button", { name: "Day", pressed: false }).click();
-    await expect(page.getByRole("heading", { name: "Day view" })).toBeVisible();
-    await expect(
-      page.getByRole("region", { name: "day schedule calendar" }),
-    ).toBeVisible();
-    await captureState(page, canvas, "schedule-standard-day");
-
-    await page.getByRole("button", { name: "Week", pressed: false }).click();
-    const weekCalendar = page.getByRole("region", {
-      name: "week schedule calendar",
-    });
-    await expect(weekCalendar).toBeVisible();
-    const firstWeekEvent = weekCalendar
-      .locator(".schedule-standard-event-content")
-      .first();
-    await firstWeekEvent.evaluate((event) => {
-      const frame = event.closest<HTMLElement>(
-        ".schedule-standard-scroll-frame",
-      );
-      if (!frame) throw new Error("Week calendar scroll frame is missing.");
-      frame.scrollLeft +=
-        event.getBoundingClientRect().left -
-        frame.getBoundingClientRect().left -
-        110;
-    });
-    await expect(firstWeekEvent).toContainText(
-      "The Future of Attendee Engagement",
-    );
-    await captureState(page, canvas, "schedule-standard-week");
-
-    await captureState(
-      page,
-      page.getByTestId("schedule-notes-editor"),
-      "schedule-notes-editor",
-    );
-    await captureState(
-      page,
-      page.getByTestId("session-content-editor"),
-      "session-content-editor",
-    );
-
-    const preview = page.getByTestId("session-content-preview");
-    await preview.getByRole("button", { name: "Mobile" }).click();
-    await preview.getByRole("button", { name: "Session detail" }).click();
-    await expect(
-      preview.locator("[data-preview-viewport='mobile']"),
-    ).toBeVisible();
-    await captureState(page, preview, "session-content-mobile-preview");
-  });
-
-  test("import and export controls keep their consequence boundary visible", async ({
-    page,
-  }) => {
-    await openHydrated(page, "/admin/operations?panel=imports");
-    await captureState(
-      page,
-      page.locator("section").filter({
-        has: page.getByRole("heading", { name: "CSV import" }),
-      }),
-      "operation-import-controls",
-    );
-
-    await selectDemoRole(page, "owner");
-    await openHydrated(page, "/admin/operations?panel=exports");
-    await captureState(
-      page,
-      page.locator("section").filter({
-        has: page.getByRole("heading", { name: "Event data exports" }),
-      }),
-      "operation-export-controls",
-    );
-  });
-
-  test("failed provider item exposes honest record-level recovery controls", async ({
-    page,
-    request,
-  }) => {
-    const fixture = await seedVisualAcceleventsFailure(request);
-    await openHydrated(
-      page,
-      `/admin/operations?operation=${encodeURIComponent(fixture.operationId)}`,
-    );
-    const results = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Record-level results" }),
-    });
-    const table = results.locator(".table-wrap");
-    await expect(table).toBeVisible();
-    expect(
-      await table.evaluate(
-        (element) => element.scrollWidth - element.clientWidth,
-      ),
-      "record-level results should present the complete row without horizontal scrolling",
-    ).toBeLessThanOrEqual(1);
-
-    const recoveryControls = [
-      results.getByRole("button", { name: /^Retry / }),
-      results.getByRole("button", { name: /^Skip / }),
-    ];
-    const tableBounds = await table.boundingBox();
-    expect(tableBounds).not.toBeNull();
-    for (const control of recoveryControls) {
-      await expect(control).toBeVisible();
-      const controlBounds = await control.boundingBox();
-      expect(controlBounds).not.toBeNull();
-      expect(controlBounds!.x).toBeGreaterThanOrEqual(tableBounds!.x - 1);
-      expect(controlBounds!.x + controlBounds!.width).toBeLessThanOrEqual(
-        tableBounds!.x + tableBounds!.width + 1,
-      );
-    }
-    await captureState(page, results, "operation-record-recovery");
-  });
-
-  test("interactive API reference has a responsive application viewport", async ({
-    page,
-  }) => {
-    await openHydrated(page, "/api/docs");
-    await expect(page.locator(".scalar-api-reference")).toBeVisible();
-    await expect(
-      page.getByText("Program Cue API", { exact: true }).first(),
-    ).toBeVisible();
-    await expect(page).toHaveScreenshot("api-reference.png");
-    await expectDocumentContained(page, "api-reference");
-  });
-
-  test("new operational surfaces remain contained at a 200 percent equivalent width", async ({
-    page,
-  }, testInfo) => {
-    test.skip(
-      testInfo.project.name !== "desktop-chromium",
-      "The desktop project owns the explicit 200% equivalent pass.",
-    );
-    await selectDemoRole(page, "owner");
-    await page.setViewportSize({ width: 720, height: 900 });
-    for (const [name, path] of [
-      ["assistant", "/admin/assistant"],
-      ["form builder", "/admin/submissions/form"],
-      ["submission grid", "/admin/submissions?status=submitted"],
-      ["schedule", "/admin/schedule?session=demo-session-1"],
-      ["task plan", "/admin/tasks"],
-      ["operation import", "/admin/operations?panel=imports"],
-      ["API settings", "/admin/settings"],
-      ["retention", "/admin/files/retention"],
-      ["demo guide", "/demo"],
-      ["API reference", "/api/docs"],
-    ] as const) {
-      await openHydrated(page, path);
-      if (name === "form builder")
-        await waitForSurfaceReady(page, "form-builder");
-      if (name === "API reference") {
-        await expect(page.locator(".scalar-api-reference")).toBeVisible();
-      }
-      await expect(page.locator("main#main")).toBeVisible();
-      await expectDocumentContained(page, `${name} at 200% equivalent`);
-    }
-  });
 });

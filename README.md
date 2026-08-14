@@ -113,11 +113,12 @@ projects using Vitest's changed-file graph;
 without also starting the separate Agents Durable Object project.
 
 `check:quick` runs the complete core gate plus sharded desktop Chromium
-behavior, excluding the full visual inventory and cross-browser smoke. It is an
-integration aid, not an ordinary completion gate. `test:unit` runs
-deterministic Node-compatible rules without starting Workerd or applying D1
-migrations. `test:worker` runs the service, route and provider-boundary suites
-against the Cloudflare runtime, followed by the Agents Durable Object project.
+behavior, excluding the representative visual inventory and cross-browser
+smoke. It is an integration aid, not an ordinary completion gate. `test:unit`
+runs deterministic Node-compatible rules without starting Workerd or applying
+D1 migrations. `test:worker` runs the service, route and provider-boundary
+suites against the Cloudflare runtime, followed by the Agents Durable Object
+project.
 `npm test` runs both projects; focused commands do not replace the complete
 merge or release gate.
 
