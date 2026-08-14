@@ -159,6 +159,35 @@ describe("production authentication routes", () => {
     );
   });
 
+  it("clears a stale event selection and redirects home to explicit selection", async () => {
+    const testEnv = validatedProductionEnv();
+    const { cookie } = await sessionCookie("person-demo-admin");
+    const staleEventCookie = currentEventCookie(
+      "evt-no-longer-authorised",
+      testEnv,
+    ).split(";", 1)[0];
+
+    const response = await homeLoader({
+      request: new Request("http://localhost/", {
+        headers: { cookie: `${cookie}; ${staleEventCookie}` },
+      }),
+      params: {},
+      context: context(testEnv),
+    } as never).catch((error: unknown) => error);
+
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).status).toBe(302);
+    expect((response as Response).headers.get("location")).toBe(
+      "/events/select?returnTo=%2F",
+    );
+    expect((response as Response).headers.get("set-cookie")).toContain(
+      "__Host-program_cue_event=; Max-Age=0",
+    );
+    expect((response as Response).headers.get("cache-control")).toBe(
+      "private, no-store",
+    );
+  });
+
   it("keeps an authenticated identity without memberships outside private workspaces", async () => {
     const personId = `person-no-access-${crypto.randomUUID()}`;
     await env.DB.prepare(

@@ -2,6 +2,39 @@ import { expect, test } from "@playwright/test";
 import { acceptConfirm } from "./support/confirm-dialog";
 import { e2eOrigin } from "./support/e2e-origin";
 
+test("home recovers from a stale event selection", async ({ context, page }) => {
+  await context.addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-no-longer-authorised",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+    {
+      name: "program_cue_demo_identity",
+      value: "owner",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+
+  await page.goto("/");
+
+  await expect(page).toHaveURL(/\/events\/select\?returnTo=%2F$/u);
+  await expect(
+    page.getByRole("heading", { name: "Choose an event" }),
+  ).toBeVisible();
+  expect(
+    (await context.cookies()).some(
+      (cookie) => cookie.name === "program_cue_event",
+    ),
+  ).toBe(false);
+});
+
 test("an event switch persists across reloads on the local HTTP Worker", async ({
   context,
   page,

@@ -5,6 +5,7 @@ import { BrandMark } from "~/components/brand-mark";
 import type { ViewerRole } from "~/platform/auth/authorize.server";
 import {
   chooseInitialEvent,
+  clearCurrentEventCookie,
   currentEventCookie,
   listAuthorisedEvents,
   selectedEventId,
@@ -29,9 +30,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   if (!eventId) throw redirect("/events/select?returnTo=%2F");
   const event = events.find((candidate) => candidate.eventId === eventId);
   if (!event) {
-    throw new Response("Your account cannot manage this event.", {
-      status: 403,
-      statusText: "Forbidden",
+    throw redirect("/events/select?returnTo=%2F", {
+      headers: {
+        "set-cookie": clearCurrentEventCookie(env),
+        "cache-control": "private, no-store",
+      },
     });
   }
   if (event.invitationPending) throw redirect("/events/select?returnTo=%2F");
