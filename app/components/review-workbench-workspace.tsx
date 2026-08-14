@@ -21,9 +21,22 @@ export {
   reviewSaveCoversCurrentEdits,
 } from "~/components/review-workbench-model";
 
+/* The rail is never the only carrier: the same state is spelled out in the
+   card's last line, so colour-blind, printed and forced-colors readings all
+   still answer "how far is this one". */
+const QUEUE_STATE_RAIL: Record<string, string> = {
+  submitted: "var(--state-good-solid)",
+  in_progress: "var(--brand-600)",
+  reopened: "var(--state-warn-solid)",
+};
+
 function ReviewQueuePanel() {
   const { workspace, fetcher, dirty, saveFailed, requestAssignmentNavigation } =
     useReviewWorkbenchModel();
+  const submittedCount = workspace.assignments.filter(
+    (assignment) => assignment.status === "submitted",
+  ).length;
+  const assignedCount = workspace.assignments.length;
   return (
     <aside
       className="card pad review-queue"
@@ -31,21 +44,38 @@ function ReviewQueuePanel() {
     >
       <div className="card-title">
         <h2 id="review-queue-title">My queue</h2>
-        <span className="status info right">
-          {workspace.assignments.length}
-        </span>
+        <span className="status info right">{assignedCount}</span>
+      </div>
+      <p className="review-queue-progress">
+        <span className="pc-num">
+          {submittedCount} of {assignedCount}
+        </span>{" "}
+        submitted
+      </p>
+      <div className="progress" aria-hidden="true">
+        <span
+          style={{
+            width: `${assignedCount ? Math.round((submittedCount / assignedCount) * 100) : 0}%`,
+          }}
+        />
       </div>
       <nav className="review-queue-list" aria-label="Assigned review sources">
         {workspace.assignments.map((assignment) => {
           const href = `/review/workbench?assignment=${assignment.id}`;
+          const current = assignment.id === workspace.selected?.id;
           return (
             <Link
               to={href}
               key={assignment.id}
-              className={`queue-card${assignment.id === workspace.selected?.id ? " active" : ""}`}
-              aria-current={
-                assignment.id === workspace.selected?.id ? "page" : undefined
+              className={`queue-card rail-left${current ? " active" : ""}`}
+              style={
+                {
+                  "--rail":
+                    QUEUE_STATE_RAIL[assignment.status] ??
+                    "var(--border-strong)",
+                } as React.CSSProperties
               }
+              aria-current={current ? "page" : undefined}
               onClick={(event) => {
                 if (saveFailed || dirty || fetcher.state !== "idle") {
                   event.preventDefault();
@@ -53,13 +83,14 @@ function ReviewQueuePanel() {
                 }
               }}
             >
+              <h3>{assignment.title}</h3>
               <span className="pill track">
                 {assignment.category ?? "Uncategorised"}
               </span>
-              <h3>{assignment.title}</h3>
-              <small className="subtle">
-                {assignment.reference} <span aria-hidden="true">·</span>{" "}
-                {assignment.status.replaceAll("_", " ")}
+              <small className="queue-card-state">
+                {assignment.status.replaceAll("_", " ")}{" "}
+                <span aria-hidden="true">·</span>{" "}
+                <span className="pc-num">{assignment.reference}</span>
               </small>
             </Link>
           );
@@ -69,10 +100,42 @@ function ReviewQueuePanel() {
   );
 }
 
+/* A field the header already carries is not a second fact, and three of the six
+   rows in the reading column were literal repeats of the title 100px above.
+   Matched on value as well as id so a form that reuses one of these ids for
+   something else keeps its answer. */
+function unrepeatedAnswerFields(
+  submission: NonNullable<
+    ReturnType<typeof useReviewWorkbenchModel>["workspace"]["submission"]
+  >,
+) {
+  const headed = new Map([
+    ["title", submission.title],
+    ["category", submission.category],
+    ["format", submission.format],
+  ]);
+  return submission.answerFields
+    .map((field) => ({
+      ...field,
+      text: Array.isArray(field.value)
+        ? field.value.join(", ")
+        : String(field.value ?? ""),
+    }))
+    .filter((field) => headed.get(field.id) !== field.text)
+    .map((field) => ({
+      ...field,
+      /* Prose and a three-word answer are not the same kind of thing: one is
+         read, the other is checked. Length is what separates them, because the
+         schema does not say which fields are which. */
+      prose: field.text.length > 60 || field.text.includes("\n"),
+    }));
+}
+
 function ReviewSubmissionPanel() {
   const {
     workspace,
     saveFailed,
+    selectedIndex,
     previousAssignment,
     nextAssignment,
     requestAssignmentNavigation,
@@ -80,16 +143,35 @@ function ReviewSubmissionPanel() {
   const selected = workspace.selected;
   const submission = workspace.submission;
   if (!selected || !submission) return null;
+  const answerFields = unrepeatedAnswerFields(submission);
   return (
     <article
       className="card pad review-detail"
       aria-labelledby="review-submission-title"
     >
-      <div className="card-title">
-        <span className="status info">
-          {selected.status.replaceAll("_", " ")}
-        </span>
-        <div className="page-actions right">
+      <div className="review-detail-head">
+        <div className="review-detail-identity">
+          <h2 id="review-submission-title">{submission.title}</h2>
+          <p className="subtle">
+            {submission.blindedReviewing
+              ? "Speaker identity hidden"
+              : submission.speakerNames.join(", ") ||
+                (submission.sourceType === "session"
+                  ? "No speakers attached"
+                  : "Speaker pending")}{" "}
+            <span aria-hidden="true">·</span> {submission.format}
+          </p>
+        </div>
+        <div className="review-detail-nav">
+          <span className="review-queue-position pc-num">
+            {selectedIndex + 1} / {workspace.assignments.length}
+          </span>
+          {workspace.assignments.length > 1 ? (
+            <span className="review-kbd-hint" aria-hidden="true">
+              <kbd>K</kbd>
+              <kbd>J</kbd>
+            </span>
+          ) : null}
           <button
             type="button"
             className="btn small"
@@ -120,31 +202,18 @@ function ReviewSubmissionPanel() {
           </button>
         </div>
       </div>
-      <h2 className="mt" id="review-submission-title">
-        {submission.title}
-      </h2>
-      <p className="subtle">
-        {submission.blindedReviewing
-          ? "Speaker identity hidden"
-          : submission.speakerNames.join(", ") ||
-            (submission.sourceType === "session"
-              ? "No speakers attached"
-              : "Speaker pending")}{" "}
-        <span aria-hidden="true">·</span> {submission.format}
-      </p>
       <div className="divider" />
       <h3>
         {submission.sourceType === "session" ? "Session snapshot" : "Proposal"}
       </h3>
       <dl className="review-answer-list">
-        {submission.answerFields.map((field) => (
-          <div key={field.id}>
+        {answerFields.map((field) => (
+          <div
+            key={field.id}
+            className={field.prose ? "review-answer prose" : "review-answer"}
+          >
             <dt>{field.label}</dt>
-            <dd>
-              {Array.isArray(field.value)
-                ? field.value.join(", ")
-                : String(field.value ?? "")}
-            </dd>
+            <dd>{field.text}</dd>
           </div>
         ))}
       </dl>
@@ -176,6 +245,23 @@ function ReviewSubmissionPanel() {
   );
 }
 
+/* A scale is a choice among a handful of fixed positions. A row of segments
+   states the chosen one at rest, so four criteria read as a profile; a dropdown
+   costs a popup per criterion and shows nothing afterwards. Only a genuinely
+   open list stays a <select>. */
+function scaleOptions(inputType: string) {
+  if (inputType === "yes_no")
+    return [
+      { value: "yes", label: "Yes" },
+      { value: "no", label: "No" },
+    ];
+  if (inputType !== "scale_5" && inputType !== "scale_10") return null;
+  return Array.from(
+    { length: inputType === "scale_10" ? 10 : 5 },
+    (_, index) => ({ value: String(index + 1), label: String(index + 1) }),
+  );
+}
+
 function ReviewScorePanel() {
   const {
     workspace,
@@ -188,11 +274,15 @@ function ReviewScorePanel() {
     editGeneration,
     inFlightSaveGeneration,
     setConflictOpen,
+    setShortcutsOpen,
+    saveDraftTriggerRef,
+    dirty,
+    saveFailed,
     submitMode,
     setSubmitMode,
     requiredCriterionCount,
     completedCriterionCount,
-    setCompletedCriterionCount,
+    weightedScore,
     readOnly,
     revision,
     markDirty,
@@ -203,6 +293,12 @@ function ReviewScorePanel() {
   const selected = workspace.selected;
   const submission = workspace.submission;
   if (!selected || !submission) return null;
+  // Weights without a weighted total is an arithmetic homework assignment; a
+  // rubric with no scaled criterion has no total to show in the first place.
+  const weighted = workspace.criteria.some(
+    (criterion) =>
+      criterion.inputType === "scale_5" || criterion.inputType === "scale_10",
+  );
   return (
     <section className="card review-score" aria-labelledby="review-score-title">
       <fetcher.Form
@@ -214,15 +310,6 @@ function ReviewScorePanel() {
           if (!readOnly) {
             markDirty();
             captureRecoveryPayload(event.currentTarget);
-            const values = new FormData(event.currentTarget);
-            setCompletedCriterionCount(
-              workspace.criteria.filter(
-                (criterion) =>
-                  criterion.required &&
-                  String(values.get(`score:${criterion.id}`) ?? "").trim() !==
-                    "",
-              ).length,
-            );
           }
         }}
         onSubmit={(event) => {
@@ -248,50 +335,59 @@ function ReviewScorePanel() {
         <div className="pad review-score-body">
           <div className="card-title review-score-head">
             <h2 id="review-score-title">Score {submission.sourceType}</h2>
-            <span className="status info">
+            <span className="status info right">
               {completedCriterionCount} / {requiredCriterionCount}
               <span className="sr-only"> required criteria complete</span>
             </span>
-            {!readOnly ? (
-              <button
-                ref={conflictTriggerRef}
-                className="btn small danger"
-                type="button"
-                onClick={() => {
-                  clearAutosaveTimer();
-                  setConflictOpen(true);
-                }}
-              >
-                Declare conflict
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="review-shortcut-trigger"
+              aria-label="Keyboard shortcuts"
+              onClick={() => setShortcutsOpen(true)}
+            >
+              <kbd aria-hidden="true">?</kbd>
+            </button>
           </div>
           <div className="review-rubric">
             {workspace.criteria.map((criterion) => {
               const inputId = `criterion-${criterion.id}`;
+              const labelId = `${inputId}-label`;
               const descriptionId = `${inputId}-description`;
               const weightId = `${inputId}-weight`;
               const currentValue = workspace.review?.scores[criterion.id] ?? "";
-              const selectValue =
+              const storedValue =
                 typeof currentValue === "boolean"
                   ? currentValue
                     ? "yes"
                     : "no"
-                  : currentValue;
+                  : String(currentValue);
+              const scale = scaleOptions(criterion.inputType);
               return (
                 <div className="review-rubric-row" key={criterion.id}>
                   <div className="review-criterion">
-                    <label htmlFor={inputId}>
-                      {criterion.name}
-                      {criterion.required ? (
-                        <span className="sr-only"> (required)</span>
-                      ) : null}
-                    </label>
+                    {scale ? (
+                      <span className="review-criterion-name" id={labelId}>
+                        {criterion.name}
+                        {criterion.required ? (
+                          <span className="sr-only"> (required)</span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      <label
+                        className="review-criterion-name"
+                        htmlFor={inputId}
+                      >
+                        {criterion.name}
+                        {criterion.required ? (
+                          <span className="sr-only"> (required)</span>
+                        ) : null}
+                      </label>
+                    )}
                     <small className="subtle" id={descriptionId}>
                       {criterion.description}
                     </small>
                   </div>
-                  <span className="review-weight" id={weightId}>
+                  <span className="review-weight pc-num" id={weightId}>
                     {criterion.weightPercent > 0
                       ? `${criterion.weightPercent}%`
                       : criterion.required
@@ -301,12 +397,57 @@ function ReviewScorePanel() {
                       <span className="sr-only"> weight</span>
                     ) : null}
                   </span>
-                  {criterion.inputType === "free_text" ? (
+                  {scale ? (
+                    <fieldset
+                      className="review-scale"
+                      data-review-scale=""
+                      role="radiogroup"
+                      aria-labelledby={labelId}
+                      aria-describedby={`${descriptionId} ${weightId}`}
+                    >
+                      {/* An optional criterion has to be able to go back to
+                          unanswered; a dropdown could, and a row of segments
+                          only can if one of them says so. */}
+                      {!criterion.required ? (
+                        <label className="review-scale-option is-clear">
+                          <input
+                            className="review-scale-input"
+                            type="radio"
+                            name={`score:${criterion.id}`}
+                            value=""
+                            defaultChecked={storedValue === ""}
+                            disabled={readOnly}
+                          />
+                          <span>
+                            <span aria-hidden="true">—</span>
+                            <span className="sr-only">Not scored</span>
+                          </span>
+                        </label>
+                      ) : null}
+                      {scale.map((option) => (
+                        <label
+                          className="review-scale-option"
+                          key={option.value}
+                        >
+                          <input
+                            className="review-scale-input"
+                            type="radio"
+                            name={`score:${criterion.id}`}
+                            value={option.value}
+                            defaultChecked={storedValue === option.value}
+                            required={criterion.required}
+                            disabled={readOnly}
+                          />
+                          <span className="pc-num">{option.label}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                  ) : criterion.inputType === "free_text" ? (
                     <textarea
                       className="textarea"
                       id={inputId}
                       name={`score:${criterion.id}`}
-                      defaultValue={String(selectValue)}
+                      defaultValue={storedValue}
                       aria-describedby={`${descriptionId} ${weightId}`}
                       required={criterion.required}
                       disabled={readOnly}
@@ -316,47 +457,41 @@ function ReviewScorePanel() {
                       className="select review-score-select"
                       id={inputId}
                       name={`score:${criterion.id}`}
-                      defaultValue={selectValue as string | number}
+                      defaultValue={storedValue}
                       aria-describedby={`${descriptionId} ${weightId}`}
                       required={criterion.required}
                       disabled={readOnly}
                     >
-                      <option value="">
-                        {criterion.inputType === "yes_no" ||
-                        criterion.inputType === "dropdown"
-                          ? "Choose…"
-                          : "Score"}
-                      </option>
-                      {criterion.inputType === "dropdown" ? (
-                        criterion.options.map((option) => (
-                          <option value={option} key={option}>
-                            {option}
-                          </option>
-                        ))
-                      ) : criterion.inputType === "yes_no" ? (
-                        <>
-                          <option value="yes">Yes</option>
-                          <option value="no">No</option>
-                        </>
-                      ) : (
-                        Array.from(
-                          {
-                            length: criterion.inputType === "scale_10" ? 10 : 5,
-                          },
-                          (_, index) => index + 1,
-                        ).map((score) => (
-                          <option value={score} key={score}>
-                            {score} /{" "}
-                            {criterion.inputType === "scale_10" ? 10 : 5}
-                          </option>
-                        ))
-                      )}
+                      <option value="">Choose…</option>
+                      {criterion.options.map((option) => (
+                        <option value={option} key={option}>
+                          {option}
+                        </option>
+                      ))}
                     </select>
                   )}
                 </div>
               );
             })}
           </div>
+          {weighted ? (
+            <div className="score-summary">
+              <div>
+                <span className="score-summary-label">Weighted score</span>
+                <small className="subtle">
+                  {weightedScore === null
+                    ? "Appears once every scored criterion has a value."
+                    : "Weighted by the criterion percentages in this round."}
+                </small>
+              </div>
+              <strong
+                className={`score-summary-value pc-num${weightedScore === null ? " is-pending" : ""}`}
+              >
+                {weightedScore === null ? "—" : weightedScore.toFixed(2)}
+                <span className="score-summary-unit"> / 5</span>
+              </strong>
+            </div>
+          ) : null}
           <div className="review-overall-fields">
             <label className="label">
               Recommendation
@@ -413,6 +548,25 @@ function ReviewScorePanel() {
               />
             </label>
           </div>
+          {!readOnly ? (
+            <div className="review-recusal">
+              <button
+                ref={conflictTriggerRef}
+                className="btn small"
+                type="button"
+                onClick={() => {
+                  clearAutosaveTimer();
+                  setConflictOpen(true);
+                }}
+              >
+                Declare conflict
+              </button>
+              <small className="subtle">
+                Recuses you and returns this {submission.sourceType} to the
+                committee.
+              </small>
+            </div>
+          ) : null}
         </div>
         <div className="sticky-actions review-actions">
           {readOnly ? (
@@ -421,12 +575,18 @@ function ReviewScorePanel() {
             </span>
           ) : (
             <>
-              <span className="subtle">
-                Drafts save after one second of inactivity.
+              <span className="review-save-state">
+                {fetcher.state !== "idle"
+                  ? "Saving…"
+                  : saveFailed
+                    ? "Save failed"
+                    : dirty
+                      ? "Unsaved"
+                      : "Saved"}
               </span>
-              <span className="spacer" />
               <button
-                className="btn"
+                ref={saveDraftTriggerRef}
+                className="btn review-save-draft"
                 type="submit"
                 name="intent"
                 value="save"
@@ -541,6 +701,72 @@ function ReviewActionNotice() {
     >
       {fetcher.data.message}
     </div>
+  ) : null;
+}
+
+function ReviewShortcutSheet() {
+  const { shortcutsOpen, setShortcutsOpen, readOnly } =
+    useReviewWorkbenchModel();
+  return shortcutsOpen ? (
+    <Dialog
+      title="Keyboard shortcuts"
+      onClose={() => setShortcutsOpen(false)}
+      footer={
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setShortcutsOpen(false)}
+        >
+          Close
+        </button>
+      }
+    >
+      <dl className="shortcut-list review-shortcut-list">
+        <div>
+          <dt>
+            <kbd>J</kbd> / <kbd>K</kbd>
+          </dt>
+          <dd>Open the next or previous assignment</dd>
+        </div>
+        {!readOnly ? (
+          <>
+            <div>
+              <dt>
+                <kbd>1</kbd> – <kbd>9</kbd>
+              </dt>
+              <dd>
+                Score the criterion you are on, then move to the next unscored
+                one
+              </dd>
+            </div>
+            <div>
+              <dt>
+                <kbd>←</kbd> / <kbd>→</kbd>
+              </dt>
+              <dd>Move within one criterion&rsquo;s scale</dd>
+            </div>
+            <div>
+              <dt>
+                <kbd>⌘/Ctrl</kbd> + <kbd>S</kbd>
+              </dt>
+              <dd>Save the draft now</dd>
+            </div>
+            <div>
+              <dt>
+                <kbd>⌘/Ctrl</kbd> + <kbd>Enter</kbd>
+              </dt>
+              <dd>Submit this review and open the next</dd>
+            </div>
+          </>
+        ) : null}
+        <div>
+          <dt>
+            <kbd>?</kbd>
+          </dt>
+          <dd>Open this shortcut reference</dd>
+        </div>
+      </dl>
+    </Dialog>
   ) : null;
 }
 
@@ -723,6 +949,7 @@ function ReviewWorkbenchPage() {
       <ReviewDraftRecoveryNotice />
       <ReviewActionNotice />
       <ReviewWorkspaceState />
+      <ReviewShortcutSheet />
       <ReviewSubmitDialog />
       <ReviewDraftConflictNotice />
       <ReviewConflictDialog />

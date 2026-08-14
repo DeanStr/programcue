@@ -6,21 +6,22 @@ import {
   CalendarDays,
   Cable,
   ChevronDown,
+  ClipboardCheck,
   ClipboardCopy,
-  FileStack,
+  FolderOpen,
   ContactRound,
   Files,
-  Grid3X3,
   LayoutDashboard,
   ListChecks,
   Activity,
   Mail,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   PanelTop,
   Plus,
   Search,
   Settings,
-  Sparkles,
   UsersRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -54,34 +55,41 @@ export const NAV_ITEMS = [
   ["command", LayoutDashboard, "Command Centre"],
   ["event", CalendarCog, "Event Setup"],
   ["submissions", Files, "Submissions"],
-  ["review", Sparkles, "Review"],
+  /* Sparkles is the universal "a machine wrote this" glyph and the palette
+     already spends it on the assistant. Humans score submissions here. */
+  ["review", ClipboardCheck, "Review"],
   ["speakers", UsersRound, "Speakers"],
   ["crm", ContactRound, "Speaker Network"],
   ["resources", BookOpen, "Resources"],
   ["schedule", CalendarDays, "Schedule"],
   ["communications", Mail, "Communications"],
   ["tasks", ListChecks, "Tasks"],
-  ["content", FileStack, "Content & files"],
+  /* Files and FileStack are the same stacked-paper outline at 16px, which is
+     exactly the size the rail runs at when the icon is the only label. */
+  ["content", FolderOpen, "Content & files"],
   ["programme", PanelTop, "Programme"],
   ["integrations", Cable, "Integrations"],
   ["settings", Settings, "Settings"],
   ["operations", Activity, "Operations"],
 ] as const satisfies ReadonlyArray<AdminNavigationItem>;
 
+/* "Core work" held ten of the thirteen items, which chunks nothing. The phases
+   an event actually moves through do: take the work in, get it ready, keep the
+   installation running. */
 const NAV_GROUPS = [
   {
     label: "Core work",
+    ids: ["command", "event", "submissions", "review"],
+  },
+  {
+    label: "Delivery",
     ids: [
-      "command",
-      "event",
-      "submissions",
-      "review",
       "speakers",
       "schedule",
+      "programme",
       "communications",
       "tasks",
       "content",
-      "programme",
     ],
   },
   {
@@ -89,6 +97,18 @@ const NAV_GROUPS = [
     ids: ["integrations", "operations", "settings"],
   },
 ] as const;
+
+/* Speaker Network and Resources are full workspaces that no rail entry pointed
+   at, so the rail marked Speakers current for them and contradicted the
+   breadcrumb printed directly below it. They are the speaker family's second
+   level and appear whenever that family is where you are. */
+const NAV_CHILDREN: Record<string, ReadonlyArray<string>> = {
+  speakers: ["crm", "resources"],
+};
+
+function navigationFamily(id: string) {
+  return [id, ...(NAV_CHILDREN[id] ?? [])];
+}
 
 export function primaryNavigationGroups(
   items: ReadonlyArray<AdminNavigationItem>,
@@ -103,12 +123,44 @@ export function primaryNavigationGroups(
   })).filter((group) => group.items.length > 0);
 }
 
-export function primaryNavigationItemActive(id: string, pathname: string) {
-  const section = pathname.split("/").filter(Boolean)[1] ?? "command";
-  if (section === id) return true;
-  if (id === "speakers") return section === "crm" || section === "resources";
-  return false;
+export function primaryNavigationSection(pathname: string) {
+  return pathname.split("/").filter(Boolean)[1] ?? "command";
 }
+
+export function primaryNavigationItemActive(id: string, pathname: string) {
+  return primaryNavigationSection(pathname) === id;
+}
+
+export function primaryNavigationItemExpanded(id: string, pathname: string) {
+  return navigationFamily(id).includes(primaryNavigationSection(pathname));
+}
+
+export function primaryNavigationChildren(
+  id: string,
+  items: ReadonlyArray<AdminNavigationItem>,
+) {
+  const available = new Map(items.map((item) => [item[0], item]));
+  return (NAV_CHILDREN[id] ?? []).flatMap((childId) => {
+    const item = available.get(childId);
+    return item ? [item] : [];
+  });
+}
+const SIDEBAR_COLLAPSE_COOKIE = "program_cue_sidebar";
+
+function readSidebarCollapsedCookie() {
+  return document.cookie
+    .split("; ")
+    .includes(`${SIDEBAR_COLLAPSE_COOKIE}=collapsed`);
+}
+
+function writeSidebarCollapsedCookie(collapsed: boolean) {
+  // A cookie rather than local storage so the shell can eventually be rendered
+  // at the stored width on the server and skip the restoring frame entirely.
+  document.cookie = `${SIDEBAR_COLLAPSE_COOKIE}=${
+    collapsed ? "collapsed" : "expanded"
+  }; path=/; max-age=31536000; samesite=lax`;
+}
+
 export type AdminShellDialog =
   | "command"
   | "event"
@@ -301,6 +353,7 @@ export function AdminShell({
   const navigate = useNavigate();
   const submit = useSubmit();
   const [collapsed, setCollapsed] = useState(false);
+  const [motionReady, setMotionReady] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [dialog, setDialog] = useState<AdminShellDialog>(null);
   const [commandQuery, setCommandQuery] = useState("");
@@ -341,6 +394,13 @@ export function AdminShell({
     .slice(0, 2)
     .join("")
     .toUpperCase();
+  const eventInitials = event.name
+    .split(/\s+/)
+    .filter((word) => /\p{L}|\p{N}/u.test(word[0] ?? ""))
+    .map((word) => word[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
   const dateLocation = [
     event.dates,
     [event.venue, event.city].filter(Boolean).join(", "),
@@ -359,7 +419,7 @@ export function AdminShell({
           ([id]) => id !== "crm" || viewer.canCreateEvents || viewer.demo,
         );
   const navigationGroups = primaryNavigationGroups(navigationItems);
-  const demoRoleLabel = `${viewer.role.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase())} demo`;
+  const demoRoleLabel = viewer.role.replaceAll("_", " ");
   const viewArea = savedViewArea(location.pathname);
   const currentHref = `${location.pathname}${location.search}${location.hash}`;
   const currentEventOption = eventOptions.find(
@@ -415,6 +475,24 @@ export function AdminShell({
 
   useEffect(() => setCopyState("idle"), [currentHref]);
 
+  // Switching event reloads the document, so component state alone threw the
+  // rail width away every time an operator changed event.
+  useEffect(() => {
+    setCollapsed(readSidebarCollapsedCookie());
+    // Restoring a stored width is a starting position, not a movement the
+    // operator made, so the transition only arms once that paint has landed.
+    const outer = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => setMotionReady(true));
+    });
+    return () => window.cancelAnimationFrame(outer);
+  }, []);
+
+  function toggleCollapsed() {
+    const next = !collapsed;
+    setCollapsed(next);
+    writeSidebarCollapsedCookie(next);
+  }
+
   async function copyDeepLink() {
     if (!navigator.clipboard?.writeText) {
       setCopyState("unavailable");
@@ -451,7 +529,11 @@ export function AdminShell({
     value.toLocaleLowerCase().includes(commandQuery.trim().toLocaleLowerCase());
 
   return (
-    <div className={`app-admin${collapsed ? " sidebar-is-collapsed" : ""}`}>
+    <div
+      className={`app-admin${collapsed ? " sidebar-is-collapsed" : ""}${
+        motionReady ? " shell-motion-ready" : ""
+      }`}
+    >
       <aside className="sidebar" aria-label="Primary navigation">
         <Link
           className="brand"
@@ -469,59 +551,108 @@ export function AdminShell({
           {navigationGroups.map((group) => (
             <div className="nav-group" key={group.label}>
               <span className="nav-group-label">{group.label}</span>
-              {group.items.map(([id, Icon, label]) => (
-                <Link
-                  key={id}
-                  to={`/admin/${id}`}
-                  className={
-                    primaryNavigationItemActive(id, location.pathname)
-                      ? "active"
-                      : undefined
-                  }
-                  aria-current={
-                    primaryNavigationItemActive(id, location.pathname)
-                      ? "page"
-                      : undefined
-                  }
-                  /* The label span is display:none at and below 1024px, which
-                     leaves the link with no accessible name at all. */
-                  aria-label={label}
-                >
-                  <span className="nav-icon">
-                    <Icon aria-hidden size={16} strokeWidth={1.8} />
-                  </span>
-                  <span className="nav-label">{label}</span>
-                </Link>
-              ))}
+              {group.items.map(([id, Icon, label]) => {
+                const expanded = primaryNavigationItemExpanded(
+                  id,
+                  location.pathname,
+                );
+                const children = expanded
+                  ? primaryNavigationChildren(id, navigationItems)
+                  : [];
+                return (
+                  <div className="nav-item" key={id}>
+                    <Link
+                      to={`/admin/${id}`}
+                      className={
+                        primaryNavigationItemActive(id, location.pathname)
+                          ? "active"
+                          : undefined
+                      }
+                      /* Icon-only mode hides the children, so the parent has
+                         to answer "which family am I in" on its own or the
+                         collapsed rail states no location at all. */
+                      data-family-current={
+                        expanded &&
+                        !primaryNavigationItemActive(id, location.pathname)
+                          ? ""
+                          : undefined
+                      }
+                      aria-current={
+                        primaryNavigationItemActive(id, location.pathname)
+                          ? "page"
+                          : undefined
+                      }
+                      /* The label span is display:none at and below 1024px,
+                         which leaves the link with no accessible name at all,
+                         and no tooltip for a mouse user either. */
+                      aria-label={label}
+                      title={label}
+                    >
+                      <span className="nav-icon">
+                        <Icon aria-hidden size={16} strokeWidth={1.8} />
+                      </span>
+                      <span className="nav-label">{label}</span>
+                    </Link>
+                    {children.length ? (
+                      <div className="nav-child">
+                        {children.map(([childId, , childLabel]) => (
+                          <Link
+                            key={childId}
+                            to={`/admin/${childId}`}
+                            className={
+                              primaryNavigationItemActive(
+                                childId,
+                                location.pathname,
+                              )
+                                ? "active"
+                                : undefined
+                            }
+                            aria-current={
+                              primaryNavigationItemActive(
+                                childId,
+                                location.pathname,
+                              )
+                                ? "page"
+                                : undefined
+                            }
+                          >
+                            <span className="nav-label">{childLabel}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </nav>
         <div className="sidebar-bottom">
+          {/* Production had a bordered card here stating that an authenticated
+              user is authenticated. Only the demo state is worth a line: it
+              says the records are disposable. */}
           {viewer.demo ? (
             <Link
-              className="demo-card"
+              className="sidebar-demo"
               to="/demo"
               title="Open evaluator guide and reset controls"
             >
-              <strong>{demoRoleLabel}</strong>
-              <div className="mini">
-                Evaluator guide · reset · test identities
-              </div>
+              <span>Demo · {demoRoleLabel}</span>
             </Link>
-          ) : (
-            <div className="demo-card">
-              <strong>Production workspace</strong>
-              <div className="mini">Authenticated · server authorised</div>
-            </div>
-          )}
+          ) : null}
           <button
             type="button"
             className="sidebar-collapse"
             aria-expanded={!collapsed}
             aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-            onClick={() => setCollapsed((value) => !value)}
+            onClick={() => toggleCollapsed()}
           >
-            {collapsed ? "›" : "‹"} <span className="nav-label">Collapse</span>
+            {collapsed ? (
+              <PanelLeftOpen aria-hidden size={16} strokeWidth={1.8} />
+            ) : (
+              <PanelLeftClose aria-hidden size={16} strokeWidth={1.8} />
+            )}
+            <span className="nav-label">Collapse</span>
           </button>
         </div>
       </aside>
@@ -543,8 +674,8 @@ export function AdminShell({
           aria-label="Switch event"
           onClick={() => setDialog("event")}
         >
-          <span className="event-thumb">
-            <Grid3X3 aria-hidden size={17} />
+          <span className="event-thumb" aria-hidden>
+            {eventInitials}
           </span>
           <span>
             <strong>{event.name}</strong>
@@ -560,9 +691,11 @@ export function AdminShell({
           onClick={openCommandDialog}
         >
           <Search aria-hidden size={14} />
+          {/* One control, one keycap. ? opened the shortcut reference, not
+              this, so it advertised a second way to search that did not
+              search. The shortcut dialog documents it. */}
           <span>Search or run a command…</span>
           <kbd>⌘K</kbd>
-          <kbd>?</kbd>
         </button>
         <div className="top-actions">
           {viewer.role !== "committee_chair" ? (
@@ -605,26 +738,61 @@ export function AdminShell({
               <div className="pc-mobile-nav-group" key={group.label}>
                 <span className="nav-group-label">{group.label}</span>
                 {group.items.map(([id, Icon, label]) => (
-                  <Link
-                    key={id}
-                    to={`/admin/${id}`}
-                    className={
-                      primaryNavigationItemActive(id, location.pathname)
-                        ? "active"
-                        : undefined
-                    }
-                    aria-current={
-                      primaryNavigationItemActive(id, location.pathname)
-                        ? "page"
-                        : undefined
-                    }
-                    onClick={() => setMobileNavOpen(false)}
-                  >
-                    <span className="nav-icon">
-                      <Icon aria-hidden size={17} strokeWidth={1.8} />
-                    </span>
-                    {label}
-                  </Link>
+                  <div className="nav-item" key={id}>
+                    <Link
+                      to={`/admin/${id}`}
+                      className={
+                        primaryNavigationItemActive(id, location.pathname)
+                          ? "active"
+                          : undefined
+                      }
+                      aria-current={
+                        primaryNavigationItemActive(id, location.pathname)
+                          ? "page"
+                          : undefined
+                      }
+                      data-dialog-autofocus={
+                        primaryNavigationItemActive(id, location.pathname)
+                          ? ""
+                          : undefined
+                      }
+                      onClick={() => setMobileNavOpen(false)}
+                    >
+                      <span className="nav-icon">
+                        <Icon aria-hidden size={17} strokeWidth={1.8} />
+                      </span>
+                      {label}
+                    </Link>
+                    {primaryNavigationItemExpanded(id, location.pathname)
+                      ? primaryNavigationChildren(id, navigationItems).map(
+                          ([childId, , childLabel]) => (
+                            <Link
+                              key={childId}
+                              className={`pc-mobile-nav-child${
+                                primaryNavigationItemActive(
+                                  childId,
+                                  location.pathname,
+                                )
+                                  ? " active"
+                                  : ""
+                              }`}
+                              to={`/admin/${childId}`}
+                              aria-current={
+                                primaryNavigationItemActive(
+                                  childId,
+                                  location.pathname,
+                                )
+                                  ? "page"
+                                  : undefined
+                              }
+                              onClick={() => setMobileNavOpen(false)}
+                            >
+                              {childLabel}
+                            </Link>
+                          ),
+                        )
+                      : null}
+                  </div>
                 ))}
               </div>
             ))}
@@ -660,7 +828,10 @@ export function AdminShell({
             </ol>
           </nav>
           <button
-            className="btn small pc-copy-deep-link"
+            /* Ghost, not a bordered button: a rarely-used utility sitting on
+               the same edge and at the same weight as the page's real action
+               left the eye no way to rank the two. */
+            className="btn small ghost pc-copy-deep-link"
             type="button"
             onClick={() => void copyDeepLink()}
             aria-label="Copy a deep link to this page"

@@ -1,3 +1,4 @@
+import { Plus, X } from "lucide-react";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { Link } from "react-router";
 
@@ -31,11 +32,7 @@ function FieldError({
   name: string;
 }) {
   const message = actionData?.errors?.[name]?.[0];
-  return message ? (
-    <span className="help" style={{ color: "var(--red)" }}>
-      {message}
-    </span>
-  ) : null;
+  return message ? <span className="pc-field-error">{message}</span> : null;
 }
 
 function Avatar({ name }: { name: string }) {
@@ -59,6 +56,13 @@ export function EventIdentityPanels({
   event: EventSetup;
   actionData?: ActionResponse;
 }) {
+  // The swatch cannot show what colour it holds, so the hex value is the field
+  // that carries the name and the two are kept in step. An operator matching a
+  // brand guide needs to read and paste this, not just point at it.
+  const [brandAccent, setBrandAccent] = useState(event.brandAccent);
+  const swatchValue = /^#[0-9a-f]{6}$/i.test(brandAccent)
+    ? brandAccent
+    : "#000000";
   return (
     <>
       <section className="card pad">
@@ -86,17 +90,24 @@ export function EventIdentityPanels({
               list="iana-timezones"
               required
               autoComplete="off"
+              placeholder="Australia/Melbourne"
             />
             <datalist id="iana-timezones">
               {timezoneNames.map((timezone) => (
                 <option key={timezone} value={timezone} />
               ))}
             </datalist>
-            <span className="help">
-              Use an IANA timezone such as America/Toronto, Australia/Melbourne
-              or UTC.
-            </span>
+            <span className="help">An IANA name, such as America/Toronto.</span>
             <FieldError actionData={actionData} name="timezone" />
+          </label>
+          <label className="label">
+            Venue
+            <input
+              className="field"
+              name="venue"
+              defaultValue={event.venue}
+              maxLength={200}
+            />
           </label>
           <label className="label">
             Start date
@@ -120,15 +131,6 @@ export function EventIdentityPanels({
             <FieldError actionData={actionData} name="endDate" />
           </label>
           <label className="label">
-            Venue
-            <input
-              className="field"
-              name="venue"
-              defaultValue={event.venue}
-              maxLength={200}
-            />
-          </label>
-          <label className="label">
             City
             <input
               className="field"
@@ -144,7 +146,7 @@ export function EventIdentityPanels({
         <div className="card-title">
           <h3>Public identity</h3>
         </div>
-        <div className="form-row">
+        <div className="form-row trailing-fit">
           <label className="label">
             Public slug
             {event.programmePublished ? (
@@ -166,16 +168,34 @@ export function EventIdentityPanels({
             ) : null}
             <FieldError actionData={actionData} name="publicSlug" />
           </label>
-          <label className="label event-accent-field">
-            Brand accent
-            <input
-              className="field"
-              name="brandAccent"
-              type="color"
-              defaultValue={event.brandAccent}
-              aria-label="Brand accent"
-            />
-          </label>
+          <div className="label">
+            <span id="event-brand-accent-label">Brand accent</span>
+            <div className="event-accent-control">
+              <input
+                type="color"
+                value={swatchValue}
+                aria-label="Brand accent colour picker"
+                onChange={(changeEvent) =>
+                  setBrandAccent(changeEvent.target.value)
+                }
+              />
+              <input
+                className="event-accent-hex"
+                name="brandAccent"
+                value={brandAccent}
+                aria-labelledby="event-brand-accent-label"
+                spellCheck={false}
+                autoComplete="off"
+                maxLength={7}
+                pattern="#[0-9a-fA-F]{6}"
+                required
+                onChange={(changeEvent) =>
+                  setBrandAccent(changeEvent.target.value)
+                }
+              />
+            </div>
+            <FieldError actionData={actionData} name="brandAccent" />
+          </div>
         </div>
         <div className="form-row mt">
           <label className="label">
@@ -294,7 +314,26 @@ export function EventRoomsPanel({
     >
       <summary>
         <RecordChevron />
-        <h3>Rooms and capacities</h3>
+        {/* Closed, this row used to spend 78px on one integer. The same row now
+            names the first few records, so an operator can see whether the
+            rooms they expect exist without opening and re-closing the panel. */}
+        <div className="event-record-summary">
+          <h3>Rooms and capacities</h3>
+          {rooms.length ? (
+            <div className="event-record-preview">
+              {rooms.slice(0, 4).map((room) => (
+                <span className="event-record-chip" key={room.id}>
+                  {room.name} · <span className="pc-num">{room.capacity}</span>
+                </span>
+              ))}
+              {rooms.length > 4 ? (
+                <span className="event-record-chip">
+                  +{rooms.length - 4} more
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
         <span className="event-record-count">
           {rooms.length} {rooms.length === 1 ? "room" : "rooms"}
         </span>
@@ -306,7 +345,7 @@ export function EventRoomsPanel({
             requires is in that room's inventory.
           </p>
           <button type="button" className="btn small" onClick={onAdd}>
-            + Add room
+            <Plus aria-hidden size={14} /> Add room
           </button>
         </div>
         {rooms.length ? (
@@ -371,7 +410,7 @@ export function EventRoomsPanel({
                       <button
                         key={resource}
                         type="button"
-                        className="tag"
+                        className="event-record-resource"
                         aria-label={`Remove ${resource} from ${room.name}`}
                         onClick={() =>
                           setRooms((current) =>
@@ -388,7 +427,8 @@ export function EventRoomsPanel({
                           )
                         }
                       >
-                        {resource} ×
+                        {resource}
+                        <X aria-hidden size={13} />
                       </button>
                     ))}
                     <input
@@ -429,7 +469,7 @@ export function EventRoomsPanel({
                         onRemove(room.id);
                       }}
                     >
-                      ×
+                      <X aria-hidden size={15} />
                     </button>
                   </div>
                 </div>
@@ -492,22 +532,41 @@ export function EventFilePolicyPanel({
         canonical maxima. Allowed file types and scan/quarantine requirements
         cannot be relaxed here.
       </p>
-      <div className="form-row mt">
+      {/* Four numbers that are only meaningful against each other and against
+          their ceiling. Left-aligned in half-width boxes they lined up on no
+          digit at all, the unit was printed four times, and the canonical
+          maximum the help text promises exists was never shown. */}
+      <div className="event-file-limits mt">
         {fields.map((field) => (
-          <label className="label" key={field.name}>
-            {field.label} (MiB)
-            <input
-              className="field"
-              name={field.name}
-              type="number"
-              min={1}
-              max={maximumMegabytes(field.maximum)}
-              step={1}
-              defaultValue={maximumMegabytes(field.value)}
-              required
-            />
-            <span className="help">{field.types}</span>
-          </label>
+          <div className="event-file-limit" key={field.name}>
+            <label htmlFor={`event-file-limit-${field.name}`}>
+              {field.label}
+              <small>{field.types}</small>
+            </label>
+            <span className="event-file-limit-value">
+              <input
+                id={`event-file-limit-${field.name}`}
+                className="field"
+                name={field.name}
+                type="number"
+                min={1}
+                max={maximumMegabytes(field.maximum)}
+                step={1}
+                defaultValue={maximumMegabytes(field.value)}
+                required
+                aria-describedby={`event-file-limit-${field.name}-ceiling`}
+              />
+              <span
+                className="subtle"
+                id={`event-file-limit-${field.name}-ceiling`}
+              >
+                MiB, up to{" "}
+                <span className="pc-num">
+                  {maximumMegabytes(field.maximum)}
+                </span>
+              </span>
+            </span>
+          </div>
         ))}
       </div>
       <FieldError actionData={actionData} name="filePolicy" />
@@ -539,11 +598,11 @@ export function EventAccessPanels({
             Invite administrator
           </button>
         </div>
-        <div className="event-role-group">
-          <strong>Organisation owners</strong>
-          <p className="subtle">Manage organisation settings and all events.</p>
-        </div>
-        <div className="divider" />
+        {/* Organisation owners and evaluators had a titled band each, with a
+            rule above and below and nothing in either to change. Two thirds of
+            this card was a permissions model restated as prose in a place the
+            operator opened to edit something. They are one sentence now, under
+            the list they qualify. */}
         <div className="event-role-group">
           <strong>Administrators</strong>
           <p className="subtle">
@@ -551,22 +610,24 @@ export function EventAccessPanels({
             manage every event in this organisation.
           </p>
           {event.administrators.map((administrator) => (
-            <div className="row-main mt" key={administrator.id}>
+            <div className="row-main mt event-admin-row" key={administrator.id}>
               <Avatar name={administrator.name} />
-              <span>
+              <span className="event-admin-identity">
                 <strong>{administrator.name}</strong>
-                <small>
-                  {administrator.email} ·{" "}
-                  {administrator.scope === "organisation"
-                    ? "Organisation"
-                    : "Event"}{" "}
-                  · {administrator.status}
-                </small>
+                <small>{administrator.email}</small>
+              </span>
+              <span
+                className={`status ${administrator.status === "Active" ? "success" : "warning"}`}
+              >
+                {administrator.scope === "organisation"
+                  ? "Organisation"
+                  : "Event"}{" "}
+                · {administrator.status}
               </span>
               {canManageAdministrators ? (
                 <button
                   type="button"
-                  className="btn small danger right"
+                  className="btn small danger"
                   onClick={() =>
                     onRevoke(
                       administrator.id,
@@ -586,13 +647,11 @@ export function EventAccessPanels({
             </p>
           ) : null}
         </div>
-        <div className="divider" />
-        <div className="event-role-group">
-          <strong>Evaluators</strong>
-          <p className="subtle">
-            Review only assigned submissions. Cannot publish decisions.
-          </p>
-        </div>
+        <p className="help mt">
+          Organisation owners manage organisation settings and every event.
+          Evaluators review only assigned submissions and cannot publish
+          decisions.
+        </p>
       </section>
 
       <section className="card pad">

@@ -7,8 +7,10 @@ import {
   adminPageBreadcrumbs,
   canOpenAdminAssistant,
   NAV_ITEMS,
+  primaryNavigationChildren,
   primaryNavigationGroups,
   primaryNavigationItemActive,
+  primaryNavigationItemExpanded,
 } from "./admin-shell";
 import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
 
@@ -93,22 +95,28 @@ describe("administrator navigation context", () => {
     expect(canOpenAdminAssistant("committee_chair")).toBe(false);
   });
 
-  it("keeps the primary workflow visible and leaves contextual tools out of the sidebar", () => {
+  it("chunks the top level by workflow phase and keeps second-level tools out of it", () => {
     const groups = primaryNavigationGroups(NAV_ITEMS);
-    expect(groups.map((group) => group.label)).toEqual(["Core work", "Manage"]);
+    expect(groups.map((group) => group.label)).toEqual([
+      "Core work",
+      "Delivery",
+      "Manage",
+    ]);
     expect(groups[0]?.items.map(([id]) => id)).toEqual([
       "command",
       "event",
       "submissions",
       "review",
+    ]);
+    expect(groups[1]?.items.map(([id]) => id)).toEqual([
       "speakers",
       "schedule",
+      "programme",
       "communications",
       "tasks",
       "content",
-      "programme",
     ]);
-    expect(groups[1]?.items.map(([id]) => id)).toEqual([
+    expect(groups[2]?.items.map(([id]) => id)).toEqual([
       "integrations",
       "operations",
       "settings",
@@ -118,7 +126,7 @@ describe("administrator navigation context", () => {
     ).not.toEqual(expect.arrayContaining(["resources", "crm"]));
   });
 
-  it("marks a contextual tool's visible parent as the current workflow", () => {
+  it("marks the section actually open, never a sibling standing in for it", () => {
     expect(primaryNavigationItemActive("content", "/admin/content")).toBe(true);
     expect(
       primaryNavigationItemActive(
@@ -127,13 +135,44 @@ describe("administrator navigation context", () => {
       ),
     ).toBe(true);
     expect(primaryNavigationItemActive("speakers", "/admin/crm/pipeline")).toBe(
+      false,
+    );
+    expect(primaryNavigationItemActive("crm", "/admin/crm/pipeline")).toBe(
       true,
     );
-    expect(primaryNavigationItemActive("speakers", "/admin/resources")).toBe(
+    expect(primaryNavigationItemActive("resources", "/admin/resources")).toBe(
       true,
     );
     expect(primaryNavigationItemActive("programme", "/admin/schedule")).toBe(
       false,
     );
+  });
+
+  it("opens the speaker family's second level anywhere inside that family", () => {
+    expect(primaryNavigationItemExpanded("speakers", "/admin/speakers")).toBe(
+      true,
+    );
+    expect(primaryNavigationItemExpanded("speakers", "/admin/resources")).toBe(
+      true,
+    );
+    expect(
+      primaryNavigationItemExpanded("speakers", "/admin/crm/pipeline"),
+    ).toBe(true);
+    expect(primaryNavigationItemExpanded("speakers", "/admin/schedule")).toBe(
+      false,
+    );
+    expect(
+      primaryNavigationChildren("speakers", NAV_ITEMS).map(([id]) => id),
+    ).toEqual(["crm", "resources"]);
+    expect(primaryNavigationChildren("schedule", NAV_ITEMS)).toEqual([]);
+  });
+
+  it("drops a second-level tool the viewer is not authorised for", () => {
+    const withoutOrganisationAccess = NAV_ITEMS.filter(([id]) => id !== "crm");
+    expect(
+      primaryNavigationChildren("speakers", withoutOrganisationAccess).map(
+        ([id]) => id,
+      ),
+    ).toEqual(["resources"]);
   });
 });

@@ -14,9 +14,11 @@ import {
   CalendarAdministration,
   CommunicationAutomation,
   DeliveryConfiguration,
+  DeliveryReadiness,
   RecentCommunications,
   SenderDnsRecords,
   TemplateEditor,
+  TemplatePreview,
   TemplateVersionList,
   type SenderDnsRecord,
   type SenderDnsRecordSet,
@@ -215,6 +217,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
   return {
     ...centre,
+    // Sender profiles, reminder triggers and calendar connections are set up
+    // once and then left alone, so they are a destination rather than eight
+    // more cards between the reader and the work they came here to do.
+    view: search.get("view") === "setup" ? ("setup" as const) : ("centre" as const),
     invitations,
     senders,
     triggers,
@@ -562,43 +568,54 @@ export default function CommunicationsCentre({
       void recovery.markServerSaved();
     }
   }, [actionData?.intent, actionData?.ok, recovery.markServerSaved]);
+  const setup = loaderData.view === "setup";
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>Communications Centre</h1>
+          <h1>{setup ? "Delivery settings" : "Communications Centre"}</h1>
           <p>
-            Manage delivery configuration and versioned content, then launch a
-            durable staged draft for each audience.
+            {setup
+              ? "Sender profiles, reminder triggers and calendar connections. Set these up once; the Communications Centre is where the daily work happens."
+              : "Publish versioned email content, then launch a durable staged draft for each audience."}
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn primary" to="/admin/communications/compose">
-            New communication
-          </Link>
-          <Link className="btn" to="/admin/operations">
-            Operation Centre
-          </Link>
-          <span
-            className={`status ${loaderData.provider.configured && loaderData.provider.queueConfigured ? "success" : "danger"}`}
-          >
-            {loaderData.provider.configured &&
-            loaderData.provider.queueConfigured
-              ? "Delivery configured"
-              : "Delivery blocked"}
-          </span>
+          {setup ? (
+            <Link className="btn" to="/admin/communications">
+              Back to Communications Centre
+            </Link>
+          ) : (
+            <>
+              <Link className="btn primary" to="/admin/communications/compose">
+                New communication
+              </Link>
+              <Link className="btn" to="/admin/operations">
+                Operation Centre
+              </Link>
+            </>
+          )}
         </div>
       </div>
 
       <AdminPageSectionNavigation
-        label="Communications Centre sections"
-        links={[
-          { id: "communications-delivery", label: "Delivery" },
-          { id: "communications-templates", label: "Templates" },
-          { id: "communications-history", label: "History" },
-          { id: "communications-automation", label: "Automation" },
-          { id: "communications-calendars", label: "Calendars" },
-        ]}
+        label={
+          setup
+            ? "Delivery settings sections"
+            : "Communications Centre sections"
+        }
+        links={
+          setup
+            ? [
+                { id: "communications-delivery", label: "Delivery" },
+                { id: "communications-automation", label: "Automation" },
+                { id: "communications-calendars", label: "Calendars" },
+              ]
+            : [
+                { id: "communications-templates", label: "Templates" },
+                { id: "communications-history", label: "History" },
+              ]
+        }
       />
 
       {loaderData.activeFilter === "failed" ? (
@@ -672,130 +689,93 @@ export default function CommunicationsCentre({
         </div>
       ) : null}
 
-      <AdminPageSection
-        id="communications-delivery"
-        label="Delivery configuration"
-        description="Sender, provider and Queue readiness"
-      >
-        <div className="comms-provider-strip card pad mb">
-          <span>
-            <strong>Sender</strong>
-            <small>
-              {loaderData.provider.sender ?? "No verified sender profile"}
-            </small>
-          </span>
-          <span>
-            <strong>
-              {loaderData.provider.name === "mailpit" ? "Mailpit" : "Resend"}
-            </strong>
-            <small>
-              {loaderData.provider.configured
-                ? loaderData.provider.name === "mailpit"
-                  ? "Local capture endpoint and verified sender present"
-                  : "API key and verified sender present"
-                : "Configuration required"}
-            </small>
-          </span>
-          <span>
-            <strong>Queue</strong>
-            <small>
-              {loaderData.provider.queueConfigured
-                ? "Operations Queue bound"
-                : "OPERATIONS_QUEUE is unavailable"}
-            </small>
-          </span>
-          <span>
-            <strong>Policy</strong>
-            <small>No provider simulation or silent fallback</small>
-          </span>
-        </div>
-
-        <DeliveryConfiguration
-          loaderData={loaderData}
-          working={working}
-          pendingIntent={pendingIntent}
-        />
-      </AdminPageSection>
-
-      <AdminPageSection
-        id="communications-templates"
-        label="Templates and composition"
-        description="Versioned content and durable communication drafts"
-        defaultExpandedOnMobile
-      >
-        <div className="comms-layout comms-production-layout">
-          <TemplateVersionList loaderData={loaderData} selected={selected} />
-          <main className="stack">
-            <DraftRecoveryFeedback recovery={recovery} className="" />
-            <TemplateEditor
-              selected={selected}
+      {setup ? (
+        <>
+          <AdminPageSection
+            id="communications-delivery"
+            label="Delivery configuration"
+            description="Sender profiles the provider will accept, and a real test send"
+            defaultExpandedOnMobile
+          >
+            <DeliveryConfiguration
+              loaderData={loaderData}
               working={working}
               pendingIntent={pendingIntent}
-              templateDirty={templateDirty}
-              draft={templateDraft}
-              recoveryState={recovery.state}
-              onChange={(draft) => {
-                setTemplateDraft(draft);
-                setTemplateDirty(true);
-              }}
             />
-            <section className="card pad">
-              <div className="card-title">
-                <div>
-                  <h2>Compose and send</h2>
-                  <p className="help">
-                    Audience configuration, preview and confirmation live in a
-                    durable communication draft that can be resumed safely.
-                  </p>
-                </div>
-                <Link
-                  className="btn primary right"
-                  to="/admin/communications/compose"
-                >
-                  New communication
-                </Link>
-              </div>
-            </section>
-          </main>
-        </div>
-      </AdminPageSection>
+          </AdminPageSection>
+          <AdminPageSection
+            id="communications-automation"
+            label="Automatic reminders"
+            description="Scheduled reminder and escalation policy"
+          >
+            <CommunicationAutomation
+              loaderData={loaderData}
+              working={working}
+              pendingIntent={pendingIntent}
+            />
+          </AdminPageSection>
+          <AdminPageSection
+            id="communications-calendars"
+            label="Calendar administration"
+            description="Connections and published-session invitations"
+          >
+            <CalendarAdministration
+              loaderData={loaderData}
+              working={working}
+              pendingIntent={pendingIntent}
+            />
+          </AdminPageSection>
+        </>
+      ) : (
+        <>
+          <DeliveryReadiness loaderData={loaderData} />
 
-      <AdminPageSection
-        id="communications-history"
-        label="Communication history"
-        description="Delivery records and calendar lifecycle"
-      >
-        <div className="grid grid-2 comms-history">
-          <RecentCommunications
-            loaderData={loaderData}
-            working={working}
-            pendingIntent={pendingIntent}
-          />
-          <CalendarLifecycleTable loaderData={loaderData} />
-        </div>
-      </AdminPageSection>
-      <AdminPageSection
-        id="communications-automation"
-        label="Automatic reminders"
-        description="Scheduled reminder and escalation policy"
-      >
-        <CommunicationAutomation
-          loaderData={loaderData}
-          working={working}
-          pendingIntent={pendingIntent}
-        />
-      </AdminPageSection>
-      <AdminPageSection
-        id="communications-calendars"
-        label="Calendar administration"
-        description="Connections and published-session invitations"
-      >
-        <CalendarAdministration
-          loaderData={loaderData}
-          working={working}
-          pendingIntent={pendingIntent}
-        />
-      </AdminPageSection>
+          <AdminPageSection
+            id="communications-templates"
+            label="Templates"
+            description="Versioned email content, and the published version every send uses"
+            defaultExpandedOnMobile
+          >
+            <div className="comms-workbench">
+              <TemplateVersionList
+                loaderData={loaderData}
+                selected={selected}
+              />
+              <div className="stack comms-workbench-editor">
+                <DraftRecoveryFeedback recovery={recovery} className="" />
+                <TemplateEditor
+                  selected={selected}
+                  working={working}
+                  pendingIntent={pendingIntent}
+                  templateDirty={templateDirty}
+                  draft={templateDraft}
+                  recoveryState={recovery.state}
+                  onChange={(draft) => {
+                    setTemplateDraft(draft);
+                    setTemplateDirty(true);
+                  }}
+                />
+              </div>
+              <TemplatePreview draft={templateDraft} />
+            </div>
+          </AdminPageSection>
+
+          <AdminPageSection
+            id="communications-history"
+            label="History"
+            description="Confirmed sends and calendar operations for this event"
+          >
+            <div className="grid grid-2 comms-history">
+              <RecentCommunications
+                loaderData={loaderData}
+                working={working}
+                pendingIntent={pendingIntent}
+              />
+              <CalendarLifecycleTable loaderData={loaderData} />
+            </div>
+          </AdminPageSection>
+        </>
+      )}
     </>
   );
 }

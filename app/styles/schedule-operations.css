@@ -21,6 +21,9 @@
 .schedule-session-source {
   display: flex;
   flex-direction: column;
+  /* Without this the default stretch blockifies the inline-flex status pill
+     into a full-width bar, which reads as a filled row, not a status. */
+  align-items: flex-start;
   gap: var(--space-1);
   width: 100%;
   padding: var(--space-3);
@@ -41,7 +44,6 @@
   z-index: 10;
 }
 .schedule-scroll-hint {
-  display: none;
   margin: 0 0 var(--space-2);
   color: var(--muted);
   font-size: var(--text-2xs);
@@ -56,25 +58,28 @@
   max-width: 100%;
   overscroll-behavior-inline: contain;
 }
+/* One row per half hour, every row the same height, so vertical distance on
+   the board is elapsed time. The board's own border is dropped: .table-wrap
+   already draws one inside the card. */
 .schedule-room-board {
+  --pc-slot-height: 44px;
   display: grid;
-  min-width: 780px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  grid-template-rows: auto;
+  grid-auto-rows: var(--pc-slot-height);
 }
 .schedule-room-board > .header,
 .schedule-room-board > .time,
 .schedule-room-board > .schedule-drop {
   min-width: 0;
-  min-height: 56px;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
-  padding: var(--space-2);
   overflow-wrap: anywhere;
 }
 .schedule-room-board > .header {
-  min-height: auto;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: var(--space-2);
   background: var(--soft);
   font-weight: var(--weight-bold);
   text-align: center;
@@ -84,32 +89,169 @@
   color: var(--muted);
   font-weight: var(--weight-normal);
 }
-.schedule-room-board > .time {
+/* Four rooms already overflow the centre column, and a board scrolled
+   sideways with the axis gone leaves every card at an unknown time. */
+.schedule-room-board > .time,
+.schedule-room-board > .header.corner {
+  position: sticky;
+  left: 0;
   background: var(--soft);
+}
+.schedule-room-board > .header.corner {
+  z-index: 5;
+  text-align: left;
+}
+.schedule-room-board > .time {
+  z-index: 3;
+  padding: 2px var(--space-2);
+  color: var(--text-secondary);
   font-size: var(--text-2xs);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+/* A border rather than a shadow: the axis has to stay separated from the
+   first room in High Contrast Mode too, where box-shadow is not painted. */
+.schedule-room-board > .time,
+.schedule-room-board > .header.corner {
+  border-right: 1px solid var(--border-strong);
 }
 .schedule-room-board > .schedule-drop {
+  position: relative;
   transition:
-    background 0.15s ease,
-    box-shadow 0.15s ease;
+    background var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 .schedule-room-board > .schedule-drop.is-over {
   background: var(--brand-50);
   box-shadow: inset 0 0 0 2px var(--brand-600);
 }
+/* The card is as tall as the session is long and starts where the session
+   starts. Two entries in one row split the width, so a room double-booking
+   is visible before validation names it. */
+.schedule-entry {
+  position: absolute;
+  top: calc(var(--pc-entry-offset) * var(--pc-slot-height) / 30);
+  inset-inline-start: calc(
+    2px + var(--pc-entry-column) * (100% - 4px) / var(--pc-entry-columns)
+  );
+  width: calc((100% - 4px) / var(--pc-entry-columns));
+  height: calc(var(--pc-entry-minutes) * var(--pc-slot-height) / 30 - 3px);
+  min-height: 20px;
+  padding-right: 2px;
+  z-index: 3;
+}
 .schedule-room-board .session-card {
-  position: static;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 1px;
   width: 100%;
-  height: auto;
-  min-height: 42px;
+  height: 100%;
+  padding: 3px var(--space-2);
   text-align: left;
-  overflow: visible;
-  overflow-wrap: anywhere;
+  line-height: 1.25;
+  overflow: hidden;
+}
+.schedule-room-board .session-card strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.schedule-room-board .session-card[data-compact="true"] strong {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
 }
 .schedule-room-board .session-card small {
   display: block;
-  margin-top: 3px;
+  overflow: hidden;
+  color: inherit;
+  opacity: 0.78;
+  font-size: var(--text-2xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* A jump from the validation rail has to land somewhere the eye can find. */
+.schedule-room-board .session-card.revealed,
+.schedule-room-board .session-card.focused {
+  outline: 3px solid var(--brand-600);
+  outline-offset: 1px;
+}
+.schedule-format-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin: 0 0 var(--space-2);
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+.schedule-format-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.schedule-format-key span::before {
+  content: "";
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--pc-format-rail, var(--muted-2));
+}
+/* The conflict count is the number the operator acts on, so it is the one
+   tinted cell and the one that goes somewhere. */
+.schedule-summary-jump {
+  appearance: none;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: var(--state-bad-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.schedule-summary-jump:hover {
+  background: #fecaca;
+}
+/* Title, message and action stacked. In a 280px rail a centred nowrap row
+   gave each of the three about 85px and wrapped all of them to four lines. */
+.schedule-conflicts .validation-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-1);
+  text-align: left;
+}
+/* Below 1320px the rail spans the page. A tinted bar the width of the
+   viewport announcing that nothing is wrong is louder than the fact. */
+.schedule-conflicts .validation-item.ok {
+  width: fit-content;
+  max-width: 100%;
+  background: var(--state-good-surface);
+}
+.schedule-conflicts .validation-item p {
+  margin: 0;
+}
+.schedule-conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+/* Page-level notices: body in column one, the action held at the top right
+   rather than vertically centred against a four-line paragraph. */
+.validation-item.schedule-notice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-1) var(--space-3);
+}
+.validation-item.schedule-notice > * {
+  grid-column: 1;
+}
+.validation-item.schedule-notice > form,
+.validation-item.schedule-notice > a.btn {
+  grid-column: 2;
+  grid-row: 1;
 }
 .schedule-entry-draggable {
   appearance: none;
@@ -129,7 +271,10 @@
 .inline-form .select {
   min-width: 150px;
 }
-@media (max-width: 1100px) {
+/* Three columns leave the board about 360px at laptop width, which is one
+   room and a horizontal scroll. The board is the work surface; the
+   validation rail drops beneath it long before it drops off. */
+@media (max-width: 1320px) {
   .schedule-workspace {
     grid-template-columns: 240px minmax(0, 1fr);
   }
@@ -153,9 +298,6 @@
   }
   .schedule-canvas > .table-wrap {
     overflow: auto;
-  }
-  .schedule-scroll-hint {
-    display: block;
   }
   .schedule-summary {
     grid-template-columns: 1fr 1fr;
@@ -183,14 +325,42 @@
   font-weight: var(--weight-semibold);
   color: var(--muted);
 }
+/* 07:00–22:00 at 44px a half hour is ~1,320px, so a working day is one or
+   two screens rather than the eight the 24-hour axis cost. */
 .schedule-room-scroll {
-  max-height: 65vh;
+  max-height: calc(100dvh - 320px);
+  min-height: 360px;
   overscroll-behavior: contain;
 }
-.schedule-room-board > .header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
+/* The card's tint and rail are repainted away in High Contrast Mode, so the
+   flagged and jumped-to states are re-asserted as outlines. The word on the
+   card carries the rest. */
+@media (forced-colors: active) {
+  .schedule-room-board > .header,
+  .schedule-room-board > .time,
+  .schedule-room-board > .schedule-drop {
+    border-right: 1px solid CanvasText;
+    border-bottom: 1px solid CanvasText;
+  }
+  .schedule-room-board .session-card {
+    border: 1px solid CanvasText;
+  }
+  .schedule-room-board .session-card.conflict {
+    outline: 2px dashed CanvasText;
+    outline-offset: -3px;
+  }
+  .schedule-room-board .session-card.revealed,
+  .schedule-room-board .session-card.focused {
+    outline: 3px solid Highlight;
+  }
+  .schedule-format-key span::before {
+    background: CanvasText;
+  }
+}
+@media (max-width: 760px) {
+  .schedule-room-board {
+    --pc-slot-height: 40px;
+  }
 }
 
 /* Record-backed Command Centre interactions. */

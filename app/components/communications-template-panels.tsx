@@ -1,6 +1,13 @@
+import { useMemo, useRef } from "react";
 import { Form, Link } from "react-router";
+import { FileText } from "lucide-react";
+
 import { DraftRecoveryStatus } from "~/components/draft-recovery-feedback";
 import { EmptyState } from "~/components/ui/states";
+import {
+  mergeTemplateVariables,
+  representativeMergeValues,
+} from "~/modules/communications/merge-template";
 import type { DraftRecoveryState } from "~/platform/drafts/draft-recovery";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
@@ -19,6 +26,8 @@ export type TemplateDraftFields = {
   buttonUrl: string;
 };
 
+const MERGE_FIELDS = Object.keys(representativeMergeValues);
+
 export function TemplateVersionList({
   loaderData,
   selected,
@@ -30,7 +39,9 @@ export function TemplateVersionList({
     <aside className="card pad template-column">
       <div className="card-title">
         <h2>Template versions</h2>
-        <span className="status info right">{loaderData.templates.length}</span>
+        <span className="status info right">
+          <span className="pc-num">{loaderData.templates.length}</span>
+        </span>
       </div>
       <div className="template-list">
         {loaderData.templates.length ? (
@@ -39,10 +50,12 @@ export function TemplateVersionList({
               key={template.id}
               to={`?template=${template.id}`}
               className={`template-item${selected?.id === template.id ? " active" : ""}`}
+              aria-current={selected?.id === template.id ? "true" : undefined}
             >
               <strong>{template.name}</strong>
               <small>
-                {categoryLabel(template.category)} · v{template.versionNumber}
+                {categoryLabel(template.category)} ·{" "}
+                <span className="pc-num">v{template.versionNumber}</span>
               </small>
               <span
                 className={`status ${template.versionStatus === "published" ? "success" : template.versionStatus === "draft" ? "warning" : "info"}`}
@@ -53,12 +66,38 @@ export function TemplateVersionList({
           ))
         ) : (
           <EmptyState
+            className="comms-empty"
+            icon={FileText}
             title="No templates yet"
             description="Create the first versioned email template with the editor beside this list."
           />
         )}
       </div>
     </aside>
+  );
+}
+
+/**
+ * A merge field the reader typed that Program Cue cannot fill is only found at
+ * send time today, where it stops a real delivery. The editor knows the same
+ * value set the sender uses, so it can say so while the reader is still typing.
+ */
+function unresolvableMergeFields(draft: TemplateDraftFields) {
+  return [
+    ...new Set([
+      ...mergeTemplateVariables(draft.subject),
+      ...mergeTemplateVariables(draft.body),
+    ]),
+  ].filter((field) => !(field in representativeMergeValues));
+}
+
+function fillMergeFields(text: string) {
+  return text.replace(
+    /\{\{\s*([a-z][a-zA-Z0-9.]*)\s*\}\}/gu,
+    (token, field: string) =>
+      field in representativeMergeValues
+        ? String(representativeMergeValues[field] ?? "")
+        : token,
   );
 }
 
@@ -79,6 +118,27 @@ export function TemplateEditor({
   recoveryState: DraftRecoveryState;
   onChange: (draft: TemplateDraftFields) => void;
 }) {
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // Typing `{{recipient.firstName}}` by hand is where the unfillable fields
+  // came from, so the fields that exist are offered rather than remembered.
+  const insertMergeField = (field: string) => {
+    const token = `{{${field}}}`;
+    const element = bodyRef.current;
+    if (!element) {
+      onChange({ ...draft, body: `${draft.body}${token}` });
+      return;
+    }
+    const start = element.selectionStart;
+    const end = element.selectionEnd;
+    onChange({
+      ...draft,
+      body: `${draft.body.slice(0, start)}${token}${draft.body.slice(end)}`,
+    });
+    window.requestAnimationFrame(() => {
+      element.focus();
+      element.setSelectionRange(start + token.length, start + token.length);
+    });
+  };
   return (
     <section className="card pad">
       <div className="card-title">
@@ -87,7 +147,8 @@ export function TemplateEditor({
           <span
             className={`status ${selected.versionStatus === "published" ? "success" : "warning"} right`}
           >
-            v{selected.versionNumber} · {selected.versionStatus}
+            <span className="pc-num">v{selected.versionNumber}</span> ·{" "}
+            {selected.versionStatus}
           </span>
         ) : null}
       </div>
@@ -148,6 +209,7 @@ export function TemplateEditor({
         <label className="label">
           Message
           <textarea
+            ref={bodyRef}
             className="textarea comms-body"
             name="body"
             value={draft.body}
@@ -157,6 +219,21 @@ export function TemplateEditor({
             required
           />
         </label>
+        <details className="pc-disclosure comms-merge-fields">
+          <summary>Insert a merge field</summary>
+          <div className="comms-merge-field-list">
+            {MERGE_FIELDS.map((field) => (
+              <button
+                key={field}
+                className="btn small"
+                type="button"
+                onClick={() => insertMergeField(field)}
+              >
+                {field}
+              </button>
+            ))}
+          </div>
+        </details>
         <label className="label">
           Physical address
           <input
@@ -228,5 +305,61 @@ export function TemplateEditor({
         </div>
       </Form>
     </section>
+  );
+}
+
+/**
+ * The editor authored merge fields with nothing on screen showing what they
+ * resolve to. This fills them with the same representative values the real
+ * test send uses, so the reader checks the sentence rather than the syntax.
+ * It is the message, not the sent email: the branded frame is added on send,
+ * and claiming otherwise would be a preview that lies about fidelity.
+ */
+export function TemplatePreview({ draft }: { draft: TemplateDraftFields }) {
+  const preview = useMemo(
+    () => ({
+      subject: fillMergeFields(draft.subject),
+      paragraphs: fillMergeFields(draft.body).split(/\n{2,}/u),
+      unresolvable: unresolvableMergeFields(draft),
+    }),
+    [draft.subject, draft.body],
+  );
+  return (
+    <aside className="card pad comms-message-preview" aria-label="Message preview">
+      <div className="card-title">
+        <h2>Message preview</h2>
+      </div>
+      <p className="help">
+        Merge fields hold the representative values a real test send uses. The
+        Program Cue frame and footer are added when the email is sent.
+      </p>
+      {preview.unresolvable.length ? (
+        <div className="validation-item warn" role="status">
+          <strong>△</strong>
+          <span>
+            Program Cue cannot fill{" "}
+            {preview.unresolvable.map((field) => `{{${field}}}`).join(", ")}.
+            Sending is refused until{" "}
+            {preview.unresolvable.length === 1 ? "it is" : "they are"} removed
+            or corrected.
+          </span>
+        </div>
+      ) : null}
+      <div className="comms-message-frame">
+        <p className="comms-message-subject">{preview.subject}</p>
+        {preview.paragraphs.map((paragraph, index) => (
+          <p key={index} className="comms-message-paragraph">
+            {paragraph}
+          </p>
+        ))}
+        {draft.buttonText && draft.buttonUrl ? (
+          <p className="comms-message-button">
+            {draft.buttonText}
+            <small>{draft.buttonUrl}</small>
+          </p>
+        ) : null}
+        <p className="comms-message-footer">{draft.physicalAddress}</p>
+      </div>
+    </aside>
   );
 }

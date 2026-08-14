@@ -35,6 +35,9 @@ export function AdminAuxiliaryDialogs({
   viewer: AdminShellViewer;
   notifications: ReadonlyArray<AdminShellNotification>;
 }) {
+  const firstSwitchableEventId = eventOptions.find(
+    (option) => option.eventId !== event.id || option.pendingInvitationRole,
+  )?.eventId;
   return (
     <>
       {dialog === "views" && viewArea ? (
@@ -219,7 +222,16 @@ export function AdminAuxiliaryDialogs({
                   ) : null}
                 </div>
                 {option.eventId !== event.id || option.pendingInvitationRole ? (
-                  <button className="btn small" type="submit">
+                  <button
+                    className="btn small"
+                    type="submit"
+                    /* Without a stated target every shell dialog opens with
+                       focus on Close — the one control that undoes opening
+                       it. */
+                    data-dialog-autofocus={
+                      option.eventId === firstSwitchableEventId ? "" : undefined
+                    }
+                  >
                     {option.pendingInvitationRole
                       ? `Accept ${option.pendingInvitationRole.replaceAll("_", " ")} invitation${option.eventId === event.id ? "" : " and switch event"}`
                       : "Switch event"}
@@ -287,6 +299,7 @@ export function AdminAuxiliaryDialogs({
               className="card pad"
               to="/admin/submissions"
               onClick={closeDialog}
+              data-dialog-autofocus
             >
               <strong>Submission</strong>
               <p className="subtle">Add a direct programme proposal.</p>
@@ -311,12 +324,13 @@ export function AdminAuxiliaryDialogs({
         >
           {notifications.length ? (
             <div className="stack">
-              {notifications.map((notification) => (
+              {notifications.map((notification, index) => (
                 <Link
                   className="card pad"
                   to={notification.href}
                   onClick={closeDialog}
                   key={notification.label}
+                  data-dialog-autofocus={index === 0 ? "" : undefined}
                 >
                   <span className={`status ${notification.severity}`}>
                     {notification.count}

@@ -1,7 +1,24 @@
 /* final layout refinements */
+
+/* The per-workflow sentence is methodology, not data: it is the first thing to
+   go when the row runs out of width, and the figure is the point. */
+@media (max-width: 1200px) {
+  .command-workflow-row {
+    grid-template-columns: minmax(160px, 1fr) 140px 46px 10px;
+  }
+  .command-workflow-detail {
+    display: none;
+  }
+}
+
 @media (max-width: 1024px) {
   .command-workflow-phases {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .command-readiness-row,
+  .command-assist,
+  .command-activity {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -9,24 +26,42 @@
   .command-workflow-phases {
     grid-template-columns: 1fr;
   }
-}
-
-@media (min-width: 1351px) {
-  .command-grid {
-    grid-template-columns: minmax(370px, 1.6fr) repeat(4, minmax(155px, 0.7fr));
+  /* Narrow enough that the bar cannot share a line with the label without
+     squeezing both, so it takes its own row under them. */
+  .command-workflow-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-3) var(--space-2);
   }
-  .readiness-card {
-    grid-template-columns: 130px 1fr;
+  .command-workflow-row strong {
+    grid-area: 1 / 1;
   }
-  .readiness-card .gauge {
-    width: 120px;
-    height: 120px;
+  .command-workflow-row b {
+    grid-area: 1 / 2;
   }
-  .readiness-card .gauge::before {
-    width: 88px;
-    height: 88px;
+  .command-workflow-row .progress {
+    grid-area: 2 / 1 / 2 / -1;
   }
-  .readiness-card .gauge strong {
-    font-size: var(--text-2xl);
+  .command-workflow-row .chev,
+  .command-session-row .chev {
+    display: none;
+  }
+  .command-blocker {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .command-blocker .chev {
+    display: none;
+  }
+  /* Compound so it outranks the generic .command-agenda-link collapse in
+     schedule-operations.css, which loads later. */
+  .command-session-row.command-agenda-link {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr);
+    gap: var(--space-1) var(--space-2);
+    align-items: baseline;
+  }
+  .command-session-title,
+  .command-session-room {
+    grid-column: 2;
   }
 }

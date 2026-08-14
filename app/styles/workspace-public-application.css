@@ -1,58 +1,55 @@
 .cfp-landing {
-  --cfp-paper: #f7f5f1;
-  --cfp-ink: #182033;
-  background: var(--cfp-paper);
-  color: var(--cfp-ink);
+  background: var(--surface-editorial);
+  color: var(--text-primary);
 }
+/* No gradient mesh. A radial-over-linear stack is the most recognisable
+   generated-hero tell there is, and it was standing in for the event's own
+   photograph. Without an image the masthead is the product's inverse surface
+   with the customer accent as a single edge — which also means the accent
+   never has to carry text contrast it cannot guarantee. */
 .cfp-masthead {
-  min-height: 500px;
+  min-height: 460px;
   display: grid;
   align-items: end;
   padding: clamp(28px, 6vw, 76px) max(24px, calc((100vw - 1180px) / 2));
   color: white;
-  background: radial-gradient(
-      circle at 82% 30%,
-      color-mix(in srgb, var(--event-accent) 85%, white) 0 8%,
-      transparent 38%
-    ),
-    linear-gradient(125deg, #081126 0%, #162452 58%, var(--event-accent) 140%);
+  background: var(--surface-inverse);
+  border-bottom: 4px solid var(--event-accent, var(--brand-600));
   background-position: center;
   background-size: cover;
 }
 .cfp-masthead-copy {
   width: min(720px, 100%);
 }
-.cfp-open-state,
-.cfp-kicker,
-.cfp-section-label,
+/* Was four selectors at uppercase / 0.12em / weight 800. The eyebrow above a
+   heading said nothing the heading did not, so it is gone; what remains are
+   the two roles that genuinely label a value. */
 .cfp-event-facts dt {
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
   font-size: var(--text-2xs);
-  font-weight: var(--weight-extrabold);
+  font-weight: var(--weight-semibold);
 }
+/* Sentence case, at the same weight as the product's other status pills.
+   It reads as a state, which is what it is, rather than as a banner. */
 .cfp-open-state {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   border: 1px solid rgba(255, 255, 255, 0.42);
   border-radius: var(--radius-full);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-3);
   background: rgba(8, 17, 38, 0.42);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
 }
 .cfp-open-state::before {
   content: "";
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #5ee6a8;
+  background: var(--state-good-on-dark);
 }
 .cfp-open-state.closed::before {
-  background: #fbbf24;
-}
-.cfp-kicker {
-  margin: var(--space-6) 0 var(--space-1);
-  color: rgba(255, 255, 255, 0.74);
+  background: var(--state-warn-on-dark);
 }
 .cfp-masthead h1 {
   max-width: 18ch;
@@ -135,15 +132,11 @@
   line-height: 1.05;
   letter-spacing: -0.04em;
 }
-.cfp-editorial-section > p:not(.cfp-section-label) {
+.cfp-editorial-section > p {
   max-width: 70ch;
   font-size: var(--text-base);
   line-height: 1.7;
-  color: #455064;
-}
-.cfp-section-label {
-  margin: 0;
-  color: var(--event-accent);
+  color: var(--text-secondary);
 }
 .cfp-organizer {
   display: flex;
@@ -151,14 +144,14 @@
   gap: var(--space-3);
   margin-top: var(--space-6);
   padding-top: var(--space-6);
-  border-top: 1px solid #dedbd5;
+  border-top: 1px solid var(--border-editorial);
 }
 .cfp-organizer > span:last-child {
   display: grid;
 }
 .cfp-organizer small,
 .cfp-organizer span span {
-  color: #5f697d;
+  color: var(--text-tertiary);
 }
 .cfp-entry {
   grid-area: entry;
@@ -196,7 +189,7 @@
   margin: var(--space-4) 0 0;
   padding: 0 var(--space-2);
   list-style: none;
-  color: #5d677a;
+  color: var(--text-tertiary);
   font-size: var(--text-xs);
 }
 .cfp-entry-assurances li {
@@ -221,19 +214,19 @@
 }
 .cfp-section-heading p {
   margin: 0;
-  color: #5f697d;
+  color: var(--text-tertiary);
 }
 .cfp-question-outline {
   margin: 0;
   padding: 0;
-  border-top: 1px solid #dedbd5;
+  border-top: 1px solid var(--border-editorial);
   list-style: none;
   counter-reset: cfp-question;
 }
 .cfp-question-outline li {
   position: relative;
   padding: var(--space-5) var(--space-2) var(--space-5) var(--space-9);
-  border-bottom: 1px solid #dedbd5;
+  border-bottom: 1px solid var(--border-editorial);
   counter-increment: cfp-question;
 }
 .cfp-question-outline li::before {
@@ -241,7 +234,7 @@
   position: absolute;
   left: 7px;
   top: 20px;
-  color: #8991a0;
+  color: var(--text-tertiary);
   font-size: var(--text-2xs);
   font-weight: var(--weight-extrabold);
 }
@@ -253,15 +246,15 @@
 }
 .cfp-question-outline p {
   margin: var(--space-1) 0 0;
-  color: #606a7b;
+  color: var(--text-tertiary);
   line-height: 1.5;
 }
 .cfp-question-outline .cfp-example {
-  color: #3c4658;
+  color: var(--text-secondary);
   font-style: italic;
 }
 .cfp-question-outline .cfp-condition {
-  color: #4f5a6d;
+  color: var(--text-secondary);
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
 }
@@ -270,14 +263,12 @@
   color: var(--event-accent);
   font-size: var(--text-2xs);
   font-style: normal;
-  font-weight: var(--weight-extrabold);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-bold);
 }
 .cfp-featured {
   margin-top: var(--space-11);
   padding-top: var(--space-9);
-  border-top: 1px solid #dedbd5;
+  border-top: 1px solid var(--border-editorial);
 }
 .cfp-featured-grid {
   display: grid;
@@ -305,7 +296,7 @@
 }
 .cfp-speaker-card p {
   margin: 0;
-  color: #5f697d;
+  color: var(--text-tertiary);
   font-size: var(--text-xs);
   line-height: 1.4;
 }
@@ -314,7 +305,7 @@
   gap: var(--space-3);
   margin: var(--space-3) 0 var(--space-5);
   padding: var(--space-4);
-  border: 1px solid #dbe3f0;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--soft);
 }

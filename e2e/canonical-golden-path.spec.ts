@@ -52,10 +52,14 @@ async function switchDemoRole(
 
 async function completeSelectedReview(page: Page) {
   const form = page.locator("#review-score-form");
-  const scoreInputs = form.locator('select[name^="score:"]');
-  expect(await scoreInputs.count()).toBeGreaterThan(0);
-  for (let index = 0; index < (await scoreInputs.count()); index += 1) {
-    await scoreInputs.nth(index).selectOption("5");
+  const scoreGroups = form.locator("[data-review-scale]");
+  const scoreGroupCount = await scoreGroups.count();
+  expect(scoreGroupCount).toBeGreaterThan(0);
+  for (let index = 0; index < scoreGroupCount; index += 1) {
+    await scoreGroups
+      .nth(index)
+      .getByRole("radio", { name: "5", exact: true })
+      .check();
   }
   await form.getByLabel("Recommendation").selectOption("accept");
   await form.getByLabel("Confidence").selectOption("5");
@@ -266,7 +270,12 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       .getByRole("navigation", { name: "Assigned review sources" })
       .getByRole("link")
       .filter({ hasText: SUBMISSION_TITLE })
-      .filter({ hasText: /assigned\s*$/ });
+      // The queue card ends with its reference rather than its state now. A
+      // leading \b cannot be used: textContent runs the track chip straight
+      // into the state ("...Leadershipassigned"), so there is no word boundary
+      // to anchor to. The round-1 card reads "submitted", so this stays exact
+      // enough to pick the new assignment.
+      .filter({ hasText: /assigned/i });
     await expect(nextRoundAssignment).toHaveCount(1);
     await nextRoundAssignment.click();
     await expect(

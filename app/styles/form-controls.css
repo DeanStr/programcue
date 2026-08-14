@@ -104,6 +104,15 @@
 .form-row > .label {
   align-content: start;
 }
+/* A control with no useful width beyond its own chrome — a colour swatch, a
+   short unit-suffixed number — sizes to itself instead of claiming an equal
+   share, so the field beside it gets the rest of the row. Above the collapse
+   breakpoint only: at one column per row there is no share to redistribute. */
+@media (min-width: 761px) {
+  .form-row.trailing-fit {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+}
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -138,6 +147,25 @@
 }
 .toggle input[type="checkbox"]:checked::after {
   transform: translateX(16px);
+}
+/* High Contrast Mode repaints background, and background is the whole of the
+   checked state here. The track keeps a border so the knob has an enclosure to
+   travel inside, and both are painted in system colours that survive. */
+@media (forced-colors: active) {
+  .toggle input[type="checkbox"] {
+    forced-color-adjust: none;
+    border: 1px solid CanvasText;
+    background: Canvas;
+  }
+  .toggle input[type="checkbox"]::after {
+    background: CanvasText;
+  }
+  .toggle input[type="checkbox"]:checked {
+    background: Highlight;
+  }
+  .toggle input[type="checkbox"]:checked::after {
+    background: HighlightText;
+  }
 }
 .tabs {
   display: flex;
@@ -220,8 +248,12 @@
   }
 }
 
-/* Native checkbox and radio chrome, sized and coloured once. */
-input[type="checkbox"],
+/* Native checkbox and radio chrome, sized and coloured once. The toggle paints
+   its own 38px track and opts out by name rather than by outranking this rule,
+   because "a later declaration collapses the track to a 16px square" is a
+   defect one reordering away. :where() keeps the exclusion weightless so the
+   .toggle block above still wins. */
+input[type="checkbox"]:not(:where(.toggle > input)),
 input[type="radio"] {
   width: 16px;
   height: 16px;
@@ -245,7 +277,7 @@ input[type="radio"] {
   .icon-btn {
     width: 44px;
   }
-  input[type="checkbox"],
+  input[type="checkbox"]:not(:where(.toggle > input)),
   input[type="radio"] {
     width: 20px;
     height: 20px;

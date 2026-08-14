@@ -1,22 +1,43 @@
 /* Schedule */
+/* The column count lives with the markup in schedule-operations.css; two
+   competing grid-template-columns here meant @import order decided the
+   layout. */
 .schedule-summary {
   display: grid;
-  grid-template-columns: repeat(5, 1fr) 1.8fr;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
   margin: var(--space-3) 0;
 }
-.schedule-summary > div {
+.schedule-summary > * {
   padding: var(--space-3);
   border-right: 1px solid var(--line);
 }
-.schedule-summary > div:last-child {
+.schedule-summary > *:last-child {
   border-right: 0;
 }
 .schedule-summary strong,
 .schedule-summary small {
   display: block;
+}
+/* A count the operator acts on should not be the same size as the session
+   title beside it. */
+.schedule-summary strong {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: 1.05;
+  letter-spacing: var(--tracking-tight);
+}
+.schedule-summary small {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+.schedule-summary .tone-good {
+  color: var(--state-good-text);
+}
+.schedule-summary .tone-bad {
+  color: var(--state-bad-text);
 }
 .schedule-layout {
   display: grid;
@@ -60,14 +81,20 @@
   left: 0;
   z-index: 4;
 }
+/* Card bodies stay neutral so a conflict tint has something to read against.
+   Format is carried by a 3px rail and named in the legend above the board —
+   a colour nobody can decode is decoration. */
 .session-card {
-  position: absolute;
-  border: 1px solid;
-  border-radius: var(--radius-sm);
+  --pc-format-rail: var(--muted-2);
+  position: relative;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--pc-format-rail);
+  border-radius: var(--radius-xs);
   padding: var(--space-2);
+  background: var(--surface);
+  color: var(--ink);
   font-size: var(--text-2xs);
   overflow: hidden;
-  z-index: 3;
   cursor: grab;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
@@ -75,36 +102,39 @@
   font-size: var(--text-2xs);
   display: block;
 }
-.session-card.keynote {
-  background: #f5f3ff;
-  border-color: #c4b5fd;
-  color: #4c1d95;
+.session-card.keynote,
+.schedule-format-key .keynote {
+  --pc-format-rail: #7c3aed;
 }
-.session-card.presentation {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #1e3a8a;
+.session-card.presentation,
+.schedule-format-key .presentation {
+  --pc-format-rail: #2563eb;
 }
-.session-card.panel {
-  background: #fff7ed;
-  border-color: #fed7aa;
-  color: #9a3412;
+.session-card.panel,
+.schedule-format-key .panel {
+  --pc-format-rail: #c2410c;
 }
-.session-card.workshop {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
-  color: var(--state-good-text);
+.session-card.workshop,
+.schedule-format-key .workshop {
+  --pc-format-rail: var(--state-good-solid);
 }
-.session-card.breakout {
-  background: #ecfeff;
-  border-color: #a5f3fc;
-  color: #155e75;
+.session-card.breakout,
+.schedule-format-key .breakout {
+  --pc-format-rail: #0e7490;
 }
 .session-card.conflict {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+  border-color: var(--state-bad-solid);
+  border-left-color: var(--state-bad-solid);
+  box-shadow: inset 0 0 0 1px var(--state-bad-solid);
   background: #fff5f5;
   color: var(--state-bad-text);
+}
+.session-card.conflict.warning {
+  border-color: var(--state-warn-solid);
+  border-left-color: var(--state-warn-solid);
+  box-shadow: inset 0 0 0 1px var(--state-warn-solid);
+  background: #fffbeb;
+  color: var(--state-warn-text);
 }
 .drop-target {
   outline: 2px dashed var(--brand-400);

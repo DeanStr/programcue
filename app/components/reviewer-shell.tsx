@@ -12,6 +12,10 @@ export function ReviewerShell({ viewer, eventName, children }: {
     returnTo: `${location.pathname}${location.search}${location.hash}`,
   })}`;
   const initials = viewer.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("");
+  /* Four clusters, and the grid declares four columns. It declared four while
+     rendering five, so the chrome wrapped to a second row at its own design
+     width and left identity under the logo with the event switcher 1,200px
+     away. Session actions travel together; identity is its own cluster. */
   return <div className="speaker-shell reviewer-shell">
     <header className="speaker-top review-top">
       <Link className="review-brand" to="/review/workbench" aria-label="Program Cue review workbench">
@@ -22,8 +26,10 @@ export function ReviewerShell({ viewer, eventName, children }: {
         <strong>{eventName}</strong>
         <small>Evaluation workspace</small>
       </div>
-      <Link className="btn small" to={eventSelectionHref}>Switch event</Link>
-      {viewer.demo ? <form method="post" action="/demo/role" className="review-demo-return"><input type="hidden" name="identity" value="administrator" /><button className="btn small">Return to organizer demo</button></form> : null}
+      <div className="review-session-actions">
+        <Link className="btn small" to={eventSelectionHref}>Switch event</Link>
+        {viewer.demo ? <form method="post" action="/demo/role" className="review-demo-return"><input type="hidden" name="identity" value="administrator" /><button className="btn small">Return to organizer demo</button></form> : null}
+      </div>
       <div className="review-account">
         <span className="status info">{viewer.role.replaceAll("_", " ")}</span>
         <span className="avatar" role="img" aria-label={`Signed in as ${viewer.name}`} title={viewer.name}>{initials}</span>

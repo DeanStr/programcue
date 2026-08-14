@@ -107,20 +107,40 @@ test("administrator navigation groups core work without hiding programme tools",
   ).toHaveAttribute("aria-current", "page");
 
   await waitForInterface(page, "/admin/speakers");
+  const main = page.locator("#main");
   await expect(
-    page.getByRole("link", { name: "Speaker Network" }),
+    main.getByRole("link", { name: "Speaker Network" }),
   ).toHaveAttribute("href", "/admin/crm");
-  await expect(page.getByRole("link", { name: "Resources" })).toHaveAttribute(
+  await expect(main.getByRole("link", { name: "Resources" })).toHaveAttribute(
     "href",
     "/admin/resources",
   );
+  // Both are full workspaces, so the rail names them as the speaker family's
+  // second level rather than marking Speakers current and contradicting the
+  // breadcrumb below it.
+  const speakerRail = page.getByRole("complementary", {
+    name: "Primary navigation",
+  });
+  await expect(
+    speakerRail.getByRole("link", { name: "Speaker Network" }),
+  ).toHaveAttribute("href", "/admin/crm");
+  await expect(
+    speakerRail.getByRole("link", { name: "Resources" }),
+  ).toHaveAttribute("href", "/admin/resources");
 
   await waitForInterface(page, "/admin/crm");
+  const crmRail = page.getByRole("complementary", {
+    name: "Primary navigation",
+  });
+  // The page is Speaker Network, so that is what claims aria-current. Speakers
+  // marks the family instead of claiming to be the page and contradicting the
+  // breadcrumb underneath it.
   await expect(
-    page
-      .getByRole("complementary", { name: "Primary navigation" })
-      .getByRole("link", { name: "Speakers" }),
+    crmRail.getByRole("link", { name: "Speaker Network" }),
   ).toHaveAttribute("aria-current", "page");
+  await expect(
+    crmRail.getByRole("link", { name: "Speakers" }),
+  ).toHaveAttribute("data-family-current", "");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open navigation" }).click();
@@ -254,7 +274,9 @@ test("review scoring exposes every criterion control at mobile width", async ({
     "Practical value",
     "Delivery approach",
   ]) {
-    await expect(page.getByRole("combobox", { name })).toBeVisible();
+    // Each criterion scores through a segmented radio group rather than a
+    // dropdown, so the chosen position is visible at rest.
+    await expect(page.getByRole("radiogroup", { name })).toBeVisible();
   }
   await expect(
     page.getByRole("button", { name: "Return to organizer demo" }),

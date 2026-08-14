@@ -1,6 +1,6 @@
 /* Public programme
    ------------------------------------------------------------------------
-   The attendee-facing surface. Two rules govern everything below.
+   The attendee-facing surface. Three rules govern everything below.
 
    1. The event owns the page. Chrome is quiet and neutral; the only saturated
       colour on the page comes from --event-accent, which is the customer's own
@@ -9,6 +9,9 @@
       in a heading, and rows carry only the clock range. The previous layout
       repeated "Thursday, May 20, 2027 · 9:00 AM–9:45 AM EDT" on every row inside
       a 110px column, which wrapped to four lines and buried the session title.
+   3. Four steps of type, not one. Masthead 72 / chapter 28 / row 19 / body 14.
+      The page previously lived between 12 and 19px below the hero, so the eye
+      had nothing to grab and defaulted to scanning the coloured pills.
 */
 
 .public-shell {
@@ -22,7 +25,37 @@
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
-  background: var(--surface);
+  background: var(--surface-editorial);
+}
+/* The public page stops borrowing the admin card heading, which set a section
+   title smaller than the row titles inside it. */
+.public-shell .card-title h2 {
+  font-size: var(--text-lg);
+  letter-spacing: var(--tracking-snug);
+}
+/* A chapter break above a run of cards: heading, count, hairline. */
+.public-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-editorial);
+}
+.public-section-head h2 {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+}
+.public-section-count {
+  margin: 0;
+  color: var(--muted-on-surface);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* --- Masthead ----------------------------------------------------------- */
@@ -31,13 +64,13 @@
   display: flex;
   align-items: center;
   padding: var(--space-2) var(--space-6);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border-editorial);
   gap: var(--space-6);
   position: sticky;
   top: 0;
   /* Opaque. At 88% the page scrolled visibly through the masthead — a primary
      button underneath read straight through the event name. */
-  background: var(--surface);
+  background: var(--surface-editorial);
   z-index: 40;
 }
 .public-top .brand {
@@ -164,10 +197,15 @@
 }
 
 /* --- Hero ---------------------------------------------------------------
-   Built from --event-accent over a fixed near-black base, so white text keeps
-   its contrast whatever colour the customer picked. */
+   The event's own photograph leads when there is one. Without one, the panel
+   is built from --event-accent over a fixed near-black base, so white text
+   keeps its contrast whatever colour the customer picked. */
 .hero {
-  margin: var(--space-5) auto var(--space-6);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+  align-items: end;
+  gap: var(--space-8);
+  margin: var(--space-5) auto var(--space-8);
   width: min(1320px, calc(100% - 40px));
   border-radius: var(--radius-lg);
   color: white;
@@ -175,7 +213,8 @@
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  background:
+  background-color: var(--surface-inverse);
+  background-image:
     radial-gradient(
       120% 130% at 88% 8%,
       color-mix(in srgb, var(--event-accent) 92%, white) 0%,
@@ -191,6 +230,21 @@
       var(--surface-inverse) 0%,
       color-mix(in srgb, var(--event-accent) 34%, var(--surface-inverse)) 100%
     );
+}
+/* The scrim is opaque where the type sits and clears to the photograph on the
+   right, so a customer's own image carries the masthead without ever putting
+   white text on an unknown pixel. */
+.hero.has-image {
+  background-image:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--surface-inverse) 94%, transparent) 0%,
+      color-mix(in srgb, var(--surface-inverse) 72%, transparent) 52%,
+      color-mix(in srgb, var(--surface-inverse) 34%, transparent) 100%
+    ),
+    var(--hero-image);
+  background-position: center;
+  background-size: cover;
 }
 /* A fine grid, at the threshold of visibility. It gives the panel a surface
    instead of a flat wash, which is what made the old hero read as a stock
@@ -209,11 +263,16 @@
 }
 .hero-body {
   position: relative;
-  max-width: 780px;
+  min-width: 0;
 }
+/* The column bounds the line, not a ch measure: a ch cap landed the demo event
+   name exactly on the wrap boundary, so the masthead was one line with the
+   fallback font and two with Inter, and the page changed height as the webfont
+   arrived. */
 .hero h1 {
   margin: 0 0 var(--space-4);
-  font-size: var(--display-2);
+  font-size: var(--display-1);
+  font-weight: var(--weight-bold);
   line-height: var(--leading-tight);
   letter-spacing: var(--tracking-tight);
   text-wrap: balance;
@@ -232,28 +291,56 @@
   align-items: center;
   gap: var(--space-2);
 }
-.hero-stats {
+.hero-actions {
+  margin: var(--space-6) 0 0;
+}
+/* White on the panel rather than the accent button: the hero ground is already
+   built from the customer's accent, and .event-branded .btn.primary mixes that
+   same accent for its fill, so an accent button here would sit on a near-match
+   of itself. */
+.hero-action {
+  border-color: transparent;
+  background: white;
+  color: var(--ink);
+}
+.hero-action:hover {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.88);
+}
+/* What the list cannot say from the top of the page. It replaced three big
+   numbers that the page already stated within one screen. */
+.hero-opening {
+  position: relative;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.08);
+}
+.hero-opening-label {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+}
+.hero-opening-title {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-snug);
+  text-wrap: pretty;
+}
+.hero-opening-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-7);
-  margin: var(--space-7) 0 0;
-  padding-top: var(--space-5);
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
-}
-.hero-stats dt {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-}
-.hero-stats dd {
-  margin: 2px 0 0;
-  font-size: var(--text-2xl);
-  font-weight: var(--weight-bold);
+  gap: 0 var(--space-2);
+  margin: var(--space-2) 0 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
-  letter-spacing: var(--tracking-tight);
-  line-height: 1;
+}
+.hero-opening-meta > span::before {
+  content: "· ";
 }
 
 /* --- Layout -------------------------------------------------------------- */
@@ -262,6 +349,7 @@
   margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 372px;
+  align-items: start;
   gap: var(--space-6);
   padding-bottom: var(--space-10);
 }
@@ -300,7 +388,7 @@
   width: min(1320px, calc(100% - 40px));
   margin: var(--space-6) auto 0;
   padding: var(--space-6) 0 var(--space-9);
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--border-editorial);
 }
 .public-footer p {
   margin: 0;
@@ -329,14 +417,16 @@
   gap: var(--space-5);
   margin-bottom: var(--space-6);
   padding-bottom: var(--space-5);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border-editorial);
 }
 .public-surface-heading-copy {
   min-width: 0;
 }
 .public-surface-heading h1 {
-  margin: 2px 0 var(--space-2);
-  font-size: var(--text-3xl);
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
   letter-spacing: var(--tracking-tight);
 }
 .public-surface-heading p {
@@ -364,7 +454,7 @@
 .public-filters-bar {
   margin-bottom: var(--space-5);
   padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border-editorial);
 }
 .public-filters {
   display: flex;
@@ -403,12 +493,16 @@
 /* --- Day heading --------------------------------------------------------
    Consecutive days used to run together in one list, so a reader scanning the
    bold left-hand times saw 9:00, 10:00, 11:15, then 9:30 and read it as an
-   ordering bug. The date is now stated once, and it sticks while its own day
-   scrolls past. */
+   ordering bug. The date is stated once, and it sticks while its own day
+   scrolls past.
+
+   It is set as a chapter break rather than a caption. At 12px tracked-out caps
+   it drew at exactly the weight of a track pill, which made the single most
+   important organising fact on a programme the quietest line on the page. */
 .programme-days,
 .public-surface .public-itinerary-day + .public-itinerary-day {
   display: grid;
-  gap: var(--space-7);
+  gap: var(--space-9);
 }
 .programme-day-divider {
   position: sticky;
@@ -416,27 +510,27 @@
   z-index: 2;
   display: flex;
   align-items: baseline;
-  gap: var(--space-3);
-  margin: 0 0 var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  box-shadow: inset 0 -1px 0 var(--border-strong);
-  font-size: var(--text-2xs);
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) 0 var(--space-2);
+  border-bottom: 2px solid var(--ink);
+  background: var(--surface-editorial);
+  font-size: var(--text-2xl);
   font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--text-secondary);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--ink);
 }
-.programme-day-divider > svg {
-  align-self: center;
-  color: var(--event-accent);
+.programme-day-date {
+  font-variant-numeric: tabular-nums;
 }
-.programme-day-divider span {
-  margin-left: auto;
-  letter-spacing: 0;
-  text-transform: none;
+.programme-day-count {
+  flex: none;
+  font-size: var(--text-xs);
   font-weight: var(--weight-normal);
+  letter-spacing: var(--tracking-normal);
+  font-variant-numeric: tabular-nums;
   color: var(--muted-on-surface);
 }
 .public-itinerary-day + .public-itinerary-day {
@@ -472,6 +566,36 @@
 .programme-entry.active {
   background: var(--accent-soft);
   box-shadow: inset 3px 0 0 var(--accent-ink);
+}
+/* A keynote and a 45-minute breakout used to draw as pixel-identical rows. The
+   rank comes from the published format, and it is carried by size and rule,
+   not by colour alone. */
+.programme-entry.feature {
+  box-shadow: inset 4px 0 0 var(--accent-ink);
+}
+.programme-entry.feature .programme-row {
+  padding-top: var(--space-5);
+}
+.programme-entry.feature .programme-row h3 {
+  font-size: var(--text-xl);
+  letter-spacing: var(--tracking-tight);
+}
+.programme-entry.feature .programme-row-speaker .avatar {
+  width: 36px;
+  height: 36px;
+  font-size: var(--text-xs);
+}
+/* A tint and an inset rail are both repainted away in High Contrast Mode, so
+   selection and rank re-assert themselves in system colours. */
+@media (forced-colors: active) {
+  .programme-entry.feature {
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+  .programme-entry.active {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
 }
 .programme-row {
   display: grid;
@@ -520,6 +644,14 @@
 .programme-row-speakers {
   display: grid;
   gap: var(--space-1);
+}
+/* Room and tags share one line below the title. The pills used to render above
+   the heading, so the first thing read in every row was its track. */
+.session-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
 }
 .programme-row-speaker {
   display: flex;
@@ -579,7 +711,21 @@
   transition:
     background-color var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+/* Saving is one of the three state changes on this page and the only one the
+   pointer initiates, so it acknowledges the press. */
+.session-save:active:not(:disabled) {
+  transform: scale(0.97);
+}
+/* The panel and the row run the same control at the same weight. */
+.session-save.wide {
+  justify-content: center;
+  width: 100%;
+  margin: var(--space-4) 0;
+  min-height: 38px;
+  font-size: var(--text-xs);
 }
 .session-save:hover:not(:disabled) {
   border-color: var(--accent-ink);
@@ -596,13 +742,16 @@
   cursor: not-allowed;
 }
 /* The disclosure sits directly under the text it reveals. It used to be pushed
-   to the far right of the row, where it read as an unrelated row action. */
+   to the far right of the row, where it read as an unrelated row action.
+   It is a text control, not a button: five identical grey buttons running down
+   the left edge read as a repeated control rather than as prose, and each one
+   cost more vertical space than the line of text it was hiding. */
 .programme-entry-description {
   grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: 0 var(--space-4) var(--space-4)
     calc(124px + var(--space-4) + var(--space-4));
 }
@@ -612,6 +761,25 @@
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
   color: var(--muted-on-surface);
+}
+.programme-entry-description p.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.session-disclosure {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-ink);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.session-disclosure:hover {
+  text-decoration-thickness: 2px;
 }
 /* A share URL is long and unbreakable. The generic single-line validation row
    pushed it out of the column, so it gets its own stacked block. */
@@ -642,11 +810,17 @@
   margin-top: 0;
 }
 
-/* --- Overview speakers --------------------------------------------------- */
+/* --- Overview speakers ---------------------------------------------------
+   The roster follows the rail in source order and stays in the reading column,
+   so the tracks are wide enough that a two-speaker line-up fills its row
+   instead of leaving a third of it visibly empty. */
 .public-speakers-section {
+  grid-column: 1;
   margin-top: var(--space-10);
 }
-.public-speakers-section > .grid {
+.public-speaker-roster {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-4);
   align-items: stretch;
 }
 .public-speakers-section > .grid > .card {
@@ -949,7 +1123,9 @@
   border-bottom: 1px solid var(--line);
 }
 .public-surface-detail-heading h2 {
-  margin: 3px 0 0;
+  margin: 0;
+  font-size: var(--text-xl);
+  line-height: var(--leading-snug);
   letter-spacing: var(--tracking-tight);
 }
 /* Prose on the left, facts on the right: a single measure of description in a
@@ -965,13 +1141,10 @@
   border-radius: var(--radius);
   background: var(--surface-sunken);
 }
-.public-surface-detail-facts h3 {
-  margin: var(--space-4) 0 var(--space-2);
-  font-size: var(--text-2xs);
+.public-surface-detail-subhead {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--text-sm);
   font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--muted-on-surface);
 }
 .public-surface-detail-facts .public-detail-list dd {
   font-size: var(--text-xs);
@@ -993,7 +1166,14 @@
   background: var(--accent-ink);
   color: var(--accent-on-solid);
 }
+/* Tracks are capped rather than fractional: with auto-fit a two-person
+   directory stretched two cards across the whole measure and stranded their
+   64px headshots 500px apart. Capped tracks cluster left at a card's natural
+   size and the row simply ends. */
 .public-speaker-directory-grid {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 380px));
+  justify-content: start;
+  gap: var(--space-4);
   align-items: stretch;
 }
 .public-speaker-directory-card {
@@ -1148,14 +1328,14 @@
   box-shadow: var(--elev-1);
   transition:
     border-color var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out);
+    box-shadow var(--dur-fast) var(--ease-out);
 }
+/* No lift. It was the only transform on the surface, on the one card that had
+   no more reason to move than any other. */
 .speaker-gallery-card:hover,
 .speaker-gallery-card:focus-visible {
   border-color: var(--accent-line);
   box-shadow: var(--elev-3);
-  transform: translateY(-2px);
 }
 .speaker-gallery-card .public-speaker-photo {
   border-radius: 0;
@@ -1251,50 +1431,82 @@
 .itinerary-item:last-child {
   border-bottom: 0;
 }
-.itinerary-empty {
-  display: grid;
-  place-items: center;
-  gap: var(--space-1);
-  padding: var(--space-6) var(--space-4);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  text-align: center;
-}
-.itinerary-empty > span {
-  font-size: var(--text-2xl);
-  color: var(--accent-line);
-}
-.itinerary-empty p {
+/* The card opens at the height of one sentence and grows only once it holds
+   something. It used to open at 300px of dashed box to state nought. */
+.itinerary-zero {
   margin: 0;
-  max-width: 34ch;
+  color: var(--muted-on-surface);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
 }
 
-/* --- Session detail rail ------------------------------------------------- */
+/* --- Session detail rail -------------------------------------------------
+   The rail holds what the row cannot: the whole abstract, the speakers'
+   biographies and any clash with a session already saved. Everything the row
+   states is compressed into the two caption lines under the title, so the
+   panel still stands on its own when it stacks under the list on a phone. */
 .session-detail-panel {
   padding: var(--space-5);
-  scroll-margin-top: 96px;
+  scroll-margin-top: 88px;
 }
 .session-detail-panel h2 {
-  margin: var(--space-1) 0 var(--space-2);
+  margin: 0;
   font-size: var(--text-xl);
   line-height: var(--leading-snug);
   letter-spacing: var(--tracking-tight);
 }
 .session-detail-panel > h3 {
   margin: var(--space-5) 0 var(--space-1);
+  font-size: var(--text-sm);
 }
 .session-detail-when {
-  margin: 0 0 var(--space-1);
+  margin: var(--space-2) 0 0;
   color: var(--text-secondary);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.session-detail-classification {
+  margin: 2px 0 0;
+  color: var(--muted-on-surface);
+  font-size: var(--text-2xs);
 }
 .session-detail-description {
   line-height: var(--leading-normal);
   white-space: pre-line;
 }
+.session-detail-speakers {
+  display: grid;
+  gap: var(--space-4);
+}
+.session-detail-speaker-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.session-detail-speaker-identity strong {
+  display: block;
+  font-size: var(--text-sm);
+}
+.session-detail-speaker-identity small {
+  color: var(--muted-on-surface);
+  font-size: var(--text-2xs);
+}
+.session-detail-speaker > p {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
+}
+.session-detail-profile-link {
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
 /* Session and profile cross-links are plain anchors, so give them an explicit
    affordance rather than relying on position alone. */
+.session-detail-profile-link,
 .session-detail-panel .stack a:not(.btn),
 #programme-speaker-profile .stack a:not(.btn) {
   color: var(--blue);
@@ -1302,6 +1514,8 @@
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
+.session-detail-profile-link:hover,
+.session-detail-profile-link:focus-visible,
 .session-detail-panel .stack a:not(.btn):hover,
 .session-detail-panel .stack a:not(.btn):focus-visible,
 #programme-speaker-profile .stack a:not(.btn):hover,

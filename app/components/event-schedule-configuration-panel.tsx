@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useState, type Dispatch, type SetStateAction } from "react";
 
 import {
@@ -28,11 +29,7 @@ function FieldError({
   name: string;
 }) {
   const message = actionData?.errors?.[name]?.[0];
-  return message ? (
-    <p className="help" style={{ color: "var(--red)" }}>
-      {message}
-    </p>
-  ) : null;
+  return message ? <p className="pc-field-error">{message}</p> : null;
 }
 
 export function EventScheduleConfigurationPanels({
@@ -122,7 +119,30 @@ export function EventScheduleConfigurationPanels({
       >
         <summary>
           <RecordChevron />
-          <h3>Programme tracks</h3>
+          <div className="event-record-summary">
+            <h3>Programme tracks</h3>
+            {tracks.length ? (
+              <div className="event-record-preview">
+                {tracks.slice(0, 4).map((track) => (
+                  <span className="event-record-chip" key={track.id}>
+                    {/* The dot is the track's own colour, which is the thing a
+                        scheduler checks for a clash. The name carries the
+                        meaning, so a repainted or unseen dot loses nothing. */}
+                    <span
+                      className="event-record-chip-dot"
+                      style={{ background: track.colourToken ?? "#5e6ad2" }}
+                    />
+                    {track.name}
+                  </span>
+                ))}
+                {tracks.length > 4 ? (
+                  <span className="event-record-chip">
+                    +{tracks.length - 4} more
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
           <span className="event-record-count">
             {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
           </span>
@@ -259,7 +279,7 @@ export function EventScheduleConfigurationPanels({
                         }}
                         aria-label={`Remove ${track.name}`}
                       >
-                        ×
+                        <X aria-hidden size={15} />
                       </button>
                     </div>
                   </div>
@@ -306,7 +326,27 @@ export function EventScheduleConfigurationPanels({
       >
         <summary>
           <RecordChevron />
-          <h3>Session formats and durations</h3>
+          <div className="event-record-summary">
+            <h3>Session formats and durations</h3>
+            {sessionFormats.length ? (
+              <div className="event-record-preview">
+                {sessionFormats.slice(0, 4).map((format) => (
+                  <span className="event-record-chip" key={format.key}>
+                    {format.label} ·{" "}
+                    <span className="pc-num">
+                      {format.defaultDurationMinutes}
+                    </span>{" "}
+                    min
+                  </span>
+                ))}
+                {sessionFormats.length > 4 ? (
+                  <span className="event-record-chip">
+                    +{sessionFormats.length - 4} more
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
           <span className="event-record-count">
             {sessionFormats.length}{" "}
             {sessionFormats.length === 1 ? "format" : "formats"}
@@ -402,7 +442,7 @@ export function EventScheduleConfigurationPanels({
                         )
                       }
                     >
-                      ×
+                      <X aria-hidden size={15} />
                     </button>
                   </div>
                 </div>

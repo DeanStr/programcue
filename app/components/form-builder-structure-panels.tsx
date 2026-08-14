@@ -1,3 +1,5 @@
+import { ChevronDown, ChevronUp } from "lucide-react";
+
 import type {
   FormField,
   SaveFormInput,
@@ -37,51 +39,157 @@ function nextFieldIndex(fields: FormField[]) {
   return index - 1;
 }
 
-export function FieldLibraryPanel({
+/**
+ * The form's outline: what questions exist, in what order. The palette is a
+ * collapsible strip at the foot of this pane rather than a column of its own —
+ * adding a field is a one-second act that was costing a permanent 220px column.
+ */
+export function FormStructurePanel({
   input,
-  passwordConfigured,
+  selectedId,
+  draftVersionNumber,
   change,
   onSelect,
 }: {
   input: SaveFormInput;
-  passwordConfigured: boolean;
+  selectedId: string | undefined;
+  draftVersionNumber: number;
   change: (next: SaveFormInput) => void;
   onSelect: (fieldId: string) => void;
 }) {
+  const fields = input.schema.fields;
+
+  function addField(type: FormField["type"]) {
+    const field = newField(type, nextFieldIndex(fields));
+    change({
+      ...input,
+      schema: { ...input.schema, fields: [...fields, field] },
+    });
+    onSelect(field.id);
+  }
+
+  /* Reordering has to act on the row it is drawn on, not on whatever happens
+     to be selected, or the two panes disagree about what "this field" means. */
+  function moveFieldAt(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= fields.length) return;
+    const next = [...fields];
+    [next[index], next[target]] = [next[target]!, next[index]!];
+    change({ ...input, schema: { ...input.schema, fields: next } });
+  }
+
   return (
-    <section className="card builder-panel">
-      <div className="card-title">
-        <h2>Field library</h2>
+    <section className="card fb-pane fb-outline">
+      <div className="fb-pane-head">
+        <h2>Form structure</h2>
+        <span className="status info right">Draft v{draftVersionNumber}</span>
       </div>
-      <div className="field-library">
-        {FIELD_TYPES.map((fieldType) => (
-          <button
-            className="field-option"
-            type="button"
-            key={fieldType.value}
-            onClick={() => {
-              const field = newField(
-                fieldType.value,
-                nextFieldIndex(input.schema.fields),
-              );
+      <div className="fb-pane-body">
+        <label className="label mb">
+          Introduction
+          <textarea
+            className="textarea fb-introduction"
+            value={input.schema.introduction}
+            onChange={(event) =>
               change({
                 ...input,
-                schema: {
-                  ...input.schema,
-                  fields: [...input.schema.fields, field],
-                },
-              });
-              onSelect(field.id);
-            }}
-          >
-            <span>＋</span>
-            {fieldType.label}
-          </button>
-        ))}
+                schema: { ...input.schema, introduction: event.target.value },
+              })
+            }
+          />
+        </label>
+        <ul className="fb-field-list">
+          {fields.map((field, index) => (
+            <li
+              className={`fb-field-row${field.id === selectedId ? " is-selected" : ""}`}
+              key={field.id}
+            >
+              <button
+                className="fb-field-select"
+                type="button"
+                aria-current={field.id === selectedId ? "true" : undefined}
+                onClick={() => onSelect(field.id)}
+              >
+                <span className="fb-field-index pc-num">{index + 1}</span>
+                <span>
+                  <span className="fb-field-name">
+                    {field.label}
+                    {/* Non-breaking, so a required mark never wraps alone onto
+                        a line of its own in a 245px column. */}
+                    {field.required ? "\u00a0*" : ""}
+                  </span>
+                  <span className="fb-field-kind">
+                    {
+                      FIELD_TYPES.find((type) => type.value === field.type)
+                        ?.label
+                    }
+                  </span>
+                  {field.condition ? (
+                    <span className="fb-field-condition">
+                      Shown when {field.condition.fieldId} ={" "}
+                      {field.condition.equals}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+              <span className="fb-field-move">
+                <button
+                  type="button"
+                  aria-label="Move up"
+                  disabled={index === 0}
+                  onClick={() => moveFieldAt(index, -1)}
+                >
+                  <ChevronUp size={13} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Move down"
+                  disabled={index === fields.length - 1}
+                  onClick={() => moveFieldAt(index, 1)}
+                >
+                  <ChevronDown size={13} aria-hidden="true" />
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <details className="fb-add-field" open>
+          <summary>Add field</summary>
+          <div className="field-library">
+            {FIELD_TYPES.map((fieldType) => (
+              <button
+                type="button"
+                key={fieldType.value}
+                onClick={() => addField(fieldType.value)}
+              >
+                <span>＋</span>
+                {fieldType.label}
+              </button>
+            ))}
+          </div>
+        </details>
       </div>
-      <div className="divider" />
-      <h3>Publication settings</h3>
-      <label className="label mt">
+    </section>
+  );
+}
+
+/**
+ * When the form opens, closes and who may answer it. These are properties of
+ * the form rather than of any field, so they live with the canvas and not in
+ * the field inspector.
+ */
+export function PublicationSettingsFields({
+  input,
+  passwordConfigured,
+  change,
+}: {
+  input: SaveFormInput;
+  passwordConfigured: boolean;
+  change: (next: SaveFormInput) => void;
+}) {
+  return (
+    <div className="fb-form-settings">
+      <label className="label">
         Closing date
         <input
           className="field"
@@ -93,7 +201,7 @@ export function FieldLibraryPanel({
           }
         />
       </label>
-      <label className="label mt">
+      <label className="label">
         Overall limit
         <input
           className="field"
@@ -112,42 +220,40 @@ export function FieldLibraryPanel({
           placeholder="No limit"
         />
       </label>
-      <div className="form-row mt">
-        <label className="label">
-          Min speakers
-          <input
-            className="field"
-            name="minSpeakers"
-            type="number"
-            min={1}
-            max={20}
-            value={input.minSpeakers}
-            onChange={(event) =>
-              change({ ...input, minSpeakers: Number(event.target.value) })
-            }
-          />
-        </label>
-        <label className="label">
-          Max speakers
-          <input
-            className="field"
-            name="maxSpeakers"
-            type="number"
-            min={1}
-            max={20}
-            value={input.maxSpeakers ?? ""}
-            onChange={(event) =>
-              change({
-                ...input,
-                maxSpeakers: event.target.value
-                  ? Number(event.target.value)
-                  : null,
-              })
-            }
-          />
-        </label>
-      </div>
-      <label className="label mt">
+      <label className="label">
+        Min speakers
+        <input
+          className="field"
+          name="minSpeakers"
+          type="number"
+          min={1}
+          max={20}
+          value={input.minSpeakers}
+          onChange={(event) =>
+            change({ ...input, minSpeakers: Number(event.target.value) })
+          }
+        />
+      </label>
+      <label className="label">
+        Max speakers
+        <input
+          className="field"
+          name="maxSpeakers"
+          type="number"
+          min={1}
+          max={20}
+          value={input.maxSpeakers ?? ""}
+          onChange={(event) =>
+            change({
+              ...input,
+              maxSpeakers: event.target.value
+                ? Number(event.target.value)
+                : null,
+            })
+          }
+        />
+      </label>
+      <label className="label">
         Applicant access
         <select
           className="select"
@@ -168,7 +274,7 @@ export function FieldLibraryPanel({
         </select>
       </label>
       {input.accessMode === "password_protected" ? (
-        <label className="label mt">
+        <label className="label">
           {passwordConfigured ? "Replace form password" : "Form password"}
           <input
             className="field"
@@ -195,7 +301,7 @@ export function FieldLibraryPanel({
         <input type="hidden" name="accessPassword" value="" />
       )}
       {input.kind === "direct_session" ? (
-        <label className="label mt">
+        <label className="label">
           Session duration override (minutes)
           <input
             className="field"
@@ -221,69 +327,6 @@ export function FieldLibraryPanel({
           </span>
         </label>
       ) : null}
-    </section>
-  );
-}
-
-export function FormStructurePanel({
-  input,
-  selectedId,
-  draftVersionNumber,
-  change,
-  onSelect,
-}: {
-  input: SaveFormInput;
-  selectedId: string | undefined;
-  draftVersionNumber: number;
-  change: (next: SaveFormInput) => void;
-  onSelect: (fieldId: string) => void;
-}) {
-  return (
-    <section className="card builder-panel">
-      <div className="card-title">
-        <h2>Form structure</h2>
-        <span className="status info right">Draft v{draftVersionNumber}</span>
-      </div>
-      <label className="label mb">
-        Introduction
-        <textarea
-          className="textarea"
-          value={input.schema.introduction}
-          onChange={(event) =>
-            change({
-              ...input,
-              schema: { ...input.schema, introduction: event.target.value },
-            })
-          }
-        />
-      </label>
-      <div className="form-canvas">
-        {input.schema.fields.map((field, index) => (
-          <button
-            className={`form-field-card${field.id === selectedId ? " selected" : ""}`}
-            type="button"
-            key={field.id}
-            onClick={() => onSelect(field.id)}
-            style={{ width: "100%", textAlign: "left" }}
-          >
-            <span className="drag-handle">⠿</span>
-            <span>
-              <strong>{field.label}</strong>
-              {field.required ? " *" : ""}
-              <small className="subtle" style={{ display: "block" }}>
-                {FIELD_TYPES.find((type) => type.value === field.type)?.label}
-              </small>
-              {field.condition ? (
-                <span className="conditional-note">
-                  Shown when {field.condition.fieldId} ={" "}
-                  {field.condition.equals}
-                </span>
-              ) : null}
-            </span>
-            <span>{index + 1}</span>
-          </button>
-        ))}
-      </div>
-    </section>
+    </div>
   );
 }

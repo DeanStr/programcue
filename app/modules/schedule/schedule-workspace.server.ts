@@ -223,6 +223,8 @@ export async function loadScheduleWorkspaceD1(
         env.DB.prepare(
           `
         SELECT id, conflict_type AS type, severity,
+               primary_entry_id AS primaryEntryId,
+               conflicting_entry_id AS conflictingEntryId,
                COALESCE(json_extract(details_json, '$.message'), conflict_type) AS message
           FROM schedule_conflicts
          WHERE event_id = ? AND schedule_version_id = ? AND resolved_at IS NULL
@@ -235,6 +237,8 @@ export async function loadScheduleWorkspaceD1(
             type: string;
             severity: string;
             message: string;
+            primaryEntryId: string | null;
+            conflictingEntryId: string | null;
           }>(),
       ])
     : [{ results: [] }, { results: [] }];
@@ -327,7 +331,17 @@ export async function loadScheduleWorkspaceD1(
     sessionFormats: parsedFormats,
     sessions: configuredSessions,
     entries: entries.results,
-    conflicts: conflicts.results,
+    /* A conflict that cannot point at the cards it is about is only a
+       sentence. Both ends of an overlap are implicated; a single-entry
+       breach such as an event boundary has a primary and nothing else. */
+    conflicts: conflicts.results.map(
+      ({ primaryEntryId, conflictingEntryId, ...conflict }) => ({
+        ...conflict,
+        entryIds: [primaryEntryId, conflictingEntryId].filter(
+          (entryId): entryId is string => Boolean(entryId),
+        ),
+      }),
+    ),
     publicationConflicts: [],
     policies: {
       room: schedulePolicyAction(policyRow.roomAction),

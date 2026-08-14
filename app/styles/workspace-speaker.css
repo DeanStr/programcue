@@ -19,11 +19,33 @@
   font-size: var(--text-lg);
   font-weight: var(--weight-extrabold);
 }
+.speaker-event {
+  min-width: 0;
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--line);
+}
 .speaker-top .right {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+.speaker-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-left: var(--space-2);
+}
+.speaker-identity > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  /* The name is already in the avatar; the address is not worth a line here. */
+  .speaker-identity > span:last-child {
+    display: none;
+  }
 }
 .participant-logo {
   display: block;
@@ -71,17 +93,24 @@
 .speaker-main {
   padding: var(--space-6);
 }
+/* One column now that the donut is gone. A flat tint and a state rail carry
+   "this is the thing to do next" without a 135deg gradient pretending the
+   card is lit from somewhere. */
 .next-action {
-  display: grid;
-  grid-template-columns: 1fr 330px;
-  align-items: center;
-  padding: var(--space-6);
-  background: linear-gradient(135deg, #fbfaff, var(--brand-50));
-  border-color: var(--brand-200);
+  padding: var(--space-5);
+  background: var(--surface);
+  border-color: var(--border);
+  border-left: 3px solid var(--brand-600);
 }
-.next-action h1 {
-  margin: var(--space-1) 0;
-  font-size: var(--text-2xl);
+.next-action h2 {
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-snug);
+}
+.next-action p {
+  max-width: 72ch;
+  margin: 0 0 var(--space-4);
 }
 .upload-illustration {
   height: 145px;

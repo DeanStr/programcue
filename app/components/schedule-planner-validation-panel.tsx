@@ -3,16 +3,22 @@ import type {
   ScheduleFetcher,
   SchedulePlannerWorkspaceData,
 } from "./schedule-planner-panel-types";
+import {
+  conflictEntryIds,
+  conflictTypeName,
+} from "./schedule-planner-workspace-helpers";
 
 export function ScheduleValidationPanel({
   workspace,
   fetcher,
+  revealConflictEntries,
 }: {
   workspace: SchedulePlannerWorkspaceData;
   fetcher: ScheduleFetcher;
+  revealConflictEntries(entryIds: string[]): void;
 }) {
   return (
-    <aside className="card pad schedule-conflicts">
+    <aside id="schedule-validation" className="card pad schedule-conflicts">
       <div className="card-title">
         <h2>Validation</h2>
         <span
@@ -95,20 +101,41 @@ export function ScheduleValidationPanel({
           </button>
         </fetcher.Form>
       </details>
-      {workspace.conflicts.map((conflict) => (
-        <div
-          id={`schedule-conflict-${conflict.id}`}
-          className={`validation-item ${conflict.severity === "blocking" ? "error" : "warn"}`}
-          key={conflict.id}
-          tabIndex={
-            conflict.id === workspace.focusedConflictId ? -1 : undefined
-          }
-        >
-          <strong>{conflict.type}</strong>
-          <p>{conflict.message}</p>
-          <ScheduleConflictExplanationAction conflictId={conflict.id} />
-        </div>
-      ))}
+      {workspace.conflicts.map((conflict) => {
+        const entryIds = conflictEntryIds(conflict);
+        return (
+          <div
+            id={`schedule-conflict-${conflict.id}`}
+            className={`validation-item schedule-conflict-item ${conflict.severity === "blocking" ? "error" : "warn"}`}
+            key={conflict.id}
+            tabIndex={
+              conflict.id === workspace.focusedConflictId ? -1 : undefined
+            }
+          >
+            <strong>
+              {conflictTypeName(conflict.type)}
+              <span className="help">
+                {conflict.severity === "blocking"
+                  ? " · Blocks publication"
+                  : " · Warning"}
+              </span>
+            </strong>
+            <p>{conflict.message}</p>
+            <div className="schedule-conflict-actions">
+              {entryIds.length ? (
+                <button
+                  className="btn small"
+                  type="button"
+                  onClick={() => revealConflictEntries(entryIds)}
+                >
+                  Show on board
+                </button>
+              ) : null}
+              <ScheduleConflictExplanationAction conflictId={conflict.id} />
+            </div>
+          </div>
+        );
+      })}
       {!workspace.conflicts.length ? (
         <div className="validation-item ok">No recorded conflicts.</div>
       ) : null}

@@ -1,3 +1,4 @@
+import { CircleAlert, CircleCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Form,
@@ -19,6 +20,10 @@ import {
   EventRoomsPanel,
 } from "~/components/event-setup-panels";
 import { EventScheduleConfigurationPanels } from "~/components/event-schedule-configuration-panel";
+import {
+  AdminPageSection,
+  AdminPageSectionNavigation,
+} from "~/components/ui/admin-page-sections";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import type { EventSetup } from "~/modules/events/event-repository.server";
 import type { IncompleteEventSummary } from "~/modules/events/event-repository-recovery.server";
@@ -32,8 +37,8 @@ const eventSetupBaselineExcludedFields = new Set([
   "sessionFormats",
 ]);
 
-function serialiseEventSetupFields(form: HTMLFormElement) {
-  const fields: [string, string][] = [];
+function eventSetupFieldValues(form: HTMLFormElement) {
+  const fields = new Map<string, string[]>();
   for (const [name, value] of new FormData(form)) {
     if (eventSetupBaselineExcludedFields.has(name)) continue;
     if (typeof value !== "string") {
@@ -41,9 +46,67 @@ function serialiseEventSetupFields(form: HTMLFormElement) {
         `Event Setup field ${name} unexpectedly contains a file. Files require an explicit dirty-state comparison.`,
       );
     }
-    fields.push([name, value]);
+    const values = fields.get(name);
+    if (values) values.push(value);
+    else fields.set(name, [value]);
   }
-  return JSON.stringify(fields);
+  return fields;
+}
+
+/* The count is what the operator is shown, so it counts fields rather than
+   keystrokes. An unchecked box leaves the form data entirely, which is why a
+   name present on one side only is a change and not an absence. */
+function countChangedFields(
+  saved: ReadonlyMap<string, string[]>,
+  current: ReadonlyMap<string, string[]>,
+) {
+  let changed = 0;
+  for (const name of new Set([...saved.keys(), ...current.keys()])) {
+    const savedValues = saved.get(name);
+    const currentValues = current.get(name);
+    if (
+      !savedValues ||
+      !currentValues ||
+      savedValues.length !== currentValues.length ||
+      savedValues.some((value, index) => value !== currentValues[index])
+    )
+      changed += 1;
+  }
+  return changed;
+}
+
+/* Rooms, tracks and formats keep their loaded order, so an index-wise
+   comparison sees an edited record as one change and an added or removed one
+   as one more. */
+function countChangedRecords(
+  saved: readonly unknown[],
+  current: readonly unknown[],
+) {
+  let changed = Math.abs(saved.length - current.length);
+  for (let index = 0; index < Math.min(saved.length, current.length); index++) {
+    if (JSON.stringify(saved[index]) !== JSON.stringify(current[index]))
+      changed += 1;
+  }
+  return changed;
+}
+
+/* One result banner, three sources. The mark is a real icon at one optical
+   size: the "△" it replaces is a hollow geometric shape, not a warning
+   triangle, and it was carrying the failure state of a save. */
+function ResultNotice({ response }: { response: ActionResponse }) {
+  return (
+    <div
+      className={`card pad mb validation-item event-setup-notice ${response.ok ? "ok" : "error"}`}
+      role={response.ok ? "status" : "alert"}
+    >
+      {response.ok ? (
+        <CircleCheck aria-hidden size={18} />
+      ) : (
+        <CircleAlert aria-hidden size={18} />
+      )}
+      <span>{response.message}</span>
+    </div>
+  );
 }
 
 export function EventSetupForm({
@@ -64,7 +127,9 @@ export function EventSetupForm({
   const inviteFetcher = useFetcher<typeof action>();
   const repositoryFetcher = useFetcher<typeof action>();
   const formRef = useRef<HTMLFormElement | null>(null);
-  const savedFieldValuesRef = useRef<string | null>(null);
+  const savedFieldValuesRef = useRef<ReadonlyMap<string, string[]> | null>(
+    null,
+  );
   const navigate = useNavigate();
   const navigation = useNavigation();
   const { confirm, dialog } = useConfirm();
@@ -80,6 +145,10 @@ export function EventSetupForm({
   const [recordDraftValues, setRecordDraftValues] = useState<
     Readonly<Record<string, string>>
   >({});
+  // Discarding has to reach the drafts the record panels keep in their own
+  // state — a new resource, track or format that was typed but never added.
+  // Remounting them is the only reset that covers those too.
+  const [panelGeneration, setPanelGeneration] = useState(0);
   const focusedRecordId = focusedRecord?.id ?? null;
   const focusedRecordKind = focusedRecord?.kind ?? null;
   const saving =
@@ -133,31 +202,28 @@ export function EventSetupForm({
   // through the serialised hidden inputs above, so leaving the page discarded
   // them silently. The named fields are uncontrolled, so each form-level input
   // event compares their current values with the exact loaded baseline.
-  const [namedFieldsChanged, setNamedFieldsChanged] = useState(false);
-  const savedStructure = useMemo(
-    () => JSON.stringify([event.rooms, event.tracks, event.sessionFormats]),
+  const [namedFieldChangeCount, setNamedFieldChangeCount] = useState(0);
+  const savedRecords = useMemo(
+    () => [event.rooms, event.tracks, event.sessionFormats] as const,
     [event.revision],
   );
-  const currentStructure = JSON.stringify([
-    orderedRooms,
-    orderedTracks,
-    orderedSessionFormats,
-  ]);
+  const recordChangeCount =
+    countChangedRecords(savedRecords[0], orderedRooms) +
+    countChangedRecords(savedRecords[1], orderedTracks) +
+    countChangedRecords(savedRecords[2], orderedSessionFormats);
   const newRoomDraftPresent = Boolean(
     newRoomName.trim() || newRoomCapacity !== "100",
   );
   const pendingRecordDraftPresent =
     Object.values(recordDraftValues).some((value) => value.trim()) ||
     newRoomDraftPresent;
-  const hasUnsavedChanges =
-    namedFieldsChanged ||
-    currentStructure !== savedStructure ||
-    pendingRecordDraftPresent;
+  const changeCount = namedFieldChangeCount + recordChangeCount;
+  const hasUnsavedChanges = changeCount > 0 || pendingRecordDraftPresent;
 
   const captureEventSetupForm = useCallback((form: HTMLFormElement | null) => {
     formRef.current = form;
     if (form && savedFieldValuesRef.current === null) {
-      savedFieldValuesRef.current = serialiseEventSetupFields(form);
+      savedFieldValuesRef.current = eventSetupFieldValues(form);
     }
   }, []);
 
@@ -168,7 +234,9 @@ export function EventSetupForm({
         "The Event Setup form received input before its saved baseline was captured.",
       );
     }
-    setNamedFieldsChanged(serialiseEventSetupFields(form) !== savedValues);
+    setNamedFieldChangeCount(
+      countChangedFields(savedValues, eventSetupFieldValues(form)),
+    );
   }, []);
 
   const handleRecordDraftStateChange = useCallback(
@@ -180,8 +248,8 @@ export function EventSetupForm({
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;
-    savedFieldValuesRef.current = serialiseEventSetupFields(form);
-    setNamedFieldsChanged(false);
+    savedFieldValuesRef.current = eventSetupFieldValues(form);
+    setNamedFieldChangeCount(0);
   }, [event.revision]);
 
   useBeforeUnload(
@@ -224,6 +292,22 @@ export function EventSetupForm({
     setNewRoomName("");
     setNewRoomCapacity("100");
     setAddRoomOpen(false);
+  }
+
+  // The repository panel and the leave-confirmation both tell the operator to
+  // "save or discard", and until now discarding meant leaving the page.
+  function discardChanges() {
+    const form = formRef.current;
+    if (!form) return;
+    form.reset();
+    setRooms(event.rooms);
+    setTracks(event.tracks);
+    setSessionFormats(event.sessionFormats);
+    setRecordDraftValues({});
+    setNewRoomName("");
+    setNewRoomCapacity("100");
+    setPanelGeneration((generation) => generation + 1);
+    updateNamedFieldDirtyState(form);
   }
 
   function clearRemovedRecordFocus(kind: "room" | "track", id: string) {
@@ -311,26 +395,6 @@ export function EventSetupForm({
               defaults.
             </p>
           </div>
-          <div className="page-actions">
-            <button
-              type="submit"
-              className="btn primary"
-              disabled={saving || pendingRecordDraftPresent}
-              aria-describedby={
-                pendingRecordDraftPresent
-                  ? "event-setup-pending-record-help"
-                  : undefined
-              }
-            >
-              {saving ? "Saving…" : "Save event"}
-            </button>
-            {pendingRecordDraftPresent ? (
-              <span className="help" id="event-setup-pending-record-help">
-                Add or clear the unfinished room, resource, track or format
-                before saving.
-              </span>
-            ) : null}
-          </div>
         </div>
 
         {incompleteEvents.length ? (
@@ -374,76 +438,63 @@ export function EventSetupForm({
           </section>
         ) : null}
 
-        {actionData ? (
-          <div
-            className={`card pad mb validation-item ${actionData.ok ? "ok" : "error"}`}
-            role={actionData.ok ? "status" : "alert"}
-          >
-            <strong>{actionData.ok ? "✓" : "△"}</strong>
-            <span>{actionData.message}</span>
-          </div>
-        ) : null}
-        {inviteData ? (
-          <div
-            className={`card pad mb validation-item ${inviteData.ok ? "ok" : "error"}`}
-            role={inviteData.ok ? "status" : "alert"}
-          >
-            <strong>{inviteData.ok ? "✓" : "△"}</strong>
-            <span>{inviteData.message}</span>
-          </div>
-        ) : null}
+        {actionData ? <ResultNotice response={actionData} /> : null}
+        {inviteData ? <ResultNotice response={inviteData} /> : null}
         {repositoryData &&
         repositoryData.intent !== "preview_repository_migration" ? (
-          <div
-            className={`card pad mb validation-item ${repositoryData.ok ? "ok" : "error"}`}
-            role={repositoryData.ok ? "status" : "alert"}
-          >
-            <strong>{repositoryData.ok ? "✓" : "△"}</strong>
-            <span>{repositoryData.message}</span>
-          </div>
+          <ResultNotice response={repositoryData} />
         ) : null}
 
-        {/* Four titled bands rather than one nine-card grid. Panels are paired
-            by height as well as by subject: the three record editors are full
-            width because they grow without bound, and the fixed-size settings
-            cards sit two-up beside a comparable neighbour. A grid row is as
-            tall as its tallest card, so mixing the two shapes in one grid is
-            what left a 1,096px hole under Event identity. */}
+        <AdminPageSectionNavigation
+          label="Event Setup sections"
+          links={[
+            { id: "event-setup-identity", label: "Identity" },
+            { id: "event-setup-structure", label: "Programme structure" },
+            { id: "event-setup-access", label: "Access and roles" },
+            { id: "event-setup-data", label: "Data and files" },
+          ]}
+        />
+
+        {/* Four titled sections rather than one nine-card grid. Panels are
+            paired by height as well as by subject: the three record editors are
+            full width because they grow without bound, and the fixed-size
+            settings cards sit two-up beside a comparable neighbour. A grid row
+            is as tall as its tallest card, so mixing the two shapes in one grid
+            is what left a 1,096px hole under Event identity.
+            Every section stays expanded on phones: the record editors inside
+            Programme structure are already disclosures, and nesting a second
+            one around them puts a required field somewhere the browser cannot
+            focus to report it. */}
         <div className="event-setup-page">
-          <section
-            className="event-setup-section"
-            aria-labelledby="event-setup-identity"
+          <AdminPageSection
+            id="event-setup-identity"
+            label="Identity"
+            description="How this event is named internally and how it presents itself to participants and the public."
+            defaultExpandedOnMobile
           >
-            <div className="event-setup-section-head">
-              <h2 id="event-setup-identity">Identity</h2>
-              <p>
-                How this event is named internally and how it presents itself to
-                participants and the public.
-              </p>
-            </div>
             {/* Full width rather than two-up. The two cards are 336px and
                 644px, and a grid row is as tall as its tallest child, so
                 pairing them left a ~300px hole under the shorter one. Stacked,
                 each card lays its own fields out across the full measure for
                 the same total height and no gap. */}
             <div className="grid">
-              <EventIdentityPanels event={event} actionData={actionData} />
+              <EventIdentityPanels
+                key={`identity-${panelGeneration}`}
+                event={event}
+                actionData={actionData}
+              />
             </div>
-          </section>
+          </AdminPageSection>
 
-          <section
-            className="event-setup-section"
-            aria-labelledby="event-setup-structure"
+          <AdminPageSection
+            id="event-setup-structure"
+            label="Programme structure"
+            description="The rooms, tracks and session formats the schedule builder can draw on."
+            defaultExpandedOnMobile
           >
-            <div className="event-setup-section-head">
-              <h2 id="event-setup-structure">Programme structure</h2>
-              <p>
-                The rooms, tracks and session formats the schedule builder can
-                draw on.
-              </p>
-            </div>
             <div className="grid">
               <EventRoomsPanel
+                key={`rooms-${panelGeneration}`}
                 rooms={rooms}
                 setRooms={setRooms}
                 actionData={actionData}
@@ -455,6 +506,7 @@ export function EventSetupForm({
                 onDraftStateChange={handleRecordDraftStateChange}
               />
               <EventScheduleConfigurationPanels
+                key={`schedule-${panelGeneration}`}
                 tracks={tracks}
                 setTracks={setTracks}
                 sessionFormats={sessionFormats}
@@ -469,19 +521,14 @@ export function EventSetupForm({
                 onDraftStateChange={handleRecordDraftStateChange}
               />
             </div>
-          </section>
+          </AdminPageSection>
 
-          <section
-            className="event-setup-section"
-            aria-labelledby="event-setup-access"
+          <AdminPageSection
+            id="event-setup-access"
+            label="Access and roles"
+            description="Who can administer this event, and how applicants reach the submission form."
+            defaultExpandedOnMobile
           >
-            <div className="event-setup-section-head">
-              <h2 id="event-setup-access">Access and roles</h2>
-              <p>
-                Who can administer this event, and how applicants reach the
-                submission form.
-              </p>
-            </div>
             <div className="grid grid-2">
               <EventAccessPanels
                 event={event}
@@ -490,19 +537,14 @@ export function EventSetupForm({
                 canManageAdministrators={canManageOrganisationAdministrators}
               />
             </div>
-          </section>
+          </AdminPageSection>
 
-          <section
-            className="event-setup-section"
-            aria-labelledby="event-setup-data"
+          <AdminPageSection
+            id="event-setup-data"
+            label="Data and files"
+            description="Upload limits, where event data is authoritative, and how long it is kept."
+            defaultExpandedOnMobile
           >
-            <div className="event-setup-section-head">
-              <h2 id="event-setup-data">Data and files</h2>
-              <p>
-                Upload limits, where event data is authoritative, and how long
-                it is kept.
-              </p>
-            </div>
             <div className="grid grid-2">
               <EventFilePolicyPanel event={event} actionData={actionData} />
               <EventRepositoryPanel
@@ -517,7 +559,53 @@ export function EventSetupForm({
                 hasUnsavedChanges={hasUnsavedChanges}
               />
             </div>
-          </section>
+          </AdminPageSection>
+        </div>
+
+        <div
+          className="event-setup-actions"
+          data-dirty={hasUnsavedChanges ? "true" : undefined}
+        >
+          {pendingRecordDraftPresent ? (
+            <p
+              className="event-setup-state is-blocked"
+              id="event-setup-pending-record-help"
+            >
+              <CircleAlert aria-hidden size={16} />
+              Add or clear the unfinished room, resource, track or format before
+              saving.
+            </p>
+          ) : changeCount ? (
+            <p className="event-setup-state is-dirty">
+              <CircleAlert aria-hidden size={16} />
+              {changeCount} unsaved {changeCount === 1 ? "change" : "changes"}
+            </p>
+          ) : (
+            <p className="event-setup-state">
+              <CircleCheck aria-hidden size={16} />
+              Saved
+            </p>
+          )}
+          <button
+            type="button"
+            className="btn"
+            onClick={discardChanges}
+            disabled={!hasUnsavedChanges || saving}
+          >
+            Discard changes
+          </button>
+          <button
+            type="submit"
+            className="btn primary"
+            disabled={saving || pendingRecordDraftPresent}
+            aria-describedby={
+              pendingRecordDraftPresent
+                ? "event-setup-pending-record-help"
+                : undefined
+            }
+          >
+            {saving ? "Saving…" : "Save event"}
+          </button>
         </div>
       </Form>
 
@@ -608,7 +696,7 @@ export function EventSetupForm({
             {inviteData && !inviteData.ok ? (
               <p className="validation-item error">{inviteData.message}</p>
             ) : null}
-            <div className="modal-foot" style={{ margin: "18px -18px -18px" }}>
+            <div className="modal-foot event-setup-modal-foot">
               <button
                 type="button"
                 className="btn"
@@ -686,7 +774,7 @@ export function EventSetupForm({
                 {repositoryData.message}
               </p>
             ) : null}
-            <div className="modal-foot" style={{ margin: "18px -18px -18px" }}>
+            <div className="modal-foot event-setup-modal-foot">
               <button
                 type="button"
                 className="btn"
@@ -767,10 +855,7 @@ export function EventSetupForm({
                   name="previewId"
                   value={repositoryData.preview.previewId}
                 />
-                <div
-                  className="modal-foot"
-                  style={{ margin: "18px -18px -18px" }}
-                >
+                <div className="modal-foot event-setup-modal-foot">
                   <button
                     type="button"
                     className="btn"
@@ -822,10 +907,7 @@ export function EventSetupForm({
                   {repositoryData.message}
                 </p>
               ) : null}
-              <div
-                className="modal-foot"
-                style={{ margin: "18px -18px -18px" }}
-              >
+              <div className="modal-foot event-setup-modal-foot">
                 <button
                   type="button"
                   className="btn"

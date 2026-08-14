@@ -71,6 +71,7 @@ export function AdminPageSection({
   const sectionRef = useRef<HTMLElement>(null);
   const expanded = !mobile || mobileExpanded;
   const contentId = `${id}-content`;
+  const headingId = `${id}-title`;
 
   useEffect(() => {
     const revealTarget = (targetId: string) => {
@@ -107,21 +108,35 @@ export function AdminPageSection({
     };
   }, []);
 
+  // The heading renders at every viewport. It used to live inside the toggle
+  // button, which is display:none above 760px, so every named section on a
+  // desktop admin page drew as an unlabelled run of cards and the anchor
+  // navigation pointed at headings that were never painted.
   return (
-    <section className="pc-admin-page-section" id={id} ref={sectionRef}>
-      <button
-        className="pc-admin-section-toggle"
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={contentId}
-        onClick={() => setMobileExpanded((current) => !current)}
-      >
-        <span>
-          <strong>{label}</strong>
-          <small>{description}</small>
-        </span>
-        <ChevronDown aria-hidden size={18} />
-      </button>
+    <section
+      className="pc-admin-page-section"
+      id={id}
+      ref={sectionRef}
+      aria-labelledby={headingId}
+    >
+      <header className="pc-admin-section-head">
+        <div className="pc-admin-section-head-copy">
+          <h2 id={headingId}>{label}</h2>
+          <p>{description}</p>
+        </div>
+        <button
+          className="pc-admin-section-toggle"
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          onClick={() => setMobileExpanded((current) => !current)}
+        >
+          <span className="sr-only">
+            {expanded ? `Collapse ${label}` : `Expand ${label}`}
+          </span>
+          <ChevronDown aria-hidden size={18} />
+        </button>
+      </header>
       <div id={contentId} hidden={!expanded}>
         {children}
       </div>

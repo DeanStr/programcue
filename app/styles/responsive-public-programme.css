@@ -5,6 +5,11 @@
 .public-shell.embedded .hero {
   margin-top: var(--space-3);
   padding: var(--space-7) var(--space-6);
+  grid-template-columns: minmax(0, 1fr);
+}
+/* An embed is a panel on someone else's page, not a masthead. */
+.public-shell.embedded .hero h1 {
+  font-size: var(--display-2);
 }
 .public-shell.embedded .public-main {
   width: min(1180px, calc(100% - 24px));
@@ -39,10 +44,28 @@
   padding-bottom: var(--space-3);
 }
 
-@media (max-width: 1180px) {
+/* One rail width per breakpoint, and it keeps the rail down to the point where
+   the page genuinely stacks. The generic refinements sheet drops .public-main
+   to a single column at 1350px while this sheet restored a rail below 1180, so
+   a laptop sat in the one band that had no rail at all and showed the detail
+   panel as a 1,240px-wide card. */
+@media (max-width: 1350px) {
   .public-main {
     grid-template-columns: minmax(0, 1fr) 320px;
     gap: var(--space-4);
+  }
+  /* A laptop is wide enough for the rail and short enough that pinning it
+     clipped the detail panel mid-sentence, so here the rail scrolls with the
+     page instead of scrolling inside itself. */
+  .public-main > aside {
+    position: static;
+    max-height: none;
+    padding-bottom: 0;
+    overflow: visible;
+  }
+  .hero {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 260px);
+    gap: var(--space-6);
   }
 }
 
@@ -74,6 +97,27 @@
     max-height: none;
     padding-bottom: 0;
     overflow: visible;
+  }
+  /* Stacked, the panel is what a tapped row scrolls to, so it gets the room a
+     rail could not give it — but prose and a save control do not widen with
+     the card. */
+  .session-detail-panel {
+    padding: var(--space-5) var(--space-6);
+  }
+  .session-detail-description,
+  .session-detail-speaker > p {
+    max-width: var(--measure-prose);
+  }
+  .session-save.wide {
+    max-width: 320px;
+  }
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-6);
+  }
+  .hero-opening {
+    max-width: 420px;
   }
 }
 
@@ -109,16 +153,18 @@
   .hero {
     padding: var(--space-7) var(--space-6);
   }
-  .hero-stats {
-    gap: var(--space-6);
-    margin-top: var(--space-5);
-    padding-top: var(--space-4);
-  }
 }
 
 @media (max-width: 600px) {
-  .public-surface-heading h1 {
-    font-size: var(--text-2xl);
+  .public-surface-heading h1,
+  .programme-day-divider {
+    font-size: var(--text-xl);
+  }
+  .public-section-head h2 {
+    font-size: var(--text-xl);
+  }
+  .public-speaker-directory-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
   .agenda-board {
     grid-template-columns: 1fr;
@@ -143,9 +189,6 @@
     width: 92px;
     height: 92px;
     flex-basis: 92px;
-  }
-  .hero-stats dd {
-    font-size: var(--text-xl);
   }
   .programme-embed-builder-title,
   .programme-embed-output > .card-title,
@@ -224,6 +267,9 @@
   }
   .programme-row h3 {
     font-size: var(--text-base);
+  }
+  .programme-entry.feature .programme-row h3 {
+    font-size: var(--text-lg);
   }
   .session-save {
     justify-content: center;

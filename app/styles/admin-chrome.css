@@ -1,7 +1,9 @@
 /* Canonical administrator chrome: dark navigation and dark context bar, light work canvas. */
 .app-admin .topbar {
-  background: linear-gradient(180deg, var(--nav), #0b172b);
-  border-bottom-color: #1e293b;
+  /* Flat, and one hairline. The gradient was invisible and the rail beside it
+     is flat, so the two dark surfaces now read as one band. */
+  background: var(--nav);
+  border-bottom: 1px solid #1e293b;
   color: var(--soft);
 }
 .app-admin .event-switcher {
@@ -11,6 +13,11 @@
 }
 .app-admin .event-switcher small {
   color: #a9b8cc;
+}
+.app-admin .event-thumb {
+  background: #1b2b45;
+  border-color: #33455f;
+  color: #e2e8f0;
 }
 .app-admin .command-trigger {
   background: var(--nav-2);
@@ -28,5 +35,155 @@
   color: var(--soft);
 }
 .app-admin .topbar .avatar {
-  border: 2px solid #334155;
+  background: var(--nav-2);
+  border: 1px solid #263750;
+  color: var(--nav-text);
+}
+/* Cut out of the bar it sits on. A white ring was the only white object in the
+   chrome and read as a sticker rather than a count. */
+.app-admin .topbar .badge-dot::after {
+  border-color: var(--nav);
+}
+
+/* The rail's one spatial change had no continuity: 230px to 76px in a single
+   frame, reflowing the whole page. Both durations collapse to 1ms under
+   prefers-reduced-motion. The class is set a frame after hydration so that
+   restoring a stored preference paints as a starting width, not a movement. */
+.app-admin.shell-motion-ready {
+  transition: grid-template-columns var(--dur-base) var(--ease-out);
+}
+.app-admin.shell-motion-ready .sidebar {
+  transition: width var(--dur-base) var(--ease-out);
+}
+
+/* Icon-only rail: the label is gone, so the row centres on its icon and the
+   3px location rail is the only thing still left of it. */
+@media (max-width: 1024px) {
+  .app-admin .nav a {
+    min-height: 40px;
+    padding-inline: 0;
+  }
+  .app-admin .nav-child {
+    display: none;
+  }
+  .app-admin .nav a[data-family-current] {
+    border-left-color: var(--brand-500);
+  }
+}
+.sidebar-is-collapsed .nav a {
+  padding-inline: 0;
+}
+.sidebar-is-collapsed .nav-child {
+  display: none;
+}
+.sidebar-is-collapsed .nav a[data-family-current] {
+  border-left-color: var(--brand-500);
+}
+/* Nothing but the dot survives collapse, and a dot is neither a word nor an
+   accessible name. */
+.sidebar-is-collapsed .sidebar-demo {
+  display: none;
+}
+.sidebar-is-collapsed .sidebar-collapse {
+  justify-content: center;
+}
+
+@media (forced-colors: active) {
+  /* The tinted ground and the brighter label both disappear here, so the rail
+     is all that is left — it has to be a repainted border, as .rail-left is. */
+  .nav a.active {
+    border-left-color: Highlight;
+  }
+}
+
+/* --- Phone chrome --------------------------------------------------------
+   The 62px single row spent its width on a hamburger, a search icon, a bare
+   "+", a bell and an avatar, and truncated the one label that says which
+   conference you are about to change. Two rows: identity, then tools. */
+@media (max-width: 760px) {
+  .app-admin {
+    --topbar: 100px;
+  }
+  .app-admin .topbar {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "menu event event"
+      "search search actions";
+    align-content: center;
+    row-gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+  .app-admin .pc-mobile-nav-trigger {
+    grid-area: menu;
+  }
+  .app-admin .event-switcher {
+    grid-area: event;
+  }
+  .app-admin .event-switcher strong {
+    font-size: var(--text-sm);
+  }
+  /* Once the name owns a whole row there is room for the line that says which
+     dates and which venue, which is half of what identifies an event. */
+  .app-admin .event-switcher small {
+    display: block;
+  }
+  .app-admin .command-trigger {
+    grid-area: search;
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    height: 38px;
+    justify-content: flex-start;
+    padding: 0 var(--space-3);
+  }
+  .app-admin .command-trigger span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .app-admin .top-actions {
+    grid-area: actions;
+    margin-left: 0;
+  }
+  /* "+" alone is a verb with no object. There is room for the word once the
+     bar has two rows. */
+  .app-admin .top-actions .btn span {
+    display: inline;
+  }
+
+  /* Primary navigation is a place, not a decision: it arrives from the edge it
+     lives on rather than as a centred card with 20px of scrim on every side. */
+  .modal-overlay:has(.pc-mobile-nav) {
+    place-items: stretch;
+    justify-items: start;
+    padding: 0;
+  }
+  .modal-overlay:has(.pc-mobile-nav) > .modal {
+    width: min(320px, 86vw);
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    animation: pc-drawer-in var(--dur-base) var(--ease-out);
+  }
+}
+.pc-mobile-nav .nav-item {
+  display: grid;
+  gap: var(--space-1);
+}
+/* Indented to where the parent's label starts, not given a second icon well. */
+.pc-mobile-nav a.pc-mobile-nav-child {
+  padding-left: calc(var(--space-3) + 17px + var(--space-3));
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+.pc-mobile-nav a.pc-mobile-nav-child.active {
+  color: var(--brand-700);
+  font-weight: var(--weight-semibold);
+}
+@keyframes pc-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
 }

@@ -1,6 +1,6 @@
 export {
-  FieldLibraryPanel,
   FormStructurePanel,
+  PublicationSettingsFields,
 } from "./form-builder-structure-panels";
 export { FieldSettingsPanel } from "./form-builder-field-settings-panel";
 export { ApplicantPreviewPanel } from "./form-builder-applicant-preview-panel";

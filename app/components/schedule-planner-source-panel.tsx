@@ -6,6 +6,7 @@ import { EmptyState } from "~/components/ui/states";
 import { SessionCopyAction } from "~/modules/ai/contextual-ai-actions";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
 import type {
+  ScheduleEntry,
   ScheduleFetcher,
   SchedulePlannerWorkspaceData,
   StateSetter,
@@ -95,6 +96,8 @@ export function ScheduleSourcePanel({
   visibleSessions,
   scheduledSessionIds,
   readOnlyPlacementMessage,
+  quickEntry,
+  unassign,
 }: {
   workspace: SchedulePlannerWorkspaceData;
   fetcher: ScheduleFetcher;
@@ -113,6 +116,8 @@ export function ScheduleSourcePanel({
   visibleSessions: ScheduleSession[];
   scheduledSessionIds: Set<string>;
   readOnlyPlacementMessage: string;
+  quickEntry: ScheduleEntry | undefined;
+  unassign(entry: ScheduleEntry): void;
 }) {
   const [placementFormOpen, setPlacementFormOpen] = useState(true);
   return (
@@ -234,6 +239,20 @@ export function ScheduleSourcePanel({
                 ? "Move or resize session"
                 : "Place session"}
             </button>
+            {/* The board card used to carry its own slider and unassign
+                button. Both blew the cell open and gave the same operation a
+                third mental model; the form already names the session it is
+                acting on. */}
+            {quickEntry ? (
+              <button
+                className="btn small"
+                type="button"
+                onClick={() => unassign(quickEntry)}
+                disabled={fetcher.state !== "idle"}
+              >
+                Unassign from the board
+              </button>
+            ) : null}
           </fetcher.Form>
         </details>
       ) : null}

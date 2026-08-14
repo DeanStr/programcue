@@ -13,4 +13,9 @@
   .review-score .sticky-actions {
     margin-top: auto;
   }
+  /* Reading width, not container width: past this point the queue is a rail and
+     the extra column goes to the proposal, which is the one being read. */
+  .reviewer-shell .review-layout {
+    grid-template-columns: 260px minmax(360px, 1.25fr) minmax(400px, 1fr);
+  }
 }

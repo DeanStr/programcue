@@ -1,4 +1,4 @@
-import { CalendarDays, Check, MapPin, Plus } from "lucide-react";
+import { MapPin, Plus } from "lucide-react";
 
 import {
   formatProgrammeDuration,
@@ -16,8 +16,11 @@ import type {
 
 /**
  * A published list is grouped by day so the calendar date is stated once. The
- * heading sticks while its own day scrolls, which is what tells a reader on a
- * phone which day the row under their thumb belongs to.
+ * date is the largest organising fact on a programme, so it is set as a chapter
+ * break rather than as a caption: at 12px caps it was drawing at the same
+ * weight as a track pill. The heading sticks while its own day scrolls, which
+ * is what tells a reader on a phone which day the row under their thumb
+ * belongs to.
  */
 export function ProgrammeDayHeading({
   label,
@@ -28,9 +31,8 @@ export function ProgrammeDayHeading({
 }) {
   return (
     <h2 className="programme-day-divider">
-      <CalendarDays aria-hidden="true" size={14} />
-      {label}
-      <span>
+      <span className="programme-day-date">{label}</span>
+      <span className="programme-day-count">
         {count} session{count === 1 ? "" : "s"}
       </span>
     </h2>
@@ -141,25 +143,36 @@ export function SessionSpeakerLines({
  * A real control, named for the session it acts on. The previous "＋" was a
  * decorative span inside the row button, so it could not be reached, labelled
  * or pressed on its own.
+ *
+ * The detail variant is the same control at the same weight, only wider and
+ * self-labelling: the panel used to answer the row's quiet pill with a
+ * saturated primary button, so one action wore two labels and two weights on
+ * screen at the same moment.
  */
 export function SaveSessionButton({
   session,
   model,
+  variant = "row",
 }: {
   session: PublishedSession;
   model: PublicProgrammeModel;
+  variant?: "row" | "detail";
 }) {
   const saved = model.saved.includes(session.id);
   const verificationRequired = model.requiresItineraryVerification(session.id);
+  const pending = model.fetcher.state !== "idle";
+  const detail = variant === "detail";
   return (
     <button
       type="button"
-      className={`session-save${saved ? " saved" : ""}`}
+      className={`session-save${saved ? " saved" : ""}${detail ? " wide" : ""}`}
       aria-pressed={saved}
       aria-label={
-        saved
-          ? `Remove ${session.title} from my itinerary`
-          : `Save ${session.title} to my itinerary`
+        detail
+          ? undefined
+          : saved
+            ? `Remove ${session.title} from my itinerary`
+            : `Save ${session.title} to my itinerary`
       }
       aria-describedby={
         verificationRequired ? "itinerary-verification-help" : undefined
@@ -169,14 +182,21 @@ export function SaveSessionButton({
           ? "Security verification is required before the first save"
           : undefined
       }
-      disabled={model.fetcher.state !== "idle"}
+      disabled={pending}
       onClick={() => model.toggle(session.id)}
     >
-      {saved ? (
-        <>
-          <Check aria-hidden="true" size={15} />
-          <span>Saved ✓</span>
-        </>
+      {detail ? (
+        <span>
+          {pending
+            ? "Updating itinerary…"
+            : saved
+              ? "Remove from itinerary"
+              : "Add to itinerary"}
+        </span>
+      ) : saved ? (
+        /* One checkmark. The lucide glyph beside the literal "✓" shipped the
+           same mark twice. */
+        <span>Saved ✓</span>
       ) : (
         <>
           <Plus aria-hidden="true" size={15} />

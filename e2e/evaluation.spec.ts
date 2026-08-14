@@ -51,18 +51,22 @@ test("reviewer queue navigation and submission confirmation preserve context", a
   await expect(
     page.getByRole("dialog", { name: "Submit and open the next review?" }),
   ).toBeHidden();
-  const scoreFields = page.locator(".review-score-select");
-  const missingScore = scoreFields.first();
-  await expect(missingScore).toBeFocused();
+  // A blocked submit sends focus to the first unscored criterion, which is now
+  // the first segment of its radio group rather than a dropdown.
+  const scoreGroups = page.locator("[data-review-scale]");
+  const scoreGroupCount = await scoreGroups.count();
+  await expect(scoreGroups.first().getByRole("radio").first()).toBeFocused();
 
-  for (let index = 0; index < (await scoreFields.count()); index += 1) {
-    await scoreFields.nth(index).selectOption("4");
-    await expect(scoreFields.nth(index)).toHaveValue("4");
+  const chosen = (index: number) =>
+    scoreGroups.nth(index).getByRole("radio", { name: "4", exact: true });
+  for (let index = 0; index < scoreGroupCount; index += 1) {
+    await chosen(index).check();
+    await expect(chosen(index)).toBeChecked();
   }
   await page.locator('select[name="recommendation"]').selectOption("accept");
   await page.locator('select[name="confidence"]').selectOption("4");
-  for (let index = 0; index < (await scoreFields.count()); index += 1) {
-    await expect(scoreFields.nth(index)).toHaveValue("4");
+  for (let index = 0; index < scoreGroupCount; index += 1) {
+    await expect(chosen(index)).toBeChecked();
   }
   await expect(
     page.getByRole("region", { name: "Score submission" }).locator(".status"),

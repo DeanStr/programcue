@@ -114,6 +114,48 @@ export function conflictTypeLabel(type: string) {
   return type.replaceAll("_", " ");
 }
 
+/* Headings the rail can lead with. The stored type is a database enum, and
+   `required_resource` set in bold at an operator is the same defect as
+   showing them a row id; these are the names the policy list directly above
+   already uses. The inline form above keeps conflictTypeLabel, which reads
+   as part of its sentence rather than as a heading. */
+const CONFLICT_TYPE_NAMES: Record<string, string> = {
+  room: "Room overlap",
+  speaker: "Speaker overlap",
+  turnaround: "Speaker turnaround",
+  track: "Exclusive track overlap",
+  event_boundary: "Outside event dates",
+  capacity: "Room capacity",
+  required_resource: "Required resource overlap",
+  resource_configuration: "Resource configuration",
+  room_resource: "Room resource",
+};
+
+export function conflictTypeName(type: string) {
+  return CONFLICT_TYPE_NAMES[type] ?? conflictTypeLabel(type);
+}
+
+/* `ScheduleWorkspace["conflicts"]` is declared in the schedule service, which
+   the workspace query cannot widen from here, so the entry mapping it now
+   returns is invisible to the type checker. Read it the way the action
+   payloads above are read rather than asserting a shape. */
+export function conflictEntryIds(conflict: unknown): string[] {
+  if (!isRecord(conflict) || !Array.isArray(conflict.entryIds)) return [];
+  return conflict.entryIds.filter((id): id is string => typeof id === "string");
+}
+
+/* A FullCalendar drag snaps to five minutes, so an entry can start between
+   two rows of a half-hour axis. It belongs in the row it starts inside; the
+   card's own offset and height carry the rest. */
+export function containingScheduleSlot(slots: number[], epoch: number) {
+  let row = slots[0];
+  for (const slot of slots) {
+    if (slot > epoch) break;
+    row = slot;
+  }
+  return row;
+}
+
 export function isAutoPlacementUnplaced(
   value: unknown,
 ): value is AutoPlacementUnplaced {

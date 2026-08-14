@@ -15,11 +15,11 @@ import {
 } from "~/components/form-builder-controller";
 import {
   ApplicantPreviewPanel,
-  FieldLibraryPanel,
   FieldSettingsPanel,
   FormStructurePanel,
   FormVersionHistory,
   PresentationSettingsPanel,
+  PublicationSettingsFields,
 } from "~/components/form-builder-panels";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
@@ -223,7 +223,6 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
     editorStatus,
     formRef,
     input,
-    moveField,
     navigationState,
     patchField,
     pendingIntent,
@@ -241,6 +240,30 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
     ok: boolean;
     message: string;
   } | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  /* The dock carries one of two panes. Rendering the switch inside each pane's
+     own header keeps the pane title and the control that replaces it on the
+     same line, instead of stacking two rows of chrome above the content. */
+  const dockSwitch = (
+    <span className="fb-dock-switch" role="group" aria-label="Inspector pane">
+      <button
+        className="btn small"
+        type="button"
+        aria-pressed={!previewOpen}
+        onClick={() => setPreviewOpen(false)}
+      >
+        Settings
+      </button>
+      <button
+        className="btn small"
+        type="button"
+        aria-pressed={previewOpen}
+        onClick={() => setPreviewOpen(true)}
+      >
+        Preview
+      </button>
+    </span>
+  );
   const publishedPublicSlug =
     loaderData.workspace?.publishedVersion?.settings.publicSlug;
   if (loaderData.workspace?.publishedVersion && !publishedPublicSlug) {
@@ -277,86 +300,6 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           <p>Design, test and publish immutable application versions.</p>
         </div>
         <div className="page-actions">
-          <label className="label" style={{ minWidth: 220 }}>
-            Form
-            <select
-              className="select"
-              value={input.id ?? "new"}
-              onChange={(event) => {
-                window.location.assign(
-                  event.target.value === "new"
-                    ? "/admin/submissions/form?new=1"
-                    : `/admin/submissions/form?form=${encodeURIComponent(event.target.value)}`,
-                );
-              }}
-            >
-              <option value="new">New form…</option>
-              {loaderData.forms.map((form) => (
-                <option key={form.id} value={form.id}>
-                  {form.name} · {form.kind.replace("_", " ")}
-                </option>
-              ))}
-            </select>
-          </label>
-          {dirty ? (
-            <span className="status warning">Unsaved changes</span>
-          ) : input.id ? (
-            <span className="status success">Draft saved</span>
-          ) : (
-            <span className="status warning">Not saved</span>
-          )}
-          <DraftRecoveryStatus state={recovery.state} />
-          {publicUrl ? (
-            <>
-              <Link
-                className="btn"
-                to={publicUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open public form
-                <span className="sr-only"> (opens in a new tab)</span>
-              </Link>
-              <button
-                className="btn"
-                type="button"
-                onClick={async () => {
-                  try {
-                    if (!navigator.clipboard) {
-                      throw new Error(
-                        "Clipboard access is unavailable in this browser context.",
-                      );
-                    }
-                    await navigator.clipboard.writeText(
-                      new URL(publicUrl, window.location.origin).href,
-                    );
-                    setCopyFeedback({
-                      ok: true,
-                      message: "Public form link copied.",
-                    });
-                  } catch (error) {
-                    setCopyFeedback({
-                      ok: false,
-                      message:
-                        error instanceof Error
-                          ? error.message
-                          : "The public form link could not be copied.",
-                    });
-                  }
-                }}
-              >
-                Copy public form link
-              </button>
-              {copyFeedback ? (
-                <span
-                  className={copyFeedback.ok ? "help" : "field-error"}
-                  role={copyFeedback.ok ? "status" : "alert"}
-                >
-                  {copyFeedback.message}
-                </span>
-              ) : null}
-            </>
-          ) : null}
           <button
             className="btn"
             type="submit"
@@ -509,133 +452,94 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
         </div>
       ) : null}
 
-      <div className="grid grid-3 mb">
-        <label className="label">
-          Form name
-          <input
-            className="field"
-            name="name"
-            value={input.name}
-            onChange={(event) => change({ ...input, name: event.target.value })}
-            required
-          />
-        </label>
-        <label className="label">
-          Public URL
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <span
-              className="field"
-              style={{
-                borderRight: 0,
-                borderRadius: "8px 0 0 8px",
-                color: "var(--muted)",
-              }}
-            >
-              /apply/
-            </span>
-            <input
-              className="field"
-              name="publicSlug"
-              value={input.publicSlug}
-              onChange={(event) =>
-                change({ ...input, publicSlug: event.target.value })
-              }
-              style={{ borderRadius: "0 8px 8px 0" }}
-              required
-            />
-          </div>
-        </label>
-        <label className="label">
-          Record type
+      <div className="fb-toolbar">
+        <label className="label fb-toolbar-form">
+          Form
           <select
             className="select"
-            name="kind"
-            value={input.kind}
+            value={input.id ?? "new"}
             onChange={(event) => {
-              const kind = event.target.value as SaveFormInput["kind"];
-              change({
-                ...input,
-                kind,
-                schema: {
-                  ...input.schema,
-                  fields: input.schema.fields.map((field) =>
-                    field.id === "category"
-                      ? {
-                          ...field,
-                          type:
-                            kind === "direct_session"
-                              ? ("select" as const)
-                              : ("multi_select" as const),
-                          help:
-                            kind === "direct_session"
-                              ? "Choose the programme track for this session."
-                              : "Choose every programme track this proposal should be reviewed for.",
-                        }
-                      : field,
-                  ),
-                },
-              });
+              window.location.assign(
+                event.target.value === "new"
+                  ? "/admin/submissions/form?new=1"
+                  : `/admin/submissions/form?form=${encodeURIComponent(event.target.value)}`,
+              );
             }}
           >
-            <option value="submission">Application for review</option>
-            <option value="direct_session">Direct session intake</option>
+            <option value="new">New form…</option>
+            {loaderData.forms.map((form) => (
+              <option key={form.id} value={form.id}>
+                {form.name} · {form.kind.replace("_", " ")}
+              </option>
+            ))}
           </select>
         </label>
+        <span className="fb-toolbar-state">
+          {dirty ? (
+            <span className="status warning">Unsaved changes</span>
+          ) : input.id ? (
+            <span className="status success">Draft saved</span>
+          ) : (
+            <span className="status warning">Not saved</span>
+          )}
+          <DraftRecoveryStatus state={recovery.state} />
+        </span>
+        {publicUrl ? (
+          <span className="fb-toolbar-links">
+            <Link
+              className="btn small"
+              to={publicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open public form
+              <span className="sr-only"> (opens in a new tab)</span>
+            </Link>
+            <button
+              className="btn small"
+              type="button"
+              onClick={async () => {
+                try {
+                  if (!navigator.clipboard) {
+                    throw new Error(
+                      "Clipboard access is unavailable in this browser context.",
+                    );
+                  }
+                  await navigator.clipboard.writeText(
+                    new URL(publicUrl, window.location.origin).href,
+                  );
+                  setCopyFeedback({
+                    ok: true,
+                    message: "Public form link copied.",
+                  });
+                } catch (error) {
+                  setCopyFeedback({
+                    ok: false,
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "The public form link could not be copied.",
+                  });
+                }
+              }}
+            >
+              Copy public form link
+            </button>
+            {copyFeedback ? (
+              <span
+                className={copyFeedback.ok ? "help" : "field-error"}
+                role={copyFeedback.ok ? "status" : "alert"}
+              >
+                {copyFeedback.message}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
       </div>
 
-      <section className="card pad mb form-js-editor-card">
-        <div className="card-title">
-          <div>
-            <h2>Visual form editor</h2>
-            <p className="help">
-              Drag and edit supported fields here. Program Cue turns this
-              canvas into the saved, versioned form.
-            </p>
-          </div>
-        </div>
-        {editorStatus.state === "error" ? (
-          <div className="validation-item error mb" role="alert">
-            <strong>Visual adapter blocked</strong>
-            <span>{editorStatus.message}</span>
-          </div>
-        ) : (
-          <p className="help" aria-live="polite">
-            {editorStatus.message}
-          </p>
-        )}
-        <p className="help">
-          Supported visual fields are short text, long text, static single or
-          multiple choice, conference URL and conference video. Conditions must
-          use the Program Cue equality form shown in Field settings. Unsupported
-          FEEL, dynamic options and multi-column layouts block saving instead of
-          being discarded.
-        </p>
-        <p
-          className="help form-js-scroll-hint"
-          id="visual-form-editor-scroll-help"
-        >
-          On a narrow screen, swipe horizontally within the editor to reach the
-          form canvas and field settings.
-        </p>
-        <FormJsVisualEditor
-          schema={input.schema}
-          onChange={changeVisualSchema}
-          onStatus={setEditorStatus}
-          ariaDescribedBy="visual-form-editor-scroll-help"
-        />
-        <noscript>
-          The visual form editor requires JavaScript. Saving is unavailable
-          until the adapter can validate the visual schema.
-        </noscript>
-      </section>
-
-      <div className="builder-layout">
-        <FieldLibraryPanel
-          input={input}
-          passwordConfigured={loaderData.passwordConfigured}
-          change={change}
-          onSelect={setSelectedId}
-        />
+      <div
+        className={`fb-workbench${previewOpen ? " is-previewing" : ""}`}
+      >
         <FormStructurePanel
           input={input}
           selectedId={selected?.id}
@@ -645,25 +549,148 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           change={change}
           onSelect={setSelectedId}
         />
-        <div className="builder-inspector-stack">
+
+        <section className="card fb-pane fb-canvas">
+          <div className="fb-pane-head">
+            <h2>Form canvas</h2>
+            {editorStatus.state === "error" ? null : (
+              <span className="help right" aria-live="polite">
+                {editorStatus.message}
+              </span>
+            )}
+          </div>
+          <div className="fb-pane-body">
+            {editorStatus.state === "error" ? (
+              <div className="validation-item error mb" role="alert">
+                <strong>Visual adapter blocked</strong>
+                <span>{editorStatus.message}</span>
+              </div>
+            ) : null}
+            <FormJsVisualEditor
+              schema={input.schema}
+              onChange={changeVisualSchema}
+              onStatus={setEditorStatus}
+              ariaDescribedBy="visual-form-editor-scroll-help"
+            />
+            <p className="fb-pane-note mt">
+              Draw short text, long text, single or multiple choice, conference
+              URL and conference video. Conditions use the equality form in
+              Field settings; anything else blocks saving rather than being
+              discarded.
+            </p>
+            <p
+              className="help form-js-scroll-hint"
+              id="visual-form-editor-scroll-help"
+            >
+              On a narrow screen, swipe horizontally within the editor to reach
+              the form canvas and field settings.
+            </p>
+            <noscript>
+              The visual form editor requires JavaScript. Saving is unavailable
+              until the adapter can validate the visual schema.
+            </noscript>
+
+            <h3 className="fb-subhead">Form settings</h3>
+            <div className="fb-form-settings mb">
+              <label className="label">
+                Form name
+                <input
+                  className="field"
+                  name="name"
+                  value={input.name}
+                  onChange={(event) =>
+                    change({ ...input, name: event.target.value })
+                  }
+                  required
+                />
+              </label>
+              <label className="label">
+                Public URL
+                <span className="fb-slug-field">
+                  <span className="field fb-slug-prefix">/apply/</span>
+                  <input
+                    className="field"
+                    name="publicSlug"
+                    value={input.publicSlug}
+                    onChange={(event) =>
+                      change({ ...input, publicSlug: event.target.value })
+                    }
+                    required
+                  />
+                </span>
+              </label>
+              <label className="label">
+                Record type
+                <select
+                  className="select"
+                  name="kind"
+                  value={input.kind}
+                  onChange={(event) => {
+                    const kind = event.target.value as SaveFormInput["kind"];
+                    change({
+                      ...input,
+                      kind,
+                      schema: {
+                        ...input.schema,
+                        fields: input.schema.fields.map((field) =>
+                          field.id === "category"
+                            ? {
+                                ...field,
+                                type:
+                                  kind === "direct_session"
+                                    ? ("select" as const)
+                                    : ("multi_select" as const),
+                                help:
+                                  kind === "direct_session"
+                                    ? "Choose the programme track for this session."
+                                    : "Choose every programme track this proposal should be reviewed for.",
+                              }
+                            : field,
+                        ),
+                      },
+                    });
+                  }}
+                >
+                  <option value="submission">Application for review</option>
+                  <option value="direct_session">Direct session intake</option>
+                </select>
+              </label>
+            </div>
+            <PublicationSettingsFields
+              input={input}
+              passwordConfigured={loaderData.passwordConfigured}
+              change={change}
+            />
+            <div className="mt">
+              <PresentationSettingsPanel input={input} change={change} />
+            </div>
+          </div>
+        </section>
+
+        <div
+          className={`card fb-pane fb-dock${previewOpen ? " is-previewing" : ""}`}
+        >
           <FieldSettingsPanel
             input={input}
             selected={selected}
             categoryField={categoryField}
             change={change}
             patchField={patchField}
-            moveField={moveField}
             setSelectedId={setSelectedId}
             routingTeams={loaderData.routingTeams}
             routingTracks={loaderData.routingTracks}
+            paneSwitch={dockSwitch}
+            hidden={previewOpen}
           />
-          <PresentationSettingsPanel input={input} change={change} />
+          <ApplicantPreviewPanel
+            input={input}
+            brandAccent={loaderData.workspace?.brandAccent}
+            eventName={loaderData.workspace?.eventName}
+            paneSwitch={dockSwitch}
+            hidden={!previewOpen}
+            onClose={() => setPreviewOpen(false)}
+          />
         </div>
-        <ApplicantPreviewPanel
-          input={input}
-          brandAccent={loaderData.workspace?.brandAccent}
-          eventName={loaderData.workspace?.eventName}
-        />
       </div>
 
       {loaderData.workspace ? (

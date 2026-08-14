@@ -64,6 +64,22 @@
   --surface-canvas: var(--canvas);
   --surface-nav: var(--nav);
   --surface-inverse: var(--ink);
+  /* The paper ground for attendee-facing reading surfaces. Warm, because a
+     published programme is a document; confined to public shells, because the
+     operations half is a working instrument and reads better cool.
+     On this ground: --text-secondary is 7.04:1 and --text-tertiary 4.99:1.
+     --muted-2 is 4.28:1 and is therefore not a body colour here. */
+  --surface-editorial: #f7f5f1;
+  /* A cool hairline reads blue against warm paper, so the editorial surface
+     carries its own. */
+  --border-editorial: #dedbd5;
+
+  /* --- State on dark grounds ---------------------------------------------
+     The *-solid values are tuned to clear 3:1 against light tracks and go
+     nearly black against navy. These are their counterparts for status dots
+     and marks painted on --surface-inverse or --surface-nav. */
+  --state-good-on-dark: #5ee6a8;
+  --state-warn-on-dark: #fbbf24;
 
   /* --- Semantic text ----------------------------------------------------- */
   --text-primary: var(--ink);
@@ -171,7 +187,9 @@
   --tracking-tight: -0.035em;
   --tracking-snug: -0.015em;
   --tracking-normal: 0;
-  --tracking-wide: 0.09em;
+  /* There is deliberately no --tracking-wide. It existed to letterspace
+     uppercase labels, that treatment is retired, and a token kept for no
+     consumer is an invitation to bring it back. */
 
   --measure-prose: 68ch;
   --measure-app: 1560px;

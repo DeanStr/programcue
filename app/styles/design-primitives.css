@@ -33,15 +33,22 @@
 .pc-page-header-copy {
   min-width: 0;
 }
+/* The tracked-out caps eyebrow is retired. It sat above nearly every heading
+   in the product saying nothing the heading did not, and a page wearing eight
+   of them reads as generated rather than composed. What survives is a quiet
+   sentence-case label for the cases where the word genuinely qualifies the
+   heading beneath it ("From the event team"), at a weight that lets the
+   heading win. Changing it here rather than deleting ninety call sites keeps
+   the information and removes the tell in one place. */
 .pc-page-eyebrow,
 .pc-section-kicker {
   display: block;
   margin-bottom: var(--space-1);
-  color: var(--brand-700);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-normal);
+  text-transform: none;
 }
 .pc-page-header .page-actions {
   align-items: center;
@@ -118,41 +125,53 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* An empty state is a sentence and a next step, not a 220px hole with a
+   dashed frame around it. The old min-height reserved a crater inside every
+   card that had nothing to show, which is most of what made the dashboards
+   read as unfinished. Left-aligned so it sits on the same rag as the content
+   it replaces. */
 .pc-empty-state {
   display: grid;
-  justify-items: center;
-  align-content: center;
-  min-height: 220px;
-  padding: var(--space-7);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, #fff, var(--soft));
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
 }
 /* Styled by class, not by element: the heading level varies with the
    surrounding outline, so keying appearance to h2 left every empty state at
    the default level rendering with browser margins. */
 .pc-empty-state-title {
-  margin: var(--space-2) 0 3px;
+  grid-column: 2;
+  margin: 0;
   color: var(--ink);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: var(--weight-bold);
   line-height: var(--leading-snug);
 }
 .pc-empty-state p {
-  max-width: 340px;
+  grid-column: 2;
+  max-width: 58ch;
   margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
 }
 .pc-state-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: var(--radius);
+  grid-row: span 2;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs);
   display: grid;
   place-items: center;
-  background: var(--brand-50);
-  color: var(--brand-700);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text-tertiary);
 }
 .pc-state-action {
-  margin-top: var(--space-3);
+  grid-column: 2;
+  margin-top: var(--space-1);
 }
 .pc-pending-state {
   min-height: 220px;
@@ -630,6 +649,39 @@
 .pc-admin-page-section + .pc-admin-page-section {
   margin-top: var(--space-3);
 }
+/* --- Admin section header ------------------------------------------------
+   A page is a sequence of named sections, not a run of cards. The heading
+   outranks the card titles beneath it (23px section over 16px card), and the
+   rule carries the break to the edge so the eye can find the seam without
+   reading. The disclosure control belongs to mobile only. */
+.pc-admin-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+.pc-admin-section-head-copy {
+  min-width: 0;
+}
+.pc-admin-section-head h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--leading-tight);
+}
+.pc-admin-section-head p {
+  margin: var(--space-1) 0 0;
+  max-width: 78ch;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+.pc-admin-page-section + .pc-admin-page-section .pc-admin-section-head {
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border);
+}
 .pc-admin-section-toggle {
   display: none;
 }
@@ -656,28 +708,29 @@
   .pc-admin-section-nav a {
     white-space: nowrap;
   }
-  .pc-admin-section-toggle {
-    display: flex;
-    width: 100%;
+  /* The heading stays a heading; the chevron is a separate 44px control beside
+     it, so screen readers still get a real section outline on mobile. */
+  .pc-admin-section-head {
     align-items: center;
-    justify-content: space-between;
     gap: var(--space-3);
-    padding: var(--space-3);
+    margin-bottom: var(--space-2);
+  }
+  .pc-admin-section-head h2 {
+    font-size: var(--text-lg);
+  }
+  .pc-admin-section-head p {
+    font-size: var(--text-2xs);
+  }
+  .pc-admin-section-toggle {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 44px;
+    height: 44px;
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     color: var(--ink);
     background: var(--surface);
-    text-align: left;
-  }
-  .pc-admin-section-toggle > span {
-    display: grid;
-    min-width: 0;
-    gap: 2px;
-  }
-  .pc-admin-section-toggle small {
-    color: var(--text-secondary);
-    font-size: var(--text-2xs);
-    font-weight: var(--weight-normal);
   }
   .pc-admin-section-toggle svg {
     flex: none;
@@ -687,7 +740,6 @@
     transform: rotate(180deg);
   }
   .pc-admin-section-toggle[aria-expanded="true"] {
-    margin-bottom: var(--space-3);
     border-color: var(--brand-300);
   }
 }
@@ -779,4 +831,119 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: var(--space-3);
+}
+
+/* --- Interactive surfaces -------------------------------------------------
+   A card that navigates has to say so before it is clicked. Every tile on the
+   participant dashboard was an <a> wrapping a .card with no hover, no active
+   and no pointer affordance of any kind, so five of the six things a speaker
+   can do read as decoration. The lift is 1px: enough to register as a
+   response, small enough that a grid of them does not shimmer. Motion is
+   already neutralised by the reduced-motion block in tokens.css. */
+a.card,
+button.card,
+.pc-interactive {
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+a.card:hover,
+button.card:hover,
+.pc-interactive:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--elev-2);
+  transform: translateY(-1px);
+}
+a.card:active,
+button.card:active,
+.pc-interactive:active {
+  box-shadow: var(--elev-1);
+  transform: translateY(0);
+}
+
+/* --- Numerals -------------------------------------------------------------
+   Any figure a reader compares against another figure is tabular, so digits
+   sit in the same column down a stack and a changing value does not reflow
+   its own label. */
+.pc-num,
+.progress-row b,
+.pc-stat-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* --- Index list -----------------------------------------------------------
+   A run of destinations with one comparable figure each. Rows, not cards: the
+   values share a right-aligned column so a reader scans the numbers first and
+   the labels only when one of them is surprising. One rule between rows, none
+   above the first or below the last. */
+.pc-index-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--elev-1);
+  overflow: hidden;
+}
+.pc-index-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, auto) minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  min-height: 52px;
+  color: var(--text-primary);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.pc-index-row + .pc-index-row {
+  border-top: 1px solid var(--border);
+}
+.pc-index-row:hover {
+  background: var(--surface-sunken);
+}
+.pc-index-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-tertiary);
+}
+.pc-index-label {
+  font-weight: var(--weight-semibold);
+}
+.pc-index-detail {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+/* The figure and the thing it counts stay together and baseline-align, so a
+   row reads as one phrase — "4 sessions" — rather than a number stranded at
+   the right edge with its noun 600px away on the left. */
+.pc-index-measure {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  text-align: right;
+}
+.pc-index-value {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-snug);
+}
+.pc-index-unit {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+.pc-index-chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--muted-2);
+}
+@media (max-width: 560px) {
+  /* The sentence fragment is the first thing to go; the figure is the point. */
+  .pc-index-row {
+    grid-template-columns: 20px minmax(0, 1fr) auto 16px;
+  }
+  .pc-index-detail {
+    display: none;
+  }
 }

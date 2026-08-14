@@ -78,7 +78,7 @@ test("mobile administration sections reveal linked content without overflow", as
   const navigation = page.getByRole("navigation", {
     name: "Command Centre sections",
   });
-  const workflows = page.getByRole("button", { name: /^Workflow actions/ });
+  const workflows = page.getByRole("button", { name: /Workflow actions/ });
   await expect(workflows).toHaveAttribute("aria-expanded", "false");
   await navigation.getByRole("link", { name: "Workflow actions" }).click();
   await expect(workflows).toHaveAttribute("aria-expanded", "true");
@@ -91,7 +91,7 @@ test("mobile administration sections reveal linked content without overflow", as
   await expect(workflows).toHaveAttribute("aria-expanded", "true");
 
   const assistants = page.getByRole("button", {
-    name: /^Assistants and delivery/,
+    name: /Assistants and delivery/,
   });
   await navigation.getByRole("link", { name: "Assistants" }).click();
   await expect(assistants).toHaveAttribute("aria-expanded", "true");
@@ -105,22 +105,40 @@ test("mobile administration sections reveal linked content without overflow", as
   await expectNoHorizontalPageOverflow(page);
   await expectNoContrastViolations(page, "Command Centre");
 
-  await waitForInterface(page, "/admin/communications");
-  const delivery = page.getByRole("button", {
-    name: /^Delivery configuration/,
+  // Sender profiles, automation and calendar accounts are configured once and
+  // then left alone, so they sit behind Delivery settings rather than on the
+  // page an operator opens to send something today.
+  await waitForInterface(page, "/admin/communications?view=setup");
+  // Delivery configuration is the reason this view exists, so it opens with
+  // the page. Calendar administration is the one that starts closed.
+  const calendars = page.getByRole("button", {
+    name: /Calendar administration/,
   });
-  await expect(delivery).toHaveAttribute("aria-expanded", "false");
+  await expect(calendars).toHaveAttribute("aria-expanded", "false");
+  await page
+    .getByRole("navigation", { name: "Delivery settings sections" })
+    .getByRole("link", { name: "Calendars" })
+    .click();
+  await expect(calendars).toHaveAttribute("aria-expanded", "true");
+  await expectNoHorizontalPageOverflow(page);
+  await expectNoContrastViolations(page, "Delivery settings");
+
+  await waitForInterface(page, "/admin/communications");
+  // Templates is the centre's primary work and opens with the page; History
+  // is the one that starts closed.
+  const history = page.getByRole("button", { name: /History/ });
+  await expect(history).toHaveAttribute("aria-expanded", "false");
   await page
     .getByRole("navigation", { name: "Communications Centre sections" })
-    .getByRole("link", { name: "Delivery" })
+    .getByRole("link", { name: "History" })
     .click();
-  await expect(delivery).toHaveAttribute("aria-expanded", "true");
+  await expect(history).toHaveAttribute("aria-expanded", "true");
   await expectNoHorizontalPageOverflow(page);
   await expectNoContrastViolations(page, "Communications Centre");
 
   await waitForInterface(page, "/admin/review");
   const evaluationAccess = page.getByRole("button", {
-    name: /^Evaluation access/,
+    name: /Evaluation access/,
   });
   await expect(evaluationAccess).toHaveAttribute("aria-expanded", "false");
   await page

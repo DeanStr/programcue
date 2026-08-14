@@ -18,14 +18,14 @@ export function PresentationSettingsPanel({
     });
 
   return (
-    <details className="card builder-panel presentation-settings-panel">
+    <details className="fb-disclosure">
       <summary>
         <span>
           <strong>Public landing page</strong>
           <small>Invitation, organiser, imagery and programme promotion</small>
         </span>
       </summary>
-      <div className="presentation-settings-fields">
+      <div className="fb-disclosure-fields">
         <p className="help">
           Give applicants enough event context to decide before they start a
           private draft.

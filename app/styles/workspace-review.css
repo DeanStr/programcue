@@ -19,59 +19,36 @@
   border-radius: var(--radius-sm);
   margin-bottom: var(--space-2);
   background: var(--surface);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
+.queue-card:hover {
+  background: var(--surface-sunken);
+  border-color: var(--border-strong);
+}
+/* The current item was a 2px ring at 8% alpha over a near-white tint — below
+   the threshold at which you can find your place while scanning. The rail
+   primitive already survives forced-colors, so the marker uses it. */
 .queue-card.active {
+  --rail: var(--brand-600);
   border-color: var(--brand-400);
-  background: #f7f7ff;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.08);
+  background: var(--brand-50);
 }
 .queue-card h3 {
-  font-size: var(--text-xs);
-  margin: var(--space-1) 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-snug);
+  margin: 0;
 }
-.queue-card .queue-progress {
-  height: 4px;
-  background: var(--line);
-  border-radius: var(--radius-sm);
-  margin-top: var(--space-2);
+.review-queue-progress {
+  margin: 0 0 var(--space-2);
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
 }
-.queue-card .queue-progress span {
-  display: block;
-  height: 100%;
-  background: var(--brand-600);
-  border-radius: var(--radius-sm);
-}
-.rubric-row {
-  display: grid;
-  grid-template-columns: 1fr 48px 150px 68px;
-  gap: var(--space-2);
-  align-items: center;
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--line);
-}
-.stars {
-  display: flex;
-  gap: 3px;
-}
-.star {
-  border: 0;
-  background: transparent;
-  color: var(--nav-text);
-  font-size: var(--text-lg);
-  padding: 0;
-}
-.star.on {
-  color: var(--brand-600);
-}
-.score-summary {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-2);
-  background: var(--soft);
-  border: 1px solid var(--line);
-  padding: var(--space-3);
-  border-radius: var(--radius);
-  margin-top: var(--space-3);
+.review-queue-progress .pc-num {
+  color: var(--text-primary);
+  font-weight: var(--weight-bold);
 }
 .sticky-actions {
   position: sticky;
@@ -87,6 +64,83 @@
 }
 .sticky-actions .spacer {
   margin-left: auto;
+}
+/* The panel's aggregate, revived for a number it can actually produce: the
+   same weighted total the action stores on submit, beside the count of
+   criteria answered. */
+.score-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  margin-top: var(--space-4);
+}
+.score-summary > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.score-summary-label {
+  color: var(--text-primary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+}
+.score-summary > div small {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
+.score-summary-value {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-snug);
+  white-space: nowrap;
+}
+/* An unfinished total is not a value with a dash in it: it reads at the weight
+   of the caption it belongs to, not at the weight of the number it will become. */
+.score-summary-value.is-pending {
+  color: var(--text-tertiary);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+.score-summary-unit {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.review-kbd-hint {
+  display: inline-flex;
+  gap: 2px;
+}
+.review-kbd-hint kbd,
+.review-shortcut-trigger kbd,
+.review-shortcut-list kbd {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  padding: 1px var(--space-2);
+  font-family: var(--font);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+.review-shortcut-trigger {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  line-height: 1;
+}
+.review-shortcut-trigger:hover kbd {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.review-shortcut-list > div {
+  grid-template-columns: 150px minmax(0, 1fr);
 }
 .conflict-box {
   border: 1px solid #fecaca;

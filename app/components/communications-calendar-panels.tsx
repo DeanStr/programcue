@@ -1,3 +1,4 @@
+import { CalendarClock, CalendarPlus, Link2 } from "lucide-react";
 import { Form, Link, useSubmit } from "react-router";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
@@ -110,10 +111,10 @@ export function CalendarAdministration({
   const submit = useSubmit();
   const { confirm, dialog } = useConfirm();
   return (
-    <section className="card pad mt">
+    <section className="card pad">
       {dialog}
       <div className="card-title">
-        <h2>Calendar administration</h2>
+        <h2>Calendar connections</h2>
         <span className="help right">Google, Microsoft 365 and email ICS</span>
       </div>
       <div className="row-actions mb">
@@ -237,7 +238,8 @@ export function CalendarAdministration({
         </div>
       ) : (
         <EmptyState
-          className="mb"
+          className="mb comms-empty"
+          icon={Link2}
           title="No calendar account is connected"
           description="Connect Google or Microsoft 365 above to send invitations directly from a participant's own calendar. Email ICS invitations work without a connection."
         />
@@ -359,7 +361,9 @@ export function CalendarAdministration({
         </div>
       ) : (
         <EmptyState
+          className="comms-empty"
           headingLevel={4}
+          icon={CalendarPlus}
           title="No session invitations to administer"
           description="Publish a scheduled speaker session to administer its invitation."
         />
@@ -436,6 +440,8 @@ export function CalendarLifecycleTable({
         </div>
       ) : (
         <EmptyState
+          className="comms-empty"
+          icon={CalendarClock}
           title="No calendar operations yet"
           description="Published schedule updates will create stable-UID calendar operations here."
         />

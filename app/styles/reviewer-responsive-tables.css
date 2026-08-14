@@ -1,11 +1,16 @@
 /* Reviewer shell and workbench. Keep this slice isolated from administrator and speaker layouts. */
 .reviewer-shell .review-top {
   height: auto;
-  min-height: 72px;
+  min-height: 64px;
   display: grid;
   grid-template-columns: auto minmax(180px, 1fr) auto auto;
   align-items: center;
   gap: var(--space-3) var(--space-5);
+}
+.reviewer-shell .review-session-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 .reviewer-shell .review-brand {
   display: flex;
@@ -48,32 +53,37 @@
 .reviewer-shell .speaker-main {
   min-width: 0;
 }
+/* The three columns cap at the same height and scroll independently. The queue
+   sizes to its own content instead: a stretched panel holding two items was
+   580px of empty white on the column that is meant to show progress. */
 .reviewer-shell .review-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 0.58fr) minmax(360px, 1.03fr) minmax(
+  grid-template-columns: minmax(220px, 0.5fr) minmax(360px, 1.1fr) minmax(
       400px,
       1fr
     );
   gap: var(--space-4);
-  align-items: stretch;
-  min-height: calc(100dvh - 190px);
+  align-items: start;
 }
 .reviewer-shell .review-layout > *,
 .reviewer-shell .review-score-form {
   min-width: 0;
 }
 .reviewer-shell .review-queue {
+  align-self: start;
+  max-height: calc(100dvh - 190px);
   overflow: auto;
 }
 .reviewer-shell .review-queue-list {
   display: grid;
   gap: var(--space-2);
+  margin-top: var(--space-4);
 }
 .reviewer-shell .review-queue .queue-card {
   min-width: 0;
   display: grid;
   justify-items: start;
-  gap: var(--space-1);
+  gap: var(--space-2);
   margin: 0;
   padding: var(--space-3);
   overflow: hidden;
@@ -85,9 +95,23 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
-.reviewer-shell .review-queue .queue-card small {
+/* The rail's companion word. Without it the state is colour alone, which is
+   nothing in forced-colors and nothing to a colour-blind reviewer. */
+.reviewer-shell .queue-card-state {
   max-width: 100%;
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  /* The reference is how a reviewer cross-checks an item against a decision
+     list, so the line wraps rather than eliding half of it in a narrow rail. */
   overflow-wrap: anywhere;
+}
+.reviewer-shell .queue-card-state::first-letter {
+  text-transform: uppercase;
+}
+.reviewer-shell .queue-card-state .pc-num {
+  color: var(--text-tertiary);
+  font-weight: var(--weight-normal);
 }
 .reviewer-shell .review-queue .queue-card .pill {
   max-width: 100%;
@@ -97,62 +121,114 @@
 }
 .reviewer-shell .review-detail {
   min-width: 0;
+  max-height: calc(100dvh - 190px);
   overflow: auto;
+}
+.reviewer-shell .review-detail-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+.reviewer-shell .review-detail-identity {
+  min-width: 0;
+}
+/* The submission title is what the whole column is about, and it was set at
+   the same 16px as the card chrome around it. */
+.reviewer-shell .review-detail-identity h2 {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-snug);
+  text-wrap: balance;
+}
+.reviewer-shell .review-detail-identity p {
+  margin: var(--space-2) 0 0;
+}
+.reviewer-shell .review-detail-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+.reviewer-shell .review-queue-position {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
 }
 .reviewer-shell .review-answer-list {
   display: grid;
   gap: 0;
   margin: var(--space-3) 0 0;
 }
-.reviewer-shell .review-answer-list > div {
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid var(--line);
+/* A one-line fact and three paragraphs are not the same object. Facts pair off
+   in a strip with no rule between them; prose gets the rule and the room. */
+.reviewer-shell .review-answer {
+  display: grid;
+  grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
 }
-.reviewer-shell .review-answer-list > div:last-child {
-  border-bottom: 0;
+.reviewer-shell .review-answer.prose {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
+}
+.reviewer-shell .review-answer + .review-answer {
+  border-top: 1px solid var(--line);
+}
+.reviewer-shell .review-answer:not(.prose) + .review-answer:not(.prose) {
+  border-top: 0;
 }
 .reviewer-shell .review-answer-list dt {
-  color: var(--muted);
+  color: var(--text-tertiary);
   font-size: var(--text-2xs);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: 0.07em;
-  text-transform: capitalize;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-normal);
+  text-transform: none;
 }
 .reviewer-shell .review-answer-list dd {
-  margin: var(--space-1) 0 0;
+  margin: 0;
   overflow-wrap: anywhere;
 }
+.reviewer-shell .review-answer.prose dd {
+  line-height: var(--leading-normal);
+}
+/* The column caps itself and scrolls its body, so the commit bar stays on
+   screen. It no longer borrows its height from a stretched grid row — the
+   queue beside it is sized by its own content now. */
 .reviewer-shell .review-score {
   grid-column: auto;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
   max-height: calc(100dvh - 190px);
   overflow: hidden;
 }
 .reviewer-shell .review-score-form {
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
 .reviewer-shell .review-score-body {
   flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: var(--space-4);
 }
 .reviewer-shell .review-score-head {
-  align-items: flex-start;
-  flex-wrap: wrap;
-}
-.reviewer-shell .review-score-head .btn {
-  margin-left: auto;
+  align-items: center;
 }
 .reviewer-shell .review-rubric {
   border-top: 1px solid var(--line);
 }
 .reviewer-shell .review-rubric-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 54px 108px;
-  align-items: center;
-  gap: var(--space-2);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
   padding: var(--space-3) 0;
   border-bottom: 1px solid var(--line);
 }
@@ -161,7 +237,7 @@
   display: grid;
   gap: 2px;
 }
-.reviewer-shell .review-criterion label {
+.reviewer-shell .review-criterion-name {
   font-weight: var(--weight-bold);
 }
 .reviewer-shell .review-criterion small {
@@ -172,9 +248,113 @@
   font-size: var(--text-2xs);
   font-weight: var(--weight-bold);
   text-align: right;
+  white-space: nowrap;
+}
+/* The scale takes the full row so ten positions stay legible and the four
+   criteria line up as a profile you can read down. */
+.reviewer-shell .review-scale {
+  grid-column: 1/-1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  border: 0;
+}
+.reviewer-shell .review-scale-option {
+  position: relative;
+  flex: 1 1 34px;
+  min-width: 0;
+}
+/* The control is invisible but still occupies the whole segment, so the thing
+   a reader sees and the thing a pointer hits are the same rectangle. Clipping
+   it to 1px the way .sr-only does would leave the segment with no hit target
+   of its own and make it unreachable to anything driving the radio directly. */
+.reviewer-shell .review-scale-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.reviewer-shell .review-scale-input:disabled {
+  cursor: default;
+}
+.reviewer-shell .review-scale-option.is-clear {
+  flex: 0 0 auto;
+}
+.reviewer-shell .review-scale-option.is-clear > span {
+  padding: 0 var(--space-3);
+  color: var(--text-tertiary);
+}
+.reviewer-shell .review-scale-option > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.reviewer-shell .review-scale-option:hover > span {
+  border-color: var(--border-strong);
+  background: var(--surface-sunken);
+}
+.reviewer-shell .review-scale-option input:checked + span {
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--text-inverse);
+  font-weight: var(--weight-bold);
+}
+.reviewer-shell .review-scale-option input:focus-visible + span {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
+  box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
+}
+.reviewer-shell .review-scale-option input:disabled + span {
+  background: var(--surface-sunken);
+  color: var(--muted-2);
+  cursor: default;
+}
+.reviewer-shell .review-scale-option input:disabled:checked + span {
+  border-color: var(--border-strong);
+  background: var(--border-strong);
+  color: var(--text-primary);
 }
 .reviewer-shell .review-score-select {
+  grid-column: 1/-1;
   width: 100%;
+  min-width: 0;
+  margin-top: var(--space-1);
+}
+.reviewer-shell .review-rubric-row .textarea {
+  grid-column: 1/-1;
+  margin-top: var(--space-1);
+}
+/* A recusal is decided after the work, not before it, and it was holding the
+   panel's top-right corner in the highest-saturation treatment on the screen.
+   The danger styling stays where the decision is confirmed. */
+.reviewer-shell .review-recusal {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+.reviewer-shell .review-recusal small {
   min-width: 0;
 }
 .reviewer-shell .review-overall-fields {
@@ -196,43 +376,104 @@
   min-height: 100px;
 }
 .reviewer-shell .review-actions {
-  position: static;
-  flex: 0 0 auto;
+  padding-inline: var(--space-4);
+}
+/* Three commit labels in a 500px column wrapped to two lines each. They never
+   wrap now; the save state is the element that gives way. */
+.reviewer-shell .review-actions .btn {
+  white-space: nowrap;
+}
+.reviewer-shell .review-save-state {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+/* Below this the three commit labels use the whole bar, so the save state takes
+   a line of its own rather than eliding itself down to one letter. */
+@media (max-width: 1350px) {
+  .reviewer-shell .review-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .reviewer-shell .review-save-state {
+    flex: 1 0 100%;
+  }
+}
+/* The bar used to hand the reviewer a Save draft button and, 8px to its left,
+   a sentence explaining that drafts save themselves. One primary, one
+   secondary, and a quiet manual save for the reviewer who wants the keystroke. */
+.reviewer-shell .review-save-draft {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  padding-inline: var(--space-2);
+}
+.reviewer-shell .review-save-draft:hover {
+  background: var(--surface-sunken);
+  border-color: var(--line);
 }
 
+/* The three-column case is the only one where the panel owns its own scroll
+   container and the bar already sits at the bottom of it. Everywhere else the
+   page scrolls, and a static bar puts Submit 2,600px below the fold. */
+@media (min-width: 1181px) {
+  .reviewer-shell .review-actions {
+    position: static;
+    flex: 0 0 auto;
+  }
+}
 @media (max-width: 1180px) {
   .reviewer-shell .review-layout {
     grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
-    min-height: 0;
+  }
+  .reviewer-shell .review-queue,
+  .reviewer-shell .review-detail {
+    max-height: none;
   }
   .reviewer-shell .review-score {
     grid-column: 1/-1;
     max-height: none;
+    overflow: visible;
   }
   .reviewer-shell .review-score-body {
     overflow: visible;
   }
+  .reviewer-shell .review-actions {
+    border-radius: 0 0 var(--radius) var(--radius);
+    padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
+  }
+  /* Scroll-padding belongs to the scroll root, which this slice does not own,
+     so the fields carry the offset instead and never land under the bar. */
+  .reviewer-shell .review-score-body :is(.field, .select, .textarea, fieldset) {
+    scroll-margin-bottom: 96px;
+  }
 }
 @media (max-width: 900px) {
   .reviewer-shell .review-top {
-    grid-template-columns: auto minmax(160px, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-2) var(--space-3);
   }
-  .reviewer-shell .review-demo-return {
-    grid-column: 2;
+  .reviewer-shell .review-context {
+    grid-column: 1/-1;
+    grid-row: 2;
+  }
+  .reviewer-shell .review-session-actions {
+    grid-column: 1/-1;
+    grid-row: 3;
   }
   .reviewer-shell .review-account {
-    grid-column: 3;
-    grid-row: 1/-1;
+    grid-column: 2;
+    grid-row: 1;
   }
   .reviewer-shell .review-layout {
     grid-template-columns: 1fr;
   }
   .reviewer-shell .review-score {
     grid-column: auto;
-  }
-  .reviewer-shell .review-queue {
-    max-height: none;
   }
 }
 @media (max-width: 760px) {
@@ -261,11 +502,14 @@
   .reviewer-shell .review-context small {
     text-align: right;
   }
-  .reviewer-shell .review-demo-return {
+  .reviewer-shell .review-session-actions {
     grid-column: 1/-1;
     grid-row: 3;
   }
-  .reviewer-shell .review-demo-return .btn {
+  .reviewer-shell .review-session-actions > * {
+    flex: 1 1 0;
+  }
+  .reviewer-shell .review-session-actions .btn {
     width: 100%;
   }
   .reviewer-shell .review-account {
@@ -289,33 +533,60 @@
   .reviewer-shell .review-score {
     margin-top: 0;
   }
-  .reviewer-shell .review-rubric-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--space-2) var(--space-3);
+  .reviewer-shell .review-detail-head {
+    flex-direction: column;
+    gap: var(--space-3);
   }
-  .reviewer-shell .review-weight {
-    text-align: right;
+  .reviewer-shell .review-answer {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
   }
-  .reviewer-shell .review-score-select {
-    display: block;
-    grid-column: 1/-1;
+  .reviewer-shell .review-detail-nav {
+    margin-left: 0;
   }
   .reviewer-shell .review-overall-fields {
     grid-template-columns: 1fr;
   }
+  .reviewer-shell .review-recusal {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  /* The primary leads and takes the full width; the pair below it is
+     secondary. The old two-column grid left it dangling at half width in the
+     third cell, narrower than the two actions above it. */
   .reviewer-shell .review-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
   }
+  .reviewer-shell .review-actions > .btn.primary {
+    grid-column: 1/-1;
+    order: -1;
+  }
+  .reviewer-shell .review-save-state,
   .reviewer-shell .review-actions > .subtle {
     grid-column: 1/-1;
   }
-  .reviewer-shell .review-actions .spacer {
-    display: none;
+  .reviewer-shell .review-save-state {
+    order: -2;
   }
   .reviewer-shell .review-actions .btn {
     width: 100%;
+  }
+}
+
+/* The chosen segment is a background fill, and the UA repaints backgrounds in
+   High Contrast Mode. Without this the whole rubric reads as unscored. */
+@media (forced-colors: active) {
+  .reviewer-shell .review-scale-option > span {
+    border: 1px solid CanvasText;
+  }
+  .reviewer-shell .review-scale-option input:checked + span {
+    forced-color-adjust: none;
+    background: Highlight;
+    border-color: Highlight;
+    color: HighlightText;
   }
 }
 

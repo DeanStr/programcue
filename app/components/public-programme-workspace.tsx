@@ -1,9 +1,10 @@
 import { useRef, type CSSProperties } from "react";
-import { CalendarDays, MapPin, Search } from "lucide-react";
+import { CalendarDays, Heart, MapPin, Search } from "lucide-react";
 import { Link } from "react-router";
 
 import { TurnstileWidget } from "~/components/turnstile-widget";
 import {
+  formatProgrammeDuration,
   formatProgrammeEventDay,
   formatProgrammeTimeRange,
   programmeAccentPalette,
@@ -21,6 +22,7 @@ import {
 } from "~/components/public-programme-parts";
 import {
   descriptionSnippet,
+  eventHeroImagePath,
   formatDay,
   formatTime,
   groupSessionsByDay,
@@ -142,8 +144,10 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
           )}
         </nav>
       </details>
+      {/* A lucide heart, not "♡": the keyboard glyph falls back to the system
+          emoji font beside monochrome vector icons. */}
       <a className="btn public-itinerary-link" href={itineraryHref}>
-        <span aria-hidden="true">♡</span>
+        <Heart aria-hidden="true" size={15} />
         <span>{shared ? "Shared itinerary" : "My itinerary"}</span>
         <span className="status info">{saved.length}</span>
       </a>
@@ -151,23 +155,31 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
   );
 }
 
+/**
+ * The masthead of a published programme. It used to carry three big numbers —
+ * sessions, speakers, days — each of which the page states again within one
+ * screen, and one of which was counting the days that happened to hold a
+ * session rather than the days of the event, so it contradicted the range
+ * printed directly above it. What replaces them is the one thing the list
+ * cannot say from the top of the page: what the programme opens with, and how
+ * to take the whole thing away in a calendar.
+ */
 function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
   const { programme, embedded } = model;
   const place = [programme.event.venue, programme.event.city]
     .filter(Boolean)
     .join(", ");
-  const dayCount = new Set(
-    programme.sessions.map((session) =>
-      formatDay(session.startsAt, programme.event.timezone),
-    ),
-  ).size;
-  const stats = [
-    { label: "Sessions", value: programme.sessions.length },
-    { label: "Speakers", value: programme.speakers.length },
-    { label: dayCount === 1 ? "Day" : "Days", value: dayCount },
-  ];
+  const heroImage = eventHeroImagePath(programme.event);
+  const opening = programme.sessions[0] ?? null;
   return (
-    <section className="hero">
+    <section
+      className={`hero${heroImage ? " has-image" : ""}`}
+      style={
+        heroImage
+          ? ({ "--hero-image": `url("${heroImage}")` } as CSSProperties)
+          : undefined
+      }
+    >
       <div className="hero-body">
         <h1>{programme.event.name}</h1>
         <p className="hero-meta">
@@ -186,16 +198,34 @@ function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
           ) : null}
         </p>
         {embedded ? null : (
-          <dl className="hero-stats">
-            {stats.map((stat) => (
-              <div key={stat.label}>
-                <dt>{stat.label}</dt>
-                <dd>{stat.value}</dd>
-              </div>
-            ))}
-          </dl>
+          <div className="hero-actions">
+            <a
+              className="btn hero-action"
+              href={`/api/v1/public/events/${encodeURIComponent(programme.event.slug)}/calendar.ics`}
+            >
+              <CalendarDays aria-hidden="true" size={15} />
+              Add to calendar (.ics)
+            </a>
+          </div>
         )}
       </div>
+      {opening && !embedded ? (
+        <div className="hero-opening">
+          <p className="hero-opening-label">Opens with</p>
+          <p className="hero-opening-title">{opening.title}</p>
+          <p className="hero-opening-meta">
+            <time dateTime={new Date(opening.startsAt * 1_000).toISOString()}>
+              {formatDay(opening.startsAt, programme.event.timezone)} ·{" "}
+              {formatProgrammeTimeRange(
+                opening.startsAt,
+                opening.endsAt,
+                programme.event.timezone,
+              )}
+            </time>
+            <span>{opening.room}</span>
+          </p>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -398,6 +428,17 @@ function PublicProgrammeFilters({ model }: { model: PublicProgrammeModel }) {
   );
 }
 
+/**
+ * A programme whose keynote draws exactly like a 45-minute breakout has given
+ * up its main editorial job, so the sessions the whole room attends get the
+ * larger title and an accent rail. Driven off the published format, because
+ * that is the only ranking the organiser has actually stated.
+ */
+function isFeatureSession(session: { format: string }) {
+  const format = session.format.toLocaleLowerCase("en");
+  return format.includes("keynote") || format.includes("plenary");
+}
+
 function ProgrammeSessionEntry({
   session,
   model,
@@ -410,51 +451,58 @@ function ProgrammeSessionEntry({
   const snippet = descriptionSnippet(description);
   const expanded = expandedDescriptions.includes(session.id);
   const active = session.id === selected?.id;
+  const feature = isFeatureSession(session);
   return (
-    <div className={`programme-entry${active ? " active" : ""}`}>
+    <div
+      className={`programme-entry${feature ? " feature" : ""}${active ? " active" : ""}`}
+    >
       <button
         type="button"
         id={`session-${session.slug}`}
         className={`programme-row${active ? " active" : ""}`}
         aria-pressed={active}
-        onClick={() => model.setSelectedId(session.id)}
+        onClick={() => model.openSessionDetail(session.id)}
       >
         <span className="session-time">
           <SessionTime session={session} timezone={programme.event.timezone} />
         </span>
+        {/* Title first. The coloured pills used to render above it, so the
+            first thing the eye landed on in every row was the track. */}
         <span className="session-main">
-          <SessionTags session={session} />
           <h3>{session.title}</h3>
           <SessionSpeakerLines session={session} model={model} />
-          <SessionPlace session={session} />
+          <span className="session-meta">
+            <SessionPlace session={session} />
+            <SessionTags session={session} />
+          </span>
         </span>
       </button>
       {!embedded && !shared ? (
         <SaveSessionButton session={session} model={model} />
       ) : null}
-      {snippet || !description ? (
-        <div className="programme-entry-description">
-          <p id={`session-description-${session.id}`}>
-            {description
-              ? expanded
-                ? description
-                : snippet
-              : "Description not provided."}
-          </p>
-          {snippet && snippet !== description ? (
-            <button
-              type="button"
-              className="btn small"
-              aria-expanded={expanded}
-              aria-controls={`session-description-${session.id}`}
-              aria-label={`${expanded ? "Show less" : "Show more"} of the ${session.title} description`}
-              onClick={() => model.toggleDescription(session.id)}
-            >
-              {expanded ? "Show less" : "Show more"}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      {/* Clamped, not cut: a 32px button plus its gap used to be spent hiding
+          about a line of text, five times down the same edge. The full
+          description is in the row and the expander only unclamps it. */}
+      <div className="programme-entry-description">
+        <p
+          id={`session-description-${session.id}`}
+          className={expanded ? undefined : "is-clamped"}
+        >
+          {description || "Description not provided."}
+        </p>
+        {snippet && snippet !== description ? (
+          <button
+            type="button"
+            className="session-disclosure"
+            aria-expanded={expanded}
+            aria-controls={`session-description-${session.id}`}
+            aria-label={`${expanded ? "Show less" : "Show more"} of the ${session.title} description`}
+            onClick={() => model.toggleDescription(session.id)}
+          >
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -613,18 +661,25 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
           ) : null}
         </>
       ) : (
-        <div className="itinerary-empty">
-          <span aria-hidden="true">♡</span>
-          <p className="subtle">No saved sessions yet.</p>
-          <p className="help">
-            Save a session to build a personal itinerary you can share.
-          </p>
-        </div>
+        /* One line, inside the card. The icon-in-a-dashed-box zero state was
+           300px of the highest-value space on the page spent stating nought. */
+        <p className="itinerary-zero">
+          Nothing saved yet — choose Save on any session to build a personal
+          itinerary you can share.
+        </p>
       )}
     </section>
   );
 }
 
+/**
+ * The rail earns its width by holding what the row beside it cannot: the whole
+ * abstract, the speakers' biographies, and any clash with a session already
+ * saved. It used to restate the row's title, time, place, both pills and
+ * speaker line, so a third of the viewport showed the same session twice at
+ * the same moment, with the withheld remainder of the description sitting
+ * 400px from the "Show more" that withheld it.
+ */
 function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
   const {
     selected,
@@ -632,108 +687,103 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
     speakerById,
     embedded,
     shared,
-    saved,
-    fetcher,
     showSpeakers,
+    selectedConflicts,
+    sessionDetailRef,
   } = model;
   if (!selected) return null;
+  const classification = [
+    selected.track,
+    selected.format,
+    formatProgrammeDuration(selected.startsAt, selected.endsAt),
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <section className="card session-detail-panel">
-      <span className="pc-page-eyebrow">Session detail</span>
-      <h2>{selected.title}</h2>
+    <section
+      className="card session-detail-panel"
+      aria-labelledby="session-detail-title"
+      ref={sessionDetailRef}
+      tabIndex={-1}
+    >
+      <h2 id="session-detail-title">{selected.title}</h2>
+      {/* One caption line, so the panel still stands on its own when it is
+          stacked under the list on a phone and the row is a screen away. */}
       <p className="session-detail-when">
         {formatDay(selected.startsAt, programme.event.timezone)} ·{" "}
         {formatProgrammeTimeRange(
           selected.startsAt,
           selected.endsAt,
           programme.event.timezone,
-        )}
+        )}{" "}
+        · {selected.room}
       </p>
-      <SessionPlace session={selected} />
-      <div className="public-detail-tags mt">
-        {selected.track ? (
-          <span className="pill track">{selected.track}</span>
-        ) : null}
-        <span className="pill format">{selected.format}</span>
-      </div>
-      <div className="stack mt mb">
+      <p className="session-detail-classification">{classification}</p>
+      {selectedConflicts.length ? (
+        <p className="validation-item warn">
+          <strong>Schedule conflict</strong>
+          <span>
+            Overlaps {selectedConflicts[0]!.title}, already in your itinerary.
+          </span>
+        </p>
+      ) : null}
+      {!embedded && !shared ? (
+        <SaveSessionButton session={selected} model={model} variant="detail" />
+      ) : null}
+      <h3>About this session</h3>
+      <p className="session-detail-description">
+        {selected.description || "A description is coming soon."}
+      </p>
+      <h3>{selected.speakerIds.length === 1 ? "Speaker" : "Speakers"}</h3>
+      <div className="session-detail-speakers">
         {selected.speakerIds.length ? (
           selected.speakerIds.map((speakerId, index) => {
             const speaker = speakerById.get(speakerId)!;
             const name = selected.speakerNames[index]!;
             const affiliation = speakerAffiliation(speaker);
             return (
-              <div className="row-main" key={speakerId}>
-                {speaker.imageUrl ? (
-                  <img
-                    className="avatar"
-                    src={speaker.imageUrl}
-                    alt=""
-                    width={40}
-                    height={40}
-                  />
-                ) : (
-                  <span className="avatar" aria-hidden="true">
-                    {initials(name)}
-                  </span>
-                )}
-                <div>
-                  <strong>{name}</strong>
-                  {affiliation ? <small>{affiliation}</small> : null}
+              <div className="session-detail-speaker" key={speakerId}>
+                <div className="session-detail-speaker-identity">
+                  {speaker.imageUrl ? (
+                    <img
+                      className="avatar"
+                      src={speaker.imageUrl}
+                      alt=""
+                      width={40}
+                      height={40}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="avatar" aria-hidden="true">
+                      {initials(name)}
+                    </span>
+                  )}
+                  <div>
+                    <strong>{name}</strong>
+                    {affiliation ? <small>{affiliation}</small> : null}
+                  </div>
                 </div>
+                {speaker.biography ? (
+                  <p>{descriptionSnippet(speaker.biography)}</p>
+                ) : null}
+                {showSpeakers ? (
+                  <a
+                    className="session-detail-profile-link"
+                    href={`#speaker-${speakerId}`}
+                    onClick={(event) =>
+                      model.openSpeakerProfile(speakerId, event.currentTarget)
+                    }
+                  >
+                    View {name}’s profile
+                  </a>
+                ) : null}
               </div>
             );
           })
         ) : (
-          <div className="row-main">
-            <span className="avatar" aria-hidden="true">
-              PC
-            </span>
-            <div>
-              <strong>Speaker to be announced</strong>
-              <small>{selected.track}</small>
-            </div>
-          </div>
+          <p className="subtle">Speaker to be announced.</p>
         )}
       </div>
-      {!embedded && !shared ? (
-        <button
-          type="button"
-          className={`btn${saved.includes(selected.id) ? "" : " primary"}`}
-          aria-describedby={
-            model.requiresItineraryVerification(selected.id)
-              ? "itinerary-verification-help"
-              : undefined
-          }
-          disabled={fetcher.state !== "idle"}
-          onClick={() => model.toggle(selected.id)}
-        >
-          {fetcher.state !== "idle"
-            ? "Updating itinerary…"
-            : saved.includes(selected.id)
-              ? "Remove from itinerary"
-              : "Add to itinerary"}
-        </button>
-      ) : null}
-      <h3>About this session</h3>
-      <p className="session-detail-description">
-        {selected.description || "A description is coming soon."}
-      </p>
-      {showSpeakers && selected.speakerIds.length ? (
-        <div className="stack mt">
-          {selected.speakerIds.map((speakerId, index) => (
-            <a
-              key={speakerId}
-              href={`#speaker-${speakerId}`}
-              onClick={(event) =>
-                model.openSpeakerProfile(speakerId, event.currentTarget)
-              }
-            >
-              View {selected.speakerNames[index]}’s profile
-            </a>
-          ))}
-        </div>
-      ) : null}
       <div className="divider" />
       <Link
         className="btn small"
@@ -759,32 +809,42 @@ function ItineraryVerificationPrompt({
     turnstileResetKey,
   } = model;
   if (!loaderData.itineraryVerificationRequired) return null;
+  const raised = itineraryVerificationPrompted || Boolean(turnstileToken);
   return (
+    /* The check is a consequence of the first save, not a condition of reading
+       the page: it used to open above the itinerary before the visitor had
+       touched anything, so the panel's first sentence was a warning about a
+       list they had not started. The sentence stays in the accessibility tree
+       throughout, because every save control describes itself by it. */
     <div
-      className={`itinerary-verification stack mb${itineraryVerificationPrompted ? " prompted" : ""}`}
+      className={`itinerary-verification stack mb${itineraryVerificationPrompted ? " prompted" : ""}${raised ? "" : " latent"}`}
       ref={itineraryVerificationRef}
       tabIndex={-1}
       aria-labelledby="itinerary-verification-help"
     >
       <p
         className={
-          itineraryVerificationPrompted ? "validation-item warn" : "help"
+          itineraryVerificationPrompted
+            ? "validation-item warn"
+            : raised
+              ? "help"
+              : "sr-only"
         }
         id="itinerary-verification-help"
-        role={
-          itineraryVerificationPrompted || turnstileToken ? "status" : undefined
-        }
+        role={raised ? "status" : undefined}
       >
         {turnstileToken
           ? "Security check complete. Choose Save again to start this browser's itinerary."
           : "Complete this security check once, then choose Save again to start this browser's itinerary."}
       </p>
-      <TurnstileWidget
-        siteKey={loaderData.turnstileSiteKey}
-        action="public_itinerary_create"
-        onTokenChange={updateTurnstileToken}
-        resetKey={turnstileResetKey}
-      />
+      {raised ? (
+        <TurnstileWidget
+          siteKey={loaderData.turnstileSiteKey}
+          action="public_itinerary_create"
+          onTokenChange={updateTurnstileToken}
+          resetKey={turnstileResetKey}
+        />
+      ) : null}
     </div>
   );
 }
@@ -803,19 +863,23 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
   return (
     <section
       id="speakers"
-      className="mt public-speakers-section"
+      className="public-speakers-section"
       aria-labelledby="speakers-title"
       hidden={!showSpeakers}
     >
-      <div className="card-title">
-        <div>
-          <span className="pc-page-eyebrow">Meet the programme</span>
-          <h2 id="speakers-title">Speakers</h2>
-        </div>
-        <span className="status info">{visibleSpeakers.length}</span>
+      {/* A section is named by its heading. The eyebrow above this one said
+          "Meet the programme", which is the heading again in smaller caps and
+          in the platform's violet rather than the event's accent. */}
+      <div className="public-section-head">
+        <h2 id="speakers-title">Speakers</h2>
+        <p className="public-section-count">
+          {visibleSpeakers.length} presenting
+        </p>
       </div>
       {visibleSpeakers.length ? (
-        <div className="grid grid-3">
+        /* auto-fill, so two speakers make two cards rather than two thirds of
+           a row with a visibly empty third track. */
+        <div className="grid public-speaker-roster">
           {visibleSpeakers.map((speaker) => (
             <PublicSpeakerCard
               key={speaker.id}
@@ -958,12 +1022,15 @@ export function PublicProgrammeWorkspace({
                 <PublicProgrammeFilters model={model} />
               ) : null}
               <ProgrammeSessionList model={model} />
-              <OverviewSpeakers model={model} />
             </div>
+            {/* The rail precedes the roster in source order, so on a phone —
+                where it stops being a rail — a tapped session's detail is the
+                next thing under the list rather than 2,400px below it. */}
             <aside id="itinerary">
               {!embedded ? <ItineraryPanel model={model} /> : null}
               <SessionDetailPanel model={model} />
             </aside>
+            <OverviewSpeakers model={model} />
           </>
         )}
       </main>

@@ -1,87 +1,244 @@
 /* Communications */
-.comms-layout {
+
+/* --- Delivery readiness ---------------------------------------------------
+   The page opens by answering one question: can this event send email. It is
+   a section, not a card, so its verdict sits on the section step of the type
+   ladder and the cards below it read as its detail. Each cell states the state
+   in a word as well as a dot, because the dot is gone in High Contrast Mode
+   and invisible to a reader who cannot separate red from green. */
+.comms-readiness .pc-admin-section-head .btn {
+  flex: none;
+  white-space: nowrap;
+}
+.comms-readiness-cells {
   display: grid;
-  grid-template-columns: 220px minmax(500px, 1fr) 315px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5);
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  list-style: none;
+}
+/* A blocked event gets a rail, not just red text: the strip has to be findable
+   from across the page, and the heading beside it already says the word. */
+.comms-readiness.is-blocked .comms-readiness-cells {
+  padding-left: calc(var(--space-5) + 3px);
+  box-shadow:
+    inset 3px 0 0 var(--state-bad-solid),
+    var(--elev-1);
+}
+.comms-readiness-cell {
+  display: grid;
+  gap: 3px;
+  align-content: start;
+  min-width: 0;
+  padding-right: var(--space-5);
+  border-right: 1px solid var(--border);
+}
+.comms-readiness-cell:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+.comms-readiness-cell strong {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+.comms-readiness-cell small {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
+}
+.comms-readiness-state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--state-bad-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.comms-readiness-cell[data-ready="true"] .comms-readiness-state {
+  color: var(--state-good-text);
+}
+.comms-readiness-state::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* --- Template workbench ---------------------------------------------------
+   Two columns, not three: the versions list and the preview share the narrow
+   column so both columns end at roughly the same line. A third column would
+   have left the shortest pane 400px of empty white under it, which is the
+   same rag the audit found under the form builder. */
+.comms-workbench {
+  display: grid;
   gap: var(--space-3);
+  align-items: start;
+}
+.comms-workbench > * {
+  min-width: 0;
+}
+.comms-workbench-editor {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* responsive-refinements.css hides `.template-column` on phones, from when the
+   list had no narrow form. It has one now — a single scrolling row — and the
+   published version a send uses is not something to withhold on a phone. */
+.comms-workbench > .template-column {
+  display: block;
+}
+@media (min-width: 1080px) {
+  .comms-workbench {
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  }
+  .comms-workbench > .template-column {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .comms-workbench-editor {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .comms-workbench > .comms-message-preview {
+    grid-column: 1;
+    grid-row: 2;
+  }
 }
 .template-list {
   display: grid;
   gap: var(--space-1);
 }
+/* Name, state and version on two lines rather than three: at three lines a
+   list of five templates was taller than the editor beside it, and the rag
+   under the editor was the tallest empty rectangle on the page. */
 .template-item {
-  padding: var(--space-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  color: inherit;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+.template-item:hover {
+  border-color: var(--brand-200);
+  background: var(--surface-sunken);
 }
 .template-item.active {
+  border-color: var(--brand-300);
   background: var(--brand-50);
   color: var(--brand-700);
 }
-.comms-production-layout .template-item.active small {
+.template-item small {
+  grid-column: 1;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+.template-item.active small {
   color: var(--text-secondary);
 }
-.channel-tabs {
-  display: flex;
-  gap: var(--space-1);
+.template-item .status {
+  grid-column: 2;
+  grid-row: 1 / span 2;
 }
-.channel-tab {
-  border: 1px solid var(--line);
-  background: var(--surface);
+/* The message is the field this whole section exists to edit; it had the same
+   height as the two-line address field beside it. */
+.comms-workbench .comms-body {
+  min-height: 240px;
+}
+/* .empty sets text-align: center in base.css and .pc-empty-state never resets
+   it, so the shared compact row rendered with a left icon and centred copy. */
+.comms-empty {
+  text-align: start;
+}
+
+/* --- Message preview ------------------------------------------------------
+   The merge fields the reader types resolve at send time and nowhere else, so
+   the editor showed handlebars and the operator found out what they meant from
+   a test email. This shows the sentence. It is deliberately the message and
+   not the sent email: a preview that implied final fidelity would be lying
+   about a frame it does not render. */
+.comms-message-preview > .help {
+  display: block;
+  margin: calc(-1 * var(--space-1)) 0 var(--space-3);
+}
+.comms-message-preview .validation-item {
+  margin-bottom: var(--space-3);
+  align-items: flex-start;
+}
+.comms-message-frame {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
   border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  overflow-wrap: anywhere;
+}
+.comms-message-subject {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-snug);
+}
+.comms-message-paragraph {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  white-space: pre-line;
+}
+/* Described, not drawn: a live-looking button inside a preview is an
+   affordance that does nothing when clicked. */
+.comms-message-button {
+  margin: 0;
   padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+  font-size: var(--text-xs);
   font-weight: var(--weight-bold);
 }
-.channel-tab.active {
-  border-color: var(--brand-400);
-  color: var(--brand-700);
-  background: #f7f7ff;
+.comms-message-button small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-weight: var(--weight-normal);
 }
-.preview-diff-confirm {
-  display: grid;
-  grid-template-columns: 1.15fr 0.9fr 0.8fr;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
+.comms-message-footer {
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
 }
-.step-card {
-  padding: var(--space-3);
+/* Four selects across two rows of two left the trigger's policy alone beside
+   half a row of nothing; three across closes it. */
+@media (min-width: 761px) {
+  .comms-trigger-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
-.step-num {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--brand-600);
-  color: white;
-  display: inline-grid;
-  place-items: center;
-  font-weight: var(--weight-extrabold);
+.comms-merge-fields > summary {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
 }
-.channel-previews {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-2);
+.comms-merge-field-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
   margin-top: var(--space-2);
 }
-.preview-mini {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
-  font-size: var(--text-2xs);
-  min-height: 130px;
-  background: #fafcff;
-}
-.diff-line {
-  padding: var(--space-1) var(--space-2);
-  font-family: ui-monospace, monospace;
-  font-size: var(--text-2xs);
-}
-.diff-line.add {
-  background: var(--state-good-surface);
-  color: var(--state-good-text);
-}
-.diff-line.del {
-  background: var(--state-bad-surface);
-  color: var(--state-bad-text);
-  text-decoration: line-through;
-}
+
 .validation-item {
   display: flex;
   align-items: center;
@@ -91,11 +248,11 @@
   font-size: var(--text-2xs);
 }
 .validation-item.error {
-  background: #fef2f2;
+  background: var(--state-bad-surface);
   color: var(--state-bad-text);
 }
 .validation-item.warn {
-  background: #fffbeb;
+  background: var(--state-warn-surface);
   color: var(--state-warn-text);
 }
 .validation-item.ok {

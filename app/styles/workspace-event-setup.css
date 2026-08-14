@@ -1,9 +1,13 @@
 /*
  * Event Setup.
  *
- * Two patterns live here. Titled section bands group the nine panels into four
- * named areas so a 3,600px settings page has landmarks. Record rows render a
- * repeating collection as one line per record instead of a stacked card each.
+ * The four titled bands are now <AdminPageSection>, which every other long
+ * admin page already uses: it brings the 23px section heading, the anchor
+ * navigation and the per-section disclosure on phones, and it retires the
+ * bespoke band styles that used to live here as a tracked-out caps eyebrow.
+ * What is left is this page's own shapes: record rows, which render a
+ * repeating collection as one line per record instead of a stacked card each,
+ * and the sticky commit bar.
  *
  * The stacked cards were the direct cause of this page's layout problem: rooms
  * (1,432px), tracks (1,203px) and session formats (1,326px) sat in the same
@@ -12,56 +16,198 @@
  * holes at the source rather than hiding them.
  */
 
-.event-setup-section + .event-setup-section {
-  margin-top: var(--space-7);
+/* The shared rule leaves 12px between sections and then hangs the seam rule
+   24px above the next heading, so the rule sat nearer the section it ends than
+   the one it opens. Even the two gaps. */
+.event-setup-page .pc-admin-page-section + .pc-admin-page-section {
+  margin-top: var(--space-6);
 }
-.event-setup-section-head {
-  display: grid;
-  gap: var(--space-1);
-  margin-bottom: var(--space-3);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--line);
+.event-setup-notice svg {
+  flex: 0 0 auto;
 }
-/* The band title outranks the card titles inside it, so it is an h2 to their
-   h3. It reads as an eyebrow rather than a heading because the cards below
-   carry the visible weight; a second full-size heading level competes. */
-.event-setup-section-head h2 {
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-/* Prose gets a measure, not the container width. `.main` has no maximum width,
-   so an unconstrained paragraph ran 166 characters at 1440px and 326 at
-   2560px against a comfortable 45–75. */
-.event-setup-section-head p {
-  margin: 0;
-  max-width: 62ch;
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-/* Card titles keep the size they had as h2 before the section band pushed them
-   down a level. Scoped so the global .card-title h3 scale is left alone. */
+/* Card titles keep the 16px the shared ladder gives a card heading; the
+   section band above them is the 23px step. Scoped so the global .card-title
+   h3 scale, which sits a level lower, is left alone. */
 .event-setup-page .card-title h3 {
   font-size: var(--text-base);
 }
 
 /* Six fields across three columns is two rows instead of three, which is what
    lets Event identity sit above Public identity at the same total height the
-   two-up pairing had — without the hole the height mismatch used to leave. */
+   two-up pairing had — without the hole the height mismatch used to leave.
+   The source order is name, timezone, venue / start, end, city so that the two
+   halves of the date range are neighbours: a range is one fact, and reading it
+   used to cost a saccade from column three of row one to column one of row
+   two. Visual order and tab order stay the same sequence. */
 @media (min-width: 700px) {
   .event-identity-fields {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-/* A colour input has no useful width beyond its swatch, and .field's 220px
-   floor would otherwise stretch it across a whole column. */
-.event-accent-field .field {
-  width: 56px;
-  min-width: 0;
-  padding: 2px;
+/* Swatch and hex value are one control, because a bare colour input shows a
+   value the operator cannot read, type, paste or quote against a brand guide.
+   The wrapper carries the border so the two read as a single field. */
+.event-accent-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  min-height: 38px;
+}
+.event-accent-control:focus-within {
+  border-color: var(--brand-500);
+}
+.event-accent-control input[type="color"] {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: none;
   cursor: pointer;
+}
+/* The hex is a value to be compared and retyped, so it takes tabular figures
+   and only the width its seven characters need. */
+.event-accent-hex {
+  width: 9ch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-transform: lowercase;
+}
+.event-accent-hex:focus {
+  outline: none;
+}
+/* iOS zooms the viewport when a focused control is under 16px, and this input
+   sets its own font rather than inheriting .field's. */
+@media (max-width: 760px) {
+  .event-accent-hex {
+    font-size: var(--text-base);
+  }
+}
+
+/* Save sits under the form, not above it. The page is ~2,200px closed and
+   ~3,600px open, so a button in the page head is off-screen for every edit
+   after the first one, and the operator had to scroll back on faith to commit
+   anything. Sticky keeps the commit and the change count in the same place the
+   editing is happening. */
+.event-setup-actions {
+  position: sticky;
+  bottom: var(--space-3);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--elev-2);
+}
+/* Dirty is a word plus a count, never the shadow alone: the elevation change
+   is reinforcement for people who can see it, not the carrier. */
+.event-setup-actions[data-dirty="true"] {
+  border-color: var(--border-strong);
+  box-shadow: var(--elev-3);
+}
+.event-setup-actions > .btn {
+  margin-left: auto;
+}
+.event-setup-actions > .btn ~ .btn {
+  margin-left: 0;
+}
+.event-setup-state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.event-setup-state.is-dirty {
+  color: var(--state-warn-text);
+}
+.event-setup-state.is-blocked {
+  color: var(--state-bad-text);
+  font-weight: var(--weight-normal);
+}
+.event-setup-state svg {
+  flex: 0 0 auto;
+}
+/* The bar is a fixed cost on every phone screen, so the state takes a line of
+   its own and the two actions share the next instead of stacking three deep. */
+@media (max-width: 760px) {
+  .event-setup-actions {
+    padding: var(--space-2) var(--space-3);
+  }
+  .event-setup-state {
+    flex: 1 0 100%;
+  }
+}
+@media (forced-colors: active) {
+  .event-setup-actions {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* These four footers sit inside .modal-body rather than beside it, so they
+   cancel its padding to reach the modal edge. The inline 18px they used to do
+   it with is not on the space scale and overhung the 16px it was cancelling by
+   two pixels on three sides. */
+.event-setup-modal-foot {
+  margin: var(--space-4) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
+}
+
+.event-file-limits {
+  display: grid;
+}
+.event-file-limit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+}
+.event-file-limit > label {
+  min-width: 0;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+.event-file-limit > label small {
+  display: block;
+  color: var(--muted);
+  font-weight: var(--weight-normal);
+}
+/* Fixed tracks rather than max-content: each row is its own grid, so content
+   sizing let the four inputs land on four different x positions in a column
+   whose whole purpose is comparison. */
+.event-file-limit-value {
+  display: grid;
+  grid-template-columns: 84px 104px;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-2xs);
+}
+/* The limits are read as a column, so they align on their digits and take only
+   the width four figures need. */
+.event-file-limit-value .field {
+  width: 84px;
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Role bands read as one card split by rules. They were three nested `card pad`
@@ -74,6 +220,20 @@
 .event-role-group > .subtle {
   margin: 0;
   font-size: var(--text-xs);
+}
+/* Scope and status were the tail of a run-on line under the address. As a
+   badge on its own track they line up down the list and can be compared
+   between rows, which is the only reason to show them at all. */
+.event-admin-row {
+  flex-wrap: wrap;
+}
+.event-admin-identity {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.event-admin-row .status,
+.event-admin-row .btn {
+  flex: 0 0 auto;
 }
 
 /* The three record editors collapse because their height is unbounded — they
@@ -104,11 +264,46 @@
 .event-record-panel[open] > summary .event-record-chevron {
   transform: rotate(90deg);
 }
+.event-record-summary {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.event-record-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.event-record-panel[open] .event-record-preview {
+  display: none;
+}
+.event-record-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-normal);
+  white-space: nowrap;
+}
+.event-record-chip-dot {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+}
 .event-record-count {
   margin-left: auto;
   color: var(--muted);
   font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
+  /* "5 rooms" broke across two lines once the preview took the width it needs;
+     a count that wraps stops being a count you can read at a glance. */
+  white-space: nowrap;
 }
 .event-record-body {
   margin-top: var(--space-3);
@@ -252,6 +447,30 @@
 .event-record-resources .field {
   flex: 1 1 116px;
   min-width: 116px;
+}
+/* A resource was a button with no styles at all, so a room's inventory drew as
+   a row of grey OS buttons inside a form of tokenised controls. It is a chip
+   whose whole body removes the resource, which the label states. */
+.event-record-resource {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+.event-record-resource:hover {
+  border-color: var(--border-strong);
+  color: var(--state-bad-text);
+}
+.event-record-resource svg {
+  flex: 0 0 auto;
+  color: var(--muted);
 }
 /* The add-a-record row closes the list rather than floating under it. */
 .event-record-add {

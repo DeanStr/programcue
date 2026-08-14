@@ -1,10 +1,96 @@
-import { Form } from "react-router";
-import { EmptyState } from "~/components/ui/states";
+import { Form, Link } from "react-router";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
   communicationCategoryLabel as categoryLabel,
   type PendingIntent,
 } from "./communications-panel-shared";
+
+type ReadinessCell = {
+  label: string;
+  ready: boolean;
+  /** The state itself, so the dot is never the only thing carrying it. */
+  state: string;
+  detail: string;
+};
+
+/**
+ * The four cells this replaced all read as the same grey sentence, so the one
+ * fact the reader came for — can this event send email — took four readings to
+ * assemble. The fourth cell stated a policy that never varies, which is chrome
+ * rather than state, and is gone.
+ */
+export function DeliveryReadiness({
+  loaderData,
+}: {
+  loaderData: CommunicationsCentreLoaderData;
+}) {
+  const provider = loaderData.provider;
+  const providerLabel = provider.name === "mailpit" ? "Mailpit" : "Resend";
+  const cells: ReadinessCell[] = [
+    {
+      label: "Sender",
+      ready: Boolean(provider.sender),
+      state: provider.sender ? "Verified" : "Not verified",
+      detail:
+        provider.sender ??
+        "No sender profile is verified, so every send is refused.",
+    },
+    {
+      label: providerLabel,
+      ready: provider.configured,
+      state: provider.configured ? "Connected" : "Not configured",
+      detail: provider.configured
+        ? provider.name === "mailpit"
+          ? "Local capture address and verified sender are both present."
+          : "Sending credentials and a verified sender are both present."
+        : "Sending credentials are missing or the sender is unverified.",
+    },
+    {
+      label: "Delivery queue",
+      ready: provider.queueConfigured,
+      state: provider.queueConfigured ? "Ready" : "Unavailable",
+      detail: provider.queueConfigured
+        ? "Every send is recorded durably before it is dispatched."
+        : "Nothing can be dispatched until the operations queue is available.",
+    },
+  ];
+  const blocked = cells.some((cell) => !cell.ready);
+  return (
+    <section
+      className={`pc-admin-page-section comms-readiness${blocked ? " is-blocked" : ""}`}
+      aria-labelledby="communications-readiness-title"
+    >
+      <header className="pc-admin-section-head">
+        <div className="pc-admin-section-head-copy">
+          <h2 id="communications-readiness-title">
+            {blocked ? "Delivery blocked" : "Delivery ready"}
+          </h2>
+          <p>
+            {blocked
+              ? "Email cannot leave Program Cue until every requirement below is met."
+              : "Every requirement for sending email from this event is met."}
+          </p>
+        </div>
+        <Link className="btn" to="?view=setup">
+          Delivery settings
+        </Link>
+      </header>
+      <ul className="card comms-readiness-cells">
+        {cells.map((cell) => (
+          <li
+            key={cell.label}
+            className="comms-readiness-cell"
+            data-ready={cell.ready}
+          >
+            <strong>{cell.label}</strong>
+            <span className="comms-readiness-state">{cell.state}</span>
+            <small>{cell.detail}</small>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 export function DeliveryConfiguration({
   loaderData,
@@ -21,10 +107,17 @@ export function DeliveryConfiguration({
   const emailProviderLabel =
     loaderData.provider.name === "mailpit" ? "Mailpit" : "Resend";
   const localCapture = loaderData.provider.name === "mailpit";
+  const testSendBlocker = !loaderData.provider.queueConfigured
+    ? "The operations queue is unavailable, so nothing can be dispatched."
+    : !loaderData.provider.configured
+      ? "Verify a sender profile first."
+      : !published.length
+        ? "Publish a template version first."
+        : null;
   return (
-    <section className="card pad mb">
+    <section className="card pad">
       <div className="card-title">
-        <h2>Delivery configuration</h2>
+        <h2>Sender profiles and test sends</h2>
         <span className="help right">
           Provider verification is authoritative
         </span>
@@ -67,6 +160,9 @@ export function DeliveryConfiguration({
                   : "Save unverified sender"}
             </button>
           </Form>
+          {/* No empty state here: the create form above is the empty state, and
+              an illustrated box 40px below it explaining that form was the
+              loudest way this page had of saying nothing was wrong. */}
           {loaderData.senders.length ? (
             <div
               className="table-wrap"
@@ -200,13 +296,7 @@ export function DeliveryConfiguration({
                 </tbody>
               </table>
             </div>
-          ) : (
-            <EmptyState
-              headingLevel={4}
-              title="No sender profile yet"
-              description={`Add a ${emailProviderLabel} sender profile above before any communication can be sent.`}
-            />
-          )}
+          ) : null}
         </div>
         <div className="stack">
           <h3>Real test send</h3>
@@ -244,19 +334,23 @@ export function DeliveryConfiguration({
               Test recipient
               <input className="field" name="recipient" type="email" required />
             </label>
-            <button
-              className="btn primary"
-              disabled={
-                working ||
-                !published.length ||
-                !loaderData.provider.configured ||
-                !loaderData.provider.queueConfigured
-              }
-            >
-              {working && pendingIntent === "test-send"
-                ? "Queueing…"
-                : "Send real test email"}
-            </button>
+            <div className="row-actions">
+              {/* A disabled primary with no stated cause is a button the reader
+                  clicks and gets nothing from. The unmet condition sits beside
+                  it, because there is no other place on this page that names
+                  which of the three it is. */}
+              {testSendBlocker ? (
+                <span className="help">{testSendBlocker}</span>
+              ) : null}
+              <button
+                className="btn primary"
+                disabled={working || Boolean(testSendBlocker)}
+              >
+                {working && pendingIntent === "test-send"
+                  ? "Queueing…"
+                  : "Send real test email"}
+              </button>
+            </div>
           </Form>
         </div>
       </div>
@@ -279,9 +373,9 @@ export function CommunicationAutomation({
       template.versionStatus === "published",
   );
   return (
-    <section className="card pad mt">
+    <section className="card pad">
       <div className="card-title">
-        <h2>Automatic reminders and escalation</h2>
+        <h2>Reminder triggers</h2>
         <span className="status info right">{loaderData.triggers.length}</span>
       </div>
       <p className="help">
@@ -322,7 +416,7 @@ export function CommunicationAutomation({
             </select>
           </label>
         </div>
-        <div className="form-row">
+        <div className="form-row comms-trigger-row">
           <label className="label">
             Audience
             <select
@@ -355,11 +449,21 @@ export function CommunicationAutomation({
             </select>
           </label>
         </div>
-        <button className="btn" disabled={working || !reminderTemplates.length}>
-          {working && pendingIntent === "save-trigger"
-            ? "Saving…"
-            : "Enable reminder trigger"}
-        </button>
+        <div className="row-actions">
+          {reminderTemplates.length ? null : (
+            <span className="help">
+              Publish a task-reminder template before enabling a trigger.
+            </span>
+          )}
+          <button
+            className="btn"
+            disabled={working || !reminderTemplates.length}
+          >
+            {working && pendingIntent === "save-trigger"
+              ? "Saving…"
+              : "Enable reminder trigger"}
+          </button>
+        </div>
       </Form>
       {loaderData.triggers.length ? (
         <div

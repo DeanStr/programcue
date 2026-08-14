@@ -62,32 +62,37 @@ export function SpeakerShell({
           )}
           <span>Program Cue</span>
         </NavLink>
-        <div>
+        {/* Event identity is two lines of context, not four stacked lines of
+            mixed context and controls. "Switch event" and support are actions,
+            so they sit with the other actions on the right. */}
+        <div className="speaker-event">
           <div className="event-title">{event.name}</div>
           <div className="subtle tiny">
             {[event.dateLabel, event.locationLabel].filter(Boolean).join(" · ")}
           </div>
-          <Link className="tiny" to={eventSelectionHref}>
+        </div>
+        <div className="right">
+          <Link className="btn small" to={eventSelectionHref}>
             Switch event
           </Link>
           {event.participantSupportUrl ? (
             <a
-              className="tiny participant-support-link"
+              className="btn small"
               href={event.participantSupportUrl}
               target="_blank"
               rel="noreferrer"
             >
-              Participant support
+              Support
             </a>
           ) : null}
-        </div>
-        <div className="right">
-          <span className="avatar">{initials}</span>
-          <span>
-            <strong>{name}</strong>
-            <small className="subtle speaker-viewer-email">
-              {viewer.email}
-            </small>
+          <span className="speaker-identity">
+            <span className="avatar">{initials}</span>
+            <span>
+              <strong>{name}</strong>
+              <small className="subtle speaker-viewer-email">
+                {viewer.email}
+              </small>
+            </span>
           </span>
           <Form method="post" action="/sign-out">
             <button className="btn small" type="submit">

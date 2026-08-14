@@ -16,6 +16,7 @@ import {
   type FetcherWithComponents,
 } from "react-router";
 
+import { calculateRubricWeightedScore } from "~/modules/evaluations/evaluation-rules";
 import {
   clearDraftRecoveryScope,
   useDraftRecovery,
@@ -56,6 +57,7 @@ export type ReviewWorkbenchModel = {
   assignmentKey: string;
   fetcher: FetcherWithComponents<ReviewWorkbenchActionData>;
   formRef: RefObject<HTMLFormElement | null>;
+  saveDraftTriggerRef: RefObject<HTMLButtonElement | null>;
   submitReviewTriggerRef: RefObject<HTMLButtonElement | null>;
   submitNextTriggerRef: RefObject<HTMLButtonElement | null>;
   conflictTriggerRef: RefObject<HTMLButtonElement | null>;
@@ -63,16 +65,19 @@ export type ReviewWorkbenchModel = {
   inFlightSaveGeneration: RefObject<number | null>;
   conflictOpen: boolean;
   setConflictOpen: Dispatch<SetStateAction<boolean>>;
+  shortcutsOpen: boolean;
+  setShortcutsOpen: Dispatch<SetStateAction<boolean>>;
   submitMode: "stay" | "next" | null;
   setSubmitMode: Dispatch<SetStateAction<"stay" | "next" | null>>;
   dirty: boolean;
   requiredCriterionCount: number;
   completedCriterionCount: number;
-  setCompletedCriterionCount: Dispatch<SetStateAction<number>>;
+  weightedScore: number | null;
   readOnly: boolean;
   revision: number;
   committedWarning: boolean;
   saveFailed: boolean;
+  selectedIndex: number;
   previousAssignment: ReviewAssignment | null;
   nextAssignment: ReviewAssignment | null;
   recoveryPayload: ReviewRecoveryPayload;
@@ -83,6 +88,62 @@ export type ReviewWorkbenchModel = {
   captureRecoveryPayload(form: HTMLFormElement): void;
   requestAssignmentNavigation(href: string): void;
 };
+
+/* Every scale renders as a radio group, so the group — not one control — is
+   the scoring unit the keyboard drives. Marked in the DOM because the shortcut
+   handler runs at the document, above the component that renders the rubric. */
+const SCALE_GROUP_SELECTOR = "[data-review-scale]";
+
+// A dialog owns the keyboard while it is open: a shortcut firing behind a modal
+// edits a record the reviewer cannot see.
+function reviewDialogIsOpen() {
+  return Boolean(
+    document.querySelector("[role='dialog'],[role='alertdialog']"),
+  );
+}
+
+function reviewTargetIsTyping(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  if (target.tagName === "TEXTAREA" || target.tagName === "SELECT") return true;
+  // Radios are the scoring control itself, so digits have to reach them.
+  return target instanceof HTMLInputElement && target.type !== "radio";
+}
+
+/* A digit lands on the group focus is in; with focus outside the rubric it
+   fills the first unscored group and moves on, so 4-4-3-5 typed blind scores
+   the rubric top to bottom. */
+function scoreRubricFromDigit(form: HTMLFormElement, digit: number) {
+  const groups = Array.from(
+    form.querySelectorAll<HTMLElement>(SCALE_GROUP_SELECTOR),
+  );
+  if (!groups.length) return false;
+  const unscored = groups.filter(
+    (group) => !group.querySelector("input:checked:not([value=''])"),
+  );
+  const focused = groups.find(
+    (group) =>
+      document.activeElement instanceof Node &&
+      group.contains(document.activeElement),
+  );
+  const target = focused ?? unscored[0] ?? groups[0];
+  const option =
+    target.querySelectorAll<HTMLInputElement>(
+      "input[type='radio']:not([value=''])",
+    )[digit - 1] ?? null;
+  if (!option || option.disabled) return false;
+  option.click();
+  const next = unscored.find(
+    (group) =>
+      group !== target && !group.querySelector("input:checked:not([value=''])"),
+  );
+  (
+    next?.querySelector<HTMLInputElement>(
+      "input[type='radio']:not(:disabled)",
+    ) ?? option
+  ).focus();
+  return true;
+}
 
 export function reviewSaveCoversCurrentEdits(
   savedEditGeneration: number | null,
@@ -114,6 +175,7 @@ export function useReviewWorkbenchState({
   });
   const navigate = useNavigate();
   const formRef = useRef<HTMLFormElement>(null);
+  const saveDraftTriggerRef = useRef<HTMLButtonElement>(null);
   const submitReviewTriggerRef = useRef<HTMLButtonElement>(null);
   const submitNextTriggerRef = useRef<HTMLButtonElement>(null);
   const conflictTriggerRef = useRef<HTMLButtonElement>(null);
@@ -123,6 +185,7 @@ export function useReviewWorkbenchState({
   const inFlightSaveGeneration = useRef<number | null>(null);
   const recoveryAssignmentKey = useRef(assignmentKey);
   const [conflictOpen, setConflictOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [submitMode, setSubmitMode] = useState<"stay" | "next" | null>(null);
   const [dirty, setDirty] = useState(false);
   const [editVersion, setEditVersion] = useState(0);
@@ -133,19 +196,6 @@ export function useReviewWorkbenchState({
   const requiredCriterionCount = workspace.criteria.filter(
     (criterion) => criterion.required,
   ).length;
-  const storedCompletedCriterionCount = workspace.criteria.filter(
-    (criterion) => {
-      if (!criterion.required) return false;
-      const response = workspace.review?.scores[criterion.id];
-      return !(
-        response === undefined ||
-        (typeof response === "string" && response.trim() === "")
-      );
-    },
-  ).length;
-  const [completedCriterionCount, setCompletedCriterionCount] = useState(
-    storedCompletedCriterionCount,
-  );
   const readOnly = workspace.selected?.status === "submitted";
   const revision =
     fetcher.data &&
@@ -196,40 +246,83 @@ export function useReviewWorkbenchState({
     [workspace.criteria, workspace.review],
   );
   const [recoveryPayload, setRecoveryPayload] = useState(serverRecoveryPayload);
-  const restoreReview = useCallback(
-    (payload: ReviewRecoveryPayload) => {
-      const form = formRef.current;
-      if (!form) return;
-      const setValue = (name: string, value: string) => {
-        const control = form.elements.namedItem(name);
-        if (
-          control instanceof HTMLInputElement ||
-          control instanceof HTMLSelectElement ||
-          control instanceof HTMLTextAreaElement
-        ) {
-          control.value = value;
-        }
-      };
-      for (const [criterionId, value] of Object.entries(payload.scores))
-        setValue(`score:${criterionId}`, value);
-      setValue("recommendation", payload.recommendation);
-      setValue("confidence", payload.confidence);
-      setValue("submitterFeedback", payload.submitterFeedback);
-      setValue("privateNotes", payload.privateNotes);
-      setRecoveryPayload(payload);
-      setCompletedCriterionCount(
-        workspace.criteria.filter(
+  /* The recovery payload already mirrors every score the reviewer has entered,
+     on the server copy, on a restore and on every edit. A second copy of the
+     same values only existed to count them, and two states for one fact drift. */
+  const completedCriterionCount = workspace.criteria.filter(
+    (criterion) =>
+      criterion.required &&
+      (recoveryPayload.scores[criterion.id] ?? "").trim() !== "",
+  ).length;
+  const scaledCriteria = useMemo(
+    () =>
+      workspace.criteria
+        .filter(
           (criterion) =>
-            criterion.required &&
-            String(payload.scores[criterion.id] ?? "").trim() !== "",
-        ).length,
-      );
-      setDirty(true);
-      editGeneration.current += 1;
-      setEditVersion((current) => current + 1);
-    },
+            criterion.inputType === "scale_5" ||
+            criterion.inputType === "scale_10",
+        )
+        .map((criterion) => ({
+          id: criterion.id,
+          weightPercent: criterion.weightPercent,
+          inputType: criterion.inputType as "scale_5" | "scale_10",
+        })),
     [workspace.criteria],
   );
+  /* The same rule the action applies on submit, so the number on the panel is
+     the number the round will store. It has no answer until every scaled
+     criterion holds a whole score, and a partial total would be a figure the
+     reviewer could act on that no review ever records. */
+  const weightedScore = useMemo(() => {
+    try {
+      return calculateRubricWeightedScore(
+        scaledCriteria,
+        recoveryPayload.scores,
+      );
+    } catch {
+      return null;
+    }
+  }, [scaledCriteria, recoveryPayload.scores]);
+  const restoreReview = useCallback((payload: ReviewRecoveryPayload) => {
+    const form = formRef.current;
+    if (!form) return;
+    const setValue = (name: string, value: string) => {
+      const control = form.elements.namedItem(name);
+      if (
+        control instanceof HTMLInputElement ||
+        control instanceof HTMLSelectElement ||
+        control instanceof HTMLTextAreaElement
+      ) {
+        control.value = value;
+        return;
+      }
+      // A scale is a radio group, and its value setter only ever checks a
+      // matching sibling. An unanswered criterion has no sibling to match, so
+      // it has to be cleared explicitly or the recovered draft keeps whatever
+      // the server copy had checked.
+      if (
+        typeof RadioNodeList !== "undefined" &&
+        control instanceof RadioNodeList
+      ) {
+        if (value === "") {
+          for (const option of Array.from(control))
+            if (option instanceof HTMLInputElement) option.checked = false;
+          return;
+        }
+        control.value = value;
+      }
+    };
+    for (const [criterionId, value] of Object.entries(payload.scores))
+      setValue(`score:${criterionId}`, value);
+    setValue("recommendation", payload.recommendation);
+    setValue("confidence", payload.confidence);
+    setValue("submitterFeedback", payload.submitterFeedback);
+    setValue("privateNotes", payload.privateNotes);
+    setRecoveryPayload(payload);
+    setDirty(true);
+    editGeneration.current += 1;
+    setEditVersion((current) => current + 1);
+  }, []);
   const recovery = useDraftRecovery({
     scope: workspace.selected
       ? {
@@ -347,7 +440,6 @@ export function useReviewWorkbenchState({
       inFlightSaveGeneration.current = null;
       handledSavedRevision.current = null;
       setDirty(false);
-      setCompletedCriterionCount(storedCompletedCriterionCount);
       setRecoveryPayload(serverRecoveryPayload);
       return;
     }
@@ -357,10 +449,9 @@ export function useReviewWorkbenchState({
         serverSyncedEditGeneration.current,
       )
     ) {
-      setCompletedCriterionCount(storedCompletedCriterionCount);
       setRecoveryPayload(serverRecoveryPayload);
     }
-  }, [assignmentKey, serverRecoveryPayload, storedCompletedCriterionCount]);
+  }, [assignmentKey, serverRecoveryPayload]);
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
     if (
@@ -457,6 +548,92 @@ export function useReviewWorkbenchState({
     }
     void navigate(href);
   }
+  /* The shortcut handler reads the model through a ref rather than through its
+     dependency list: navigation closes over autosave state that changes on
+     every keystroke, and resubscribing the document listener that often would
+     make a keypress depend on render timing. */
+  const shortcutModel = useRef({
+    previousAssignment,
+    nextAssignment,
+    readOnly,
+    requestAssignmentNavigation,
+  });
+  useEffect(() => {
+    shortcutModel.current = {
+      previousAssignment,
+      nextAssignment,
+      readOnly,
+      requestAssignmentNavigation,
+    };
+  });
+  useEffect(() => {
+    function openAssignment(assignment: ReviewAssignment | null) {
+      if (!assignment) return false;
+      shortcutModel.current.requestAssignmentNavigation(
+        `/review/workbench?assignment=${assignment.id}`,
+      );
+      return true;
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || reviewDialogIsOpen()) return;
+      const locked = shortcutModel.current.readOnly;
+      if (event.metaKey || event.ctrlKey) {
+        // Commit shortcuts stay live inside the notes fields: they are the
+        // fields a reviewer is in when the review is finished.
+        if (event.key === "Enter" && !locked) {
+          event.preventDefault();
+          submitNextTriggerRef.current?.click();
+        } else if (event.key.toLowerCase() === "s" && !locked) {
+          event.preventDefault();
+          saveDraftTriggerRef.current?.click();
+        }
+        return;
+      }
+      if (event.altKey || reviewTargetIsTyping(event.target)) return;
+      if (event.key === "?") {
+        event.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+      if (event.shiftKey) return;
+      if (event.key === "j" || event.key === "]") {
+        if (openAssignment(shortcutModel.current.nextAssignment))
+          event.preventDefault();
+        return;
+      }
+      if (event.key === "k" || event.key === "[") {
+        if (openAssignment(shortcutModel.current.previousAssignment))
+          event.preventDefault();
+        return;
+      }
+      if (!locked && /^[1-9]$/.test(event.key) && formRef.current) {
+        if (scoreRubricFromDigit(formRef.current, Number(event.key)))
+          event.preventDefault();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+  /* Opening an assignment puts the caret where the work starts. Only on a
+     change: stealing focus on first paint would move a screen reader off the
+     page heading before it has been read. */
+  const focusedAssignmentKey = useRef(assignmentKey);
+  useEffect(() => {
+    if (focusedAssignmentKey.current === assignmentKey) return;
+    focusedAssignmentKey.current = assignmentKey;
+    const form = formRef.current;
+    if (!form || readOnly) return;
+    const groups = Array.from(
+      form.querySelectorAll<HTMLElement>(SCALE_GROUP_SELECTOR),
+    );
+    const target =
+      groups.find(
+        (group) => !group.querySelector("input:checked:not([value=''])"),
+      ) ?? groups[0];
+    target
+      ?.querySelector<HTMLInputElement>("input[type='radio']:not(:disabled)")
+      ?.focus();
+  }, [assignmentKey, readOnly]);
   return {
     viewer,
     workspace,
@@ -464,6 +641,7 @@ export function useReviewWorkbenchState({
     assignmentKey,
     fetcher,
     formRef,
+    saveDraftTriggerRef,
     submitReviewTriggerRef,
     submitNextTriggerRef,
     conflictTriggerRef,
@@ -471,16 +649,19 @@ export function useReviewWorkbenchState({
     inFlightSaveGeneration,
     conflictOpen,
     setConflictOpen,
+    shortcutsOpen,
+    setShortcutsOpen,
     submitMode,
     setSubmitMode,
     dirty,
     requiredCriterionCount,
     completedCriterionCount,
-    setCompletedCriterionCount,
+    weightedScore,
     readOnly,
     revision,
     committedWarning,
     saveFailed,
+    selectedIndex,
     previousAssignment,
     nextAssignment,
     recoveryPayload,

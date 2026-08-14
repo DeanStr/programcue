@@ -1,6 +1,12 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { useState, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { ScheduleStandardCalendar } from "~/components/schedule-standard-calendar";
 import type {
   ScheduleSession,
@@ -18,92 +24,82 @@ import type {
   StateSetter,
 } from "./schedule-planner-panel-types";
 
-function DraggableScheduledSession({
-  entryId,
+/* The card is only as tall as the session is long, so each line has to be
+   earned. Below these lengths the line would be clipped mid-stroke, which
+   reads worse than not showing it. */
+const MINUTES_FOR_TWO_LINE_TITLE = 45;
+const MINUTES_FOR_TIME_LINE = 30;
+const MINUTES_FOR_SPEAKER_LINE = 60;
+const MINUTES_FOR_RESOURCE_LINE = 90;
+
+function ScheduledEntryCard({
+  entry,
   session,
   disabled,
   focused,
+  revealed,
+  conflictSeverity,
+  timezone,
 }: {
-  entryId: string;
+  entry: ScheduleEntry;
   session: ScheduleSession;
   disabled: boolean;
   focused: boolean;
+  revealed: boolean;
+  conflictSeverity: "warning" | "blocking" | undefined;
+  timezone: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
-      id: `entry:${entryId}`,
+      id: `entry:${entry.id}`,
       data: { sessionId: session.id },
       disabled,
     });
+  const minutes = Math.round((entry.endsAt - entry.startsAt) / 60);
+  const moveLabel = disabled
+    ? session.title
+    : `Move ${session.title}. Press Space, choose a destination with the arrow keys, then press Space again.`;
+  const conflictLabel =
+    conflictSeverity === "blocking"
+      ? "Conflict"
+      : conflictSeverity === "warning"
+        ? "Check"
+        : null;
   return (
     <button
       ref={setNodeRef}
       id={`schedule-session-${session.id}`}
       data-session-id={session.id}
+      data-entry-id={entry.id}
+      data-compact={minutes < MINUTES_FOR_TWO_LINE_TITLE ? "true" : undefined}
       type="button"
-      className={`session-card presentation schedule-entry-draggable${isDragging ? " dragging" : ""}${focused ? " focused" : ""}`}
+      className={`session-card ${session.format} schedule-entry-draggable${isDragging ? " dragging" : ""}${focused ? " focused" : ""}${revealed ? " revealed" : ""}${conflictSeverity ? ` conflict ${conflictSeverity}` : ""}`}
       style={{ transform: CSS.Translate.toString(transform) }}
       aria-label={
-        disabled
-          ? session.title
-          : `Move ${session.title}. Press Space, choose a destination with the arrow keys, then press Space again.`
+        conflictLabel
+          ? `${moveLabel} ${conflictSeverity === "blocking" ? "This placement has a blocking conflict." : "This placement has a conflict warning."}`
+          : moveLabel
       }
       {...listeners}
       {...attributes}
     >
       <strong>{session.title}</strong>
-      <small>{session.speakerNames.join(", ")}</small>
-      {session.requiredResources.length ? (
+      {/* Duration is carried by the card's height; it is also written out so
+          that it survives High Contrast Mode and a screen reader. */}
+      {minutes >= MINUTES_FOR_TIME_LINE || conflictLabel ? (
+        <small>
+          {conflictLabel ? `${conflictLabel} · ` : ""}
+          {timeLabel(entry.startsAt, timezone)} · {minutes} min
+        </small>
+      ) : null}
+      {minutes >= MINUTES_FOR_SPEAKER_LINE && session.speakerNames.length ? (
+        <small>{session.speakerNames.join(", ")}</small>
+      ) : null}
+      {minutes >= MINUTES_FOR_RESOURCE_LINE &&
+      session.requiredResources.length ? (
         <small>{session.requiredResources.join(", ")}</small>
       ) : null}
     </button>
-  );
-}
-
-function ScheduledSessionResizeControl({
-  entry,
-  session,
-  disabled,
-  onResize,
-}: {
-  entry: ScheduleWorkspace["entries"][number];
-  session: ScheduleSession;
-  disabled: boolean;
-  onResize: (minutes: number) => void;
-}) {
-  const currentMinutes = Math.round((entry.endsAt - entry.startsAt) / 60);
-  const [minutes, setMinutes] = useState(currentMinutes);
-  const outputId = `resize-output-${entry.id}`;
-  return (
-    <div className="stack" aria-label={`Resize ${session.title}`}>
-      <label className="help" htmlFor={`resize-${entry.id}`}>
-        Duration
-      </label>
-      <input
-        id={`resize-${entry.id}`}
-        type="range"
-        min={5}
-        max={480}
-        step={1}
-        value={minutes}
-        disabled={disabled}
-        aria-describedby={outputId}
-        onChange={(event) => setMinutes(Number(event.target.value))}
-      />
-      <div className="row-main">
-        <output id={outputId} htmlFor={`resize-${entry.id}`}>
-          {minutes} min
-        </output>
-        <button
-          className="btn small"
-          type="button"
-          disabled={disabled || minutes === currentMinutes}
-          onClick={() => onResize(minutes)}
-        >
-          Apply resize
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -139,6 +135,17 @@ function timeLabel(epoch: number, timezone: string) {
   }).format(new Date(epoch * 1_000));
 }
 
+/* The axis is event-local; the day tabs above it are UTC calendar
+   boundaries. Naming the zone on the axis is what stops the two reading as a
+   contradiction. */
+function timezoneAbbreviation(epoch: number, timezone: string) {
+  return (
+    new Intl.DateTimeFormat("en", { timeZone: timezone, timeZoneName: "short" })
+      .formatToParts(new Date(epoch * 1_000))
+      .find((part) => part.type === "timeZoneName")?.value ?? timezone
+  );
+}
+
 function dateLabel(epoch: number, timezone: string) {
   return new Intl.DateTimeFormat("en", {
     weekday: "short",
@@ -164,7 +171,8 @@ export function ScheduleCanvasPanel({
   roomScrollRef,
   slots,
   entriesBySlot,
-  unassign,
+  conflictSeverityByEntryId,
+  revealedEntryIds,
 }: {
   workspace: SchedulePlannerWorkspaceData;
   fetcher: ScheduleFetcher;
@@ -185,8 +193,58 @@ export function ScheduleCanvasPanel({
   roomScrollRef: RefObject<HTMLDivElement | null>;
   slots: number[];
   entriesBySlot: Map<string, ScheduleWorkspace["entries"]>;
-  unassign(entry: ScheduleEntry): void;
+  conflictSeverityByEntryId: Map<string, "warning" | "blocking">;
+  revealedEntryIds: string[];
 }) {
+  /* Whether the board overflows depends on the room count and the width the
+     validation rail leaves behind, so the hint is measured rather than
+     guessed at a breakpoint. */
+  const [roomsOverflow, setRoomsOverflow] = useState(false);
+  useEffect(() => {
+    const scroll = roomScrollRef.current;
+    if (!scroll) return;
+    const update = () =>
+      setRoomsOverflow(scroll.scrollWidth > scroll.clientWidth + 1);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(scroll);
+    return () => observer.disconnect();
+  }, [roomScrollRef, view, workspace.rooms.length]);
+  /* Only the formats actually on this day: a key listing formats nobody has
+     placed is a legend for nothing. */
+  const placedFormatKeys = new Set(
+    [...entriesBySlot.values()]
+      .flat()
+      .map((entry) => sessionById.get(entry.sessionId)?.format)
+      .filter((format): format is string => format !== undefined),
+  );
+  const placedFormats = workspace.sessionFormats.filter((format) =>
+    placedFormatKeys.has(format.key),
+  );
+  const dayTabs = (
+    <div className="tabs schedule-day-tabs" role="group" aria-label="Event day">
+      {eventDays.map((day) => {
+        const date = eventBoundaryCalendarDate(day);
+        const entryCount = workspace.entries.filter(
+          (entry) =>
+            eventLocalCalendarDate(entry.startsAt, workspace.event.timezone) ===
+            date,
+        ).length;
+        return (
+          <button
+            key={day}
+            type="button"
+            className={`tab${selectedDay === day ? " active" : ""}`}
+            aria-pressed={selectedDay === day}
+            onClick={() => setSelectedDay(day)}
+          >
+            {dateLabel(day, "UTC")}
+            <small>{entryCount} placed</small>
+          </button>
+        );
+      })}
+    </div>
+  );
   return (
     <section className="card pad schedule-canvas">
       <div className="card-title">
@@ -203,36 +261,7 @@ export function ScheduleCanvasPanel({
       </div>
       {view === "list" || view === "day" || view === "week" ? (
         <>
-          {view === "day" ? (
-            <div
-              className="tabs schedule-day-tabs"
-              role="group"
-              aria-label="Event day"
-            >
-              {eventDays.map((day) => {
-                const date = eventBoundaryCalendarDate(day);
-                const entryCount = workspace.entries.filter(
-                  (entry) =>
-                    eventLocalCalendarDate(
-                      entry.startsAt,
-                      workspace.event.timezone,
-                    ) === date,
-                ).length;
-                return (
-                  <button
-                    key={day}
-                    type="button"
-                    className={`tab${selectedDay === day ? " active" : ""}`}
-                    aria-pressed={selectedDay === day}
-                    onClick={() => setSelectedDay(day)}
-                  >
-                    {dateLabel(day, "UTC")}
-                    <small>{entryCount} placed</small>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
+          {view === "day" ? dayTabs : null}
           <ScheduleStandardCalendar
             workspace={workspace}
             view={view}
@@ -268,37 +297,21 @@ export function ScheduleCanvasPanel({
         </div>
       ) : (
         <>
-          <div
-            className="tabs schedule-day-tabs"
-            role="group"
-            aria-label="Event day"
-          >
-            {eventDays.map((day) => {
-              const date = eventBoundaryCalendarDate(day);
-              const entryCount = workspace.entries.filter(
-                (entry) =>
-                  eventLocalCalendarDate(
-                    entry.startsAt,
-                    workspace.event.timezone,
-                  ) === date,
-              ).length;
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  className={`tab${selectedDay === day ? " active" : ""}`}
-                  aria-pressed={selectedDay === day}
-                  onClick={() => setSelectedDay(day)}
-                >
-                  {dateLabel(day, "UTC")}
-                  <small>{entryCount} placed</small>
-                </button>
-              );
-            })}
-          </div>
-          <p className="schedule-scroll-hint">
-            <span aria-hidden>↔</span> Swipe horizontally to see every room
-          </p>
+          {dayTabs}
+          {placedFormats.length ? (
+            <p className="schedule-format-key">
+              {placedFormats.map((format) => (
+                <span className={format.key} key={format.key}>
+                  {format.label}
+                </span>
+              ))}
+            </p>
+          ) : null}
+          {roomsOverflow ? (
+            <p className="schedule-scroll-hint">
+              <span aria-hidden>↔</span> Scroll sideways to see every room
+            </p>
+          ) : null}
           <div
             ref={roomScrollRef}
             className="table-wrap schedule-room-scroll"
@@ -312,7 +325,15 @@ export function ScheduleCanvasPanel({
                 gridTemplateColumns: `90px repeat(${workspace.rooms.length}, minmax(150px, 1fr))`,
               }}
             >
-              <div className="header">Time</div>
+              <div className="header corner">
+                Time
+                <small>
+                  {timezoneAbbreviation(
+                    slots[0] ?? selectedDay,
+                    workspace.event.timezone,
+                  )}
+                </small>
+              </div>
               {workspace.rooms.map((room) => (
                 <div className="header" key={room.id}>
                   {room.name}
@@ -336,38 +357,46 @@ export function ScheduleCanvasPanel({
                       roomId={room.id}
                       startsAt={startsAt}
                     >
-                      {entries.map((entry) => {
+                      {entries.map((entry, index) => {
                         const session = sessionById.get(entry.sessionId);
                         if (!session) return null;
                         return (
-                          <div className="stack" key={entry.id}>
-                            <DraggableScheduledSession
-                              entryId={entry.id}
+                          <div
+                            className="schedule-entry"
+                            key={entry.id}
+                            style={
+                              {
+                                /* Vertical distance is elapsed time: the card
+                                   starts where the session starts and is as
+                                   tall as the session is long. Two entries
+                                   sharing a row split the width, so a room
+                                   double-booking is visible before the
+                                   server names it. */
+                                "--pc-entry-offset": Math.max(
+                                  0,
+                                  Math.round((entry.startsAt - startsAt) / 60),
+                                ),
+                                "--pc-entry-minutes": Math.round(
+                                  (entry.endsAt - entry.startsAt) / 60,
+                                ),
+                                "--pc-entry-column": index,
+                                "--pc-entry-columns": entries.length,
+                              } as CSSProperties
+                            }
+                          >
+                            <ScheduledEntryCard
+                              entry={entry}
                               session={session}
                               disabled={workspace.version?.status !== "draft"}
                               focused={
                                 workspace.focusedSessionId === session.id
                               }
+                              revealed={revealedEntryIds.includes(entry.id)}
+                              conflictSeverity={conflictSeverityByEntryId.get(
+                                entry.id,
+                              )}
+                              timezone={workspace.event.timezone}
                             />
-                            {workspace.version?.status === "draft" ? (
-                              <ScheduledSessionResizeControl
-                                key={`${entry.id}:${entry.revision}`}
-                                entry={entry}
-                                session={session}
-                                disabled={fetcher.state !== "idle"}
-                                onResize={(minutes) => resize(entry, minutes)}
-                              />
-                            ) : null}
-                            {workspace.version?.status === "draft" ? (
-                              <button
-                                className="btn small"
-                                type="button"
-                                onClick={() => unassign(entry)}
-                                disabled={fetcher.state !== "idle"}
-                              >
-                                Unassign
-                              </button>
-                            ) : null}
                           </div>
                         );
                       })}

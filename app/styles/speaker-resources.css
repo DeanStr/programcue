@@ -6,45 +6,46 @@
   text-overflow: ellipsis;
 }
 .speaker-portal-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-6);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
 }
 .speaker-portal-head h1 {
-  margin: 2px 0 var(--space-1);
-  font-size: var(--text-2xl);
-  letter-spacing: -0.035em;
-}
-.speaker-readiness {
-  display: grid;
-  justify-items: end;
-}
-.speaker-readiness strong {
+  margin: 0 0 var(--space-2);
   font-size: var(--text-3xl);
-  color: var(--brand-700);
-  line-height: 1;
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
 }
-.speaker-readiness span {
-  color: var(--muted);
-  font-size: var(--text-2xs);
+.speaker-portal-head > div > .subtle {
+  max-width: 68ch;
+  margin: 0;
+}
+/* The one readiness statement on this surface. Counts, not a percentage:
+   "1 of 3" tells a speaker what is left to do, "33%" does not. The bar is a
+   flat measurement beneath it and never the only carrier — the sentence
+   above it says the same thing in words. */
+.speaker-readiness-line {
+  max-width: 420px;
+  margin-top: var(--space-4);
+}
+.speaker-readiness-line p {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+}
+.speaker-readiness-line strong {
+  font-weight: var(--weight-bold);
 }
 .speaker-progress-visual {
   display: grid;
   place-items: center;
   min-height: 150px;
 }
+/* No decorative rail. The rail vocabulary in base.css means "what state is
+   this in", and an indigo-to-green gradient painted identically on every card
+   said nothing at all — it just made five link tiles look like a product
+   screenshot. State reaches these cards through their status badge. */
 .speaker-session-card {
   position: relative;
   overflow: hidden;
-}
-.speaker-session-card::after {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: linear-gradient(90deg, var(--brand-500), #22c55e);
 }
 .speaker-session-meta {
   display: grid;

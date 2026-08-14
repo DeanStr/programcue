@@ -13,32 +13,54 @@ export function SpeakerDashboardOverview({
   portal,
   next,
   progress,
+  completedCount,
+  requirementCount,
 }: {
   portal: SpeakerPortal;
   next: SpeakerTask | undefined;
   progress: number;
+  completedCount: number;
+  requirementCount: number;
 }) {
   const waitingOnTeam = next
     ? ["submitted", "blocked"].includes(next.status)
     : false;
-  const readinessState =
-    progress >= 100 ? "ready" : progress >= 60 ? "on_track" : "at_risk";
-  const readinessLabel =
-    progress >= 100 ? "Complete" : progress >= 60 ? "On track" : "In progress";
+  // One readiness statement, in the counts a speaker can act on. The same
+  // fact used to appear four times above the fold — a 34px percentage, a
+  // donut restating it, the hero card implying it, and the Tasks tile
+  // counting it — in four different visual languages.
+  const remaining = requirementCount - completedCount;
   return (
     <>
       <div className="speaker-portal-head">
         <div>
-          <span className="pc-page-eyebrow">Speaker workspace</span>
           <h1>Welcome back, {portal.profile.name.split(/\s+/)[0]}</h1>
           <p className="subtle">
             Everything the event team needs from you, with clear privacy and
             review states.
           </p>
-        </div>
-        <div className="speaker-readiness">
-          <strong>{progress}%</strong>
-          <span>onboarding complete</span>
+          {requirementCount > 0 ? (
+            <div className="speaker-readiness-line">
+              <p>
+                <strong className="pc-num">{completedCount}</strong> of{" "}
+                <strong className="pc-num">{requirementCount}</strong>{" "}
+                requirements complete
+                {remaining > 0 ? (
+                  <span className="subtle"> · {remaining} to go</span>
+                ) : null}
+              </p>
+              <div
+                className={`progress${progress >= 100 ? " green" : progress >= 60 ? "" : " amber"}`}
+                role="progressbar"
+                aria-label="Requirements complete"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+              >
+                <span style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
       <section className="card next-action mt">
@@ -70,25 +92,6 @@ export function SpeakerDashboardOverview({
               Open task
             </Link>
           ) : null}
-        </div>
-        <div
-          className="speaker-progress-visual"
-          role="progressbar"
-          aria-label={`${progress}% complete`}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={progress}
-        >
-          <div
-            className="gauge compact"
-            data-state={readinessState}
-            style={{ "--pct": progress } as React.CSSProperties}
-          >
-            <div className="gauge-inner">
-              <strong>{progress}%</strong>
-              <small>{readinessLabel}</small>
-            </div>
-          </div>
         </div>
       </section>
     </>

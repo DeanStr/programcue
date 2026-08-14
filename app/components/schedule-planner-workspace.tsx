@@ -17,7 +17,6 @@ import type { ScheduleWorkspace } from "~/modules/schedule/schedule-service.serv
 import {
   eventBoundaryCalendarDate,
   eventCalendarDayBoundaries,
-  eventDayScheduleSlots,
   eventDayUsableScheduleSlots,
   eventLocalCalendarDate,
   eventLocalTimeEpoch,
@@ -40,7 +39,9 @@ export {
 } from "./schedule-planner-workspace-helpers";
 
 import {
+  conflictEntryIds,
   conflictTypeLabel,
+  containingScheduleSlot,
   isRecord,
   localHour,
   parseScheduleActionNotices,
@@ -71,6 +72,7 @@ export function SchedulePlannerWorkspace({
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(
     null,
   );
+  const [revealedEntryIds, setRevealedEntryIds] = useState<string[]>([]);
   const eventDays = useMemo(
     () =>
       eventCalendarDayBoundaries(
@@ -95,7 +97,6 @@ export function SchedulePlannerWorkspace({
     );
   });
   const roomScrollRef = useRef<HTMLDivElement>(null);
-  const pendingResizeSessionId = useRef<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor),
@@ -121,23 +122,66 @@ export function SchedulePlannerWorkspace({
       ),
     [selectedDate, workspace.entries, workspace.event.timezone],
   );
-  const slots = useMemo(
-    () =>
-      eventDayScheduleSlots(
-        selectedDay,
-        workspace.event.timezone,
-        selectedDayEntries.map((entry) => entry.startsAt),
-      ),
-    [selectedDay, selectedDayEntries, workspace.event.timezone],
-  );
+  /* The board offered 00:00–24:00 while the placement form only ever offered
+     07:00–22:00, so two thirds of the axis were drop targets the keyboard
+     path refused to name. An entry can still sit outside that window — an
+     import, or a policy that has since changed — and the axis stretches to
+     reach it rather than drawing it at a time it does not happen. */
+  const slots = useMemo(() => {
+    const usable = eventDayUsableScheduleSlots(
+      selectedDay,
+      workspace.event.timezone,
+    );
+    const first = usable[0];
+    const last = usable[usable.length - 1];
+    if (first === undefined || last === undefined) return usable;
+    const halfHour = 30 * 60;
+    const starts = selectedDayEntries.map((entry) => entry.startsAt);
+    const leading: number[] = [];
+    const earliest = Math.min(first, ...starts);
+    for (
+      let epoch = first - Math.ceil((first - earliest) / halfHour) * halfHour;
+      epoch < first;
+      epoch += halfHour
+    ) {
+      leading.push(epoch);
+    }
+    const trailing: number[] = [];
+    for (
+      let epoch = last + halfHour;
+      epoch <= Math.max(last, ...starts);
+      epoch += halfHour
+    ) {
+      trailing.push(epoch);
+    }
+    return [...leading, ...usable, ...trailing];
+  }, [selectedDay, selectedDayEntries, workspace.event.timezone]);
   const entriesBySlot = useMemo(() => {
     const grouped = new Map<string, ScheduleWorkspace["entries"]>();
-    for (const entry of workspace.entries) {
-      const key = `${entry.roomId}:${entry.startsAt}`;
+    for (const entry of selectedDayEntries) {
+      const row = containingScheduleSlot(slots, entry.startsAt);
+      if (row === undefined) continue;
+      const key = `${entry.roomId}:${row}`;
       grouped.set(key, [...(grouped.get(key) ?? []), entry]);
     }
     return grouped;
-  }, [workspace.entries]);
+  }, [selectedDayEntries, slots]);
+  /* Severity, not just membership: a warning and a blocking overlap must not
+     paint the same card the same colour. */
+  const conflictSeverityByEntryId = useMemo(() => {
+    const severities = new Map<string, "warning" | "blocking">();
+    for (const conflict of workspace.conflicts) {
+      for (const entryId of conflictEntryIds(conflict)) {
+        if (conflict.severity === "blocking" || !severities.has(entryId)) {
+          severities.set(
+            entryId,
+            conflict.severity === "blocking" ? "blocking" : "warning",
+          );
+        }
+      }
+    }
+    return severities;
+  }, [workspace.conflicts]);
   const sessionById = useMemo(
     () => new Map(workspace.sessions.map((session) => [session.id, session])),
     [workspace.sessions],
@@ -276,8 +320,11 @@ export function SchedulePlannerWorkspace({
   }
 
   useEffect(() => {
+    const firstEntryStart = selectedDayEntries[0]?.startsAt;
     const preferredStart =
-      selectedDayEntries[0]?.startsAt ??
+      (firstEntryStart === undefined
+        ? undefined
+        : containingScheduleSlot(slots, firstEntryStart)) ??
       eventLocalTimeEpoch(selectedDay, workspace.event.timezone, 8);
     const target = roomScrollRef.current?.querySelector<HTMLElement>(
       `[data-starts-at="${preferredStart}"]`,
@@ -288,9 +335,51 @@ export function SchedulePlannerWorkspace({
         target.getBoundingClientRect().top -
         scroll.getBoundingClientRect().top +
         scroll.scrollTop;
-      scroll.scrollTop = Math.max(0, targetTop - 48);
+      /* The room header row is sticky, so a fixed offset parks the first
+         session underneath it at whichever width the header wraps to two
+         lines. */
+      const headerHeight =
+        scroll.querySelector<HTMLElement>(".schedule-room-board > .header")
+          ?.offsetHeight ?? 48;
+      scroll.scrollTop = Math.max(0, targetTop - headerHeight - 8);
     }
-  }, [selectedDay, selectedDayEntries, workspace.event.timezone]);
+  }, [selectedDay, selectedDayEntries, slots, workspace.event.timezone]);
+
+  /* Naming a conflict in a 280px rail leaves the operator to find the cards
+     themselves. Switching the day first means the jump works for a conflict
+     that is not on the day currently on screen. */
+  function revealConflictEntries(entryIds: string[]) {
+    const implicated = workspace.entries.filter((entry) =>
+      entryIds.includes(entry.id),
+    );
+    const first = implicated[0];
+    if (first) {
+      const date = eventLocalCalendarDate(
+        first.startsAt,
+        workspace.event.timezone,
+      );
+      const day = eventDays.find(
+        (eventDay) => eventBoundaryCalendarDate(eventDay) === date,
+      );
+      if (day !== undefined) setSelectedDay(day);
+    }
+    setRevealedEntryIds(entryIds);
+  }
+
+  useEffect(() => {
+    if (!revealedEntryIds.length) return;
+    const target = revealedEntryIds
+      .map((entryId) =>
+        document.querySelector<HTMLElement>(
+          `[data-entry-id="${CSS.escape(entryId)}"]`,
+        ),
+      )
+      .find((node): node is HTMLElement => node !== null);
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "center", inline: "center" });
+    const clear = window.setTimeout(() => setRevealedEntryIds([]), 2400);
+    return () => window.clearTimeout(clear);
+  }, [revealedEntryIds]);
 
   useEffect(() => {
     if (!workspace.focusedSessionId) return;
@@ -301,18 +390,6 @@ export function SchedulePlannerWorkspace({
     target.focus({ preventScroll: true });
     target.scrollIntoView({ block: "center", inline: "center" });
   }, [selectedDay, workspace.focusedSessionId, workspace.entries]);
-
-  useEffect(() => {
-    if (fetcher.state !== "idle" || !pendingResizeSessionId.current) return;
-    const entry = workspace.entries.find(
-      (candidate) => candidate.sessionId === pendingResizeSessionId.current,
-    );
-    if (!entry) return;
-    document.getElementById(`resize-${entry.id}`)?.focus({
-      preventScroll: true,
-    });
-    pendingResizeSessionId.current = null;
-  }, [fetcher.state, workspace.entries]);
 
   function sessionLabel(active: {
     data: { current?: Record<string, unknown> };
@@ -386,7 +463,6 @@ export function SchedulePlannerWorkspace({
       durationMinutes > 480
     )
       return;
-    pendingResizeSessionId.current = entry.sessionId;
     void fetcher.submit(
       {
         intent: "place",
@@ -561,14 +637,14 @@ export function SchedulePlannerWorkspace({
         </div>
       </div>
       {autoError ? (
-        <div className="validation-item error mb" role="alert">
+        <div className="validation-item schedule-notice error mb" role="alert">
           <strong>Auto-place blocked</strong>
           <span>{autoError}</span>
         </div>
       ) : null}
       {autoResult ? (
         <div
-          className={`validation-item ${autoResult.warning || autoResult.unplacedCount ? "warn" : "ok"} mb`}
+          className={`validation-item schedule-notice ${autoResult.warning || autoResult.unplacedCount ? "warn" : "ok"} mb`}
           role="status"
         >
           <strong>
@@ -607,7 +683,7 @@ export function SchedulePlannerWorkspace({
         </div>
       ) : null}
       {workspace.activeFilter ? (
-        <div className="validation-item info mb" role="status">
+        <div className="validation-item schedule-notice info mb" role="status">
           <strong>Filtered view</strong>
           <span>
             {visibleSessions.length} session
@@ -620,7 +696,7 @@ export function SchedulePlannerWorkspace({
         </div>
       ) : null}
       {workspace.focusedSessionId ? (
-        <div className="validation-item info mb" role="status">
+        <div className="validation-item schedule-notice info mb" role="status">
           <strong>Focused session</strong>
           <span>
             {sessionById.get(workspace.focusedSessionId)?.title ??
@@ -632,11 +708,11 @@ export function SchedulePlannerWorkspace({
         </div>
       ) : null}
       {actionNotices.error ? (
-        <div className="validation-item error mb" role="alert">
+        <div className="validation-item schedule-notice error mb" role="alert">
           <span>{actionNotices.error}</span>
         </div>
       ) : actionResult && "error" in actionResult ? (
-        <div className="validation-item error mb" role="alert">
+        <div className="validation-item schedule-notice error mb" role="alert">
           <span>{actionResult.error}</span>
           {actionNotices.conflicts.map((conflict, index) => (
             <span key={`${conflict.type}-${index}`}>
@@ -674,7 +750,7 @@ export function SchedulePlannerWorkspace({
         </div>
       ) : actionResult?.message ? (
         <div
-          className={`validation-item ${actionNotices.warnings.length ? "warn" : "ok"} mb`}
+          className={`validation-item schedule-notice ${actionNotices.warnings.length ? "warn" : "ok"} mb`}
           role="status"
         >
           <span>{actionResult.message}</span>
@@ -715,29 +791,42 @@ export function SchedulePlannerWorkspace({
       ) : null}
       <div className="schedule-summary card">
         <div>
-          <strong>{workspace.sessions.length}</strong>
+          <strong className="pc-num">{workspace.sessions.length}</strong>
           <small>Sessions</small>
         </div>
         <div>
-          <strong>{workspace.entries.length}</strong>
+          <strong className="pc-num">{workspace.entries.length}</strong>
           <small>Scheduled</small>
         </div>
         <div>
-          <strong>
+          <strong className="pc-num">
             {workspace.sessions.length - scheduledSessionIds.size}
           </strong>
           <small>Unscheduled</small>
         </div>
-        <div>
-          <strong
-            style={{
-              color: workspace.conflicts.length ? "var(--red)" : "var(--green)",
+        {workspace.conflicts.length ? (
+          <button
+            type="button"
+            className="schedule-summary-jump"
+            onClick={() => {
+              const panel = document.getElementById("schedule-validation");
+              panel?.scrollIntoView({ block: "center" });
+              panel
+                ?.querySelector<HTMLElement>(".validation-item button")
+                ?.focus({ preventScroll: true });
             }}
           >
-            {workspace.conflicts.length}
-          </strong>
-          <small>Open conflicts</small>
-        </div>
+            <strong className="pc-num tone-bad">
+              {workspace.conflicts.length}
+            </strong>
+            <small>Open conflicts · review</small>
+          </button>
+        ) : (
+          <div>
+            <strong className="pc-num tone-good">0</strong>
+            <small>Open conflicts</small>
+          </div>
+        )}
       </div>
       <div className="tabs mt" role="group" aria-label="Schedule view">
         {(["room", "list", "day", "week", "track"] as const).map((name) => (
@@ -805,6 +894,8 @@ export function SchedulePlannerWorkspace({
             visibleSessions={visibleSessions}
             scheduledSessionIds={scheduledSessionIds}
             readOnlyPlacementMessage={readOnlyPlacementMessage}
+            quickEntry={quickEntry}
+            unassign={unassign}
           />
           <ScheduleCanvasPanel
             workspace={workspace}
@@ -822,9 +913,14 @@ export function SchedulePlannerWorkspace({
             roomScrollRef={roomScrollRef}
             slots={slots}
             entriesBySlot={entriesBySlot}
-            unassign={unassign}
+            conflictSeverityByEntryId={conflictSeverityByEntryId}
+            revealedEntryIds={revealedEntryIds}
           />
-          <ScheduleValidationPanel workspace={workspace} fetcher={fetcher} />
+          <ScheduleValidationPanel
+            workspace={workspace}
+            fetcher={fetcher}
+            revealConflictEntries={revealConflictEntries}
+          />
         </div>
         {/* Rendered in a portal above both panes. Without it the dragged card
             is clipped the moment it leaves the source list, which has

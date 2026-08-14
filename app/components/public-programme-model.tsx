@@ -57,6 +57,21 @@ export function normaliseDescription(description: string) {
   return description.replace(/\s+/gu, " ").trim();
 }
 
+/**
+ * The published snapshot does not carry the event photograph yet, so the hero
+ * reads it defensively and falls back to the accent panel. The moment the
+ * publication pipeline copies `presentation.heroImagePath` onto the event, the
+ * customer's own photograph leads the page with no further change here.
+ */
+export function eventHeroImagePath(event: PublishedProgramme["event"]) {
+  const value = (event as { heroImagePath?: unknown }).heroImagePath;
+  // The path is interpolated into a url() custom property, so anything that
+  // could close the function or the declaration is refused outright.
+  return typeof value === "string" && /^\/[\w\-./]+$/u.test(value)
+    ? value
+    : null;
+}
+
 export function initials(name: string) {
   return (
     name
@@ -213,6 +228,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     [programme.speakers],
   );
   const [selectedId, setSelectedId] = useState(programme.sessions[0]?.id ?? "");
+  const sessionDetailRef = useRef<HTMLElement | null>(null);
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
   const [expandedSpeakerBiography, setExpandedSpeakerBiography] =
     useState(false);
@@ -361,6 +377,14 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const savedSessions = programme.sessions.filter((session) =>
     saved.includes(session.id),
   );
+  const selectedConflicts = selected
+    ? savedSessions.filter(
+        (session) =>
+          session.id !== selected.id &&
+          session.startsAt < selected.endsAt &&
+          selected.startsAt < session.endsAt,
+      )
+    : [];
   const itineraryConflicts = savedSessions.flatMap((session, index) =>
     savedSessions
       .slice(index + 1)
@@ -426,6 +450,28 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     speakerProfileReturnFocusRef.current = null;
     requestAnimationFrame(() => {
       focusTarget?.focus();
+    });
+  }
+
+  /**
+   * Beside the list the detail panel is already in view, so selecting a row
+   * must not move focus away from it. Stacked under the list it is a screen
+   * away, and a selection that changed something off-screen read as a row that
+   * did nothing at all on a phone.
+   */
+  function openSessionDetail(sessionId: string) {
+    setSelectedId(sessionId);
+    if (typeof window === "undefined") return;
+    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    window.requestAnimationFrame(() => {
+      const panel = sessionDetailRef.current;
+      panel?.focus({ preventScroll: true });
+      panel?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "start",
+      });
     });
   }
 
@@ -534,6 +580,8 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     orderedSpeakers,
     selectedId,
     setSelectedId,
+    sessionDetailRef,
+    openSessionDetail,
     speakerProfileRef,
     showControl,
     showSpeakers,
@@ -548,6 +596,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     expandedSpeakerBiography,
     savedSessions,
     itineraryConflicts,
+    selectedConflicts,
     openSpeakerProfile,
     closeSpeakerProfile,
     toggleDescription,

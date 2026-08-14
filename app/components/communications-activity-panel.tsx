@@ -1,3 +1,4 @@
+import { Send } from "lucide-react";
 import { Form, Link, useSubmit } from "react-router";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
@@ -120,6 +121,8 @@ export function RecentCommunications({
         </div>
       ) : (
         <EmptyState
+          className="comms-empty"
+          icon={Send}
           title="No sends have been confirmed"
           description="Confirmed and scheduled communications appear here with their delivery progress."
           action={

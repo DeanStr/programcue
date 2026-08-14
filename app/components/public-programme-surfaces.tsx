@@ -170,18 +170,23 @@ export function PublicSessionDetails({
       tabIndex={-1}
     >
       <div className="public-surface-detail-heading">
-        <div>
-          <span className="pc-page-eyebrow">Session detail</span>
-          <h2 id="public-session-detail-title">{session.title}</h2>
-        </div>
+        <h2 id="public-session-detail-title">{session.title}</h2>
         <SessionTags session={session} />
       </div>
+      {/* Prose and speakers on the left, the two facts on the right. The
+          speaker block used to sit in the facts panel, which made the right
+          column the taller of the two and left a third of the card empty
+          beside a short abstract. */}
       <div className="public-surface-detail-body">
         <div>
           <p className="public-detail-description">
             {normaliseDescription(session.description) ||
               "Description not provided."}
           </p>
+          <h3 className="public-surface-detail-subhead">
+            {session.speakerIds.length === 1 ? "Speaker" : "Speakers"}
+          </h3>
+          <PublicSessionSpeakers session={session} model={model} />
         </div>
         <aside className="public-surface-detail-facts">
           <dl className="public-detail-list">
@@ -203,8 +208,6 @@ export function PublicSessionDetails({
                 .join(" · ")}
             </dd>
           </dl>
-          <h3>Speakers</h3>
-          <PublicSessionSpeakers session={session} model={model} />
         </aside>
       </div>
     </article>
@@ -245,17 +248,17 @@ function SessionCardDescription({
 /**
  * Heading, count and the surface's own control sit on one line. Keeping the
  * search beside the count stops a directory of a handful of speakers from
- * reading as an empty page with a stray badge in the corner.
+ * reading as an empty page with a stray badge in the corner. A surface is
+ * named by its heading: the tracked-out caps line that used to sit above each
+ * one restated it in the platform's colour on the customer's page.
  */
 function SurfaceHeading({
-  eyebrow,
   title,
   id,
   description,
   count,
   children,
 }: {
-  eyebrow: string;
   title: string;
   id: string;
   description: string;
@@ -265,7 +268,6 @@ function SurfaceHeading({
   return (
     <div className="public-surface-heading">
       <div className="public-surface-heading-copy">
-        <span className="pc-page-eyebrow">{eyebrow}</span>
         <h1 id={id}>{title}</h1>
         <p className="subtle">{description}</p>
       </div>
@@ -300,7 +302,6 @@ export function PublicAgendaSurface({
   return (
     <section className="public-surface" aria-labelledby="public-agenda-title">
       <SurfaceHeading
-        eyebrow="Public programme"
         title="Agenda"
         id="public-agenda-title"
         description="Every published session for the selected day, side by side."
@@ -393,7 +394,6 @@ export function PublicScheduleSurface({
   return (
     <section className="public-surface" aria-labelledby="public-schedule-title">
       <SurfaceHeading
-        eyebrow="Browse chronologically"
         title="Schedule Itinerary"
         id="public-schedule-title"
         description="A day-by-day itinerary of the published programme, with complete session and speaker details."
@@ -466,7 +466,9 @@ function SpeakerDirectoryCard({
           <PublicSpeakerMetadata speaker={speaker} />
         </span>
       </button>
-      {speaker.biography ? <p>{descriptionSnippet(speaker.biography)}</p> : null}
+      {speaker.biography ? (
+        <p>{descriptionSnippet(speaker.biography)}</p>
+      ) : null}
       <span className="help">
         {speaker.sessionIds.length} public session
         {speaker.sessionIds.length === 1 ? "" : "s"}
@@ -483,7 +485,6 @@ export function PublicSpeakersSurface({
   return (
     <section className="public-surface" aria-labelledby="public-speakers-title">
       <SurfaceHeading
-        eyebrow="Published directory"
         title="Speakers"
         id="public-speakers-title"
         description="Meet the people presenting this event."
@@ -503,7 +504,7 @@ export function PublicSpeakersSurface({
           />
         </div>
       </SurfaceHeading>
-      <div className="grid grid-3 public-speaker-directory-grid">
+      <div className="grid public-speaker-directory-grid">
         {model.directorySpeakers.length ? (
           model.directorySpeakers.map((speaker) => (
             <SpeakerDirectoryCard
@@ -583,7 +584,6 @@ function SpeakerDetailPanel({
       <div className="public-speaker-detail-heading">
         <PublicSpeakerPhoto speaker={speaker} large />
         <div>
-          <span className="pc-page-eyebrow">Speaker details</span>
           <h2 id={`${variant}-speaker-detail-name`}>{speaker.displayName}</h2>
           <PublicSpeakerMetadata speaker={speaker} />
           <div className="public-profile-actions">
@@ -660,7 +660,6 @@ export function PublicSpeakerGallerySurface({
       aria-labelledby="speaker-gallery-title"
     >
       <SurfaceHeading
-        eyebrow="Visual speaker showcase"
         title="Speaker Gallery"
         id="speaker-gallery-title"
         description="Browse the published speaker community by name. Open a card for biography and session details."

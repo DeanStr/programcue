@@ -118,7 +118,6 @@ export function PublicApplicationLanding({
           <span className={`cfp-open-state ${accepting ? "open" : "closed"}`}>
             {accepting ? "Submissions open" : "Submissions unavailable"}
           </span>
-          <p className="cfp-kicker">{form.name}</p>
           <h1>{form.eventName}</h1>
           <p className="cfp-thesis">{form.version.schema.introduction}</p>
           <dl className="cfp-event-facts">
@@ -183,11 +182,6 @@ export function PublicApplicationLanding({
         >
           {hasInvitation ? (
             <section className="cfp-editorial-section cfp-invitation">
-              <p className="cfp-section-label">
-                {presentation.invitationHeading || presentation.invitationText
-                  ? "The invitation"
-                  : "The event"}
-              </p>
               <h2>{presentation.invitationHeading || "About the event"}</h2>
               {form.eventDescription ? <p>{form.eventDescription}</p> : null}
               {presentation.invitationText ? (
@@ -232,7 +226,6 @@ export function PublicApplicationLanding({
             className="cfp-editorial-section cfp-outline"
             aria-labelledby="outline-heading"
           >
-            <p className="cfp-section-label">What we’ll ask</p>
             <div className="cfp-section-heading">
               <div>
                 <h2 id="outline-heading">Preview the application</h2>
@@ -284,7 +277,6 @@ export function PublicApplicationLanding({
 
         {featuredSpeakers.length ? (
           <section className="cfp-featured" aria-labelledby="featured-heading">
-            <p className="cfp-section-label">Already joining us</p>
             <div className="cfp-section-heading">
               <div>
                 <h2 id="featured-heading">Meet speakers on the programme</h2>

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { BrandMark } from "~/components/brand-mark";
+import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 import {
   heroImagePathSchema,
   validateAnswerShapes,
@@ -8,6 +9,22 @@ import {
   type FormField,
   type SaveFormInput,
 } from "~/modules/submissions/submission-schema";
+
+const PREVIEW_WIDTHS = { mobile: 390, desktop: 960 } as const;
+
+/**
+ * An event accent is customer-chosen and carries no contrast guarantee against
+ * the white hero text, so the ground is the accent's derived ink rather than
+ * the accent itself. An unusable value falls through to the token default.
+ */
+function heroGround(brandAccent: string | undefined) {
+  if (!brandAccent) return undefined;
+  try {
+    return programmeAccentPalette(brandAccent).ink;
+  } catch {
+    return undefined;
+  }
+}
 
 function FieldPreview({
   field,
@@ -80,10 +97,16 @@ export function ApplicantPreviewPanel({
   input,
   brandAccent,
   eventName,
+  paneSwitch,
+  hidden,
+  onClose,
 }: {
   input: SaveFormInput;
   brandAccent?: string;
   eventName?: string;
+  paneSwitch?: ReactNode;
+  hidden?: boolean;
+  onClose?: () => void;
 }) {
   const parsedHeroImagePath = heroImagePathSchema.safeParse(
     input.schema.presentation.heroImagePath,
@@ -129,141 +152,177 @@ export function ApplicantPreviewPanel({
     setValidated(true);
   }
 
+  const ground = heroGround(brandAccent);
+  const headStyle: CSSProperties = {
+    ...(ground ? { backgroundColor: ground } : {}),
+    ...(heroImagePath
+      ? {
+          // Density follows the text: the scrim is darkest at the foot, where
+          // the meta lines sit. The old 100deg version faded to 30% opacity
+          // exactly under the wrapped second line.
+          backgroundImage: `linear-gradient(180deg,rgba(10,18,48,.35),rgba(10,18,48,.92)),url(${heroImagePath})`,
+        }
+      : {}),
+  };
+
   return (
-    <section
-      className={`card builder-panel preview-panel${viewport === "desktop" ? " preview-desktop" : ""}`}
-    >
-      <div className="card-title">
+    <section className="fb-dock-panel fb-preview" hidden={hidden}>
+      <div className="fb-pane-head">
         <h2>Live applicant preview</h2>
-        <span
-          className="preview-viewport-controls right"
-          role="group"
-          aria-label="Applicant preview size"
-        >
-          <button
-            className="btn small"
-            type="button"
-            aria-pressed={viewport === "mobile"}
-            onClick={() => setViewport("mobile")}
-          >
-            Mobile
-          </button>
-          <button
-            className="btn small"
-            type="button"
-            aria-pressed={viewport === "desktop"}
-            onClick={() => setViewport("desktop")}
-          >
-            Desktop
-          </button>
-        </span>
+        {paneSwitch ? <span className="right">{paneSwitch}</span> : null}
       </div>
-      <p className="help mb">
-        Isolated test mode exercises conditional fields and validation without
-        creating applicant or submission records.
-      </p>
-      <div className={`phone preview-device-${viewport}`}>
-        <div
-          className="phone-head"
-          style={{
-            background: heroImagePath
-              ? `linear-gradient(100deg,rgba(10,18,48,.94),rgba(10,18,48,.3)),url(${heroImagePath}) center/cover`
-              : `linear-gradient(135deg,#111b3f,${brandAccent ?? "#4f46e5"})`,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <BrandMark size="small" />
-            <strong>Program Cue</strong>
-          </div>
-          <h3>{input.name}</h3>
-          <small>{eventName ?? "Your event"}</small>
-          <small>
-            {input.schema.fields.length} questions · about{" "}
-            {input.schema.presentation.estimatedMinutes} minutes
-          </small>
-          {input.schema.presentation.organizerName ? (
-            <small>
-              Organised by {input.schema.presentation.organizerName}
-            </small>
-          ) : null}
-        </div>
-        <div className="phone-body">
-          <p className="tiny subtle">{input.schema.introduction}</p>
-          {previewFields.map((field) =>
-            field.type === "multi_select" ? (
-              <fieldset className="application-choice-field" key={field.id}>
-                <legend className="label">
-                  {field.label}
-                  {field.required ? " *" : ""}
-                </legend>
-                {field.help ? <span className="help">{field.help}</span> : null}
-                <FieldPreview
-                  field={field}
-                  value={answers[field.id]}
-                  onChange={(value) => updateAnswer(field.id, value)}
-                />
-                {errors[field.id]?.[0] ? (
-                  <span className="field-error">{errors[field.id][0]}</span>
-                ) : null}
-              </fieldset>
-            ) : (
-              <label className="label" key={field.id}>
-                {field.label}
-                {field.required ? " *" : ""}
-                {field.help ? <span className="help">{field.help}</span> : null}
-                <FieldPreview
-                  field={field}
-                  value={answers[field.id]}
-                  onChange={(value) => updateAnswer(field.id, value)}
-                />
-                {errors[field.id]?.[0] ? (
-                  <span className="field-error">{errors[field.id][0]}</span>
-                ) : null}
-              </label>
-            ),
-          )}
-          <label className="label">
-            Test speaker count
-            <input
-              className="field"
-              type="number"
-              min={1}
-              max={20}
-              value={speakerCount}
-              onChange={(event) => {
-                setSpeakerCount(Number(event.target.value));
-                setErrors({});
-                setValidated(false);
-              }}
-            />
-            {errors.speakers?.[0] ? (
-              <span className="field-error">{errors.speakers[0]}</span>
-            ) : null}
-          </label>
-          {validated ? (
-            <div
-              className={`validation-item ${Object.keys(errors).length ? "error" : "ok"}`}
-              role={Object.keys(errors).length ? "alert" : "status"}
+      <div className="fb-pane-body">
+        <p className="help mb">
+          Isolated test mode exercises conditional fields and validation without
+          creating applicant or submission records.
+        </p>
+        <div className="fb-preview-shell">
+          <div className="fb-preview-chrome">
+            <span className="pc-num">{PREVIEW_WIDTHS[viewport]} px wide</span>
+            <span
+              className="preview-viewport-controls right"
+              role="group"
+              aria-label="Applicant preview size"
             >
-              <strong>{Object.keys(errors).length ? "△" : "✓"}</strong>
-              <span>
-                {Object.keys(errors).length
-                  ? "This test submission needs the highlighted changes."
-                  : "This test submission passes the current form rules."}
-              </span>
+              <button
+                className="btn small"
+                type="button"
+                aria-pressed={viewport === "mobile"}
+                onClick={() => setViewport("mobile")}
+              >
+                Mobile
+              </button>
+              <button
+                className="btn small"
+                type="button"
+                aria-pressed={viewport === "desktop"}
+                onClick={() => setViewport("desktop")}
+              >
+                Desktop
+              </button>
+            </span>
+            {onClose ? (
+              <button
+                className="btn small fb-preview-close"
+                type="button"
+                onClick={onClose}
+              >
+                Close preview
+              </button>
+            ) : null}
+          </div>
+          <div className="fb-preview-scroll">
+            <div className={`fb-preview-page is-${viewport}`}>
+              <div className="fb-preview-head" style={headStyle}>
+                <span className="fb-preview-brand">
+                  <BrandMark size="small" />
+                  Program Cue
+                </span>
+                <h3>{input.name}</h3>
+                <span className="fb-preview-meta">
+                  {eventName ?? "Your event"}
+                </span>
+                <span className="fb-preview-meta">
+                  {input.schema.fields.length} questions · about{" "}
+                  {input.schema.presentation.estimatedMinutes} minutes
+                </span>
+                {input.schema.presentation.organizerName ? (
+                  <span className="fb-preview-meta">
+                    Organised by {input.schema.presentation.organizerName}
+                  </span>
+                ) : null}
+              </div>
+              <div className="fb-preview-body">
+                <p className="tiny subtle">{input.schema.introduction}</p>
+                {previewFields.map((field) =>
+                  field.type === "multi_select" ? (
+                    <fieldset
+                      className="application-choice-field"
+                      key={field.id}
+                    >
+                      <legend className="label">
+                        {field.label}
+                        {field.required ? " *" : ""}
+                      </legend>
+                      {field.help ? (
+                        <span className="help">{field.help}</span>
+                      ) : null}
+                      <FieldPreview
+                        field={field}
+                        value={answers[field.id]}
+                        onChange={(value) => updateAnswer(field.id, value)}
+                      />
+                      {errors[field.id]?.[0] ? (
+                        <span className="field-error">
+                          {errors[field.id][0]}
+                        </span>
+                      ) : null}
+                    </fieldset>
+                  ) : (
+                    <label className="label" key={field.id}>
+                      {field.label}
+                      {field.required ? " *" : ""}
+                      {field.help ? (
+                        <span className="help">{field.help}</span>
+                      ) : null}
+                      <FieldPreview
+                        field={field}
+                        value={answers[field.id]}
+                        onChange={(value) => updateAnswer(field.id, value)}
+                      />
+                      {errors[field.id]?.[0] ? (
+                        <span className="field-error">
+                          {errors[field.id][0]}
+                        </span>
+                      ) : null}
+                    </label>
+                  ),
+                )}
+                <label className="label">
+                  Test speaker count
+                  <input
+                    className="field"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={speakerCount}
+                    onChange={(event) => {
+                      setSpeakerCount(Number(event.target.value));
+                      setErrors({});
+                      setValidated(false);
+                    }}
+                  />
+                  {errors.speakers?.[0] ? (
+                    <span className="field-error">{errors.speakers[0]}</span>
+                  ) : null}
+                </label>
+                {validated ? (
+                  <div
+                    className={`validation-item ${Object.keys(errors).length ? "error" : "ok"}`}
+                    role={Object.keys(errors).length ? "alert" : "status"}
+                  >
+                    <strong>{Object.keys(errors).length ? "△" : "✓"}</strong>
+                    <span>
+                      {Object.keys(errors).length
+                        ? "This test submission needs the highlighted changes."
+                        : "This test submission passes the current form rules."}
+                    </span>
+                  </div>
+                ) : null}
+                <button
+                  className="btn primary"
+                  type="button"
+                  onClick={validatePreview}
+                >
+                  Validate test submission
+                </button>
+                <small className="help">
+                  Test values stay in this preview. No applicant or submission
+                  record is saved.
+                </small>
+              </div>
             </div>
-          ) : null}
-          <button
-            className="btn primary"
-            type="button"
-            onClick={validatePreview}
-          >
-            Validate test submission
-          </button>
-          <small className="help">
-            Test values stay in this preview. No applicant or submission record
-            is saved.
-          </small>
+          </div>
         </div>
       </div>
     </section>
