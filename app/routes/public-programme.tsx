@@ -3,6 +3,7 @@ import { data } from "react-router";
 import type { Route } from "./+types/public-programme";
 import {
   ProgrammeEmbedConfigurationError,
+  parseProgrammeEmbedSurface,
   parseProgrammeEmbedSearchParameters,
 } from "~/modules/programme/programme-embed-configuration";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
@@ -111,7 +112,17 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!programme)
     throw new Response("Published event programme not found", { status: 404 });
   const embedded = new URL(request.url).pathname.startsWith("/embed/");
-  const surface = embedded ? "overview" : surfaceFromParam(params.surface);
+  let surface: PublicProgrammeSurface;
+  try {
+    surface = embedded
+      ? parseProgrammeEmbedSurface(params.surface)
+      : surfaceFromParam(params.surface);
+  } catch (error) {
+    if (error instanceof ProgrammeEmbedConfigurationError) {
+      throw new Response(error.message, { status: 404 });
+    }
+    throw error;
+  }
   const url = new URL(request.url);
   let embedOptions;
   try {

@@ -65,13 +65,23 @@ export function SessionTime({
 }
 
 /** Track and format are different facts, so they are given different colours. */
-export function SessionTags({ session }: { session: PublishedSession }) {
+export function SessionTags({
+  session,
+  showTrack = true,
+  showFormat = true,
+}: {
+  session: PublishedSession;
+  showTrack?: boolean;
+  showFormat?: boolean;
+}) {
   return (
     <span className="public-detail-tags">
-      {session.track ? (
+      {showTrack && session.track ? (
         <span className="pill track">{session.track}</span>
       ) : null}
-      <span className="pill format">{session.format}</span>
+      {showFormat ? (
+        <span className="pill format">{session.format}</span>
+      ) : null}
     </span>
   );
 }
@@ -108,7 +118,7 @@ export function SessionSpeakerLines({
         const affiliation = speakerAffiliation(speaker);
         return (
           <span className="programme-row-speaker" key={speakerId}>
-            {speaker.imageUrl ? (
+            {model.showEmbedField("images") && speaker.imageUrl ? (
               <img
                 className="avatar sm"
                 src={speaker.imageUrl}
@@ -117,13 +127,13 @@ export function SessionSpeakerLines({
                 height={28}
                 loading="lazy"
               />
-            ) : (
+            ) : model.showEmbedField("images") ? (
               <span className="avatar sm" aria-hidden="true">
                 {initials(session.speakerNames[index]!)}
               </span>
-            )}
+            ) : null}
             <span className="speaker">{session.speakerNames[index]}</span>
-            {affiliation ? (
+            {model.showEmbedField("affiliations") && affiliation ? (
               <small className="subtle programme-row-affiliation">
                 {" "}
                 <span aria-hidden="true">— </span>

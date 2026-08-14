@@ -112,6 +112,16 @@ mutable queue record is introduced.
 
 ## Public programme workstream decisions
 
+**Public embed surfaces.** The embed URL and generated widget allow exactly five
+published surfaces: sessions, speakers, agenda, schedule and gallery. One
+strict allowlist controls optional supporting fields such as time, location,
+track, format, descriptions, speaker identity details and linked sessions;
+session titles and speaker names remain the identifying minimum. Iframe and
+auto-resizing widget output share this stateless contract, unknown surfaces or
+fields fail explicitly, and every surface continues to read only the current
+immutable published programme snapshot. Saved embed records, arbitrary CSS and
+parallel content stores are not introduced.
+
 | Decision                  | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Public programme surfaces | Sessions, speakers, agenda, schedule/itinerary and Speaker Gallery are route-level views over one `PublishedProgramme` snapshot. The gallery does not create a second speaker or schedule store, and all private reads retain event, publication, visibility and profile predicates. Optional speaker title, organisation and biography fields render only when present; attendee surfaces do not turn missing profile data into administrator-facing quality labels.                                                                                                                                                             |

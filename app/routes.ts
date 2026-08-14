@@ -234,6 +234,9 @@ export default [
   route("embed/:slug", "routes/public-programme.tsx", {
     id: "embed-programme",
   }),
+  route("embed/:slug/:surface", "routes/public-programme.tsx", {
+    id: "embed-programme-surface",
+  }),
   route("apply/:slug", "routes/application-form.tsx"),
   route("design/system", "routes/design-system.tsx"),
 ] satisfies RouteConfig;

@@ -30,7 +30,18 @@
   }
 
   var widgetOrigin = new URL(script.src, document.baseURI).origin;
-  var frameUrl = new URL("/embed/" + encodeURIComponent(slug), widgetOrigin);
+  var surface = script.hasAttribute("data-surface")
+    ? (script.dataset.surface || "").trim()
+    : "sessions";
+  if (!/^(sessions|speakers|agenda|schedule|gallery)$/.test(surface)) {
+    throw new Error(
+      "Program Cue widget data-surface must be sessions, speakers, agenda, schedule or gallery.",
+    );
+  }
+  var frameUrl = new URL(
+    "/embed/" + encodeURIComponent(slug) + "/" + surface,
+    widgetOrigin,
+  );
   [
     "day",
     "track",
@@ -41,6 +52,7 @@
     "controls",
     "density",
     "speakers",
+    "fields",
   ].forEach(function copyFilter(name) {
     var value = script.dataset[name];
     if (script.hasAttribute("data-" + name)) {

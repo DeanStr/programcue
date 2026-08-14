@@ -8,7 +8,30 @@ export const PROGRAMME_EMBED_CONTROLS = [
   "room",
 ] as const;
 
+export const PROGRAMME_EMBED_SURFACES = [
+  "sessions",
+  "speakers",
+  "agenda",
+  "schedule",
+  "gallery",
+] as const;
+
+export const PROGRAMME_EMBED_FIELDS = [
+  "time",
+  "location",
+  "track",
+  "format",
+  "description",
+  "speakers",
+  "affiliations",
+  "images",
+  "biography",
+  "sessions",
+] as const;
+
 export type ProgrammeEmbedControl = (typeof PROGRAMME_EMBED_CONTROLS)[number];
+export type ProgrammeEmbedSurface = (typeof PROGRAMME_EMBED_SURFACES)[number];
+export type ProgrammeEmbedField = (typeof PROGRAMME_EMBED_FIELDS)[number];
 export type ProgrammeEmbedDensity = "comfortable" | "compact";
 
 const PROGRAMME_EMBED_QUERY_PARAMETERS = [
@@ -21,6 +44,7 @@ const PROGRAMME_EMBED_QUERY_PARAMETERS = [
   "controls",
   "density",
   "speakers",
+  "fields",
 ] as const;
 
 type ProgrammeEmbedSearchConfiguration = {
@@ -33,9 +57,11 @@ type ProgrammeEmbedSearchConfiguration = {
   controls: ProgrammeEmbedControl[];
   density: ProgrammeEmbedDensity;
   showSpeakers: boolean;
+  fields: ProgrammeEmbedField[];
 };
 
 export type ProgrammeEmbedConfiguration = {
+  surface: ProgrammeEmbedSurface;
   day: string;
   track: string;
   format: string;
@@ -45,6 +71,7 @@ export type ProgrammeEmbedConfiguration = {
   controls: ProgrammeEmbedControl[];
   density: ProgrammeEmbedDensity;
   showSpeakers: boolean;
+  fields: ProgrammeEmbedField[];
   height: number;
 };
 
@@ -66,6 +93,7 @@ export class ProgrammeEmbedConfigurationError extends Error {
 
 export function defaultProgrammeEmbedConfiguration(): ProgrammeEmbedConfiguration {
   return {
+    surface: "sessions",
     day: "",
     track: "",
     format: "",
@@ -75,6 +103,7 @@ export function defaultProgrammeEmbedConfiguration(): ProgrammeEmbedConfiguratio
     controls: [...PROGRAMME_EMBED_CONTROLS],
     density: "comfortable",
     showSpeakers: true,
+    fields: [...PROGRAMME_EMBED_FIELDS],
     height: 720,
   };
 }
@@ -109,6 +138,45 @@ export function programmeEmbedFilterOptions(
 
 function isEmbedControl(value: string): value is ProgrammeEmbedControl {
   return PROGRAMME_EMBED_CONTROLS.includes(value as ProgrammeEmbedControl);
+}
+
+export function parseProgrammeEmbedSurface(
+  raw: string | undefined,
+): ProgrammeEmbedSurface {
+  if (raw === undefined) return "sessions";
+  if (PROGRAMME_EMBED_SURFACES.includes(raw as ProgrammeEmbedSurface)) {
+    return raw as ProgrammeEmbedSurface;
+  }
+  throw new ProgrammeEmbedConfigurationError(
+    "Embed surface must be sessions, speakers, agenda, schedule or gallery.",
+  );
+}
+
+function isEmbedField(value: string): value is ProgrammeEmbedField {
+  return PROGRAMME_EMBED_FIELDS.includes(value as ProgrammeEmbedField);
+}
+
+export function parseProgrammeEmbedFields(
+  raw: string | null,
+): ProgrammeEmbedField[] {
+  if (raw === null) return [...PROGRAMME_EMBED_FIELDS];
+  if (raw === "none") return [];
+  if (raw.length > 128) {
+    throw new ProgrammeEmbedConfigurationError(
+      "Embed fields must be a unique comma-separated selection of supported public fields, or none.",
+    );
+  }
+  const requested = raw.split(",");
+  if (
+    !requested.length ||
+    requested.some((value) => !value || !isEmbedField(value)) ||
+    new Set(requested).size !== requested.length
+  ) {
+    throw new ProgrammeEmbedConfigurationError(
+      "Embed fields must be a unique comma-separated selection of supported public fields, or none.",
+    );
+  }
+  return requested as ProgrammeEmbedField[];
 }
 
 export function parseProgrammeEmbedControls(
@@ -196,6 +264,7 @@ export function parseProgrammeEmbedSearchParameters(
     controls: parseProgrammeEmbedControls(searchParams.get("controls")),
     density: parseProgrammeEmbedDensity(searchParams.get("density")),
     showSpeakers: parseProgrammeEmbedSpeakers(searchParams.get("speakers")),
+    fields: parseProgrammeEmbedFields(searchParams.get("fields")),
   };
 }
 
@@ -205,6 +274,13 @@ function hasDefaultControls(controls: readonly ProgrammeEmbedControl[]) {
     controls.every(
       (control, index) => control === PROGRAMME_EMBED_CONTROLS[index],
     )
+  );
+}
+
+function hasDefaultFields(fields: readonly ProgrammeEmbedField[]) {
+  return (
+    fields.length === PROGRAMME_EMBED_FIELDS.length &&
+    fields.every((field, index) => field === PROGRAMME_EMBED_FIELDS[index])
   );
 }
 
@@ -219,10 +295,14 @@ function assertTextLength(label: string, value: string, maximum: number) {
 function assertProgrammeEmbedConfiguration(
   configuration: ProgrammeEmbedConfiguration,
 ) {
+  parseProgrammeEmbedSurface(configuration.surface);
   parseProgrammeEmbedControls(
     configuration.controls.length ? configuration.controls.join(",") : "none",
   );
   parseProgrammeEmbedDensity(configuration.density);
+  parseProgrammeEmbedFields(
+    configuration.fields.length ? configuration.fields.join(",") : "none",
+  );
   if (typeof configuration.showSpeakers !== "boolean") {
     throw new ProgrammeEmbedConfigurationError(
       "Embed speaker visibility must be a boolean.",
@@ -257,7 +337,10 @@ export function programmeEmbedUrl(
   configuration: ProgrammeEmbedConfiguration,
 ) {
   assertProgrammeEmbedConfiguration(configuration);
-  const url = new URL(`/embed/${encodeURIComponent(eventSlug)}`, origin);
+  const url = new URL(
+    `/embed/${encodeURIComponent(eventSlug)}/${configuration.surface}`,
+    origin,
+  );
   const values = [
     ["day", configuration.day],
     ["track", configuration.track],
@@ -278,7 +361,15 @@ export function programmeEmbedUrl(
   if (configuration.density !== "comfortable") {
     url.searchParams.set("density", configuration.density);
   }
-  if (!configuration.showSpeakers) url.searchParams.set("speakers", "hide");
+  if (configuration.surface === "sessions" && !configuration.showSpeakers) {
+    url.searchParams.set("speakers", "hide");
+  }
+  if (!hasDefaultFields(configuration.fields)) {
+    url.searchParams.set(
+      "fields",
+      configuration.fields.length ? configuration.fields.join(",") : "none",
+    );
+  }
   return url.toString();
 }
 
@@ -337,6 +428,7 @@ export function programmeWidgetSnippet({
     ["data-programcue-event", eventSlug],
     ["data-target", `#${target}`],
     ["data-title", title],
+    ["data-surface", configuration.surface],
     ["data-day", configuration.day],
     ["data-track", configuration.track],
     ["data-format", configuration.format],
@@ -355,7 +447,20 @@ export function programmeWidgetSnippet({
       "data-density",
       configuration.density === "comfortable" ? "" : configuration.density,
     ],
-    ["data-speakers", configuration.showSpeakers ? "" : "hide"],
+    [
+      "data-speakers",
+      configuration.surface === "sessions" && !configuration.showSpeakers
+        ? "hide"
+        : "",
+    ],
+    [
+      "data-fields",
+      hasDefaultFields(configuration.fields)
+        ? ""
+        : configuration.fields.length
+          ? configuration.fields.join(",")
+          : "none",
+    ],
     ["data-height", String(configuration.height)],
   ] as const;
   const serialized = attributes

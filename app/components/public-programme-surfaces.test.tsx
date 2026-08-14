@@ -65,6 +65,8 @@ function model(overrides: Partial<PublicProgrammeModel> = {}) {
     closeSpeakerProfile: vi.fn(),
     expandedSpeakerBiography: false,
     toggleSpeakerBiography: vi.fn(),
+    showControl: () => true,
+    showEmbedField: () => true,
     ...overrides,
   } as unknown as PublicProgrammeModel;
 }

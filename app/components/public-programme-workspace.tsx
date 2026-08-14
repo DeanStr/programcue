@@ -171,14 +171,16 @@ function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
       <div className="hero-body">
         <h1>{programme.event.name}</h1>
         <p className="hero-meta">
-          <span>
-            <CalendarDays aria-hidden="true" size={15} />
+          {model.showEmbedField("time") ? (
             <span>
-              {formatProgrammeEventDay(programme.event.startDate)}–
-              {formatProgrammeEventDay(programme.event.endDate)}
+              <CalendarDays aria-hidden="true" size={15} />
+              <span>
+                {formatProgrammeEventDay(programme.event.startDate)}–
+                {formatProgrammeEventDay(programme.event.endDate)}
+              </span>
             </span>
-          </span>
-          {place ? (
+          ) : null}
+          {model.showEmbedField("location") && place ? (
             <span>
               <MapPin aria-hidden="true" size={15} />
               <span>{place}</span>
@@ -246,22 +248,28 @@ export function PublicSpeakerCard({
       key={speaker.id}
     >
       <div className="public-speaker-card-identity">
-        <PublicSpeakerAvatar speaker={speaker} size={56} />
+        {model.showEmbedField("images") ? (
+          <PublicSpeakerAvatar speaker={speaker} size={56} />
+        ) : null}
         <div>
           <h3>{speaker.displayName}</h3>
-          {affiliation ? <p className="help">{affiliation}</p> : null}
+          {model.showEmbedField("affiliations") && affiliation ? (
+            <p className="help">{affiliation}</p>
+          ) : null}
         </div>
       </div>
-      {speaker.biography ? (
+      {model.showEmbedField("biography") && speaker.biography ? (
         <p className="public-speaker-card-bio">
           {descriptionSnippet(speaker.biography)}
         </p>
       ) : null}
       <div className="public-speaker-card-foot">
-        <span className="help">
-          {speaker.sessionIds.length} session
-          {speaker.sessionIds.length === 1 ? "" : "s"}
-        </span>
+        {model.showEmbedField("sessions") ? (
+          <span className="help">
+            {speaker.sessionIds.length} session
+            {speaker.sessionIds.length === 1 ? "" : "s"}
+          </span>
+        ) : null}
         <a
           className="btn small"
           id={`speaker-profile-link-${speaker.id}`}
@@ -415,24 +423,37 @@ function ProgrammeSessionEntry({
       <button
         type="button"
         id={`session-${session.slug}`}
-        className={`programme-row${active ? " active" : ""}`}
+        className={`programme-row${active ? " active" : ""}${model.showEmbedField("time") ? "" : " without-time"}`}
         aria-pressed={active}
         onClick={() => model.setSelectedId(session.id)}
       >
-        <span className="session-time">
-          <SessionTime session={session} timezone={programme.event.timezone} />
-        </span>
+        {model.showEmbedField("time") ? (
+          <span className="session-time">
+            <SessionTime
+              session={session}
+              timezone={programme.event.timezone}
+            />
+          </span>
+        ) : null}
         <span className="session-main">
-          <SessionTags session={session} />
+          {model.showEmbedField("track") || model.showEmbedField("format") ? (
+            <SessionTags
+              session={session}
+              showTrack={model.showEmbedField("track")}
+              showFormat={model.showEmbedField("format")}
+            />
+          ) : null}
           <h3>{session.title}</h3>
           <SessionSpeakerLines session={session} model={model} />
-          <SessionPlace session={session} />
+          {model.showEmbedField("location") ? (
+            <SessionPlace session={session} />
+          ) : null}
         </span>
       </button>
       {!embedded && !shared ? (
         <SaveSessionButton session={session} model={model} />
       ) : null}
-      {snippet || !description ? (
+      {model.showEmbedField("description") && (snippet || !description) ? (
         <div className="programme-entry-description">
           <p id={`session-description-${session.id}`}>
             {description
@@ -658,61 +679,75 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
     <section className="card session-detail-panel">
       <span className="pc-page-eyebrow">Session detail</span>
       <h2>{selected.title}</h2>
-      <p className="session-detail-when">
-        {formatDay(selected.startsAt, programme.event.timezone)} ·{" "}
-        {formatProgrammeTimeRange(
-          selected.startsAt,
-          selected.endsAt,
-          programme.event.timezone,
-        )}
-      </p>
-      <SessionPlace session={selected} />
-      <div className="public-detail-tags mt">
-        {selected.track ? (
-          <span className="pill track">{selected.track}</span>
-        ) : null}
-        <span className="pill format">{selected.format}</span>
-      </div>
-      <div className="stack mt mb">
-        {selected.speakerIds.length ? (
-          selected.speakerIds.map((speakerId, index) => {
-            const speaker = speakerById.get(speakerId)!;
-            const name = selected.speakerNames[index]!;
-            const affiliation = speakerAffiliation(speaker);
-            return (
-              <div className="row-main" key={speakerId}>
-                {speaker.imageUrl ? (
-                  <img
-                    className="avatar"
-                    src={speaker.imageUrl}
-                    alt=""
-                    width={40}
-                    height={40}
-                  />
-                ) : (
-                  <span className="avatar" aria-hidden="true">
-                    {initials(name)}
-                  </span>
-                )}
-                <div>
-                  <strong>{name}</strong>
-                  {affiliation ? <small>{affiliation}</small> : null}
+      {model.showEmbedField("time") ? (
+        <p className="session-detail-when">
+          {formatDay(selected.startsAt, programme.event.timezone)} ·{" "}
+          {formatProgrammeTimeRange(
+            selected.startsAt,
+            selected.endsAt,
+            programme.event.timezone,
+          )}
+        </p>
+      ) : null}
+      {model.showEmbedField("location") ? (
+        <SessionPlace session={selected} />
+      ) : null}
+      {model.showEmbedField("track") || model.showEmbedField("format") ? (
+        <div className="public-detail-tags mt">
+          {model.showEmbedField("track") && selected.track ? (
+            <span className="pill track">{selected.track}</span>
+          ) : null}
+          {model.showEmbedField("format") ? (
+            <span className="pill format">{selected.format}</span>
+          ) : null}
+        </div>
+      ) : null}
+      {model.showEmbedField("speakers") ? (
+        <div className="stack mt mb">
+          {selected.speakerIds.length ? (
+            selected.speakerIds.map((speakerId, index) => {
+              const speaker = speakerById.get(speakerId)!;
+              const name = selected.speakerNames[index]!;
+              const affiliation = speakerAffiliation(speaker);
+              return (
+                <div className="row-main" key={speakerId}>
+                  {model.showEmbedField("images") && speaker.imageUrl ? (
+                    <img
+                      className="avatar"
+                      src={speaker.imageUrl}
+                      alt=""
+                      width={40}
+                      height={40}
+                    />
+                  ) : model.showEmbedField("images") ? (
+                    <span className="avatar" aria-hidden="true">
+                      {initials(name)}
+                    </span>
+                  ) : null}
+                  <div>
+                    <strong>{name}</strong>
+                    {model.showEmbedField("affiliations") && affiliation ? (
+                      <small>{affiliation}</small>
+                    ) : null}
+                  </div>
                 </div>
+              );
+            })
+          ) : (
+            <div className="row-main">
+              <span className="avatar" aria-hidden="true">
+                PC
+              </span>
+              <div>
+                <strong>Speaker to be announced</strong>
+                {model.showEmbedField("track") && selected.track ? (
+                  <small>{selected.track}</small>
+                ) : null}
               </div>
-            );
-          })
-        ) : (
-          <div className="row-main">
-            <span className="avatar" aria-hidden="true">
-              PC
-            </span>
-            <div>
-              <strong>Speaker to be announced</strong>
-              <small>{selected.track}</small>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      ) : null}
       {!embedded && !shared ? (
         <button
           type="button"
@@ -732,11 +767,17 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
               : "Add to itinerary"}
         </button>
       ) : null}
-      <h3>About this session</h3>
-      <p className="session-detail-description">
-        {selected.description || "A description is coming soon."}
-      </p>
-      {showSpeakers && selected.speakerIds.length ? (
+      {model.showEmbedField("description") ? (
+        <>
+          <h3>About this session</h3>
+          <p className="session-detail-description">
+            {selected.description || "A description is coming soon."}
+          </p>
+        </>
+      ) : null}
+      {showSpeakers &&
+      model.showEmbedField("speakers") &&
+      selected.speakerIds.length ? (
         <div className="stack mt">
           {selected.speakerIds.map((speakerId, index) => (
             <a
@@ -857,13 +898,16 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
         >
           <div className="card-title">
             <div className="public-speaker-profile-identity">
-              <PublicSpeakerAvatar speaker={selectedSpeaker} size={72} />
+              {model.showEmbedField("images") ? (
+                <PublicSpeakerAvatar speaker={selectedSpeaker} size={72} />
+              ) : null}
               <div>
                 <span className="pill">Speaker profile</span>
                 <h2 id="programme-speaker-profile-name">
                   {selectedSpeaker.displayName}
                 </h2>
-                {speakerAffiliation(selectedSpeaker) ? (
+                {model.showEmbedField("affiliations") &&
+                speakerAffiliation(selectedSpeaker) ? (
                   <p className="help">{speakerAffiliation(selectedSpeaker)}</p>
                 ) : null}
               </div>
@@ -881,37 +925,59 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
               </button>
             </div>
           </div>
-          {selectedSpeaker.pronunciation ? (
+          {model.showEmbedField("biography") &&
+          selectedSpeaker.pronunciation ? (
             <p className="help">
               Pronunciation · {selectedSpeaker.pronunciation}
             </p>
           ) : null}
-          {selectedSpeaker.biography ? (
+          {model.showEmbedField("biography") && selectedSpeaker.biography ? (
             <p>{selectedSpeaker.biography}</p>
           ) : null}
-          <h3>
-            Sessions{" "}
-            <span className="status info">
-              {selectedSpeakerSessions.length}
-            </span>
-          </h3>
-          <div className="stack">
-            {selectedSpeakerSessions.length ? (
-              selectedSpeakerSessions.map((session) => (
-                <a
-                  href={`#session-${session.slug}`}
-                  key={session.id}
-                  onClick={() => setSelectedId(session.id)}
-                >
-                  {formatDay(session.startsAt, programme.event.timezone)} ·{" "}
-                  {formatTime(session.startsAt, programme.event.timezone)} ·{" "}
-                  {session.title} · {session.room}
-                </a>
-              ))
-            ) : (
-              <p className="subtle">No sessions match the current filters.</p>
-            )}
-          </div>
+          {model.showEmbedField("sessions") ? (
+            <>
+              <h3>
+                Sessions{" "}
+                <span className="status info">
+                  {selectedSpeakerSessions.length}
+                </span>
+              </h3>
+              <div className="stack">
+                {selectedSpeakerSessions.length ? (
+                  selectedSpeakerSessions.map((session) => (
+                    <a
+                      href={`#session-${session.slug}`}
+                      key={session.id}
+                      onClick={() => setSelectedId(session.id)}
+                    >
+                      {model.showEmbedField("time") ? (
+                        <>
+                          {formatDay(
+                            session.startsAt,
+                            programme.event.timezone,
+                          )}{" "}
+                          ·{" "}
+                          {formatTime(
+                            session.startsAt,
+                            programme.event.timezone,
+                          )}{" "}
+                          ·{" "}
+                        </>
+                      ) : null}
+                      {session.title}
+                      {model.showEmbedField("location") && session.room ? (
+                        <> · {session.room}</>
+                      ) : null}
+                    </a>
+                  ))
+                ) : (
+                  <p className="subtle">
+                    No sessions match the current filters.
+                  </p>
+                )}
+              </div>
+            </>
+          ) : null}
         </article>
       ) : null}
     </section>
@@ -951,6 +1017,9 @@ export function PublicProgrammeWorkspace({
         {!overviewSurface ? (
           <div className="public-surface-content">
             <ItineraryVerificationPrompt model={model} />
+            {embedded && embedOptions.controls.length ? (
+              <PublicProgrammeFilters model={model} />
+            ) : null}
             <PublicProgrammeSurfaceContent model={model} />
           </div>
         ) : (
