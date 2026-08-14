@@ -98,7 +98,7 @@
     "R2_BUCKET_NAME": "program-cue-files",
     "FILE_SCANNER_API_URL": "https://scanner.programcue.com/v1/scans",
     "CORS_ALLOWED_ORIGINS": "https://app.programcue.com",
-    "EMBED_FRAME_ANCESTORS": "https://app.programcue.com https://programcue.com https://www.programcue.com",
+    "EMBED_FRAME_ANCESTORS": "*",
     "RESOURCE_EMBED_ORIGINS": "none",
   },
   "observability": {

@@ -8,7 +8,11 @@ import {
   isDemoIdentityKey,
   type DemoIdentityKey,
 } from "~/platform/demo/seed.server";
-import { selectedEvaluationPerson } from "~/platform/evaluation/evaluation-session.server";
+import {
+  EVALUATION_ORGANISATION_ID,
+  evaluationPersonForSession,
+  readEvaluationSession,
+} from "~/platform/evaluation/evaluation-session.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 export type ViewerRole =
@@ -56,6 +60,16 @@ function signInLocation(request: Request, demo = false) {
   const returnTo = `${url.pathname}${url.search}`;
   const destination = demo ? "/demo" : "/sign-in";
   return `${destination}?${new URLSearchParams({ returnTo })}`;
+}
+
+function requireEvaluationIdentity(
+  unauthenticatedBehavior: "redirect" | "response",
+): never {
+  if (unauthenticatedBehavior === "redirect") throw redirect("/evaluate");
+  forbidden(
+    "Choose an evaluation identity before opening a private workspace",
+    401,
+  );
 }
 
 function cookieValue(request: Request, name: string) {
@@ -108,12 +122,15 @@ export async function requireAuthenticatedPerson(
       demo: true,
       evaluation: false,
       demoIdentity: selected.identityKey,
+      restrictedOrganisationId: null,
     };
   }
 
   if (runtime.evaluation) {
-    const selected = await selectedEvaluationPerson(request, env);
-    if (selected) {
+    const evaluationSession = await readEvaluationSession(request, env);
+    if (evaluationSession) {
+      const selected = await evaluationPersonForSession(env, evaluationSession);
+      if (!selected) requireEvaluationIdentity(unauthenticatedBehavior);
       return {
         personId: selected.personId,
         name: selected.name,
@@ -121,6 +138,7 @@ export async function requireAuthenticatedPerson(
         demo: false,
         evaluation: true,
         demoIdentity: null,
+        restrictedOrganisationId: EVALUATION_ORGANISATION_ID,
       };
     }
   }
@@ -140,6 +158,7 @@ export async function requireAuthenticatedPerson(
     demo: false,
     evaluation: false,
     demoIdentity: null,
+    restrictedOrganisationId: null,
   };
 }
 
@@ -151,7 +170,7 @@ async function resolveEventRole(
   unauthenticatedBehavior: "redirect" | "response",
   acceptPendingInvitation: boolean,
 ): Promise<Viewer> {
-  const { personId, name, email, demo, evaluation } =
+  const { personId, name, email, demo, evaluation, restrictedOrganisationId } =
     await requireAuthenticatedPerson(request, env, unauthenticatedBehavior);
 
   if (allowedRoles.length === 0)
@@ -165,6 +184,7 @@ async function resolveEventRole(
       JOIN events e ON e.organisation_id = m.organisation_id
      WHERE e.id = ?
        AND e.activation_status = 'active'
+       AND (? IS NULL OR e.organisation_id = ?)
        AND m.person_id = ?
        AND (m.event_id = e.id OR (m.event_id IS NULL AND m.role IN ('owner', 'administrator')))
        AND m.role IN (${rolePlaceholders})
@@ -183,7 +203,13 @@ async function resolveEventRole(
      LIMIT 1
   `,
   )
-    .bind(eventId, personId, ...allowedRoles)
+    .bind(
+      eventId,
+      restrictedOrganisationId,
+      restrictedOrganisationId,
+      personId,
+      ...allowedRoles,
+    )
     .first<{
       id: string;
       organisationId: string;
@@ -199,6 +225,7 @@ async function resolveEventRole(
         JOIN events e ON e.organisation_id = m.organisation_id
        WHERE e.id = ?
          AND e.activation_status = 'active'
+         AND (? IS NULL OR e.organisation_id = ?)
          AND m.person_id = ?
          AND (m.event_id = e.id OR (m.event_id IS NULL AND m.role IN ('owner', 'administrator')))
          AND m.role IN (${rolePlaceholders})
@@ -219,7 +246,13 @@ async function resolveEventRole(
        LIMIT 1
     `,
     )
-      .bind(eventId, personId, ...allowedRoles)
+      .bind(
+        eventId,
+        restrictedOrganisationId,
+        restrictedOrganisationId,
+        personId,
+        ...allowedRoles,
+      )
       .first<{
         id: string;
         organisationId: string;
@@ -235,29 +268,54 @@ async function resolveEventRole(
           UPDATE memberships
              SET accepted_at = unixepoch(), last_operation_id = ?
            WHERE id = ? AND accepted_at IS NULL AND invited_at IS NOT NULL
+             AND organisation_id = ? AND person_id = ?
+             AND role = ?
+             AND (
+               event_id = ?
+               OR (event_id IS NULL AND role IN ('owner', 'administrator'))
+             )
              AND revoked_at IS NULL
              AND invitation_expires_at > unixepoch()
           RETURNING id, organisation_id AS organisationId, event_id AS eventId, role
         `,
-        ).bind(acceptanceOperationId, invitation.id),
+        ).bind(
+          acceptanceOperationId,
+          invitation.id,
+          invitation.organisationId,
+          personId,
+          invitation.role,
+          eventId,
+        ),
         env.DB.prepare(
           `
           INSERT INTO audit_events (
             id, organisation_id, event_id, actor_person_id, action,
             entity_type, entity_id, metadata_json, created_at
           )
-          SELECT ?, m.organisation_id, ?, ?, 'membership.accepted',
+          SELECT ?, m.organisation_id, event.id, ?, 'membership.accepted',
                  'membership', m.id, ?, unixepoch()
             FROM memberships m
+            JOIN events event
+              ON event.id = ? AND event.organisation_id = m.organisation_id
+             AND event.activation_status = 'active'
            WHERE m.id = ? AND m.accepted_at IS NOT NULL
+             AND m.organisation_id = ? AND m.person_id = ? AND m.role = ?
+             AND (
+               m.event_id = event.id
+               OR (m.event_id IS NULL
+                   AND m.role IN ('owner', 'administrator'))
+             )
              AND m.revoked_at IS NULL AND m.last_operation_id = ?
         `,
         ).bind(
           crypto.randomUUID(),
-          eventId,
           personId,
           JSON.stringify({ role: invitation.role }),
+          eventId,
           invitation.id,
+          invitation.organisationId,
+          personId,
+          invitation.role,
           acceptanceOperationId,
         ),
       ]);
@@ -271,6 +329,7 @@ async function resolveEventRole(
             JOIN events e ON e.organisation_id = m.organisation_id
            WHERE m.id = ? AND e.id = ? AND m.person_id = ?
              AND e.activation_status = 'active'
+             AND (? IS NULL OR e.organisation_id = ?)
              AND (m.event_id = e.id
                   OR (m.event_id IS NULL
                       AND m.role IN ('owner', 'administrator')))
@@ -280,7 +339,14 @@ async function resolveEventRole(
            LIMIT 1
         `,
         )
-          .bind(invitation.id, eventId, personId, ...allowedRoles)
+          .bind(
+            invitation.id,
+            eventId,
+            personId,
+            restrictedOrganisationId,
+            restrictedOrganisationId,
+            ...allowedRoles,
+          )
           .first<{
             id: string;
             organisationId: string;

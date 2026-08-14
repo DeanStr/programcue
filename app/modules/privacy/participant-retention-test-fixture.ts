@@ -40,15 +40,20 @@ export async function seedExpiredRetentionEvent() {
     testEnv.DB.prepare(
       `INSERT INTO people (
          id, email, display_name, email_verified, image_url, biography,
-         pronunciation, organisation_name, job_title, profile_status
+         pronunciation, organisation_name, job_title, linkedin_url, x_handle,
+         profile_status
        ) VALUES (?, ?, 'Exclusive Person', 1, 'https://images.invalid/exclusive',
                  'Private biography', 'Private pronunciation', 'Private Org',
-                 'Private role', 'published')`,
+                 'Private role', 'https://www.linkedin.com/in/exclusive-person',
+                 'exclusive_user', 'published')`,
     ).bind(exclusiveId, `${exclusiveId}@example.com`),
     testEnv.DB.prepare(
       `INSERT INTO people (
-         id, email, display_name, email_verified, biography, profile_status
-       ) VALUES (?, ?, 'Shared Person', 1, 'Shared biography', 'published')`,
+         id, email, display_name, email_verified, biography, linkedin_url,
+         x_handle, profile_status
+       ) VALUES (?, ?, 'Shared Person', 1, 'Shared biography',
+                 'https://www.linkedin.com/in/shared-person', 'shared_user',
+                 'published')`,
     ).bind(sharedId, `${sharedId}@example.com`),
     testEnv.DB.prepare(
       `INSERT INTO events (
@@ -75,6 +80,27 @@ export async function seedExpiredRetentionEvent() {
       organisationId,
       id("privacy-other-slug"),
       CANONICAL_EVENT_FILE_POLICY_JSON,
+    ),
+    testEnv.DB.prepare(
+      `INSERT INTO event_participant_profiles (
+         event_id, organisation_id, person_id, travel_preferences,
+         last_operation_id
+       ) VALUES (?, ?, ?, 'Exclusive event travel preferences', ?),
+                (?, ?, ?, 'Shared event travel preferences', ?),
+                (?, ?, ?, 'Other event travel preferences', ?)`,
+    ).bind(
+      eventId,
+      organisationId,
+      exclusiveId,
+      id("privacy-exclusive-event-profile"),
+      eventId,
+      organisationId,
+      sharedId,
+      id("privacy-shared-event-profile"),
+      otherEventId,
+      organisationId,
+      sharedId,
+      id("privacy-shared-other-event-profile"),
     ),
     testEnv.DB.prepare(
       `INSERT INTO memberships (

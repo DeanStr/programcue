@@ -146,24 +146,32 @@ test.describe.serial("cross-surface interaction standards", () => {
   }) => {
     await page.goto("/admin/speakers");
     await page.locator("body[data-hydrated='true']").waitFor();
-    const invitationDisclosure = page.locator("details").filter({
-      has: page.getByText("Invite a speaker", { exact: true }),
+    const speakerRecordDisclosure = page.locator("details").filter({
+      has: page.getByText("Add speaker record", { exact: true }),
     });
-    await invitationDisclosure.locator("summary").click();
-    await expect(invitationDisclosure).toHaveAttribute("open", "");
-    await invitationDisclosure
+    await speakerRecordDisclosure.locator("summary").click();
+    await expect(speakerRecordDisclosure).toHaveAttribute("open", "");
+    await speakerRecordDisclosure
       .getByLabel("Name", { exact: true })
       .fill("Priya Shah");
-    await invitationDisclosure
+    await speakerRecordDisclosure
       .getByLabel("Email", { exact: true })
       .fill("priya.speaker@example.com");
-    await invitationDisclosure
-      .getByRole("button", { name: "Send invitation" })
+    await speakerRecordDisclosure
+      .getByRole("button", { name: "Add speaker record" })
       .click();
 
     await expect(
       page.getByRole("heading", { name: "Likely existing person" }),
     ).toBeVisible();
-    await expect(page.getByLabel(/I reviewed these identities/)).toBeVisible();
+    await page.getByLabel(/I reviewed these identities/).check();
+    await speakerRecordDisclosure
+      .getByRole("button", { name: "Add speaker record" })
+      .click();
+    await expect(
+      page.getByText(
+        "This identity is already on this event roster. Nothing was changed and no invitation email was sent.",
+      ),
+    ).toBeVisible();
   });
 });

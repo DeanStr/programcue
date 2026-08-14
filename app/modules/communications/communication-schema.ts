@@ -13,6 +13,7 @@ export const audienceTypeSchema = z.enum([
   "submitted_applicants",
   "decision_recipients",
   "accepted_speakers",
+  "active_speakers",
   "incomplete_speakers",
   "due_speakers",
   "overdue_speakers",

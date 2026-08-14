@@ -94,9 +94,14 @@ function requestFor(
   init: RequestInit = {},
   extraCookie?: string,
 ) {
+  const url = new URL(path, "http://localhost");
   const headers = new Headers(init.headers);
   headers.set("cookie", actorCookie(actor, extraCookie));
-  return new Request(`http://localhost${path}`, { ...init, headers });
+  const method = (init.method ?? "GET").toUpperCase();
+  if (!["GET", "HEAD", "OPTIONS"].includes(method) && !headers.has("origin")) {
+    headers.set("origin", url.origin);
+  }
+  return new Request(url, { ...init, headers });
 }
 
 async function routeStatus(operation: Promise<unknown>) {

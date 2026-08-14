@@ -130,6 +130,19 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
 
     const statements = [
       this.claimStatement(viewer, operationId, confirmedEventName),
+      this.env.DB.prepare(
+        `DELETE FROM event_participant_profiles
+          WHERE event_id = ? AND organisation_id = ?
+            AND person_id IN (${mappings.map(() => "?").join(",")})
+            AND ${eventClaimGuard()}`,
+      ).bind(
+        viewer.eventId,
+        viewer.organisationId,
+        ...mappings.map((mapping) => mapping.id),
+        viewer.eventId,
+        viewer.organisationId,
+        operationId,
+      ),
       ...mappings.map((mapping) =>
         this.env.DB.prepare(
           `INSERT INTO people (
@@ -293,7 +306,8 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
                 SET email = ?, display_name = 'Anonymised participant',
                     email_verified = 0, image_url = NULL, biography = NULL,
                     pronunciation = NULL, organisation_name = NULL,
-                    job_title = NULL, profile_status = 'archived',
+                    job_title = NULL, linkedin_url = NULL, x_handle = NULL,
+                    profile_status = 'archived',
                     last_operation_id = ?, updated_at = unixepoch()
               WHERE id = ? AND ${eventClaimGuard()}
                 AND EXISTS (SELECT 1 FROM people retained WHERE retained.id = ?)

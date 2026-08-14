@@ -2,7 +2,7 @@
 
 Program Cue is a pre-release conference programme operations platform. It is one React Router/TypeScript modular monolith on Cloudflare Workers, with D1 for relational state, R2 for private files, Queues for provider work and an event-scoped Durable Object for realtime invalidation.
 
-The repository contains connected server-backed slices for event setup, submissions, evaluation and decisions, automatic speaker onboarding, resources/files, FullCalendar scheduling and publication, communications/calendars, Airtable and Accelevents integrations, operations, a permissioned AI assistant and a documented 32-path REST/webhook API. Published forms, resources, schedule content and communication templates keep immutable version snapshots; retryable provider work is recorded durably and claimed idempotently. The remaining boundaries are deployment, live-provider and independent acceptance evidence rather than simulated success; see [implementation status](docs/IMPLEMENTATION_STATUS.md).
+The repository contains connected server-backed slices for event setup, submissions, evaluation and decisions, automatic speaker onboarding, resources/files, FullCalendar scheduling and publication, communications/calendars, Airtable and Accelevents integrations, operations, a permissioned AI assistant and a documented 33-path REST/webhook API. Published forms, resources, schedule content and communication templates keep immutable version snapshots; retryable provider work is recorded durably and claimed idempotently. Remaining boundaries are deployment of each new release candidate, unexercised live-provider paths and independent acceptance evidence rather than simulated success; see [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Local development
 
@@ -40,8 +40,9 @@ cron exist only in production because D1 export requires remote Cloudflare
 authority. Direct multipart upload, malware scanning, connected calendars,
 external integrations and non-Workers-AI providers remain unavailable locally
 until their optional `.dev.vars` credentials are supplied; they fail fast when
-selected. Demo identities and seed data exist only in the explicit development
-and demo profiles.
+selected. Local demo cookies and mutation routes exist only in the explicit
+development and demo profiles. Production evaluation uses the separately
+access-code-gated fixed fixture described below and never enables `/demo`.
 
 Useful routes:
 
@@ -127,7 +128,11 @@ wired to the provisioned D1 database, private R2 buckets, Queues and Turnstile
 widget. `npm run deploy:check` passes for both the application and its dedicated
 file-scanner companion. The application and scanner are deployed; required
 runtime secrets remain outside Git and every release preflight verifies their
-presence before upload.
+presence before upload. Exact accepted versions and remaining external
+boundaries are recorded in [implementation status](docs/IMPLEMENTATION_STATUS.md).
+A repository release candidate is not deployed evidence until its revision is
+stamped, its migrations are applied and the ordinary preflight/deploy path
+succeeds.
 
 For headless Wrangler access in this workspace, keep the temporary deployment
 token and account ID only in the ignored, mode-0600 `.env.cloudflare` file and
@@ -174,12 +179,8 @@ Provider setup for this production hostname uses these exact endpoints:
   database for scheduled logical exports. Do not reuse the temporary deployment
   token for either runtime credential.
 
-Before each release, set `SOURCE_REVISION` to the deployed 7-64 character
-hexadecimal Git revision and verify the production URLs, sender and origin
-allowlists in both Wrangler profiles. `RESOURCE_EMBED_ORIGINS` is a
-comma-separated list of exact HTTPS origins; the current explicit value `none`
-rejects every external resource embed. Configure the complete release secret
-inventory:
+Install the complete runtime secret inventory during initial provisioning and
+update an individual secret only when it is deliberately rotated:
 
 ```bash
 wrangler secret put BETTER_AUTH_SECRET
@@ -204,19 +205,17 @@ wrangler secret put R2_SECRET_ACCESS_KEY
 wrangler secret put D1_REST_API_TOKEN
 wrangler secret put EVALUATION_ACCESS_CODE
 wrangler secret put EVALUATION_SESSION_SECRET
+```
 
+Before each release, set `SOURCE_REVISION` to that candidate's 7-64 character
+hexadecimal Git revision and verify the production URLs, sender and origin
+allowlists in both Wrangler profiles. `RESOURCE_EMBED_ORIGINS` is a
+comma-separated list of exact HTTPS origins; the current explicit value `none`
+rejects every external resource embed. Apply migrations before deploying the
+same stamped revision:
+
+```bash
 npm run db:migrate:remote
-npm run db:bootstrap:production -- \\
-  --owner-email owner@your-domain.example \\
-  --owner-name "Owner Name" \\
-  --organisation-name "Organisation Name" \\
-  --organisation-slug organisation-name \\
-  --event-name "Event Name" \\
-  --event-slug event-name \\
-  --timezone America/Toronto \\
-  --start-date 2027-05-20 \\
-  --end-date 2027-05-22 \\
-  --yes
 npm run deploy
 ```
 
@@ -253,7 +252,6 @@ desktop/mobile accessibility, containment and visual coverage with
 `PROGRAM_CUE_SITE_E2E_PORT` when it is occupied. During `npm run check`, an
 overridden `PROGRAM_CUE_E2E_PORT` automatically gives the site an isolated port
 1,000 higher unless the site-specific value is set.
-
 The production bootstrap is intentionally one-time and requires an empty,
 migrated application database. It atomically creates the first Better Auth
 person, organisation-wide owner membership and explicitly slugged initial event;
@@ -261,6 +259,22 @@ it does not install a permanent bootstrap endpoint. Ordinary email, Google and
 Microsoft identity creation remains available after bootstrap, but signup alone
 creates no organisation, event, membership or participant access. After
 deployment, the bootstrap owner requests their first magic link at `/sign-in`.
+Production is already bootstrapped; do not run this command there again. For a
+new empty production database only, run it once after migrations:
+
+```bash
+npm run db:bootstrap:production -- \
+  --owner-email owner@your-domain.example \
+  --owner-name "Owner Name" \
+  --organisation-name "Organisation Name" \
+  --organisation-slug organisation-name \
+  --event-name "Event Name" \
+  --event-slug event-name \
+  --timezone America/Toronto \
+  --start-date 2027-05-20 \
+  --end-date 2027-05-22 \
+  --yes
+```
 
 `BETTER_AUTH_SECRET` must contain at least 32 characters.
 `CALENDAR_CREDENTIALS_KEY`, `INTEGRATION_CREDENTIALS_KEY` and
@@ -274,70 +288,43 @@ Mailpit and never falls back to local capture, demo identity, stale data or
 simulated provider success.
 
 `npm run deploy` runs configuration and remote secret preflights before build or
-deployment. The scanner boundary is live, but a complete deployed application
-environment has not been verified from this workspace.
+deployment. The application and scanner are live; deployment alone does not
+prove a new migration, evaluator reset or external-provider outcome. Record
+those separately as acceptance evidence.
 
 ### Production evaluation fixture
 
-The final SBEK run uses the ordinary production deployment and provider paths.
-The checked-in profile keeps `APP_ENV=production` and `DEMO_MODE=false` while
-explicitly setting `EVALUATION_MODE=true`. Install an independently random
-private access code (at least 16 characters) and 32+ character signing secret:
+The final SBEK run uses the ordinary production deployment and provider paths
+with `APP_ENV=production`, `DEMO_MODE=false` and the explicit
+`EVALUATION_MODE=true` gate. Reviewers unlock `/evaluate` with a separately
+configured access code, then select only fixed fixture identities. The signed
+session is bound to the latest reset generation, restricted to the dedicated
+fixture organisation and never falls through to an unrelated ordinary login.
+Only the clean-applicant card has an explicit audited membership activation;
+ordinary persona selection grants no membership and no provider success is
+simulated.
 
-```bash
-wrangler secret put EVALUATION_ACCESS_CODE -c wrangler.jsonc
-wrangler secret put EVALUATION_SESSION_SECRET -c wrangler.jsonc
-```
+The separately authenticated reset owns only the dedicated evaluation
+organisation. It restores the canonical event, retires evaluator-created
+events, clears their private R2 data, removes only safe fixture-created people
+and fails on active work, retention, identity drift or cross-tenant state. The
+temporary reset credentials and evaluator address bindings are removed after
+seeding; the permanent evaluation access and signing secrets remain installed
+only for the evaluation period.
 
-Reviewers open `/evaluate`, enter the shared access code and choose one fixed
-fixture persona. The signed, secure, HttpOnly session lasts eight hours, is
-bound to the latest fixture-reset record and cannot select an arbitrary
-person, reset data or grant membership. A later reset invalidates every existing
-evaluator cookie. Missing or
-weak evaluator configuration fails production readiness, and fixture identity
-loss is an explicit reset-required failure rather than an anonymous fallback.
-Normal server authorisation and real production provider behavior still apply. Unlock
-attempts use the existing hashed, D1-backed production IP rate limit. Selecting
-the clean applicant also establishes that fixed person for the public
-application flow without changing the person's durable email-verification flag.
+Secret installation, mode-`0600` environment handling, reset and cleanup
+commands, exact personas and aliases, bounded evaluation exceptions, Codex/SBEK
+setup and remaining external evidence are maintained in the
+[SBEK evaluation runbook](docs/SBEK_EVALUATION.md). Follow that runbook for
+every production evaluation; do not reconstruct the procedure from this
+overview.
 
-An operator may temporarily install a dedicated reset secret plus four real,
-distinct evaluator addresses and invoke one narrow reset endpoint:
-
-```bash
-wrangler secret put EVALUATION_FIXTURE_SECRET -c wrangler.jsonc
-wrangler secret put EVALUATION_RESEND_API_KEY -c wrangler.jsonc
-wrangler secret put EVALUATOR_ORGANIZER_EMAIL -c wrangler.jsonc
-wrangler secret put EVALUATOR_SPEAKER_EMAIL -c wrangler.jsonc
-wrangler secret put EVALUATOR_SECOND_SPEAKER_EMAIL -c wrangler.jsonc
-wrangler secret put EVALUATOR_REVIEWER_EMAIL -c wrangler.jsonc
-
-EVALUATION_FIXTURE_SECRET='<same 32+ character value>' \
-  npm run evaluation:fixture:reset -- --yes
-```
-
-`EVALUATION_RESEND_API_KEY` is a temporary full-access Resend key used only to
-read domain status; the application's domain-scoped sending-only key remains
-unchanged. The command fails before mutation unless production is using Resend,
-the `AUTH_EMAIL_FROM` domain is verified by Resend, Workers AI and the
-production D1/R2 bindings are available, the canonical fixture IDs are
-tenant-isolated, and the target addresses do not collide with another person.
-It resets only the dedicated Future Events Association event and R2 prefix,
-revokes prior fixture sessions, provider links and outstanding authentication
-tokens, leaves the four evaluator addresses unverified for optional real
-magic-link acceptance, configures that organisation for Workers AI
-`@cf/openai/gpt-oss-120b`, and verifies the resulting baseline. Normal users
-continue to use Better Auth and every normal production feature throughout.
-
-After seeding, delete `EVALUATION_FIXTURE_SECRET` and the temporary
-`EVALUATION_RESEND_API_KEY`; the endpoint then returns 404. The four address
-secrets may also be removed because the seeded people retain their addresses in
-D1. Use `/evaluate` to establish and save each evaluator browser state.
-Ordinary Resend magic links remain available when real email delivery itself is
-under test. Full instructions are in [the SBEK evaluation
-runbook](docs/SBEK_EVALUATION.md).
-
-Backup and point-in-time recovery procedures are in [docs/RECOVERY.md](docs/RECOVERY.md). Production configuration includes a fail-closed daily D1-export Workflow to a separate private R2 bucket; it is not evidence that a live backup has run. `npm run recovery:drill` exercises a clean-room logical export and restore without touching development or production data.
+Backup and point-in-time recovery procedures are in
+[docs/RECOVERY.md](docs/RECOVERY.md). The deployed daily D1-export Workflow has
+one API-triggered production completion and exact-R2 restore acceptance; the
+next autonomous post-fix cron remains outstanding. `npm run recovery:drill`
+exercises a clean-room logical export and restore without touching development
+or production data.
 
 The repeatable local browser-budget method, isolated 10,000-record fixture and latest measurements are in [docs/PERFORMANCE.md](docs/PERFORMANCE.md). These local results do not replace deployed p75/RUM and production-like scale acceptance.
 

@@ -159,6 +159,14 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await page.getByLabel("Six-digit code").fill("424242");
     await page.getByRole("button", { name: "Verify and open drafts" }).click();
     await page.getByRole("button", { name: "Start application" }).click();
+    await page.getByText("I have reviewed this application").click();
+    await page.getByRole("button", { name: "Submit application" }).click();
+    await expect(
+      page.getByRole("alert").filter({
+        hasText: "Complete the highlighted required field before submitting.",
+      }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Session title *")).toBeFocused();
     await page
       .getByText("Your claimed speaker profile", { exact: true })
       .click();
@@ -330,15 +338,53 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await waitForInterface(page, "/admin/schedule");
     await page.getByRole("button", { name: "Create next draft" }).click();
     await expect(page.getByText(/Version 2 · draft/)).toBeVisible();
-    await page.getByText("Place or move with form", { exact: true }).click();
     const placement = page.locator("details").filter({
       has: page.getByText("Place or move with form", { exact: true }),
     });
+    await expect(placement).toHaveAttribute("open", "");
+    await placement.getByLabel("Session").selectOption({
+      label: "AI in Event Operations · scheduled",
+    });
+    await placement.getByLabel("Room").selectOption({ label: "Room 301A" });
+    const start = placement.getByLabel(/Start · America\/Toronto/);
+    const speakerConflictSlot = (
+      await start.locator("option").allTextContents()
+    ).find((label) => /Wed, May 21.*9:30 AM/.test(label));
+    expect(speakerConflictSlot).toBeTruthy();
+    await start.selectOption({ label: speakerConflictSlot! });
+    await placement.getByLabel("Duration (minutes)").fill("60");
+    await placement
+      .getByRole("button", { name: "Move or resize session" })
+      .click();
+    await expectStatus(page, "Session placed with 1 warning");
+    const warningNotice = page
+      .locator('.validation-item.warn[role="status"]')
+      .filter({ hasText: "Session placed with 1 warning" });
+    await expect(warningNotice).toContainText(
+      "speaker: A speaker also appears in “Community and Connection”",
+    );
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expectStatus(page, "Schedule change undone");
+
     await placement.getByLabel("Session").selectOption({
       label: SUBMISSION_TITLE,
     });
+    await placement.getByLabel("Room").selectOption({ label: "Main Stage" });
+    const occupiedSlot = (await start.locator("option").allTextContents()).find(
+      (label) => /Tue, May 20.*9:00 AM/.test(label),
+    );
+    expect(occupiedSlot).toBeTruthy();
+    await start.selectOption({ label: occupiedSlot! });
+    await placement.getByLabel("Duration (minutes)").fill("60");
+    await placement.getByRole("button", { name: "Place session" }).click();
+    const blockedNotice = page
+      .getByRole("alert")
+      .filter({ hasText: "blocking schedule conflict" });
+    await expect(blockedNotice).toContainText(
+      "room: Room overlaps “The Future of Attendee Engagement”",
+    );
+
     await placement.getByLabel("Room").selectOption({ label: "Room 303" });
-    const start = placement.getByLabel(/Start · America\/Toronto/);
     const freeSlot = (await start.locator("option").allTextContents()).find(
       (label) => /Tue, May 20.*8:00 AM/.test(label),
     );

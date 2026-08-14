@@ -200,7 +200,7 @@ test.describe.serial("canonical provider boundaries", () => {
       uploadTask.getByText("Submitted", { exact: true }),
     ).toBeVisible();
     await expect(uploadTask).toContainText(
-      "Stored in quarantine. Scanning and administrator approval are pending.",
+      "Stored for administrator review. You can upload a newer version while review is pending.",
     );
     expect(multipartOperations).toEqual([
       "resume",

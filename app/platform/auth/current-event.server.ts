@@ -123,13 +123,19 @@ export async function listAuthorisedEvents(
     env,
     unauthenticatedBehavior,
   );
-  return listAuthorisedEventsForPerson(env, person.personId, allowedRoles);
+  return listAuthorisedEventsForPerson(
+    env,
+    person.personId,
+    allowedRoles,
+    person.restrictedOrganisationId,
+  );
 }
 
 async function listAuthorisedEventsForPerson(
   env: CloudflareEnvironment,
   personId: string,
   allowedRoles: ReadonlyArray<ViewerRole>,
+  restrictedOrganisationId: string | null = null,
 ): Promise<AuthorisedEvent[]> {
   if (allowedRoles.length === 0) return [];
   const placeholders = allowedRoles.map(() => "?").join(",");
@@ -147,6 +153,7 @@ async function listAuthorisedEventsForPerson(
             OR (membership.event_id IS NULL
                 AND membership.role IN ('owner', 'administrator')))
      WHERE membership.person_id = ?
+       AND (? IS NULL OR e.organisation_id = ?)
        AND e.activation_status = 'active'
        AND membership.role IN (${placeholders})
        AND membership.revoked_at IS NULL
@@ -173,7 +180,12 @@ async function listAuthorisedEventsForPerson(
               CASE WHEN membership.event_id = e.id THEN 0 ELSE 1 END
   `,
   )
-    .bind(personId, ...allowedRoles)
+    .bind(
+      personId,
+      restrictedOrganisationId,
+      restrictedOrganisationId,
+      ...allowedRoles,
+    )
     .all<
       Omit<AuthorisedEvent, "invitationPending" | "pendingInvitationRole"> & {
         invitationPending: number | boolean;
@@ -218,6 +230,7 @@ export async function listAcceptedEventRoles(
             OR (membership.event_id IS NULL
                 AND membership.role IN ('owner', 'administrator')))
      WHERE event.id = ?
+       AND (? IS NULL OR event.organisation_id = ?)
        AND event.activation_status = 'active'
        AND membership.person_id = ?
        AND membership.accepted_at IS NOT NULL
@@ -234,7 +247,12 @@ export async function listAcceptedEventRoles(
      END
   `,
   )
-    .bind(eventId, person.personId)
+    .bind(
+      eventId,
+      person.restrictedOrganisationId,
+      person.restrictedOrganisationId,
+      person.personId,
+    )
     .all<{ role: ViewerRole }>();
   return rows.results.map((row) => row.role);
 }
@@ -375,7 +393,12 @@ export async function loadCurrentEventAdminShellContext(
   allowedRoles: ReadonlyArray<ViewerRole>,
 ): Promise<CurrentEventAdminShellContext> {
   const [eventOptions, row] = await Promise.all([
-    listAuthorisedEventsForPerson(env, viewer.personId, allowedRoles),
+    listAuthorisedEventsForPerson(
+      env,
+      viewer.personId,
+      allowedRoles,
+      viewer.evaluation ? viewer.organisationId : null,
+    ),
     env.DB.prepare(
       `
       WITH current_event AS (

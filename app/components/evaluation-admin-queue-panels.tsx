@@ -348,6 +348,17 @@ export function EvaluationSubmissionQueue() {
                         <small className="subtle">
                           {submission.category ?? "Uncategorised"}
                         </small>
+                        {submission.speakers.length ? (
+                          <small className="subtle">
+                            Participants:{" "}
+                            {submission.speakers
+                              .map(
+                                (speaker) =>
+                                  `${speaker.name} (${speaker.roleLabel ?? "Speaker"})`,
+                              )
+                              .join(", ")}
+                          </small>
+                        ) : null}
                         {submission.routedTeamName ? (
                           <small className="subtle">
                             Routed to {submission.routedTeamName}

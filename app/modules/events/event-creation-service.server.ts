@@ -4,6 +4,7 @@ import {
   AIRTABLE_ROOMS_TABLE,
   airtableConnectionInputSchema,
 } from "~/modules/airtable/airtable-schema";
+import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 import {
   EVENT_CREATION_STALLED_CODE,
@@ -18,6 +19,12 @@ import { apiRequestHash } from "~/platform/api/api.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 
 const EVENT_CREATION_LEASE_SECONDS = 15 * 60;
+const senderProfileIdSchema = z
+  .string()
+  .trim()
+  .min(1, "Choose a verified sender profile.")
+  .max(200, "Choose a verified sender profile.")
+  .regex(/^[A-Za-z0-9._:-]+$/u, "Choose a verified sender profile.");
 
 const eventCreationInputSchema = z
   .object({
@@ -36,6 +43,10 @@ const eventCreationInputSchema = z
     startDate: z.iso.date(),
     endDate: z.iso.date(),
     repositoryProvider: z.enum(["d1", "airtable"]),
+    reuseSenderProfileId: z
+      .union([senderProfileIdSchema, z.literal("")])
+      .optional()
+      .transform((value) => value || null),
     personalAccessToken: z.string().trim().optional(),
     baseId: z.string().trim().optional(),
     tableName: z.string().trim().optional(),
@@ -47,6 +58,16 @@ const eventCreationInputSchema = z
         code: "custom",
         path: ["endDate"],
         message: "End date cannot be before the start date.",
+      });
+    if (
+      value.repositoryProvider !== "d1" &&
+      value.reuseSenderProfileId !== null
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["reuseSenderProfileId"],
+        message:
+          "Verified sender reuse is available only when creating a D1 event.",
       });
     if (value.repositoryProvider !== "airtable") return;
     const connection = airtableConnectionInputSchema.safeParse({
@@ -79,6 +100,15 @@ export class EventCreationIntentConflictError extends Error {
   }
 }
 
+export class EventCreationSenderReuseError extends Error {
+  constructor(
+    message = "The selected verified sender is no longer available in this organisation. Refresh before creating the event.",
+  ) {
+    super(message);
+    this.name = "EventCreationSenderReuseError";
+  }
+}
+
 export type EventCreationResult = {
   eventId: string;
   operationId: string;
@@ -108,6 +138,7 @@ const eventCreationOperationPayloadSchema = z.object({
   targetEventId: z.string().min(1),
   requestedRepositoryProvider: z.enum(["d1", "airtable"]),
   requestHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  reusedSenderProfileId: senderProfileIdSchema.optional(),
 });
 
 const eventCreationOperationResultSchema = z.object({
@@ -133,6 +164,23 @@ type EventCreationOperation = {
 type EventCreationDependencies = {
   provisioning?: Pick<EventRepositoryProvisioningService, "provisionAirtable">;
 };
+
+type ReusableSenderProfile = {
+  id: string;
+  sourceEventId: string;
+  sourceEventName: string;
+  name: string;
+  fromName: string;
+  fromEmail: string;
+  replyToEmail: string | null;
+  provider: "resend" | "mailpit";
+  providerSenderId: string | null;
+};
+
+type ReusableSenderProfileOption = Omit<
+  ReusableSenderProfile,
+  "providerSenderId"
+>;
 
 function parseStoredOperationPayload(value: string) {
   try {
@@ -221,13 +269,77 @@ export class EventCreationService {
       .first<{ timezone: string; startsAt: number; endsAt: number }>();
     if (!source)
       throw new Response("Current event not found.", { status: 404 });
+    let emailProvider: "resend" | "mailpit" | null = null;
+    let emailProviderIssue: string | null = null;
+    try {
+      emailProvider = requireEmailProviderConfiguration(this.env).provider;
+    } catch (error) {
+      emailProviderIssue =
+        error instanceof Error
+          ? error.message
+          : "The email provider configuration is invalid.";
+    }
+    const reusableSenderProfiles = emailProvider
+      ? await this.env.DB.prepare(
+          `SELECT sender.id, sender.event_id AS sourceEventId,
+                  event.name AS sourceEventName, sender.name,
+                  sender.from_name AS fromName, sender.from_email AS fromEmail,
+                  sender.reply_to_email AS replyToEmail, sender.provider
+             FROM sender_profiles sender
+             JOIN events event ON event.id = sender.event_id
+            WHERE event.organisation_id = ?
+              AND event.activation_status = 'active'
+              AND sender.provider = ? AND sender.status = 'verified'
+              AND (sender.provider <> 'resend' OR sender.provider_sender_id IS NOT NULL)
+            ORDER BY event.name COLLATE NOCASE, sender.name COLLATE NOCASE,
+                     sender.id`,
+        )
+          .bind(viewer.organisationId, emailProvider)
+          .all<ReusableSenderProfileOption>()
+      : { results: [] as ReusableSenderProfileOption[] };
     return {
       creationIntentId: crypto.randomUUID(),
       timezone: source.timezone,
       startDate: nextYear(isoDate(source.startsAt)),
       endDate: nextYear(isoDate(source.endsAt)),
       airtableTableName: AIRTABLE_ROOMS_TABLE,
+      emailProvider,
+      emailProviderIssue,
+      reusableSenderProfiles: reusableSenderProfiles.results,
     };
+  }
+
+  private async requireReusableSender(
+    viewer: Viewer,
+    profileId: string,
+  ): Promise<ReusableSenderProfile> {
+    let emailProvider: "resend" | "mailpit";
+    try {
+      emailProvider = requireEmailProviderConfiguration(this.env).provider;
+    } catch (error) {
+      throw new EventCreationSenderReuseError(
+        error instanceof Error
+          ? error.message
+          : "The email provider configuration is invalid.",
+      );
+    }
+    const profile = await this.env.DB.prepare(
+      `SELECT sender.id, sender.event_id AS sourceEventId,
+              event.name AS sourceEventName, sender.name,
+              sender.from_name AS fromName, sender.from_email AS fromEmail,
+              sender.reply_to_email AS replyToEmail, sender.provider,
+              sender.provider_sender_id AS providerSenderId
+         FROM sender_profiles sender
+         JOIN events event ON event.id = sender.event_id
+        WHERE sender.id = ? AND event.organisation_id = ?
+          AND event.activation_status = 'active'
+          AND sender.provider = ? AND sender.status = 'verified'
+          AND (sender.provider <> 'resend' OR sender.provider_sender_id IS NOT NULL)`,
+    )
+      .bind(profileId, viewer.organisationId, emailProvider)
+      .first<ReusableSenderProfile>();
+    if (!profile) throw new EventCreationSenderReuseError();
+    return profile;
   }
 
   private async loadOperation(creationIntentId: string) {
@@ -550,6 +662,9 @@ export class EventCreationService {
       startDate: input.startDate,
       endDate: input.endDate,
       repositoryProvider: input.repositoryProvider,
+      ...(input.reuseSenderProfileId
+        ? { reuseSenderProfileId: input.reuseSenderProfileId }
+        : {}),
       ...(airtableConnection
         ? {
             baseId: airtableConnection.baseId,
@@ -564,6 +679,9 @@ export class EventCreationService {
       requestHash,
     );
     if (replay) return replay;
+    const reusableSender = input.reuseSenderProfileId
+      ? await this.requireReusableSender(viewer, input.reuseSenderProfileId)
+      : null;
     const conflict = await this.env.DB.prepare(
       "SELECT 1 FROM events WHERE slug = ? LIMIT 1",
     )
@@ -575,31 +693,94 @@ export class EventCreationService {
     const operationId = input.creationIntentId;
     const correlationId = input.creationIntentId;
     const pendingAirtable = airtableConnection !== null;
+    const reusedSenderProfileId = reusableSender ? crypto.randomUUID() : null;
     const statements: D1PreparedStatement[] = [
-      this.env.DB.prepare(
-        `INSERT INTO events (
-           id, organisation_id, name, slug, timezone, starts_at, ends_at,
-           session_formats_json, repository_provider, activation_status,
-           file_policy_json,
-           revision, last_operation_id, last_updated_by_person_id,
-           created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?,
-                   unixepoch(), unixepoch())`,
-      ).bind(
-        eventId,
-        viewer.organisationId,
-        input.name,
-        input.slug,
-        input.timezone,
-        startEpoch(input.startDate),
-        endEpoch(input.endDate),
-        INITIAL_EVENT_SESSION_FORMATS_JSON,
-        input.repositoryProvider,
-        pendingAirtable ? "provisioning" : "active",
-        CANONICAL_EVENT_FILE_POLICY_JSON,
-        operationId,
-        viewer.personId,
-      ),
+      reusableSender
+        ? this.env.DB.prepare(
+            `INSERT INTO events (
+               id, organisation_id, name, slug, timezone, starts_at, ends_at,
+               session_formats_json, repository_provider, activation_status,
+               file_policy_json,
+               revision, last_operation_id, last_updated_by_person_id,
+               created_at, updated_at
+             )
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'd1', 'active', ?, 1, ?, ?,
+                    unixepoch(), unixepoch()
+               FROM sender_profiles sender
+               JOIN events source_event ON source_event.id = sender.event_id
+              WHERE sender.id = ? AND sender.event_id = ?
+                AND source_event.organisation_id = ?
+                AND source_event.activation_status = 'active'
+                AND sender.status = 'verified' AND sender.provider = ?
+                AND sender.name = ? AND sender.from_name = ?
+                AND sender.from_email = ? AND sender.reply_to_email IS ?
+                AND sender.provider_sender_id IS ?`,
+          ).bind(
+            eventId,
+            viewer.organisationId,
+            input.name,
+            input.slug,
+            input.timezone,
+            startEpoch(input.startDate),
+            endEpoch(input.endDate),
+            INITIAL_EVENT_SESSION_FORMATS_JSON,
+            CANONICAL_EVENT_FILE_POLICY_JSON,
+            operationId,
+            viewer.personId,
+            reusableSender.id,
+            reusableSender.sourceEventId,
+            viewer.organisationId,
+            reusableSender.provider,
+            reusableSender.name,
+            reusableSender.fromName,
+            reusableSender.fromEmail,
+            reusableSender.replyToEmail,
+            reusableSender.providerSenderId,
+          )
+        : this.env.DB.prepare(
+            `INSERT INTO events (
+               id, organisation_id, name, slug, timezone, starts_at, ends_at,
+               session_formats_json, repository_provider, activation_status,
+               file_policy_json,
+               revision, last_operation_id, last_updated_by_person_id,
+               created_at, updated_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?,
+                       unixepoch(), unixepoch())`,
+          ).bind(
+            eventId,
+            viewer.organisationId,
+            input.name,
+            input.slug,
+            input.timezone,
+            startEpoch(input.startDate),
+            endEpoch(input.endDate),
+            INITIAL_EVENT_SESSION_FORMATS_JSON,
+            input.repositoryProvider,
+            pendingAirtable ? "provisioning" : "active",
+            CANONICAL_EVENT_FILE_POLICY_JSON,
+            operationId,
+            viewer.personId,
+          ),
+      ...(reusableSender && reusedSenderProfileId
+        ? [
+            this.env.DB.prepare(
+              `INSERT INTO sender_profiles (
+                 id, event_id, name, from_name, from_email, reply_to_email,
+                 provider, provider_sender_id, status, created_at, updated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'verified',
+                         unixepoch(), unixepoch())`,
+            ).bind(
+              reusedSenderProfileId,
+              eventId,
+              reusableSender.name,
+              reusableSender.fromName,
+              reusableSender.fromEmail,
+              reusableSender.replyToEmail,
+              reusableSender.provider,
+              reusableSender.providerSenderId,
+            ),
+          ]
+        : []),
       this.env.DB.prepare(
         `INSERT INTO operation_jobs (
            id, organisation_id, event_id, requested_by_person_id, type,
@@ -624,6 +805,9 @@ export class EventCreationService {
           targetEventId: eventId,
           requestedRepositoryProvider: input.repositoryProvider,
           requestHash,
+          ...(reusableSender
+            ? { reusedSenderProfileId: reusableSender.id }
+            : {}),
         }),
         pendingAirtable
           ? null
@@ -655,8 +839,40 @@ export class EventCreationService {
           repositoryProvider: input.repositoryProvider,
           activationStatus: pendingAirtable ? "provisioning" : "active",
           requestedRepositoryProvider: input.repositoryProvider,
+          ...(reusableSender
+            ? {
+                reusedSenderProfileId: reusableSender.id,
+                reusedSenderSourceEventId: reusableSender.sourceEventId,
+              }
+            : {}),
         }),
       ),
+      ...(reusableSender && reusedSenderProfileId
+        ? [
+            this.env.DB.prepare(
+              `INSERT INTO audit_events (
+                 id, organisation_id, event_id, actor_person_id, action,
+                 entity_type, entity_id, correlation_id, metadata_json,
+                 created_at
+               ) VALUES (?, ?, ?, ?, 'communication.sender.reused',
+                         'sender_profile', ?, ?, ?, unixepoch())`,
+            ).bind(
+              crypto.randomUUID(),
+              viewer.organisationId,
+              eventId,
+              viewer.personId,
+              reusedSenderProfileId,
+              correlationId,
+              JSON.stringify({
+                sourceEventId: reusableSender.sourceEventId,
+                sourceSenderProfileId: reusableSender.id,
+                provider: reusableSender.provider,
+                providerSenderId: reusableSender.providerSenderId,
+                fromEmail: reusableSender.fromEmail,
+              }),
+            ),
+          ]
+        : []),
     ];
     try {
       await this.env.DB.batch(statements);
@@ -672,6 +888,24 @@ export class EventCreationService {
         /UNIQUE constraint failed: events\.slug/iu.test(error.message)
       )
         throw new EventCreationSlugConflictError();
+      if (reusableSender) {
+        const current = await this.requireReusableSender(
+          viewer,
+          reusableSender.id,
+        );
+        if (
+          current.sourceEventId !== reusableSender.sourceEventId ||
+          current.name !== reusableSender.name ||
+          current.fromName !== reusableSender.fromName ||
+          current.fromEmail !== reusableSender.fromEmail ||
+          current.replyToEmail !== reusableSender.replyToEmail ||
+          current.provider !== reusableSender.provider ||
+          current.providerSenderId !== reusableSender.providerSenderId
+        )
+          throw new EventCreationSenderReuseError(
+            "The selected verified sender changed while the event was being created. Refresh and confirm the sender identity again.",
+          );
+      }
       throw error;
     }
 

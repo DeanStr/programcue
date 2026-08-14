@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test";
+import { serializeSignedCookie } from "better-call";
 import { RouterContextProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -148,6 +149,90 @@ describe("published programme and itinerary", () => {
           headers: { cookie },
         }),
         testEnv,
+        "evt-foe-2025",
+      ),
+    ).resolves.toEqual({
+      personId: "person-demo-admin",
+      visitorToken: null,
+    });
+  });
+
+  it("keeps gate-only evaluation state anonymous instead of falling through to Better Auth", async () => {
+    const testEnv = {
+      ...(env as unknown as CloudflareEnvironment),
+      APP_ENV: "production",
+      DEMO_MODE: "false",
+      EVALUATION_MODE: "true",
+      BETTER_AUTH_SECRET:
+        "evaluation-itinerary-better-auth-secret-with-thirty-two-characters",
+      BETTER_AUTH_URL: "https://app.programcue.com",
+      EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+      EVALUATION_SESSION_SECRET:
+        "evaluation-session-secret-with-more-than-thirty-two-characters",
+    } as CloudflareEnvironment;
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    await testEnv.DB.prepare(
+      `INSERT INTO audit_events (
+         id, organisation_id, event_id, actor_id, action,
+         entity_type, entity_id, metadata_json, created_at
+       ) VALUES (?, 'org-future-events', 'evt-foe-2025', 'test-operator',
+                 'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
+                 unixepoch())`,
+    )
+      .bind(crypto.randomUUID())
+      .run();
+    const evaluationCookie = (
+      await evaluationSessionCookie(testEnv, null)
+    ).split(";", 1)[0]!;
+    const authToken = `itinerary-dual-session-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO auth_sessions (
+         id, person_id, token, expires_at, created_at, updated_at
+       ) VALUES (?, 'person-demo-admin', ?, unixepoch() + 3600,
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(crypto.randomUUID(), authToken)
+      .run();
+    const betterAuthCookie = await serializeSignedCookie(
+      "__Secure-better-auth.session_token",
+      authToken,
+      String(testEnv.BETTER_AUTH_SECRET),
+    );
+    const visitorToken = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+    const visitorCookie = (
+      await itineraryCookie(
+        testEnv,
+        visitorToken,
+        "https://app.programcue.com/public/programme/future-of-events-2025",
+      )
+    ).split(";", 1)[0]!;
+
+    await expect(
+      publicItineraryIdentity(
+        new Request(
+          "https://app.programcue.com/public/programme/future-of-events-2025",
+          {
+            headers: {
+              cookie: `${evaluationCookie}; ${betterAuthCookie}; ${visitorCookie}`,
+            },
+          },
+        ),
+        testEnv,
+        "evt-foe-2025",
+      ),
+    ).resolves.toEqual({
+      personId: null,
+      visitorToken,
+    });
+
+    await expect(
+      publicItineraryIdentity(
+        new Request(
+          "https://app.programcue.com/public/programme/future-of-events-2025",
+          { headers: { cookie: betterAuthCookie } },
+        ),
+        testEnv,
+        "evt-foe-2025",
       ),
     ).resolves.toEqual({
       personId: "person-demo-admin",
@@ -439,6 +524,100 @@ describe("published programme and itinerary", () => {
         (session) => session.id === "private-unpublished-session",
       ),
     ).toBe(false);
+  });
+
+  it("uses bundled portraits only for the canonical demo or evaluation fixture", async () => {
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    const production = await new PublicProgrammeService({
+      ...(env as unknown as CloudflareEnvironment),
+      DEMO_MODE: "false",
+      EVALUATION_MODE: "false",
+    } as unknown as CloudflareEnvironment).getPublished(
+      "future-of-events-2025",
+    );
+    expect(
+      production?.speakers.find(
+        (speaker) => speaker.id === "person-demo-speaker",
+      )?.imageUrl,
+    ).toBeNull();
+
+    const evaluationEnv = {
+      ...(env as unknown as CloudflareEnvironment),
+      DEMO_MODE: "false",
+      EVALUATION_MODE: "true",
+    } as unknown as CloudflareEnvironment;
+    const evaluationService = new PublicProgrammeService(evaluationEnv);
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE people
+            SET profile_status = 'published', updated_at = unixepoch()
+          WHERE id IN ('person-sbek-speaker', 'person-sbek-speaker2')`,
+      ),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES ('demo-session-1', 'evt-foe-2025',
+                   'person-sbek-speaker', 90, 'Speaker', 'confirmed',
+                   unixepoch(), 'public')`,
+      ),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES ('demo-session-1', 'evt-foe-2025',
+                   'person-sbek-speaker2', 91, 'Co-speaker', 'confirmed',
+                   unixepoch(), 'public')`,
+      ),
+    ]);
+    const evaluation = await evaluationService.getPublished(
+      "future-of-events-2025",
+    );
+    expect(
+      evaluation?.speakers.find(
+        (speaker) => speaker.id === "person-demo-speaker",
+      )?.imageUrl,
+    ).toBe("/images/demo-speakers/priya-shah.webp");
+    expect(
+      evaluation?.speakers.find(
+        (speaker) => speaker.id === "person-sbek-speaker",
+      )?.imageUrl,
+    ).toBe("/images/demo-speakers/priya-raman.webp");
+    expect(
+      evaluation?.speakers.find(
+        (speaker) => speaker.id === "person-sbek-speaker2",
+      )?.imageUrl,
+    ).toBe("/images/demo-speakers/marcus-okafor.webp");
+
+    const assetId = `fixture-pending-headshot-${crypto.randomUUID()}`;
+    const versionId = `${assetId}-v1`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO file_assets (
+         id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           current_version_id, status, created_at, updated_at
+         ) VALUES (?, 'evt-foe-2025', 'person-demo-speaker', 'person',
+                   'person-demo-speaker', 'headshot', NULL, 'pending',
+                   unixepoch(), unixepoch())`,
+      ).bind(assetId),
+      env.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, size_bytes,
+           created_by_person_id, created_at
+         ) VALUES (?, 'evt-foe-2025', ?, 1, ?, 'pending-headshot.webp',
+                   'image/webp', 1024, 'person-demo-speaker', unixepoch())`,
+      ).bind(versionId, assetId, `evaluation/headshots/${versionId}`),
+    ]);
+
+    const withPendingUpload = await evaluationService.getPublished(
+      "future-of-events-2025",
+    );
+    expect(
+      withPendingUpload?.speakers.find(
+        (speaker) => speaker.id === "person-demo-speaker",
+      )?.imageUrl,
+    ).toBeNull();
   });
 
   it("loads a published programme with more than 98 speakers", async () => {
@@ -847,6 +1026,7 @@ describe("published programme and itinerary", () => {
         ...(env as unknown as CloudflareEnvironment),
         APP_ENV: "production",
         DEMO_MODE: "false",
+        EVALUATION_MODE: "false",
         BETTER_AUTH_URL: "https://programcue.test",
         BETTER_AUTH_SECRET:
           "programme-abuse-test-secret-with-at-least-thirty-two-characters",
@@ -913,6 +1093,82 @@ describe("published programme and itinerary", () => {
     }
   });
 
+  it("uses rate limiting without Turnstile for the production evaluation fixture itinerary", async () => {
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const evaluationEnv = {
+      ...(env as unknown as CloudflareEnvironment),
+      APP_ENV: "production",
+      DEMO_MODE: "false",
+      EVALUATION_MODE: "true",
+      BETTER_AUTH_URL: "https://programcue.test",
+      BETTER_AUTH_SECRET:
+        "programme-abuse-test-secret-with-at-least-thirty-two-characters",
+    } as unknown as CloudflareEnvironment;
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: evaluationEnv,
+      ctx: {} as ExecutionContext,
+    });
+    const before = await env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM abuse_rate_limits",
+    ).first<{ total: number }>();
+
+    const page = await publicProgrammePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2025",
+      ),
+      params: { slug: "future-of-events-2025" },
+      context,
+    } as never);
+    if (page instanceof Response) {
+      throw new Error("Evaluation programme loader returned a raw response.");
+    }
+    expect(page.data).toMatchObject({
+      itineraryVerificationRequired: false,
+      turnstileSiteKey: null,
+    });
+
+    const programme = await new PublicProgrammeService(
+      evaluationEnv,
+    ).getPublished("future-of-events-2025");
+    expect(programme).not.toBeNull();
+    const response = await publicProgrammePageAction({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2025",
+        {
+          method: "POST",
+          headers: {
+            "cf-connecting-ip": "203.0.113.202",
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            intent: "add",
+            sessionId: programme!.sessions[0]!.id,
+          }),
+        },
+      ),
+      params: { slug: "future-of-events-2025" },
+      context,
+    } as never);
+    if (response instanceof Response) {
+      throw new Error("Evaluation itinerary action returned a raw response.");
+    }
+
+    expect(response.init?.status).toBeUndefined();
+    expect(response.data).toMatchObject({ ok: true });
+    expect(response.init?.headers).toEqual(
+      expect.objectContaining({ "set-cookie": expect.any(String) }),
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+    await expect(
+      env.DB.prepare("SELECT COUNT(*) AS total FROM abuse_rate_limits").first<{
+        total: number;
+      }>(),
+    ).resolves.toEqual({ total: (before?.total ?? 0) + 1 });
+  });
+
   it("rejects an unsigned visitor cookie instead of accepting a fixed bearer token", async () => {
     const attackerSelectedToken = `fixed-${crypto.randomUUID()}`;
     await expect(
@@ -923,6 +1179,7 @@ describe("published programme and itinerary", () => {
           },
         }),
         env as unknown as CloudflareEnvironment,
+        "evt-foe-2025",
       ),
     ).resolves.toEqual({ personId: null, visitorToken: null });
   });
@@ -1445,6 +1702,7 @@ describe("published programme and itinerary", () => {
       publicItineraryIdentity(
         requestWithCookie,
         env as unknown as CloudflareEnvironment,
+        "evt-foe-2025",
       ),
     ).resolves.toEqual({ personId: null, visitorToken: browserId });
     const encodedValue = cookie.split(";")[0]!.split("=")[1]!;
@@ -1458,6 +1716,7 @@ describe("published programme and itinerary", () => {
           },
         }),
         env as unknown as CloudflareEnvironment,
+        "evt-foe-2025",
       ),
     ).resolves.toEqual({ personId: null, visitorToken: null });
     expect(

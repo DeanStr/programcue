@@ -27,11 +27,14 @@ import {
   EVALUATION_EVENT_NAME,
   EVALUATION_IDENTITIES,
   EVALUATION_ORGANISATION_ID,
+  activateEvaluationApplicantAccount,
   clearEvaluationSessionCookie,
   evaluationAccessCodeMatches,
+  evaluationPersonForSession,
   evaluationSessionCookie,
   isEvaluationIdentityKey,
   readEvaluationSession,
+  renewedEvaluationSessionCookie,
   requireEvaluationMode,
   resolveEvaluationPerson,
 } from "~/platform/evaluation/evaluation-session.server";
@@ -54,8 +57,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   requireEvaluationMode(env);
   const session = await readEvaluationSession(request, env);
-  const selected = session?.identityKey
-    ? await resolveEvaluationPerson(env, session.identityKey)
+  const selected = session
+    ? await evaluationPersonForSession(env, session)
     : null;
   return {
     unlocked: Boolean(session),
@@ -76,6 +79,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         destination: identity.destination,
         whatToTry: identity.whatToTry,
         group: identity.group,
+        requiresAccountActivation: key === "sbek_applicant",
       }),
     ),
   };
@@ -168,32 +172,61 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const identityKey = String(form.get("identity") ?? "");
-  if (intent !== "select_identity" || !isEvaluationIdentityKey(identityKey)) {
+  const choosesApplicantEvent = intent === "activate_account_and_choose_event";
+  const activatesEvaluatorAccount =
+    intent === "activate_account" || choosesApplicantEvent;
+  if (
+    (intent !== "select_identity" && !activatesEvaluatorAccount) ||
+    !isEvaluationIdentityKey(identityKey) ||
+    (activatesEvaluatorAccount && identityKey !== "sbek_applicant") ||
+    (!activatesEvaluatorAccount && identityKey === "sbek_applicant")
+  ) {
     return data<ActionResult>(
       { ok: false, message: "Choose one of the fixed evaluation identities." },
       { status: 400, headers: { "cache-control": "no-store" } },
     );
   }
   const selected = await resolveEvaluationPerson(env, identityKey);
-  await env.DB.prepare(
-    `INSERT INTO audit_events (
+  const accountActivation = activatesEvaluatorAccount
+    ? await activateEvaluationApplicantAccount(env, session.fixtureGeneration)
+    : null;
+  if (!accountActivation?.replayed) {
+    await env.DB.prepare(
+      `INSERT INTO audit_events (
        id, organisation_id, event_id, actor_id, action, entity_type,
        entity_id, metadata_json, created_at
      ) VALUES (?, ?, ?, 'production-evaluation-access',
-               'evaluation.identity.selected', 'person', ?, ?, unixepoch())`,
-  )
-    .bind(
-      crypto.randomUUID(),
-      EVALUATION_ORGANISATION_ID,
-      EVALUATION_EVENT_ID,
-      selected.personId,
-      JSON.stringify({ identityKey }),
+               ?, 'person', ?, ?, unixepoch())`,
     )
-    .run();
+      .bind(
+        crypto.randomUUID(),
+        EVALUATION_ORGANISATION_ID,
+        EVALUATION_EVENT_ID,
+        "evaluation.identity.selected",
+        selected.personId,
+        JSON.stringify({
+          identityKey,
+          fixtureGeneration: session.fixtureGeneration,
+          accountActivated: activatesEvaluatorAccount,
+        }),
+      )
+      .run();
+  }
   const headers = new Headers();
-  headers.append("set-cookie", await evaluationSessionCookie(env, identityKey));
-  headers.append("set-cookie", currentEventCookie(EVALUATION_EVENT_ID, env));
-  return redirectDocument(selected.definition.destination, {
+  headers.append(
+    "set-cookie",
+    await renewedEvaluationSessionCookie(env, session, identityKey),
+  );
+  headers.append(
+    "set-cookie",
+    choosesApplicantEvent
+      ? clearCurrentEventCookie(env)
+      : currentEventCookie(EVALUATION_EVENT_ID, env),
+  );
+  const destination = choosesApplicantEvent
+    ? "/events/select"
+    : selected.definition.destination;
+  return redirectDocument(destination, {
     status: 303,
     headers,
   });
@@ -221,12 +254,47 @@ function RoleCards({
               <strong>What to try:</strong> {identity.whatToTry}
             </p>
             <Form method="post">
-              <input type="hidden" name="_intent" value="select_identity" />
+              <input
+                type="hidden"
+                name="_intent"
+                value={
+                  identity.requiresAccountActivation
+                    ? "activate_account"
+                    : "select_identity"
+                }
+              />
               <input type="hidden" name="identity" value={identity.key} />
               <button className="btn primary" type="submit" disabled={busy}>
-                Open as {identity.label} <ArrowRight aria-hidden size={15} />
+                {identity.requiresAccountActivation
+                  ? "Create evaluator submitter account"
+                  : `Open as ${identity.label}`}{" "}
+                <ArrowRight aria-hidden size={15} />
               </button>
+              {identity.requiresAccountActivation ? (
+                <p className="help">
+                  Activates only this fixed fixture identity. No verification
+                  email or external-provider delivery is claimed.
+                </p>
+              ) : null}
             </Form>
+            {identity.requiresAccountActivation ? (
+              <Form method="post" className="mt">
+                <input
+                  type="hidden"
+                  name="_intent"
+                  value="activate_account_and_choose_event"
+                />
+                <input type="hidden" name="identity" value={identity.key} />
+                <button className="btn" type="submit" disabled={busy}>
+                  Activate account and choose event
+                </button>
+                <p className="help">
+                  Opens only events where this fixed identity already has
+                  accepted access or a pending invitation. Accepting an
+                  invitation remains a separate explicit step.
+                </p>
+              </Form>
+            ) : null}
           </article>
         ))}
     </div>
@@ -356,7 +424,7 @@ export default function EvaluationGuide({ loaderData }: Route.ComponentProps) {
           </Link>
           <Link
             className="btn"
-            to="/public/programme/future-of-events-2025/speakers"
+            to="/public/programme/future-of-events-2025/gallery"
           >
             Speaker gallery
           </Link>
@@ -365,6 +433,41 @@ export default function EvaluationGuide({ loaderData }: Route.ComponentProps) {
           </Link>
           <Link className="btn" to="/api/docs">
             API documentation
+          </Link>
+        </div>
+        <hr />
+        <h3>Operations proof</h3>
+        <p className="subtle">
+          Choose the Organisation owner or Event organiser first. Production
+          authorisation still applies to every link.
+        </p>
+        <div className="page-actions">
+          <Link className="btn" to="/admin/submissions">
+            Submissions
+          </Link>
+          <Link className="btn" to="/admin/review">
+            Review &amp; decisions
+          </Link>
+          <Link className="btn" to="/admin/speakers">
+            Speakers
+          </Link>
+          <Link className="btn" to="/admin/tasks">
+            Tasks
+          </Link>
+          <Link className="btn" to="/admin/content">
+            Content &amp; files
+          </Link>
+          <Link className="btn" to="/admin/schedule">
+            Schedule
+          </Link>
+          <Link className="btn" to="/admin/communications">
+            Communications
+          </Link>
+          <Link className="btn" to="/admin/crm">
+            Speaker CRM
+          </Link>
+          <Link className="btn" to="/admin/events/new">
+            Create event
           </Link>
         </div>
       </section>

@@ -31,6 +31,7 @@ import { EventRepositoryRecoveryService } from "~/modules/events/event-repositor
 import {
   EventAdministratorPermissionError,
   EventAirtableProjectionCommitError,
+  EventInvitationAddressError,
   EventInvitationDeliveryError,
   EventRepositoryMigrationRequiredError,
   EventService,
@@ -366,6 +367,12 @@ export async function action({ request, context }: Route.ActionArgs) {
           committed: true,
         },
         { status: 207 },
+      );
+    }
+    if (error instanceof EventInvitationAddressError) {
+      return data<ActionResponse>(
+        { ok: false, intent: "invite", message: error.message },
+        { status: 422 },
       );
     }
     if (error instanceof EventAirtableProjectionCommitError) {

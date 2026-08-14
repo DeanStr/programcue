@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Form } from "react-router";
 
 import { Dialog } from "~/components/dialog";
@@ -6,6 +6,7 @@ import { EventDateTime } from "~/components/ui/event-date-time";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 
 export function BulkAssignmentDialog() {
+  const [trackFilter, setTrackFilter] = useState("");
   const {
     navigation,
     bulkAssignOpen,
@@ -22,20 +23,37 @@ export function BulkAssignmentDialog() {
     bulkSelectedSubmissions,
     bulkAssignmentTargetLabel,
   } = useEvaluationAdminModel();
+  const trackOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          bulkAssignableSubmissions
+            .flatMap((submission) => submission.tracks)
+            .map((track) => [track.id, track] as const),
+        ).values(),
+      ).sort((left, right) => left.name.localeCompare(right.name)),
+    [bulkAssignableSubmissions],
+  );
+  const visibleSubmissions = trackFilter
+    ? bulkAssignableSubmissions.filter((submission) =>
+        submission.tracks.some((track) => track.id === trackFilter),
+      )
+    : bulkAssignableSubmissions;
+  const close = () => {
+    setBulkAssignOpen(false);
+    setBulkAssignPreview(false);
+    setTrackFilter("");
+  };
   return bulkAssignOpen && activeRound ? (
     <Dialog
       title={
         bulkAssignPreview ? "Confirm bulk assignment" : "Bulk assign reviewers"
       }
-      onClose={() => setBulkAssignOpen(false)}
+      onClose={close}
       footer={null}
     >
       {bulkAssignPreview ? (
-        <Form
-          method="post"
-          className="stack"
-          onSubmit={() => setBulkAssignOpen(false)}
-        >
+        <Form method="post" className="stack" onSubmit={close}>
           <input type="hidden" name="intent" value="assign" />
           <input type="hidden" name="roundId" value={activeRound.id} />
           <input type="hidden" name="targetType" value="submission" />
@@ -114,6 +132,26 @@ export function BulkAssignmentDialog() {
               })}
             </select>
           </label>
+          {trackOptions.length ? (
+            <label className="label">
+              Filter submissions by track
+              <select
+                className="select"
+                value={trackFilter}
+                onChange={(event) => {
+                  setTrackFilter(event.currentTarget.value);
+                  setBulkSubmissionIds(new Set());
+                }}
+              >
+                <option value="">All tracks</option>
+                {trackOptions.map((track) => (
+                  <option key={track.id} value={track.id}>
+                    {track.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <fieldset className="stack">
             <legend className="label">Affected submissions</legend>
             <div className="page-actions">
@@ -123,14 +161,12 @@ export function BulkAssignmentDialog() {
                 onClick={() =>
                   setBulkSubmissionIds(
                     new Set(
-                      bulkAssignableSubmissions.map(
-                        (submission) => submission.id,
-                      ),
+                      visibleSubmissions.map((submission) => submission.id),
                     ),
                   )
                 }
               >
-                Select all
+                Select visible
               </button>
               <button
                 type="button"
@@ -140,7 +176,7 @@ export function BulkAssignmentDialog() {
                 Clear
               </button>
             </div>
-            {bulkAssignableSubmissions.map((submission) => (
+            {visibleSubmissions.map((submission) => (
               <label key={submission.id} className="validation-item">
                 <input
                   type="checkbox"
@@ -157,10 +193,18 @@ export function BulkAssignmentDialog() {
                   <small className="subtle">
                     {submission.reference} ·{" "}
                     {submission.status.replaceAll("_", " ")}
+                    {submission.tracks.length
+                      ? ` · ${submission.tracks.map((track) => track.name).join(", ")}`
+                      : " · No track"}
                   </small>
                 </span>
               </label>
             ))}
+            {visibleSubmissions.length === 0 ? (
+              <p className="subtle">
+                No reviewable submissions use this track.
+              </p>
+            ) : null}
           </fieldset>
           <button
             type="button"

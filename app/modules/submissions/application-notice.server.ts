@@ -7,6 +7,7 @@ export const applicationNoticeKindSchema = z.enum([
   "created",
   "saved",
   "submitted",
+  "revised",
   "withdrawn",
   "claimed",
   "profile_updated",

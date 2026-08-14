@@ -33,6 +33,7 @@ import { EventService } from "~/modules/events/event-service.server";
 import { communicationScheduledEpoch } from "~/modules/communications/communication-time";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import { evaluatorEmailRoutingMessage } from "~/platform/evaluation/evaluator-email-alias.server";
 import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 import {
@@ -464,13 +465,17 @@ export async function action({ request, context }: ActionFunctionArgs) {
         values.get("role") === "committee_chair"
           ? "Committee-chair"
           : "Evaluator";
-      const message =
+      const invitationMessage =
         result.delivery === "sent"
           ? `${roleLabel} invitation created and a one-time sign-in link was sent.`
           : result.demoAccessActivation === "activated" ||
               result.demoAccessActivation === "already_active"
             ? `Demo ${roleLabel.toLowerCase()} invitation created in D1 and the exact SBEK fixture identity was activated locally. No email was sent.`
             : `Demo ${roleLabel.toLowerCase()} invitation created in D1. No email was sent in explicit demo mode.`;
+      const routingDisclosure = evaluatorEmailRoutingMessage(
+        "routing" in result ? (result.routing ?? null) : null,
+      );
+      const message = `${invitationMessage}${routingDisclosure ? ` ${routingDisclosure}` : ""}`;
       if (realtimeFailure) {
         return data(
           {

@@ -166,6 +166,11 @@ export function AdminAssignedTasksPanel({
                               key={comment.id}
                             >
                               <strong>{comment.authorName}</strong>
+                              {" · "}
+                              <EventDateTime
+                                epochSeconds={comment.createdAt}
+                                timeZone={data.eventTimezone}
+                              />
                               {comment.visibility === "administrator" ? (
                                 <small className="subtle">
                                   Administrator only

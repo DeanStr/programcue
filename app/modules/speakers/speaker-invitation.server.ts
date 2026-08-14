@@ -5,6 +5,7 @@ import {
   sha256Base64Url,
   type AcceptedSpeakerInvitationMessage,
 } from "~/modules/evaluations/accepted-speaker-invitation-plan.server";
+import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 export type SpeakerInvitationDelivery =
@@ -16,8 +17,7 @@ export type SpeakerInvitationDelivery =
   | "cancelled"
   | "demo_not_sent";
 
-type SpeakerInvitationSource =
-  "manual_speaker" | "direct_session" | "speaker_network";
+type SpeakerInvitationSource = "direct_session" | "speaker_network";
 
 type SpeakerInvitationActor = {
   organisationId: string;
@@ -89,6 +89,15 @@ export class SpeakerInvitationDeliveryError extends Error {
   }
 }
 
+export class SpeakerInvitationAddressError extends Error {
+  constructor(reason: string) {
+    super(
+      `The speaker invitation email address is not deliverable: ${reason.toLowerCase()}.`,
+    );
+    this.name = "SpeakerInvitationAddressError";
+  }
+}
+
 export async function prepareSpeakerInvitations(input: {
   env: CloudflareEnvironment;
   actor: SpeakerInvitationActor;
@@ -125,6 +134,12 @@ export async function prepareSpeakerInvitations(input: {
   const acceptedEmails = new Set(accepted.results.map((row) => row.email));
   const emails = requestedEmails.filter((email) => !acceptedEmails.has(email));
   if (!emails.length) return [];
+  for (const email of emails) {
+    const deliveryIssue = emailDeliveryIssue(email, input.env.APP_ENV);
+    if (deliveryIssue) {
+      throw new SpeakerInvitationAddressError(deliveryIssue);
+    }
+  }
   if (!input.env.OPERATIONS_QUEUE) {
     throw new Error(
       "Required OPERATIONS_QUEUE binding is unavailable; no speaker invitation was saved.",

@@ -11,9 +11,11 @@ import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-speaker-detail";
+import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
+import { maximumMegabytes } from "~/modules/files/file-policy";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
   SpeakerAdminStateError,
@@ -66,13 +68,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
   try {
     if (intent === "confirm_external_participation") {
-      const result = await new SpeakerService(
-        env,
-      ).confirmExternalParticipation(viewer, params.personId, {
-        sessionId: form.get("sessionId"),
-        confirmation: form.get("confirmation"),
-        externalConfirmation: form.get("externalConfirmation"),
-      });
+      const result = await new SpeakerService(env).confirmExternalParticipation(
+        viewer,
+        params.personId,
+        {
+          sessionId: form.get("sessionId"),
+          confirmation: form.get("confirmation"),
+          externalConfirmation: form.get("externalConfirmation"),
+        },
+      );
       const realtimeFailure = result.changed
         ? await recordRouteChange(env, viewer, {
             entityType: "session",
@@ -98,6 +102,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         pronunciation: form.get("pronunciation"),
         organisationName: form.get("organisationName"),
         jobTitle: form.get("jobTitle"),
+        linkedinUrl: form.get("linkedinUrl"),
+        xHandle: form.get("xHandle"),
+        travelPreferences: form.get("travelPreferences"),
         profileStatus: form.get("profileStatus"),
       },
     );
@@ -161,6 +168,17 @@ export default function AdminSpeakerDetail({
 }: Route.ComponentProps) {
   const { detail } = loaderData;
   const { profile, profileShared, event, sessions, files, tasks } = detail;
+  const headshot = files.find(
+    (file) =>
+      file.kind === "headshot" &&
+      file.targetType === "person" &&
+      file.targetId === profile.id &&
+      file.currentVersionId &&
+      file.downloadReleasedAt &&
+      file.downloadUploadedAt &&
+      file.downloadFilename &&
+      file.downloadUploaderName,
+  );
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -233,6 +251,66 @@ export default function AdminSpeakerDetail({
             </span>
           </div>
         ) : null}
+        <div className="speaker-headshot-card mb">
+          {headshot ? (
+            <img
+              className="speaker-headshot-image"
+              src={`/admin/speakers/${profile.id}/files/${headshot.id}?view=headshot`}
+              alt={`${profile.name} headshot`}
+            />
+          ) : (
+            <span className="speaker-headshot-placeholder">
+              <UserRound aria-hidden size={38} />
+            </span>
+          )}
+          <div className="stack">
+            <div>
+              <strong>
+                {headshot
+                  ? "Current released headshot"
+                  : "No released headshot"}
+              </strong>
+              {headshot ? (
+                <p className="subtle">
+                  {headshot.downloadFilename} · uploaded by{" "}
+                  {headshot.downloadUploaderName} ·{" "}
+                  {formatTimestamp(
+                    headshot.downloadUploadedAt!,
+                    event.timezone,
+                  )}
+                </p>
+              ) : (
+                <p className="subtle">
+                  Upload a JPG, PNG or WebP replacement below. It remains
+                  private until signature validation and malware scanning pass.
+                </p>
+              )}
+            </div>
+            {headshot ? (
+              <a
+                className="btn"
+                href={`/admin/speakers/${profile.id}/files/${headshot.id}`}
+              >
+                <Download aria-hidden size={14} /> Download headshot
+              </a>
+            ) : null}
+          </div>
+        </div>
+        <DirectMultipartUpload
+          target={{ targetType: "person", targetId: profile.id }}
+          kinds={[
+            {
+              value: "headshot",
+              label: `Headshot (JPG, PNG, WebP · ${maximumMegabytes(event.filePolicy.headshotMaximumBytes)} MB)`,
+              accept: "image/jpeg,image/png,image/webp",
+              maximumBytes: event.filePolicy.headshotMaximumBytes,
+            },
+          ]}
+          heading={
+            headshot ? "Replace speaker headshot" : "Upload speaker headshot"
+          }
+          description="The browser uploads directly to private R2. The current released image stays available until the replacement passes signature validation and malware scanning."
+        />
         <Form method="post" className="stack">
           <input type="hidden" name="_intent" value="save_speaker_profile" />
           <input type="hidden" name="revision" value={profile.revision} />
@@ -268,6 +346,30 @@ export default function AdminSpeakerDetail({
                   name="organisationName"
                   defaultValue={profile.organisationName ?? ""}
                   maxLength={160}
+                />
+              </label>
+            </div>
+            <div className="form-row">
+              <label className="label">
+                LinkedIn profile URL
+                <input
+                  className="field"
+                  name="linkedinUrl"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://www.linkedin.com/in/your-name"
+                  defaultValue={profile.linkedinUrl ?? ""}
+                  maxLength={500}
+                />
+              </label>
+              <label className="label">
+                X handle
+                <input
+                  className="field"
+                  name="xHandle"
+                  placeholder="@your_handle"
+                  defaultValue={profile.xHandle ? `@${profile.xHandle}` : ""}
+                  maxLength={16}
                 />
               </label>
             </div>
@@ -309,6 +411,21 @@ export default function AdminSpeakerDetail({
                 maxLength={5_000}
                 rows={7}
               />
+            </label>
+            <label className="label">
+              Travel and logistics preferences
+              <textarea
+                className="textarea"
+                name="travelPreferences"
+                defaultValue={profile.travelPreferences ?? ""}
+                maxLength={2_000}
+                rows={4}
+                placeholder="Arrival timing, accessibility, ground transport, dietary or other event logistics preferences"
+              />
+              <span className="help">
+                Private to the participant and authorised organisers; never
+                shown on the public programme.
+              </span>
             </label>
             <button className="btn primary" type="submit" disabled={busy}>
               {busy ? "Saving…" : "Save profile"}
@@ -476,6 +593,13 @@ export default function AdminSpeakerDetail({
                     {file.filename ?? "No stored version"} · version{" "}
                     {file.versionNumber ?? "—"} · {formatBytes(file.sizeBytes)}
                   </small>
+                  {file.downloadFilename && file.downloadUploadedAt ? (
+                    <small>
+                      Current released file: {file.downloadFilename} · uploaded
+                      by {file.downloadUploaderName} ·{" "}
+                      {formatTimestamp(file.downloadUploadedAt, event.timezone)}
+                    </small>
+                  ) : null}
                 </span>
                 {file.scanStatus ? (
                   <DomainStatusBadge domain="file" status={file.scanStatus} />

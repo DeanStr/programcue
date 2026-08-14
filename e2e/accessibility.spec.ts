@@ -85,7 +85,7 @@ test("administrator navigation groups core work without hiding programme tools",
   await navigation.getByRole("button", { name: "Expand navigation" }).click();
   await expect(
     navigation.getByRole("link", { name: "Content & files" }),
-  ).toHaveCount(0);
+  ).toBeVisible();
   await expect(
     navigation.getByRole("link", { name: "Speaker Network" }),
   ).toHaveCount(0);
@@ -103,7 +103,7 @@ test("administrator navigation groups core work without hiding programme tools",
   await expect(
     page
       .getByRole("complementary", { name: "Primary navigation" })
-      .getByRole("link", { name: "Programme" }),
+      .getByRole("link", { name: "Content & files" }),
   ).toHaveAttribute("aria-current", "page");
 
   await waitForInterface(page, "/admin/speakers");

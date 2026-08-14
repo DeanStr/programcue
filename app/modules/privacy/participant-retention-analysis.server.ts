@@ -56,6 +56,7 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
                OR person.image_url IS NOT NULL OR person.biography IS NOT NULL
                OR person.pronunciation IS NOT NULL
                OR person.organisation_name IS NOT NULL OR person.job_title IS NOT NULL
+               OR person.linkedin_url IS NOT NULL OR person.x_handle IS NOT NULL
                OR person.profile_status <> 'archived'))
           + (SELECT COUNT(*) FROM participant_retention_locked_identities link
             JOIN people person ON person.id = link.person_id
@@ -66,6 +67,7 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
                OR person.image_url IS NOT NULL OR person.biography IS NOT NULL
                OR person.pronunciation IS NOT NULL
                OR person.organisation_name IS NOT NULL OR person.job_title IS NOT NULL
+               OR person.linkedin_url IS NOT NULL OR person.x_handle IS NOT NULL
                OR person.profile_status <> 'archived'
                OR EXISTS (SELECT 1 FROM auth_sessions auth
                             WHERE auth.person_id = person.id)
@@ -73,6 +75,8 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
                             WHERE auth.person_id = person.id)
                OR EXISTS (SELECT 1 FROM verification_tokens token
                             WHERE token.identifier = person.email COLLATE NOCASE)))
+          + (SELECT COUNT(*) FROM event_participant_profiles profile
+              WHERE profile.event_id IN locked)
           AS total`,
       },
       {
@@ -373,6 +377,10 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
               WHERE owner_person_id = ? AND event_id <> ?
            )
            OR EXISTS (
+             SELECT 1 FROM event_participant_profiles
+              WHERE person_id = ? AND event_id <> ?
+           )
+           OR EXISTS (
              SELECT 1 FROM audit_events
               WHERE actor_person_id = ? AND (event_id IS NULL OR event_id <> ?)
            )
@@ -392,7 +400,7 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
          ) AS immutableAuditRows`,
     )
       .bind(
-        ...Array.from({ length: 14 }, () => [
+        ...Array.from({ length: 15 }, () => [
           candidate.id,
           viewer.eventId,
         ]).flat(),

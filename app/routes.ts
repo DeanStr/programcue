@@ -174,6 +174,10 @@ export default [
       "routes/admin-content-file-versions.ts",
     ),
     route(
+      "admin/content/files/:assetId/versions/:versionId",
+      "routes/admin-content-file-version-download.ts",
+    ),
+    route(
       "admin/content/files/:assetId",
       "routes/admin-content-file-download.ts",
     ),
@@ -207,6 +211,10 @@ export default [
     route("participant/profile", "routes/speaker-profile.tsx"),
     route("participant/resources", "routes/speaker-resources.tsx"),
   ]),
+  route(
+    "participant/tasks/files/:assetId/:versionId",
+    "routes/speaker-task-file-download.ts",
+  ),
   route("participant/files/:assetId", "routes/speaker-file-download.ts"),
   route(
     "participant/resources/files/:assetId",

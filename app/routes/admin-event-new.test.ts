@@ -101,4 +101,78 @@ describe("new event route", () => {
         .first(),
     ).toEqual({ provider: "d1", eventCount: 1 });
   });
+
+  it("offers and reuses only an explicitly selected verified organisation sender", async () => {
+    const sourceSenderId = "sender-production-evaluation-fixture";
+    await env.DB.prepare(
+      `INSERT INTO sender_profiles (
+         id, event_id, name, from_name, from_email, reply_to_email, provider,
+         provider_sender_id, status, created_at, updated_at
+       ) VALUES (?, 'evt-foe-2025', 'Route sender', 'Program Cue Events',
+                 'events@programcue.test', 'reply@programcue.test', 'resend',
+                 'domain-programcue-test', 'verified', unixepoch(), unixepoch())`,
+    )
+      .bind(sourceSenderId)
+      .run();
+    const prepared = await loader({
+      request: request(),
+      params: {},
+      context: context(),
+    } as never);
+    expect(prepared.reusableSenderProfiles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: sourceSenderId,
+          sourceEventName: "Future of Events 2025",
+          provider: "resend",
+        }),
+      ]),
+    );
+
+    const token = crypto.randomUUID().slice(0, 8);
+    const response = await action({
+      request: request({
+        intent: "create",
+        creationIntentId: crypto.randomUUID(),
+        name: `Route sender event ${token}`,
+        slug: `route-sender-event-${token}`,
+        timezone: "UTC",
+        startDate: "2027-10-01",
+        endDate: "2027-10-02",
+        repositoryProvider: "d1",
+        reuseSenderProfileId: sourceSenderId,
+      }),
+      params: {},
+      context: context(),
+    } as never);
+    if (response instanceof Response)
+      throw new Error("New event action returned a raw response.");
+    expect(response.data).toMatchObject({
+      ok: true,
+      committed: true,
+      message: expect.stringContaining("verified sender is ready"),
+    });
+    expect(
+      await env.DB.prepare(
+        `SELECT sender.from_name AS fromName, sender.from_email AS fromEmail,
+                sender.reply_to_email AS replyToEmail, sender.provider,
+                sender.provider_sender_id AS providerSenderId, sender.status,
+                (SELECT COUNT(*) FROM audit_events audit
+                  WHERE audit.event_id = sender.event_id
+                    AND audit.action = 'communication.sender.reused') AS audits
+           FROM sender_profiles sender
+          WHERE sender.event_id = ?`,
+      )
+        .bind(response.data.result?.eventId)
+        .first(),
+    ).toEqual({
+      fromName: "Program Cue Events",
+      fromEmail: "events@programcue.test",
+      replyToEmail: "reply@programcue.test",
+      provider: "resend",
+      providerSenderId: "domain-programcue-test",
+      status: "verified",
+      audits: 1,
+    });
+  });
 });

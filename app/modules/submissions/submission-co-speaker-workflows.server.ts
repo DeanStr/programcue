@@ -1,5 +1,11 @@
 import { z } from "zod";
+import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  EvaluatorEmailAliasContextError,
+  resolveEvaluatorEmailAlias,
+  type EvaluatorEmailRouting,
+} from "~/platform/evaluation/evaluator-email-alias.server";
 import {
   hashApplicantToken,
   type PublicForm,
@@ -43,14 +49,43 @@ export abstract class SubmissionCoSpeakerWorkflows extends SubmissionFormWorkflo
     rawInput: unknown,
     operationId: string = crypto.randomUUID(),
   ) {
-    const input = acceptedCoSpeakerInvitationSchema.parse(rawInput);
+    const parsed = acceptedCoSpeakerInvitationSchema.parse(rawInput);
+    let emailResolution: Awaited<ReturnType<typeof resolveEvaluatorEmailAlias>>;
+    try {
+      emailResolution = await resolveEvaluatorEmailAlias(
+        this.env,
+        viewer,
+        parsed.email,
+      );
+    } catch (error) {
+      if (error instanceof EvaluatorEmailAliasContextError) {
+        throw new SubmissionStateError(error.message);
+      }
+      throw error;
+    }
+    const deliveryIssue = emailDeliveryIssue(
+      emailResolution.email,
+      this.env.APP_ENV,
+    );
+    if (deliveryIssue) {
+      throw new SubmissionStateError(
+        `The co-speaker invitation email address is not deliverable: ${deliveryIssue.toLowerCase()}.`,
+      );
+    }
+    const input = { ...parsed, email: emailResolution.email };
     const parsedOperationId = z.string().min(1).max(200).parse(operationId);
     return this.projectIntentCommand(
       viewer,
       "submission.co_speaker.invite_after_acceptance",
       parsedOperationId,
-      input,
-      () => this.inviteAcceptedCoSpeakerD1(viewer, input, parsedOperationId),
+      { ...input, evaluatorEmailRouting: emailResolution.routing },
+      () =>
+        this.inviteAcceptedCoSpeakerD1(
+          viewer,
+          input,
+          parsedOperationId,
+          emailResolution.routing,
+        ),
     );
   }
 
@@ -58,6 +93,7 @@ export abstract class SubmissionCoSpeakerWorkflows extends SubmissionFormWorkflo
     viewer: Viewer,
     input: AcceptedCoSpeakerInvitationInput,
     operationId: string,
+    routing: EvaluatorEmailRouting | null,
   ) {
     const operationsQueue = this.env.OPERATIONS_QUEUE;
     if (!operationsQueue) {
@@ -441,6 +477,7 @@ export abstract class SubmissionCoSpeakerWorkflows extends SubmissionFormWorkflo
           roleLabel: input.roleLabel,
           previousRevision: input.revision,
           revision: input.revision + 1,
+          ...(routing ? { evaluatorEmailRouting: routing } : {}),
         }),
         input.submissionId,
         viewer.eventId,
@@ -487,6 +524,7 @@ export abstract class SubmissionCoSpeakerWorkflows extends SubmissionFormWorkflo
         status: invitationStatus,
         operationId: plan.operationId,
       },
+      ...(routing ? { routing } : {}),
     };
   }
 
@@ -498,6 +536,9 @@ export abstract class SubmissionCoSpeakerWorkflows extends SubmissionFormWorkflo
     const row = await this.env.DB.prepare(
       `SELECT CAST(json_extract(audit.metadata_json, '$.revision') AS INTEGER)
                 AS committedRevision,
+              json_extract(audit.metadata_json, '$.evaluatorEmailRouting.enteredEmail') AS routedEnteredEmail,
+              json_extract(audit.metadata_json, '$.evaluatorEmailRouting.routedEmail') AS routedEmail,
+              json_extract(audit.metadata_json, '$.evaluatorEmailRouting.personId') AS routedPersonId,
               speaker.id AS speakerId, delivery.recipient_name AS speakerName,
               delivery.recipient_address AS speakerEmail,
               speaker.role_label AS roleLabel,
@@ -540,6 +581,9 @@ export abstract class SubmissionCoSpeakerWorkflows extends SubmissionFormWorkflo
       )
       .first<{
         committedRevision: number;
+        routedEnteredEmail: EvaluatorEmailRouting["enteredEmail"] | null;
+        routedEmail: string | null;
+        routedPersonId: string | null;
         speakerId: string;
         speakerName: string;
         speakerEmail: string;
@@ -557,6 +601,18 @@ export abstract class SubmissionCoSpeakerWorkflows extends SubmissionFormWorkflo
     if (!Number.isInteger(row.committedRevision) || row.committedRevision < 1) {
       throw new Error(
         "The co-speaker invitation audit is missing its committed submission revision.",
+      );
+    }
+    if (
+      [row.routedEnteredEmail, row.routedEmail, row.routedPersonId].some(
+        Boolean,
+      ) &&
+      ![row.routedEnteredEmail, row.routedEmail, row.routedPersonId].every(
+        Boolean,
+      )
+    ) {
+      throw new Error(
+        "The co-speaker evaluator email routing audit is incomplete.",
       );
     }
     const operationStatus = z
@@ -666,6 +722,15 @@ export abstract class SubmissionCoSpeakerWorkflows extends SubmissionFormWorkflo
           : ("queued" as const),
         operationId,
       },
+      ...(row.routedEnteredEmail && row.routedEmail && row.routedPersonId
+        ? {
+            routing: {
+              enteredEmail: row.routedEnteredEmail,
+              routedEmail: row.routedEmail,
+              personId: row.routedPersonId,
+            },
+          }
+        : {}),
     };
   }
 

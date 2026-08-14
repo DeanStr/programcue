@@ -1,5 +1,5 @@
 import { data, useActionData, useNavigation } from "react-router";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 
 import type { Route } from "./+types/admin-tasks";
 import { AdminTasksWorkspace } from "~/components/admin-tasks-workspace";
@@ -13,6 +13,56 @@ import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
 export const meta = () => [{ title: "Tasks & Readiness · Program Cue" }];
+
+const taskFiltersSchema = z
+  .object({
+    task: z.string().max(200),
+    state: z.enum([
+      "",
+      "open",
+      "not_started",
+      "in_progress",
+      "blocked",
+      "submitted",
+      "completed",
+      "waived",
+      "overdue",
+    ]),
+    impact: z.enum(["", "critical", "high", "medium", "low"]),
+    target: z.enum(["", "speaker", "session", "event"]),
+    type: z.enum([
+      "",
+      "checklist",
+      "acknowledgement",
+      "short_form",
+      "file_upload",
+      "link_visit",
+      "administrator_only",
+    ]),
+  })
+  .strict();
+
+function exactSearchValue(search: URLSearchParams, key: string) {
+  const values = search.getAll(key);
+  if (values.length > 1) {
+    throw new Response("Invalid task filters", { status: 400 });
+  }
+  return values[0] ?? "";
+}
+
+export function parseTaskFilters(search: URLSearchParams) {
+  const parsed = taskFiltersSchema.safeParse({
+    task: exactSearchValue(search, "task"),
+    state: exactSearchValue(search, "state"),
+    impact: exactSearchValue(search, "impact"),
+    target: exactSearchValue(search, "target"),
+    type: exactSearchValue(search, "type"),
+  });
+  if (!parsed.success) {
+    throw new Response("Invalid task filters", { status: 400 });
+  }
+  return parsed.data;
+}
 
 async function administrator(
   request: Request,
@@ -29,23 +79,14 @@ async function administrator(
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await administrator(request, context);
+  const filters = parseTaskFilters(new URL(request.url).searchParams);
   const workspace = await new TaskService(env).getAdminWorkspace(viewer);
-  const search = new URL(request.url).searchParams;
-  const requestedTaskId = search.get("task")?.trim() ?? "";
-  if (requestedTaskId.length > 200)
-    throw new Response("Invalid task focus", { status: 400 });
+  const requestedTaskId = filters.task;
   if (
     requestedTaskId &&
     !workspace.tasks.some((task) => task.id === requestedTaskId)
   )
     throw new Response("Task not found in this event", { status: 404 });
-  const filters = {
-    task: requestedTaskId,
-    state: search.get("state") ?? "",
-    impact: search.get("impact") ?? "",
-    target: search.get("target") ?? "",
-    type: search.get("type") ?? "",
-  };
   const open = new Set([
     "not_started",
     "in_progress",
@@ -84,6 +125,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     focusedTaskId: requestedTaskId || null,
     totalTaskCount: workspace.tasks.length,
     intentId: crypto.randomUUID(),
+    assignIntentId: crypto.randomUUID(),
   };
 }
 
@@ -158,6 +200,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         viewer,
         String(form.get("templateId") ?? ""),
         String(form.get("targetId") ?? ""),
+        z.uuid().parse(form.get("assignIntentId")),
       );
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "task_instance",

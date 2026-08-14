@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Form, useNavigation } from "react-router";
+import { Form, Link, useNavigation } from "react-router";
 
 import {
   ApplicantVideoUpload,
@@ -120,13 +120,16 @@ export function DraftEditor({
   maximumVideoBytes,
   recoveryPersonId,
   recoveryEventId,
+  revisionIntentId,
   serverSaved,
   conflict,
   maxSpeakers,
   errors,
   canSubmit = true,
+  canRevise = false,
   forceReadOnly = false,
   readOnlyNotice,
+  acceptedParticipantsHref,
   action,
   timezone,
 }: {
@@ -139,13 +142,16 @@ export function DraftEditor({
   maximumVideoBytes: number;
   recoveryPersonId: string;
   recoveryEventId: string;
+  revisionIntentId: string;
   serverSaved: boolean;
   conflict: boolean;
   maxSpeakers: number | null;
   errors?: Record<string, string[]>;
   canSubmit?: boolean;
+  canRevise?: boolean;
   forceReadOnly?: boolean;
   readOnlyNotice?: string;
+  acceptedParticipantsHref?: string | null;
   action?: string;
   timezone: string;
 }) {
@@ -156,6 +162,9 @@ export function DraftEditor({
     MAX_SUBMISSION_SPEAKERS,
   );
   const [answers, setAnswers] = useState(draft.answers);
+  const [clientValidationMessage, setClientValidationMessage] = useState<
+    string | null
+  >(null);
   const [speakers, setSpeakers] = useState(
     draft.speakers.length
       ? draft.speakers.map(({ name, email, biography, invitationStatus }) => ({
@@ -186,7 +195,9 @@ export function DraftEditor({
       : draft.uploads,
   );
   const [dirty, setDirty] = useState(false);
-  const readOnly = forceReadOnly || draft.status !== "draft";
+  const revisionMode = canRevise && draft.status === "submitted";
+  const readOnly = forceReadOnly || (draft.status !== "draft" && !revisionMode);
+  const originalSpeakerCount = draft.speakers.length;
   const recoveryPayload = useMemo(
     () => ({ answers, speakers, uploads }),
     [answers, speakers, uploads],
@@ -275,7 +286,15 @@ export function DraftEditor({
       method="post"
       action={action}
       className="stack"
-      onChange={() => setDirty(true)}
+      onChange={() => {
+        setDirty(true);
+        setClientValidationMessage(null);
+      }}
+      onInvalid={() => {
+        setClientValidationMessage(
+          "Complete the highlighted required field before submitting.",
+        );
+      }}
     >
       {dialog}
       <input type="hidden" name="submissionId" value={draft.id} />
@@ -283,6 +302,13 @@ export function DraftEditor({
       <input type="hidden" name="answers" value={JSON.stringify(answers)} />
       <input type="hidden" name="speakers" value={JSON.stringify(speakers)} />
       <input type="hidden" name="uploads" value={JSON.stringify(uploads)} />
+      {revisionMode ? (
+        <input
+          type="hidden"
+          name="intentId"
+          value={`${revisionIntentId}:${draft.revision}`}
+        />
+      ) : null}
       <div className="card-title">
         <div>
           <span
@@ -295,6 +321,12 @@ export function DraftEditor({
         <span className="subtle right">Form version {draft.versionNumber}</span>
       </div>
       <DraftRecoveryFeedback recovery={recovery} className="" />
+      {clientValidationMessage ? (
+        <div className="validation-item error" role="alert">
+          <strong>Review required</strong>
+          <span>{clientValidationMessage}</span>
+        </div>
+      ) : null}
       {errors && Object.keys(errors).length ? (
         <div className="validation-item error" role="alert">
           <strong>Review required</strong>
@@ -334,14 +366,16 @@ export function DraftEditor({
                 <FieldControl
                   field={field}
                   value={answers[field.id]}
-                  disabled={readOnly}
+                  disabled={
+                    readOnly || (revisionMode && Boolean(uploads[field.id]))
+                  }
                   required={field.required && !uploads[field.id]}
                   invalid={Boolean(error)}
                   describedBy={describedBy}
                   onChange={update}
                 />
               </label>
-              {!readOnly ? (
+              {!readOnly && !revisionMode ? (
                 <ApplicantVideoUpload
                   publicSlug={publicSlug}
                   submissionId={draft.id}
@@ -446,7 +480,7 @@ export function DraftEditor({
           The first speaker is primary. Additional speakers receive a pending
           claim relationship and an expiring invitation after final submission.
         </p>
-        {!readOnly && applicant.verified ? (
+        {!readOnly && !revisionMode && applicant.verified ? (
           <SessionizeProfileImport
             publicSlug={publicSlug}
             disabled={readOnly}
@@ -479,6 +513,7 @@ export function DraftEditor({
                 className="field"
                 disabled={
                   readOnly ||
+                  (revisionMode && index < originalSpeakerCount) ||
                   (index > 0 && speaker.invitationStatus === "claimed")
                 }
                 required
@@ -499,6 +534,7 @@ export function DraftEditor({
                   type="email"
                   disabled={
                     readOnly ||
+                    (revisionMode && index < originalSpeakerCount) ||
                     (index === 0 && applicant.verified) ||
                     (index > 0 && speaker.invitationStatus === "claimed")
                   }
@@ -513,6 +549,7 @@ export function DraftEditor({
                 />
                 {index > 0 &&
                 !readOnly &&
+                (!revisionMode || index >= originalSpeakerCount) &&
                 speaker.invitationStatus !== "claimed" ? (
                   <button
                     className="icon-btn"
@@ -536,6 +573,7 @@ export function DraftEditor({
                 className="textarea"
                 disabled={
                   readOnly ||
+                  (revisionMode && index < originalSpeakerCount) ||
                   (index > 0 && speaker.invitationStatus === "claimed")
                 }
                 maxLength={5_000}
@@ -593,47 +631,58 @@ export function DraftEditor({
           <div className="validation-item warn">
             <strong>Before submitting</strong>
             <span>
-              Final submission freezes this form-version snapshot. You can still
-              view it afterward.
+              {revisionMode
+                ? "Saving creates a new submitted revision. The prior submitted revision stays in the audit history."
+                : "Final submission records an immutable form-version revision. While applications remain open and review has not started, you may submit a newer revision."}
             </span>
           </div>
           <label className="toggle">
             <input
               type="checkbox"
-              name="confirm"
+              name={revisionMode ? "confirmRevision" : "confirm"}
               value="yes"
               required
-              disabled={!canSubmit}
+              disabled={revisionMode ? false : !canSubmit}
             />{" "}
-            I have reviewed this application and am ready to submit it.
+            {revisionMode
+              ? "I have reviewed these changes and am ready to replace the current submitted version."
+              : "I have reviewed this application and am ready to submit it."}
           </label>
           <div className="page-actions">
             <span className={`status ${dirty ? "warning" : "success"}`}>
               {dirty ? "Unsaved changes" : "Loaded from D1"}
             </span>
             <DraftRecoveryStatus state={recovery.state} />
-            <button
-              className="btn"
-              type="submit"
-              name="_intent"
-              value="save_draft"
-              formNoValidate
-              disabled={navigation.state !== "idle"}
-            >
-              {navigation.formData?.get("_intent") === "save_draft"
-                ? "Saving…"
-                : "Save draft"}
-            </button>
+            {!revisionMode ? (
+              <button
+                className="btn"
+                type="submit"
+                name="_intent"
+                value="save_draft"
+                formNoValidate
+                disabled={navigation.state !== "idle"}
+              >
+                {navigation.formData?.get("_intent") === "save_draft"
+                  ? "Saving…"
+                  : "Save draft"}
+              </button>
+            ) : null}
             <button
               className="btn primary"
               type="submit"
               name="_intent"
-              value="submit"
-              disabled={navigation.state !== "idle" || !canSubmit}
+              value={revisionMode ? "revise_submission" : "submit"}
+              disabled={
+                navigation.state !== "idle" || (!revisionMode && !canSubmit)
+              }
             >
-              {navigation.formData?.get("_intent") === "submit"
-                ? "Submitting…"
-                : "Submit application"}
+              {navigation.formData?.get("_intent") === "revise_submission"
+                ? "Saving revision…"
+                : navigation.formData?.get("_intent") === "submit"
+                  ? "Submitting…"
+                  : revisionMode
+                    ? "Save revised application"
+                    : "Submit application"}
             </button>
           </div>
           {conflict ? (
@@ -687,6 +736,33 @@ export function DraftEditor({
               </span>
             </div>
           ) : null}
+          {revisionMode ? (
+            <details className="card pad pc-disclosure">
+              <summary>
+                <strong>Withdraw application</strong>
+              </summary>
+              <p className="help mt">
+                Withdrawal removes this application from the active review
+                queue. The submitted revisions and audit history are retained.
+              </p>
+              <label className="toggle">
+                <input type="checkbox" name="confirmWithdrawal" value="yes" /> I
+                understand this application will be withdrawn.
+              </label>
+              <button
+                className="btn danger mt"
+                type="submit"
+                name="_intent"
+                value="withdraw"
+                formNoValidate
+                disabled={navigation.state !== "idle"}
+              >
+                {navigation.formData?.get("_intent") === "withdraw"
+                  ? "Withdrawing…"
+                  : "Withdraw application"}
+              </button>
+            </details>
+          ) : null}
         </>
       ) : (
         <>
@@ -719,6 +795,18 @@ export function DraftEditor({
                     }.`}
             </span>
           </div>
+          {acceptedParticipantsHref ? (
+            <div className="validation-item info">
+              <strong>Accepted proposal participants</strong>
+              <span>
+                Add or review accepted-session speakers in the participant
+                workspace without changing this submitted answer snapshot.
+              </span>
+              <Link className="btn small" to={acceptedParticipantsHref}>
+                Manage participants
+              </Link>
+            </div>
+          ) : null}
           {!forceReadOnly &&
           (draft.status === "submitted" || draft.status === "assigned") ? (
             <details className="card pad pc-disclosure">
@@ -743,6 +831,7 @@ export function DraftEditor({
                 type="submit"
                 name="_intent"
                 value="withdraw"
+                formNoValidate
                 disabled={navigation.state !== "idle"}
               >
                 {navigation.formData?.get("_intent") === "withdraw"

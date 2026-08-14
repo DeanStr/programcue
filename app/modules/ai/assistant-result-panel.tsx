@@ -43,7 +43,8 @@ const domainApprovalCopy = {
     button: "Approve and publish schedule",
   },
   propose_accelevents_run: {
-    confirmation: "I reviewed every external create, update and unchanged record.",
+    confirmation:
+      "I reviewed every external create, update and unchanged record.",
     button: "Approve Accelevents run",
   },
 } as const;
@@ -56,7 +57,8 @@ function Attribution({
   return (
     <p className="help">
       <Sparkles aria-hidden size={13} /> AI-generated advisory output ·{" "}
-      {attribution.provider} {attribution.model} · response {attribution.responseId}
+      {attribution.provider} {attribution.model} · response{" "}
+      {attribution.responseId}
     </p>
   );
 }
@@ -111,9 +113,7 @@ export function ProposalApproval({
     executedTaskId || executedCommunicationId || executedDomainEntityId,
   );
   const reminder =
-    proposal.toolName === "propose_reminder_send"
-      ? proposal.reminder
-      : null;
+    proposal.toolName === "propose_reminder_send" ? proposal.reminder : null;
   const domainCopy =
     proposal.toolName !== "propose_task" &&
     proposal.toolName !== "propose_reminder_send"
@@ -129,11 +129,7 @@ export function ProposalApproval({
         <span
           className={`status ${executed ? "success" : expired ? "danger" : "warning"}`}
         >
-          {executed
-            ? "Executed"
-            : expired
-              ? "Expired"
-              : "Approval required"}
+          {executed ? "Executed" : expired ? "Expired" : "Approval required"}
         </span>
       </div>
       <p>{proposal.summary}</p>
@@ -240,8 +236,8 @@ export function ProposalApproval({
               </label>
               <p className="help">
                 Editing does not send. Update the preview to create a new
-                immutable template version and re-resolve every recipient
-                before approval.
+                immutable template version and re-resolve every recipient before
+                approval.
               </p>
               <button className="btn" type="submit">
                 Update exact preview
@@ -293,7 +289,10 @@ export function ProposalApproval({
                         <span className="status danger">Invalid</span>
                       </td>
                       <td>{recipient.name || "Unnamed recipient"}</td>
-                      <td>{recipient.address}</td>
+                      <td>
+                        {recipient.address}
+                        <div className="subtle">{recipient.reason}</div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

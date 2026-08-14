@@ -127,11 +127,12 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       `
       INSERT OR IGNORE INTO task_templates (
         id, event_id, name, description, target_type, task_type, impact, evidence_mode,
-        due_anchor, due_offset_minutes, auto_assign_on_acceptance,
+        due_anchor, due_offset_minutes, fixed_due_at, auto_assign_on_acceptance,
         configuration_json, status, created_at, updated_at
       ) VALUES (
         'task-template-profile', ?, 'Complete your speaker profile', 'Confirm your biography, role and pronunciation.',
-        'speaker', 'short_form', 'high', 'checkbox', 'none', NULL, 1, '{}', 'active', unixepoch(), unixepoch()
+        'speaker', 'short_form', 'high', 'checkbox', 'fixed', NULL,
+        unixepoch('2025-05-10T16:00:00Z'), 1, '{}', 'active', unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID),
@@ -152,11 +153,12 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       `
       INSERT OR IGNORE INTO task_templates (
         id, event_id, name, description, target_type, task_type, impact, evidence_mode,
-        due_anchor, due_offset_minutes, auto_assign_on_acceptance,
+        due_anchor, due_offset_minutes, fixed_due_at, auto_assign_on_acceptance,
         configuration_json, status, created_at, updated_at
       ) VALUES (
         'task-template-handbook', ?, 'Read the speaker handbook', 'Read and acknowledge the current handbook.',
-        'speaker', 'acknowledgement', 'medium', 'checkbox', 'none', NULL, 1,
+        'speaker', 'acknowledgement', 'medium', 'checkbox', 'fixed', NULL,
+        unixepoch('2025-05-12T16:00:00Z'), 1,
         '{"resourcePageId":"resource-speaker-handbook"}', 'active', unixepoch(), unixepoch()
       )
     `,
@@ -224,11 +226,12 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       `
       INSERT OR IGNORE INTO task_instances (
         id, event_id, template_id, target_type, target_id, owner_person_id, title, description,
-        task_type, impact, status, readiness_state, readiness_percent, revision, created_at, updated_at
+        task_type, impact, status, readiness_state, readiness_percent, revision,
+        due_at, created_at, updated_at
       ) VALUES (
         'task-demo-handbook', ?, 'task-template-handbook', 'speaker', ?, ?, 'Read the speaker handbook',
         'Read and acknowledge the current handbook.', 'acknowledgement', 'medium', 'not_started', 'on_track', 0, 1,
-        unixepoch(), unixepoch()
+        unixepoch('2025-05-12T16:00:00Z'), unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID, SPEAKER_ID, SPEAKER_ID),

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
 import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
@@ -172,9 +172,10 @@ export async function prepareAcceptedSpeakerInvitationPlans(input: {
 
   return Promise.all(
     speakers.map(async (speaker) => {
-      if (!z.email().safeParse(speaker.email).success) {
+      const deliveryIssue = emailDeliveryIssue(speaker.email, env.APP_ENV);
+      if (deliveryIssue) {
         throw new EvaluationStateError(
-          "Every accepted speaker must have a valid email address before invitations can be queued.",
+          `Every accepted speaker must have a deliverable email address before invitations can be queued: ${deliveryIssue.toLowerCase()}.`,
         );
       }
       const identity = (

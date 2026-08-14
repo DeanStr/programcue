@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
 import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
 import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
 import { hashApplicantToken } from "./applicant-session.server";
@@ -119,6 +120,12 @@ export async function buildCoSpeakerInvitationPlan(
   context: InvitationContext,
   speaker: InvitationSpeaker,
 ): Promise<CoSpeakerInvitationPlan> {
+  const deliveryIssue = emailDeliveryIssue(speaker.email, env.APP_ENV);
+  if (deliveryIssue) {
+    throw new SubmissionStateError(
+      `The co-speaker invitation email address is not deliverable: ${deliveryIssue.toLowerCase()}.`,
+    );
+  }
   if (!context.physicalAddress.trim()) {
     throw new SubmissionStateError(
       "Configure the event venue or mailing address before co-speaker invitations can be created.",
@@ -186,6 +193,9 @@ export async function buildCoSpeakerInvitationPlan(
     submissionId: context.submissionId,
     speakerId: speaker.id,
     emails: [speaker.email],
+    ...(context.submissionOperationId
+      ? { submissionOperationId: context.submissionOperationId }
+      : {}),
   };
   const contentSnapshot = {
     schemaVersion: 1,
@@ -427,4 +437,157 @@ export async function persistCoSpeakerQueueFailure(
       "The persisted co-speaker invitation queue failure was inconsistent.",
     );
   }
+}
+
+export async function dispatchCoSpeakerInvitationsForSubmissionRevision(input: {
+  env: CloudflareEnvironment;
+  organisationId: string;
+  eventId: string;
+  submissionId: string;
+  commandId: string;
+  expectedCount: number;
+}) {
+  const operations = await input.env.DB.prepare(
+    `SELECT operation.id AS operationId, operation.status,
+            operation.payload_json AS payloadJson,
+            operation.idempotency_key AS operationIdempotencyKey,
+            operation.dispatched_at AS dispatchedAt,
+            communication.id AS communicationId,
+            delivery.id AS deliveryId,
+            speaker.id AS speakerId,
+            speaker.claim_token_hash AS claimTokenHash
+       FROM operation_jobs operation
+       JOIN communications communication
+         ON communication.operation_id = operation.id
+        AND communication.event_id = operation.event_id
+       JOIN communication_deliveries delivery
+         ON delivery.communication_id = communication.id
+        AND delivery.event_id = communication.event_id
+       JOIN submission_speakers speaker
+         ON speaker.id = delivery.source_id
+        AND speaker.event_id = delivery.event_id
+       JOIN submissions submission
+         ON submission.id = speaker.submission_id
+        AND submission.event_id = speaker.event_id
+       JOIN events event
+         ON event.id = submission.event_id
+        AND event.organisation_id = operation.organisation_id
+      WHERE operation.organisation_id = ? AND operation.event_id = ?
+        AND operation.type = 'communication.send'
+        AND submission.id = ?
+        AND json_extract(communication.audience_json, '$.type') =
+            'co_speaker_invitation'
+        AND json_extract(communication.audience_json,
+                         '$.submissionOperationId') = ?
+      ORDER BY operation.id`,
+  )
+    .bind(
+      input.organisationId,
+      input.eventId,
+      input.submissionId,
+      input.commandId,
+    )
+    .all<{
+      operationId: string;
+      status: string;
+      payloadJson: string;
+      operationIdempotencyKey: string;
+      dispatchedAt: number | null;
+      communicationId: string;
+      deliveryId: string;
+      speakerId: string;
+      claimTokenHash: string | null;
+    }>();
+  if (operations.results.length !== input.expectedCount) {
+    throw new Error(
+      "The committed submission revision is missing a durable co-speaker invitation operation.",
+    );
+  }
+
+  let queueFailed = 0;
+  for (const operation of operations.results) {
+    if (
+      ["queue_failed", "partially_failed", "failed", "cancelled"].includes(
+        operation.status,
+      )
+    ) {
+      queueFailed += 1;
+      continue;
+    }
+    if (
+      !["queued", "received", "running", "retrying", "completed"].includes(
+        operation.status,
+      )
+    ) {
+      throw new Error(
+        `The committed co-speaker invitation has unsupported status ${JSON.stringify(operation.status)}.`,
+      );
+    }
+    if (operation.status !== "queued" || operation.dispatchedAt !== null) {
+      continue;
+    }
+    if (!input.env.OPERATIONS_QUEUE) {
+      throw new Error("Required OPERATIONS_QUEUE binding is unavailable.");
+    }
+    const message = parseCoSpeakerQueueMessage(operation.payloadJson, {
+      operationId: operation.operationId,
+      communicationId: operation.communicationId,
+      eventId: input.eventId,
+      organisationId: input.organisationId,
+      idempotencyKey: operation.operationIdempotencyKey,
+    });
+    try {
+      await input.env.OPERATIONS_QUEUE.send(message);
+    } catch (error) {
+      if (!operation.claimTokenHash) {
+        throw new Error(
+          "The queued co-speaker invitation is missing its claim token hash.",
+        );
+      }
+      await persistCoSpeakerQueueFailure(
+        input.env,
+        {
+          organisationId: input.organisationId,
+          eventId: input.eventId,
+          operationId: operation.operationId,
+          communicationId: operation.communicationId,
+          deliveryId: operation.deliveryId,
+          speakerId: operation.speakerId,
+          tokenHash: operation.claimTokenHash,
+        },
+        error,
+      );
+      queueFailed += 1;
+      continue;
+    }
+    const dispatched = await input.env.DB.prepare(
+      `UPDATE operation_jobs
+          SET dispatched_at = COALESCE(dispatched_at, unixepoch()),
+              updated_at = unixepoch()
+        WHERE id = ? AND organisation_id = ? AND event_id = ?
+          AND type = 'communication.send' AND status = 'queued'
+          AND dispatched_at IS NULL`,
+    )
+      .bind(operation.operationId, input.organisationId, input.eventId)
+      .run();
+    if ((dispatched.meta.changes ?? 0) !== 1) {
+      const converged = await input.env.DB.prepare(
+        `SELECT dispatched_at AS dispatchedAt
+           FROM operation_jobs
+          WHERE id = ? AND organisation_id = ? AND event_id = ?
+            AND type = 'communication.send'`,
+      )
+        .bind(operation.operationId, input.organisationId, input.eventId)
+        .first<{ dispatchedAt: number | null }>();
+      if (!converged?.dispatchedAt) {
+        throw new Error(
+          "The co-speaker invitation dispatch could not be recorded consistently.",
+        );
+      }
+    }
+  }
+  return {
+    queued: operations.results.length - queueFailed,
+    queueFailed,
+  };
 }

@@ -26,8 +26,6 @@ import { EmptyState } from "~/components/ui/states";
 import { ensureDemoCrmData } from "~/modules/crm/demo.server";
 import { crmStages } from "~/modules/crm/crm-schema";
 import { CrmService, CrmStateError } from "~/modules/crm/crm-service.server";
-import { SpeakerAdminStateError } from "~/modules/speakers/speaker-service.server";
-import { SpeakerInvitationDeliveryError } from "~/modules/speakers/speaker-invitation.server";
 import { currentEventCookie } from "~/platform/auth/current-event.server";
 import { requireOrganisationAdministrator } from "~/platform/auth/organisation.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -116,9 +114,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         form.get("idempotencyKey"),
       );
       return redirect(
-        added.accepted
-          ? `/admin/speakers?person=${encodeURIComponent(added.personId)}`
-          : "/admin/speakers",
+        `/admin/speakers?person=${encodeURIComponent(added.personId)}`,
         {
           headers: { "set-cookie": currentEventCookie(added.eventId, env) },
         },
@@ -129,17 +125,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       { status: 400 },
     );
   } catch (error) {
-    if (error instanceof SpeakerInvitationDeliveryError) {
-      return data<ActionResult>(
-        { ok: false, message: error.message },
-        { status: 207 },
-      );
-    }
-    if (
-      error instanceof ZodError ||
-      error instanceof CrmStateError ||
-      error instanceof SpeakerAdminStateError
-    ) {
+    if (error instanceof ZodError || error instanceof CrmStateError) {
       return data<ActionResult>(
         {
           ok: false,
@@ -149,11 +135,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
               : error.message,
         },
         {
-          status:
-            error instanceof CrmStateError ||
-            error instanceof SpeakerAdminStateError
-              ? error.status
-              : 422,
+          status: error instanceof CrmStateError ? error.status : 422,
         },
       );
     }
@@ -456,9 +438,10 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
             <CalendarPlus aria-hidden className="subtle" />
           </div>
           <p className="subtle">
-            Creates or restores speaker access for this identity. Network
-            profile suggestions remain organisation-scoped until the speaker
-            updates their own profile.
+            Adds this contact to the event roster as a prospect without creating
+            account access or sending email. Their organisation-scoped Network
+            profile remains visible in the Speakers workspace, where invitations
+            are sent explicitly.
           </p>
           <Form method="post" className="stack mt">
             <input type="hidden" name="_intent" value="add_to_event" />
@@ -478,7 +461,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
               </select>
             </label>
             <button className="btn primary" disabled={busy}>
-              Add to event and open speaker
+              Add prospect to event
             </button>
           </Form>
         </section>

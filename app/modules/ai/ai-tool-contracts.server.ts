@@ -251,7 +251,13 @@ const reminderProposalMetadataSchema = z
                 selected: z.number().int().nonnegative(),
                 deliverable: z.array(communicationRecipientSchema),
                 invalid: z.array(
-                  z.object({ address: z.string(), name: z.string() }).strict(),
+                  z
+                    .object({
+                      address: z.string(),
+                      name: z.string(),
+                      reason: z.string(),
+                    })
+                    .strict(),
                 ),
                 suppressed: z.array(communicationRecipientSchema),
               })
@@ -477,10 +483,7 @@ function requireAllProviderObjectProperties(value: unknown): unknown {
   const result = Object.fromEntries(
     Object.entries(value)
       .filter(([key]) => key !== "default")
-      .map(([key, child]) => [
-        key,
-        requireAllProviderObjectProperties(child),
-      ]),
+      .map(([key, child]) => [key, requireAllProviderObjectProperties(child)]),
   ) as Record<string, unknown>;
   if (
     result.properties &&

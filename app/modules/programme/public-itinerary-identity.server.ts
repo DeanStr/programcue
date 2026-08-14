@@ -1,5 +1,10 @@
 import { createAuth } from "~/platform/auth/auth.server";
-import { selectedEvaluationPerson } from "~/platform/evaluation/evaluation-session.server";
+import {
+  EVALUATION_ORGANISATION_ID,
+  evaluationPersonForSession,
+  readEvaluationSession,
+} from "~/platform/evaluation/evaluation-session.server";
+import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 import type { ItineraryIdentity } from "./public-itinerary-service.server";
 import { readCookie } from "./public-programme-service.server";
 import {
@@ -34,14 +39,36 @@ async function readItineraryBrowserId(
 export async function publicItineraryIdentity(
   request: Request,
   env: CloudflareEnvironment,
+  eventId: string,
 ): Promise<ItineraryIdentity> {
   const visitorToken = await readItineraryBrowserId(request, env);
-  if (String(env.DEMO_MODE) === "true") {
+  const runtime = requireRuntimeMode(env);
+  if (runtime.demo) {
     return { personId: null, visitorToken };
   }
-  const evaluationPerson = await selectedEvaluationPerson(request, env);
-  if (evaluationPerson) {
-    return { personId: evaluationPerson.personId, visitorToken };
+  if (runtime.evaluation) {
+    const evaluationSession = await readEvaluationSession(request, env);
+    if (evaluationSession) {
+      if (!evaluationSession.identityKey) {
+        return { personId: null, visitorToken };
+      }
+      const fixtureEvent = await env.DB.prepare(
+        `SELECT 1 FROM events
+          WHERE id = ? AND organisation_id = ?
+            AND activation_status = 'active'`,
+      )
+        .bind(eventId, EVALUATION_ORGANISATION_ID)
+        .first();
+      if (!fixtureEvent) return { personId: null, visitorToken };
+      const evaluationPerson = await evaluationPersonForSession(
+        env,
+        evaluationSession,
+      );
+      return {
+        personId: evaluationPerson?.personId ?? null,
+        visitorToken,
+      };
+    }
   }
   const session = await createAuth(env).api.getSession({
     headers: request.headers,

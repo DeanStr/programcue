@@ -74,6 +74,63 @@ export class SubmissionApplicantEventService {
     };
   }
 
+  async prepareRevised(
+    scope: EventScope,
+    applicant: Extract<Applicant, { verified: true }>,
+    submissionId: string,
+    operationId: string,
+    revision: number,
+  ): Promise<PreparedApplicantMutationEvent> {
+    const auditEventId = crypto.randomUUID();
+    return {
+      organisationId: scope.organisationId,
+      eventId: scope.eventId,
+      auditEventId,
+      webhook: await this.webhooks.prepareEventForAudit(
+        { ...scope, personId: applicant.personId },
+        {
+          eventType: "submission.updated",
+          entityType: "submission",
+          entityId: submissionId,
+          idempotencyKey: `submission.updated:${submissionId}:${revision}`,
+          correlationId: operationId,
+          data: {
+            status: "submitted",
+            revision,
+            change: "submitted_revision",
+          },
+        },
+        auditEventId,
+      ),
+    };
+  }
+
+  resumeRevised(
+    scope: EventScope,
+    applicant: Extract<Applicant, { verified: true }>,
+    submissionId: string,
+    operationId: string,
+    revision: number,
+    auditEventId: string,
+  ) {
+    return this.webhooks.resumePreparedEventForAudit(
+      { ...scope, personId: applicant.personId },
+      {
+        eventType: "submission.updated",
+        entityType: "submission",
+        entityId: submissionId,
+        idempotencyKey: `submission.updated:${submissionId}:${revision}`,
+        correlationId: operationId,
+        data: {
+          status: "submitted",
+          revision,
+          change: "submitted_revision",
+        },
+      },
+      auditEventId,
+    );
+  }
+
   dispatch(event: PreparedApplicantMutationEvent) {
     return this.webhooks.dispatchPreparedEvent(event.webhook);
   }

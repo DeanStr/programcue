@@ -558,6 +558,9 @@ test.describe("mutable schedule authoring", () => {
 
     await waitForInterface(page, "/admin/content");
     const library = page.getByRole("region", { name: "Central files library" });
+    await expect(
+      library.getByRole("link", { name: "Open task thread" }).first(),
+    ).toHaveAttribute("href", /\/admin\/tasks\?task=/);
     const disclosure = library.locator("details").first();
     await expect(disclosure).not.toHaveAttribute("open", "");
     await expect(disclosure.locator("li")).toHaveCount(0);
@@ -567,7 +570,9 @@ test.describe("mutable schedule authoring", () => {
     );
     await disclosure.locator("summary").click();
     expect((await historyResponse).ok()).toBeTruthy();
-    await expect(disclosure.locator("li").first()).toContainText(/v\d+/);
+    await expect(disclosure.locator("li").first()).toContainText(
+      /v\d+ · .*latest/,
+    );
   });
 
   test("configures resources and commits a pointer resize through the authoritative schedule", async ({

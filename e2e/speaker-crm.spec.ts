@@ -159,19 +159,31 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
   await expect(page.getByText("contacted → interested")).toBeVisible();
 
   await page.getByLabel("Target event").selectOption("evt-foe-2025");
-  await page
-    .getByRole("button", { name: "Add to event and open speaker" })
-    .click();
-  await expect(page).toHaveURL(/\/admin\/speakers$/u);
-  const pendingInvitations = page.locator("section").filter({
-    has: page.getByRole("heading", {
-      name: "Speaker invitations awaiting acceptance",
-    }),
+  await page.getByRole("button", { name: "Add prospect to event" }).click();
+  await expect(page).toHaveURL(/\/admin\/speakers\?person=/u);
+  const focusedSpeaker = page.getByRole("row").filter({
+    has: page.getByRole("link", { name: "Marcus Okafor" }),
   });
-  await expect(pendingInvitations).toContainText(
-    "marcus.speaker@sbek-test.example.com",
-  );
-  await expect(pendingInvitations).toContainText("Pending acceptance");
+  await expect(
+    focusedSpeaker.getByText("marcus.speaker@sbek-test.example.com", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    focusedSpeaker.getByLabel("Workflow status for Marcus Okafor"),
+  ).toHaveValue("prospect");
+  await expect(
+    focusedSpeaker.getByText("Invite to speaker portal", { exact: true }),
+  ).toBeVisible();
+  const pendingMarcusInvitation = page
+    .locator("section")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Speaker invitations awaiting acceptance",
+      }),
+    })
+    .filter({ hasText: "marcus.speaker@sbek-test.example.com" });
+  await expect(pendingMarcusInvitation).toHaveCount(0);
 
   await page.getByRole("link", { name: "Speaker Network" }).click();
   await expect(

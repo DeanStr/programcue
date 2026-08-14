@@ -2,7 +2,10 @@ import { z } from "zod";
 
 import { CommunicationDraftService } from "~/modules/communications/communication-draft-service.server";
 import { CommunicationTemplateService } from "~/modules/communications/communication-template-service.server";
-import { SpeakerService } from "~/modules/speakers/speaker-service.server";
+import {
+  SpeakerAdminStateError,
+  SpeakerService,
+} from "~/modules/speakers/speaker-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import type { OrganisationAdministrator } from "~/platform/auth/organisation.server";
 import {
@@ -98,6 +101,11 @@ export class CrmOutreachService {
   ) {
     const personId = crmPersonIdSchema.parse(rawPersonId);
     const targetEventId = z.string().trim().min(1).max(128).parse(rawEventId);
+    const idempotencyKey = z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9._:-]{8,128}$/)
+      .parse(rawIdempotencyKey);
     const event = await this.env.DB.prepare(
       `SELECT id FROM events
         WHERE id = ? AND organisation_id = ?
@@ -106,24 +114,29 @@ export class CrmOutreachService {
       .bind(targetEventId, viewer.organisationId)
       .first();
     if (!event) throw new Response("Target event not found.", { status: 404 });
-    const contact = await this.getContact(viewer, personId);
-    const invitation = await new SpeakerService(this.env).createManualSpeaker(
-      eventViewer(viewer, targetEventId),
-      {
-        idempotencyKey: z
-          .string()
-          .trim()
-          .regex(/^[A-Za-z0-9._:-]{8,128}$/)
-          .parse(rawIdempotencyKey),
-        name: contact.name,
-        email: contact.email,
-      },
-    );
-    return {
-      eventId: targetEventId,
-      personId: invitation.personId,
-      accepted: invitation.accepted,
-    };
+    await this.getContact(viewer, personId);
+    try {
+      return await new SpeakerService(this.env).addExistingSpeakerProspect(
+        {
+          personId: viewer.personId,
+          name: viewer.name,
+          email: viewer.email,
+          role: viewer.role,
+          organisationId: viewer.organisationId,
+          eventId: targetEventId,
+          demo: viewer.demo,
+        },
+        {
+          personId,
+          idempotencyKey,
+        },
+      );
+    } catch (error) {
+      if (error instanceof SpeakerAdminStateError) {
+        throw new CrmStateError(error.message, error.status);
+      }
+      throw error;
+    }
   }
 
   async createDraft(viewer: OrganisationAdministrator, rawInput: unknown) {

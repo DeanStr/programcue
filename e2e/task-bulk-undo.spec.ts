@@ -38,6 +38,62 @@ async function selectSpeaker(page: import("@playwright/test").Page) {
   ]);
 }
 
+async function selectAdministrator(page: import("@playwright/test").Page) {
+  await page.context().addCookies([
+    {
+      name: "program_cue_demo_identity",
+      value: "administrator",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+}
+
+test("task dashboard filters visible work and keeps template creation open", async ({
+  page,
+}) => {
+  await selectAdministrator(page);
+  await waitForInterface(page, "/admin/tasks");
+  const filters = page.getByRole("region", { name: "Filter assigned work" });
+  const assignedWork = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "Assigned work" }),
+  });
+  const templateCreation = page.getByRole("region", {
+    name: "Create task template",
+  });
+
+  await expect(filters.getByLabel("Status")).toBeVisible();
+  await expect(templateCreation.getByLabel("Due date anchor")).toBeVisible();
+  await expect(
+    templateCreation.getByRole("button", { name: "Create template" }),
+  ).toBeVisible();
+
+  await filters.getByLabel("Status").selectOption("completed");
+  await filters.getByRole("button", { name: "Apply filters" }).click();
+  await expect(page).toHaveURL(/state=completed/u);
+  await expect(page.getByText("Showing 1 of 3 tasks")).toBeVisible();
+  await expect(
+    assignedWork.getByText("Complete your speaker profile", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    assignedWork.getByText("Upload presentation slides", { exact: true }),
+  ).toHaveCount(0);
+
+  await filters.getByLabel("Status").selectOption("overdue");
+  await filters.getByLabel("Task type").selectOption("file_upload");
+  await filters.getByRole("button", { name: "Apply filters" }).click();
+  await expect(page).toHaveURL(/state=overdue/u);
+  await expect(page).toHaveURL(/type=file_upload/u);
+  await expect(
+    assignedWork.getByText("Upload presentation slides", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    assignedWork.getByText("Complete your speaker profile", { exact: true }),
+  ).toHaveCount(0);
+});
+
 test("task status bulk actions require an exact preview and can be cancelled", async ({
   page,
 }) => {
@@ -118,9 +174,11 @@ test("a speaker can undo a reversible task completion from its status notice", a
   await expect(
     actionNotice.getByText("Task completion undone.", { exact: true }),
   ).toBeVisible();
+  await expect(task.getByRole("checkbox")).not.toBeChecked();
   await expect(
-    task.getByLabel("Not started status", { exact: true }),
+    task.getByRole("button", { name: "Complete task" }),
   ).toBeVisible();
+  await expect(task.getByText("Completed", { exact: true })).toHaveCount(0);
 });
 
 test("speaker task evidence uses the signed direct uploader", async ({
@@ -141,4 +199,85 @@ test("speaker task evidence uses the signed direct uploader", async ({
   await expect(
     task.locator('input[name="intent"][value="upload-task"]'),
   ).toHaveCount(0);
+});
+
+test("deliverable comments preserve author and event-local timestamps across roles", async ({
+  page,
+}) => {
+  const speakerMessage = "Draft deck - final version coming Friday.";
+  const administratorReply = "Thanks — the programme team will review it.";
+  await selectSpeaker(page);
+  await waitForInterface(page, "/participant/tasks");
+  let task = page.locator("article.speaker-task").filter({
+    hasText: "Upload presentation slides",
+  });
+  const speakerComposer = task.locator("details.speaker-task-comment");
+  await speakerComposer.locator("summary").click();
+  await speakerComposer
+    .getByRole("textbox", { name: "Message" })
+    .fill(speakerMessage);
+  await speakerComposer.getByRole("button", { name: "Send" }).click();
+  let comment = task.locator("blockquote.task-comment").filter({
+    hasText: speakerMessage,
+  });
+  await expect(comment).toContainText("Priya Shah");
+  await expect(comment.locator("time")).toHaveAttribute(
+    "data-exact-time",
+    /America\/Toronto/,
+  );
+
+  await selectAdministrator(page);
+  await waitForInterface(page, "/admin/tasks");
+  const row = page.getByRole("row").filter({
+    has: page.getByText("Upload presentation slides", { exact: true }),
+  });
+  await row
+    .locator("details")
+    .filter({ hasText: "1 message" })
+    .locator("summary")
+    .click();
+  comment = row.locator("blockquote.task-comment").filter({
+    hasText: speakerMessage,
+  });
+  await expect(comment).toContainText("Priya Shah");
+  await expect(comment.locator("time")).toHaveAttribute(
+    "data-exact-time",
+    /America\/Toronto/,
+  );
+
+  const administratorComposer = row.locator("details").filter({
+    hasText: "Add comment",
+  });
+  await administratorComposer.locator("summary").click();
+  await administratorComposer
+    .getByRole("textbox", { name: "Message" })
+    .fill(administratorReply);
+  await administratorComposer
+    .getByRole("button", { name: "Send comment" })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Comment added." }),
+  ).toBeVisible();
+  comment = row.locator("blockquote.task-comment").filter({
+    hasText: administratorReply,
+  });
+  await expect(comment).toContainText("Jordan Alvarez");
+  await expect(comment.locator("time")).toHaveAttribute(
+    "data-exact-time",
+    /America\/Toronto/,
+  );
+
+  await selectSpeaker(page);
+  await waitForInterface(page, "/participant/tasks");
+  task = page.locator("article.speaker-task").filter({
+    hasText: "Upload presentation slides",
+  });
+  comment = task.locator("blockquote.task-comment").filter({
+    hasText: administratorReply,
+  });
+  await expect(comment).toContainText("Jordan Alvarez");
+  await expect(comment.locator("time")).toHaveAttribute(
+    "data-exact-time",
+    /America\/Toronto/,
+  );
 });

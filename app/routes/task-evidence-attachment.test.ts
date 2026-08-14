@@ -2,7 +2,11 @@ import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { completeTestDirectUpload } from "~/modules/files/direct-upload.test-helper";
+import {
+  acceptTestFileScanDispatch,
+  completeTestDirectUpload,
+} from "~/modules/files/direct-upload.test-helper";
+import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
@@ -357,5 +361,145 @@ describe("task-evidence attachment resource", () => {
         .first(),
     ).toMatchObject({ status: "deleted", uploadStatus: "failed" });
     expect(await workerEnv.FILES.get(stored!.objectKey)).toBeNull();
+  });
+
+  it("discards only a raced replacement when canonical evidence becomes inconsistent", async () => {
+    const files = new FileService(workerEnv);
+    await workerEnv.DB.batch([
+      workerEnv.DB.prepare(
+        "DELETE FROM task_evidence WHERE task_id = ? AND event_id = ?",
+      ).bind(taskId, eventId),
+      workerEnv.DB.prepare(
+        `UPDATE task_instances
+            SET status = 'not_started', evidence_json = NULL,
+                submitted_at = NULL, completed_at = NULL,
+                revision = revision + 1, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      ).bind(taskId, eventId),
+    ]);
+    const first = await completeTestDirectUpload(
+      workerEnv,
+      speaker,
+      {
+        targetType: "task",
+        targetId: taskId,
+        assetKind: "task_evidence",
+      },
+      new File(["%PDF-1.7 first"], "slides-v1.pdf", {
+        type: "application/pdf",
+      }),
+    );
+    const firstAttachment = await invoke(
+      jsonRequest({
+        taskId,
+        assetId: first.assetId,
+        versionId: first.versionId,
+      }),
+    );
+    expect([200, 207]).toContain(firstAttachment.status);
+    await files.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        workerEnv,
+        eventId,
+        first.versionId,
+      )),
+      eventId,
+      versionId: first.versionId,
+      provider: "test-scanner",
+      callbackId: `callback-${first.versionId}`,
+      status: "clean",
+      result: { verdict: "clean" },
+    });
+
+    const replacement = await completeTestDirectUpload(
+      workerEnv,
+      speaker,
+      {
+        targetType: "task",
+        targetId: taskId,
+        assetKind: "task_evidence",
+      },
+      new File(["%PDF-1.7 second"], "slides-v2.pdf", {
+        type: "application/pdf",
+      }),
+    );
+    expect(replacement.assetId).toBe(first.assetId);
+    const replacementRow = await workerEnv.DB.prepare(
+      "SELECT object_key AS objectKey FROM file_versions WHERE id = ?",
+    )
+      .bind(replacement.versionId)
+      .first<{ objectKey: string }>();
+    await files.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        workerEnv,
+        eventId,
+        replacement.versionId,
+      )),
+      eventId,
+      versionId: replacement.versionId,
+      provider: "test-scanner",
+      callbackId: `callback-${replacement.versionId}`,
+      status: "clean",
+      result: { verdict: "clean" },
+    });
+    expect(
+      await workerEnv.DB.prepare(
+        "SELECT current_version_id AS currentVersionId FROM file_assets WHERE id = ?",
+      )
+        .bind(first.assetId)
+        .first(),
+    ).toEqual({ currentVersionId: replacement.versionId });
+
+    await workerEnv.DB.prepare(
+      `UPDATE task_evidence
+          SET status = 'superseded'
+        WHERE task_id = ? AND event_id = ?
+          AND file_asset_id = ?
+          AND json_extract(evidence_json, '$.fileVersionId') = ?`,
+    )
+      .bind(taskId, eventId, first.assetId, first.versionId)
+      .run();
+    const conflicted = await invoke(
+      jsonRequest({
+        taskId,
+        assetId: replacement.assetId,
+        versionId: replacement.versionId,
+      }),
+    );
+    expect(conflicted.status).toBe(409);
+    expect(await conflicted.json()).toMatchObject({ discarded: true });
+
+    expect(
+      await workerEnv.DB.prepare(
+        `SELECT asset.status, asset.current_version_id AS currentVersionId,
+                first.deleted_at AS firstDeletedAt,
+                first.replaced_at AS firstReplacedAt,
+                replacement.deleted_at AS replacementDeletedAt
+           FROM file_assets asset
+           JOIN file_versions first
+             ON first.id = ? AND first.asset_id = asset.id
+           JOIN file_versions replacement
+             ON replacement.id = ? AND replacement.asset_id = asset.id
+          WHERE asset.id = ? AND asset.event_id = ?`,
+      )
+        .bind(first.versionId, replacement.versionId, first.assetId, eventId)
+        .first(),
+    ).toMatchObject({
+      status: "active",
+      currentVersionId: first.versionId,
+      firstDeletedAt: null,
+      firstReplacedAt: null,
+      replacementDeletedAt: expect.any(Number),
+    });
+    expect(
+      await workerEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM task_evidence
+          WHERE task_id = ? AND file_asset_id = ?
+            AND json_extract(evidence_json, '$.fileVersionId') = ?`,
+      )
+        .bind(taskId, first.assetId, first.versionId)
+        .first(),
+    ).toEqual({ count: 1 });
+    expect(await workerEnv.FILES.get(replacementRow!.objectKey)).toBeNull();
   });
 });

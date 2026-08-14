@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
 import {
   chooseInitialEvent,
   currentEventCookie,
@@ -19,6 +20,42 @@ function demoRequest(cookie = "program_cue_demo_identity=administrator") {
   return new Request("https://programcue.test/admin/event", {
     headers: { cookie },
   });
+}
+
+function productionEvaluationEnvironment() {
+  return {
+    ...workerEnv,
+    APP_ENV: "production",
+    DEMO_MODE: "false",
+    EVALUATION_MODE: "true",
+    EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+    EVALUATION_SESSION_SECRET:
+      "evaluation-session-secret-with-more-than-thirty-two-characters",
+  } as CloudflareEnvironment;
+}
+
+async function selectedEvaluationRequest() {
+  const testEnv = productionEvaluationEnvironment();
+  await testEnv.DB.prepare(
+    `INSERT INTO audit_events (
+       id, organisation_id, event_id, actor_id, action,
+       entity_type, entity_id, metadata_json, created_at
+     ) VALUES (?, 'org-future-events', 'evt-foe-2025', 'test-operator',
+               'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
+               unixepoch())`,
+  )
+    .bind(crypto.randomUUID())
+    .run();
+  const cookie = (await evaluationSessionCookie(testEnv, "organizer")).split(
+    ";",
+    1,
+  )[0]!;
+  return {
+    env: testEnv,
+    request: new Request("https://app.programcue.com/events/select", {
+      headers: { cookie },
+    }),
+  };
 }
 
 beforeEach(async () => {
@@ -55,6 +92,46 @@ beforeEach(async () => {
 });
 
 describe("current event context", () => {
+  it("lists evaluator-created events in the dedicated organisation", async () => {
+    const evaluation = await selectedEvaluationRequest();
+    const events = await listAuthorisedEvents(
+      evaluation.request,
+      evaluation.env,
+      ["administrator"],
+    );
+    expect(events.map((event) => event.eventId)).toEqual(
+      expect.arrayContaining(["evt-foe-2025", "evt-current-context-two"]),
+    );
+    expect(
+      events.every((event) => event.organisationId === "org-future-events"),
+    ).toBe(true);
+  });
+
+  it("fails the evaluator event list closed after any cross-organisation identity link", async () => {
+    const evaluation = await selectedEvaluationRequest();
+    await evaluation.env.DB.batch([
+      evaluation.env.DB.prepare(
+        `INSERT INTO organisations (id, name, slug)
+         VALUES ('org-evaluation-list-outside', 'Outside list',
+                 'evaluation-list-outside')`,
+      ),
+      evaluation.env.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role,
+           invited_at, accepted_at, created_at
+         ) VALUES ('membership-evaluation-list-outside',
+                   'org-evaluation-list-outside', NULL, 'person-demo-admin',
+                   'administrator', unixepoch(), unixepoch(), unixepoch())`,
+      ),
+    ]);
+
+    await expect(
+      listAuthorisedEvents(evaluation.request, evaluation.env, [
+        "administrator",
+      ]),
+    ).rejects.toMatchObject({ status: 503 });
+  });
+
   it("uses only a configured authorised default or an unambiguous sole event", () => {
     const events = [{ eventId: "event-a" }, { eventId: "event-b" }];
     expect(chooseInitialEvent(events, "event-b")).toBe("event-b");

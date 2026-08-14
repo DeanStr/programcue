@@ -234,8 +234,9 @@ export type ContentFileVersion = {
   signatureStatus: string;
   scanStatus: string;
   releasedAt: number | null;
-  createdAt: number;
+  uploadedAt: number | null;
   current: boolean;
+  latest: boolean;
 };
 
 export type ContentFileAsset = {
@@ -270,7 +271,13 @@ export class ContentManagementService {
         400,
       );
     }
-    const [version, sessions, assets, fileCount] = await Promise.all([
+    const [event, version, sessions, assets, fileCount] = await Promise.all([
+      this.env.DB.prepare(
+        `SELECT timezone FROM events
+          WHERE id = ? AND organisation_id = ?`,
+      )
+        .bind(viewer.eventId, viewer.organisationId)
+        .first<{ timezone: string }>(),
       this.env.DB.prepare(
         `SELECT version.id, version.version_number AS versionNumber,
                 version.status, version.revision
@@ -348,11 +355,15 @@ export class ContentManagementService {
                 current.signature_status AS currentSignatureStatus,
                 current.scan_status AS currentScanStatus,
                 current.released_at AS currentReleasedAt,
-                current.created_at AS currentCreatedAt,
+                current.uploaded_at AS currentUploadedAt,
                 (SELECT COUNT(*) FROM file_versions retained
                   WHERE retained.event_id = asset.event_id
                     AND retained.asset_id = asset.id
                     AND retained.deleted_at IS NULL) AS versionCount,
+                (SELECT MAX(retained.version_number) FROM file_versions retained
+                  WHERE retained.event_id = asset.event_id
+                    AND retained.asset_id = asset.id
+                    AND retained.deleted_at IS NULL) AS latestVersionNumber,
                 COALESCE(owner.display_name, (
                   SELECT person.display_name
                     FROM task_instances task
@@ -402,6 +413,7 @@ export class ContentManagementService {
         .all<
           Omit<ContentFileAsset, "versions" | "versionCount"> & {
             versionCount: number;
+            latestVersionNumber: number | null;
             currentFileVersionId: string | null;
             currentVersionNumber: number | null;
             currentFilename: string | null;
@@ -410,7 +422,7 @@ export class ContentManagementService {
             currentSignatureStatus: string | null;
             currentScanStatus: string | null;
             currentReleasedAt: number | null;
-            currentCreatedAt: number | null;
+            currentUploadedAt: number | null;
           }
         >(),
       this.env.DB.prepare(
@@ -423,6 +435,12 @@ export class ContentManagementService {
         .bind(viewer.organisationId, viewer.eventId)
         .first<{ total: number }>(),
     ]);
+    if (!event) {
+      throw new ContentManagementStateError(
+        "The selected event is unavailable.",
+        404,
+      );
+    }
     if (
       !fileCount ||
       !Number.isSafeInteger(fileCount.total) ||
@@ -440,6 +458,7 @@ export class ContentManagementService {
       );
     }
     return {
+      eventTimezone: event.timezone,
       version: version ?? null,
       sessions: sessions.results.map((session) => ({
         ...session,
@@ -458,7 +477,8 @@ export class ContentManagementService {
             currentSignatureStatus,
             currentScanStatus,
             currentReleasedAt,
-            currentCreatedAt,
+            currentUploadedAt,
+            latestVersionNumber,
             ...asset
           }) => {
             if (asset.currentVersionId === null) {
@@ -472,7 +492,7 @@ export class ContentManagementService {
               currentUploadStatus === null ||
               currentSignatureStatus === null ||
               currentScanStatus === null ||
-              currentCreatedAt === null
+              latestVersionNumber === null
             ) {
               throw new Error(
                 `File asset ${asset.id} references unavailable current version ${asset.currentVersionId}.`,
@@ -490,8 +510,9 @@ export class ContentManagementService {
                   signatureStatus: currentSignatureStatus,
                   scanStatus: currentScanStatus,
                   releasedAt: currentReleasedAt,
-                  createdAt: currentCreatedAt,
+                  uploadedAt: currentUploadedAt,
                   current: true,
+                  latest: currentVersionNumber === latestVersionNumber,
                 },
               ],
             };
@@ -539,8 +560,15 @@ export class ContentManagementService {
                 version.signature_status AS signatureStatus,
                 version.scan_status AS scanStatus,
                 version.released_at AS releasedAt,
-                version.created_at AS createdAt,
-                version.id = asset.current_version_id AS current
+                version.uploaded_at AS uploadedAt,
+                version.id = asset.current_version_id AS current,
+                version.version_number = (
+                  SELECT MAX(latest.version_number)
+                    FROM file_versions latest
+                   WHERE latest.event_id = version.event_id
+                     AND latest.asset_id = version.asset_id
+                     AND latest.deleted_at IS NULL
+                ) AS latest
            FROM file_versions version
            JOIN file_assets asset
              ON asset.id = version.asset_id AND asset.event_id = version.event_id
@@ -558,7 +586,12 @@ export class ContentManagementService {
           FILE_LIBRARY_PAGE_SIZE + 1,
           (page - 1) * FILE_LIBRARY_PAGE_SIZE,
         )
-        .all<Omit<ContentFileVersion, "current"> & { current: number }>(),
+        .all<
+          Omit<ContentFileVersion, "current" | "latest"> & {
+            current: number;
+            latest: number;
+          }
+        >(),
     ]);
     if (!asset) {
       throw new ContentManagementStateError(
@@ -575,9 +608,10 @@ export class ContentManagementService {
     return {
       versions: versions.results
         .slice(0, FILE_LIBRARY_PAGE_SIZE)
-        .map(({ current, ...version }) => ({
+        .map(({ current, latest, ...version }) => ({
           ...version,
           current: Boolean(current),
+          latest: Boolean(latest),
         })),
       page,
       total: asset.total,
@@ -1002,6 +1036,7 @@ export class ContentManagementService {
       `SELECT asset.id AS assetId, version.id AS versionId,
               version.object_key AS objectKey,
               version.object_etag AS objectEtag,
+              version.detected_content_type AS contentType,
               version.size_bytes AS sizeBytes,
               version.original_filename AS filename,
               version.created_at AS createdAt,
@@ -1043,7 +1078,12 @@ export class ContentManagementService {
         ORDER BY asset.id`,
     )
       .bind(viewer.organisationId, viewer.eventId, ...assetIds)
-      .all<z.infer<typeof zipManifestEntrySchema> & { objectKey: string }>();
+      .all<
+        z.infer<typeof zipManifestEntrySchema> & {
+          objectKey: string;
+          contentType: string | null;
+        }
+      >();
   }
 
   async previewZip(viewer: Viewer, rawInput: unknown) {
@@ -1073,7 +1113,7 @@ export class ContentManagementService {
       );
     }
     const manifest = rows.results.map(
-      ({ objectKey: _objectKey, ...row }) => row,
+      ({ objectKey: _objectKey, contentType: _contentType, ...row }) => row,
     );
     return {
       groupBy: input.groupBy,
@@ -1098,7 +1138,7 @@ export class ContentManagementService {
       expected.map((entry) => entry.assetId),
     );
     const current = rows.results.map(
-      ({ objectKey: _objectKey, ...row }) => row,
+      ({ objectKey: _objectKey, contentType: _contentType, ...row }) => row,
     );
     const unchanged =
       current.length === expected.length &&
@@ -1193,6 +1233,11 @@ export class ContentManagementService {
         404,
       );
     }
+    if (!row.contentType?.trim()) {
+      throw new Error(
+        "The released private file is missing its detected content type.",
+      );
+    }
     const object = await this.requireBucket().get(row.objectKey);
     if (
       !object ||
@@ -1205,10 +1250,79 @@ export class ContentManagementService {
     }
     return new Response(object.body, {
       headers: {
-        "content-type": "application/octet-stream",
+        "content-type": row.contentType,
         "content-disposition": `attachment; filename="${safeDownloadName(row.filename)}"`,
         "content-length": String(object.size),
         etag: row.objectEtag,
+        "cache-control": "private, no-store",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  }
+
+  async downloadFileVersion(
+    viewer: Viewer,
+    assetId: string,
+    versionId: string,
+  ) {
+    requireAdministrator(viewer);
+    const version = await this.env.DB.prepare(
+      `SELECT version.object_key AS objectKey,
+              version.object_etag AS objectEtag,
+              version.original_filename AS filename,
+              version.detected_content_type AS contentType,
+              version.size_bytes AS sizeBytes
+         FROM file_assets asset
+         JOIN events event
+           ON event.id = asset.event_id AND event.organisation_id = ?
+         JOIN file_versions version
+           ON version.id = ? AND version.asset_id = asset.id
+          AND version.event_id = asset.event_id
+        WHERE asset.id = ? AND asset.event_id = ?
+          AND asset.status = 'active'
+          AND version.upload_status = 'uploaded'
+          AND version.signature_status = 'valid'
+          AND version.scan_status = 'clean'
+          AND version.released_at IS NOT NULL
+          AND version.deleted_at IS NULL
+          AND version.object_etag IS NOT NULL
+        LIMIT 1`,
+    )
+      .bind(viewer.organisationId, versionId, assetId, viewer.eventId)
+      .first<{
+        objectKey: string;
+        objectEtag: string;
+        filename: string;
+        contentType: string | null;
+        sizeBytes: number;
+      }>();
+    if (!version) {
+      throw new ContentManagementStateError(
+        "The requested file version is unavailable, quarantined or outside this event.",
+        404,
+      );
+    }
+    if (!version.contentType?.trim()) {
+      throw new Error(
+        "The released private file is missing its detected content type.",
+      );
+    }
+    const object = await this.requireBucket().get(version.objectKey);
+    if (
+      !object ||
+      object.httpEtag !== version.objectEtag ||
+      object.size !== version.sizeBytes
+    ) {
+      throw new Error(
+        "The released private R2 object is missing or no longer matches its scanned version.",
+      );
+    }
+    return new Response(object.body, {
+      headers: {
+        "content-type": version.contentType,
+        "content-disposition": `attachment; filename="${safeDownloadName(version.filename)}"`,
+        "content-length": String(object.size),
+        etag: version.objectEtag,
         "cache-control": "private, no-store",
         "x-content-type-options": "nosniff",
       },

@@ -94,10 +94,17 @@ test("blank event creation keeps templates empty and makes repository authority 
   await waitForInterface(page, "/admin/events/new");
   await expect(page.getByRole("heading", { name: "New event" })).toBeVisible();
   await expect(page.getByText("Empty by design")).toBeVisible();
+  await expect(page.getByLabel("Reuse verified sender")).toHaveValue("");
+  await expect(
+    page.getByLabel("Reuse verified sender").getByRole("option", {
+      name: "None — configure later",
+    }),
+  ).toHaveCount(1);
   await expect(
     page.getByRole("radio", { name: /Cloudflare D1/ }),
   ).toBeChecked();
   await page.getByRole("radio", { name: /Airtable/ }).check();
+  await expect(page.getByLabel("Reuse verified sender")).toHaveCount(0);
   await expect(page.getByLabel("Personal access token")).toBeVisible();
   await expect(page.getByLabel("Base ID")).toBeVisible();
   await page.getByRole("radio", { name: /Cloudflare D1/ }).check();

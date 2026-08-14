@@ -306,6 +306,10 @@ describe("evaluation vertical slice", () => {
           WHERE event_id = ? AND submission_id = 'eval-test-submission'`,
       ).bind(admin.eventId),
       env.DB.prepare(
+        `UPDATE people SET email = 'alex.submitter@example.com'
+          WHERE id = 'person-demo-submitter'`,
+      ),
+      env.DB.prepare(
         `INSERT OR IGNORE INTO form_definitions (id, event_id, name, kind, status, public_slug, min_speakers, max_speakers, access_mode, revision, created_by_person_id, created_at, updated_at) VALUES ('eval-test-form', ?, 'Evaluation fixture', 'submission', 'published', 'eval-test-form', 1, 4, 'email_verified', 1, ?, unixepoch(), unixepoch())`,
       ).bind(admin.eventId, admin.personId),
       env.DB.prepare(
@@ -1047,6 +1051,12 @@ describe("evaluation vertical slice", () => {
 
     it("persists accepted-speaker sign-in intent before Queue delivery and recovers it exactly", async () => {
       await resetEvaluationFixture();
+      const deliveryEmail = "alex.submitter@programcue.dev";
+      await env.DB.prepare(
+        `UPDATE people SET email = ? WHERE id = 'person-demo-submitter'`,
+      )
+        .bind(deliveryEmail)
+        .run();
       await env.DB.prepare(
         `DELETE FROM memberships
           WHERE event_id = ? AND person_id = 'person-demo-submitter'
@@ -1138,7 +1148,7 @@ describe("evaluation vertical slice", () => {
       );
       expect(intent?.identifier).not.toContain("person-demo-submitter");
       expect(JSON.parse(intent!.value)).toEqual({
-        email: "alex.submitter@example.com",
+        email: deliveryEmail,
       });
 
       const replay = await service.decide(admin, input, commandId);
@@ -1183,6 +1193,10 @@ describe("evaluation vertical slice", () => {
 
     it("rotates and durably requeues an expired accepted-speaker invitation", async () => {
       await resetEvaluationFixture();
+      await env.DB.prepare(
+        `UPDATE people SET email = 'alex.submitter@programcue.dev'
+          WHERE id = 'person-demo-submitter'`,
+      ).run();
       await env.DB.prepare(
         `DELETE FROM memberships
           WHERE event_id = ? AND person_id = 'person-demo-submitter'

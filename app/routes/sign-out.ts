@@ -7,8 +7,8 @@ import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { DEMO_IDENTITY_COOKIE } from "~/platform/demo/demo-identities";
 import {
-  clearEvaluationSessionCookie,
   readEvaluationSession,
+  renewedEvaluationSessionCookie,
 } from "~/platform/evaluation/evaluation-session.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
@@ -31,9 +31,17 @@ export async function action({ request, context }: Route.ActionArgs) {
     return redirect("/demo", { status: 303, headers });
   }
 
-  if (runtime.evaluation && (await readEvaluationSession(request, env))) {
-    const headers = new Headers();
-    headers.append("set-cookie", clearEvaluationSessionCookie());
+  const evaluationSession = runtime.evaluation
+    ? await readEvaluationSession(request, env)
+    : null;
+  if (evaluationSession) {
+    const result = await signOutSession(env, request);
+    if (!result.ok) return result;
+    const headers = new Headers(result.headers);
+    headers.append(
+      "set-cookie",
+      await renewedEvaluationSessionCookie(env, evaluationSession, null),
+    );
     headers.append("set-cookie", clearCurrentEventCookie(env));
     return redirect("/evaluate", { status: 303, headers });
   }

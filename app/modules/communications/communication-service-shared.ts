@@ -7,6 +7,7 @@ import {
 } from "./communication-schema";
 import {
   formatEventDateMarkers,
+  formatTaskDueDate,
   mergeTemplateVariables,
   representativeMergeValues,
   type MergeValues,
@@ -198,6 +199,14 @@ const sourceVariableRequirements: Record<
     ]),
     categories: new Set(["task_reminder"]),
   },
+  "task.dueDate": {
+    audiences: new Set([
+      "incomplete_speakers",
+      "due_speakers",
+      "overdue_speakers",
+    ]),
+    categories: new Set(["task_reminder"]),
+  },
 };
 
 export function sourceVariables(
@@ -332,20 +341,42 @@ export async function snapshotSourceValues(
     }
   }
 
-  if (variables.includes("task.title")) {
+  if (variables.includes("task.title") || variables.includes("task.dueDate")) {
     const rows = await env.DB.prepare(
-      `SELECT id, title FROM task_instances
-        WHERE event_id = ? AND id IN (SELECT value FROM json_each(?))`,
+      `SELECT task.id, task.title, task.due_at AS dueAt,
+              event.timezone AS eventTimezone
+         FROM task_instances task
+         JOIN events event ON event.id = task.event_id
+        WHERE task.event_id = ?
+          AND task.id IN (SELECT value FROM json_each(?))`,
     )
       .bind(eventId, JSON.stringify(sourceIds))
-      .all<{ id: string; title: string }>();
+      .all<{
+        id: string;
+        title: string;
+        dueAt: number | null;
+        eventTimezone: string;
+      }>();
     if (rows.results.length !== sourceIds.length) {
       throw new CommunicationStateError(
         "A task required by this audience is no longer available. Preview again.",
       );
     }
-    for (const row of rows.results)
-      snapshots.get(row.id)!["task.title"] = row.title;
+    for (const row of rows.results) {
+      const values = snapshots.get(row.id)!;
+      if (variables.includes("task.title")) values["task.title"] = row.title;
+      if (variables.includes("task.dueDate")) {
+        if (row.dueAt === null) {
+          throw new CommunicationStateError(
+            "A due date required by this task-reminder template is unavailable. Preview again after assigning one.",
+          );
+        }
+        values["task.dueDate"] = formatTaskDueDate(
+          row.dueAt,
+          row.eventTimezone,
+        );
+      }
+    }
   }
   return snapshots;
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   type AcceptedEvent,
@@ -154,9 +155,10 @@ export async function resendAcceptedSpeakerInvitation(input: {
       "The speaker invitation changed after this page loaded. Refresh before renewing it.",
     );
   }
-  if (!z.email().safeParse(speaker.email).success) {
+  const deliveryIssue = emailDeliveryIssue(speaker.email, env.APP_ENV);
+  if (deliveryIssue) {
     throw new EvaluationStateError(
-      "The accepted speaker must have a valid email address before renewing the invitation.",
+      `The accepted speaker must have a deliverable email address before renewing the invitation: ${deliveryIssue.toLowerCase()}.`,
     );
   }
   const readiness = await acceptedSpeakerInvitationReadiness({

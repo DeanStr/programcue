@@ -35,6 +35,10 @@ describe("production evaluation fixture reset command", () => {
             fixtureVerificationTokens: 0,
             verifiedSenders: 1,
             workersAiSettings: 1,
+            fixtureOrganisationAdministrators: 1,
+            fixtureOrganisationMemberships: 2,
+            fixtureApplicantMemberships: 0,
+            nonDiscardedExtraEvents: 0,
           },
         });
       },

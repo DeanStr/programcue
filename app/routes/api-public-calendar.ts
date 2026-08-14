@@ -48,7 +48,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     if (query.itinerary) {
       requestedIds = await service.itinerary(
         programme,
-        await publicItineraryIdentity(request, env),
+        await publicItineraryIdentity(request, env, programme.event.id),
       );
     } else if (query.share !== undefined) {
       try {

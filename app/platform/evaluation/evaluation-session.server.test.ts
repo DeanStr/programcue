@@ -5,10 +5,15 @@ import { ensureDemoData } from "~/platform/demo/seed.server";
 
 import {
   EVALUATION_SESSION_COOKIE,
+  activateEvaluationApplicantAccount,
   evaluationAccessCodeMatches,
+  evaluationPersonForSession,
   evaluationSessionCookie,
   readEvaluationSession,
+  renewedEvaluationSessionCookie,
   requireEvaluationMode,
+  resolveEvaluationPerson,
+  selectedEvaluationPerson,
 } from "./evaluation-session.server";
 
 function environment() {
@@ -45,6 +50,7 @@ async function recordFixtureReset(
       JSON.stringify({ status }),
     )
     .run();
+  return fixtureGeneration;
 }
 
 function cookieHeader(setCookie: string) {
@@ -132,6 +138,60 @@ describe.sequential("production evaluation sessions", () => {
     ).resolves.toBeNull();
   });
 
+  it("keeps the already-validated fixture generation when a session is renewed across a reset race", async () => {
+    const testEnv = environment();
+    await recordFixtureReset(testEnv, "fixture-generation-before-renewal");
+    const unlockedCookie = cookieHeader(
+      await evaluationSessionCookie(testEnv, null, 1_000),
+    );
+    const unlockedRequest = new Request("https://app.programcue.com/evaluate", {
+      headers: { cookie: unlockedCookie },
+    });
+    const unlockedSession = await readEvaluationSession(
+      unlockedRequest,
+      testEnv,
+      1_001,
+    );
+    expect(unlockedSession).toMatchObject({
+      fixtureGeneration: "fixture-generation-before-renewal",
+      identityKey: null,
+    });
+
+    await recordFixtureReset(testEnv, "fixture-generation-after-renewal");
+    const renewedCookie = cookieHeader(
+      await renewedEvaluationSessionCookie(
+        testEnv,
+        unlockedSession!,
+        "organizer",
+        1_002,
+      ),
+    );
+
+    await expect(
+      readEvaluationSession(
+        new Request("https://app.programcue.com/evaluate", {
+          headers: { cookie: renewedCookie },
+        }),
+        testEnv,
+        1_003,
+      ),
+    ).resolves.toBeNull();
+    const freshCookie = cookieHeader(
+      await evaluationSessionCookie(testEnv, "organizer", 1_002),
+    );
+    await expect(
+      readEvaluationSession(
+        new Request("https://app.programcue.com/evaluate", {
+          headers: { cookie: freshCookie },
+        }),
+        testEnv,
+        1_003,
+      ),
+    ).resolves.toMatchObject({
+      fixtureGeneration: "fixture-generation-after-renewal",
+    });
+  });
+
   it("fails closed while the latest fixture reset is incomplete", async () => {
     const testEnv = environment();
     await recordFixtureReset(testEnv, "completed-fixture-generation");
@@ -150,6 +210,109 @@ describe.sequential("production evaluation sessions", () => {
     await expect(
       readEvaluationSession(request, testEnv, 1_001),
     ).rejects.toMatchObject({ status: 503 });
+  });
+
+  it.each([
+    ["owner", "membership-demo-owner"],
+    ["organizer", "membership-demo-admin"],
+    ["chair", "membership-demo-committee_chair"],
+    ["reviewer", "membership-demo-evaluator"],
+    ["applicant", "membership-demo-submitter"],
+    ["speaker", "membership-demo-speaker"],
+  ] as const)(
+    "rejects showcase identity %s when its expected membership is revoked",
+    async (identityKey, membershipId) => {
+      const testEnv = environment();
+      await recordFixtureReset(testEnv);
+      await testEnv.DB.prepare(
+        "UPDATE memberships SET revoked_at = unixepoch() WHERE id = ?",
+      )
+        .bind(membershipId)
+        .run();
+
+      const rejected = await resolveEvaluationPerson(
+        testEnv,
+        identityKey,
+      ).catch((error: unknown) => error);
+      expect(rejected).toBeInstanceOf(Response);
+      expect((rejected as Response).status).toBe(503);
+      expect((rejected as Response).headers.get("cache-control")).toBe(
+        "no-store",
+      );
+    },
+  );
+
+  it("requires a showcase persona's exact role and event scope", async () => {
+    const testEnv = environment();
+    await recordFixtureReset(testEnv);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE memberships SET role = 'speaker'
+          WHERE id = 'membership-demo-evaluator'`,
+      ),
+      testEnv.DB.prepare(
+        `UPDATE memberships SET event_id = ?
+          WHERE id = 'membership-demo-owner'`,
+      ).bind("evt-foe-2025"),
+    ]);
+
+    await expect(
+      resolveEvaluationPerson(testEnv, "reviewer"),
+    ).rejects.toMatchObject({ status: 503 });
+    await expect(
+      resolveEvaluationPerson(testEnv, "owner"),
+    ).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("keeps the clean applicant and reviewer resolvable before scenario membership exists", async () => {
+    const testEnv = environment();
+    await recordFixtureReset(testEnv);
+
+    await expect(
+      resolveEvaluationPerson(testEnv, "sbek_applicant"),
+    ).resolves.toMatchObject({ personId: "person-sbek-speaker" });
+    await expect(
+      resolveEvaluationPerson(testEnv, "sbek_reviewer"),
+    ).resolves.toMatchObject({ personId: "person-sbek-reviewer" });
+  });
+
+  it("fails fast when a selected applicant loses its activated membership", async () => {
+    const testEnv = environment();
+    const fixtureGeneration = await recordFixtureReset(testEnv);
+    await activateEvaluationApplicantAccount(testEnv, fixtureGeneration);
+    const cookie = cookieHeader(
+      await evaluationSessionCookie(testEnv, "sbek_applicant"),
+    );
+    await testEnv.DB.prepare(
+      `DELETE FROM memberships
+        WHERE id = 'membership-production-evaluation-applicant-event'`,
+    ).run();
+
+    const rejected = await selectedEvaluationPerson(
+      new Request("https://app.programcue.com/apply/form", {
+        headers: { cookie },
+      }),
+      testEnv,
+    ).catch((error: unknown) => error);
+    expect(rejected).toBeInstanceOf(Response);
+    expect((rejected as Response).status).toBe(503);
+    expect((rejected as Response).headers.get("cache-control")).toBe(
+      "no-store",
+    );
+  });
+
+  it("keeps a gate-only evaluator session anonymous", async () => {
+    const testEnv = environment();
+    const fixtureGeneration = await recordFixtureReset(testEnv);
+
+    await expect(
+      evaluationPersonForSession(testEnv, {
+        version: 1,
+        identityKey: null,
+        fixtureGeneration,
+        expiresAt: 2_000,
+      }),
+    ).resolves.toBeNull();
   });
 
   it("does not turn missing evaluator secrets into ordinary access failures", async () => {

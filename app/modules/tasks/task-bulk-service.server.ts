@@ -7,6 +7,37 @@ import { TaskService, TaskStateError } from "./task-service.server";
 const taskBulkActionSchema = z.enum(["assign_template", "waive", "reopen"]);
 export type TaskBulkAction = z.infer<typeof taskBulkActionSchema>;
 
+const storedTemplateSnapshotSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  description: z.string().nullable(),
+  targetType: z.enum(["speaker", "session", "event"]),
+  taskType: z.enum([
+    "checklist",
+    "acknowledgement",
+    "short_form",
+    "file_upload",
+    "link_visit",
+    "administrator_only",
+  ]),
+  impact: z.enum(["critical", "high", "medium", "low"]),
+  evidenceMode: z.enum([
+    "none",
+    "checkbox",
+    "file",
+    "text",
+    "link",
+    "admin_approval",
+  ]),
+  dueAnchor: z.enum(["none", "acceptance", "session_start", "fixed"]),
+  dueOffsetMinutes: z.number().int().nullable(),
+  fixedDueAt: z.number().int().nullable(),
+  autoAssignOnAcceptance: z.number().int().min(0).max(1),
+  configurationJson: z.string(),
+  updatedAt: z.number().int().positive(),
+  dependencyIds: z.array(z.string().min(1)),
+});
+
 const previewInputSchema = z
   .object({
     action: taskBulkActionSchema,
@@ -83,6 +114,10 @@ const storedSummarySchema = z.object({
   invalidCount: z.number().int().nonnegative(),
 });
 
+const storedOperationResultSchema = storedSummarySchema.extend({
+  expectedTemplates: z.array(storedTemplateSnapshotSchema),
+});
+
 type TaskRow = {
   id: string;
   title: string;
@@ -108,6 +143,7 @@ export type TaskBulkOperation = {
   createdAt: number;
   completedAt: number | null;
   summary: z.infer<typeof storedSummarySchema>;
+  expectedTemplates: z.infer<typeof storedTemplateSnapshotSchema>[];
   items: Array<{
     id: string;
     status: string;
@@ -172,13 +208,9 @@ export class TaskBulkService {
         `SELECT DISTINCT person.id, person.display_name AS name, person.email
            FROM people person
            JOIN events event ON event.id = ? AND event.organisation_id = ?
-           LEFT JOIN memberships membership
-             ON membership.person_id = person.id AND membership.event_id = event.id
-            AND membership.role = 'speaker' AND membership.accepted_at IS NOT NULL
-            AND membership.revoked_at IS NULL
-           LEFT JOIN session_speakers session_speaker
-             ON session_speaker.person_id = person.id AND session_speaker.event_id = event.id
-          WHERE membership.id IS NOT NULL OR session_speaker.person_id IS NOT NULL
+           JOIN event_speaker_workflows workflow
+             ON workflow.person_id = person.id AND workflow.event_id = event.id
+            AND workflow.status IN ('prospect','invited','confirmed')
           ORDER BY person.display_name COLLATE NOCASE, person.id
           LIMIT ?`,
       )
@@ -255,14 +287,16 @@ export class TaskBulkService {
         errorMessage: string | null;
         resultJson: string;
       }>();
+    const { expectedTemplates, ...summary } = storedOperationResultSchema.parse(
+      parseJson(operation.resultJson, `Task bulk operation ${operation.id}`),
+    );
     return {
       id: operation.id,
       status: operation.status,
       createdAt: operation.createdAt,
       completedAt: operation.completedAt,
-      summary: storedSummarySchema.parse(
-        parseJson(operation.resultJson, `Task bulk operation ${operation.id}`),
-      ),
+      summary,
+      expectedTemplates,
       items: items.results.map(({ resultJson, ...item }) => ({
         ...item,
         result: storedItemSchema.parse(
@@ -331,6 +365,7 @@ export class TaskBulkService {
       result: z.infer<typeof storedItemSchema>;
     }> = [];
     let templateName: string | null = null;
+    let expectedTemplates: z.infer<typeof storedTemplateSnapshotSchema>[] = [];
 
     if (parsed.action === "assign_template") {
       const template = workspace.templates.find(
@@ -343,27 +378,25 @@ export class TaskBulkService {
       }
       templateName = template.name;
       const speakers = await this.env.DB.prepare(
-        `SELECT DISTINCT person.id, person.display_name AS name
+        `SELECT DISTINCT person.id, person.display_name AS name,
+                workflow.revision AS workflowRevision
            FROM people person
            JOIN events event ON event.id = ? AND event.organisation_id = ?
-           LEFT JOIN memberships membership
-             ON membership.person_id = person.id AND membership.event_id = event.id
-            AND membership.role = 'speaker' AND membership.accepted_at IS NOT NULL
-            AND membership.revoked_at IS NULL
-           LEFT JOIN session_speakers session_speaker
-             ON session_speaker.person_id = person.id AND session_speaker.event_id = event.id
+           JOIN event_speaker_workflows workflow
+             ON workflow.person_id = person.id AND workflow.event_id = event.id
+            AND workflow.status IN ('prospect','invited','confirmed')
           WHERE person.id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
-            AND (membership.id IS NOT NULL OR session_speaker.person_id IS NOT NULL)`,
+          `,
       )
         .bind(
           viewer.eventId,
           viewer.organisationId,
           JSON.stringify(parsed.recordIds),
         )
-        .all<{ id: string; name: string }>();
+        .all<{ id: string; name: string; workflowRevision: number }>();
       if (speakers.results.length !== parsed.recordIds.length) {
         throw new TaskBulkStateError(
-          "The selected speakers do not all belong to the current event.",
+          "The selected speakers are not all active in the current event roster.",
         );
       }
       const dependencies = await this.dependencyTemplates(
@@ -374,19 +407,74 @@ export class TaskBulkService {
         template.id,
         ...dependencies.map((row) => row.id),
       ];
-      const existing = await this.env.DB.prepare(
-        `SELECT template_id AS templateId, target_id AS personId
-           FROM task_instances
-          WHERE event_id = ? AND target_type = 'speaker'
-            AND target_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
-            AND template_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
-      )
-        .bind(
-          viewer.eventId,
-          JSON.stringify(parsed.recordIds),
-          JSON.stringify(relevantTemplateIds),
+      const [existing, storedTemplates, storedDependencies] = await Promise.all(
+        [
+          this.env.DB.prepare(
+            `SELECT template_id AS templateId, target_id AS personId
+             FROM task_instances
+            WHERE event_id = ? AND target_type = 'speaker'
+              AND target_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+              AND template_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
+          )
+            .bind(
+              viewer.eventId,
+              JSON.stringify(parsed.recordIds),
+              JSON.stringify(relevantTemplateIds),
+            )
+            .all<{ templateId: string; personId: string }>(),
+          this.env.DB.prepare(
+            `SELECT id, name, description, target_type AS targetType,
+                  task_type AS taskType, impact, evidence_mode AS evidenceMode,
+                  due_anchor AS dueAnchor,
+                  due_offset_minutes AS dueOffsetMinutes,
+                  fixed_due_at AS fixedDueAt,
+                  auto_assign_on_acceptance AS autoAssignOnAcceptance,
+                  configuration_json AS configurationJson,
+                  updated_at AS updatedAt
+             FROM task_templates
+            WHERE event_id = ? AND status = 'active'
+              AND id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+            ORDER BY id`,
+          )
+            .bind(viewer.eventId, JSON.stringify(relevantTemplateIds))
+            .all<z.infer<typeof storedTemplateSnapshotSchema>>(),
+          this.env.DB.prepare(
+            `SELECT template_id AS templateId,
+                  depends_on_template_id AS dependencyId
+             FROM task_template_dependencies
+            WHERE template_id IN (
+              SELECT CAST(value AS TEXT) FROM json_each(?)
+            )
+            ORDER BY template_id, depends_on_template_id`,
+          )
+            .bind(JSON.stringify(relevantTemplateIds))
+            .all<{ templateId: string; dependencyId: string }>(),
+        ],
+      );
+      if (storedTemplates.results.length !== relevantTemplateIds.length) {
+        throw new TaskBulkStateError(
+          "The task dependency plan changed before the preview could be recorded.",
+        );
+      }
+      const relevantTemplateIdSet = new Set(relevantTemplateIds);
+      if (
+        storedDependencies.results.some(
+          (edge) =>
+            !relevantTemplateIdSet.has(edge.templateId) ||
+            !relevantTemplateIdSet.has(edge.dependencyId),
         )
-        .all<{ templateId: string; personId: string }>();
+      ) {
+        throw new TaskBulkStateError(
+          "The task dependency plan changed before the preview could be recorded.",
+        );
+      }
+      expectedTemplates = storedTemplates.results.map((storedTemplate) => ({
+        ...storedTemplate,
+        autoAssignOnAcceptance: Number(storedTemplate.autoAssignOnAcceptance),
+        dependencyIds: storedDependencies.results
+          .filter((edge) => edge.templateId === storedTemplate.id)
+          .map((edge) => edge.dependencyId),
+      }));
       const existingKeys = new Set(
         existing.results.map((row) => `${row.personId}:${row.templateId}`),
       );
@@ -405,7 +493,7 @@ export class TaskBulkService {
           result: {
             recordId: personId,
             label: speaker.name,
-            expectedRevision: null,
+            expectedRevision: speaker.workflowRevision,
             beforeStatus: alreadyAssigned ? "assigned" : "not assigned",
             afterStatus: "assigned",
             personId,
@@ -566,7 +654,7 @@ export class TaskBulkService {
         `task-bulk:${operationId}`,
         correlationId,
         JSON.stringify({ operationId, action: parsed.action }),
-        JSON.stringify(summary),
+        JSON.stringify({ ...summary, expectedTemplates }),
         items.length,
         skippedCount,
         invalidCount,
@@ -643,113 +731,145 @@ export class TaskBulkService {
     ]);
   }
 
-  private async assertPreviewFresh(
+  private async claimFreshPreview(
     viewer: Viewer,
     operation: TaskBulkOperation,
   ) {
-    const pending = operation.items.filter((item) => item.status === "pending");
-    if (operation.summary.action === "assign_template") {
-      const template = await this.env.DB.prepare(
-        `SELECT 1 FROM task_templates template
-          JOIN events event ON event.id = template.event_id AND event.organisation_id = ?
-         WHERE template.id = ? AND template.event_id = ? AND template.status = 'active'
-           AND template.target_type = 'speaker'`,
+    const baseSql = `UPDATE operation_jobs
+        SET status = 'running', cancellable = 0, started_at = unixepoch(),
+            updated_at = unixepoch()
+      WHERE id = ? AND event_id = ? AND organisation_id = ?
+        AND type = 'task.bulk' AND status = 'received'`;
+    if (operation.summary.action !== "assign_template") {
+      const expected = operation.items
+        .filter(
+          (item) => item.status === "pending" || item.status === "skipped",
+        )
+        .map((item) => ({
+          id: item.result.recordId,
+          revision: item.result.expectedRevision,
+          status: item.result.beforeStatus,
+        }));
+      return this.env.DB.prepare(
+        `${baseSql}
+          AND (SELECT COUNT(*)
+                 FROM task_instances task
+                 JOIN events event
+                   ON event.id = task.event_id AND event.organisation_id = ?
+                 JOIN json_each(?) expected
+                   ON task.id = json_extract(expected.value, '$.id')
+                WHERE task.event_id = ?
+                  AND task.revision = json_extract(expected.value, '$.revision')
+                  AND task.status = json_extract(expected.value, '$.status')) = ?`,
       )
         .bind(
-          viewer.organisationId,
-          operation.summary.templateId,
+          operation.id,
           viewer.eventId,
+          viewer.organisationId,
+          viewer.organisationId,
+          JSON.stringify(expected),
+          viewer.eventId,
+          expected.length,
         )
-        .first();
-      if (!template) return false;
-      let dependencyIds: string[];
-      try {
-        dependencyIds = (
-          await this.dependencyTemplates(
-            viewer.eventId,
-            operation.summary.templateId!,
-          )
-        ).map((dependency) => dependency.id);
-      } catch (error) {
-        if (error instanceof TaskBulkStateError) return false;
-        throw error;
-      }
-      const currentTemplateIds = [
-        operation.summary.templateId!,
-        ...dependencyIds,
-      ].sort();
-      if (
-        pending.some(
-          (item) =>
-            JSON.stringify(
-              item.result.expectedTemplateAssignments
-                .map((assignment) => assignment.templateId)
-                .sort(),
-            ) !== JSON.stringify(currentTemplateIds),
-        )
-      ) {
-        return false;
-      }
-      const personIds = pending.map((item) => item.result.personId);
-      const eligible = await this.env.DB.prepare(
-        `SELECT COUNT(DISTINCT person.id) AS count
-           FROM people person
-           JOIN events event ON event.id = ? AND event.organisation_id = ?
-          WHERE person.id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
-            AND (
-              EXISTS (
-                SELECT 1 FROM memberships membership
-                 WHERE membership.event_id = event.id AND membership.person_id = person.id
-                   AND membership.role = 'speaker' AND membership.accepted_at IS NOT NULL
-                   AND membership.revoked_at IS NULL
-              ) OR EXISTS (
-                SELECT 1 FROM session_speakers session_speaker
-                 WHERE session_speaker.event_id = event.id
-                   AND session_speaker.person_id = person.id
-              )
-            )`,
-      )
-        .bind(viewer.eventId, viewer.organisationId, JSON.stringify(personIds))
-        .first<{ count: number }>();
-      if ((eligible?.count ?? 0) !== pending.length) return false;
-      const assignmentSnapshot = pending.flatMap((item) =>
-        item.result.expectedTemplateAssignments.map((assignment) => ({
-          personId: item.result.personId,
-          ...assignment,
-        })),
-      );
-      const changedAssignment = await this.env.DB.prepare(
-        `SELECT 1
-           FROM json_each(?) expected
-          WHERE EXISTS (
-                  SELECT 1 FROM task_instances task
-                   WHERE task.event_id = ? AND task.target_type = 'speaker'
-                     AND task.target_id = json_extract(expected.value, '$.personId')
-                     AND task.template_id = json_extract(expected.value, '$.templateId')
-                ) <> json_extract(expected.value, '$.assigned')
-          LIMIT 1`,
-      )
-        .bind(JSON.stringify(assignmentSnapshot), viewer.eventId)
-        .first();
-      return !changedAssignment;
+        .run();
     }
-    const expected = pending.map((item) => ({
-      id: item.result.recordId,
+
+    const selected = operation.items.filter(
+      (item) => item.status === "pending" || item.status === "skipped",
+    );
+    const expectedTemplates = operation.expectedTemplates;
+    const serializedTemplates = JSON.stringify(expectedTemplates);
+    if (!expectedTemplates.length) {
+      throw new Error("The stored bulk task template snapshot is missing.");
+    }
+    const expectedSpeakers = selected.map((item) => ({
+      personId: item.result.personId,
       revision: item.result.expectedRevision,
-      status: item.result.beforeStatus,
     }));
-    const exact = await this.env.DB.prepare(
-      `SELECT COUNT(*) AS count
-         FROM task_instances task
-         JOIN events event ON event.id = task.event_id AND event.organisation_id = ?
-         JOIN json_each(?) expected ON task.id = json_extract(expected.value, '$.id')
-        WHERE task.event_id = ?
-          AND task.revision = json_extract(expected.value, '$.revision')
-          AND task.status = json_extract(expected.value, '$.status')`,
+    const expectedAssignments = selected.flatMap((item) =>
+      item.result.expectedTemplateAssignments.map((assignment) => ({
+        personId: item.result.personId,
+        templateId: assignment.templateId,
+        assigned: assignment.assigned ? 1 : 0,
+      })),
+    );
+    const expectedEdges = expectedTemplates.flatMap((template) =>
+      template.dependencyIds.map((dependencyId) => ({
+        templateId: template.id,
+        dependencyId,
+      })),
+    );
+    const templateIds = expectedTemplates.map((template) => template.id);
+    return this.env.DB.prepare(
+      `${baseSql}
+        AND NOT EXISTS (
+          SELECT 1 FROM json_each(?) expected
+          LEFT JOIN task_templates template
+            ON template.id = json_extract(expected.value, '$.id')
+           AND template.event_id = ? AND template.status = 'active'
+         WHERE template.id IS NULL
+            OR template.updated_at IS NOT json_extract(expected.value, '$.updatedAt')
+            OR template.name IS NOT json_extract(expected.value, '$.name')
+            OR template.description IS NOT json_extract(expected.value, '$.description')
+            OR template.target_type IS NOT json_extract(expected.value, '$.targetType')
+            OR template.task_type IS NOT json_extract(expected.value, '$.taskType')
+            OR template.impact IS NOT json_extract(expected.value, '$.impact')
+            OR template.evidence_mode IS NOT json_extract(expected.value, '$.evidenceMode')
+            OR template.due_anchor IS NOT json_extract(expected.value, '$.dueAnchor')
+            OR template.due_offset_minutes IS NOT json_extract(expected.value, '$.dueOffsetMinutes')
+            OR template.fixed_due_at IS NOT json_extract(expected.value, '$.fixedDueAt')
+            OR template.auto_assign_on_acceptance IS NOT json_extract(expected.value, '$.autoAssignOnAcceptance')
+            OR template.configuration_json IS NOT json_extract(expected.value, '$.configurationJson')
+        )
+        AND (SELECT COUNT(*) FROM task_template_dependencies dependency
+              WHERE dependency.template_id IN (
+                SELECT CAST(value AS TEXT) FROM json_each(?)
+              )) = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM json_each(?) expected
+           WHERE NOT EXISTS (
+             SELECT 1 FROM task_template_dependencies dependency
+              WHERE dependency.template_id = json_extract(expected.value, '$.templateId')
+                AND dependency.depends_on_template_id = json_extract(expected.value, '$.dependencyId')
+           )
+        )
+        AND (SELECT COUNT(*)
+               FROM json_each(?) expected
+               JOIN people person
+                 ON person.id = json_extract(expected.value, '$.personId')
+               JOIN events event ON event.id = ? AND event.organisation_id = ?
+               JOIN event_speaker_workflows workflow
+                 ON workflow.event_id = event.id
+                AND workflow.person_id = person.id
+                AND workflow.status IN ('prospect','invited','confirmed')
+                AND workflow.revision = json_extract(expected.value, '$.revision')) = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM json_each(?) expected
+           WHERE EXISTS (
+             SELECT 1 FROM task_instances task
+              WHERE task.event_id = ? AND task.target_type = 'speaker'
+                AND task.target_id = json_extract(expected.value, '$.personId')
+                AND task.template_id = json_extract(expected.value, '$.templateId')
+           ) <> json_extract(expected.value, '$.assigned')
+        )`,
     )
-      .bind(viewer.organisationId, JSON.stringify(expected), viewer.eventId)
-      .first<{ count: number }>();
-    return (exact?.count ?? 0) === pending.length;
+      .bind(
+        operation.id,
+        viewer.eventId,
+        viewer.organisationId,
+        serializedTemplates,
+        viewer.eventId,
+        JSON.stringify(templateIds),
+        expectedEdges.length,
+        JSON.stringify(expectedEdges),
+        JSON.stringify(expectedSpeakers),
+        viewer.eventId,
+        viewer.organisationId,
+        expectedSpeakers.length,
+        JSON.stringify(expectedAssignments),
+        viewer.eventId,
+      )
+      .run();
   }
 
   async confirm(viewer: Viewer, operationId: string) {
@@ -764,22 +884,21 @@ export class TaskBulkService {
         "Remove ineligible records before confirming this bulk task action.",
       );
     }
-    if (!(await this.assertPreviewFresh(viewer, operation))) {
-      await this.failStale(viewer, operationId);
-      throw new TaskBulkStateError(
-        "The selected records changed after preview. Create a new preview before applying the action.",
-      );
-    }
-    const claim = await this.env.DB.prepare(
-      `UPDATE operation_jobs
-          SET status = 'running', cancellable = 0, started_at = unixepoch(),
-              updated_at = unixepoch()
-        WHERE id = ? AND event_id = ? AND organisation_id = ?
-          AND type = 'task.bulk' AND status = 'received'`,
-    )
-      .bind(operationId, viewer.eventId, viewer.organisationId)
-      .run();
+    const claim = await this.claimFreshPreview(viewer, operation);
     if ((claim.meta.changes ?? 0) !== 1) {
+      const current = await this.env.DB.prepare(
+        `SELECT status FROM operation_jobs
+          WHERE id = ? AND event_id = ? AND organisation_id = ?
+            AND type = 'task.bulk'`,
+      )
+        .bind(operationId, viewer.eventId, viewer.organisationId)
+        .first<{ status: string }>();
+      if (current?.status === "received") {
+        await this.failStale(viewer, operationId);
+        throw new TaskBulkStateError(
+          "The selected records changed after preview. Create a new preview before applying the action.",
+        );
+      }
       throw new TaskBulkStateError(
         "This bulk task preview was already confirmed or cancelled.",
       );
@@ -799,6 +918,12 @@ export class TaskBulkService {
             viewer,
             item.result.templateId!,
             item.result.personId!,
+            item.id,
+            {
+              targetRevision: item.result.expectedRevision!,
+              templateAssignments: item.result.expectedTemplateAssignments,
+              templates: operation.expectedTemplates,
+            },
           );
           changedTaskId = result.taskId;
           if (result.webhookWarning)

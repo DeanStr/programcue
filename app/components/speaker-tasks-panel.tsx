@@ -8,6 +8,7 @@ import {
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { maximumMegabytes } from "~/modules/files/file-policy";
+import type { ParticipantTaskEvidenceVersion } from "~/modules/files/file-service.server";
 import {
   speakerDueLabel,
   type SpeakerPortal,
@@ -52,6 +53,37 @@ async function attachTaskEvidence(
   return { message: payload.message };
 }
 
+export function taskEvidenceVersionStatus(
+  version: Pick<
+    ParticipantTaskEvidenceVersion,
+    "uploadStatus" | "signatureStatus" | "scanStatus" | "releasedAt"
+  >,
+) {
+  if (version.uploadStatus === "failed")
+    return { label: "Upload failed", tone: "danger" } as const;
+  if (version.uploadStatus === "aborted")
+    return { label: "Upload aborted", tone: "danger" } as const;
+  if (version.signatureStatus === "invalid")
+    return { label: "Invalid file signature", tone: "danger" } as const;
+  if (version.signatureStatus === "failed")
+    return { label: "Signature validation failed", tone: "danger" } as const;
+  if (version.scanStatus === "infected")
+    return { label: "Malware detected", tone: "danger" } as const;
+  if (version.scanStatus === "failed")
+    return { label: "Malware scan failed", tone: "danger" } as const;
+  if (version.uploadStatus === "requested")
+    return { label: "Upload requested", tone: "info" } as const;
+  if (version.uploadStatus === "uploading")
+    return { label: "Uploading", tone: "info" } as const;
+  if (version.signatureStatus === "pending")
+    return { label: "Signature validation pending", tone: "info" } as const;
+  if (version.scanStatus === "pending")
+    return { label: "Malware scan pending", tone: "info" } as const;
+  if (version.releasedAt === null)
+    return { label: "Release pending", tone: "warning" } as const;
+  return { label: "Released", tone: "success" } as const;
+}
+
 export function SpeakerTasksPanel({
   portal,
   tasks,
@@ -60,7 +92,9 @@ export function SpeakerTasksPanel({
   intentId,
 }: {
   portal: SpeakerPortal;
-  tasks: SpeakerTask[];
+  tasks: Array<
+    SpeakerTask & { fileVersions: ParticipantTaskEvidenceVersion[] }
+  >;
   finished: number;
   busy: boolean;
   intentId: string;
@@ -137,15 +171,72 @@ export function SpeakerTasksPanel({
                   ) : null}
                   {task.comments.map((comment) => (
                     <blockquote key={comment.id} className="task-comment">
-                      <strong>{comment.authorName}</strong>
+                      <footer>
+                        <strong>{comment.authorName}</strong> ·{" "}
+                        <EventDateTime
+                          epochSeconds={comment.createdAt}
+                          timeZone={portal.event.timezone}
+                        />
+                      </footer>
                       <p>{comment.body}</p>
                     </blockquote>
                   ))}
+                  {task.fileVersions.length ? (
+                    <section
+                      className="stack mt"
+                      aria-label="Uploaded file versions"
+                    >
+                      <strong>Uploaded file versions</strong>
+                      <ol className="stack">
+                        {task.fileVersions.map((version) => {
+                          const state = taskEvidenceVersionStatus(version);
+                          return (
+                            <li
+                              className="file-version-row"
+                              key={version.versionId}
+                            >
+                              <span>
+                                <strong>
+                                  {version.filename} · v{version.versionNumber}
+                                </strong>
+                                <small className="subtle">
+                                  <EventDateTime
+                                    epochSeconds={version.createdAt}
+                                    timeZone={portal.event.timezone}
+                                  />
+                                </small>
+                              </span>
+                              <span className="row-actions">
+                                {version.latest ? (
+                                  <span className="status success">Latest</span>
+                                ) : null}
+                                {version.current ? (
+                                  <span className="status info">
+                                    Current released
+                                  </span>
+                                ) : null}
+                                {version.downloadAvailable ? (
+                                  <a
+                                    className="btn small"
+                                    href={`/participant/tasks/files/${encodeURIComponent(version.assetId)}/${encodeURIComponent(version.versionId)}`}
+                                  >
+                                    Download v{version.versionNumber}
+                                  </a>
+                                ) : (
+                                  <small className={`status ${state.tone}`}>
+                                    {state.label}
+                                  </small>
+                                )}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </section>
+                  ) : null}
                 </div>
                 <div className="speaker-task-action">
-                  {!["completed", "waived", "submitted"].includes(
-                    task.status,
-                  ) &&
+                  {!["completed", "waived"].includes(task.status) &&
                   !blocked &&
                   task.taskType === "file_upload" ? (
                     <DirectMultipartUpload
@@ -161,8 +252,16 @@ export function SpeakerTasksPanel({
                               .supportingDocumentMaximumBytes,
                         },
                       ]}
-                      heading="Upload evidence"
-                      description="Upload directly to Program Cue's private file store. The exact completed file is attached to this task and remains quarantined until malware scanning passes."
+                      heading={
+                        task.status === "submitted"
+                          ? "Upload a replacement version"
+                          : "Upload evidence"
+                      }
+                      description={
+                        task.status === "submitted"
+                          ? "The replacement becomes the next version of this exact deliverable. Earlier versions remain retained and downloadable after clean scanning."
+                          : "Upload directly to Program Cue's private file store. The exact completed file is attached to this task and remains quarantined until malware scanning passes."
+                      }
                       onCompleted={(upload) =>
                         attachTaskEvidence(task.id, upload)
                       }
@@ -297,7 +396,7 @@ export function SpeakerTasksPanel({
                       <Clock3 aria-hidden size={16} />
                       <span>
                         {task.taskType === "file_upload"
-                          ? "Stored in quarantine. Scanning and administrator approval are pending."
+                          ? "Stored for administrator review. You can upload a newer version while review is pending."
                           : "Submitted for administrator review."}
                       </span>
                     </div>

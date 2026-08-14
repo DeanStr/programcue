@@ -109,11 +109,11 @@ export default function App({ loaderData }: Route.ComponentProps) {
           <strong>Evaluation:</strong> {loaderData.evaluation.label} ·{" "}
           {loaderData.evaluation.name}
           <Link className="btn small" to="/evaluate">
-            Change persona
+            Evaluation guide
           </Link>
           <Form method="post" action="/sign-out">
             <button className="btn small" type="submit">
-              End session
+              Change persona
             </button>
           </Form>
         </aside>

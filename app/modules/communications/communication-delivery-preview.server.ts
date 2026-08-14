@@ -122,6 +122,7 @@ export abstract class CommunicationDeliveryPreview extends CommunicationDelivery
         .map((recipient) => ({
           address: recipient.address,
           name: recipient.name,
+          reason: recipient.reason,
         }))
         .sort((left, right) =>
           JSON.stringify(left).localeCompare(JSON.stringify(right), "en"),

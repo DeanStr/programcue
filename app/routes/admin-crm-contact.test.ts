@@ -3,7 +3,6 @@ import { RouterContextProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CrmService } from "~/modules/crm/crm-service.server";
-import { SpeakerInvitationDeliveryError } from "~/modules/speakers/speaker-invitation.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { action } from "./admin-crm-contact";
@@ -20,14 +19,16 @@ function context() {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Speaker Network event handoff", () => {
-  it("reports committed invitation delivery failure as partial success", async () => {
+  it("opens the roster at the handed-off prospect without sending an invitation", async () => {
     await ensureDemoData(env as unknown as CloudflareEnvironment);
-    vi.spyOn(CrmService.prototype, "addContactToEvent").mockRejectedValue(
-      new SpeakerInvitationDeliveryError(
-        "membership-crm-delivery-test",
-        new Error("provider unavailable"),
-      ),
-    );
+    const handoff = vi
+      .spyOn(CrmService.prototype, "addContactToEvent")
+      .mockResolvedValue({
+        eventId: "evt-foe-2025",
+        personId: "person-demo-speaker",
+        workflowStatus: "prospect",
+        created: true,
+      });
 
     const result = await action({
       request: new Request(
@@ -50,13 +51,22 @@ describe("Speaker Network event handoff", () => {
       context: context(),
     } as never);
 
-    if (result instanceof Response) {
-      throw new Error("CRM partial result returned a raw response.");
+    if (!(result instanceof Response)) {
+      throw new Error("CRM event handoff did not redirect to the roster.");
     }
-    expect(result.init?.status).toBe(207);
-    expect(result.data).toMatchObject({
-      ok: false,
-      message: expect.stringMatching(/saved.*operation needs attention/i),
-    });
+    expect(result.status).toBe(302);
+    expect(result.headers.get("location")).toBe(
+      "/admin/speakers?person=person-demo-speaker",
+    );
+    expect(result.headers.get("set-cookie")).toContain("program_cue_event=");
+    expect(handoff).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organisationId: "org-future-events",
+        personId: "person-demo-admin",
+      }),
+      "person-demo-speaker",
+      "evt-foe-2025",
+      "crm-delivery-test",
+    );
   });
 });

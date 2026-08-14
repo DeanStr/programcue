@@ -907,6 +907,229 @@ describe("onboarding task service", () => {
       ).toEqual({ count: 0 });
     });
 
+    it("reuses the canonical task asset for retained replacement versions and exact downloads", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const taskId = await createFileTask(testEnv, "Versioned presentation");
+      const files = new FileService(testEnv);
+      const tasks = new TaskService(testEnv);
+      const evidenceFile = (name: string, marker: number) =>
+        new File(
+          [
+            new Uint8Array([
+              0x89,
+              0x50,
+              0x4e,
+              0x47,
+              0x0d,
+              0x0a,
+              0x1a,
+              0x0a,
+              marker,
+            ]),
+          ],
+          name,
+          { type: "image/png" },
+        );
+      const first = await completeTestDirectUpload(
+        testEnv,
+        speaker,
+        {
+          targetType: "task",
+          targetId: taskId,
+          assetKind: "task_evidence",
+        },
+        evidenceFile("slides-v1.png", 1),
+      );
+      await tasks.attachCompletedFileEvidence(speaker, {
+        taskId,
+        assetId: first.assetId,
+        versionId: first.versionId,
+      });
+      await files.recordScanResult({
+        ...(await acceptTestFileScanDispatch(
+          testEnv,
+          speaker.eventId,
+          first.versionId,
+        )),
+        eventId: speaker.eventId,
+        versionId: first.versionId,
+        provider: "test-scanner",
+        callbackId: `callback-${first.versionId}`,
+        status: "clean",
+        result: { verdict: "clean" },
+      });
+
+      const second = await completeTestDirectUpload(
+        testEnv,
+        speaker,
+        {
+          targetType: "task",
+          targetId: taskId,
+          assetKind: "task_evidence",
+        },
+        evidenceFile("slides-v2.png", 2),
+      );
+      expect(second).toMatchObject({
+        assetId: first.assetId,
+        versionNumber: 2,
+      });
+      await tasks.attachCompletedFileEvidence(speaker, {
+        taskId,
+        assetId: second.assetId,
+        versionId: second.versionId,
+      });
+      await files.recordScanResult({
+        ...(await acceptTestFileScanDispatch(
+          testEnv,
+          speaker.eventId,
+          second.versionId,
+        )),
+        eventId: speaker.eventId,
+        versionId: second.versionId,
+        provider: "test-scanner",
+        callbackId: `callback-${second.versionId}`,
+        status: "clean",
+        result: { verdict: "clean" },
+      });
+
+      const infected = await completeTestDirectUpload(
+        testEnv,
+        speaker,
+        {
+          targetType: "task",
+          targetId: taskId,
+          assetKind: "task_evidence",
+        },
+        evidenceFile("slides-v3-infected.png", 3),
+      );
+      await tasks.attachCompletedFileEvidence(speaker, {
+        taskId,
+        assetId: infected.assetId,
+        versionId: infected.versionId,
+      });
+      await files.recordScanResult({
+        ...(await acceptTestFileScanDispatch(
+          testEnv,
+          speaker.eventId,
+          infected.versionId,
+        )),
+        eventId: speaker.eventId,
+        versionId: infected.versionId,
+        provider: "test-scanner",
+        callbackId: `callback-${infected.versionId}`,
+        status: "infected",
+        result: { verdict: "infected" },
+      });
+
+      const task = (await tasks.listParticipantTasks(speaker)).find(
+        (candidate) => candidate.id === taskId,
+      );
+      expect(
+        await files.listParticipantTaskEvidenceVersions(speaker, [task!.id]),
+      ).toEqual([
+        expect.objectContaining({
+          versionId: infected.versionId,
+          versionNumber: 3,
+          uploadStatus: "uploaded",
+          signatureStatus: "valid",
+          scanStatus: "infected",
+          releasedAt: null,
+          latest: true,
+          current: false,
+          downloadAvailable: false,
+        }),
+        expect.objectContaining({
+          versionId: second.versionId,
+          versionNumber: 2,
+          uploadStatus: "uploaded",
+          signatureStatus: "valid",
+          scanStatus: "clean",
+          releasedAt: expect.any(Number),
+          latest: false,
+          current: true,
+          downloadAvailable: true,
+        }),
+        expect.objectContaining({
+          versionId: first.versionId,
+          versionNumber: 1,
+          uploadStatus: "uploaded",
+          signatureStatus: "valid",
+          scanStatus: "clean",
+          releasedAt: expect.any(Number),
+          latest: false,
+          current: false,
+          downloadAvailable: true,
+        }),
+      ]);
+      await expect(
+        files.participantTaskEvidenceDownload(
+          speaker,
+          first.assetId,
+          first.versionId,
+        ),
+      ).resolves.toMatchObject({ status: 200 });
+      await expect(
+        files.participantTaskEvidenceDownload(
+          speaker,
+          second.assetId,
+          second.versionId,
+        ),
+      ).resolves.toMatchObject({ status: 200 });
+      await expect(
+        files.administratorTaskEvidenceDownload(
+          admin,
+          first.assetId,
+          first.versionId,
+        ),
+      ).resolves.toMatchObject({ status: 200 });
+      await expect(
+        files.participantTaskEvidenceDownload(
+          submitter,
+          first.assetId,
+          first.versionId,
+        ),
+      ).rejects.toThrow("outside your tasks");
+    });
+
+    it("fails fast when a submitted file task lacks canonical evidence", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const taskId = await createFileTask(testEnv, "Broken file evidence");
+      await testEnv.DB.prepare(
+        `UPDATE task_instances
+            SET status = 'submitted', evidence_json = '{}',
+                submitted_at = unixepoch(), revision = revision + 1
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(taskId, speaker.eventId)
+        .run();
+
+      await expect(
+        completeTestDirectUpload(
+          testEnv,
+          speaker,
+          {
+            targetType: "task",
+            targetId: taskId,
+            assetKind: "task_evidence",
+          },
+          new File(["%PDF-1.7"], "replacement.pdf", {
+            type: "application/pdf",
+          }),
+        ),
+      ).rejects.toThrow("missing canonical evidence");
+      expect(
+        await testEnv.DB.prepare(
+          `SELECT COUNT(*) AS count
+             FROM file_assets
+            WHERE event_id = ? AND target_type = 'task' AND target_id = ?`,
+        )
+          .bind(speaker.eventId, taskId)
+          .first<{ count: number }>(),
+      ).toEqual({ count: 0 });
+    });
+
     it("reopens infected file evidence and accepts a replacement upload", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);

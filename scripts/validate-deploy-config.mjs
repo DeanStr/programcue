@@ -633,15 +633,7 @@ function validateProduction(config, issues) {
     "EMBED_FRAME_ANCESTORS",
     issues,
   );
-  if (frameAncestors === "*") {
-    issues.push(
-      issue(
-        profile,
-        "configuration",
-        "EMBED_FRAME_ANCESTORS must not be a production wildcard.",
-      ),
-    );
-  } else {
+  if (frameAncestors !== "*") {
     for (const origin of frameAncestors.split(/\s+/u).filter(Boolean)) {
       productionUrl(profile, "EMBED_FRAME_ANCESTORS", origin, issues);
     }

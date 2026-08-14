@@ -1,10 +1,14 @@
 import { createAuth } from "~/platform/auth/auth.server";
 import { createEmailProvider } from "~/modules/communications/email-provider.server";
 import {
-  EVALUATION_EVENT_ID,
-  selectedEvaluationPerson,
+  EVALUATION_ORGANISATION_ID,
+  evaluationPersonForSession,
+  readEvaluationSession,
 } from "~/platform/evaluation/evaluation-session.server";
-import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
+import {
+  requireRuntimeMode,
+  requiresProductionSecurity,
+} from "~/platform/runtime-environment.server";
 import type {
   Applicant,
   FormSummary,
@@ -138,13 +142,27 @@ export class ApplicantSessionService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
   async get(request: Request, form: PublicForm): Promise<Applicant | null> {
-    if (form.accessMode !== "password_protected") {
-      if (form.eventId === EVALUATION_EVENT_ID) {
-        const evaluationPerson = await selectedEvaluationPerson(
-          request,
-          this.env,
-        );
-        if (evaluationPerson?.identityKey === "sbek_applicant") {
+    const evaluationSession = requireRuntimeMode(this.env).evaluation
+      ? await readEvaluationSession(request, this.env)
+      : null;
+    if (evaluationSession) {
+      if (
+        form.accessMode !== "password_protected" &&
+        evaluationSession.identityKey === "sbek_applicant"
+      ) {
+        const fixtureEvent = await this.env.DB.prepare(
+          `SELECT 1 FROM events
+            WHERE id = ? AND organisation_id = ?
+              AND activation_status = 'active'`,
+        )
+          .bind(form.eventId, EVALUATION_ORGANISATION_ID)
+          .first();
+        if (fixtureEvent) {
+          const evaluationPerson = await evaluationPersonForSession(
+            this.env,
+            evaluationSession,
+          );
+          if (!evaluationPerson) return null;
           return {
             personId: evaluationPerson.personId,
             email: evaluationPerson.email,
@@ -153,9 +171,14 @@ export class ApplicantSessionService {
             profileRevision: evaluationPerson.profileRevision,
             verified: true,
             anonymousDraftId: null,
+            evaluation: true,
           };
         }
       }
+      return null;
+    }
+
+    if (form.accessMode !== "password_protected") {
       const session = await createAuth(this.env).api.getSession({
         headers: request.headers,
       });

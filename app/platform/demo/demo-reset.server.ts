@@ -1,4 +1,6 @@
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
+import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
+import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import {
@@ -120,6 +122,7 @@ export const DEMO_RESET_EVENT_TABLES = [
   "session_content_revisions",
   "schedule_session_contents",
   "schedule_versions",
+  "event_participant_profiles",
   "event_speaker_workflows",
   "session_tags",
   "session_archives",
@@ -165,6 +168,14 @@ const DEMO_REVIEWER_REMINDER_TEMPLATE_ID =
   "cf82ad49-991e-40dd-896d-7b45b288d16f";
 const DEMO_REVIEWER_REMINDER_VERSION_ID =
   "2a37e49b-95ca-4383-8c58-720c2e681bab";
+const DEMO_SPEAKER_WELCOME_TEMPLATE_ID = "b5fa9880-c53b-49a9-8d30-dd6585089c41";
+const DEMO_SPEAKER_WELCOME_VERSION_ID = "73e3200d-ec06-4d11-a87f-bce1543b7c21";
+const DEMO_SUBMISSION_CONFIRMATION_TEMPLATE_ID =
+  "353b1640-8e96-4f52-a657-9407ddf551fb";
+const DEMO_SUBMISSION_CONFIRMATION_VERSION_ID =
+  "7d527639-cf8c-4886-a490-c09d8019310f";
+const DEMO_DECISION_TEMPLATE_ID = "572ae193-24e3-4746-b148-4757f54f83bd";
+const DEMO_DECISION_VERSION_ID = "95e1b191-434c-4be1-acb8-915f435f561f";
 const DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP = Math.floor(
   Date.parse("2025-05-01T12:00:00Z") / 1_000,
 );
@@ -274,12 +285,28 @@ async function supersedeDemoAssistantFixtureProposals(
   return result.meta.changes ?? 0;
 }
 
-async function clearDemoObjects(bucket: R2Bucket) {
+async function clearDemoObjects(
+  bucket: R2Bucket,
+  assertDestructiveWorkAllowed: (() => Promise<void>) | null = null,
+) {
   let deleted = 0;
+  let previousPage: string | null = null;
+  let repeatedPageCount = 0;
   while (true) {
+    await assertDestructiveWorkAllowed?.();
     const page = await bucket.list({ prefix: DEMO_R2_PREFIX, limit: 1_000 });
     const keys = page.objects.map((object) => object.key);
     if (keys.length === 0) return deleted;
+    const pageIdentity = JSON.stringify(keys);
+    repeatedPageCount =
+      pageIdentity === previousPage ? repeatedPageCount + 1 : 0;
+    if (repeatedPageCount >= 3) {
+      throw new Error(
+        "The demo R2 prefix did not make progress after repeated delete attempts.",
+      );
+    }
+    previousPage = pageIdentity;
+    await assertDestructiveWorkAllowed?.();
     await bucket.delete(keys);
     deleted += keys.length;
     if (deleted > 100_000) {
@@ -306,29 +333,38 @@ async function resetMutableIdentity(env: CloudflareEnvironment) {
               ends_at = unixepoch('2025-05-22T23:59:59Z'),
               venue_name = 'Metro Toronto Convention Centre', city = 'Toronto',
               description = 'The conference for modern event professionals.',
-              brand_accent = '#4f46e5', repository_provider = 'd1',
+              brand_accent = '#4f46e5', participant_logo_url = NULL,
+              participant_welcome_text = NULL, participant_support_url = NULL,
+              session_formats_json = ?, repository_provider = 'd1',
+              activation_status = 'active',
               repository_locked_at = NULL, retention_months = 24,
               file_retention_hold_at = NULL,
+              participant_retention_completed_at = NULL,
               submission_access_mode = 'email_verified',
               allow_anonymous_drafts = 1, duplicate_person_warnings = 1,
-              revision = 1, last_operation_id = NULL,
+              file_policy_json = ?, revision = 1, last_operation_id = NULL,
               last_updated_by_person_id = ?, programme_published_at = NULL,
               updated_at = unixepoch()
         WHERE id = ? AND organisation_id = ?`,
     ).bind(
+      INITIAL_EVENT_SESSION_FORMATS_JSON,
+      CANONICAL_EVENT_FILE_POLICY_JSON,
       DEMO_IDENTITIES.administrator.personId,
       DEMO_EVENT_ID,
       DEMO_ORGANISATION_ID,
     ),
-    env.DB.prepare(`INSERT INTO schedule_policies (event_id) VALUES (?)`).bind(
-      DEMO_EVENT_ID,
-    ),
+    env.DB.prepare(
+      `INSERT INTO schedule_policies (
+         event_id, room_overlap_action, speaker_overlap_action
+       ) VALUES (?, 'block', 'warn')`,
+    ).bind(DEMO_EVENT_ID),
     ...identities.map((identity) =>
       env.DB.prepare(
         `UPDATE people
             SET email = ?, display_name = ?, email_verified = 1,
                 image_url = NULL, biography = NULL, pronunciation = NULL,
                 organisation_name = NULL, job_title = NULL,
+                linkedin_url = NULL, x_handle = NULL,
                 profile_status = ?, profile_revision = 1,
                 last_operation_id = NULL, updated_at = unixepoch()
           WHERE id = ?`,
@@ -372,7 +408,7 @@ async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
          created_by_person_id, created_at, published_at
        ) VALUES (
          ?, ?, ?, 1, 'Speaker task reminder', 'task_reminder', 'email',
-         'Reminder: {{task.title}}', ?, NULL, 'published', ?,
+         'Reminder: {{task.title}} is due {{task.dueDate}}', ?, NULL, 'published', ?,
          unixepoch(), unixepoch()
        )`,
     ).bind(
@@ -380,7 +416,7 @@ async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
       DEMO_EVENT_ID,
       DEMO_REMINDER_TEMPLATE_ID,
       JSON.stringify({
-        body: "Hi {{recipient.firstName}},\n\nPlease complete {{task.title}} for {{event.name}}.",
+        body: "Hi {{recipient.firstName}},\n\nPlease complete {{task.title}} for {{event.name}} by {{task.dueDate}}.",
         physicalAddress: "255 Front Street West, Toronto, ON",
       }),
       DEMO_IDENTITIES.administrator.personId,
@@ -418,6 +454,103 @@ async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
       }),
       DEMO_IDENTITIES.administrator.personId,
     ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communication_templates (
+         id, event_id, name, category, status, created_by_person_id,
+         created_at, updated_at
+       ) VALUES (?, ?, 'Speaker welcome', 'ad_hoc', 'active', ?, ?, ?)`,
+    ).bind(
+      DEMO_SPEAKER_WELCOME_TEMPLATE_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.administrator.personId,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP + 2,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communication_template_versions (
+         id, event_id, template_id, version_number, name, category, channel,
+         subject_template, content_json, rendered_preview_html, status,
+         created_by_person_id, created_at, published_at
+       ) VALUES (
+         ?, ?, ?, 1, 'Speaker welcome', 'ad_hoc', 'email',
+         'Welcome to {{event.name}} speakers', ?, NULL, 'published', ?,
+         unixepoch(), unixepoch()
+       )`,
+    ).bind(
+      DEMO_SPEAKER_WELCOME_VERSION_ID,
+      DEMO_EVENT_ID,
+      DEMO_SPEAKER_WELCOME_TEMPLATE_ID,
+      JSON.stringify({
+        body: "Hi {{recipient.firstName}},\n\nWelcome to {{event.name}}. Your speaker workspace is ready.",
+        physicalAddress: "255 Front Street West, Toronto, ON",
+      }),
+      DEMO_IDENTITIES.administrator.personId,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communication_templates (
+         id, event_id, name, category, status, created_by_person_id,
+         created_at, updated_at
+       ) VALUES (?, ?, 'Submission confirmation', 'submission_confirmation',
+                 'active', ?, ?, ?)`,
+    ).bind(
+      DEMO_SUBMISSION_CONFIRMATION_TEMPLATE_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.administrator.personId,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communication_template_versions (
+         id, event_id, template_id, version_number, name, category, channel,
+         subject_template, content_json, rendered_preview_html, status,
+         created_by_person_id, created_at, published_at
+       ) VALUES (
+         ?, ?, ?, 1, 'Submission confirmation', 'submission_confirmation',
+         'email', 'We received {{submission.title}}', ?, NULL, 'published', ?,
+         unixepoch(), unixepoch()
+       )`,
+    ).bind(
+      DEMO_SUBMISSION_CONFIRMATION_VERSION_ID,
+      DEMO_EVENT_ID,
+      DEMO_SUBMISSION_CONFIRMATION_TEMPLATE_ID,
+      JSON.stringify({
+        body: "Hi {{recipient.firstName}},\n\nWe received {{submission.title}} for {{event.name}}. You can return to your application workspace at any time to review its status.",
+        physicalAddress: "255 Front Street West, Toronto, ON",
+      }),
+      DEMO_IDENTITIES.administrator.personId,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communication_templates (
+         id, event_id, name, category, status, created_by_person_id,
+         created_at, updated_at
+       ) VALUES (?, ?, 'Proposal decision', 'decision', 'active', ?, ?, ?)`,
+    ).bind(
+      DEMO_DECISION_TEMPLATE_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.administrator.personId,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communication_template_versions (
+         id, event_id, template_id, version_number, name, category, channel,
+         subject_template, content_json, rendered_preview_html, status,
+         created_by_person_id, created_at, published_at
+       ) VALUES (
+         ?, ?, ?, 1, 'Proposal decision', 'decision', 'email',
+         'Decision for {{submission.title}}', ?, NULL, 'published', ?,
+         unixepoch(), unixepoch()
+       )`,
+    ).bind(
+      DEMO_DECISION_VERSION_ID,
+      DEMO_EVENT_ID,
+      DEMO_DECISION_TEMPLATE_ID,
+      JSON.stringify({
+        body: "Hi {{recipient.firstName}},\n\nThe decision for {{submission.title}} is {{decision.outcome}}.\n\n{{decision.rationale}}\n\n{{decision.feedback}}",
+        physicalAddress: "255 Front Street West, Toronto, ON",
+      }),
+      DEMO_IDENTITIES.administrator.personId,
+    ),
   ]);
   await ensureDemoProgramme(env);
 }
@@ -429,6 +562,8 @@ export type DemoBaselineEvidence = {
   tasks: number;
   sessions: number;
   publishedSchedules: number;
+  canonicalEventConfiguration: number;
+  canonicalOrganisationMemberships: number;
   publishedTemplates: number;
   showcaseMemberships: number;
   showcaseReviewerAssignments: number;
@@ -440,6 +575,7 @@ export type DemoBaselineEvidence = {
   sbekSpeakerMemberships: number;
   sbekSpeakerTasks: number;
   sbekFixtureSubmissions: number;
+  sbekApplicantMemberships: number;
 };
 
 export function demoBaselineIsComplete(evidence: DemoBaselineEvidence) {
@@ -450,7 +586,9 @@ export function demoBaselineIsComplete(evidence: DemoBaselineEvidence) {
     evidence.tasks >= 3 &&
     evidence.sessions >= 6 &&
     evidence.publishedSchedules === 1 &&
-    evidence.publishedTemplates === 2 &&
+    evidence.canonicalEventConfiguration === 1 &&
+    evidence.canonicalOrganisationMemberships === 1 &&
+    evidence.publishedTemplates === 5 &&
     evidence.showcaseMemberships === 6 &&
     evidence.showcaseReviewerAssignments >= 1 &&
     evidence.showcaseApplicantSubmissions >= 1 &&
@@ -460,7 +598,8 @@ export function demoBaselineIsComplete(evidence: DemoBaselineEvidence) {
     evidence.sbekReviewerAssignments === 0 &&
     evidence.sbekSpeakerMemberships === 0 &&
     evidence.sbekSpeakerTasks === 0 &&
-    evidence.sbekFixtureSubmissions === 0
+    evidence.sbekFixtureSubmissions === 0 &&
+    evidence.sbekApplicantMemberships === 0
   );
 }
 
@@ -473,6 +612,22 @@ async function baselineEvidence(env: CloudflareEnvironment) {
        (SELECT COUNT(*) FROM task_instances WHERE event_id = ?) AS tasks,
        (SELECT COUNT(*) FROM sessions WHERE event_id = ?) AS sessions,
        (SELECT COUNT(*) FROM schedule_versions WHERE event_id = ? AND status = 'published') AS publishedSchedules,
+       (SELECT COUNT(*) FROM events
+         WHERE id = ? AND organisation_id = ? AND activation_status = 'active'
+           AND participant_logo_url IS NULL
+           AND participant_welcome_text IS NULL
+           AND participant_support_url IS NULL
+           AND session_formats_json = ?
+           AND file_policy_json = ?
+           AND participant_retention_completed_at IS NULL) AS canonicalEventConfiguration,
+       (SELECT COUNT(*) FROM memberships membership
+         WHERE membership.id = 'membership-demo-owner'
+           AND membership.organisation_id = ? AND membership.event_id IS NULL
+           AND membership.person_id = ? AND membership.role = 'owner'
+           AND membership.accepted_at IS NOT NULL
+           AND membership.revoked_at IS NULL
+           AND (SELECT COUNT(*) FROM memberships
+                 WHERE organisation_id = ? AND event_id IS NULL) = 1) AS canonicalOrganisationMemberships,
        (SELECT COUNT(*)
           FROM communication_template_versions version
           JOIN communication_templates template
@@ -496,6 +651,30 @@ async function baselineEvidence(env: CloudflareEnvironment) {
                AND version.id = ?
                AND version.name = 'Reviewer reminder'
                AND version.category = 'ad_hoc'
+               AND version.channel = 'email')
+             OR
+             (template.id = ?
+               AND template.name = 'Speaker welcome'
+               AND template.category = 'ad_hoc'
+               AND version.id = ?
+               AND version.name = 'Speaker welcome'
+               AND version.category = 'ad_hoc'
+               AND version.channel = 'email')
+             OR
+             (template.id = ?
+               AND template.name = 'Submission confirmation'
+               AND template.category = 'submission_confirmation'
+               AND version.id = ?
+               AND version.name = 'Submission confirmation'
+               AND version.category = 'submission_confirmation'
+               AND version.channel = 'email')
+             OR
+             (template.id = ?
+               AND template.name = 'Proposal decision'
+               AND template.category = 'decision'
+               AND version.id = ?
+               AND version.name = 'Proposal decision'
+               AND version.category = 'decision'
                AND version.channel = 'email')
            )) AS publishedTemplates,
        (SELECT COUNT(*) FROM people person
@@ -541,7 +720,9 @@ async function baselineEvidence(env: CloudflareEnvironment) {
                     OR speaker.email COLLATE NOCASE IN (?, ?)
                   )
              )
-           )) AS sbekFixtureSubmissions`,
+           )) AS sbekFixtureSubmissions,
+       (SELECT COUNT(*) FROM memberships
+         WHERE id = 'membership-production-evaluation-applicant-event') AS sbekApplicantMemberships`,
   )
     .bind(
       DEMO_EVENT_ID,
@@ -551,10 +732,23 @@ async function baselineEvidence(env: CloudflareEnvironment) {
       DEMO_EVENT_ID,
       DEMO_EVENT_ID,
       DEMO_EVENT_ID,
+      DEMO_ORGANISATION_ID,
+      INITIAL_EVENT_SESSION_FORMATS_JSON,
+      CANONICAL_EVENT_FILE_POLICY_JSON,
+      DEMO_ORGANISATION_ID,
+      DEMO_IDENTITIES.owner.personId,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
       DEMO_REMINDER_TEMPLATE_ID,
       DEMO_REMINDER_VERSION_ID,
       DEMO_REVIEWER_REMINDER_TEMPLATE_ID,
       DEMO_REVIEWER_REMINDER_VERSION_ID,
+      DEMO_SPEAKER_WELCOME_TEMPLATE_ID,
+      DEMO_SPEAKER_WELCOME_VERSION_ID,
+      DEMO_SUBMISSION_CONFIRMATION_TEMPLATE_ID,
+      DEMO_SUBMISSION_CONFIRMATION_VERSION_ID,
+      DEMO_DECISION_TEMPLATE_ID,
+      DEMO_DECISION_VERSION_ID,
       DEMO_IDENTITIES.administrator.personId,
       DEMO_IDENTITIES.owner.personId,
       DEMO_IDENTITIES.committee_chair.personId,
@@ -665,6 +859,7 @@ export async function resetDemoEvent(
   confirmation: unknown,
   actorId: string | null = null,
   beforeDestructiveWork: (() => Promise<void>) | null = null,
+  assertDestructiveWorkAllowed: (() => Promise<void>) | null = null,
 ) {
   assertDemoRuntime(env);
   if (confirmation !== DEMO_RESET_CONFIRMATION) {
@@ -685,7 +880,13 @@ export async function resetDemoEvent(
     }
   };
   await assertRetentionIncomplete();
+  const initialActiveWork = await readDemoActiveWork(env);
+  if (activeWorkTotal(initialActiveWork) > 0) {
+    throw new DemoResetBusyError(initialActiveWork);
+  }
+  await assertDestructiveWorkAllowed?.();
   await ensureDemoData(env);
+  await assertDestructiveWorkAllowed?.();
   await assertRetentionIncomplete();
   const activeWork = await readDemoActiveWork(env);
   if (activeWorkTotal(activeWork) > 0) throw new DemoResetBusyError(activeWork);
@@ -699,6 +900,7 @@ export async function resetDemoEvent(
     )?.count ?? 0,
   );
   await beforeDestructiveWork?.();
+  await assertDestructiveWorkAllowed?.();
   const supersededAssistantFixtureProposals =
     await supersedeDemoAssistantFixtureProposals(env);
 
@@ -735,29 +937,36 @@ export async function resetDemoEvent(
       DEMO_ORGANISATION_ID,
     ),
   );
+  await assertDestructiveWorkAllowed?.();
   await env.DB.batch([
     ...tokenStatements,
     ...organisationCrmCleanup,
     env.DB.prepare(
-      "DELETE FROM memberships WHERE id = 'membership-demo-admin-org'",
-    ),
+      "DELETE FROM memberships WHERE organisation_id = ? AND event_id IS NULL",
+    ).bind(DEMO_ORGANISATION_ID),
     ...cleanup,
   ]);
 
   let objectCount = 0;
   let objectCleanupError: unknown = null;
   try {
-    objectCount = await clearDemoObjects(env.FILES);
+    objectCount = await clearDemoObjects(
+      env.FILES,
+      assertDestructiveWorkAllowed,
+    );
   } catch (error) {
     objectCleanupError = error;
   }
 
+  await assertDestructiveWorkAllowed?.();
   await resetMutableIdentity(env);
+  await assertDestructiveWorkAllowed?.();
   await seedJudgedDemoWorkflow(env);
   const baseline = await baselineEvidence(env);
   if (!demoBaselineIsComplete(baseline)) {
     throw new Error("The restored demo baseline is incomplete.");
   }
+  await assertDestructiveWorkAllowed?.();
   await env.DB.prepare(
     `INSERT INTO audit_events (
        id, organisation_id, event_id, actor_person_id, actor_id, action,

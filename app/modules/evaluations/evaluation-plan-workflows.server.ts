@@ -384,13 +384,18 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
                s.submitter_email AS submitterEmail,
                s.submitted_snapshot_json AS submittedSnapshotJson,
                COALESCE((
-                 SELECT json_group_array(json_object(
-                          'name', speaker.display_name,
-                          'email', speaker.email
-                        ))
-                   FROM submission_speakers speaker
-                  WHERE speaker.event_id = s.event_id
-                    AND speaker.submission_id = s.id
+                 SELECT json_group_array(json(ordered.speaker))
+                   FROM (
+                     SELECT json_object(
+                              'name', speaker.display_name,
+                              'email', speaker.email,
+                              'roleLabel', speaker.role_label
+                            ) AS speaker
+                       FROM submission_speakers speaker
+                      WHERE speaker.event_id = s.event_id
+                        AND speaker.submission_id = s.id
+                      ORDER BY speaker.position
+                   ) ordered
                ), '[]') AS speakersJson,
                (SELECT COUNT(*) FROM submission_speakers ss
                  WHERE ss.event_id = s.event_id AND ss.submission_id = s.id
@@ -785,7 +790,13 @@ export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundatio
           .min(1)
           .parse(JSON.parse(tracksJson));
         const speakers = z
-          .array(z.object({ name: z.string(), email: z.string() }))
+          .array(
+            z.object({
+              name: z.string(),
+              email: z.string(),
+              roleLabel: z.string().nullable(),
+            }),
+          )
           .parse(JSON.parse(speakersJson));
         const submittedSnapshot = requireSubmittedSnapshot(
           submission.id,

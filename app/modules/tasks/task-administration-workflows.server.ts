@@ -71,12 +71,13 @@ export abstract class TaskAdministrationWorkflows extends ParticipantTaskWorkflo
         `
         SELECT DISTINCT p.id, p.display_name AS name, p.email
           FROM people p
-          LEFT JOIN memberships m ON m.person_id = p.id AND m.event_id = ? AND m.role = 'speaker' AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL
-          LEFT JOIN session_speakers ss ON ss.person_id = p.id AND ss.event_id = ?
-         WHERE m.id IS NOT NULL OR ss.person_id IS NOT NULL ORDER BY p.display_name
+          JOIN event_speaker_workflows workflow
+            ON workflow.person_id = p.id AND workflow.event_id = ?
+           AND workflow.status IN ('prospect','invited','confirmed')
+         ORDER BY p.display_name, p.id
       `,
       )
-        .bind(viewer.eventId, viewer.eventId)
+        .bind(viewer.eventId)
         .all<{ id: string; name: string; email: string }>(),
       this.env.DB.prepare(
         `

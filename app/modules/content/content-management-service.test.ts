@@ -495,6 +495,184 @@ describe("content management", () => {
     expect(new TextDecoder().decode(zip)).toContain("conference content");
   });
 
+  it("downloads retained clean file versions by exact authorised identity", async () => {
+    const content = new ContentManagementService(scheduleTestEnv);
+    const assetId = crypto.randomUUID();
+    const firstVersionId = crypto.randomUUID();
+    const secondVersionId = crypto.randomUUID();
+    const firstKey = `private/content-tests/${firstVersionId}`;
+    const secondKey = `private/content-tests/${secondVersionId}`;
+    const firstBytes = new TextEncoder().encode("version one");
+    const secondBytes = new TextEncoder().encode("version two");
+    const [firstObject, secondObject] = await Promise.all([
+      env.FILES.put(firstKey, firstBytes),
+      env.FILES.put(secondKey, secondBytes),
+    ]);
+    if (!firstObject || !secondObject) {
+      throw new Error("The retained-version test objects were not created.");
+    }
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           current_version_id, status, created_at, updated_at
+         ) VALUES (?, ?, ?, 'session', ?, 'slides',
+                   ?, 'active', unixepoch(), unixepoch())`,
+      ).bind(
+        assetId,
+        viewer.eventId,
+        viewer.personId,
+        `content-version-target-${assetId}`,
+        secondVersionId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status,
+           scan_status, released_at, replaced_at, created_by_person_id, created_at
+         ) VALUES (?, ?, ?, 1, ?, 'slides-v1.pdf', 'application/pdf',
+                   'application/pdf', ?, ?, 'uploaded', 'valid', 'clean',
+                   unixepoch(), unixepoch(), ?, unixepoch())`,
+      ).bind(
+        firstVersionId,
+        viewer.eventId,
+        assetId,
+        firstKey,
+        firstBytes.byteLength,
+        firstObject.httpEtag,
+        viewer.personId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status,
+           scan_status, released_at, created_by_person_id, created_at
+         ) VALUES (?, ?, ?, 2, ?, 'slides-v2.pdf', 'application/pdf',
+                   'application/pdf', ?, ?, 'uploaded', 'valid', 'clean',
+                   unixepoch(), ?, unixepoch())`,
+      ).bind(
+        secondVersionId,
+        viewer.eventId,
+        assetId,
+        secondKey,
+        secondBytes.byteLength,
+        secondObject.httpEtag,
+        viewer.personId,
+      ),
+    ]);
+
+    const firstDownload = await content.downloadFileVersion(
+      viewer,
+      assetId,
+      firstVersionId,
+    );
+    const currentDownload = await content.downloadFileVersion(
+      viewer,
+      assetId,
+      secondVersionId,
+    );
+    expect(new TextDecoder().decode(await firstDownload.arrayBuffer())).toBe(
+      "version one",
+    );
+    expect(new TextDecoder().decode(await currentDownload.arrayBuffer())).toBe(
+      "version two",
+    );
+    expect(firstDownload.headers.get("content-disposition")).toContain(
+      "slides-v1.pdf",
+    );
+    await expect(
+      content.downloadFileVersion(
+        { ...viewer, role: "speaker" },
+        assetId,
+        firstVersionId,
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("uses upload time in the file dashboard and rejects released files without detected MIME", async () => {
+    const content = new ContentManagementService(scheduleTestEnv);
+    const assetId = crypto.randomUUID();
+    const versionId = crypto.randomUUID();
+    const objectKey = `private/content-tests/${versionId}`;
+    const bytes = new TextEncoder().encode("released content");
+    const object = await env.FILES.put(objectKey, bytes);
+    if (!object) throw new Error("The test R2 object was not created.");
+    const createdAt = 1_700_000_000;
+    const uploadedAt = 1_700_000_100;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           current_version_id, status, created_at, updated_at
+         ) VALUES (?, ?, ?, 'session', ?, 'slides', ?, 'active', ?, ?)`,
+      ).bind(
+        assetId,
+        viewer.eventId,
+        viewer.personId,
+        `content-mime-target-${assetId}`,
+        versionId,
+        createdAt,
+        uploadedAt,
+      ),
+      env.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status,
+           scan_status, released_at, created_by_person_id, created_at,
+           uploaded_at
+         ) VALUES (?, ?, ?, 1, ?, 'released.pdf', 'application/pdf', NULL,
+                   ?, ?, 'uploaded', 'valid', 'clean', ?, ?, ?, ?)`,
+      ).bind(
+        versionId,
+        viewer.eventId,
+        assetId,
+        objectKey,
+        bytes.byteLength,
+        object.httpEtag,
+        uploadedAt,
+        viewer.personId,
+        createdAt,
+        uploadedAt,
+      ),
+    ]);
+
+    const dashboardVersion = (await content.getDashboard(viewer)).files
+      .find((asset) => asset.id === assetId)
+      ?.versions.at(0);
+    expect(dashboardVersion).toMatchObject({
+      id: versionId,
+      uploadedAt,
+    });
+    expect(
+      (await content.getFileVersions(viewer, assetId)).versions[0],
+    ).toMatchObject({ id: versionId, uploadedAt });
+    await expect(content.downloadCurrentFile(viewer, assetId)).rejects.toThrow(
+      /missing its detected content type/i,
+    );
+    await expect(
+      content.downloadFileVersion(viewer, assetId, versionId),
+    ).rejects.toThrow(/missing its detected content type/i);
+
+    await env.DB.prepare(
+      "UPDATE file_versions SET detected_content_type = 'application/pdf' WHERE id = ? AND event_id = ?",
+    )
+      .bind(versionId, viewer.eventId)
+      .run();
+    expect(
+      (await content.downloadCurrentFile(viewer, assetId)).headers.get(
+        "content-type",
+      ),
+    ).toBe("application/pdf");
+    expect(
+      (
+        await content.downloadFileVersion(viewer, assetId, versionId)
+      ).headers.get("content-type"),
+    ).toBe("application/pdf");
+  });
+
   it("groups submission-owned files under their resulting session", async () => {
     const content = new ContentManagementService(scheduleTestEnv);
     const submissionId = crypto.randomUUID();
@@ -577,8 +755,8 @@ describe("content management", () => {
 
   it("bounds the file library and loads retained versions in separate pages", async () => {
     const content = new ContentManagementService(scheduleTestEnv);
-    const initialFileTotal = (await content.getDashboard(viewer)).filesPagination
-      .total;
+    const initialFileTotal = (await content.getDashboard(viewer))
+      .filesPagination.total;
     await env.DB.prepare(
       `WITH RECURSIVE sequence(value) AS (
          VALUES (1) UNION ALL SELECT value + 1 FROM sequence WHERE value < 55
@@ -634,9 +812,7 @@ describe("content management", () => {
     ).toMatchObject({
       id: "content-page-asset-55",
       versionCount: 52,
-      versions: [
-        expect.objectContaining({ id: "content-page-version-52" }),
-      ],
+      versions: [expect.objectContaining({ id: "content-page-version-52" })],
     });
 
     const secondPage = await content.getDashboard(viewer, 2);
@@ -654,6 +830,10 @@ describe("content management", () => {
     );
     expect(firstVersions.versions).toHaveLength(50);
     expect(firstVersions).toMatchObject({ total: 52, hasNext: true });
+    expect(firstVersions.versions[0]).toMatchObject({
+      id: "content-page-version-52",
+      latest: true,
+    });
     const secondVersions = await content.getFileVersions(
       viewer,
       "content-page-asset-55",
@@ -661,6 +841,9 @@ describe("content management", () => {
     );
     expect(secondVersions.versions).toHaveLength(2);
     expect(secondVersions).toMatchObject({ hasPrevious: true, hasNext: false });
+    expect(secondVersions.versions.every((version) => !version.latest)).toBe(
+      true,
+    );
   });
 
   it("rejects out-of-range file pages even when the bounded collection is empty", async () => {

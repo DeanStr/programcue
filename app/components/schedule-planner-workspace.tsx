@@ -62,6 +62,21 @@ type AutoPlacementResultNotice = {
   warning: string | null;
 };
 
+type ScheduleActionConflictNotice = {
+  type: string;
+  severity: "warning" | "blocking";
+  message: string;
+};
+
+export const SCHEDULE_ACTION_INVALID_RESPONSE_MESSAGE =
+  "The schedule action returned an invalid response. Refresh and try again.";
+
+type ScheduleActionNotices = {
+  conflicts: ScheduleActionConflictNotice[];
+  warnings: ScheduleActionConflictNotice[];
+  error: string | null;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -72,6 +87,60 @@ function isPositiveSafeInteger(value: unknown): value is number {
 
 function isNonNegativeSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isScheduleActionConflictNotice(
+  value: unknown,
+): value is ScheduleActionConflictNotice {
+  return (
+    isRecord(value) &&
+    typeof value.type === "string" &&
+    value.type.length > 0 &&
+    (value.severity === "warning" || value.severity === "blocking") &&
+    typeof value.message === "string" &&
+    value.message.length > 0 &&
+    (value.conflictingEntryId === undefined ||
+      typeof value.conflictingEntryId === "string")
+  );
+}
+
+export function parseScheduleActionNotices(
+  result: unknown,
+): ScheduleActionNotices {
+  const empty = { conflicts: [], warnings: [] };
+  if (result === undefined) return { ...empty, error: null };
+  if (!isRecord(result)) {
+    return { ...empty, error: SCHEDULE_ACTION_INVALID_RESPONSE_MESSAGE };
+  }
+  const conflicts =
+    "conflicts" in result && Array.isArray(result.conflicts)
+      ? result.conflicts
+      : "conflicts" in result
+        ? null
+        : [];
+  const warnings =
+    "warnings" in result && Array.isArray(result.warnings)
+      ? result.warnings
+      : "warnings" in result
+        ? null
+        : [];
+  if (
+    !conflicts ||
+    !warnings ||
+    !conflicts.every(isScheduleActionConflictNotice) ||
+    !warnings.every(
+      (warning) =>
+        isScheduleActionConflictNotice(warning) &&
+        warning.severity === "warning",
+    )
+  ) {
+    return { ...empty, error: SCHEDULE_ACTION_INVALID_RESPONSE_MESSAGE };
+  }
+  return { conflicts, warnings, error: null };
+}
+
+function conflictTypeLabel(type: string) {
+  return type.replaceAll("_", " ");
 }
 
 function isAutoPlacementUnplaced(
@@ -609,9 +678,10 @@ export function SchedulePlannerWorkspace({
   }
 
   const actionResult = fetcher.data;
+  const actionNotices = parseScheduleActionNotices(actionResult);
   useEffect(() => {
     if (
-      !actionResult ||
+      !isRecord(actionResult) ||
       !("sessionId" in actionResult) ||
       typeof actionResult.sessionId !== "string" ||
       actionResult.sessionId !== quickSessionId ||
@@ -650,7 +720,7 @@ export function SchedulePlannerWorkspace({
     quickSessionId,
   ]);
   const undo =
-    actionResult &&
+    isRecord(actionResult) &&
     "undo" in actionResult &&
     actionResult.undo &&
     typeof actionResult.undo === "object" &&
@@ -823,9 +893,19 @@ export function SchedulePlannerWorkspace({
           </Link>
         </div>
       ) : null}
-      {actionResult && "error" in actionResult ? (
+      {actionNotices.error ? (
+        <div className="validation-item error mb" role="alert">
+          <span>{actionNotices.error}</span>
+        </div>
+      ) : actionResult && "error" in actionResult ? (
         <div className="validation-item error mb" role="alert">
           <span>{actionResult.error}</span>
+          {actionNotices.conflicts.map((conflict, index) => (
+            <span key={`${conflict.type}-${index}`}>
+              <strong>{conflictTypeLabel(conflict.type)}:</strong>{" "}
+              {conflict.message}
+            </span>
+          ))}
           {undoAvailable && workspace.version?.status === "draft" ? (
             <fetcher.Form method="post">
               <input type="hidden" name="intent" value="undo" />
@@ -855,8 +935,17 @@ export function SchedulePlannerWorkspace({
           ) : null}
         </div>
       ) : actionResult?.message ? (
-        <div className="validation-item ok mb" role="status">
+        <div
+          className={`validation-item ${actionNotices.warnings.length ? "warn" : "ok"} mb`}
+          role="status"
+        >
           <span>{actionResult.message}</span>
+          {actionNotices.warnings.map((warning, index) => (
+            <span key={`${warning.type}-${index}`}>
+              <strong>{conflictTypeLabel(warning.type)}:</strong>{" "}
+              {warning.message}
+            </span>
+          ))}
           {undoAvailable && workspace.version?.status === "draft" ? (
             <fetcher.Form method="post">
               <input type="hidden" name="intent" value="undo" />

@@ -8,7 +8,16 @@ test.beforeEach(async ({ request }) => {
 test("reviewer queue navigation and submission confirmation preserve context", async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
     {
       name: "program_cue_demo_identity",
       value: "evaluator",
@@ -38,6 +47,26 @@ test("reviewer queue navigation and submission confirmation preserve context", a
   expect(page.url()).not.toBe(firstUrl);
   await page.getByRole("button", { name: "Previous", exact: true }).click();
 
+  await page.getByRole("button", { name: "Submit and open next" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Submit and open the next review?" }),
+  ).toBeHidden();
+  const scoreFields = page.locator(".review-score-select");
+  const missingScore = scoreFields.first();
+  await expect(missingScore).toBeFocused();
+
+  for (let index = 0; index < (await scoreFields.count()); index += 1) {
+    await scoreFields.nth(index).selectOption("4");
+    await expect(scoreFields.nth(index)).toHaveValue("4");
+  }
+  await page.locator('select[name="recommendation"]').selectOption("accept");
+  await page.locator('select[name="confidence"]').selectOption("4");
+  for (let index = 0; index < (await scoreFields.count()); index += 1) {
+    await expect(scoreFields.nth(index)).toHaveValue("4");
+  }
+  await expect(
+    page.getByRole("region", { name: "Score submission" }).locator(".status"),
+  ).toContainText("4 / 4");
   await page.getByRole("button", { name: "Submit and open next" }).click();
   const confirmation = page.getByRole("dialog", {
     name: "Submit and open the next review?",
@@ -96,7 +125,12 @@ test("evaluation administration exposes onboarding and consequential previews", 
   const bulkAssignment = page.getByRole("dialog", {
     name: "Bulk assign reviewers",
   });
-  await bulkAssignment.getByRole("checkbox").first().check();
+  const trackFilter = bulkAssignment.getByLabel("Filter submissions by track");
+  await expect(trackFilter.locator("option")).not.toHaveCount(1);
+  await trackFilter.selectOption({ index: 1 });
+  await bulkAssignment.getByRole("button", { name: "Select visible" }).click();
+  expect(await bulkAssignment.getByRole("checkbox").count()).toBeGreaterThan(0);
+  await expect(bulkAssignment.getByRole("checkbox").first()).toBeChecked();
   await bulkAssignment
     .getByRole("button", { name: /Preview 1 assignment target/ })
     .click();

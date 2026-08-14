@@ -52,6 +52,29 @@ const webhookCredentialKey = btoa(
   String.fromCharCode(...Array.from({ length: 32 }, (_, index) => index)),
 );
 
+async function addRosterRecord(
+  service: SpeakerService,
+  input: { idempotencyKey: string; name: string; email: string },
+) {
+  return service.addManualSpeakerRecord(admin, {
+    ...input,
+    idempotencyKey: `record:${input.idempotencyKey}`,
+    jobTitle: "",
+    organisationName: "",
+    biography: "",
+  });
+}
+
+async function inviteRosterRecord(
+  service: SpeakerService,
+  input: { idempotencyKey: string; personId: string },
+) {
+  return service.inviteSpeakerRecord(admin, {
+    ...input,
+    confirmation: "send",
+  });
+}
+
 describe("speaker profile service", () => {
   it("records speaker and administrator participation confirmation independently of portal access", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
@@ -176,7 +199,7 @@ describe("speaker profile service", () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
     const suffix = crypto.randomUUID();
-    const email = `durable-invitation-${suffix}@example.com`;
+    const email = `durable-invitation-${suffix}@programcue.dev`;
     const queued: unknown[] = [];
     await testEnv.DB.prepare(
       `INSERT INTO sender_profiles (
@@ -211,7 +234,11 @@ describe("speaker profile service", () => {
     };
     const service = new SpeakerService(productionEnv);
 
-    const created = await service.createManualSpeaker(admin, input);
+    const record = await addRosterRecord(service, input);
+    const created = await inviteRosterRecord(service, {
+      idempotencyKey: input.idempotencyKey,
+      personId: record.personId,
+    });
     expect(created.delivery).toBe("queued");
     expect(queued).toHaveLength(1);
     await expect(
@@ -228,9 +255,12 @@ describe("speaker profile service", () => {
       source: "manual",
       updatedByPersonId: admin.personId,
     });
-    await expect(service.createManualSpeaker(admin, input)).resolves.toEqual(
-      created,
-    );
+    await expect(
+      inviteRosterRecord(service, {
+        idempotencyKey: input.idempotencyKey,
+        personId: record.personId,
+      }),
+    ).resolves.toEqual(created);
     expect(queued).toHaveLength(1);
     await testEnv.DB.prepare(
       `UPDATE memberships SET accepted_at = unixepoch()
@@ -238,7 +268,12 @@ describe("speaker profile service", () => {
     )
       .bind(created.membershipId, admin.eventId)
       .run();
-    await expect(service.createManualSpeaker(admin, input)).resolves.toEqual({
+    await expect(
+      inviteRosterRecord(service, {
+        idempotencyKey: input.idempotencyKey,
+        personId: record.personId,
+      }),
+    ).resolves.toEqual({
       ...created,
       accepted: true,
       delivery: "not_required",
@@ -271,7 +306,7 @@ describe("speaker profile service", () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
     const suffix = crypto.randomUUID();
-    const email = `fast-consumer-${suffix}@example.com`;
+    const email = `fast-consumer-${suffix}@programcue.dev`;
     await testEnv.DB.prepare(
       `INSERT INTO sender_profiles (
          id, event_id, name, from_name, from_email, reply_to_email,
@@ -307,14 +342,17 @@ describe("speaker profile service", () => {
       },
     } as unknown as CloudflareEnvironment;
 
-    const created = await new SpeakerService(productionEnv).createManualSpeaker(
-      admin,
-      {
-        idempotencyKey: `fast-consumer:${suffix}`,
-        name: "Fast Queue Consumer",
-        email,
-      },
-    );
+    const service = new SpeakerService(productionEnv);
+    const input = {
+      idempotencyKey: `fast-consumer:${suffix}`,
+      name: "Fast Queue Consumer",
+      email,
+    };
+    const record = await addRosterRecord(service, input);
+    const created = await inviteRosterRecord(service, {
+      idempotencyKey: input.idempotencyKey,
+      personId: record.personId,
+    });
 
     expect(created.delivery).toBe("queued");
     await expect(
@@ -336,7 +374,7 @@ describe("speaker profile service", () => {
   it("fails before saving an invitation when durable delivery is unavailable", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
-    const email = `missing-queue-${crypto.randomUUID()}@example.com`;
+    const email = `missing-queue-${crypto.randomUUID()}@programcue.dev`;
     const productionWithoutQueue = {
       ...testEnv,
       APP_ENV: "production",
@@ -344,18 +382,27 @@ describe("speaker profile service", () => {
       OPERATIONS_QUEUE: undefined,
     } as unknown as CloudflareEnvironment;
 
+    const service = new SpeakerService(productionWithoutQueue);
+    const input = {
+      idempotencyKey: `missing-queue:${crypto.randomUUID()}`,
+      name: "Missing Queue",
+      email,
+    };
+    const record = await addRosterRecord(service, input);
     await expect(
-      new SpeakerService(productionWithoutQueue).createManualSpeaker(admin, {
-        idempotencyKey: `missing-queue:${crypto.randomUUID()}`,
-        name: "Missing Queue",
-        email,
+      inviteRosterRecord(service, {
+        idempotencyKey: input.idempotencyKey,
+        personId: record.personId,
       }),
     ).rejects.toThrow(/OPERATIONS_QUEUE.*no speaker invitation was saved/i);
     await expect(
-      testEnv.DB.prepare("SELECT id FROM people WHERE email = ?")
-        .bind(email)
+      testEnv.DB.prepare(
+        `SELECT invited_at AS invitedAt, invitation_expires_at AS expiresAt
+           FROM memberships WHERE event_id = ? AND person_id = ?`,
+      )
+        .bind(admin.eventId, record.personId)
         .first(),
-    ).resolves.toBeNull();
+    ).resolves.toEqual({ invitedAt: null, expiresAt: null });
   });
 
   it("reactivates the existing event membership when an administrator re-adds a revoked speaker", async () => {
@@ -377,13 +424,59 @@ describe("speaker profile service", () => {
          ) VALUES (?, ?, ?, ?, 'speaker', unixepoch() - 200,
                    unixepoch() - 100, unixepoch() - 50)`,
       ).bind(membershipId, admin.organisationId, admin.eventId, personId),
+      testEnv.DB.prepare(
+        `INSERT INTO event_speaker_workflows (
+           event_id, person_id, status, source, last_operation_id,
+           updated_by_person_id, created_at, updated_at
+         ) VALUES (?, ?, 'withdrawn', 'manual', ?, ?, unixepoch(), unixepoch())`,
+      ).bind(
+        admin.eventId,
+        personId,
+        `reactivate-workflow:${suffix}`,
+        admin.personId,
+      ),
     ]);
 
     await expect(
-      new SpeakerService(testEnv).createManualSpeaker(admin, {
+      new SpeakerService(testEnv).inviteSpeakerRecord(admin, {
         idempotencyKey: `reactivate:${suffix}`,
-        name: "Revoked Speaker",
-        email,
+        personId,
+        confirmation: "send",
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT id, accepted_at AS acceptedAt, revoked_at AS revokedAt
+           FROM memberships
+          WHERE event_id = ? AND person_id = ? AND role = 'speaker'`,
+      )
+        .bind(admin.eventId, personId)
+        .first(),
+    ).resolves.toEqual({
+      id: membershipId,
+      acceptedAt: expect.any(Number),
+      revokedAt: expect.any(Number),
+    });
+
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE event_speaker_workflows
+            SET status = 'prospect', revision = revision + 1,
+                last_operation_id = ?, updated_at = unixepoch()
+          WHERE event_id = ? AND person_id = ?`,
+      ).bind(`reactivate-approved:${suffix}`, admin.eventId, personId),
+      testEnv.DB.prepare(
+        `INSERT INTO organisation_contacts (
+           organisation_id, person_id, source, status, created_by_person_id,
+           created_at, updated_at
+         ) VALUES (?, ?, 'event', 'active', ?, unixepoch(), unixepoch())`,
+      ).bind(admin.organisationId, personId, admin.personId),
+    ]);
+    await expect(
+      new SpeakerService(testEnv).inviteSpeakerRecord(admin, {
+        idempotencyKey: `reactivate-approved:${suffix}`,
+        personId,
+        confirmation: "send",
       }),
     ).resolves.toMatchObject({
       personId,
@@ -411,7 +504,7 @@ describe("speaker profile service", () => {
     });
   });
 
-  it("keeps an identity from another organisation pending until that person accepts", async () => {
+  it("does not invite an identity from another organisation without an event roster relationship", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
     const suffix = crypto.randomUUID();
@@ -436,28 +529,13 @@ describe("speaker profile service", () => {
       ).bind(`other-membership-${suffix}`, otherOrganisationId, personId),
     ]);
 
-    const result = await new SpeakerService(testEnv).createManualSpeaker(
-      admin,
-      {
+    await expect(
+      new SpeakerService(testEnv).inviteSpeakerRecord(admin, {
         idempotencyKey: `cross-org:${suffix}`,
-        name: "Administrator supplied name",
-        email,
-      },
-    );
-    expect(result).toMatchObject({ personId, accepted: false });
-    await expect(
-      new SpeakerService(testEnv).getAdminSpeakerDetail(admin, personId),
-    ).resolves.toMatchObject({
-      profile: { id: personId, name: "Person-owned name" },
-      profileShared: true,
-    });
-    await expect(
-      new SpeakerService(testEnv).getPortal({
-        ...speaker,
         personId,
-        email,
+        confirmation: "send",
       }),
-    ).rejects.toMatchObject({ status: 403 });
+    ).rejects.toMatchObject({ status: 404 });
     await expect(
       testEnv.DB.prepare(
         `SELECT display_name AS name, biography
@@ -475,14 +553,17 @@ describe("speaker profile service", () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
     const suffix = crypto.randomUUID();
-    const created = await new SpeakerService(testEnv).createManualSpeaker(
-      admin,
-      {
-        idempotencyKey: `missing-expiry:${suffix}`,
-        name: "Missing Expiry",
-        email: `missing-expiry-${suffix}@example.com`,
-      },
-    );
+    const service = new SpeakerService(testEnv);
+    const input = {
+      idempotencyKey: `missing-expiry:${suffix}`,
+      name: "Missing Expiry",
+      email: `missing-expiry-${suffix}@example.com`,
+    };
+    const record = await addRosterRecord(service, input);
+    const created = await inviteRosterRecord(service, {
+      idempotencyKey: input.idempotencyKey,
+      personId: record.personId,
+    });
     await testEnv.DB.prepare(
       "UPDATE memberships SET invitation_expires_at = NULL WHERE id = ?",
     )
@@ -521,11 +602,34 @@ describe("speaker profile service", () => {
       pronunciation: "PREE-yah SHAH",
       organisationName: "EventLab",
       jobTitle: "Director",
+      linkedinUrl: "https://www.linkedin.com/in/priya-shah",
+      xHandle: "@priya_shah",
+      travelPreferences: "Vegetarian meals and step-free ground transport.",
       publish: true,
     });
     const saved = await service.getPortal(speaker);
     expect(saved.profile.jobTitle).toBe("Director");
+    expect(saved.profile).toMatchObject({
+      linkedinUrl: "https://www.linkedin.com/in/priya-shah",
+      xHandle: "priya_shah",
+      travelPreferences: "Vegetarian meals and step-free ground transport.",
+    });
     expect(saved.profile.revision).toBe(portal.profile.revision + 1);
+
+    await expect(
+      service.updateProfile(speaker, {
+        revision: saved.profile.revision,
+        name: saved.profile.name,
+        biography: saved.profile.biography ?? "",
+        pronunciation: saved.profile.pronunciation ?? "",
+        organisationName: saved.profile.organisationName ?? "",
+        jobTitle: saved.profile.jobTitle ?? "",
+        linkedinUrl: "https://example.com/not-linkedin",
+        xHandle: "invalid handle",
+        travelPreferences: saved.profile.travelPreferences ?? "",
+        publish: true,
+      }),
+    ).rejects.toMatchObject({ name: "ZodError" });
 
     const auditCountBeforeStale = await testEnv.DB.prepare(
       `SELECT COUNT(*) AS count
@@ -544,6 +648,9 @@ describe("speaker profile service", () => {
         pronunciation: "",
         organisationName: "",
         jobTitle: "",
+        linkedinUrl: "",
+        xHandle: "",
+        travelPreferences: "",
         publish: false,
       }),
     ).rejects.toBeInstanceOf(SpeakerProfileConflictError);
@@ -573,6 +680,9 @@ describe("speaker profile service", () => {
       pronunciation: "AL-ex MOR-gan",
       organisationName: "Morgan Events",
       jobTitle: "Programme Lead",
+      linkedinUrl: "",
+      xHandle: "",
+      travelPreferences: "",
       publish: true,
     });
 
@@ -583,6 +693,191 @@ describe("speaker profile service", () => {
         revision: portal.profile.revision + 1,
       },
     });
+  });
+
+  it("isolates private travel preferences for the same participant across organisations", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const token = crypto.randomUUID();
+    const personId = `travel-profile-person-${token}`;
+    const firstOrganisationId = `travel-profile-org-a-${token}`;
+    const secondOrganisationId = `travel-profile-org-b-${token}`;
+    const firstEventId = `travel-profile-event-a-${token}`;
+    const secondEventId = `travel-profile-event-b-${token}`;
+    const filePolicy =
+      '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}';
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, biography, profile_status,
+           created_at, updated_at
+         ) VALUES (?, ?, 'Shared Travel Speaker',
+                   'A sufficiently detailed biography for the shared travel profile isolation test.',
+                   'published', unixepoch(), unixepoch())`,
+      ).bind(personId, `travel-profile-${token}@example.com`),
+      testEnv.DB.prepare(
+        "INSERT INTO organisations (id, name, slug) VALUES (?, 'Travel profile organisation A', ?)",
+      ).bind(firstOrganisationId, `travel-profile-org-a-${token}`),
+      testEnv.DB.prepare(
+        "INSERT INTO organisations (id, name, slug) VALUES (?, 'Travel profile organisation B', ?)",
+      ).bind(secondOrganisationId, `travel-profile-org-b-${token}`),
+      testEnv.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           file_policy_json
+         ) VALUES (?, ?, 'Travel profile event A', ?, 'UTC', 1800000000,
+                   1800086400, ?)`,
+      ).bind(
+        firstEventId,
+        firstOrganisationId,
+        `travel-profile-event-a-${token}`,
+        filePolicy,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           file_policy_json
+         ) VALUES (?, ?, 'Travel profile event B', ?, 'UTC', 1800000000,
+                   1800086400, ?)`,
+      ).bind(
+        secondEventId,
+        secondOrganisationId,
+        `travel-profile-event-b-${token}`,
+        filePolicy,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, accepted_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch())`,
+      ).bind(
+        `travel-profile-membership-a-${token}`,
+        firstOrganisationId,
+        firstEventId,
+        personId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, accepted_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch())`,
+      ).bind(
+        `travel-profile-membership-b-${token}`,
+        secondOrganisationId,
+        secondEventId,
+        personId,
+      ),
+    ]);
+    const service = new SpeakerService(testEnv);
+    const firstSpeaker: Viewer = {
+      personId,
+      name: "Shared Travel Speaker",
+      email: `travel-profile-${token}@example.com`,
+      role: "speaker",
+      organisationId: firstOrganisationId,
+      eventId: firstEventId,
+      demo: true,
+    };
+    const secondSpeaker: Viewer = {
+      ...firstSpeaker,
+      organisationId: secondOrganisationId,
+      eventId: secondEventId,
+    };
+    const update = async (viewer: Viewer, travelPreferences: string) => {
+      const portal = await service.getPortal(viewer);
+      await service.updateProfile(viewer, {
+        revision: portal.profile.revision,
+        name: portal.profile.name,
+        biography: portal.profile.biography ?? "",
+        pronunciation: portal.profile.pronunciation ?? "",
+        organisationName: portal.profile.organisationName ?? "",
+        jobTitle: portal.profile.jobTitle ?? "",
+        linkedinUrl: portal.profile.linkedinUrl ?? "",
+        xHandle: portal.profile.xHandle ?? "",
+        travelPreferences,
+        publish: portal.profile.profileStatus === "published",
+      });
+    };
+
+    await update(firstSpeaker, "Primary event ground transport preferences");
+    await update(secondSpeaker, "Other organisation dietary preferences");
+
+    await expect(service.getPortal(firstSpeaker)).resolves.toMatchObject({
+      profile: {
+        travelPreferences: "Primary event ground transport preferences",
+      },
+    });
+    await expect(service.getPortal(secondSpeaker)).resolves.toMatchObject({
+      profile: {
+        travelPreferences: "Other organisation dietary preferences",
+      },
+    });
+    await expect(
+      service.getAdminSpeakerDetail(
+        {
+          ...admin,
+          organisationId: firstOrganisationId,
+          eventId: firstEventId,
+        },
+        personId,
+      ),
+    ).resolves.toMatchObject({
+      profile: {
+        travelPreferences: "Primary event ground transport preferences",
+      },
+    });
+    await expect(
+      service.getAdminSpeakerDetail(
+        {
+          ...admin,
+          organisationId: secondOrganisationId,
+          eventId: secondEventId,
+        },
+        personId,
+      ),
+    ).resolves.toMatchObject({
+      profile: {
+        travelPreferences: "Other organisation dietary preferences",
+      },
+    });
+    const storedProfiles = await testEnv.DB.prepare(
+      `SELECT event_id AS eventId, organisation_id AS organisationId,
+              travel_preferences AS travelPreferences
+         FROM event_participant_profiles
+        WHERE person_id = ?
+          AND event_id IN (?, ?)
+        ORDER BY event_id`,
+    )
+      .bind(personId, firstEventId, secondEventId)
+      .all();
+    expect(storedProfiles.results).toEqual(
+      expect.arrayContaining([
+        {
+          eventId: firstEventId,
+          organisationId: firstOrganisationId,
+          travelPreferences: "Primary event ground transport preferences",
+        },
+        {
+          eventId: secondEventId,
+          organisationId: secondOrganisationId,
+          travelPreferences: "Other organisation dietary preferences",
+        },
+      ]),
+    );
+    await expect(
+      service.getPortal({
+        ...firstSpeaker,
+        organisationId: secondOrganisationId,
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.getAdminSpeakerDetail(
+        {
+          ...admin,
+          organisationId: secondOrganisationId,
+          eventId: firstEventId,
+        },
+        personId,
+      ),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it("rejects a person without a current speaker membership", async () => {
@@ -632,6 +927,9 @@ describe("speaker profile service", () => {
         pronunciation: "",
         organisationName: "",
         jobTitle: "",
+        linkedinUrl: "",
+        xHandle: "",
+        travelPreferences: "",
         profileStatus: "published",
       }),
     ).rejects.toMatchObject({ status: 404 });
@@ -697,6 +995,89 @@ describe("speaker profile service", () => {
     ]);
   });
 
+  it("returns exact current headshot filename, uploader and upload time to both profile surfaces", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    await testEnv.DB.prepare(
+      `DELETE FROM file_assets
+        WHERE event_id = ? AND owner_person_id = ?
+          AND target_type = 'person' AND target_id = ?
+          AND asset_kind = 'headshot'`,
+    )
+      .bind(speaker.eventId, speaker.personId, speaker.personId)
+      .run();
+    const assetId = crypto.randomUUID();
+    const versionId = crypto.randomUUID();
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status
+         ) VALUES (?, ?, ?, 'person', ?, 'headshot', 'active')`,
+      ).bind(assetId, speaker.eventId, speaker.personId, speaker.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status,
+           scan_status, created_by_person_id, uploaded_at, released_at
+         ) VALUES (?, ?, ?, 1, ?, 'headshot.png', 'image/png', 'image/png',
+                   128, 'headshot-etag', 'uploaded', 'valid', 'clean', ?,
+                   unixepoch() - 10, unixepoch())`,
+      ).bind(
+        versionId,
+        speaker.eventId,
+        assetId,
+        `tests/${versionId}`,
+        speaker.personId,
+      ),
+      testEnv.DB.prepare(
+        "UPDATE file_assets SET current_version_id = ? WHERE id = ? AND event_id = ?",
+      ).bind(versionId, assetId, speaker.eventId),
+    ]);
+
+    const service = new SpeakerService(testEnv);
+    const adminHeadshot = (
+      await service.getAdminSpeakerDetail(admin, speaker.personId)
+    ).files.find((file) => file.id === assetId);
+    expect(adminHeadshot).toMatchObject({
+      kind: "headshot",
+      targetType: "person",
+      targetId: speaker.personId,
+      downloadFilename: "headshot.png",
+      downloadUploaderName: speaker.name,
+      downloadUploadedAt: expect.any(Number),
+    });
+    const participantHeadshot = (await service.getPortal(speaker)).files.find(
+      (file) => file.id === assetId,
+    );
+    expect(participantHeadshot).toMatchObject({
+      kind: "headshot",
+      targetType: "person",
+      targetId: speaker.personId,
+      downloadFilename: "headshot.png",
+      downloadUploaderName: speaker.name,
+      downloadUploadedAt: expect.any(Number),
+    });
+
+    await testEnv.DB.prepare(
+      "UPDATE file_versions SET created_by_person_id = NULL WHERE id = ? AND event_id = ?",
+    )
+      .bind(versionId, speaker.eventId)
+      .run();
+    await expect(
+      service.getAdminSpeakerDetail(admin, speaker.personId),
+    ).rejects.toThrow(/file .* missing upload provenance/i);
+    await expect(service.getPortal(speaker)).rejects.toThrow(
+      /file .* missing upload provenance/i,
+    );
+    await testEnv.DB.prepare(
+      "UPDATE file_versions SET created_by_person_id = ? WHERE id = ? AND event_id = ?",
+    )
+      .bind(speaker.personId, versionId, speaker.eventId)
+      .run();
+  });
+
   it("commits one organiser profile revision and rejects a stale organiser save", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
@@ -721,6 +1102,9 @@ describe("speaker profile service", () => {
         biography: "This must not clear omitted fields.",
         pronunciation: "",
         organisationName: "EventLab",
+        linkedinUrl: "",
+        xHandle: "",
+        travelPreferences: "",
         profileStatus: "published",
       }),
     ).rejects.toMatchObject({ name: "ZodError" });
@@ -744,6 +1128,9 @@ describe("speaker profile service", () => {
         pronunciation: "PREE-yah SHAH",
         organisationName: "EventLab",
         jobTitle: "Head of Experience Design",
+        linkedinUrl: "https://www.linkedin.com/in/priya-shah",
+        xHandle: "@priya_shah",
+        travelPreferences: "Arrival May 11, aisle seat; dietary: Vegetarian",
         profileStatus: "published",
       },
     );
@@ -753,8 +1140,13 @@ describe("speaker profile service", () => {
     });
 
     const after = await service.getAdminSpeakerDetail(admin, speaker.personId);
-    expect(after.profile.jobTitle).toBe("Head of Experience Design");
-    expect(after.profile.profileStatus).toBe("published");
+    expect(after.profile).toMatchObject({
+      jobTitle: "Head of Experience Design",
+      linkedinUrl: "https://www.linkedin.com/in/priya-shah",
+      xHandle: "priya_shah",
+      travelPreferences: "Arrival May 11, aisle seat; dietary: Vegetarian",
+      profileStatus: "published",
+    });
     expect(after.profile.revision).toBe(before.profile.revision + 1);
 
     const audits = await testEnv.DB.prepare(
@@ -774,6 +1166,9 @@ describe("speaker profile service", () => {
         pronunciation: "",
         organisationName: "",
         jobTitle: "",
+        linkedinUrl: "",
+        xHandle: "",
+        travelPreferences: "",
         profileStatus: "draft",
       }),
     ).rejects.toBeInstanceOf(SpeakerProfileConflictError);
@@ -838,6 +1233,9 @@ describe("speaker profile service", () => {
         pronunciation: "",
         organisationName: "Wrong organisation",
         jobTitle: "Wrong title",
+        linkedinUrl: "",
+        xHandle: "",
+        travelPreferences: "",
         profileStatus: "archived",
       }),
     ).rejects.toBeInstanceOf(SpeakerAdminStateError);
@@ -900,6 +1298,9 @@ describe("speaker profile service", () => {
           pronunciation: "",
           organisationName: "Wrong event",
           jobTitle: "Wrong title",
+          linkedinUrl: "",
+          xHandle: "",
+          travelPreferences: "",
           profileStatus: "archived",
         }),
       ).rejects.toBeInstanceOf(SpeakerAdminStateError);
@@ -1078,6 +1479,9 @@ describe("speaker profile service", () => {
       pronunciation: portal.profile.pronunciation ?? "",
       organisationName: portal.profile.organisationName ?? "",
       jobTitle: portal.profile.jobTitle ?? "",
+      linkedinUrl: portal.profile.linkedinUrl ?? "",
+      xHandle: portal.profile.xHandle ?? "",
+      travelPreferences: portal.profile.travelPreferences ?? "",
       publish: portal.profile.profileStatus === "published",
     });
 
@@ -1128,15 +1532,17 @@ describe("speaker profile service", () => {
         `INSERT INTO file_versions (
            id, event_id, asset_id, version_number, object_key, original_filename,
            declared_content_type, detected_content_type, size_bytes, upload_status,
-           signature_status, scan_status, uploaded_at, scanned_at, released_at
+           signature_status, scan_status, created_by_person_id, uploaded_at,
+           scanned_at, released_at
          ) VALUES (?, ?, ?, 1, ?, 'released.pdf', 'application/pdf',
                    'application/pdf', 100, 'uploaded', 'valid', 'clean',
-                   unixepoch(), unixepoch(), unixepoch())`,
+                   ?, unixepoch(), unixepoch(), unixepoch())`,
       ).bind(
         releasedVersionId,
         speaker.eventId,
         downloadableAssetId,
         `tests/${releasedVersionId}`,
+        speaker.personId,
       ),
       testEnv.DB.prepare(
         `INSERT INTO file_versions (

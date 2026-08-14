@@ -11,6 +11,7 @@ import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-content";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EventDateTime } from "~/components/ui/event-date-time";
 import {
   ContentManagementService,
   ContentManagementStateError,
@@ -126,9 +127,11 @@ type FileVersionPage =
 function FileVersionHistory({
   assetId,
   versionCount,
+  timeZone,
 }: {
   assetId: string;
   versionCount: number;
+  timeZone: string;
 }) {
   const fetcher = useFetcher<FileVersionPage>();
   const page = fetcher.data?.ok ? fetcher.data.page : 1;
@@ -159,8 +162,37 @@ function FileVersionHistory({
           <ol>
             {fetcher.data.versions.map((version) => (
               <li key={version.id}>
-                v{version.versionNumber} · {version.scanStatus}
-                {version.current ? " · current" : ""}
+                <span>
+                  v{version.versionNumber} · {version.scanStatus}
+                  {version.latest ? " · latest" : ""}
+                  {version.current ? " · current" : ""}
+                  {version.uploadedAt === null ? (
+                    " · upload incomplete"
+                  ) : (
+                    <>
+                      {" · Uploaded "}
+                      <EventDateTime
+                        epochSeconds={version.uploadedAt}
+                        timeZone={timeZone}
+                      />
+                    </>
+                  )}
+                </span>
+                {version.uploadStatus === "uploaded" &&
+                version.signatureStatus === "valid" &&
+                version.scanStatus === "clean" &&
+                version.releasedAt !== null ? (
+                  <Link
+                    className="btn small"
+                    to={`/admin/content/files/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(version.id)}`}
+                    reloadDocument
+                  >
+                    <Download aria-hidden size={14} /> Download v
+                    {version.versionNumber}
+                  </Link>
+                ) : (
+                  <small className="subtle">Download unavailable</small>
+                )}
               </li>
             ))}
           </ol>
@@ -313,9 +345,10 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
           </span>
         </div>
         <p className="help mb">
-          Quarantined and historical metadata remains visible. Downloads and ZIP
-          exports include only current released, signature-valid and clean
-          versions.
+          Quarantined and historical metadata remains visible. Library and ZIP
+          export actions use only current released, signature-valid and clean
+          versions; retained clean and released versions remain individually
+          downloadable from version history.
         </p>
         {loaderData.files.length ? (
           <Form method="post" className="stack">
@@ -364,15 +397,39 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
                               ? ` · ${formatBytes(current.sizeBytes)}`
                               : ""}
                           </small>
+                          {current ? (
+                            <small className="subtle">
+                              {current.uploadedAt === null ? (
+                                "Upload incomplete"
+                              ) : (
+                                <>
+                                  Uploaded{" "}
+                                  <EventDateTime
+                                    epochSeconds={current.uploadedAt}
+                                    timeZone={loaderData.eventTimezone}
+                                  />
+                                </>
+                              )}
+                            </small>
+                          ) : null}
                         </td>
                         <td>
                           {asset.sessionName}
                           <small className="subtle">{asset.speakerName}</small>
+                          {asset.targetType === "task" ? (
+                            <Link
+                              className="btn small"
+                              to={`/admin/tasks?task=${encodeURIComponent(asset.targetId)}`}
+                            >
+                              Open task thread
+                            </Link>
+                          ) : null}
                         </td>
                         <td>
                           <FileVersionHistory
                             assetId={asset.id}
                             versionCount={asset.versionCount}
+                            timeZone={loaderData.eventTimezone}
                           />
                         </td>
                         <td>

@@ -8,7 +8,7 @@ import {
   calculateRecipientCount,
   communicationDraftSchema,
 } from "./communication-rules";
-import { formatEventDateMarkers } from "./merge-template";
+import { formatEventDateMarkers, formatTaskDueDate } from "./merge-template";
 
 describe("communication and readiness rules", () => {
   it("calculates deliverable recipients", () => {
@@ -68,6 +68,13 @@ describe("communication and readiness rules", () => {
     expect(formatEventDateMarkers(start, end)).toBe("Aug 9, 2026");
     expect(formatEventDateMarkers(start, end + 86_400)).toBe(
       "Aug 9, 2026 – Aug 10, 2026",
+    );
+  });
+
+  it("renders task due dates in the event timezone", () => {
+    const dueAt = Date.parse("2026-09-20T21:00:00Z") / 1_000;
+    expect(formatTaskDueDate(dueAt, "America/Toronto")).toBe(
+      "Sep 20, 2026, 5:00 PM (America/Toronto)",
     );
   });
 });

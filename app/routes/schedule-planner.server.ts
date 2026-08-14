@@ -234,6 +234,7 @@ export async function action({ request, context }: Route.ActionArgs) {
             {
               ...realtimeFailure,
               committed: true,
+              warnings: result.warnings,
               scheduleRevision: result.scheduleRevision,
               undo: result.undo,
             },
@@ -244,6 +245,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           message: result.warnings.length
             ? `Session placed with ${result.warnings.length} warning${result.warnings.length === 1 ? "" : "s"}.`
             : "Session placed.",
+          warnings: result.warnings,
           scheduleRevision: result.scheduleRevision,
           undo: result.undo,
         };
@@ -569,9 +571,15 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 404 },
       );
     if (error instanceof SchedulePlacementBlockedError)
-      return data({ ok: false, error: error.message }, { status: 409 });
+      return data(
+        { ok: false, error: error.message, conflicts: error.conflicts },
+        { status: 409 },
+      );
     if (error instanceof SchedulePublicationBlockedError)
-      return data({ ok: false, error: error.message }, { status: 409 });
+      return data(
+        { ok: false, error: error.message, conflicts: error.conflicts },
+        { status: 409 },
+      );
     if (error instanceof ScheduleConfigurationError)
       return data(
         {

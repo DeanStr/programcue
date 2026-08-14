@@ -403,6 +403,59 @@ describe("Submissions D1 vertical slice", () => {
         demo: true,
       };
 
+      const reservedEmail = `reserved-after-acceptance-${crypto.randomUUID()}@example.com`;
+      const reservedOperationId = `reserved-after-acceptance-${crypto.randomUUID()}`;
+      await expect(
+        new SubmissionService({
+          ...testEnv,
+          APP_ENV: "production",
+          DEMO_MODE: "false",
+          EVALUATION_MODE: "false",
+        } as unknown as CloudflareEnvironment).inviteAcceptedCoSpeaker(
+          { ...participantViewer, demo: false },
+          {
+            submissionId,
+            revision: accepted!.revision,
+            name: "Reserved Co-speaker",
+            email: reservedEmail,
+            roleLabel: "Co-speaker",
+            confirmed: true,
+          },
+          reservedOperationId,
+        ),
+      ).rejects.toThrow(/not deliverable: reserved or local-only domain/i);
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT submission.revision,
+                  (SELECT COUNT(*) FROM submission_speakers speaker
+                    WHERE speaker.submission_id = submission.id
+                      AND speaker.event_id = submission.event_id
+                      AND speaker.email = ? COLLATE NOCASE) AS speakerCount,
+                  (SELECT COUNT(*) FROM idempotency_records command
+                    WHERE command.event_id = submission.event_id
+                      AND command.idempotency_key LIKE '%' || ?) AS commandCount,
+                  (SELECT COUNT(*) FROM communications communication
+                    WHERE communication.event_id = submission.event_id
+                      AND json_extract(communication.audience_json, '$.emails[0]') = ?)
+                    AS communicationCount
+             FROM submissions submission
+            WHERE submission.id = ? AND submission.event_id = ?`,
+        )
+          .bind(
+            reservedEmail,
+            reservedOperationId,
+            reservedEmail,
+            submissionId,
+            viewer.eventId,
+          )
+          .first(),
+      ).resolves.toEqual({
+        revision: accepted!.revision,
+        speakerCount: 0,
+        commandCount: 0,
+        communicationCount: 0,
+      });
+
       const result = await service.inviteAcceptedCoSpeaker(
         participantViewer,
         {

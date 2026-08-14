@@ -27,6 +27,16 @@ const speaker: Viewer = {
   demo: true,
 };
 
+const administrator: Viewer = {
+  personId: "person-demo-admin",
+  name: "Olivia Bennett",
+  email: "olivia@example.com",
+  role: "administrator",
+  organisationId: speaker.organisationId,
+  eventId: speaker.eventId,
+  demo: true,
+};
+
 function configuredMultipartEnvironment() {
   return {
     ...(env as unknown as CloudflareEnvironment),
@@ -135,6 +145,36 @@ describe("direct R2 multipart upload", () => {
       .bind(initiated.versionId)
       .first<{ status: string; uploadStatus: string }>();
     expect(row).toEqual({ status: "aborted", uploadStatus: "aborted" });
+  });
+
+  it("keeps an organiser-owned pending headshot upload under the initiating organiser's control", async () => {
+    const service = new MultipartUploadService(
+      configuredMultipartEnvironment(),
+    );
+    const initiated = await service.initiate(administrator, {
+      target: {
+        targetType: "person",
+        targetId: speaker.personId,
+        assetKind: "headshot",
+      },
+      filename: "organiser-headshot.png",
+      contentType: "image/png",
+      sizeBytes: 9,
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    await expect(
+      service.createPartUrl(speaker, {
+        versionId: initiated.versionId,
+        partNumber: 1,
+      }),
+    ).rejects.toBeInstanceOf(FileAccessError);
+    await expect(
+      service.abort(speaker, { versionId: initiated.versionId }),
+    ).rejects.toBeInstanceOf(FileAccessError);
+    await expect(
+      service.abort(administrator, { versionId: initiated.versionId }),
+    ).resolves.toEqual({ versionId: initiated.versionId, aborted: true });
   });
 
   it("finishes an abort retry when R2 proves the earlier abort already committed", async () => {

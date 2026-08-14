@@ -8,6 +8,11 @@ import {
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
 import { ApiError, apiRequestHash } from "~/platform/api/api.server";
+import {
+  EvaluatorEmailAliasContextError,
+  resolveEvaluatorEmailAlias,
+  type EvaluatorEmailRouting,
+} from "~/platform/evaluation/evaluator-email-alias.server";
 import { CsvParseError, parseCsv } from "~/platform/operations/csv";
 
 const IMPORT_BYTES_LIMIT = 512_000;
@@ -43,6 +48,8 @@ type SpeakerRosterImportRow = Omit<
   z.infer<typeof importRowSchema>,
   "workflowStatus"
 > & {
+  enteredEmail: string;
+  evaluatorEmailRouting: EvaluatorEmailRouting | null;
   biographySupplied: boolean;
   jobTitleSupplied: boolean;
   organisationNameSupplied: boolean;
@@ -62,6 +69,33 @@ type ExistingRosterProfile = {
   jobTitle: string | null;
   workflowStatus: SpeakerWorkflowStatus | null;
 };
+
+type SpeakerRosterImportResult = {
+  imported: number;
+  evaluatorEmailRoutings?: EvaluatorEmailRouting[];
+};
+
+const importAuditMetadataSchema = z.object({
+  count: z.number().int().nonnegative(),
+  evaluatorEmailRoutings: z
+    .array(
+      z.object({
+        enteredEmail: z.email(),
+        routedEmail: z.email(),
+        personId: z.string().min(1),
+      }),
+    )
+    .optional(),
+});
+
+function importResult(
+  imported: number,
+  evaluatorEmailRoutings: EvaluatorEmailRouting[],
+): SpeakerRosterImportResult {
+  return evaluatorEmailRoutings.length
+    ? { imported, evaluatorEmailRoutings }
+    : { imported };
+}
 
 function nullableImportValue(value: string) {
   return value || null;
@@ -91,7 +125,8 @@ function profileAction(
     (row.biographySupplied &&
       existing.biography !== nullableImportValue(row.biography)) ||
     (row.organisationNameSupplied &&
-      existing.organisationName !== nullableImportValue(row.organisationName)) ||
+      existing.organisationName !==
+        nullableImportValue(row.organisationName)) ||
     (row.jobTitleSupplied &&
       existing.jobTitle !== nullableImportValue(row.jobTitle));
   return changed
@@ -166,7 +201,7 @@ export class SpeakerRosterImportService {
     > = [];
     const invalid: Array<{ rowNumber: number; errors: string[] }> = [];
     const emails = new Set<string>();
-    parsed.rows.forEach((row, index) => {
+    for (const [index, row] of parsed.rows.entries()) {
       const candidate = importRowSchema.safeParse({
         name: row[mapping.name!],
         email: row[mapping.email!],
@@ -179,15 +214,40 @@ export class SpeakerRosterImportService {
           ? row[mapping.workflowStatus] || undefined
           : undefined,
       });
-      if (candidate.success && emails.has(candidate.data.email)) {
+      if (!candidate.success) {
+        invalid.push({
+          rowNumber: index + 2,
+          errors: candidate.error.issues.map((issue) => issue.message),
+        });
+        continue;
+      }
+      const enteredEmail = candidate.data.email;
+      let resolution: Awaited<ReturnType<typeof resolveEvaluatorEmailAlias>>;
+      try {
+        resolution = await resolveEvaluatorEmailAlias(
+          this.env,
+          viewer,
+          enteredEmail,
+        );
+      } catch (error) {
+        if (error instanceof EvaluatorEmailAliasContextError) {
+          invalid.push({ rowNumber: index + 2, errors: [error.message] });
+          continue;
+        }
+        throw error;
+      }
+      if (emails.has(resolution.email)) {
         invalid.push({
           rowNumber: index + 2,
           errors: ["Email duplicates another row in this import."],
         });
-      } else if (candidate.success) {
-        emails.add(candidate.data.email);
+      } else {
+        emails.add(resolution.email);
         parsedRows.push({
           ...candidate.data,
+          email: resolution.email,
+          enteredEmail,
+          evaluatorEmailRouting: resolution.routing,
           biographySupplied: mapping.biography !== null,
           jobTitleSupplied: mapping.jobTitle !== null,
           organisationNameSupplied: mapping.organisationName !== null,
@@ -195,13 +255,8 @@ export class SpeakerRosterImportService {
           workflowStatusSupplied: candidate.data.workflowStatus !== undefined,
           rowNumber: index + 2,
         });
-      } else {
-        invalid.push({
-          rowNumber: index + 2,
-          errors: candidate.error.issues.map((issue) => issue.message),
-        });
       }
-    });
+    }
     const scopedViewer = organisationViewer(viewer);
     const unavailable = await unavailableExistingEmails(
       this.env,
@@ -209,6 +264,7 @@ export class SpeakerRosterImportService {
       parsedRows.map((row) => row.email),
     );
     const linkable = parsedRows.filter((row) => {
+      if (row.evaluatorEmailRouting) return true;
       if (!unavailable.has(row.email)) return true;
       invalid.push({
         rowNumber: row.rowNumber,
@@ -345,7 +401,8 @@ export class SpeakerRosterImportService {
     const scopedViewer = organisationViewer(viewer);
     const statements: D1PreparedStatement[] = [];
     for (const row of rows) {
-      const personId = crypto.randomUUID();
+      const personId =
+        row.evaluatorEmailRouting?.personId ?? crypto.randomUUID();
       statements.push(
         this.env.DB.prepare(
           `INSERT INTO people (
@@ -353,12 +410,7 @@ export class SpeakerRosterImportService {
              created_at, updated_at
            ) VALUES (?, ?, ?, 0, 'draft', ?, unixepoch(), unixepoch())
            ON CONFLICT(email) DO NOTHING`,
-        ).bind(
-          personId,
-          row.email,
-          row.email,
-          commandId,
-        ),
+        ).bind(personId, row.email, row.email, commandId),
         this.env.DB.prepare(
           `INSERT INTO organisation_contacts (
              organisation_id, person_id, source, status, created_by_person_id,
@@ -485,6 +537,9 @@ export class SpeakerRosterImportService {
       );
     }
     const rowOperationIds = rows.map((row) => `${commandId}:${row.rowNumber}`);
+    const evaluatorEmailRoutings = rows.flatMap((row) =>
+      row.evaluatorEmailRouting ? [row.evaluatorEmailRouting] : [],
+    );
     statements.push(
       this.env.DB.prepare(
         `INSERT INTO audit_events (
@@ -519,7 +574,10 @@ export class SpeakerRosterImportService {
         rows.length,
         viewer.eventId,
         commandId,
-        JSON.stringify({ count: rows.length }),
+        JSON.stringify({
+          count: rows.length,
+          ...(evaluatorEmailRoutings.length ? { evaluatorEmailRoutings } : {}),
+        }),
       ),
     );
     try {
@@ -536,20 +594,27 @@ export class SpeakerRosterImportService {
       }
       throw error;
     }
-    return { imported: rows.length };
+    return importResult(rows.length, evaluatorEmailRoutings);
   }
 
   private async recover(viewer: Viewer, commandId: string) {
     const row = await this.env.DB.prepare(
-      `SELECT json_extract(metadata_json, '$.count') AS imported
+      `SELECT metadata_json AS metadataJson
          FROM audit_events
         WHERE organisation_id = ? AND event_id = ? AND actor_person_id = ?
           AND action = 'speaker.roster.imported'
           AND entity_type = 'speaker_roster' AND correlation_id = ?
-        LIMIT 1`,
+      LIMIT 1`,
     )
       .bind(viewer.organisationId, viewer.eventId, viewer.personId, commandId)
-      .first<{ imported: number }>();
-    return row ? { imported: Number(row.imported) } : null;
+      .first<{ metadataJson: string }>();
+    if (!row) return null;
+    const metadata = importAuditMetadataSchema.parse(
+      JSON.parse(row.metadataJson) as unknown,
+    );
+    return importResult(
+      metadata.count,
+      (metadata.evaluatorEmailRoutings ?? []) as EvaluatorEmailRouting[],
+    );
   }
 }

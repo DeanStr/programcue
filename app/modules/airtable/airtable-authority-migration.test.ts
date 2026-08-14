@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { ensureJudgedDemoWorkflow } from "~/platform/demo/demo-reset.server";
@@ -299,9 +300,12 @@ describe("Airtable authoritative room repository", () => {
       .bind(viewer.eventId)
       .run();
     await env.DB.prepare(
-      "UPDATE events SET repository_provider = 'd1', repository_locked_at = NULL WHERE id = ?",
+      `UPDATE events
+          SET repository_provider = 'd1', repository_locked_at = NULL,
+              session_formats_json = ?
+        WHERE id = ?`,
     )
-      .bind(viewer.eventId)
+      .bind(INITIAL_EVENT_SESSION_FORMATS_JSON, viewer.eventId)
       .run();
   });
 

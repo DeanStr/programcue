@@ -828,6 +828,41 @@ describe("Event Setup D1 service", () => {
     );
   });
 
+  it("rejects a reserved production administrator destination before creating invitation state", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const email = `reserved-administrator-${crypto.randomUUID()}@example.com`;
+    const productionEnv = {
+      ...testEnv,
+      APP_ENV: "production",
+      DEMO_MODE: "false",
+      EVALUATION_MODE: "false",
+    } as unknown as CloudflareEnvironment;
+
+    await expect(
+      new EventService(productionEnv).inviteAdministrator(viewer, {
+        name: "Reserved Administrator",
+        email,
+        scope: "event",
+      }),
+    ).rejects.toThrow(/not deliverable: reserved or local-only domain/i);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM people WHERE email = ? COLLATE NOCASE)
+             AS peopleCount,
+           (SELECT COUNT(*)
+              FROM memberships membership
+              JOIN people person ON person.id = membership.person_id
+             WHERE membership.event_id = ?
+               AND membership.role = 'administrator'
+               AND person.email = ? COLLATE NOCASE) AS membershipCount`,
+      )
+        .bind(email, viewer.eventId, email)
+        .first(),
+    ).resolves.toEqual({ peopleCount: 0, membershipCount: 0 });
+  });
+
   it("lets an owner invite, accept, use and revoke an organisation administrator role with audit evidence", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);

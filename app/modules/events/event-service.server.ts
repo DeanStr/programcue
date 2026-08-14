@@ -6,6 +6,7 @@ import {
 import { D1EventRepository } from "./event-repository.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { createAuth } from "~/platform/auth/auth.server";
+import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 import { AirtableRoomRepository } from "~/modules/airtable/airtable-room-repository.server";
 import {
@@ -38,6 +39,15 @@ export class EventAdministratorPermissionError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "EventAdministratorPermissionError";
+  }
+}
+
+export class EventInvitationAddressError extends Error {
+  constructor(reason: string) {
+    super(
+      `The administrator invitation email address is not deliverable: ${reason.toLowerCase()}.`,
+    );
+    this.name = "EventInvitationAddressError";
   }
 }
 
@@ -204,6 +214,8 @@ export class EventService {
       throw new EventAdministratorPermissionError(
         "Only an organisation owner can invite an organisation administrator.",
       );
+    const deliveryIssue = emailDeliveryIssue(parsed.email, this.env.APP_ENV);
+    if (deliveryIssue) throw new EventInvitationAddressError(deliveryIssue);
     const invitation = await this.repository.inviteAdministrator(
       viewer.organisationId,
       viewer.eventId,

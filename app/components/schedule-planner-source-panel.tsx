@@ -1,5 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { useState } from "react";
 import { Link } from "react-router";
 import { EmptyState } from "~/components/ui/states";
 import { SessionCopyAction } from "~/modules/ai/contextual-ai-actions";
@@ -113,6 +114,7 @@ export function ScheduleSourcePanel({
   scheduledSessionIds: Set<string>;
   readOnlyPlacementMessage: string;
 }) {
+  const [placementFormOpen, setPlacementFormOpen] = useState(true);
   return (
     <aside className="card pad schedule-source">
       <div className="card-title">
@@ -121,7 +123,11 @@ export function ScheduleSourcePanel({
       {placementAvailable &&
       workspace.sessions.length &&
       workspace.rooms.length ? (
-        <details className="mb pc-disclosure">
+        <details
+          className="mb pc-disclosure"
+          open={placementFormOpen}
+          onToggle={(event) => setPlacementFormOpen(event.currentTarget.open)}
+        >
           <summary>
             <strong>Place or move with form</strong>
             <span className="help">

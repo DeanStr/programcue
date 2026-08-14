@@ -22,6 +22,7 @@ const submission = {
   title: "Resilient operations",
   reference: "PC-001",
   category: "Operations",
+  speakers: [],
   routedTeamName: null,
   status: "under_review",
   reviewableInCurrentCycle: true,

@@ -28,6 +28,10 @@ import {
 import { SpeakerInvitationDeliveryError } from "~/modules/speakers/speaker-invitation.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import {
+  evaluatorEmailRoutingMessage,
+  resolveEvaluatorEmailAlias,
+} from "~/platform/evaluation/evaluator-email-alias.server";
 
 export const meta = () => [{ title: "Speakers · Program Cue" }];
 
@@ -145,6 +149,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     workflowIdempotencyKeys: Object.fromEntries(
       workspace.speakers.map((speaker) => [speaker.id, crypto.randomUUID()]),
     ),
+    invitationIdempotencyKeys: Object.fromEntries(
+      workspace.speakers.map((speaker) => [speaker.id, crypto.randomUUID()]),
+    ),
   };
 }
 
@@ -192,9 +199,12 @@ export async function action({ request, context }: Route.ActionArgs) {
         form.get("idempotencyKey"),
         form.get("previewFingerprint"),
       );
+      const routingDisclosure = (result.evaluatorEmailRoutings ?? [])
+        .map(evaluatorEmailRoutingMessage)
+        .join(" ");
       return data<ActionResult>({
         ok: true,
-        message: `${result.imported} speaker${result.imported === 1 ? "" : "s"} imported to this event roster. No invitation email was sent.`,
+        message: `${result.imported} speaker${result.imported === 1 ? "" : "s"} imported to this event roster. No invitation email was sent.${routingDisclosure ? ` ${routingDisclosure}` : ""}`,
       });
     } catch (error) {
       if (error instanceof SpeakerRosterImportError) {
@@ -250,7 +260,49 @@ export async function action({ request, context }: Route.ActionArgs) {
       throw error;
     }
   }
-  if (intent !== "create_manual_speaker") {
+  if (intent === "send_speaker_invitation") {
+    try {
+      const result = await new SpeakerService(env).inviteSpeakerRecord(viewer, {
+        idempotencyKey: form.get("idempotencyKey"),
+        personId: form.get("personId"),
+        confirmation: form.get("confirmation"),
+      });
+      return data<ActionResult>({
+        ok: true,
+        message: result.accepted
+          ? "This speaker already has accepted portal access."
+          : result.delivery === "demo_not_sent"
+            ? "The portal invitation was saved. Demonstration mode does not send its sign-in email."
+            : "The portal invitation and durable email operation were saved.",
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return data<ActionResult>(
+          {
+            ok: false,
+            message:
+              error.issues[0]?.message ?? "Confirm the speaker invitation.",
+          },
+          { status: 422 },
+        );
+      }
+      if (error instanceof SpeakerAdminStateError) {
+        return data<ActionResult>(
+          { ok: false, message: error.message },
+          { status: error.status },
+        );
+      }
+      if (error instanceof SpeakerInvitationDeliveryError) {
+        return data<ActionResult>(
+          { ok: false, message: error.message },
+          { status: 207 },
+        );
+      }
+      if (error instanceof Response) throw error;
+      throw error;
+    }
+  }
+  if (intent !== "add_manual_speaker") {
     return data<ActionResult>(
       { ok: false, message: "Unsupported speaker action." },
       { status: 400 },
@@ -260,11 +312,21 @@ export async function action({ request, context }: Route.ActionArgs) {
     idempotencyKey: form.get("idempotencyKey"),
     name: form.get("name"),
     email: form.get("email"),
+    jobTitle: String(form.get("jobTitle") ?? ""),
+    organisationName: String(form.get("organisationName") ?? ""),
+    biography: String(form.get("biography") ?? ""),
   };
   try {
-    const duplicateCheck = await new PersonDuplicateService(
+    const emailResolution = await resolveEvaluatorEmailAlias(
       env,
-    ).findLikelyDuplicates(viewer, [{ name: input.name, email: input.email }]);
+      viewer,
+      String(input.email ?? ""),
+    );
+    const duplicateCheck = emailResolution.routing
+      ? { matches: [], truncated: false }
+      : await new PersonDuplicateService(env).findLikelyDuplicates(viewer, [
+          { name: input.name, email: emailResolution.email },
+        ]);
     if (
       duplicateCheck.matches.length &&
       form.get("confirmDuplicatePeople") !== "yes"
@@ -282,19 +344,20 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 409 },
       );
     }
-    const result = await new SpeakerService(env).createManualSpeaker(
+    const result = await new SpeakerService(env).addManualSpeakerRecord(
       viewer,
       input,
     );
+    const routingDisclosure = evaluatorEmailRoutingMessage(result.routing);
     return data<ActionResult>({
       ok: true,
-      message: result.accepted
-        ? "This speaker already has accepted access to the event."
-        : result.delivery === "demo_not_sent"
-          ? "The pending speaker invitation was saved. Demonstration mode does not send its sign-in email."
+      message: `${
+        !result.createdRosterAssociation
+          ? "This identity is already on this event roster. Nothing was changed and no invitation email was sent."
           : result.createdIdentity
-            ? "The pending speaker invitation and its durable email operation were saved. The participant can complete their profile after accepting."
-            : "The pending speaker invitation and its durable email operation were saved. The existing participant-owned profile was left unchanged.",
+            ? "The speaker record was added to this event roster. No invitation email was sent."
+            : "The existing identity was added or restored on this event roster. Its participant-owned profile was left unchanged and no invitation email was sent."
+      }${routingDisclosure ? ` ${routingDisclosure}` : ""}`,
     });
   } catch (error) {
     if (error instanceof ZodError) {
@@ -310,12 +373,6 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data<ActionResult>(
         { ok: false, message: error.message },
         { status: error.status },
-      );
-    }
-    if (error instanceof SpeakerInvitationDeliveryError) {
-      return data<ActionResult>(
-        { ok: false, message: error.message },
-        { status: 207 },
       );
     }
     if (error instanceof Response) throw error;
@@ -470,7 +527,18 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                     <tr key={row.rowNumber}>
                       <td>{row.rowNumber}</td>
                       <td>{row.name}</td>
-                      <td>{row.email}</td>
+                      <td>
+                        {row.evaluatorEmailRouting ? (
+                          <span className="pc-record-stack">
+                            <span>{row.enteredEmail}</span>
+                            <small className="subtle">
+                              Routed to {row.email}
+                            </small>
+                          </span>
+                        ) : (
+                          row.email
+                        )}
+                      </td>
                       <td>
                         {row.jobTitleSupplied
                           ? row.jobTitle || "Clear"
@@ -559,13 +627,13 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
       </details>
       <details className="card pad mb pc-disclosure">
         <summary>
-          <strong>Invite a speaker</strong>{" "}
+          <strong>Add speaker record</strong>{" "}
           <span className="subtle">
-            access stays pending until the person explicitly accepts
+            roster only; no invitation email is sent
           </span>
         </summary>
         <Form method="post" className="stack mt">
-          <input type="hidden" name="_intent" value="create_manual_speaker" />
+          <input type="hidden" name="_intent" value="add_manual_speaker" />
           <input
             type="hidden"
             name="idempotencyKey"
@@ -583,7 +651,8 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                 maxLength={120}
               />
               <small className="subtle" id="manual-speaker-name-help">
-                Existing participant-owned profiles are never overwritten.
+                New records start as prospects. Existing participant-owned
+                profiles are never overwritten.
               </small>
             </div>
             <label className="label">
@@ -597,6 +666,28 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
               />
             </label>
           </div>
+          <div className="form-row">
+            <label className="label">
+              Job title <span className="subtle">Optional</span>
+              <input className="field" name="jobTitle" maxLength={160} />
+            </label>
+            <label className="label">
+              Company <span className="subtle">Optional</span>
+              <input
+                className="field"
+                name="organisationName"
+                maxLength={160}
+              />
+            </label>
+          </div>
+          <label className="label">
+            Biography <span className="subtle">Optional</span>
+            <textarea className="field" name="biography" maxLength={5000} />
+          </label>
+          <p className="help">
+            This creates an event roster record only. Send portal access later
+            from the speaker row when you are ready to email them.
+          </p>
           {actionData?.duplicateCheck ? (
             <PersonDuplicateWarning
               id="manual-speaker-duplicate"
@@ -609,9 +700,9 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
             type="submit"
             disabled={navigation.state !== "idle"}
           >
-            {navigation.formData?.get("_intent") === "create_manual_speaker"
-              ? "Inviting…"
-              : "Send invitation"}
+            {navigation.formData?.get("_intent") === "add_manual_speaker"
+              ? "Adding…"
+              : "Add speaker record"}
           </button>
         </Form>
       </details>
@@ -760,7 +851,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                             .slice(0, 2)
                             .join("")}
                         </span>
-                        <span className="pc-record-identity">
+                        <div className="pc-record-identity">
                           <strong>
                             <Link
                               className="pc-record-link"
@@ -779,7 +870,57 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                             {speaker.organisationName ??
                               "Organisation not provided"}
                           </small>
-                        </span>
+                          {!speaker.portalAccessAccepted &&
+                          speaker.workflowStatus !== "declined" &&
+                          speaker.workflowStatus !== "withdrawn" ? (
+                            <details className="pc-disclosure mt">
+                              <summary>
+                                {speaker.portalInvitationPending
+                                  ? "Resend portal invitation"
+                                  : "Invite to speaker portal"}
+                              </summary>
+                              <Form method="post" className="stack mt">
+                                <input
+                                  type="hidden"
+                                  name="_intent"
+                                  value="send_speaker_invitation"
+                                />
+                                <input
+                                  type="hidden"
+                                  name="personId"
+                                  value={speaker.id}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="idempotencyKey"
+                                  value={
+                                    loaderData.invitationIdempotencyKeys[
+                                      speaker.id
+                                    ]
+                                  }
+                                />
+                                <label className="help">
+                                  <input
+                                    type="checkbox"
+                                    name="confirmation"
+                                    value="send"
+                                    required
+                                  />{" "}
+                                  Send a sign-in email to {speaker.email}
+                                </label>
+                                <button
+                                  className="btn small"
+                                  type="submit"
+                                  disabled={navigation.state !== "idle"}
+                                >
+                                  {speaker.portalInvitationPending
+                                    ? "Resend invitation"
+                                    : "Send invitation"}
+                                </button>
+                              </Form>
+                            </details>
+                          ) : null}
+                        </div>
                       </div>
                     </td>
                     <td data-label="Profile">

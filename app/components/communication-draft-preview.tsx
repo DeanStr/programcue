@@ -66,8 +66,26 @@ export function CommunicationDraftPreview({
       {preview.recipients.invalid.length ||
       preview.recipients.suppressed.length ? (
         <div className="validation-item warn">
-          Excluded recipients will not receive this communication. Inspect the
-          counts before confirming.
+          <p>
+            Excluded recipients will not receive this communication. Inspect the
+            counts before confirming.
+          </p>
+          {preview.recipients.invalid.length ? (
+            <details>
+              <summary>
+                {preview.recipients.invalid.length} invalid recipient
+                {preview.recipients.invalid.length === 1 ? "" : "s"}
+              </summary>
+              <ul>
+                {preview.recipients.invalid.slice(0, 20).map((recipient) => (
+                  <li key={recipient.address}>
+                    {recipient.name ? `${recipient.name} · ` : ""}
+                    {recipient.address} — {recipient.reason}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </div>
       ) : (
         <div className="validation-item ok">

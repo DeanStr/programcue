@@ -5,6 +5,7 @@ import type { Route } from "./+types/speaker-tasks";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { SpeakerTasksPanel } from "~/components/speaker-tasks-panel";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
+import { FileService } from "~/modules/files/file-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import {
   TaskService,
@@ -16,8 +17,18 @@ export const meta = () => [{ title: "Participant Tasks · Program Cue" }];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
+  const tasks = await new TaskService(env).listParticipantTasks(viewer);
+  const versions = await new FileService(
+    env,
+  ).listParticipantTaskEvidenceVersions(
+    viewer,
+    tasks.map((task) => task.id),
+  );
   return {
-    tasks: await new TaskService(env).listParticipantTasks(viewer),
+    tasks: tasks.map((task) => ({
+      ...task,
+      fileVersions: versions.filter((version) => version.taskId === task.id),
+    })),
     intentId: crypto.randomUUID(),
   };
 }

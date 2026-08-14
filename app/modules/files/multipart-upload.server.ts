@@ -189,16 +189,14 @@ export class MultipartUploadService {
         throw new FileAccessError(
           "The draft submission is no longer available for this applicant.",
         );
-      return;
+      return null;
     }
     const files = new FileService(this.env);
-    if (
-      ["owner", "administrator"].includes(actor.role) &&
-      target.targetType !== "person"
-    ) {
+    if (["owner", "administrator"].includes(actor.role)) {
       await files.assertAdminTarget(actor, target);
+      return null;
     } else {
-      await files.assertParticipantTarget(actor, target);
+      return files.assertParticipantTarget(actor, target);
     }
   }
 
@@ -217,6 +215,22 @@ export class MultipartUploadService {
       throw new FileMultipartConflictError(
         "This idempotency key was already used for a different multipart upload.",
       );
+  }
+
+  private assertAuthorisedTaskAsset(
+    target: UploadTarget,
+    authorisedAssetId: string | null,
+    row: MultipartRow,
+  ) {
+    if (
+      target.targetType === "task" &&
+      authorisedAssetId !== null &&
+      row.assetId !== authorisedAssetId
+    ) {
+      throw new FileAccessError(
+        "This upload no longer belongs to the task's canonical evidence asset.",
+      );
+    }
   }
 
   private uploadTarget(row: MultipartRow) {
@@ -241,7 +255,8 @@ export class MultipartUploadService {
     row: MultipartRow,
   ) {
     const target = this.uploadTarget(row);
-    await this.assertTarget(actor, target);
+    const authorisedAssetId = await this.assertTarget(actor, target);
+    this.assertAuthorisedTaskAsset(target, authorisedAssetId, row);
     this.assertCurrentDeclaration(row);
   }
 
@@ -290,9 +305,16 @@ export class MultipartUploadService {
     actor: MultipartActor,
     input: z.infer<typeof multipartInitiateSchema>,
     storedIdempotencyKey: string,
+    authorisedAssetId: string | null,
   ) {
     const target = input.target;
     const reusable = !["task", "resource"].includes(target.targetType);
+    const ownerPersonId =
+      target.targetType === "resource"
+        ? null
+        : target.targetType === "person"
+          ? target.targetId
+          : actor.personId;
     const existing = reusable
       ? await this.env.DB.prepare(
           `SELECT id FROM file_assets
@@ -307,19 +329,22 @@ export class MultipartUploadService {
         )
           .bind(
             actor.eventId,
-            actor.personId,
+            ownerPersonId,
             target.targetType,
             target.targetId,
             target.assetKind,
           )
           .first<{ id: string }>()
       : null;
-    let assetId = existing?.id;
+    let assetId = authorisedAssetId ?? existing?.id;
     if (!assetId) {
       if (!reusable) {
         assetId = crypto.randomUUID();
       } else {
-        const logicalId = await stableLogicalAssetId(actor, target);
+        const logicalId = await stableLogicalAssetId(
+          { eventId: actor.eventId, personId: ownerPersonId },
+          target,
+        );
         const prior = await this.env.DB.prepare(
           "SELECT COUNT(*) AS count FROM file_assets WHERE id = ? OR id GLOB ?",
         )
@@ -342,7 +367,7 @@ export class MultipartUploadService {
       ).bind(
         assetId,
         actor.eventId,
-        target.targetType === "resource" ? null : actor.personId,
+        ownerPersonId,
         target.targetType,
         target.targetId,
         target.assetKind,
@@ -593,7 +618,7 @@ export class MultipartUploadService {
       type: input.contentType,
       size: input.sizeBytes,
     };
-    await this.assertTarget(actor, input.target);
+    const authorisedAssetId = await this.assertTarget(actor, input.target);
     assertFileScanDispatchConfigured(this.env);
     validateDirectFileDeclaration(
       input.target.assetKind,
@@ -604,6 +629,7 @@ export class MultipartUploadService {
     let row = await this.access.loadByIdempotency(actor, storedKey);
     if (row) {
       this.assertSameRequest(row, input);
+      this.assertAuthorisedTaskAsset(input.target, authorisedAssetId, row);
       if (row.status === "initiated") return this.response(row, true);
       if (["completed", "completing", "aborted", "failed"].includes(row.status))
         throw new FileMultipartStateError(
@@ -623,11 +649,17 @@ export class MultipartUploadService {
         );
     } else {
       try {
-        row = await this.allocateIntent(actor, input, storedKey);
+        row = await this.allocateIntent(
+          actor,
+          input,
+          storedKey,
+          authorisedAssetId,
+        );
       } catch (error) {
         row = await this.access.loadByIdempotency(actor, storedKey);
         if (!row) throw error;
         this.assertSameRequest(row, input);
+        this.assertAuthorisedTaskAsset(input.target, authorisedAssetId, row);
         if (row.status === "initiated") return this.response(row, true);
         throw new FileMultipartStateError(
           "Multipart initialization is already in progress. Retry shortly.",
@@ -641,7 +673,7 @@ export class MultipartUploadService {
     requireR2S3Configuration(this.env);
     this.requireBucket();
     const input = multipartResumeSchema.parse(rawInput);
-    await this.assertTarget(actor, input.target);
+    const authorisedAssetId = await this.assertTarget(actor, input.target);
     validateDirectFileDeclaration(
       input.target.assetKind,
       {
@@ -657,6 +689,7 @@ export class MultipartUploadService {
     );
     if (!row) return null;
     this.assertSameRequest(row, input);
+    this.assertAuthorisedTaskAsset(input.target, authorisedAssetId, row);
     return this.resumableResponse(row);
   }
 

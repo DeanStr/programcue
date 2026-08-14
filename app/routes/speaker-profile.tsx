@@ -30,6 +30,9 @@ export async function action({ request, context }: Route.ActionArgs) {
       pronunciation: form.get("pronunciation"),
       organisationName: form.get("organisationName"),
       jobTitle: form.get("jobTitle"),
+      linkedinUrl: form.get("linkedinUrl"),
+      xHandle: form.get("xHandle"),
+      travelPreferences: form.get("travelPreferences"),
       publish: form.get("publish") ? "true" : "false",
     });
     const warning = [result.webhookWarning, result.realtimeWarning]

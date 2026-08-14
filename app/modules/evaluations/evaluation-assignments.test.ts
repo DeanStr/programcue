@@ -1034,6 +1034,30 @@ describe("evaluation vertical slice", () => {
       }
     });
 
+    it("projects persisted participant role labels into the organiser queue", async () => {
+      await resetEvaluationFixture();
+      await env.DB.prepare(
+        `UPDATE submission_speakers
+            SET role_label = 'Co-presenter'
+          WHERE id = 'eval-test-speaker' AND event_id = ?`,
+      )
+        .bind(admin.eventId)
+        .run();
+
+      const workspace = await new EvaluationService(
+        evaluationEnvironment(),
+      ).getAdminWorkspace(admin);
+      expect(
+        workspace.submissions.find(
+          (submission) => submission.id === "eval-test-submission",
+        )?.speakers,
+      ).toContainEqual({
+        name: "Alex Morgan",
+        email: "alex.submitter@example.com",
+        roleLabel: "Co-presenter",
+      });
+    });
+
     it("fails the admin queue when a submission lacks authoritative tracks", async () => {
       await resetEvaluationFixture();
       await env.DB.prepare(

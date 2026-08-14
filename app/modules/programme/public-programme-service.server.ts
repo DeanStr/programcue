@@ -64,10 +64,12 @@ export type PublishedSpeakerPreview = Pick<
   "id" | "displayName" | "imageUrl" | "organisationName" | "jobTitle"
 >;
 
-const DEMO_EVENT_ID = "evt-foe-2025";
-const DEMO_BUNDLED_HEADSHOTS: Record<string, string> = {
+const FIXTURE_EVENT_ID = "evt-foe-2025";
+const BUNDLED_FIXTURE_HEADSHOTS: Record<string, string> = {
   "person-demo-speaker": "/images/demo-speakers/priya-shah.webp",
   "person-demo-submitter": "/images/demo-speakers/alex-morgan.webp",
+  "person-sbek-speaker": "/images/demo-speakers/priya-raman.webp",
+  "person-sbek-speaker2": "/images/demo-speakers/marcus-okafor.webp",
 };
 
 export type PublishedProgramme = {
@@ -313,6 +315,14 @@ async function withPublicContentRevision(
 export class PublicProgrammeService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
+  private bundledFixtureHeadshotsEnabled(eventId: string) {
+    return (
+      eventId === FIXTURE_EVENT_ID &&
+      (String(this.env.DEMO_MODE) === "true" ||
+        String(this.env.EVALUATION_MODE) === "true")
+    );
+  }
+
   private async publishedHeadshotPersonIds(eventId: string, versionId: string) {
     const rows = await this.env.DB.prepare(
       `
@@ -367,10 +377,11 @@ export class PublicProgrammeService {
     versionId: string,
     personIds: readonly string[],
   ) {
-    const bundledHeadshotPersonIds =
-      String(this.env.DEMO_MODE) === "true" && eventId === DEMO_EVENT_ID
-        ? personIds.filter((personId) => DEMO_BUNDLED_HEADSHOTS[personId])
-        : [];
+    const bundledHeadshotPersonIds = this.bundledFixtureHeadshotsEnabled(
+      eventId,
+    )
+      ? personIds.filter((personId) => BUNDLED_FIXTURE_HEADSHOTS[personId])
+      : [];
     if (!bundledHeadshotPersonIds.length) return new Set<string>();
     const placeholders = bundledHeadshotPersonIds.map(() => "?").join(", ");
     const rows = await this.env.DB.prepare(
@@ -396,7 +407,6 @@ export class PublicProgrammeService {
          AND asset.target_id = person.id
          AND asset.asset_kind = 'headshot'
          AND asset.status <> 'deleted'
-         AND asset.current_version_id IS NOT NULL
        WHERE published_version.id = ? AND published_version.event_id = ?
          AND published_version.status = 'published'
          AND session.status = 'published' AND session.visibility = 'public'
@@ -411,13 +421,12 @@ export class PublicProgrammeService {
     return new Set(rows.results.map((row) => row.personId));
   }
 
-  private bundledDemoHeadshot(
+  private bundledFixtureHeadshot(
     event: Pick<PublishedProgramme["event"], "id">,
     personId: string,
   ) {
-    if (String(this.env.DEMO_MODE) !== "true" || event.id !== DEMO_EVENT_ID)
-      return null;
-    return DEMO_BUNDLED_HEADSHOTS[personId] ?? null;
+    if (!this.bundledFixtureHeadshotsEnabled(event.id)) return null;
+    return BUNDLED_FIXTURE_HEADSHOTS[personId] ?? null;
   }
 
   private async withPublishedHeadshotUrls(
@@ -439,7 +448,7 @@ export class PublicProgrammeService {
         ? publishedHeadshotPath(event.slug, speaker.id)
         : assetPersonIds.has(speaker.id)
           ? null
-          : this.bundledDemoHeadshot(event, speaker.id),
+          : this.bundledFixtureHeadshot(event, speaker.id),
     }));
   }
 
@@ -507,7 +516,7 @@ export class PublicProgrammeService {
         ? publishedHeadshotPath(event.slug, speaker.id)
         : assetPersonIds.has(speaker.id)
           ? null
-          : this.bundledDemoHeadshot(event, speaker.id),
+          : this.bundledFixtureHeadshot(event, speaker.id),
     }));
   }
 

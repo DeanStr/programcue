@@ -84,18 +84,14 @@ test.describe.serial("submissions vertical slice", () => {
       }),
     ).toBeVisible();
     await expect(page.getByText("published").first()).toBeVisible();
-    await page
-      .getByLabel("Public URL")
-      .fill(`unsaved-public-url-${unique}`);
+    await page.getByLabel("Public URL").fill(`unsaved-public-url-${unique}`);
     await expect(
       page.getByRole("link", { name: /Open public form/ }),
     ).toHaveAttribute("href", "/apply/form");
     await page
       .context()
       .grantPermissions(["clipboard-read", "clipboard-write"]);
-    await page
-      .getByRole("button", { name: "Copy public form link" })
-      .click();
+    await page.getByRole("button", { name: "Copy public form link" }).click();
     await expect(page.getByText("Public form link copied.")).toBeVisible();
     const expectedPublicFormUrl = new URL("/apply/form", page.url()).href;
     await expect
@@ -236,8 +232,37 @@ test.describe.serial("submissions vertical slice", () => {
       }),
     ).toBeVisible();
     await expect(
-      page.getByText("This immutable application was received"),
+      page.getByRole("button", { name: "Save revised application" }),
     ).toBeVisible();
+    await page
+      .locator("summary")
+      .filter({ hasText: "Withdraw application" })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Withdraw application" }),
+    ).toBeVisible();
+    const revisionSentence = "Updated: now includes 2026 benchmark data.";
+    const description = page.getByLabel("Session description *");
+    await description.fill(
+      `${await description.inputValue()} ${revisionSentence}`,
+    );
+    await page
+      .getByText(
+        "I have reviewed these changes and am ready to replace the current submitted version.",
+      )
+      .click();
+    await page
+      .getByRole("button", { name: "Save revised application" })
+      .click();
+    await expect(
+      page.locator(".validation-item.ok[role='status']").filter({
+        hasText: "Your revised application is submitted and stored in D1.",
+      }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel("Session description *")).toHaveValue(
+      new RegExp(`${revisionSentence.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+    );
 
     await page.goto("/admin/submissions");
     const filters = page.getByRole("search");
@@ -246,6 +271,7 @@ test.describe.serial("submissions vertical slice", () => {
     await expect(page.getByRole("link", { name: title })).toBeVisible();
     await page.getByRole("link", { name: title }).click();
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator("body")).toContainText(revisionSentence);
     const routing = page.locator("section").filter({
       has: page.getByRole("heading", { name: "Routing", exact: true }),
     });
@@ -276,9 +302,7 @@ test.describe.serial("submissions vertical slice", () => {
     await routingFilters
       .getByLabel("Routing attention")
       .selectOption("missing_automatic");
-    await routingFilters
-      .getByRole("button", { name: "Apply filters" })
-      .click();
+    await routingFilters.getByRole("button", { name: "Apply filters" }).click();
     const filteredSubmissionRow = page.getByRole("row").filter({
       has: page.getByRole("link", { name: title }),
     });

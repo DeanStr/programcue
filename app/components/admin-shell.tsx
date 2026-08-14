@@ -80,6 +80,7 @@ const NAV_GROUPS = [
       "schedule",
       "communications",
       "tasks",
+      "content",
       "programme",
     ],
   },
@@ -106,7 +107,6 @@ export function primaryNavigationItemActive(id: string, pathname: string) {
   const section = pathname.split("/").filter(Boolean)[1] ?? "command";
   if (section === id) return true;
   if (id === "speakers") return section === "crm" || section === "resources";
-  if (id === "programme") return section === "content";
   return false;
 }
 export type AdminShellDialog =

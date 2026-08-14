@@ -39,6 +39,8 @@ export const people = sqliteTable(
     pronunciation: text("pronunciation"),
     organisationName: text("organisation_name"),
     jobTitle: text("job_title"),
+    linkedinUrl: text("linkedin_url"),
+    xHandle: text("x_handle"),
     profileStatus: text("profile_status")
       .notNull()
       .default("draft")
@@ -140,7 +142,41 @@ export const events = sqliteTable(
   },
   (table) => [
     uniqueIndex("events_slug_unique").on(table.slug),
+    uniqueIndex("events_id_organisation_unique").on(
+      table.id,
+      table.organisationId,
+    ),
     index("idx_events_org").on(table.organisationId),
+  ],
+);
+
+export const eventParticipantProfiles = sqliteTable(
+  "event_participant_profiles",
+  {
+    eventId: text("event_id").notNull(),
+    organisationId: text("organisation_id").notNull(),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    travelPreferences: text("travel_preferences"),
+    lastOperationId: text("last_operation_id").notNull(),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    primaryKey({ columns: [table.eventId, table.personId] }),
+    index("idx_event_participant_profiles_person").on(
+      table.personId,
+      table.eventId,
+    ),
+    foreignKey({
+      columns: [table.eventId, table.organisationId],
+      foreignColumns: [events.id, events.organisationId],
+    }).onDelete("cascade"),
+    check(
+      "event_participant_profiles_travel_preferences_length",
+      sql`${table.travelPreferences} IS NULL OR length(trim(${table.travelPreferences})) BETWEEN 1 AND 2000`,
+    ),
   ],
 );
 

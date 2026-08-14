@@ -1,5 +1,10 @@
 import { createAuth } from "~/platform/auth/auth.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
+import {
+  EvaluatorEmailAliasContextError,
+  resolveEvaluatorEmailAlias,
+} from "~/platform/evaluation/evaluator-email-alias.server";
 import {
   activateSbekDemoInvitation,
   type SbekDemoActivationOutcome,
@@ -31,12 +36,34 @@ export abstract class EvaluationAccessWorkflows extends EvaluationPlanWorkflows 
     await this.assertViewerEvent(viewer);
     this.assertEvaluationManager(viewer);
     const parsed = evaluationMemberInvitationSchema.parse(input);
+    let emailResolution: Awaited<ReturnType<typeof resolveEvaluatorEmailAlias>>;
+    try {
+      emailResolution = await resolveEvaluatorEmailAlias(
+        this.env,
+        viewer,
+        parsed.email,
+      );
+    } catch (error) {
+      if (error instanceof EvaluatorEmailAliasContextError) {
+        throw new EvaluationStateError(error.message);
+      }
+      throw error;
+    }
+    const deliveryIssue = emailDeliveryIssue(
+      emailResolution.email,
+      this.env.APP_ENV,
+    );
+    if (deliveryIssue) {
+      throw new EvaluationStateError(
+        `The evaluator invitation email address is not deliverable: ${deliveryIssue.toLowerCase()}.`,
+      );
+    }
     if (parsed.role === "committee_chair") {
       this.assertEvaluationAccessAdministrator(viewer);
     }
     const roleLabel =
       parsed.role === "committee_chair" ? "committee chair" : "evaluator";
-    const proposedPersonId = crypto.randomUUID();
+    const proposedPersonId = emailResolution.personId ?? crypto.randomUUID();
     await this.env.DB.prepare(
       `
       INSERT INTO people (
@@ -46,7 +73,7 @@ export abstract class EvaluationAccessWorkflows extends EvaluationPlanWorkflows 
       ON CONFLICT(email) DO NOTHING
     `,
     )
-      .bind(proposedPersonId, parsed.email, parsed.name)
+      .bind(proposedPersonId, emailResolution.email, parsed.name)
       .run();
     const person = await this.env.DB.prepare(
       `
@@ -54,9 +81,16 @@ export abstract class EvaluationAccessWorkflows extends EvaluationPlanWorkflows 
         FROM people p
         JOIN events e ON e.id = ? AND e.organisation_id = ?
        WHERE p.email = ? COLLATE NOCASE
+         AND (? IS NULL OR p.id = ?)
     `,
     )
-      .bind(viewer.eventId, viewer.organisationId, parsed.email)
+      .bind(
+        viewer.eventId,
+        viewer.organisationId,
+        emailResolution.email,
+        emailResolution.personId,
+        emailResolution.personId,
+      )
       .first<{ id: string }>();
     if (!person) {
       throw new EvaluationStateError(
@@ -252,7 +286,12 @@ export abstract class EvaluationAccessWorkflows extends EvaluationPlanWorkflows 
         viewer.eventId,
         viewer.personId,
         `membership.${parsed.role}.invited`,
-        JSON.stringify({ email: parsed.email, teamId: parsed.teamId }),
+        JSON.stringify({
+          enteredEmail: emailResolution.routing?.enteredEmail ?? parsed.email,
+          email: emailResolution.email,
+          teamId: parsed.teamId,
+          evaluatorEmailRouting: emailResolution.routing,
+        }),
         membershipId,
         viewer.organisationId,
         viewer.eventId,
@@ -292,12 +331,15 @@ export abstract class EvaluationAccessWorkflows extends EvaluationPlanWorkflows 
         membershipId,
         delivery: "demo_not_sent" as const,
         demoAccessActivation,
+        ...(emailResolution.routing
+          ? { routing: emailResolution.routing }
+          : {}),
       };
     }
     try {
       await createAuth(this.env).api.signInMagicLink({
         body: {
-          email: parsed.email,
+          email: emailResolution.email,
           callbackURL:
             parsed.role === "committee_chair"
               ? "/admin/review"
@@ -312,7 +354,11 @@ export abstract class EvaluationAccessWorkflows extends EvaluationPlanWorkflows 
         error,
       );
     }
-    return { membershipId, delivery: "sent" as const };
+    return {
+      membershipId,
+      delivery: "sent" as const,
+      ...(emailResolution.routing ? { routing: emailResolution.routing } : {}),
+    };
   }
 
   async changeCommitteeChairAccess(viewer: Viewer, input: unknown) {

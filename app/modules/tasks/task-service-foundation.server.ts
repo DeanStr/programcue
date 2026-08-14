@@ -255,11 +255,13 @@ export const completedFileEvidenceAttachmentSchema = z.object({
 export type CompletedFileEvidenceAsset = {
   id: string;
   versionId: string;
+  versionNumber: number;
   uploadStatus: string;
   signatureStatus: string;
   scanStatus: string;
   evidenceId: string | null;
   evidenceStatus: string | null;
+  hasPriorEvidence: number;
 };
 
 export function parseTaskEvidenceDetails(taskId: string, value: string) {

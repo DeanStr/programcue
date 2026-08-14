@@ -166,8 +166,7 @@ export class MultipartUploadAccessRepository {
     }
     if (
       !["owner", "administrator"].includes(actor.role) &&
-      row.createdByPersonId !== actor.personId &&
-      row.ownerPersonId !== actor.personId
+      row.createdByPersonId !== actor.personId
     )
       throw new FileAccessError(
         "This multipart upload belongs to another person.",

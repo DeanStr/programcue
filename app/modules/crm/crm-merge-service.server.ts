@@ -50,6 +50,7 @@ export class CrmMergeService {
          EXISTS(SELECT 1 FROM submissions WHERE submitter_person_id = ?) OR
          EXISTS(SELECT 1 FROM submission_speakers WHERE person_id = ?) OR
          EXISTS(SELECT 1 FROM session_speakers WHERE person_id = ?) OR
+         EXISTS(SELECT 1 FROM event_speaker_workflows WHERE person_id = ?) OR
          EXISTS(SELECT 1 FROM auth_accounts WHERE person_id = ?) OR
          EXISTS(SELECT 1 FROM auth_sessions WHERE person_id = ?) OR
          EXISTS(SELECT 1 FROM organisation_contacts
@@ -64,12 +65,13 @@ export class CrmMergeService {
         secondaryId,
         secondaryId,
         secondaryId,
+        secondaryId,
         viewer.organisationId,
       )
       .first<{ linked: number }>();
     if (linked?.linked) {
       throw new CrmStateError(
-        "The secondary identity is already linked to access, submissions, sessions, or another organisation and cannot be safely merged.",
+        "The secondary identity is already linked to access, submissions, an event roster, sessions, or another organisation and cannot be safely merged.",
       );
     }
     await this.ensureContact(viewer, primaryId);
@@ -83,6 +85,7 @@ export class CrmMergeService {
             AND NOT EXISTS (SELECT 1 FROM submissions WHERE submitter_person_id = ?)
             AND NOT EXISTS (SELECT 1 FROM submission_speakers WHERE person_id = ?)
             AND NOT EXISTS (SELECT 1 FROM session_speakers WHERE person_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM event_speaker_workflows WHERE person_id = ?)
             AND NOT EXISTS (SELECT 1 FROM auth_accounts WHERE person_id = ?)
             AND NOT EXISTS (SELECT 1 FROM auth_sessions WHERE person_id = ?)
             AND NOT EXISTS (
@@ -93,6 +96,7 @@ export class CrmMergeService {
       ).bind(
         primaryId,
         viewer.organisationId,
+        secondaryId,
         secondaryId,
         secondaryId,
         secondaryId,

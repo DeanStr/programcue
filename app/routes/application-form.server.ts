@@ -70,6 +70,7 @@ function applicationNoticeMatchesPortal(
   if (notice.kind === "withdrawn") return selected.status === "withdrawn";
   if (notice.kind === "submitted")
     return selected.status !== "draft" && selected.status !== "withdrawn";
+  if (notice.kind === "revised") return selected.status === "submitted";
   return false;
 }
 
@@ -167,11 +168,13 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
               ? "Your latest changes were saved, but the draft was not submitted because a required form, routing or invitation setting changed. Review the current notice before trying again."
               : applicationNotice?.kind === "submitted"
                 ? "This application is submitted and stored in D1."
-                : applicationNotice?.kind === "saved"
-                  ? "This draft is stored in D1."
-                  : applicationNotice?.kind === "created"
-                    ? "This private draft is stored in D1."
-                    : "";
+                : applicationNotice?.kind === "revised"
+                  ? "Your revised application is submitted and stored in D1."
+                  : applicationNotice?.kind === "saved"
+                    ? "This draft is stored in D1."
+                    : applicationNotice?.kind === "created"
+                      ? "This private draft is stored in D1."
+                      : "";
     return {
       ...portal,
       featuredSpeakers:
@@ -197,7 +200,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       recoverySavedDraftId:
         portal.selected &&
         applicationNotice &&
-        ["saved", "submitted", "submission_blocked"].includes(
+        ["saved", "submitted", "revised", "submission_blocked"].includes(
           applicationNotice.kind,
         )
           ? portal.selected.id
@@ -302,6 +305,9 @@ function parsePayload(formData: FormData) {
 }
 
 export async function action({ request, context, params }: Route.ActionArgs) {
+  const rejectedOrigin = rejectCrossOriginBrowserMutation(request);
+  if (rejectedOrigin) return rejectedOrigin;
+
   const { env } = getCloudflareContext(context);
   await ensureDemoSubmissionForm(env);
   const service = new SubmissionService(env);
@@ -319,6 +325,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       "claim_speaker",
       "save_draft",
       "submit",
+      "revise_submission",
       "withdraw",
       "update_profile",
     ].includes(intent)
@@ -335,6 +342,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       "create_draft",
       "save_draft",
       "submit",
+      "revise_submission",
       "withdraw",
       "update_profile",
     ].includes(intent)
@@ -347,8 +355,6 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     const actionUrl = new URL(request.url);
     const claimedSpeakerId = actionUrl.searchParams.get("claimedSpeaker");
     if (intent === "claim_token") {
-      const rejectedOrigin = rejectCrossOriginBrowserMutation(request);
-      if (rejectedOrigin) return rejectedOrigin;
       const speakerId = String(
         formData.get("speakerId") ??
           actionUrl.searchParams.get("speaker") ??
@@ -613,6 +619,67 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         slug,
         kind: "saved",
         submissionId: String(payload.submissionId),
+        webhookWarning: false,
+      });
+      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
+    }
+    if (intent === "revise_submission") {
+      if (formData.get("confirmRevision") !== "yes") {
+        return data<ActionResult>(
+          {
+            ok: false,
+            message: "Confirm that the revised application is ready to save.",
+          },
+          { status: 422 },
+        );
+      }
+      const result = await service.reviseSubmitted(
+        slug,
+        applicant,
+        payload,
+        String(formData.get("intentId") ?? ""),
+      );
+      const realtimeFailure = await recordRouteChange(
+        env,
+        {
+          organisationId: result.organisationId,
+          eventId: result.eventId,
+        },
+        {
+          entityType: "submission",
+          entityId: result.submissionId,
+          changeType: "updated",
+        },
+      );
+      if (
+        result.invitations.queueFailed > 0 ||
+        result.webhookQueueFailed ||
+        realtimeFailure
+      ) {
+        const warnings = [
+          result.invitations.queueFailed > 0
+            ? `${result.invitations.queueFailed} new co-speaker invitation${result.invitations.queueFailed === 1 ? "" : "s"} could not be queued; the saved operation requires attention.`
+            : null,
+          result.webhookQueueFailed
+            ? "One or more outbound webhooks could not be queued."
+            : null,
+          realtimeFailure?.message ?? null,
+        ].filter((warning): warning is string => Boolean(warning));
+        return data<ActionResult>(
+          {
+            ok: false,
+            committed: true,
+            submissionId: result.submissionId,
+            revision: result.revision,
+            message: `Application revision saved successfully. ${warnings.join(" ")}`,
+          },
+          { status: 207 },
+        );
+      }
+      const query = await applicationNoticeQuery(env, {
+        slug,
+        kind: "revised",
+        submissionId: result.submissionId,
         webhookWarning: false,
       });
       return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);

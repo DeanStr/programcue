@@ -92,7 +92,11 @@ export async function resetProductionEvaluationFixture({
     result.evidence.fixtureCalendarConnections !== 0 ||
     result.evidence.fixtureVerificationTokens !== 0 ||
     result.evidence.verifiedSenders !== 1 ||
-    result.evidence.workersAiSettings !== 1
+    result.evidence.workersAiSettings !== 1 ||
+    result.evidence.fixtureOrganisationAdministrators !== 1 ||
+    result.evidence.fixtureOrganisationMemberships !== 2 ||
+    result.evidence.fixtureApplicantMemberships !== 0 ||
+    result.evidence.nonDiscardedExtraEvents !== 0
   ) {
     throw new Error("The reset endpoint did not report a complete fixture.");
   }
@@ -110,10 +114,10 @@ async function main() {
     secret: process.env.EVALUATION_FIXTURE_SECRET,
   });
   console.log(
-    `Reset ${RESET_CONFIRMATION}: ${result.evidence.fixturePeople} evaluator identities, ${result.evidence.verifiedSenders} verified sender, Workers AI ready.`,
+    `Reset ${RESET_CONFIRMATION}: ${result.evidence.fixturePeople} clean scenario identities, ${result.evidence.verifiedSenders} verified sender, Workers AI configuration seeded.`,
   );
   console.log(
-    "Authenticate each evaluator persona through the ordinary /sign-in magic-link flow before capturing its SBEK browser state.",
+    "Open /evaluate with the shared access code and save only the organizer, clean applicant and clean invited reviewer starting states; activate the clean applicant explicitly. Marcus remains in-scenario co-speaker input. No evaluator mailbox is required for persona access.",
   );
 }
 

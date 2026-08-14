@@ -375,10 +375,9 @@ test.describe.serial(
       const taskPlan = page.locator("aside").filter({
         has: page.getByRole("heading", { name: "Assign a plan" }),
       });
-      const template = taskPlan.locator("details").filter({
-        has: page.getByText("Create task template", { exact: true }),
+      const template = taskPlan.getByRole("region", {
+        name: "Create task template",
       });
-      await template.getByText("Create task template", { exact: true }).click();
       const dueDateAnchor = template.getByLabel("Due date anchor");
       await dueDateAnchor.scrollIntoViewIfNeeded();
       await expect(dueDateAnchor).toBeInViewport();
@@ -640,10 +639,9 @@ test.describe.serial("responsive visual inventory", () => {
     const taskPlan = page.locator("aside").filter({
       has: page.getByRole("heading", { name: "Assign a plan" }),
     });
-    const template = taskPlan.locator("details").filter({
-      has: page.getByText("Create task template", { exact: true }),
+    const template = taskPlan.getByRole("region", {
+      name: "Create task template",
     });
-    await template.getByText("Create task template", { exact: true }).click();
     await template.getByLabel("Due date anchor").selectOption("acceptance");
     await template
       .getByLabel("Add this task automatically when a submission is accepted")

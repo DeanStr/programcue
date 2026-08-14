@@ -68,10 +68,33 @@ test("speaker profile, sessions and D1 task state render through the production 
   await page.getByRole("link", { name: "Files" }).click();
   await expect(page.getByRole("link", { name: /^Download / })).toHaveCount(0);
   await page.getByRole("link", { name: "Profile" }).click();
+  await expect(
+    page.getByRole("link", { name: "Upload headshot" }),
+  ).toHaveAttribute("href", "/participant/files#headshot-upload");
+  await page
+    .getByLabel("LinkedIn profile URL")
+    .fill("https://www.linkedin.com/in/priya-shah");
+  await page.getByLabel("X handle").fill("@priya_shah");
+  await page
+    .getByLabel("Travel and logistics preferences")
+    .fill("Arrival May 11, aisle seat; dietary: Vegetarian");
   await page.getByRole("button", { name: "Save profile" }).click();
   await expect(page.getByRole("status")).toContainText("Profile saved to D1");
   await page.reload();
   await expect(page.getByLabel("Job title")).toHaveValue(/Director/);
+  await expect(page.getByLabel("LinkedIn profile URL")).toHaveValue(
+    "https://www.linkedin.com/in/priya-shah",
+  );
+  await expect(page.getByLabel("X handle")).toHaveValue("@priya_shah");
+  await expect(page.getByLabel("Travel and logistics preferences")).toHaveValue(
+    "Arrival May 11, aisle seat; dietary: Vegetarian",
+  );
+
+  await page.getByLabel("LinkedIn profile URL").fill("");
+  await page.getByLabel("X handle").fill("");
+  await page.getByLabel("Travel and logistics preferences").fill("");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(page.getByRole("status")).toContainText("Profile saved to D1");
 });
 
 test("a submitter enters the same participant workspace and can open applications", async ({
@@ -142,14 +165,30 @@ test("organiser speaker detail edits the profile and keeps a durable save confir
     page.getByRole("heading", { name: "Linked sessions" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: /Designing inclusive event technology/ }),
+    page
+      .locator('td[data-label="Session"]')
+      .filter({ hasText: "Designing inclusive event technology" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Uploaded files and versions" }),
   ).toBeVisible();
+  await expect(
+    page.getByText("Upload speaker headshot", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Choose file")).toHaveAttribute(
+    "accept",
+    "image/jpeg,image/png,image/webp",
+  );
 
   const notice = page.locator(".pc-status-notice");
   await page.getByLabel("Job title").fill("Head of Experience Design");
+  await page
+    .getByLabel("LinkedIn profile URL")
+    .fill("https://www.linkedin.com/in/priya-shah");
+  await page.getByLabel("X handle").fill("@priya_shah");
+  await page
+    .getByLabel("Travel and logistics preferences")
+    .fill("Arrival May 11, aisle seat; dietary: Vegetarian");
   await page.getByLabel("Profile status").selectOption("published");
   await page.getByRole("button", { name: "Save profile" }).click();
   await expect(notice).toContainText("Saved to D1 as revision");
@@ -159,6 +198,13 @@ test("organiser speaker detail edits the profile and keeps a durable save confir
   await page.reload();
   await expect(page.getByLabel("Job title")).toHaveValue(
     "Head of Experience Design",
+  );
+  await expect(page.getByLabel("LinkedIn profile URL")).toHaveValue(
+    "https://www.linkedin.com/in/priya-shah",
+  );
+  await expect(page.getByLabel("X handle")).toHaveValue("@priya_shah");
+  await expect(page.getByLabel("Travel and logistics preferences")).toHaveValue(
+    "Arrival May 11, aisle seat; dietary: Vegetarian",
   );
   await expect(page.getByText(/Last saved .* · revision \d+/)).toBeVisible();
   await expect(notice).toHaveCount(0);
@@ -183,6 +229,9 @@ test("organiser speaker detail edits the profile and keeps a durable save confir
 
   // Restore the seeded demo identity for later specs.
   await page.getByLabel("Job title").fill("Director of Experience Design");
+  await page.getByLabel("LinkedIn profile URL").fill("");
+  await page.getByLabel("X handle").fill("");
+  await page.getByLabel("Travel and logistics preferences").fill("");
   await page.getByRole("button", { name: "Save profile" }).click();
   await expect(notice).toContainText("Saved to D1 as revision");
 });

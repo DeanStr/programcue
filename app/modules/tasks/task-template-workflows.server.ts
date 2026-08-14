@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  WebhookService,
+  type PreparedWebhookEvent,
+} from "~/platform/operations/webhook-service.server";
 import {
   taskTemplateConfigurationSchema,
   taskTemplateInputSchema,
@@ -13,6 +16,97 @@ import {
   fixedDateEndEpoch,
   taskTemplateIdForIntent,
 } from "./task-service-foundation.server";
+
+type TaskAssignmentSnapshot = {
+  targetRevision: number;
+  templateAssignments: Array<{ templateId: string; assigned: boolean }>;
+  templates: TaskTemplateAssignmentSnapshot[];
+};
+
+type TaskTemplateAssignmentSnapshot = {
+  id: string;
+  name: string;
+  description: string | null;
+  targetType: TemplateRow["targetType"];
+  taskType: TemplateRow["taskType"];
+  impact: TemplateRow["impact"];
+  evidenceMode: TemplateRow["evidenceMode"];
+  dueAnchor: TemplateRow["dueAnchor"];
+  dueOffsetMinutes: number | null;
+  fixedDueAt: number | null;
+  autoAssignOnAcceptance: number;
+  configurationJson: string;
+  updatedAt: number;
+  dependencyIds: string[];
+};
+
+type PlannedTaskNode = {
+  template: TemplateRow & { updatedAt: number };
+  dependencyTemplateIds: string[];
+  dueAt: number | null;
+  existing: {
+    id: string;
+    title: string;
+    status: string;
+    lastOperationId: string | null;
+  } | null;
+  taskId: string;
+  operationId: string;
+  auditEventId: string;
+};
+
+function assignmentTemplateSnapshot(
+  template: TemplateRow & { updatedAt: number },
+  dependencyIds: string[] = [],
+): TaskTemplateAssignmentSnapshot {
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description,
+    targetType: template.targetType,
+    taskType: template.taskType,
+    impact: template.impact,
+    evidenceMode: template.evidenceMode,
+    dueAnchor: template.dueAnchor,
+    dueOffsetMinutes: template.dueOffsetMinutes,
+    fixedDueAt: template.fixedDueAt,
+    autoAssignOnAcceptance: Number(template.autoAssignOnAcceptance),
+    configurationJson: template.configurationJson,
+    updatedAt: template.updatedAt,
+    dependencyIds: [...dependencyIds].sort(),
+  };
+}
+
+function requirePreparedTaskWebhook(
+  preparedWebhooks: ReadonlyMap<string, PreparedWebhookEvent>,
+  templateId: string,
+): PreparedWebhookEvent {
+  const prepared = preparedWebhooks.get(templateId);
+  if (!prepared) {
+    throw new Error(
+      `Task assignment invariant failed: webhook preparation is missing for template ${templateId}.`,
+    );
+  }
+  return prepared;
+}
+
+async function dependencyAssignmentOperationId(
+  intentId: string,
+  templateId: string,
+) {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`${intentId.length}:${intentId}:${templateId}`),
+    ),
+  );
+  const boundedHash = Array.from(digest, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  )
+    .join("")
+    .slice(0, 40);
+  return `dep:${boundedHash}`;
+}
 
 export abstract class TaskTemplateWorkflows extends TaskServiceFoundation {
   async createTemplate(
@@ -443,12 +537,13 @@ export abstract class TaskTemplateWorkflows extends TaskServiceFoundation {
       SELECT id, name, description, target_type AS targetType, task_type AS taskType, impact,
              evidence_mode AS evidenceMode, due_anchor AS dueAnchor, due_offset_minutes AS dueOffsetMinutes,
              fixed_due_at AS fixedDueAt, auto_assign_on_acceptance AS autoAssignOnAcceptance,
-             configuration_json AS configurationJson, status
+             configuration_json AS configurationJson, status,
+             updated_at AS updatedAt
         FROM task_templates WHERE id = ? AND event_id = ?
     `,
     )
       .bind(templateId, eventId)
-      .first<TemplateRow>();
+      .first<TemplateRow & { updatedAt: number }>();
   }
 
   protected async dueAtFor(
@@ -522,26 +617,24 @@ export abstract class TaskTemplateWorkflows extends TaskServiceFoundation {
     eventId: string,
     targetType: TemplateRow["targetType"],
     targetId: string,
+    expectedTargetRevision?: number,
   ) {
     if (targetType === "event") {
       if (targetId !== eventId)
         throw new TaskStateError("The selected event target is unavailable.");
-      return;
+      return null;
     }
     const target =
       targetType === "speaker"
         ? await this.env.DB.prepare(
             `
-            SELECT 1 FROM memberships
-             WHERE event_id = ? AND person_id = ? AND role = 'speaker'
-               AND accepted_at IS NOT NULL AND revoked_at IS NULL
-            UNION
-            SELECT 1 FROM session_speakers
-             WHERE event_id = ? AND person_id = ? LIMIT 1
+            SELECT revision FROM event_speaker_workflows
+             WHERE event_id = ? AND person_id = ?
+               AND status IN ('prospect','invited','confirmed')
           `,
           )
-            .bind(eventId, targetId, eventId, targetId)
-            .first()
+            .bind(eventId, targetId)
+            .first<{ revision: number }>()
         : await this.env.DB.prepare(
             `SELECT 1 FROM sessions
               WHERE event_id = ? AND id = ? AND status NOT IN ('cancelled','archived')`,
@@ -551,289 +644,576 @@ export abstract class TaskTemplateWorkflows extends TaskServiceFoundation {
     if (!target) {
       throw new TaskStateError(
         targetType === "speaker"
-          ? "The selected person is not a speaker in this event."
+          ? "The selected person is not an active speaker in this event."
           : "The selected session is unavailable in this event.",
       );
     }
+    if (
+      targetType === "speaker" &&
+      expectedTargetRevision !== undefined &&
+      target.revision !== expectedTargetRevision
+    ) {
+      throw new TaskStateError(
+        "The selected speaker changed after the task assignment was previewed.",
+      );
+    }
+    return targetType === "speaker"
+      ? (target as { revision: number }).revision
+      : null;
   }
 
-  protected async recordAssignmentAudit(
+  private assignmentTargetGuard(
     viewer: Viewer,
-    template: TemplateRow,
+    targetType: TemplateRow["targetType"],
     targetId: string,
-    taskId: string,
-    operationId: string,
+    expectedTargetRevision?: number,
   ) {
-    await this.env.DB.prepare(
-      `INSERT OR IGNORE INTO audit_events (
-         id, organisation_id, event_id, actor_person_id, action,
-         entity_type, entity_id, correlation_id, metadata_json, created_at
-       ) VALUES (?, ?, ?, ?, 'task.assigned', 'task_instance', ?, ?, ?, unixepoch())`,
-    )
-      .bind(
-        `audit:task-assigned:${operationId}`,
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        taskId,
-        operationId,
-        JSON.stringify({
-          templateId: template.id,
-          targetType: template.targetType,
+    if (targetType === "speaker") {
+      return {
+        sql: `EXISTS (
+          SELECT 1 FROM event_speaker_workflows workflow
+           WHERE workflow.event_id = ? AND workflow.person_id = ?
+             AND workflow.status IN ('prospect','invited','confirmed')
+             AND (? IS NULL OR workflow.revision = ?)
+        )`,
+        bindings: [
+          viewer.eventId,
           targetId,
-        }),
-      )
-      .run();
+          expectedTargetRevision ?? null,
+          expectedTargetRevision ?? null,
+        ],
+      };
+    }
+    if (targetType === "session") {
+      return {
+        sql: `EXISTS (
+          SELECT 1 FROM sessions session
+           WHERE session.event_id = ? AND session.id = ?
+             AND session.status NOT IN ('cancelled','archived')
+        )`,
+        bindings: [viewer.eventId, targetId],
+      };
+    }
+    return {
+      sql: `? = ?`,
+      bindings: [targetId, viewer.eventId],
+    };
+  }
+
+  private async planTemplateAssignment(
+    viewer: Viewer,
+    rootTemplateId: string,
+    targetId: string,
+    assignmentIntentId?: string,
+  ) {
+    const planned = new Map<string, PlannedTaskNode>();
+    const ordered: PlannedTaskNode[] = [];
+    const visiting = new Set<string>();
+    let rootTargetType: TemplateRow["targetType"] | null = null;
+
+    const visit = async (templateId: string): Promise<void> => {
+      if (visiting.has(templateId)) {
+        throw new TaskStateError("Task template dependencies contain a cycle.");
+      }
+      if (planned.has(templateId)) return;
+      visiting.add(templateId);
+      const template = await this.getTemplate(viewer.eventId, templateId);
+      if (!template || template.status !== "active") {
+        throw new TaskStateError("Task template not found or archived.");
+      }
+      rootTargetType ??= template.targetType;
+      if (template.targetType !== rootTargetType) {
+        throw new TaskStateError(
+          "Prerequisite templates must use the same task scope.",
+        );
+      }
+      const [existing, dependencyRows] = await Promise.all([
+        this.env.DB.prepare(
+          `SELECT id, title, status, last_operation_id AS lastOperationId
+             FROM task_instances
+            WHERE event_id = ? AND template_id = ?
+              AND target_type = ? AND target_id = ?
+            LIMIT 1`,
+        )
+          .bind(viewer.eventId, templateId, template.targetType, targetId)
+          .first<NonNullable<PlannedTaskNode["existing"]>>(),
+        this.env.DB.prepare(
+          `SELECT depends_on_template_id AS id
+             FROM task_template_dependencies
+            WHERE template_id = ?
+            ORDER BY depends_on_template_id`,
+        )
+          .bind(templateId)
+          .all<{ id: string }>(),
+      ]);
+      for (const dependency of dependencyRows.results) {
+        await visit(dependency.id);
+      }
+      const dueAt = existing
+        ? null
+        : await this.dueAtFor(template, viewer.eventId, targetId);
+      if (!existing && template.dueAnchor !== "none" && dueAt === null) {
+        throw new TaskStateError(
+          `The ${template.dueAnchor.replace("_", " ")} due anchor cannot be resolved for this ${template.targetType}.`,
+        );
+      }
+      const operationId = assignmentIntentId
+        ? templateId === rootTemplateId
+          ? assignmentIntentId
+          : await dependencyAssignmentOperationId(
+              assignmentIntentId,
+              templateId,
+            )
+        : crypto.randomUUID();
+      const node: PlannedTaskNode = {
+        template,
+        dependencyTemplateIds: dependencyRows.results.map((row) => row.id),
+        dueAt,
+        existing: existing ?? null,
+        taskId:
+          existing?.id ??
+          (assignmentIntentId ? `task:${operationId}` : crypto.randomUUID()),
+        operationId,
+        auditEventId: assignmentIntentId
+          ? `audit:task-assigned:${operationId}`
+          : crypto.randomUUID(),
+      };
+      planned.set(templateId, node);
+      ordered.push(node);
+      visiting.delete(templateId);
+    };
+
+    await visit(rootTemplateId);
+    return { ordered, root: planned.get(rootTemplateId)! };
+  }
+
+  private async returnExistingAssignment(
+    viewer: Viewer,
+    node: PlannedTaskNode,
+    targetId: string,
+    assignmentIntentId: string | undefined,
+    webhookWarnings: string[],
+  ) {
+    if (!node.existing) {
+      throw new Error("An existing task assignment was required.");
+    }
+    if (
+      assignmentIntentId === undefined ||
+      node.existing.lastOperationId !== node.operationId
+    ) {
+      return node.existing.id;
+    }
+
+    const deliveries = await new WebhookService(
+      this.env,
+    ).resumePreparedEventForAudit(
+      viewer,
+      {
+        eventType: "task.created",
+        entityType: "task",
+        entityId: node.existing.id,
+        idempotencyKey: `task.created:${node.existing.id}:${node.operationId}`,
+        correlationId: node.operationId,
+        data: {
+          title: node.existing.title,
+          status: node.dependencyTemplateIds.length ? "blocked" : "not_started",
+          targetType: node.template.targetType,
+          targetId,
+          templateId: node.template.id,
+        },
+      },
+      node.auditEventId,
+    );
+    if (deliveries.some((delivery) => delivery.status === "queue_failed")) {
+      webhookWarnings.push(
+        "The task change was saved, but one or more outbound webhooks need a queue retry.",
+      );
+    }
+    return node.existing.id;
   }
 
   protected async materializeTemplate(
     viewer: Viewer,
     templateId: string,
     targetId: string,
-    visiting = new Set<string>(),
     webhookWarnings: string[] = [],
-    expectedTargetType?: TemplateRow["targetType"],
     assignmentIntentId?: string,
+    expectedSnapshot?: TaskAssignmentSnapshot,
+    expectedTargetRevision?: number,
   ): Promise<string> {
-    if (visiting.has(templateId))
-      throw new TaskStateError("Task template dependencies contain a cycle.");
-    const template = await this.getTemplate(viewer.eventId, templateId);
-    if (!template || template.status !== "active")
-      throw new TaskStateError("Task template not found or archived.");
-    if (expectedTargetType && template.targetType !== expectedTargetType) {
-      throw new TaskStateError(
-        "Prerequisite templates must use the same task scope.",
+    const { ordered, root } = await this.planTemplateAssignment(
+      viewer,
+      templateId,
+      targetId,
+      assignmentIntentId,
+    );
+    if (expectedSnapshot) {
+      const expected = new Map(
+        expectedSnapshot.templateAssignments.map((assignment) => [
+          assignment.templateId,
+          assignment.assigned,
+        ]),
       );
-    }
-    const existing = await this.env.DB.prepare(
-      `
-      SELECT id, title, status, last_operation_id AS lastOperationId
-        FROM task_instances
-       WHERE event_id = ? AND template_id = ? AND target_type = ? AND target_id = ?
-       LIMIT 1
-    `,
-    )
-      .bind(viewer.eventId, templateId, template.targetType, targetId)
-      .first<{
-        id: string;
-        title: string;
-        status: string;
-        lastOperationId: string | null;
-      }>();
-    if (existing) {
-      const operationId = assignmentIntentId
-        ? expectedTargetType === undefined
-          ? assignmentIntentId
-          : `${assignmentIntentId}:${template.id}`
-        : (existing.lastOperationId ?? `existing:${existing.id}`);
-      if (assignmentIntentId) {
-        await this.recordAssignmentAudit(
-          viewer,
-          template,
-          targetId,
-          existing.id,
-          operationId,
+      if (
+        expected.size !== expectedSnapshot.templateAssignments.length ||
+        expected.size !== ordered.length ||
+        ordered.some(
+          (node) => expected.get(node.template.id) !== Boolean(node.existing),
+        )
+      ) {
+        throw new TaskStateError(
+          "The task plan assignments changed after the bulk preview.",
         );
       }
-      const warning = await this.queueTaskWebhook(viewer, {
-        eventType: "task.created",
-        taskId: existing.id,
-        operationId,
-        data: {
-          title: existing.title,
-          status: existing.status,
-          targetType: template.targetType,
-          targetId,
-          templateId,
-        },
-      });
-      if (warning) webhookWarnings.push(warning);
-      return existing.id;
+      const currentTemplates = ordered
+        .map((node) =>
+          assignmentTemplateSnapshot(node.template, node.dependencyTemplateIds),
+        )
+        .sort((left, right) => left.id.localeCompare(right.id));
+      const expectedTemplates = [...expectedSnapshot.templates].sort(
+        (left, right) => left.id.localeCompare(right.id),
+      );
+      if (
+        JSON.stringify(currentTemplates) !== JSON.stringify(expectedTemplates)
+      ) {
+        throw new TaskStateError(
+          "The task templates changed after the bulk preview.",
+        );
+      }
     }
-    visiting.add(templateId);
-    const dueAt = await this.dueAtFor(template, viewer.eventId, targetId);
-    if (template.dueAnchor !== "none" && dueAt === null) {
-      throw new TaskStateError(
-        `The ${template.dueAnchor.replace("_", " ")} due anchor cannot be resolved for this ${template.targetType}.`,
+    if (root.existing) {
+      if (expectedSnapshot) {
+        return root.existing.id;
+      }
+      return this.returnExistingAssignment(
+        viewer,
+        root,
+        targetId,
+        assignmentIntentId,
+        webhookWarnings,
       );
     }
-    const dependencyRows = await this.env.DB.prepare(
-      `
-      SELECT depends_on_template_id AS id FROM task_template_dependencies WHERE template_id = ?
-    `,
-    )
-      .bind(templateId)
-      .all<{ id: string }>();
-    const dependencyTaskIds: string[] = [];
-    for (const dependency of dependencyRows.results) {
-      dependencyTaskIds.push(
-        await this.materializeTemplate(
+
+    await this.requireTaskWebhookReadiness(viewer, "task.created");
+    const targetGuard = this.assignmentTargetGuard(
+      viewer,
+      root.template.targetType,
+      targetId,
+      expectedSnapshot?.targetRevision ?? expectedTargetRevision,
+    );
+    const missing = ordered.filter((node) => !node.existing);
+    const webhookService = new WebhookService(this.env);
+    const webhookInput = (node: PlannedTaskNode) => ({
+      eventType: "task.created" as const,
+      entityType: "task" as const,
+      entityId: node.taskId,
+      idempotencyKey: `task.created:${node.taskId}:${node.operationId}`,
+      correlationId: node.operationId,
+      data: {
+        title: node.template.name,
+        status: node.dependencyTemplateIds.length ? "blocked" : "not_started",
+        targetType: node.template.targetType,
+        targetId,
+        templateId: node.template.id,
+      },
+    });
+    const preparedWebhooks = new Map<string, PreparedWebhookEvent>();
+    for (const node of missing) {
+      preparedWebhooks.set(
+        node.template.id,
+        await webhookService.prepareEventForAudit(
           viewer,
-          dependency.id,
-          targetId,
-          visiting,
-          webhookWarnings,
-          template.targetType,
-          assignmentIntentId,
+          webhookInput(node),
+          node.auditEventId,
         ),
       );
     }
-    visiting.delete(templateId);
-    const operationId = assignmentIntentId
-      ? expectedTargetType === undefined
-        ? assignmentIntentId
-        : `${assignmentIntentId}:${template.id}`
-      : crypto.randomUUID();
-    const id = assignmentIntentId ? `task:${operationId}` : crypto.randomUUID();
-    const blocked = dependencyTaskIds.length > 0;
-    const auditEventId = assignmentIntentId
-      ? `audit:task-assigned:${operationId}`
-      : crypto.randomUUID();
-    const preparedWebhook = await new WebhookService(
-      this.env,
-    ).prepareEventForAudit(
-      viewer,
-      {
-        eventType: "task.created",
-        entityType: "task",
-        entityId: id,
-        idempotencyKey: `task.created:${id}:${operationId}`,
-        correlationId: operationId,
-        data: {
-          title: template.name,
-          status: blocked ? "blocked" : "not_started",
-          targetType: template.targetType,
-          targetId,
-          templateId: template.id,
-        },
-      },
-      auditEventId,
-    );
-    const [inserted] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `
-        INSERT OR IGNORE INTO task_instances (
-          id, event_id, template_id, target_type, target_id, owner_person_id, title, description,
-          task_type, impact, status, readiness_state, readiness_percent, revision, last_operation_id,
-          due_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, unixepoch(), unixepoch())
-      `,
-      ).bind(
-        id,
-        viewer.eventId,
-        template.id,
-        template.targetType,
-        targetId,
-        template.targetType === "speaker" ? targetId : null,
-        template.name,
-        template.description,
-        template.taskType,
-        template.impact,
-        blocked ? "blocked" : "not_started",
-        blocked ? "blocked" : "on_track",
-        operationId,
-        dueAt,
-      ),
-      ...dependencyTaskIds.map((dependencyTaskId) =>
+
+    const statements: D1PreparedStatement[] = [];
+    for (const node of missing) {
+      const blocked = node.dependencyTemplateIds.length > 0;
+      statements.push(
         this.env.DB.prepare(
-          `
-        INSERT INTO task_instance_dependencies (task_id, depends_on_task_id, created_at)
-        SELECT ?, ?, unixepoch()
-         WHERE EXISTS (
-           SELECT 1 FROM task_instances
-            WHERE id = ? AND event_id = ? AND last_operation_id = ?
-         )
-      `,
-        ).bind(id, dependencyTaskId, id, viewer.eventId, operationId),
+          `INSERT OR IGNORE INTO task_instances (
+             id, event_id, template_id, target_type, target_id,
+             owner_person_id, title, description, task_type, impact,
+             status, readiness_state, readiness_percent, revision,
+             last_operation_id, due_at, created_at, updated_at
+           )
+           SELECT ?, ?, current_template.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1,
+                  ?, ?, unixepoch(), unixepoch()
+             FROM task_templates current_template
+            WHERE current_template.id = ? AND current_template.event_id = ?
+              AND current_template.status = 'active'
+              AND current_template.target_type = ?
+              AND ${targetGuard.sql}`,
+        ).bind(
+          node.taskId,
+          viewer.eventId,
+          node.template.targetType,
+          targetId,
+          node.template.targetType === "speaker" ? targetId : null,
+          node.template.name,
+          node.template.description,
+          node.template.taskType,
+          node.template.impact,
+          blocked ? "blocked" : "not_started",
+          blocked ? "blocked" : "on_track",
+          node.operationId,
+          node.dueAt,
+          node.template.id,
+          viewer.eventId,
+          node.template.targetType,
+          ...targetGuard.bindings,
+        ),
+      );
+    }
+    const edges = ordered.flatMap((node) =>
+      node.dependencyTemplateIds.map((dependencyTemplateId) => ({
+        templateId: node.template.id,
+        dependencyTemplateId,
+      })),
+    );
+    for (const edge of edges) {
+      statements.push(
+        this.env.DB.prepare(
+          `INSERT OR IGNORE INTO task_instance_dependencies (
+             task_id, depends_on_task_id, created_at
+           )
+           SELECT task.id, prerequisite.id, unixepoch()
+             FROM task_instances task
+             JOIN task_instances prerequisite
+               ON prerequisite.event_id = task.event_id
+              AND prerequisite.target_type = task.target_type
+              AND prerequisite.target_id = task.target_id
+            WHERE task.event_id = ? AND task.template_id = ?
+              AND task.target_type = ? AND task.target_id = ?
+              AND prerequisite.template_id = ?`,
+        ).bind(
+          viewer.eventId,
+          edge.templateId,
+          root.template.targetType,
+          targetId,
+          edge.dependencyTemplateId,
+        ),
+      );
+    }
+
+    for (const node of missing.filter((candidate) => candidate !== root)) {
+      statements.push(
+        this.env.DB.prepare(
+          `INSERT OR IGNORE INTO audit_events (
+             id, organisation_id, event_id, actor_person_id, action,
+             entity_type, entity_id, correlation_id, metadata_json, created_at
+           )
+           SELECT ?, ?, ?, ?, 'task.assigned', 'task_instance', ?, ?, ?, unixepoch()
+             FROM task_instances task
+            WHERE task.id = ? AND task.event_id = ?
+              AND task.last_operation_id = ?`,
+        ).bind(
+          node.auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          node.taskId,
+          node.operationId,
+          JSON.stringify({
+            templateId: node.template.id,
+            targetType: node.template.targetType,
+            targetId,
+          }),
+          node.taskId,
+          viewer.eventId,
+          node.operationId,
+        ),
+        ...requirePreparedTaskWebhook(preparedWebhooks, node.template.id)
+          .statements,
+      );
+    }
+
+    const requiredNodes = ordered.map((node) => ({
+      templateId: node.template.id,
+      existedAtPlan: Boolean(node.existing),
+      operationId: node.operationId,
+      template: assignmentTemplateSnapshot(
+        node.template,
+        node.dependencyTemplateIds,
       ),
+    }));
+    statements.push(
       this.env.DB.prepare(
-        `
-        INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type,
-          entity_id, correlation_id, metadata_json, created_at
-        )
-        SELECT ?, ?, ?, ?, 'task.assigned', 'task_instance', ?, ?, ?, unixepoch()
-         WHERE EXISTS (
-           SELECT 1 FROM task_instances
-            WHERE id = ? AND event_id = ? AND last_operation_id = ?
-         )
-      `,
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, correlation_id, metadata_json, created_at
+         ) VALUES (
+           ?, ?, ?, ?,
+           CASE WHEN
+             ${targetGuard.sql}
+             AND EXISTS (
+               SELECT 1 FROM task_instances task
+                WHERE task.id = ? AND task.event_id = ?
+                  AND task.last_operation_id = ?
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM json_each(?) required
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM task_instances task
+                  JOIN task_templates template
+                    ON template.id = task.template_id
+                   AND template.event_id = task.event_id
+                   AND template.status = 'active'
+                   AND template.target_type = task.target_type
+                   WHERE task.event_id = ? AND task.target_type = ?
+                     AND task.target_id = ?
+                     AND task.template_id = json_extract(required.value, '$.templateId')
+                     AND template.updated_at = json_extract(required.value, '$.template.updatedAt')
+                     AND template.name IS json_extract(required.value, '$.template.name')
+                     AND template.description IS json_extract(required.value, '$.template.description')
+                     AND template.task_type IS json_extract(required.value, '$.template.taskType')
+                     AND template.impact IS json_extract(required.value, '$.template.impact')
+                     AND template.evidence_mode IS json_extract(required.value, '$.template.evidenceMode')
+                     AND template.due_anchor IS json_extract(required.value, '$.template.dueAnchor')
+                     AND template.due_offset_minutes IS json_extract(required.value, '$.template.dueOffsetMinutes')
+                     AND template.fixed_due_at IS json_extract(required.value, '$.template.fixedDueAt')
+                     AND template.auto_assign_on_acceptance IS json_extract(required.value, '$.template.autoAssignOnAcceptance')
+                     AND template.configuration_json IS json_extract(required.value, '$.template.configurationJson')
+                     AND (
+                       json_extract(required.value, '$.existedAtPlan') = 1
+                       OR task.last_operation_id = json_extract(required.value, '$.operationId')
+                     )
+                )
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM json_each(?) required_edge
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM task_instance_dependencies dependency
+                  JOIN task_instances task ON task.id = dependency.task_id
+                  JOIN task_instances prerequisite
+                    ON prerequisite.id = dependency.depends_on_task_id
+                   WHERE task.event_id = ? AND task.target_type = ?
+                     AND task.target_id = ?
+                     AND task.template_id = json_extract(required_edge.value, '$.templateId')
+                     AND prerequisite.event_id = task.event_id
+                     AND prerequisite.target_type = task.target_type
+                     AND prerequisite.target_id = task.target_id
+                     AND prerequisite.template_id = json_extract(required_edge.value, '$.dependencyTemplateId')
+                )
+             )
+             AND (
+               SELECT COUNT(*) FROM task_template_dependencies dependency
+                WHERE dependency.template_id IN (
+                  SELECT json_extract(required.value, '$.templateId')
+                    FROM json_each(?) required
+                )
+             ) = ?
+             AND NOT EXISTS (
+               SELECT 1 FROM task_template_dependencies dependency
+                WHERE dependency.template_id IN (
+                  SELECT json_extract(required.value, '$.templateId')
+                    FROM json_each(?) required
+                )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM json_each(?) required_edge
+                     WHERE json_extract(required_edge.value, '$.templateId') =
+                           dependency.template_id
+                       AND json_extract(required_edge.value, '$.dependencyTemplateId') =
+                           dependency.depends_on_template_id
+                  )
+             )
+           THEN 'task.assigned' ELSE NULL END,
+           'task_instance', ?, ?, ?, unixepoch()
+         )`,
       ).bind(
-        auditEventId,
+        root.auditEventId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
-        id,
-        operationId,
+        ...targetGuard.bindings,
+        root.taskId,
+        viewer.eventId,
+        root.operationId,
+        JSON.stringify(requiredNodes),
+        viewer.eventId,
+        root.template.targetType,
+        targetId,
+        JSON.stringify(edges),
+        viewer.eventId,
+        root.template.targetType,
+        targetId,
+        JSON.stringify(requiredNodes),
+        edges.length,
+        JSON.stringify(requiredNodes),
+        JSON.stringify(edges),
+        root.taskId,
+        root.operationId,
         JSON.stringify({
-          templateId,
-          targetType: template.targetType,
+          templateId: root.template.id,
+          targetType: root.template.targetType,
           targetId,
         }),
-        id,
-        viewer.eventId,
-        operationId,
       ),
-      ...preparedWebhook.statements,
-    ]);
-    if ((inserted.meta.changes ?? 0) === 1) {
-      const warning = await this.queueTaskWebhook(viewer, {
-        eventType: "task.created",
-        taskId: id,
-        operationId,
-        data: {
-          title: template.name,
-          status: blocked ? "blocked" : "not_started",
-          targetType: template.targetType,
+      ...requirePreparedTaskWebhook(preparedWebhooks, root.template.id)
+        .statements,
+    );
+
+    try {
+      await this.env.DB.batch(statements);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const staleOrLoserSentinel = message.includes("audit_events.action");
+      const exactIntentCollision = message.includes("audit_events.id");
+      if (!staleOrLoserSentinel && !exactIntentCollision) throw error;
+      const winner = await this.env.DB.prepare(
+        `SELECT id, title, status, last_operation_id AS lastOperationId
+           FROM task_instances
+          WHERE event_id = ? AND template_id = ?
+            AND target_type = ? AND target_id = ?
+          LIMIT 1`,
+      )
+        .bind(
+          viewer.eventId,
+          root.template.id,
+          root.template.targetType,
           targetId,
-          templateId: template.id,
-        },
-      });
-      if (warning) webhookWarnings.push(warning);
-      return id;
-    }
-    const winner = await this.env.DB.prepare(
-      `
-      SELECT id, title, status, last_operation_id AS lastOperationId FROM task_instances
-       WHERE event_id = ? AND template_id = ? AND target_type = ? AND target_id = ?
-       LIMIT 1
-    `,
-    )
-      .bind(viewer.eventId, templateId, template.targetType, targetId)
-      .first<{
-        id: string;
-        title: string;
-        status: string;
-        lastOperationId: string | null;
-      }>();
-    if (winner) {
-      if (assignmentIntentId) {
-        await this.recordAssignmentAudit(
+        )
+        .first<NonNullable<PlannedTaskNode["existing"]>>();
+      if (winner && !expectedSnapshot) {
+        await this.assertTaskTarget(
+          viewer.eventId,
+          root.template.targetType,
+          targetId,
+          expectedTargetRevision,
+        );
+        root.existing = winner;
+        return this.returnExistingAssignment(
           viewer,
-          template,
+          root,
           targetId,
-          winner.id,
-          operationId,
+          assignmentIntentId,
+          webhookWarnings,
         );
       }
-      const warning = await this.queueTaskWebhook(viewer, {
-        eventType: "task.created",
-        taskId: winner.id,
-        operationId: winner.lastOperationId ?? `existing:${winner.id}`,
-        data: {
-          title: winner.title,
-          status: winner.status,
-          targetType: template.targetType,
-          targetId,
-          templateId,
-        },
-      });
-      if (warning) webhookWarnings.push(warning);
-      return winner.id;
+      if (staleOrLoserSentinel) {
+        throw new TaskStateError(
+          "The task assignment changed before it could be created.",
+        );
+      }
+      throw error;
     }
-    throw new TaskStateError(
-      "The task assignment changed before it could be created.",
-    );
+
+    for (const node of missing) {
+      const deliveries = await webhookService.resumePreparedEventForAudit(
+        viewer,
+        webhookInput(node),
+        node.auditEventId,
+      );
+      if (deliveries.some((delivery) => delivery.status === "queue_failed")) {
+        webhookWarnings.push(
+          "The task change was saved, but one or more outbound webhooks need a queue retry.",
+        );
+      }
+    }
+    return root.taskId;
   }
 
   async assignTemplate(
@@ -841,21 +1221,28 @@ export abstract class TaskTemplateWorkflows extends TaskServiceFoundation {
     templateId: string,
     targetId: string,
     intentId?: string,
+    expectedSnapshot?: TaskAssignmentSnapshot,
   ) {
     const execute = () =>
-      this.assignTemplateD1(viewer, templateId, targetId, intentId);
+      this.assignTemplateD1(
+        viewer,
+        templateId,
+        targetId,
+        intentId,
+        expectedSnapshot,
+      );
     return intentId
       ? this.projectIntentCommand(
           viewer,
           "task.template.assign",
           intentId,
-          { templateId, targetId },
+          { templateId, targetId, expectedSnapshot },
           execute,
         )
       : this.projectCommand(
           viewer,
           "task.template.assign",
-          { templateId, targetId },
+          { templateId, targetId, expectedSnapshot },
           execute,
         );
   }
@@ -865,6 +1252,7 @@ export abstract class TaskTemplateWorkflows extends TaskServiceFoundation {
     templateId: string,
     targetId: string,
     intentId?: string,
+    expectedSnapshot?: TaskAssignmentSnapshot,
   ) {
     await this.assertEvent(viewer);
     const parsedTemplateId = z.string().min(1).parse(templateId);
@@ -872,21 +1260,21 @@ export abstract class TaskTemplateWorkflows extends TaskServiceFoundation {
     const template = await this.getTemplate(viewer.eventId, parsedTemplateId);
     if (!template || template.status !== "active")
       throw new TaskStateError("Task template not found or archived.");
-    await this.assertTaskTarget(
+    const targetRevision = await this.assertTaskTarget(
       viewer.eventId,
       template.targetType,
       parsedTargetId,
+      expectedSnapshot?.targetRevision,
     );
-    await this.requireTaskWebhookReadiness(viewer, "task.created");
     const webhookWarnings: string[] = [];
     const taskId = await this.materializeTemplate(
       viewer,
       parsedTemplateId,
       parsedTargetId,
-      new Set(),
       webhookWarnings,
-      undefined,
       intentId,
+      expectedSnapshot,
+      targetRevision ?? undefined,
     );
     return {
       taskId,

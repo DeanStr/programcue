@@ -1,10 +1,11 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  ListFilter,
   ListChecks,
   ShieldCheck,
 } from "lucide-react";
-import { Link } from "react-router";
+import { Form, Link } from "react-router";
 
 import { AdminAssignedTasksPanel } from "~/components/admin-assigned-tasks-panel";
 import { AdminTaskPlanPanel } from "~/components/admin-task-plan-panel";
@@ -55,6 +56,85 @@ export function AdminTasksWorkspace({
           </span>
         </div>
       </div>
+      <section className="card pad mb" aria-labelledby="task-filters-heading">
+        <div className="card-title">
+          <h2 id="task-filters-heading">Filter assigned work</h2>
+          <span className="help right">
+            <ListFilter aria-hidden size={14} /> Shareable URL filters
+          </span>
+        </div>
+        <Form method="get" className="grid grid-5">
+          <label className="label">
+            Status
+            <select
+              className="select"
+              name="state"
+              defaultValue={data.filters.state}
+            >
+              <option value="">All statuses</option>
+              <option value="open">Incomplete</option>
+              <option value="not_started">Not started</option>
+              <option value="in_progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="submitted">Awaiting review</option>
+              <option value="completed">Completed</option>
+              <option value="waived">Waived</option>
+              <option value="overdue">Overdue</option>
+            </select>
+          </label>
+          <label className="label">
+            Scope
+            <select
+              className="select"
+              name="target"
+              defaultValue={data.filters.target}
+            >
+              <option value="">All scopes</option>
+              <option value="speaker">Speaker</option>
+              <option value="session">Session</option>
+              <option value="event">Event</option>
+            </select>
+          </label>
+          <label className="label">
+            Task type
+            <select
+              className="select"
+              name="type"
+              defaultValue={data.filters.type}
+            >
+              <option value="">All task types</option>
+              <option value="checklist">Checklist</option>
+              <option value="acknowledgement">Acknowledgement</option>
+              <option value="short_form">Short form</option>
+              <option value="file_upload">File upload</option>
+              <option value="link_visit">Link visit</option>
+              <option value="administrator_only">Administrator only</option>
+            </select>
+          </label>
+          <label className="label">
+            Impact
+            <select
+              className="select"
+              name="impact"
+              defaultValue={data.filters.impact}
+            >
+              <option value="">All impacts</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </label>
+          <div className="page-actions" style={{ alignItems: "end" }}>
+            <button className="btn primary" type="submit">
+              Apply filters
+            </button>
+            <Link className="btn" to="/admin/tasks">
+              Clear
+            </Link>
+          </div>
+        </Form>
+      </section>
       {Object.values(data.filters).some(Boolean) ? (
         <div className="pc-status-notice is-info mb" role="status">
           <ListChecks aria-hidden size={18} />

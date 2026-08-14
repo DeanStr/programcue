@@ -86,17 +86,23 @@ describe("participant retention", () => {
 
     expect(
       await seeded.testEnv.DB.prepare(
-        "SELECT email, display_name AS name, biography FROM people WHERE id = ?",
+        `SELECT email, display_name AS name, biography,
+                linkedin_url AS linkedinUrl, x_handle AS xHandle
+           FROM people WHERE id = ?`,
       )
         .bind(seeded.exclusiveId)
         .first(),
     ).toMatchObject({
       name: "Anonymised participant",
       biography: null,
+      linkedinUrl: null,
+      xHandle: null,
     });
     expect(
       await seeded.testEnv.DB.prepare(
-        "SELECT email, display_name AS name, biography FROM people WHERE id = ?",
+        `SELECT email, display_name AS name, biography,
+                linkedin_url AS linkedinUrl, x_handle AS xHandle
+           FROM people WHERE id = ?`,
       )
         .bind(seeded.sharedId)
         .first(),
@@ -104,7 +110,27 @@ describe("participant retention", () => {
       email: `${seeded.sharedId}@example.com`,
       name: "Shared Person",
       biography: "Shared biography",
+      linkedinUrl: "https://www.linkedin.com/in/shared-person",
+      xHandle: "shared_user",
     });
+    const retainedEventProfiles = await seeded.testEnv.DB.prepare(
+      `SELECT event_id AS eventId, organisation_id AS organisationId,
+              person_id AS personId,
+              travel_preferences AS travelPreferences
+         FROM event_participant_profiles
+        WHERE person_id IN (?, ?)
+        ORDER BY event_id`,
+    )
+      .bind(seeded.exclusiveId, seeded.sharedId)
+      .all();
+    expect(retainedEventProfiles.results).toEqual([
+      {
+        eventId: seeded.otherEventId,
+        organisationId,
+        personId: seeded.sharedId,
+        travelPreferences: "Other event travel preferences",
+      },
+    ]);
     expect(
       await seeded.testEnv.DB.prepare(
         `SELECT person.email, membership.revoked_at AS revokedAt
@@ -504,6 +530,21 @@ describe("participant retention", () => {
     ).rejects.toThrow(lockMessage);
     await expect(
       seeded.testEnv.DB.prepare(
+        `INSERT INTO event_participant_profiles (
+           event_id, organisation_id, person_id, travel_preferences,
+           last_operation_id
+         ) VALUES (?, ?, ?, 'Restored private travel details', ?)`,
+      )
+        .bind(
+          seeded.eventId,
+          organisationId,
+          retained!.personId,
+          id("post-retention-event-profile"),
+        )
+        .run(),
+    ).rejects.toThrow(lockMessage);
+    await expect(
+      seeded.testEnv.DB.prepare(
         `UPDATE people SET display_name = 'Restored participant'
           WHERE id = ?`,
       )
@@ -648,6 +689,11 @@ describe("participant retention", () => {
 
     const preview = await service.preview(seeded.owner);
     expect(preview.completed).toBe(true);
+    expect(preview.integrityViolations).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/participant identity or credential record/u),
+      ]),
+    );
     expect(preview.integrityViolations).toContain(
       "The completion tombstone exists without its immutable completion audit.",
     );

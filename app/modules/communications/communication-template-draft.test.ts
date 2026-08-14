@@ -26,6 +26,7 @@ import {
   describeCommunicationUnsubscribe,
   unsubscribeFromOptionalCommunication,
 } from "./unsubscribe.server";
+import { formatTaskDueDate } from "./merge-template";
 import { verifyResendWebhook } from "./resend-webhook.server";
 
 const viewer: Viewer = {
@@ -522,6 +523,61 @@ describe("Communications D1 vertical slice", () => {
       );
     });
 
+    it("offers every active workflow speaker while excluding inactive roster records", async () => {
+      const { testEnv } = await communicationEnvironment();
+      const token = crypto.randomUUID();
+      const activePersonId = `active-roster-speaker-${token}`;
+      const inactivePersonId = `inactive-roster-speaker-${token}`;
+      const activeAddress = `active-roster-${token}@example.com`;
+      const inactiveAddress = `inactive-roster-${token}@example.com`;
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO people (
+             id, email, display_name, email_verified, profile_status,
+             created_at, updated_at
+           ) VALUES (?, ?, 'Active roster speaker', 1, 'draft', unixepoch(), unixepoch())`,
+        ).bind(activePersonId, activeAddress),
+        testEnv.DB.prepare(
+          `INSERT INTO people (
+             id, email, display_name, email_verified, profile_status,
+             created_at, updated_at
+           ) VALUES (?, ?, 'Inactive roster speaker', 1, 'draft', unixepoch(), unixepoch())`,
+        ).bind(inactivePersonId, inactiveAddress),
+        testEnv.DB.prepare(
+          `INSERT INTO event_speaker_workflows (
+             event_id, person_id, status, source, revision, last_operation_id,
+             created_at, updated_at
+           ) VALUES (?, ?, 'invited', 'backfill', 1, ?, unixepoch(), unixepoch())`,
+        ).bind(viewer.eventId, activePersonId, `active-roster-${token}`),
+        testEnv.DB.prepare(
+          `INSERT INTO event_speaker_workflows (
+             event_id, person_id, status, source, revision, last_operation_id,
+             created_at, updated_at
+           ) VALUES (?, ?, 'withdrawn', 'backfill', 1, ?, unixepoch(), unixepoch())`,
+        ).bind(viewer.eventId, inactivePersonId, `inactive-roster-${token}`),
+      ]);
+
+      const preview = await new RecipientQuery(testEnv).preview(viewer, {
+        audienceType: "active_speakers",
+        manualRecipients: "",
+        category: "ad_hoc",
+        kind: "transactional",
+      });
+
+      expect(preview.deliverable).toContainEqual(
+        expect.objectContaining({
+          personId: activePersonId,
+          address: activeAddress,
+          sourceId: null,
+        }),
+      );
+      expect(
+        preview.deliverable.some(
+          (recipient) => recipient.address === inactiveAddress,
+        ),
+      ).toBe(false);
+    });
+
     it("includes accepted organisation administrators in an event-administrator audience", async () => {
       const { testEnv } = await communicationEnvironment();
       const token = crypto.randomUUID();
@@ -610,6 +666,33 @@ describe("Communications D1 vertical slice", () => {
   });
 
   describe("template and draft workflows", () => {
+    it("excludes reserved-domain recipients from production delivery previews", async () => {
+      const { testEnv } = await communicationEnvironment();
+      const productionEnv = {
+        ...testEnv,
+        APP_ENV: "production",
+        DEMO_MODE: "false",
+      } as CloudflareEnvironment;
+      const preview = await new RecipientQuery(productionEnv).preview(viewer, {
+        audienceType: "manual",
+        manualRecipients:
+          "Dana Kowalski <dana.speaker@sbek-test.example.com>, Routeable <speaker@programcue.dev>",
+        category: "ad_hoc",
+        kind: "transactional",
+      });
+
+      expect(preview.deliverable).toEqual([
+        expect.objectContaining({ address: "speaker@programcue.dev" }),
+      ]);
+      expect(preview.invalid).toEqual([
+        {
+          address: "dana.speaker@sbek-test.example.com",
+          name: "Dana Kowalski",
+          reason: "Reserved or local-only domain",
+        },
+      ]);
+    });
+
     it("versions and publishes templates, previews exact exclusions, and records intent before enqueue", async () => {
       const { testEnv, sent } = await communicationEnvironment();
       const service = new CommunicationService(testEnv);
@@ -654,7 +737,11 @@ describe("Communications D1 vertical slice", () => {
         preview.recipients.suppressed.map((recipient) => recipient.address),
       ).toEqual(["optional@example.com"]);
       expect(preview.recipients.invalid).toEqual([
-        { address: "not-an-email", name: "" },
+        {
+          address: "not-an-email",
+          name: "",
+          reason: "Invalid email address",
+        },
       ]);
       expect(preview.rendered.subject).toContain("Deliverable");
       expect(preview.rendered.html).toContain("Program Cue");
@@ -929,16 +1016,21 @@ describe("Communications D1 vertical slice", () => {
     it("sends the source values snapshotted at confirmation", async () => {
       const { testEnv, sent } = await communicationEnvironment();
       const currentTaskId = `000-snapshot-task-${crypto.randomUUID()}`;
+      const originalDueAt = Math.floor(Date.now() / 1_000) + 60;
+      const snapshottedDueDate = formatTaskDueDate(
+        originalDueAt,
+        "America/Toronto",
+      );
       await env.DB.prepare(
         `
           INSERT INTO task_instances (
             id, event_id, target_type, target_id, owner_person_id, title,
-            impact, status, readiness_state, readiness_percent
+            impact, status, readiness_state, readiness_percent, due_at
           ) VALUES (?, ?, 'speaker', 'person-demo-speaker', 'person-demo-speaker',
-                    'Confirmed source title', 'medium', 'not_started', 'on_track', 0)
+                    'Confirmed source title', 'medium', 'not_started', 'on_track', 0, ?)
         `,
       )
-        .bind(currentTaskId, viewer.eventId)
+        .bind(currentTaskId, viewer.eventId, originalDueAt)
         .run();
       const service = new CommunicationService(testEnv);
       const saved = await service.saveTemplate(viewer, {
@@ -946,22 +1038,24 @@ describe("Communications D1 vertical slice", () => {
         category: "task_reminder",
         subject: "Reminder: {{task.title}}",
         content: {
-          body: "Please complete {{task.title}}.",
+          body: "Please complete {{task.title}} by {{task.dueDate}}.",
           physicalAddress: "100 Programme Way, Toronto",
         },
       });
       await service.publishTemplate(viewer, saved.versionId);
       const confirmed = await confirmPreviewed(service, {
         templateVersionId: saved.versionId,
-        audienceType: "incomplete_speakers",
+        audienceType: "due_speakers",
         manualRecipients: "",
         kind: "transactional",
         idempotencyKey: `snapshot-merge-${crypto.randomUUID()}`,
       });
       await env.DB.prepare(
-        "UPDATE task_instances SET title = 'Changed after confirmation' WHERE id = ?",
+        `UPDATE task_instances
+            SET title = 'Changed after confirmation', due_at = ?
+          WHERE id = ?`,
       )
-        .bind(currentTaskId)
+        .bind(originalDueAt + 86_400, currentTaskId)
         .run();
 
       const requests: Array<Record<string, unknown>> = [];
@@ -988,6 +1082,7 @@ describe("Communications D1 vertical slice", () => {
       expect(String(snapshottedRequest?.html)).not.toContain(
         "Changed after confirmation",
       );
+      expect(String(snapshottedRequest?.html)).toContain(snapshottedDueDate);
       expect(
         await env.DB.prepare(
           `
@@ -1002,6 +1097,7 @@ describe("Communications D1 vertical slice", () => {
         sourceId: currentTaskId,
         sourceValuesJson: JSON.stringify({
           "task.title": "Confirmed source title",
+          "task.dueDate": snapshottedDueDate,
         }),
         status: "sent",
       });

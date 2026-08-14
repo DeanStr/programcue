@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { loader as adminSpeakerFileDownload } from "~/routes/admin-speaker-file-download";
 import { loader as speakerFileDownload } from "~/routes/speaker-file-download";
 import { loader as speakerResourceDownload } from "~/routes/speaker-resource-download";
 import { FilePolicyError } from "./file-policy";
@@ -209,6 +210,14 @@ describe("private R2 file lifecycle", () => {
     expect(new Uint8Array(await response.arrayBuffer()).slice(0, 4)).toEqual(
       new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
     );
+    const participantInline = await service.participantDownload(
+      speaker,
+      uploaded.assetId,
+      { inlineHeadshot: true },
+    );
+    expect(participantInline.headers.get("content-disposition")).toBe(
+      'inline; filename="headshot.png"',
+    );
     const administratorResponse =
       await service.administratorSpeakerFileDownload(
         admin,
@@ -219,6 +228,67 @@ describe("private R2 file lifecycle", () => {
     expect(administratorResponse.headers.get("content-disposition")).toContain(
       'filename="headshot.png"',
     );
+    const administratorInline = await service.administratorSpeakerFileDownload(
+      admin,
+      speaker.personId,
+      uploaded.assetId,
+      { inlineHeadshot: true },
+    );
+    expect(administratorInline.headers.get("content-disposition")).toBe(
+      'inline; filename="headshot.png"',
+    );
+    const participantInlineRoute = await speakerFileDownload({
+      request: new Request(
+        `http://localhost/participant/files/${uploaded.assetId}?view=headshot`,
+        { headers: { cookie: "program_cue_demo_identity=speaker" } },
+      ),
+      params: { assetId: uploaded.assetId },
+      context: routeContext(),
+    } as never);
+    expect(participantInlineRoute.headers.get("content-disposition")).toBe(
+      'inline; filename="headshot.png"',
+    );
+    const administratorInlineRoute = await adminSpeakerFileDownload({
+      request: new Request(
+        `http://localhost/admin/speakers/${speaker.personId}/files/${uploaded.assetId}?view=headshot`,
+        { headers: { cookie: "program_cue_demo_identity=administrator" } },
+      ),
+      params: { personId: speaker.personId, assetId: uploaded.assetId },
+      context: routeContext(),
+    } as never);
+    expect(administratorInlineRoute.headers.get("content-disposition")).toBe(
+      'inline; filename="headshot.png"',
+    );
+    await testEnv.DB.prepare(
+      `UPDATE file_assets
+          SET target_type = 'session', target_id = 'session-demo-speaker'
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(uploaded.assetId, speaker.eventId)
+      .run();
+    await expect(
+      service.participantDownload(speaker, uploaded.assetId),
+    ).resolves.toBeInstanceOf(Response);
+    await expect(
+      service.participantDownload(speaker, uploaded.assetId, {
+        inlineHeadshot: true,
+      }),
+    ).rejects.toBeInstanceOf(FileScanPendingError);
+    await expect(
+      service.administratorSpeakerFileDownload(
+        admin,
+        speaker.personId,
+        uploaded.assetId,
+        { inlineHeadshot: true },
+      ),
+    ).rejects.toBeInstanceOf(FileAccessError);
+    await testEnv.DB.prepare(
+      `UPDATE file_assets
+          SET target_type = 'person', target_id = ?
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(speaker.personId, uploaded.assetId, speaker.eventId)
+      .run();
     await expect(
       service.administratorSpeakerFileDownload(
         admin,
@@ -279,6 +349,228 @@ describe("private R2 file lifecycle", () => {
         uploaded.assetId,
       ),
     ).rejects.toBeInstanceOf(FileScanPendingError);
+  });
+
+  it("stores an administrator-uploaded headshot on the exact event speaker and preserves uploader attribution", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    await testEnv.DB.prepare(
+      `DELETE FROM file_assets
+        WHERE event_id = ? AND owner_person_id = ?
+          AND target_type = 'person' AND target_id = ?
+          AND asset_kind = 'headshot'`,
+    )
+      .bind(speaker.eventId, speaker.personId, speaker.personId)
+      .run();
+    const target = {
+      targetType: "person" as const,
+      targetId: speaker.personId,
+      assetKind: "headshot" as const,
+    };
+    const image = (name: string, marker: number) =>
+      new File(
+        [
+          new Uint8Array([
+            0x89,
+            0x50,
+            0x4e,
+            0x47,
+            0x0d,
+            0x0a,
+            0x1a,
+            0x0a,
+            marker,
+          ]),
+        ],
+        name,
+        { type: "image/png" },
+      );
+
+    const administratorUpload = await completeTestDirectUpload(
+      testEnv,
+      admin,
+      target,
+      image("organizer-headshot.png", 1),
+    );
+    const participantReplacement = await completeTestDirectUpload(
+      testEnv,
+      speaker,
+      target,
+      image("speaker-headshot.png", 2),
+    );
+
+    expect(participantReplacement.assetId).toBe(administratorUpload.assetId);
+    expect(participantReplacement.versionNumber).toBe(2);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT asset.owner_person_id AS ownerPersonId,
+                first.created_by_person_id AS firstUploader,
+                second.created_by_person_id AS secondUploader
+           FROM file_assets asset
+           JOIN file_versions first
+             ON first.asset_id = asset.id AND first.version_number = 1
+           JOIN file_versions second
+             ON second.asset_id = asset.id AND second.version_number = 2
+          WHERE asset.id = ? AND asset.event_id = ?
+            AND asset.target_type = 'person' AND asset.target_id = ?`,
+      )
+        .bind(administratorUpload.assetId, speaker.eventId, speaker.personId)
+        .first(),
+    ).resolves.toEqual({
+      ownerPersonId: speaker.personId,
+      firstUploader: admin.personId,
+      secondUploader: speaker.personId,
+    });
+    await expect(
+      new FileService(testEnv).assertAdminTarget(admin, {
+        ...target,
+        targetId: "person-demo-evaluator",
+      }),
+    ).rejects.toBeInstanceOf(FileAccessError);
+    await expect(
+      new FileService(testEnv).assertAdminTarget(admin, {
+        ...target,
+        assetKind: "slides",
+      }),
+    ).rejects.toThrow(/limited to speaker headshots/i);
+    await expect(
+      new FileService(testEnv).assertParticipantTarget(speaker, {
+        targetType: "session",
+        targetId: "session-demo-speaker",
+        assetKind: "headshot",
+      }),
+    ).rejects.toThrow(/headshots must be uploaded to the participant profile/i);
+  });
+
+  it("downloads released headshots for active workflow-only prospects and denies inactive workflows", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new FileService(testEnv);
+    const suffix = crypto.randomUUID();
+    const personId = `workflow-headshot-person-${suffix}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (id, email, display_name)
+         VALUES (?, ?, 'Workflow-only prospect')`,
+      ).bind(personId, `workflow-headshot-${suffix}@example.com`),
+      testEnv.DB.prepare(
+        `INSERT INTO event_speaker_workflows (
+           event_id, person_id, status, source, last_operation_id,
+           updated_by_person_id
+         ) VALUES (?, ?, 'prospect', 'manual', ?, ?)`,
+      ).bind(
+        admin.eventId,
+        personId,
+        `workflow-headshot:${suffix}`,
+        admin.personId,
+      ),
+    ]);
+
+    const uploaded = await completeTestDirectUpload(
+      testEnv,
+      admin,
+      {
+        targetType: "person",
+        targetId: personId,
+        assetKind: "headshot",
+      },
+      new File(
+        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7])],
+        "workflow-prospect.png",
+        { type: "image/png" },
+      ),
+    );
+    await expect(
+      service.administratorSpeakerFileDownload(
+        admin,
+        personId,
+        uploaded.assetId,
+      ),
+    ).rejects.toBeInstanceOf(FileAccessError);
+
+    await service.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        testEnv,
+        admin.eventId,
+        uploaded.versionId,
+      )),
+      eventId: admin.eventId,
+      versionId: uploaded.versionId,
+      provider: "test-scanner",
+      callbackId: `callback-${uploaded.versionId}`,
+      status: "clean",
+      result: { verdict: "clean" },
+    });
+
+    const download = await service.administratorSpeakerFileDownload(
+      admin,
+      personId,
+      uploaded.assetId,
+    );
+    expect(download.headers.get("content-disposition")).toBe(
+      'attachment; filename="workflow-prospect.png"',
+    );
+    expect(download.headers.get("cache-control")).toBe("private, no-store");
+    await expect(
+      service.administratorSpeakerFileDownload(
+        { ...admin, eventId: `other-event-${suffix}` },
+        personId,
+        uploaded.assetId,
+      ),
+    ).rejects.toBeInstanceOf(FileAccessError);
+    await expect(
+      service.administratorSpeakerFileDownload(
+        { ...admin, organisationId: `other-organisation-${suffix}` },
+        personId,
+        uploaded.assetId,
+      ),
+    ).rejects.toBeInstanceOf(FileAccessError);
+
+    for (const status of ["invited", "confirmed"] as const) {
+      await testEnv.DB.prepare(
+        `UPDATE event_speaker_workflows SET status = ?, updated_at = unixepoch()
+          WHERE event_id = ? AND person_id = ?`,
+      )
+        .bind(status, admin.eventId, personId)
+        .run();
+      const view = await adminSpeakerFileDownload({
+        request: new Request(
+          `http://localhost/admin/speakers/${personId}/files/${uploaded.assetId}?view=headshot`,
+          { headers: { cookie: "program_cue_demo_identity=administrator" } },
+        ),
+        params: { personId, assetId: uploaded.assetId },
+        context: routeContext(),
+      } as never);
+      expect(view.headers.get("content-disposition")).toBe(
+        'inline; filename="workflow-prospect.png"',
+      );
+    }
+
+    for (const status of ["declined", "withdrawn"] as const) {
+      await testEnv.DB.prepare(
+        `UPDATE event_speaker_workflows SET status = ?, updated_at = unixepoch()
+          WHERE event_id = ? AND person_id = ?`,
+      )
+        .bind(status, admin.eventId, personId)
+        .run();
+      await expect(
+        service.assertAdminTarget(admin, {
+          targetType: "person",
+          targetId: personId,
+          assetKind: "headshot",
+        }),
+      ).rejects.toThrow(/speaker upload target not found/i);
+      await expect(
+        adminSpeakerFileDownload({
+          request: new Request(
+            `http://localhost/admin/speakers/${personId}/files/${uploaded.assetId}`,
+            { headers: { cookie: "program_cue_demo_identity=administrator" } },
+          ),
+          params: { personId, assetId: uploaded.assetId },
+          context: routeContext(),
+        } as never),
+      ).rejects.toMatchObject({ status: 404 });
+    }
   });
 
   it("refuses private downloads when R2 bytes no longer match the scanned object ETag", async () => {
@@ -432,6 +724,106 @@ describe("private R2 file lifecycle", () => {
       ).bind(resource.assetId, speaker.eventId),
     ]);
     await testEnv.FILES.delete([evidence.objectKey, resource.objectKey]);
+  });
+
+  it("fails closed when a released file has no detected content type", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new FileService(testEnv);
+    const uploaded = await completeTestDirectUpload(
+      testEnv,
+      speaker,
+      {
+        targetType: "task",
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence",
+      },
+      new File(["%PDF-1.7 released evidence"], "released-evidence.pdf", {
+        type: "application/pdf",
+      }),
+    );
+    await service.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        testEnv,
+        speaker.eventId,
+        uploaded.versionId,
+      )),
+      eventId: speaker.eventId,
+      versionId: uploaded.versionId,
+      provider: "test-scanner",
+      callbackId: `callback-${uploaded.versionId}`,
+      status: "clean",
+      result: { verdict: "clean" },
+    });
+    await testEnv.DB.prepare(
+      "UPDATE file_versions SET detected_content_type = NULL WHERE id = ? AND event_id = ?",
+    )
+      .bind(uploaded.versionId, speaker.eventId)
+      .run();
+
+    await expect(
+      service.participantDownload(speaker, uploaded.assetId),
+    ).rejects.toThrow(/missing its detected content type/i);
+  });
+
+  it("returns the complete participant evidence history beyond twenty versions", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new FileService(testEnv);
+    const assetId = crypto.randomUUID();
+    await testEnv.DB.prepare(
+      `INSERT INTO file_assets (
+         id, event_id, owner_person_id, target_type, target_id, asset_kind,
+         status
+       ) VALUES (?, ?, ?, 'task', 'task-demo-slides', 'task_evidence',
+                 'active')`,
+    )
+      .bind(assetId, speaker.eventId, speaker.personId)
+      .run();
+    const statements: D1PreparedStatement[] = [];
+    for (let versionNumber = 1; versionNumber <= 21; versionNumber += 1) {
+      const versionId = `${assetId}-version-${versionNumber}`;
+      statements.push(
+        testEnv.DB.prepare(
+          `INSERT INTO file_versions (
+             id, event_id, asset_id, version_number, object_key,
+             original_filename, declared_content_type, size_bytes,
+             upload_status, signature_status, scan_status,
+             created_by_person_id
+           ) VALUES (?, ?, ?, ?, ?, ?, 'application/pdf', 10,
+                     'uploaded', 'valid', 'clean', ?)`,
+        ).bind(
+          versionId,
+          speaker.eventId,
+          assetId,
+          versionNumber,
+          `tests/${versionId}`,
+          `evidence-${versionNumber}.pdf`,
+          speaker.personId,
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO task_evidence (
+             id, event_id, task_id, submitted_by_person_id, file_asset_id,
+             evidence_json, status
+           ) VALUES (?, ?, 'task-demo-slides', ?, ?, ?, 'submitted')`,
+        ).bind(
+          `${assetId}-evidence-${versionNumber}`,
+          speaker.eventId,
+          speaker.personId,
+          assetId,
+          JSON.stringify({ fileVersionId: versionId }),
+        ),
+      );
+    }
+    await testEnv.DB.batch(statements);
+
+    const versions = await service.listParticipantTaskEvidenceVersions(
+      speaker,
+      ["task-demo-slides"],
+    );
+    expect(
+      versions.filter((version) => version.assetId === assetId),
+    ).toHaveLength(21);
   });
 
   it("returns explicit HTTP states for unavailable speaker downloads", async () => {
@@ -921,29 +1313,25 @@ describe("private R2 file lifecycle", () => {
     await ensureDemoSpeakerData(testEnv);
     const service = new FileService(testEnv);
     const target = {
-      targetType: "session" as const,
-      targetId: "session-demo-speaker",
-      assetKind: "headshot" as const,
+      targetType: "person" as const,
+      targetId: speaker.personId,
+      assetKind: "supporting_document" as const,
     };
     const first = await completeTestDirectUpload(
       testEnv,
       speaker,
       target,
-      new File(
-        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 41])],
-        "erase-first.png",
-        { type: "image/png" },
-      ),
+      new File(["%PDF-1.7 erase first"], "erase-first.pdf", {
+        type: "application/pdf",
+      }),
     );
     const second = await completeTestDirectUpload(
       testEnv,
       speaker,
       target,
-      new File(
-        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 42])],
-        "erase-second.png",
-        { type: "image/png" },
-      ),
+      new File(["%PDF-1.7 erase second"], "erase-second.pdf", {
+        type: "application/pdf",
+      }),
     );
     const stored = await testEnv.DB.prepare(
       "SELECT object_key AS objectKey FROM file_versions WHERE asset_id = ? ORDER BY version_number",
@@ -964,7 +1352,7 @@ describe("private R2 file lifecycle", () => {
     expect(erased).toMatchObject({
       duplicate: false,
       erasedVersions: 2,
-      affected: { latestFilename: "erase-second.png", versionCount: 2 },
+      affected: { latestFilename: "erase-second.pdf", versionCount: 2 },
     });
     for (const version of stored.results) {
       expect(await testEnv.FILES.head(version.objectKey)).toBeNull();
@@ -996,11 +1384,9 @@ describe("private R2 file lifecycle", () => {
       testEnv,
       speaker,
       target,
-      new File(
-        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 43])],
-        "after-erasure.png",
-        { type: "image/png" },
-      ),
+      new File(["%PDF-1.7 after erasure"], "after-erasure.pdf", {
+        type: "application/pdf",
+      }),
     );
     expect(replacement.assetId).not.toBe(first.assetId);
     expect(replacement.versionNumber).toBe(1);

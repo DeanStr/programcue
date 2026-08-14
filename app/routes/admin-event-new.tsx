@@ -8,6 +8,7 @@ import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   EventCreationInProgressError,
   EventCreationIntentConflictError,
+  EventCreationSenderReuseError,
   EventCreationService,
   EventCreationSlugConflictError,
 } from "~/modules/events/event-creation-service.server";
@@ -63,6 +64,11 @@ export async function action({ request, context }: Route.ActionArgs) {
       { status: 400 },
     );
   try {
+    const rawReuseSenderProfileId = form.get("reuseSenderProfileId");
+    const reuseSenderProfileId =
+      typeof rawReuseSenderProfileId === "string" && rawReuseSenderProfileId
+        ? rawReuseSenderProfileId
+        : undefined;
     const result = await new EventCreationService(env).create(viewer, {
       creationIntentId: form.get("creationIntentId"),
       name: form.get("name"),
@@ -71,14 +77,18 @@ export async function action({ request, context }: Route.ActionArgs) {
       startDate: form.get("startDate"),
       endDate: form.get("endDate"),
       repositoryProvider: form.get("repositoryProvider"),
+      reuseSenderProfileId,
       personalAccessToken: form.get("personalAccessToken") ?? undefined,
       baseId: form.get("baseId") ?? undefined,
       tableName: form.get("tableName") ?? undefined,
     });
+    const senderOutcome = reuseSenderProfileId
+      ? " The selected verified sender is ready for this event."
+      : " Configure a sender in Communications before sending email.";
     return data<ActionResponse>({
       ok: true,
       committed: true,
-      message: `Blank event created with ${result.repositoryProvider === "airtable" ? "Airtable" : "D1"} as its event-data authority.`,
+      message: `Blank event created with ${result.repositoryProvider === "airtable" ? "Airtable" : "D1"} as its event-data authority.${senderOutcome}`,
       result,
     });
   } catch (error) {
@@ -109,7 +119,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
     if (
       error instanceof EventCreationSlugConflictError ||
-      error instanceof EventCreationIntentConflictError
+      error instanceof EventCreationIntentConflictError ||
+      error instanceof EventCreationSenderReuseError
     )
       return data<ActionResponse>(
         {
@@ -143,6 +154,16 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
   const [repositoryProvider, setRepositoryProvider] = useState<
     "d1" | "airtable"
   >("d1");
+  const [reuseSenderProfileId, setReuseSenderProfileId] = useState("");
+  const selectedSender = loaderData.reusableSenderProfiles.find(
+    (profile) => profile.id === reuseSenderProfileId,
+  );
+  const emailProviderLabel =
+    loaderData.emailProvider === "resend"
+      ? "Resend"
+      : loaderData.emailProvider === "mailpit"
+        ? "Mailpit"
+        : "email provider";
   return (
     <>
       {dialog}
@@ -310,7 +331,10 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                   name="repositoryProvider"
                   value="airtable"
                   checked={repositoryProvider === "airtable"}
-                  onChange={() => setRepositoryProvider("airtable")}
+                  onChange={() => {
+                    setRepositoryProvider("airtable");
+                    setReuseSenderProfileId("");
+                  }}
                 />
                 <span>
                   <strong>Airtable</strong>
@@ -321,6 +345,44 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                 </span>
               </label>
             </fieldset>
+            {repositoryProvider === "d1" ? (
+              <fieldset className="card pad stack">
+                <legend className="label">Email sender</legend>
+                <label className="label">
+                  Reuse verified sender
+                  <select
+                    className="field"
+                    name="reuseSenderProfileId"
+                    value={reuseSenderProfileId}
+                    onChange={(event) =>
+                      setReuseSenderProfileId(event.currentTarget.value)
+                    }
+                  >
+                    <option value="">None — configure later</option>
+                    {loaderData.reusableSenderProfiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.fromName} &lt;{profile.fromEmail}&gt; ·{" "}
+                        {profile.sourceEventName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="help">
+                  {loaderData.emailProviderIssue
+                    ? `Sender reuse is unavailable: ${loaderData.emailProviderIssue} You can create this event without a sender, but email sends fail until the provider and a verified sender are configured.`
+                    : loaderData.reusableSenderProfiles.length > 0
+                      ? `Copies the exact verified ${emailProviderLabel} sender and reply-to identity into the new event. Choose None to configure it later in Communications.`
+                      : `No verified ${emailProviderLabel} sender is available in an active event in this organisation. Configure one later in Communications.`}
+                </p>
+                {selectedSender ? (
+                  <p className="help">
+                    Reply-to:{" "}
+                    {selectedSender.replyToEmail ?? selectedSender.fromEmail}.
+                    Source profile: {selectedSender.name}.
+                  </p>
+                ) : null}
+              </fieldset>
+            ) : null}
             {repositoryProvider === "airtable" ? (
               <div className="card pad stack">
                 <h3>Airtable connection</h3>
@@ -373,7 +435,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                 confirm(
                   {
                     title: "Create this blank event?",
-                    description: `The event is created with ${repositoryProvider === "airtable" ? "Airtable" : "D1"} as its event-data authority. Changing that later requires the full preview, reconciliation and confirmation workflow.`,
+                    description: `The event is created with ${repositoryProvider === "airtable" ? "Airtable" : "D1"} as its event-data authority.${selectedSender ? ` The verified sender ${selectedSender.fromName} <${selectedSender.fromEmail}> is copied from ${selectedSender.sourceEventName}.` : " No sender is copied; email sends remain blocked until one is configured."} Changing repository authority later requires the full preview, reconciliation and confirmation workflow.`,
                     confirmLabel: "Create blank event",
                     tone: "primary",
                   },
@@ -399,7 +461,8 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
           <p>
             Rooms, tracks, forms, evaluation plans, task templates,
             communication templates, people, submissions, sessions, files and
-            publication state.
+            publication state. Sender profiles also begin empty unless you
+            explicitly reuse the verified identity selected above.
           </p>
           <div className="pc-status-notice mt">
             <Database aria-hidden size={18} />

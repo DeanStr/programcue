@@ -250,6 +250,7 @@ const audienceOptions = [
   ["submitted_applicants", "Submitted applicants"],
   ["decision_recipients", "Applicants with decisions"],
   ["accepted_speakers", "Accepted speakers"],
+  ["active_speakers", "Active speaker roster"],
   ["incomplete_speakers", "Speakers with incomplete tasks"],
   ["due_speakers", "Speakers due within 24 hours"],
   ["overdue_speakers", "Overdue speakers"],

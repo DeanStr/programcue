@@ -42,6 +42,14 @@ export function formatEventDateMarkers(startsAt: number, endsAt: number) {
   return start === end ? start : `${start} – ${end}`;
 }
 
+export function formatTaskDueDate(dueAt: number, timeZone: string) {
+  return `${new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone,
+  }).format(new Date(dueAt * 1_000))} (${timeZone})`;
+}
+
 export const representativeMergeValues: MergeValues = {
   "recipient.name": "Alex Morgan",
   "recipient.firstName": "Alex",
@@ -54,4 +62,5 @@ export const representativeMergeValues: MergeValues = {
   "decision.feedback":
     "The reviewers appreciated the practical examples and suggested clarifying the intended audience.",
   "task.title": "Upload final presentation",
+  "task.dueDate": "Sep 20, 2026, 5:00 PM (America/Toronto)",
 };

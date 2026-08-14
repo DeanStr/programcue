@@ -29,6 +29,9 @@ type CurrentProfileRow = {
   pronunciation: string | null;
   organisationName: string | null;
   jobTitle: string | null;
+  linkedinUrl: string | null;
+  xHandle: string | null;
+  travelPreferences: string | null;
   profileStatus: "draft" | "published" | "archived";
   revision: number;
 };
@@ -40,6 +43,9 @@ export type ParticipantProfilePatch = {
   pronunciation?: string;
   organisationName?: string;
   jobTitle?: string;
+  linkedinUrl?: string;
+  xHandle?: string;
+  travelPreferences?: string;
   publish?: boolean | "true" | "false";
 };
 
@@ -71,6 +77,10 @@ export class ParticipantProfileService {
       organisationName:
         patch.organisationName ?? current.organisationName ?? "",
       jobTitle: patch.jobTitle ?? current.jobTitle ?? "",
+      linkedinUrl: patch.linkedinUrl ?? current.linkedinUrl ?? "",
+      xHandle: patch.xHandle ?? current.xHandle ?? "",
+      travelPreferences:
+        patch.travelPreferences ?? current.travelPreferences ?? "",
       publish:
         patch.publish ?? (current.profileStatus === "published" ? true : false),
     });
@@ -103,15 +113,22 @@ export class ParticipantProfileService {
       this.env.DB.prepare(
         `UPDATE people
             SET display_name = ?, biography = ?, pronunciation = ?,
-                organisation_name = ?, job_title = ?, profile_status = ?,
+                organisation_name = ?, job_title = ?, linkedin_url = ?,
+                x_handle = ?, profile_status = ?,
                 profile_revision = profile_revision + 1,
                 last_operation_id = ?, updated_at = unixepoch()
           WHERE id = ? AND profile_revision = ?
             AND EXISTS (
-              SELECT 1 FROM memberships
-               WHERE event_id = ? AND person_id = people.id
-                 AND role IN ('speaker', 'submitter')
-                 AND accepted_at IS NOT NULL AND revoked_at IS NULL
+              SELECT 1 FROM memberships membership
+              JOIN events event
+                ON event.id = membership.event_id
+               AND event.organisation_id = membership.organisation_id
+               WHERE membership.event_id = ?
+                 AND membership.organisation_id = ?
+                 AND membership.person_id = people.id
+                 AND membership.role IN ('speaker', 'submitter')
+                 AND membership.accepted_at IS NOT NULL
+                 AND membership.revoked_at IS NULL
             )`,
       ).bind(
         merged.name,
@@ -119,11 +136,48 @@ export class ParticipantProfileService {
         merged.pronunciation || null,
         merged.organisationName || null,
         merged.jobTitle || null,
+        merged.linkedinUrl || null,
+        merged.xHandle || null,
         nextStatus,
         operationId,
         viewer.personId,
         merged.revision,
         viewer.eventId,
+        viewer.organisationId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO event_participant_profiles (
+           event_id, organisation_id, person_id, travel_preferences,
+           last_operation_id, created_at, updated_at
+         )
+         SELECT event.id, event.organisation_id, person.id, ?, ?,
+                unixepoch(), unixepoch()
+           FROM events event
+           JOIN people person ON person.id = ?
+          WHERE event.id = ? AND event.organisation_id = ?
+            AND person.profile_revision = ? AND person.last_operation_id = ?
+            AND EXISTS (
+              SELECT 1 FROM memberships membership
+               WHERE membership.event_id = event.id
+                 AND membership.organisation_id = event.organisation_id
+                 AND membership.person_id = person.id
+                 AND membership.role IN ('speaker', 'submitter')
+                 AND membership.accepted_at IS NOT NULL
+                 AND membership.revoked_at IS NULL
+            )
+         ON CONFLICT(event_id, person_id) DO UPDATE SET
+           travel_preferences = excluded.travel_preferences,
+           last_operation_id = excluded.last_operation_id,
+           updated_at = unixepoch()
+         WHERE event_participant_profiles.organisation_id = excluded.organisation_id`,
+      ).bind(
+        merged.travelPreferences || null,
+        operationId,
+        viewer.personId,
+        viewer.eventId,
+        viewer.organisationId,
+        merged.revision + 1,
+        operationId,
       ),
       this.env.DB.prepare(
         `UPDATE submission_speakers
@@ -191,7 +245,12 @@ export class ParticipantProfileService {
     if ((results[0]?.meta.changes ?? 0) !== 1) {
       throw new ParticipantProfileConflictError();
     }
-    const change = results[3]?.results?.[0] as { sequence: number } | undefined;
+    if ((results[1]?.meta.changes ?? 0) !== 1) {
+      throw new Error(
+        "The event-scoped travel preferences were not committed with the profile.",
+      );
+    }
+    const change = results[4]?.results?.[0] as { sequence: number } | undefined;
     if (!change) {
       throw new Error("The committed profile change cursor was not recorded.");
     }
@@ -221,14 +280,22 @@ export class ParticipantProfileService {
               person.pronunciation,
               person.organisation_name AS organisationName,
               person.job_title AS jobTitle,
+              person.linkedin_url AS linkedinUrl,
+              person.x_handle AS xHandle,
+              event_profile.travel_preferences AS travelPreferences,
               person.profile_status AS profileStatus,
               person.profile_revision AS revision
          FROM people person
          JOIN events event ON event.id = ? AND event.organisation_id = ?
+         LEFT JOIN event_participant_profiles event_profile
+           ON event_profile.event_id = event.id
+          AND event_profile.organisation_id = event.organisation_id
+          AND event_profile.person_id = person.id
         WHERE person.id = ?
           AND EXISTS (
             SELECT 1 FROM memberships membership
              WHERE membership.event_id = event.id
+               AND membership.organisation_id = event.organisation_id
                AND membership.person_id = person.id
                AND membership.role IN ('speaker', 'submitter')
                AND membership.accepted_at IS NOT NULL

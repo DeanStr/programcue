@@ -11,6 +11,7 @@ import {
 import type { Applicant } from "~/modules/submissions/submission-repository.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import type { EvaluatorEmailRouting } from "~/platform/evaluation/evaluator-email-alias.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
 import {
   WebhookService,
@@ -82,7 +83,7 @@ export const participantProfilePatchSchema = z
   .object({
     revision: z.number().int().positive(),
     name: z.string().trim().min(2).max(120),
-    biography: z.string().trim().min(40).max(2_000),
+    biography: z.string().trim().min(40).max(5_000),
   })
   .strict();
 
@@ -136,6 +137,7 @@ type AcceptedCoSpeakerInvitationResult = {
     status: "queued" | "queue_failed";
     operationId: string;
   };
+  routing?: EvaluatorEmailRouting;
 };
 
 const MAX_PARTICIPANT_COMMAND_RESPONSE_BYTES = 64 * 1_024;

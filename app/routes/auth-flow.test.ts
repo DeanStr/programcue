@@ -18,6 +18,7 @@ import {
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
 import { action as applicationAction } from "./application-form";
 import { action as authApiAction, loader as authApiLoader } from "./auth-api";
 import { loader as homeLoader } from "./home";
@@ -74,6 +75,23 @@ async function sessionCookie(personId: string) {
     String((env as unknown as CloudflareEnvironment).BETTER_AUTH_SECRET),
   );
   return { token, cookie };
+}
+
+async function selectedEvaluationCookie(environment: CloudflareEnvironment) {
+  await environment.DB.prepare(
+    `INSERT INTO audit_events (
+       id, organisation_id, event_id, actor_id, action,
+       entity_type, entity_id, metadata_json, created_at
+     ) VALUES (?, 'org-future-events', 'evt-foe-2025', 'test-operator',
+               'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
+               unixepoch())`,
+  )
+    .bind(crypto.randomUUID())
+    .run();
+  return (await evaluationSessionCookie(environment, "organizer")).split(
+    ";",
+    1,
+  )[0];
 }
 
 function formRequest(
@@ -840,6 +858,86 @@ describe("production authentication routes", () => {
       email: "sbek-organizer@example.com",
       failed: false,
     });
+  });
+
+  it("keeps underlying account details out of the sign-in loader while evaluator access is active", async () => {
+    const testEnv = {
+      ...productionEnv(),
+      EVALUATION_MODE: "true",
+      EVALUATION_SESSION_SECRET:
+        "sign-in-evaluation-session-secret-with-thirty-two-characters",
+      MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+      MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+    } as unknown as CloudflareEnvironment;
+    const { cookie: accountCookie } = await sessionCookie("person-demo-admin");
+    const evaluationCookie = await selectedEvaluationCookie(testEnv);
+
+    const result = await signInLoader({
+      request: new Request(
+        "http://localhost/sign-in?returnTo=%2Fadmin%2Fcrm&linkProvider=microsoft",
+        { headers: { cookie: `${evaluationCookie}; ${accountCookie}` } },
+      ),
+      params: {},
+      context: context(testEnv),
+    } as never);
+
+    expect(result).toBeInstanceOf(Response);
+    const response = result as Response;
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/evaluate");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    await expect(response.text()).resolves.not.toContain(
+      "sbek-organizer@example.com",
+    );
+  });
+
+  it("does not create account-link state while evaluator access is active", async () => {
+    const testEnv = {
+      ...productionEnv(),
+      EVALUATION_MODE: "true",
+      EVALUATION_SESSION_SECRET:
+        "sign-in-evaluation-session-secret-with-thirty-two-characters",
+      MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+      MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+    } as unknown as CloudflareEnvironment;
+    const { cookie: accountCookie } = await sessionCookie("person-demo-admin");
+    const evaluationCookie = await selectedEvaluationCookie(testEnv);
+    const before = await env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM verification_tokens) AS verificationCount,
+         (SELECT COUNT(*) FROM auth_accounts) AS accountCount,
+         (SELECT COUNT(*) FROM auth_sessions) AS sessionCount`,
+    ).first<{
+      verificationCount: number;
+      accountCount: number;
+      sessionCount: number;
+    }>();
+
+    const result = await signInAction({
+      request: formRequest(
+        "http://localhost/sign-in?linkProvider=microsoft",
+        {
+          _intent: "link_social_account",
+          provider: "microsoft",
+          returnTo: "/admin/crm",
+        },
+        { cookie: `${evaluationCookie}; ${accountCookie}` },
+      ),
+      params: {},
+      context: context(testEnv),
+    } as never);
+
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).status).toBe(303);
+    expect((result as Response).headers.get("location")).toBe("/evaluate");
+    await expect(
+      env.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM verification_tokens) AS verificationCount,
+           (SELECT COUNT(*) FROM auth_accounts) AS accountCount,
+           (SELECT COUNT(*) FROM auth_sessions) AS sessionCount`,
+      ).first(),
+    ).resolves.toEqual(before);
   });
 
   it("creates a hashed magic-link verification for an invited person and calls the configured delivery boundary", async () => {

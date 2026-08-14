@@ -21,10 +21,12 @@ import {
   publicItineraryIdentity,
 } from "~/modules/programme/public-itinerary-identity.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import { DEMO_EVENT_ID } from "~/platform/demo/demo-identities";
 import {
   AbuseProtectionConfigurationError,
   AbuseRateLimitError,
   enforcePublicAbuseProtection,
+  enforcePublicRateLimit,
   publicAbuseClientConfiguration,
   TurnstileRejectedError,
   TurnstileUnavailableError,
@@ -33,6 +35,14 @@ import {
   publishedProgrammeCacheHeaders,
   publishedProgrammeNotModified,
 } from "~/platform/api/api-public-programme.server";
+
+function isEvaluationFixtureEvent(env: CloudflareEnvironment, eventId: string) {
+  return (
+    String(env.APP_ENV) === "production" &&
+    String(env.EVALUATION_MODE) === "true" &&
+    eventId === DEMO_EVENT_ID
+  );
+}
 
 function surfaceFromRequest(request: Request): PublicProgrammeSurface {
   const segments = new URL(request.url).pathname
@@ -202,12 +212,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const identity =
     embedded || shared
       ? { personId: null, visitorToken: null }
-      : await publicItineraryIdentity(request, env);
+      : await publicItineraryIdentity(request, env, programme.event.id);
   const { personId, visitorToken } = identity;
   const itineraryVerificationRequired =
     !embedded &&
     !shared &&
     personId === null &&
+    !isEvaluationFixtureEvent(env, programme.event.id) &&
     !(await service.hasActiveAnonymousItinerary(programme, visitorToken));
   let itinerary: string[];
   try {
@@ -285,6 +296,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const { personId, visitorToken } = await publicItineraryIdentity(
       request,
       env,
+      programme.event.id,
     );
     if (intent === "share") {
       if (personId && visitorToken) {
@@ -306,14 +318,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       personId === null &&
       !(await service.hasActiveAnonymousItinerary(programme, visitorToken))
     ) {
-      await enforcePublicAbuseProtection({
+      const protection = {
         env,
         request,
-        action: "public_itinerary_create",
+        action: "public_itinerary_create" as const,
         tenantId: programme.event.id,
         email: "anonymous-itinerary",
-        turnstileToken: String(values.get("turnstile-token") ?? ""),
-      });
+      };
+      if (isEvaluationFixtureEvent(env, programme.event.id)) {
+        await enforcePublicRateLimit(protection);
+      } else {
+        await enforcePublicAbuseProtection({
+          ...protection,
+          turnstileToken: String(values.get("turnstile-token") ?? ""),
+        });
+      }
     }
     const itinerary = await service.updateItinerary(
       programme,

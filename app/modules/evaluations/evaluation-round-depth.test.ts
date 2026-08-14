@@ -1120,8 +1120,16 @@ describe("abstract management round depth", () => {
     expect(organizerSubmission).toMatchObject({
       submitterEmail: "priya.raman@example.com",
       speakers: expect.arrayContaining([
-        { name: "Priya Raman", email: "priya.raman@example.com" },
-        { name: "Marcus Okafor", email: "marcus.okafor@example.com" },
+        {
+          name: "Priya Raman",
+          email: "priya.raman@example.com",
+          roleLabel: null,
+        },
+        {
+          name: "Marcus Okafor",
+          email: "marcus.okafor@example.com",
+          roleLabel: null,
+        },
       ]),
       identityAnswers: expect.objectContaining({
         company: "Latticework Systems",

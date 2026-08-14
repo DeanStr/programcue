@@ -4,6 +4,7 @@ import {
 } from "~/modules/events/event-configuration";
 import { materializePublishedResourceAcknowledgementsForSession } from "~/modules/resources/resource-service.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
+import type { EvaluatorEmailRouting } from "~/platform/evaluation/evaluator-email-alias.server";
 import {
   buildCoSpeakerInvitationPlan,
   persistQueueFailure,
@@ -32,7 +33,10 @@ type SaveApplicantDraft = (
   form: FormSummary & { version: FormVersion },
   applicant: Applicant,
   payload: DraftPayload,
-  command?: { operationId: string } | null,
+  command?: {
+    operationId?: string;
+    evaluatorEmailRoutings?: EvaluatorEmailRouting[];
+  } | null,
 ) => Promise<number>;
 
 export class SubmissionDraftFinalizer {
@@ -50,6 +54,7 @@ export class SubmissionDraftFinalizer {
       routedTeamIds: string[];
       upload?: { fieldId: string; assetId: string; versionId: string } | null;
       operationId?: string;
+      evaluatorEmailRoutings?: EvaluatorEmailRouting[];
     },
   ) {
     if (!applicant.verified) {
@@ -147,10 +152,13 @@ export class SubmissionDraftFinalizer {
       } else {
         revision = await this.saveDraft(form, applicant, payload, {
           operationId: draftOperationId,
+          evaluatorEmailRoutings: options.evaluatorEmailRoutings,
         });
       }
     } else {
-      revision = await this.saveDraft(form, applicant, payload);
+      revision = await this.saveDraft(form, applicant, payload, {
+        evaluatorEmailRoutings: options.evaluatorEmailRoutings,
+      });
     }
     const confirmationOperationId = crypto.randomUUID();
     const confirmationCommunicationId = crypto.randomUUID();
@@ -411,6 +419,9 @@ export class SubmissionDraftFinalizer {
         JSON.stringify({
           formVersionId: form.version.id,
           version: form.version.versionNumber,
+          ...(options.evaluatorEmailRoutings?.length
+            ? { evaluatorEmailRoutings: options.evaluatorEmailRoutings }
+            : {}),
         }),
         payload.submissionId,
         operationId,

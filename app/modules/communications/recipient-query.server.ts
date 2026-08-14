@@ -1,12 +1,9 @@
-import { z } from "zod";
-
 import type { Viewer } from "~/platform/auth/authorize.server";
 import type {
   AudienceType,
   CommunicationCategory,
 } from "./communication-schema";
-
-const emailSchema = z.email();
+import { emailDeliveryIssue } from "./email-deliverability";
 
 type RecipientRow = {
   personId: string | null;
@@ -25,7 +22,7 @@ export type CommunicationRecipient = {
 export type RecipientPreview = {
   selected: number;
   deliverable: CommunicationRecipient[];
-  invalid: Array<{ address: string; name: string }>;
+  invalid: Array<{ address: string; name: string; reason: string }>;
   suppressed: CommunicationRecipient[];
 };
 
@@ -92,8 +89,13 @@ export class RecipientQuery {
     const invalid: RecipientPreview["invalid"] = [];
     const valid: CommunicationRecipient[] = [];
     for (const row of byAddress.values()) {
-      if (!emailSchema.safeParse(row.address).success) {
-        invalid.push({ address: row.address, name: row.name ?? "" });
+      const issue = emailDeliveryIssue(row.address, this.env.APP_ENV);
+      if (issue) {
+        invalid.push({
+          address: row.address,
+          name: row.name ?? "",
+          reason: issue,
+        });
         continue;
       }
       valid.push({
@@ -226,6 +228,26 @@ export class RecipientQuery {
         bindings: [
           viewer.organisationId,
           viewer.eventId,
+          viewer.organisationId,
+          viewer.eventId,
+          RecipientQuery.maximumBatchSize + 1,
+        ],
+      },
+      active_speakers: {
+        sql: `
+          SELECT person.id AS personId, person.email AS address,
+                 person.display_name AS name, NULL AS sourceId
+            FROM event_speaker_workflows workflow
+            JOIN people person ON person.id = workflow.person_id
+            JOIN events event
+              ON event.id = workflow.event_id AND event.organisation_id = ?
+           WHERE workflow.event_id = ?
+             AND workflow.status IN ('prospect','invited','confirmed')
+             AND trim(person.email) <> ''
+           ORDER BY person.display_name, person.id
+           LIMIT ?
+        `,
+        bindings: [
           viewer.organisationId,
           viewer.eventId,
           RecipientQuery.maximumBatchSize + 1,

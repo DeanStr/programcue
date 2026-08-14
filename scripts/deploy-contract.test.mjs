@@ -147,6 +147,37 @@ test("production event identity is created by bootstrap rather than inherited fr
   assert.equal(configs.production.vars.PUBLIC_EVENT_SLUG, undefined);
 });
 
+test("production embed frame ancestors allow the public wildcard and reject invalid alternatives", () => {
+  const configs = readDeploymentConfigs();
+  configs.production.vars.EMBED_FRAME_ANCESTORS = "*";
+  assert.deepEqual(
+    validateDeploymentConfigs(configs).filter(({ message }) =>
+      message.includes("EMBED_FRAME_ANCESTORS"),
+    ),
+    [],
+  );
+
+  configs.production.vars.EMBED_FRAME_ANCESTORS = "not-an-origin";
+  assert.ok(
+    validateDeploymentConfigs(configs).some(
+      ({ profile, kind, message }) =>
+        profile === "production" &&
+        kind === "configuration" &&
+        message === "EMBED_FRAME_ANCESTORS must be an absolute URL.",
+    ),
+  );
+
+  configs.production.vars.EMBED_FRAME_ANCESTORS = "http://embedder.test";
+  assert.ok(
+    validateDeploymentConfigs(configs).some(
+      ({ profile, kind, message }) =>
+        profile === "production" &&
+        kind === "configuration" &&
+        message === "EMBED_FRAME_ANCESTORS must use HTTPS in production.",
+    ),
+  );
+});
+
 test("resource embed origins are explicit exact HTTPS origins", () => {
   const configs = readDeploymentConfigs();
   configs.production.vars.RESOURCE_EMBED_ORIGINS =

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
 import {
   acceptEventInvitation,
   requireAuthenticatedPerson,
@@ -25,6 +26,49 @@ function invitationAcceptanceRequest(origin = "https://programcue.test") {
   });
 }
 
+function evaluationEnvironment() {
+  return {
+    ...(env as unknown as CloudflareEnvironment),
+    APP_ENV: "production",
+    DEMO_MODE: "false",
+    EVALUATION_MODE: "true",
+    EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+    EVALUATION_SESSION_SECRET:
+      "evaluation-session-secret-with-more-than-thirty-two-characters",
+  } as CloudflareEnvironment;
+}
+
+async function evaluationRequest(
+  identity: "organizer" | "sbek_reviewer",
+  method: "GET" | "POST" = "GET",
+) {
+  const testEnv = evaluationEnvironment();
+  await testEnv.DB.prepare(
+    `INSERT INTO audit_events (
+       id, organisation_id, event_id, actor_id, action,
+       entity_type, entity_id, metadata_json, created_at
+     ) VALUES (?, 'org-future-events', 'evt-foe-2025', 'test-operator',
+               'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
+               unixepoch())`,
+  )
+    .bind(crypto.randomUUID())
+    .run();
+  const cookie = (await evaluationSessionCookie(testEnv, identity)).split(
+    ";",
+    1,
+  )[0]!;
+  return {
+    env: testEnv,
+    request: new Request("https://app.programcue.com/events/select", {
+      method,
+      headers: {
+        cookie,
+        ...(method === "POST" ? { origin: "https://app.programcue.com" } : {}),
+      },
+    }),
+  };
+}
+
 beforeEach(async () => {
   await ensureDemoData(env as unknown as CloudflareEnvironment);
   await env.DB.prepare(
@@ -43,6 +87,129 @@ beforeEach(async () => {
 });
 
 describe("event role authorization", () => {
+  it("allows a selected evaluator identity to use an extra event only inside the dedicated organisation", async () => {
+    const evaluation = await evaluationRequest("organizer");
+    await evaluation.env.DB.batch([
+      evaluation.env.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           file_policy_json
+         ) VALUES ('evt-evaluation-extra', 'org-future-events',
+                   'Evaluation extra event', 'evaluation-extra-event', 'UTC',
+                   1760000000, 1760086400, ?)`,
+      ).bind(CANONICAL_EVENT_FILE_POLICY_JSON),
+      evaluation.env.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role,
+           invited_at, accepted_at, created_at
+         ) VALUES ('membership-evaluation-extra-admin',
+                   'org-future-events', 'evt-evaluation-extra',
+                   'person-demo-admin', 'administrator', unixepoch(),
+                   unixepoch(), unixepoch())`,
+      ),
+    ]);
+
+    await expect(
+      requireEventRole(
+        evaluation.request,
+        evaluation.env,
+        "evt-evaluation-extra",
+        ["administrator"],
+      ),
+    ).resolves.toMatchObject({
+      organisationId: "org-future-events",
+      eventId: "evt-evaluation-extra",
+      evaluation: true,
+    });
+  });
+
+  it("fails closed when a selected evaluator identity gains active access outside the dedicated organisation", async () => {
+    const evaluation = await evaluationRequest("organizer");
+    await evaluation.env.DB.batch([
+      evaluation.env.DB.prepare(
+        `INSERT INTO organisations (id, name, slug)
+         VALUES ('org-evaluation-outside-active', 'Outside active',
+                 'evaluation-outside-active')`,
+      ),
+      evaluation.env.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           file_policy_json
+         ) VALUES ('evt-evaluation-outside-active',
+                   'org-evaluation-outside-active', 'Outside active event',
+                   'evaluation-outside-active-event', 'UTC', 1760000000,
+                   1760086400, ?)`,
+      ).bind(CANONICAL_EVENT_FILE_POLICY_JSON),
+      evaluation.env.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role,
+           invited_at, accepted_at, created_at
+         ) VALUES ('membership-evaluation-outside-active',
+                   'org-evaluation-outside-active',
+                   'evt-evaluation-outside-active', 'person-demo-admin',
+                   'administrator', unixepoch(), unixepoch(), unixepoch())`,
+      ),
+    ]);
+
+    await expect(
+      requireEventRole(
+        evaluation.request,
+        evaluation.env,
+        "evt-evaluation-outside-active",
+        ["administrator"],
+      ),
+    ).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("does not accept or audit an outside-organisation pending invitation for an evaluator identity", async () => {
+    const evaluation = await evaluationRequest("sbek_reviewer", "POST");
+    const membershipId = `membership-evaluation-outside-pending-${crypto.randomUUID()}`;
+    await evaluation.env.DB.batch([
+      evaluation.env.DB.prepare(
+        `INSERT INTO organisations (id, name, slug)
+         VALUES ('org-evaluation-outside-pending', 'Outside pending',
+                 'evaluation-outside-pending')`,
+      ),
+      evaluation.env.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           file_policy_json
+         ) VALUES ('evt-evaluation-outside-pending',
+                   'org-evaluation-outside-pending', 'Outside pending event',
+                   'evaluation-outside-pending-event', 'UTC', 1760000000,
+                   1760086400, ?)`,
+      ).bind(CANONICAL_EVENT_FILE_POLICY_JSON),
+      evaluation.env.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, invited_at,
+           invitation_expires_at, accepted_at, created_at
+         ) VALUES (?, 'org-evaluation-outside-pending',
+                   'evt-evaluation-outside-pending', 'person-sbek-reviewer',
+                   'evaluator', unixepoch(), unixepoch() + 3600, NULL,
+                   unixepoch())`,
+      ).bind(membershipId),
+    ]);
+
+    await expect(
+      acceptEventInvitation(
+        evaluation.request,
+        evaluation.env,
+        "evt-evaluation-outside-pending",
+        ["evaluator"],
+      ),
+    ).rejects.toMatchObject({ status: 503 });
+    await expect(
+      evaluation.env.DB.prepare(
+        `SELECT accepted_at AS acceptedAt,
+                (SELECT COUNT(*) FROM audit_events
+                  WHERE entity_id = ? AND action = 'membership.accepted') AS auditCount
+           FROM memberships WHERE id = ?`,
+      )
+        .bind(membershipId, membershipId)
+        .first(),
+    ).resolves.toEqual({ acceptedAt: null, auditCount: 0 });
+  });
+
   it("redirects unauthenticated page requests to sign-in with their local destination", async () => {
     const productionEnv = {
       ...(env as unknown as CloudflareEnvironment),

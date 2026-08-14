@@ -6,6 +6,7 @@ import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   EventCreationInProgressError,
   EventCreationIntentConflictError,
+  EventCreationSenderReuseError,
   EventCreationService,
   EventCreationSlugConflictError,
 } from "./event-creation-service.server";
@@ -32,6 +33,40 @@ const viewer: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+
+async function insertSenderProfile({
+  id = crypto.randomUUID(),
+  eventId = viewer.eventId,
+  provider = "resend",
+  status = "verified",
+  providerSenderId = provider === "resend" ? `domain-${id}` : null,
+}: {
+  id?: string;
+  eventId?: string;
+  provider?: "resend" | "mailpit";
+  status?: "unverified" | "verified" | "disabled";
+  providerSenderId?: string | null;
+} = {}) {
+  await env.DB.prepare(
+    `INSERT INTO sender_profiles (
+       id, event_id, name, from_name, from_email, reply_to_email, provider,
+       provider_sender_id, status, created_at, updated_at
+     ) VALUES (?, ?, ?, 'Program Cue Events', ?, ?, ?, ?, ?,
+               unixepoch(), unixepoch())`,
+  )
+    .bind(
+      id,
+      eventId,
+      `Sender ${id}`,
+      `events-${id}@example.com`,
+      `reply-${id}@example.com`,
+      provider,
+      providerSenderId,
+      status,
+    )
+    .run();
+  return id;
+}
 
 function preparedConnection(): PreparedAirtableRepositoryConnection {
   return {
@@ -124,11 +159,18 @@ describe("blank event creation", () => {
            (SELECT COUNT(*) FROM rooms WHERE event_id = ?) AS rooms,
            (SELECT COUNT(*) FROM tracks WHERE event_id = ?) AS tracks,
            (SELECT COUNT(*) FROM form_definitions WHERE event_id = ?) AS forms,
-           (SELECT COUNT(*) FROM schedule_policies WHERE event_id = ?) AS policies`,
+           (SELECT COUNT(*) FROM schedule_policies WHERE event_id = ?) AS policies,
+           (SELECT COUNT(*) FROM sender_profiles WHERE event_id = ?) AS senders`,
       )
-        .bind(result.eventId, result.eventId, result.eventId, result.eventId)
+        .bind(
+          result.eventId,
+          result.eventId,
+          result.eventId,
+          result.eventId,
+          result.eventId,
+        )
         .first(),
-    ).toEqual({ rooms: 0, tracks: 0, forms: 0, policies: 1 });
+    ).toEqual({ rooms: 0, tracks: 0, forms: 0, policies: 1, senders: 0 });
     expect(
       await env.DB.prepare(
         "SELECT status, type FROM operation_jobs WHERE id = ? AND event_id = ?",
@@ -143,6 +185,248 @@ describe("blank event creation", () => {
         .bind(result.eventId)
         .first(),
     ).toEqual({ action: "event.created" });
+  });
+
+  it("keeps no-sender creation available when email is not configured", async () => {
+    const unconfiguredEnv = {
+      ...(env as unknown as CloudflareEnvironment),
+      EMAIL_PROVIDER: undefined,
+      RESEND_API_KEY: undefined,
+    } as unknown as CloudflareEnvironment;
+    const service = new EventCreationService(unconfiguredEnv);
+    const prepared = await service.prepare(viewer);
+    expect(prepared).toMatchObject({
+      emailProvider: null,
+      emailProviderIssue: expect.stringContaining("EMAIL_PROVIDER"),
+      reusableSenderProfiles: [],
+    });
+
+    const token = crypto.randomUUID().slice(0, 8);
+    await expect(
+      service.create(viewer, {
+        creationIntentId: crypto.randomUUID(),
+        name: `No sender event ${token}`,
+        slug: `no-sender-event-${token}`,
+        timezone: "UTC",
+        startDate: "2027-09-10",
+        endDate: "2027-09-12",
+        repositoryProvider: "d1",
+      }),
+    ).resolves.toMatchObject({ repositoryProvider: "d1" });
+  });
+
+  it("copies an explicitly selected verified sender in the creation transaction and replays once", async () => {
+    const sourceSenderId = await insertSenderProfile();
+    const token = crypto.randomUUID().slice(0, 8);
+    const input = {
+      creationIntentId: crypto.randomUUID(),
+      name: `Sender reuse event ${token}`,
+      slug: `sender-reuse-event-${token}`,
+      timezone: "UTC",
+      startDate: "2027-09-10",
+      endDate: "2027-09-12",
+      repositoryProvider: "d1" as const,
+      reuseSenderProfileId: sourceSenderId,
+    };
+    const service = new EventCreationService(
+      env as unknown as CloudflareEnvironment,
+    );
+
+    const result = await service.create(viewer, input);
+    await env.DB.prepare(
+      "UPDATE sender_profiles SET status = 'disabled' WHERE id = ?",
+    )
+      .bind(sourceSenderId)
+      .run();
+    await expect(service.create(viewer, input)).resolves.toEqual(result);
+
+    const copied = await env.DB.prepare(
+      `SELECT name, from_name AS fromName, from_email AS fromEmail,
+              reply_to_email AS replyToEmail, provider,
+              provider_sender_id AS providerSenderId, status
+         FROM sender_profiles WHERE event_id = ?`,
+    )
+      .bind(result.eventId)
+      .first();
+    expect(copied).toEqual({
+      name: `Sender ${sourceSenderId}`,
+      fromName: "Program Cue Events",
+      fromEmail: `events-${sourceSenderId}@example.com`,
+      replyToEmail: `reply-${sourceSenderId}@example.com`,
+      provider: "resend",
+      providerSenderId: `domain-${sourceSenderId}`,
+      status: "verified",
+    });
+    const evidence = await env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM sender_profiles WHERE event_id = ?) AS senders,
+         (SELECT COUNT(*) FROM audit_events
+           WHERE event_id = ? AND action = 'communication.sender.reused') AS reuseAudits,
+         (SELECT json_extract(payload_json, '$.reusedSenderProfileId')
+            FROM operation_jobs WHERE id = ?) AS selectedSenderId`,
+    )
+      .bind(result.eventId, result.eventId, result.operationId)
+      .first();
+    expect(evidence).toEqual({
+      senders: 1,
+      reuseAudits: 1,
+      selectedSenderId: sourceSenderId,
+    });
+  });
+
+  it("lists and authorizes only verified configured-provider senders from active events in the organisation", async () => {
+    const eligibleId = await insertSenderProfile();
+    const unverifiedId = await insertSenderProfile({ status: "unverified" });
+    const wrongProviderId = await insertSenderProfile({ provider: "mailpit" });
+    const missingDomainId = await insertSenderProfile({
+      providerSenderId: null,
+    });
+    const inactiveEventId = crypto.randomUUID();
+    await env.DB.prepare(
+      `INSERT INTO events (
+         id, organisation_id, name, slug, timezone, starts_at, ends_at,
+         repository_provider, activation_status, file_policy_json
+       )
+       SELECT ?, organisation_id, 'Inactive sender source', ?, timezone,
+              starts_at, ends_at, 'd1', 'discarded', file_policy_json
+         FROM events WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(
+        inactiveEventId,
+        `inactive-sender-source-${inactiveEventId}`,
+        viewer.eventId,
+        viewer.organisationId,
+      )
+      .run();
+    const inactiveEventSenderId = await insertSenderProfile({
+      eventId: inactiveEventId,
+    });
+    const foreignOrganisationId = crypto.randomUUID();
+    const foreignEventId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO organisations (id, name, slug) VALUES (?, 'Foreign organisation', ?)",
+      ).bind(foreignOrganisationId, `foreign-${foreignOrganisationId}`),
+      env.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           repository_provider, activation_status, file_policy_json
+         )
+         SELECT ?, ?, 'Foreign sender source', ?, timezone, starts_at, ends_at,
+                'd1', 'active', file_policy_json
+           FROM events WHERE id = ? AND organisation_id = ?`,
+      ).bind(
+        foreignEventId,
+        foreignOrganisationId,
+        `foreign-sender-source-${foreignEventId}`,
+        viewer.eventId,
+        viewer.organisationId,
+      ),
+    ]);
+    const foreignSenderId = await insertSenderProfile({
+      eventId: foreignEventId,
+    });
+    const service = new EventCreationService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const prepared = await service.prepare(viewer);
+
+    expect(prepared.emailProvider).toBe("resend");
+    expect(
+      prepared.reusableSenderProfiles.map((profile) => profile.id),
+    ).toContain(eligibleId);
+    expect(
+      prepared.reusableSenderProfiles.map((profile) => profile.id),
+    ).not.toEqual(
+      expect.arrayContaining([
+        unverifiedId,
+        wrongProviderId,
+        missingDomainId,
+        inactiveEventSenderId,
+        foreignSenderId,
+      ]),
+    );
+
+    for (const [index, reuseSenderProfileId] of [
+      unverifiedId,
+      wrongProviderId,
+      missingDomainId,
+      inactiveEventSenderId,
+      foreignSenderId,
+    ].entries()) {
+      const slug = `invalid-sender-reuse-${index}-${crypto.randomUUID().slice(0, 8)}`;
+      await expect(
+        service.create(viewer, {
+          creationIntentId: crypto.randomUUID(),
+          name: `Invalid sender reuse ${index}`,
+          slug,
+          timezone: "UTC",
+          startDate: "2027-09-10",
+          endDate: "2027-09-12",
+          repositoryProvider: "d1",
+          reuseSenderProfileId,
+        }),
+      ).rejects.toBeInstanceOf(EventCreationSenderReuseError);
+      await expect(
+        env.DB.prepare("SELECT 1 FROM events WHERE slug = ?")
+          .bind(slug)
+          .first(),
+      ).resolves.toBeNull();
+    }
+  });
+
+  it("includes the sender selection in the creation intent hash", async () => {
+    const firstSenderId = await insertSenderProfile();
+    const secondSenderId = await insertSenderProfile();
+    const token = crypto.randomUUID().slice(0, 8);
+    const input = {
+      creationIntentId: crypto.randomUUID(),
+      name: `Sender intent event ${token}`,
+      slug: `sender-intent-event-${token}`,
+      timezone: "UTC",
+      startDate: "2027-09-10",
+      endDate: "2027-09-12",
+      repositoryProvider: "d1" as const,
+      reuseSenderProfileId: firstSenderId,
+    };
+    const service = new EventCreationService(
+      env as unknown as CloudflareEnvironment,
+    );
+
+    await service.create(viewer, input);
+    await expect(
+      service.create(viewer, {
+        ...input,
+        reuseSenderProfileId: secondSenderId,
+      }),
+    ).rejects.toBeInstanceOf(EventCreationIntentConflictError);
+  });
+
+  it("rejects sender reuse when Airtable authority is selected", async () => {
+    const sourceSenderId = await insertSenderProfile();
+    const slug = `airtable-sender-reuse-${crypto.randomUUID().slice(0, 8)}`;
+
+    await expect(
+      new EventCreationService(env as unknown as CloudflareEnvironment).create(
+        viewer,
+        {
+          creationIntentId: crypto.randomUUID(),
+          name: "Airtable sender reuse",
+          slug,
+          timezone: "UTC",
+          startDate: "2027-09-10",
+          endDate: "2027-09-12",
+          repositoryProvider: "airtable",
+          reuseSenderProfileId: sourceSenderId,
+          personalAccessToken: "pat-test-token-at-least-twenty",
+          baseId: "app12345678901234",
+          tableName: "Program Cue Rooms",
+        },
+      ),
+    ).rejects.toThrow(/available only when creating a D1 event/i);
+    await expect(
+      env.DB.prepare("SELECT 1 FROM events WHERE slug = ?").bind(slug).first(),
+    ).resolves.toBeNull();
   });
 
   it("replays the exact event and operation for one creation intent", async () => {

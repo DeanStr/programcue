@@ -51,6 +51,16 @@ export function applicationDraftHref(
   })}`;
 }
 
+export function acceptedParticipantManagementHref(
+  eventId: string,
+  submissionId: string,
+) {
+  const returnTo = `/participant/applications?${new URLSearchParams({
+    application: submissionId,
+  })}#participant-application-detail`;
+  return `/events/select?${new URLSearchParams({ eventId, returnTo })}`;
+}
+
 function AccessPanel({
   loaderData,
   actionData,
@@ -502,6 +512,8 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
   const historicalClaimPortal = Boolean(
     claimedSpeakerId && form.status !== "published",
   );
+  const isEvaluationApplicant =
+    applicant?.verified === true && applicant.evaluation === true;
 
   if (!claimRequested && !applicant) {
     return (
@@ -597,14 +609,18 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
         {applicant ? (
           <Form
             method="post"
-            action={claimScopedAction}
+            action={isEvaluationApplicant ? "/sign-out" : claimScopedAction}
             style={{ marginLeft: "auto" }}
           >
-            <input type="hidden" name="_intent" value="sign_out" />
+            {!isEvaluationApplicant ? (
+              <input type="hidden" name="_intent" value="sign_out" />
+            ) : null}
             <button type="submit" className="btn">
-              {applicant.verified
-                ? `Sign out ${applicant.email}`
-                : "Discard anonymous session"}
+              {isEvaluationApplicant
+                ? "Change persona"
+                : applicant.verified
+                  ? `Sign out ${applicant.email}`
+                  : "Discard anonymous session"}
             </button>
           </Form>
         ) : null}
@@ -853,6 +869,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                         : "")
                     }
                     recoveryEventId={form.eventId}
+                    revisionIntentId={loaderData.intentId}
                     serverSaved={
                       loaderData.recoverySavedDraftId === selected.id ||
                       (Boolean(actionData?.committed) &&
@@ -862,8 +879,19 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                     maxSpeakers={selectedForm.maxSpeakers}
                     errors={actionData?.errors}
                     canSubmit={availability.accepting && applicant.verified}
+                    canRevise={loaderData.selectedCanRevise}
                     forceReadOnly={historicalClaimPortal}
                     readOnlyNotice="This application belongs to a closed form and is available for reference only."
+                    acceptedParticipantsHref={
+                      selected.status === "accepted" &&
+                      applicant.verified &&
+                      !applicant.claimOnly
+                        ? acceptedParticipantManagementHref(
+                            form.eventId,
+                            selected.id,
+                          )
+                        : null
+                    }
                     action={claimScopedAction}
                     timezone={form.eventTimezone}
                   />

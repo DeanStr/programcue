@@ -122,8 +122,23 @@ describe("complete evaluator demo reset", () => {
     await ensureJudgedDemoWorkflow(testEnvironment);
     await testEnvironment.DB.batch([
       testEnvironment.DB.prepare(
-        "UPDATE events SET name = 'Evaluator changed this', brand_accent = '#123456' WHERE id = ?",
+        `UPDATE events
+            SET name = 'Evaluator changed this', brand_accent = '#123456',
+                activation_status = 'discarded',
+                participant_logo_url = 'https://example.com/stale-logo.png',
+                participant_welcome_text = 'Stale participant welcome',
+                participant_support_url = 'https://example.com/stale-support',
+                session_formats_json = '[{"key":"stale","label":"Stale","defaultDurationMinutes":15,"position":0}]',
+                file_policy_json = '{"headshotMaximumBytes":1048576,"slidesMaximumBytes":1048576,"supportingDocumentMaximumBytes":1048576,"videoMaximumBytes":1048576}'
+          WHERE id = ?`,
       ).bind(DEMO_EVENT_ID),
+      testEnvironment.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role,
+           invited_at, accepted_at, created_at
+         ) VALUES ('demo-reset-stale-org-admin', ?, NULL, ?, 'administrator',
+                   unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(DEMO_ORGANISATION_ID, SBEK_FIXTURE_PEOPLE.organizer.personId),
       testEnvironment.DB.prepare(
         `INSERT INTO audit_events (
            id, organisation_id, event_id, actor_person_id, action,
@@ -177,13 +192,16 @@ describe("complete evaluator demo reset", () => {
       submissions: 2,
       assignments: 2,
       publishedSchedules: 1,
-      publishedTemplates: 2,
+      canonicalEventConfiguration: 1,
+      canonicalOrganisationMemberships: 1,
+      publishedTemplates: 5,
       sbekPeople: 4,
       sbekReviewerMemberships: 0,
       sbekReviewerAssignments: 0,
       sbekSpeakerMemberships: 0,
       sbekSpeakerTasks: 0,
       sbekFixtureSubmissions: 0,
+      sbekApplicantMemberships: 0,
     });
     await expect(
       testEnvironment.FILES.head(`${DEMO_R2_PREFIX}old/slides.pdf`),
@@ -192,15 +210,79 @@ describe("complete evaluator demo reset", () => {
       testEnvironment.FILES.head("private/events/another-event/keep.pdf"),
     ).resolves.not.toBeNull();
     const event = await testEnvironment.DB.prepare(
-      "SELECT name, brand_accent AS accent, repository_provider AS provider FROM events WHERE id = ?",
+      `SELECT name, brand_accent AS accent, repository_provider AS provider,
+              activation_status AS activationStatus,
+              participant_logo_url AS participantLogoUrl,
+              participant_welcome_text AS participantWelcomeText,
+              participant_support_url AS participantSupportUrl,
+              json_extract(session_formats_json, '$[0].key') AS firstFormat,
+              json_extract(file_policy_json, '$.headshotMaximumBytes') AS headshotMaximumBytes,
+              participant_retention_completed_at AS retentionCompletedAt
+         FROM events WHERE id = ?`,
     )
       .bind(DEMO_EVENT_ID)
-      .first<{ name: string; accent: string; provider: string }>();
+      .first<{
+        name: string;
+        accent: string;
+        provider: string;
+        activationStatus: string;
+        participantLogoUrl: string | null;
+        participantWelcomeText: string | null;
+        participantSupportUrl: string | null;
+        firstFormat: string;
+        headshotMaximumBytes: number;
+        retentionCompletedAt: number | null;
+      }>();
     expect(event).toEqual({
       name: "Future of Events 2025",
       accent: "#4f46e5",
       provider: "d1",
+      activationStatus: "active",
+      participantLogoUrl: null,
+      participantWelcomeText: null,
+      participantSupportUrl: null,
+      firstFormat: "keynote",
+      headshotMaximumBytes: 10 * 1_048_576,
+      retentionCompletedAt: null,
     });
+    await expect(
+      testEnvironment.DB.prepare(
+        `SELECT id, person_id AS personId, role
+           FROM memberships
+          WHERE organisation_id = ? AND event_id IS NULL`,
+      )
+        .bind(DEMO_ORGANISATION_ID)
+        .all(),
+    ).resolves.toMatchObject({
+      results: [
+        {
+          id: "membership-demo-owner",
+          personId: "person-demo-owner",
+          role: "owner",
+        },
+      ],
+    });
+    const schedulePolicy = await testEnvironment.DB.prepare(
+      `SELECT room_overlap_action AS roomAction,
+              speaker_overlap_action AS speakerAction
+         FROM schedule_policies
+        WHERE event_id = ?`,
+    )
+      .bind(DEMO_EVENT_ID)
+      .first<{ roomAction: string; speakerAction: string }>();
+    expect(schedulePolicy).toEqual({
+      roomAction: "block",
+      speakerAction: "warn",
+    });
+    const datedSpeakerTasks = await testEnvironment.DB.prepare(
+      `SELECT COUNT(*) AS count
+         FROM task_instances
+        WHERE event_id = ? AND owner_person_id = 'person-demo-speaker'
+          AND due_at IS NOT NULL`,
+    )
+      .bind(DEMO_EVENT_ID)
+      .first<{ count: number }>();
+    expect(Number(datedSpeakerTasks?.count ?? 0)).toBeGreaterThanOrEqual(3);
     const communicationCentre = await new CommunicationService(
       testEnvironment,
     ).listCentre(demoAdministrator);
@@ -208,7 +290,39 @@ describe("complete evaluator demo reset", () => {
       communicationCentre.templates
         .filter((template) => template.versionStatus === "published")
         .map((template) => template.name),
-    ).toEqual(["Speaker task reminder", "Reviewer reminder"]);
+    ).toEqual([
+      "Speaker welcome",
+      "Speaker task reminder",
+      "Reviewer reminder",
+      "Proposal decision",
+      "Submission confirmation",
+    ]);
+    expect(
+      communicationCentre.templates.find(
+        (template) => template.name === "Speaker welcome",
+      ),
+    ).toMatchObject({
+      category: "ad_hoc",
+      templateStatus: "active",
+      versionStatus: "published",
+      subject: "Welcome to {{event.name}} speakers",
+      content: {
+        body: "Hi {{recipient.firstName}},\n\nWelcome to {{event.name}}. Your speaker workspace is ready.",
+      },
+    });
+    expect(
+      communicationCentre.templates.find(
+        (template) => template.name === "Speaker task reminder",
+      ),
+    ).toMatchObject({
+      category: "task_reminder",
+      templateStatus: "active",
+      versionStatus: "published",
+      subject: "Reminder: {{task.title}} is due {{task.dueDate}}",
+      content: {
+        body: "Hi {{recipient.firstName}},\n\nPlease complete {{task.title}} for {{event.name}} by {{task.dueDate}}.",
+      },
+    });
     const fixturePeople = await testEnvironment.DB.prepare(
       `SELECT id, email, display_name AS name, profile_status AS profileStatus
          FROM people
@@ -272,7 +386,7 @@ describe("complete evaluator demo reset", () => {
       await expect(prepareJudgedDemoWorkflow(testEnvironment)).resolves.toEqual(
         expect.objectContaining({
           complete: false,
-          evidence: expect.objectContaining({ publishedTemplates: 1 }),
+          evidence: expect.objectContaining({ publishedTemplates: 4 }),
         }),
       );
       await expect(ensureJudgedDemoWorkflow(testEnvironment)).rejects.toThrow(
@@ -297,7 +411,7 @@ describe("complete evaluator demo reset", () => {
       await expect(prepareJudgedDemoWorkflow(testEnvironment)).resolves.toEqual(
         expect.objectContaining({
           complete: false,
-          evidence: expect.objectContaining({ publishedTemplates: 1 }),
+          evidence: expect.objectContaining({ publishedTemplates: 4 }),
         }),
       );
     } finally {
@@ -351,7 +465,7 @@ describe("complete evaluator demo reset", () => {
       await expect(prepareJudgedDemoWorkflow(testEnvironment)).resolves.toEqual(
         expect.objectContaining({
           complete: false,
-          evidence: expect.objectContaining({ publishedTemplates: 1 }),
+          evidence: expect.objectContaining({ publishedTemplates: 4 }),
         }),
       );
       await expect(ensureJudgedDemoWorkflow(testEnvironment)).rejects.toThrow(
@@ -583,6 +697,9 @@ describe("complete evaluator demo reset", () => {
         `demo-active-${suffix}`,
       )
       .run();
+    await testEnvironment.DB.prepare(
+      "DELETE FROM memberships WHERE id = 'membership-demo-owner'",
+    ).run();
     const objectKey = `${DEMO_R2_PREFIX}active/file.txt`;
     await testEnvironment.FILES.put(objectKey, "active");
 
@@ -597,6 +714,11 @@ describe("complete evaluator demo reset", () => {
       activeWork: { operations: 1 },
     });
     await expect(testEnvironment.FILES.head(objectKey)).resolves.not.toBeNull();
+    await expect(
+      testEnvironment.DB.prepare(
+        "SELECT id FROM memberships WHERE id = 'membership-demo-owner'",
+      ).first(),
+    ).resolves.toBeNull();
     await expect(
       testEnvironment.DB.prepare(
         "SELECT status FROM operation_jobs WHERE id = ?",
@@ -615,6 +737,31 @@ describe("complete evaluator demo reset", () => {
       "person-demo-admin",
       DEMO_RESET_CONFIRMATION,
     );
+  });
+
+  it("fails promptly when demo storage deletion makes no progress", async () => {
+    let listCalls = 0;
+    let deleteCalls = 0;
+    const stuckFiles = {
+      list: async ({ prefix }: { prefix: string }) => {
+        expect(prefix).toBe(DEMO_R2_PREFIX);
+        listCalls += 1;
+        return { objects: [{ key: `${prefix}stuck-object` }] };
+      },
+      delete: async () => {
+        deleteCalls += 1;
+      },
+    } as unknown as R2Bucket;
+
+    await expect(
+      resetDemoEvent(
+        demoEnvironment({ FILES: stuckFiles }),
+        "person-demo-admin",
+        DEMO_RESET_CONFIRMATION,
+      ),
+    ).rejects.toThrow(/did not make progress/iu);
+    expect(listCalls).toBe(4);
+    expect(deleteCalls).toBe(3);
   });
 
   it("cannot run under production runtime settings", async () => {

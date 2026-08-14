@@ -16,6 +16,7 @@ import {
 } from "~/modules/submissions/submission-schema";
 import { ApiParticipantService } from "~/platform/api/api-participant-service.server";
 import { ApiError } from "~/platform/api/api.server";
+import { evaluatorEmailRoutingMessage } from "~/platform/evaluation/evaluator-email-alias.server";
 import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 
@@ -85,14 +86,18 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
     const partial = finalization.warnings.length > 0;
     const relationshipMessage = `${result.response.speaker.name} was added as ${result.response.speaker.roleLabel.toLowerCase()}`;
+    const routingDisclosure = evaluatorEmailRoutingMessage(
+      result.response.routing ?? null,
+    );
+    const completedMessage = `${relationshipMessage} and the expiring claim invitation was queued.${routingDisclosure ? ` ${routingDisclosure}` : ""}`;
     return data<ParticipantApplicationsActionResult>(
       {
         ok: !partial,
         partial,
         applicationId,
         message: partial
-          ? `${relationshipMessage}. ${finalization.warnings.join(" ")}`
-          : `${relationshipMessage} and the expiring claim invitation was queued.`,
+          ? `${relationshipMessage}. ${finalization.warnings.join(" ")}${routingDisclosure ? ` ${routingDisclosure}` : ""}`
+          : completedMessage,
       },
       { status: partial ? 207 : 200 },
     );

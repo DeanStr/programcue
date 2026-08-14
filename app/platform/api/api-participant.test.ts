@@ -427,11 +427,12 @@ describe("participant API resources", () => {
     )
       .bind(viewer.personId)
       .first<{ revision: number }>();
+    const biography = `Priya keeps participant profile edits synchronized with the selected event repository authority. ${"Detailed biography content. ".repeat(90)}`;
+    expect(biography.length).toBeGreaterThan(2_000);
     const input = participantProfilePatchSchema.parse({
       revision: current!.revision,
       name: `Priya Authority ${crypto.randomUUID().slice(0, 8)}`,
-      biography:
-        "Priya keeps participant profile edits synchronized with the selected event repository authority.",
+      biography,
     });
     const commands: Array<{ operation: string; eventId: string }> = [];
     const airtable = {
@@ -455,7 +456,11 @@ describe("participant API resources", () => {
         operationId,
       ),
     ).resolves.toMatchObject({
-      profile: { name: input.name, revision: input.revision + 1 },
+      profile: {
+        name: input.name,
+        biography: input.biography,
+        revision: input.revision + 1,
+      },
     });
     expect(commands).toEqual([
       {

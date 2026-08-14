@@ -63,7 +63,7 @@ export type AiReminderProposalPreview = AiProposalBase & {
         name: string;
         sourceId: string | null;
       }>;
-      invalid: Array<{ address: string; name: string }>;
+      invalid: Array<{ address: string; name: string; reason: string }>;
       suppressed: Array<{
         personId: string | null;
         address: string;
@@ -98,9 +98,7 @@ export type AiDomainProposalPreview = AiProposalBase & {
 };
 
 export type AiProposalPreview =
-  | AiTaskProposalPreview
-  | AiReminderProposalPreview
-  | AiDomainProposalPreview;
+  AiTaskProposalPreview | AiReminderProposalPreview | AiDomainProposalPreview;
 
 export type AiAttribution = {
   provider: "OpenAI" | "Workers AI" | "Anthropic";

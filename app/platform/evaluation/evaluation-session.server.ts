@@ -3,12 +3,18 @@ import {
   DEMO_IDENTITIES,
   DEMO_ORGANISATION_ID,
   DEMO_RESET_CONFIRMATION,
-  SBEK_SECOND_SPEAKER,
 } from "~/platform/demo/demo-identities";
+import {
+  assertEvaluationPeopleAreDedicated,
+  EvaluationIdentityIsolationError,
+} from "~/platform/evaluation/evaluation-identity-isolation.server";
+import { currentEvaluationFixtureGeneration } from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 export const EVALUATION_SESSION_COOKIE = "__Host-program_cue_evaluation";
 const SESSION_SECONDS = 60 * 60 * 8;
+const EVALUATION_APPLICANT_MEMBERSHIP_ID =
+  "membership-production-evaluation-applicant-event";
 
 export const EVALUATION_IDENTITIES = {
   owner: {
@@ -26,7 +32,7 @@ export const EVALUATION_IDENTITIES = {
     description:
       "The complete operations workspace with a rich, published event.",
     whatToTry:
-      "Open Command Centre, inspect submissions, then publish a schedule change.",
+      "Inspect submissions and scheduling; when creating a D1 event, explicitly reuse the verified sender.",
     group: "showcase",
   },
   chair: {
@@ -71,18 +77,6 @@ export const EVALUATION_IDENTITIES = {
     whatToTry: "Start an application, add Marcus as co-speaker and submit it.",
     group: "scenario",
   },
-  sbek_second_speaker: {
-    ...SBEK_SECOND_SPEAKER,
-    role: "submitter",
-    destination: "/apply/form",
-    cohort: "sbek",
-    label: "Clean co-speaker",
-    description:
-      "The second fixed identity used in the automated application scenario.",
-    whatToTry:
-      "Use this identity only when inspecting the co-speaker scenario.",
-    group: "scenario",
-  },
   sbek_reviewer: {
     ...DEMO_IDENTITIES.sbek_reviewer,
     destination: "/events/select",
@@ -97,7 +91,7 @@ export const EVALUATION_IDENTITIES = {
 
 export type EvaluationIdentityKey = keyof typeof EVALUATION_IDENTITIES;
 
-type EvaluationSessionPayload = {
+export type EvaluationSessionPayload = {
   version: 1;
   identityKey: EvaluationIdentityKey | null;
   fixtureGeneration: string;
@@ -108,30 +102,37 @@ async function currentFixtureGeneration(env: CloudflareEnvironment) {
   if (!env.DB) {
     throw new Error("Required Cloudflare binding DB is unavailable.");
   }
-  const reset = await env.DB.prepare(
-    `SELECT id AS fixtureGeneration, action
-       FROM audit_events
-      WHERE organisation_id = ? AND event_id = ?
-        AND action IN (
-          'evaluation.fixture.reset.started',
-          'evaluation.fixture.reset'
-        )
-        AND entity_type = 'event' AND entity_id = ?
-      ORDER BY rowid DESC
-      LIMIT 1`,
-  )
-    .bind(DEMO_ORGANISATION_ID, DEMO_EVENT_ID, DEMO_EVENT_ID)
-    .first<{ fixtureGeneration: string; action: string }>();
-  if (
-    !reset?.fixtureGeneration ||
-    reset.action !== "evaluation.fixture.reset"
-  ) {
+  const fixtureGeneration = await currentEvaluationFixtureGeneration(env);
+  if (!fixtureGeneration) {
     throw new Response(
       "The evaluation fixture has no completed reset. Ask the evaluation operator to complete a reset before granting access.",
       { status: 503, headers: { "cache-control": "no-store" } },
     );
   }
-  return reset.fixtureGeneration;
+  return fixtureGeneration;
+}
+
+async function evaluationApplicantMembershipIsActive(
+  env: CloudflareEnvironment,
+  fixtureGeneration: string,
+) {
+  const membership = await env.DB.prepare(
+    `SELECT 1
+       FROM memberships
+      WHERE id = ? AND organisation_id = ? AND event_id = ?
+        AND person_id = ? AND role = 'submitter'
+        AND accepted_at IS NOT NULL AND revoked_at IS NULL
+        AND last_operation_id = ?`,
+  )
+    .bind(
+      EVALUATION_APPLICANT_MEMBERSHIP_ID,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.sbek_speaker.personId,
+      `evaluation-account:${fixtureGeneration}`,
+    )
+    .first();
+  return Boolean(membership);
 }
 
 function configuredSecret(env: CloudflareEnvironment) {
@@ -244,16 +245,17 @@ export async function evaluationAccessCodeMatches(
   );
 }
 
-export async function evaluationSessionCookie(
+async function signedEvaluationSessionCookie(
   env: CloudflareEnvironment,
   identityKey: EvaluationIdentityKey | null,
-  now = Math.floor(Date.now() / 1000),
+  fixtureGeneration: string,
+  now: number,
 ) {
   requireEvaluationMode(env);
   const payload: EvaluationSessionPayload = {
     version: 1,
     identityKey,
-    fixtureGeneration: await currentFixtureGeneration(env),
+    fixtureGeneration,
     expiresAt: now + SESSION_SECONDS,
   };
   const encodedPayload = base64UrlEncode(
@@ -261,6 +263,33 @@ export async function evaluationSessionCookie(
   );
   const signature = await sign(encodedPayload, configuredSecret(env));
   return `${EVALUATION_SESSION_COOKIE}=${encodedPayload}.${signature}; Max-Age=${SESSION_SECONDS}; Path=/; HttpOnly; Secure; SameSite=Lax`;
+}
+
+export async function evaluationSessionCookie(
+  env: CloudflareEnvironment,
+  identityKey: EvaluationIdentityKey | null,
+  now = Math.floor(Date.now() / 1000),
+) {
+  return signedEvaluationSessionCookie(
+    env,
+    identityKey,
+    await currentFixtureGeneration(env),
+    now,
+  );
+}
+
+export async function renewedEvaluationSessionCookie(
+  env: CloudflareEnvironment,
+  session: EvaluationSessionPayload,
+  identityKey: EvaluationIdentityKey | null,
+  now = Math.floor(Date.now() / 1000),
+) {
+  return signedEvaluationSessionCookie(
+    env,
+    identityKey,
+    session.fixtureGeneration,
+    now,
+  );
 }
 
 export function clearEvaluationSessionCookie() {
@@ -320,6 +349,11 @@ export async function resolveEvaluationPerson(
   identityKey: EvaluationIdentityKey,
 ) {
   const definition = EVALUATION_IDENTITIES[identityKey];
+  // The two scenario identities intentionally start without fixture-event
+  // access. Every showcase identity must retain its seeded, active role.
+  const requiresFixtureMembership = definition.group === "showcase";
+  const expectedMembershipEventId =
+    identityKey === "owner" ? null : DEMO_EVENT_ID;
   const person = await env.DB.prepare(
     `SELECT person.id AS personId, person.display_name AS name, person.email,
             COALESCE(person.biography, '') AS biography,
@@ -332,22 +366,29 @@ export async function resolveEvaluationPerson(
              AND event.activation_status = 'active'
         )
         AND (
-          EXISTS (
+          ? = 0 OR EXISTS (
             SELECT 1 FROM memberships membership
              WHERE membership.person_id = person.id
                AND membership.organisation_id = ?
+               AND membership.role = ?
+               AND (
+                 (? IS NULL AND membership.event_id IS NULL)
+                 OR membership.event_id = ?
+               )
+               AND membership.accepted_at IS NOT NULL
+               AND membership.revoked_at IS NULL
           )
-          OR person.id IN (?, ?, ?)
         )`,
   )
     .bind(
       definition.personId,
       DEMO_EVENT_ID,
       DEMO_ORGANISATION_ID,
+      requiresFixtureMembership ? 1 : 0,
       DEMO_ORGANISATION_ID,
-      DEMO_IDENTITIES.sbek_speaker.personId,
-      SBEK_SECOND_SPEAKER.personId,
-      DEMO_IDENTITIES.sbek_reviewer.personId,
+      definition.role,
+      expectedMembershipEventId,
+      expectedMembershipEventId,
     )
     .first<{
       personId: string;
@@ -362,7 +403,257 @@ export async function resolveEvaluationPerson(
       { status: 503, headers: { "cache-control": "no-store" } },
     );
   }
+  try {
+    await assertEvaluationPeopleAreDedicated(env, [person.personId]);
+  } catch (error) {
+    if (error instanceof EvaluationIdentityIsolationError) {
+      throw new Response(
+        "This evaluator identity is no longer isolated to the dedicated evaluation organisation. Ask the evaluation operator to reset the fixture.",
+        { status: 503, headers: { "cache-control": "no-store" } },
+      );
+    }
+    throw error;
+  }
   return { ...person, identityKey, definition };
+}
+
+export async function activateEvaluationApplicantAccount(
+  env: CloudflareEnvironment,
+  fixtureGeneration: string,
+) {
+  requireEvaluationMode(env);
+  const definition = EVALUATION_IDENTITIES.sbek_applicant;
+  try {
+    await assertEvaluationPeopleAreDedicated(env, [definition.personId]);
+  } catch (error) {
+    if (error instanceof EvaluationIdentityIsolationError) {
+      throw new Response(
+        "The fixed evaluator applicant is no longer isolated to the dedicated evaluation organisation.",
+        { status: 503, headers: { "cache-control": "no-store" } },
+      );
+    }
+    throw error;
+  }
+  const operationId = `evaluation-account:${fixtureGeneration}`;
+  const auditId = `evaluation-account-activation:${fixtureGeneration}`;
+  const metadataJson = JSON.stringify({
+    identityKey: "sbek_applicant",
+    fixtureGeneration,
+    activationKind: "fixed_fixture_submitter_membership",
+  });
+  const existing = await env.DB.prepare(
+    `SELECT organisation_id AS organisationId, event_id AS eventId,
+            person_id AS personId, role
+       FROM memberships WHERE id = ?`,
+  )
+    .bind(EVALUATION_APPLICANT_MEMBERSHIP_ID)
+    .first<{
+      organisationId: string;
+      eventId: string | null;
+      personId: string;
+      role: string;
+    }>();
+  if (
+    existing &&
+    (existing.organisationId !== DEMO_ORGANISATION_ID ||
+      existing.eventId !== DEMO_EVENT_ID ||
+      existing.personId !== definition.personId ||
+      existing.role !== "submitter")
+  ) {
+    throw new Error(
+      "The fixed evaluator applicant membership belongs to another identity or tenant.",
+    );
+  }
+  const [membership, audit, verification] = await env.DB.batch([
+    env.DB.prepare(
+      `WITH latest_reset AS (
+         SELECT id, action
+           FROM audit_events
+          WHERE organisation_id = ? AND event_id = ?
+            AND action IN (
+              'evaluation.fixture.reset.started',
+              'evaluation.fixture.reset'
+            )
+            AND entity_type = 'event' AND entity_id = ?
+          ORDER BY rowid DESC
+          LIMIT 1
+       )
+       INSERT INTO memberships (
+         id, organisation_id, event_id, person_id, role,
+         invited_at, accepted_at, revoked_at, last_operation_id, created_at
+       ) SELECT ?, ?, ?, person.id, 'submitter', NULL, unixepoch(),
+                NULL, ?, unixepoch()
+           FROM people person
+           JOIN events event ON event.id = ? AND event.organisation_id = ?
+          WHERE person.id = ? AND event.activation_status = 'active'
+            AND EXISTS (
+              SELECT 1 FROM latest_reset
+               WHERE id = ? AND action = 'evaluation.fixture.reset'
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM audit_events existing_audit
+               WHERE existing_audit.id = ?
+                 AND NOT (
+                   existing_audit.organisation_id = ?
+                   AND existing_audit.event_id = ?
+                   AND existing_audit.actor_id = 'production-evaluation-access'
+                   AND existing_audit.action = 'evaluation.account.activated'
+                   AND existing_audit.entity_type = 'person'
+                   AND existing_audit.entity_id = ?
+                   AND existing_audit.correlation_id = ?
+                   AND existing_audit.metadata_json = ?
+                 )
+            )
+       ON CONFLICT(id) DO UPDATE SET
+         accepted_at = unixepoch(), revoked_at = NULL,
+         last_operation_id = excluded.last_operation_id
+       WHERE memberships.organisation_id = excluded.organisation_id
+         AND memberships.event_id = excluded.event_id
+         AND memberships.person_id = excluded.person_id
+         AND memberships.role = excluded.role
+         AND memberships.last_operation_id IS NOT excluded.last_operation_id`,
+    ).bind(
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_EVENT_ID,
+      EVALUATION_APPLICANT_MEMBERSHIP_ID,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      operationId,
+      DEMO_EVENT_ID,
+      DEMO_ORGANISATION_ID,
+      definition.personId,
+      fixtureGeneration,
+      auditId,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      definition.personId,
+      operationId,
+      metadataJson,
+    ),
+    env.DB.prepare(
+      `WITH latest_reset AS (
+         SELECT id, action
+           FROM audit_events
+          WHERE organisation_id = ? AND event_id = ?
+            AND action IN (
+              'evaluation.fixture.reset.started',
+              'evaluation.fixture.reset'
+            )
+            AND entity_type = 'event' AND entity_id = ?
+          ORDER BY rowid DESC
+          LIMIT 1
+       )
+       INSERT INTO audit_events (
+         id, organisation_id, event_id, actor_id, action, entity_type,
+         entity_id, correlation_id, metadata_json, created_at
+       ) SELECT ?, ?, ?, 'production-evaluation-access',
+                'evaluation.account.activated', 'person', ?, ?, ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM latest_reset
+             WHERE id = ? AND action = 'evaluation.fixture.reset'
+          )
+            AND EXISTS (
+            SELECT 1 FROM memberships
+             WHERE id = ? AND organisation_id = ? AND event_id = ?
+               AND person_id = ? AND role = 'submitter'
+               AND accepted_at IS NOT NULL AND revoked_at IS NULL
+               AND last_operation_id = ?
+          )
+       ON CONFLICT(id) DO NOTHING`,
+    ).bind(
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_EVENT_ID,
+      auditId,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      definition.personId,
+      operationId,
+      metadataJson,
+      fixtureGeneration,
+      EVALUATION_APPLICANT_MEMBERSHIP_ID,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      definition.personId,
+      operationId,
+    ),
+    env.DB.prepare(
+      `WITH latest_reset AS (
+         SELECT id, action
+           FROM audit_events
+          WHERE organisation_id = ? AND event_id = ?
+            AND action IN (
+              'evaluation.fixture.reset.started',
+              'evaluation.fixture.reset'
+            )
+            AND entity_type = 'event' AND entity_id = ?
+          ORDER BY rowid DESC
+          LIMIT 1
+       )
+       SELECT EXISTS (
+                SELECT 1 FROM latest_reset
+                 WHERE id = ? AND action = 'evaluation.fixture.reset'
+              ) AS generationMatches,
+              EXISTS (
+                SELECT 1
+                  FROM memberships membership
+                  JOIN audit_events activation ON activation.id = ?
+                 WHERE membership.id = ?
+                   AND membership.organisation_id = ?
+                   AND membership.event_id = ?
+                   AND membership.person_id = ?
+                   AND membership.role = 'submitter'
+                   AND membership.accepted_at IS NOT NULL
+                   AND membership.revoked_at IS NULL
+                   AND membership.last_operation_id = ?
+                   AND activation.organisation_id = ?
+                   AND activation.event_id = ?
+                   AND activation.actor_id = 'production-evaluation-access'
+                   AND activation.action = 'evaluation.account.activated'
+                   AND activation.entity_type = 'person'
+                   AND activation.entity_id = ?
+                   AND activation.correlation_id = ?
+                   AND activation.metadata_json = ?
+              ) AS activationMatches`,
+    ).bind(
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_EVENT_ID,
+      fixtureGeneration,
+      auditId,
+      EVALUATION_APPLICANT_MEMBERSHIP_ID,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      definition.personId,
+      operationId,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      definition.personId,
+      operationId,
+      metadataJson,
+    ),
+  ]);
+  const state = verification.results?.[0] as
+    { generationMatches: number; activationMatches: number } | undefined;
+  if (state?.generationMatches !== 1) {
+    throw new Response(
+      "The evaluation fixture changed before this account could be activated. Unlock the current fixture and try again.",
+      { status: 409, headers: { "cache-control": "no-store" } },
+    );
+  }
+  const firstApplication =
+    (membership.meta.changes ?? 0) === 1 && (audit.meta.changes ?? 0) === 1;
+  const exactReplay =
+    (membership.meta.changes ?? 0) === 0 && (audit.meta.changes ?? 0) === 0;
+  if (state.activationMatches !== 1 || (!firstApplication && !exactReplay)) {
+    throw new Error("The fixed evaluator applicant account was not activated.");
+  }
+  return {
+    membershipId: EVALUATION_APPLICANT_MEMBERSHIP_ID,
+    personId: definition.personId,
+    replayed: exactReplay,
+  };
 }
 
 export async function selectedEvaluationPerson(
@@ -372,7 +663,26 @@ export async function selectedEvaluationPerson(
   const runtime = requireRuntimeMode(env);
   if (!runtime.evaluation) return null;
   const session = await readEvaluationSession(request, env);
+  return session ? evaluationPersonForSession(env, session) : null;
+}
+
+export async function evaluationPersonForSession(
+  env: CloudflareEnvironment,
+  session: EvaluationSessionPayload,
+) {
   if (!session?.identityKey) return null;
+  if (
+    session.identityKey === "sbek_applicant" &&
+    !(await evaluationApplicantMembershipIsActive(
+      env,
+      session.fixtureGeneration,
+    ))
+  ) {
+    throw new Response(
+      "The activated evaluator applicant account is unavailable. Ask the evaluation operator to reset the fixture.",
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
+  }
   return resolveEvaluationPerson(env, session.identityKey);
 }
 

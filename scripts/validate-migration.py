@@ -4,6 +4,23 @@ import sqlite3
 
 root = Path(__file__).resolve().parents[1]
 migration_files = sorted(root.joinpath("migrations").glob("*.sql"))
+migration_numbers: dict[str, list[str]] = {}
+for migration_path in migration_files:
+    match = re.fullmatch(r"(\d{4})_[a-z0-9_]+\.sql", migration_path.name)
+    if match is None:
+        raise SystemExit(
+            f"Migration filename must use NNNN_lowercase_name.sql: {migration_path.name}"
+        )
+    migration_numbers.setdefault(match.group(1), []).append(migration_path.name)
+duplicate_migration_numbers = {
+    number: names for number, names in migration_numbers.items() if len(names) > 1
+}
+if duplicate_migration_numbers:
+    details = ", ".join(
+        f"{number}: {', '.join(names)}"
+        for number, names in sorted(duplicate_migration_numbers.items())
+    )
+    raise SystemExit(f"Migration numbers must be unique ({details})")
 sql = "\n".join(path.read_text() for path in migration_files)
 schema_source = root.joinpath("app/platform/database/schema.ts").read_text()
 
@@ -378,6 +395,120 @@ def validate_advisory_content_and_itinerary_privacy_forward_migration() -> None:
 
 validate_advisory_content_and_itinerary_privacy_forward_migration()
 
+
+def validate_speaker_profile_depth_forward_migration() -> None:
+    deployed = sqlite3.connect(":memory:")
+    deployed.execute("PRAGMA foreign_keys = ON")
+    for path in migration_files:
+        if path.name == "0014_speaker_profile_depth.sql":
+            break
+        deployed.executescript(path.read_text())
+    deployed.execute(
+        "INSERT INTO people (id, email, display_name) VALUES (?, ?, ?)",
+        ("legacy-profile", "legacy-profile@example.test", "Legacy Profile"),
+    )
+    deployed.execute(
+        "INSERT INTO people (id, email, display_name) VALUES (?, ?, ?)",
+        (
+            "cross-tenant-profile",
+            "cross-tenant-profile@example.test",
+            "Cross Tenant Profile",
+        ),
+    )
+    deployed.execute(
+        "INSERT INTO organisations (id, name, slug) VALUES (?, ?, ?)",
+        ("legacy-profile-org", "Legacy Profile Org", "legacy-profile-org"),
+    )
+    deployed.execute(
+        "INSERT INTO organisations (id, name, slug) VALUES (?, ?, ?)",
+        ("other-profile-org", "Other Profile Org", "other-profile-org"),
+    )
+    deployed.execute(
+        """
+        INSERT INTO events (
+          id, organisation_id, name, slug, timezone, starts_at, ends_at,
+          file_policy_json
+        ) VALUES (?, ?, ?, ?, 'UTC', 1800000000, 1800086400, ?)
+        """,
+        (
+            "legacy-profile-event",
+            "legacy-profile-org",
+            "Legacy Profile Event",
+            "legacy-profile-event",
+            '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}',
+        ),
+    )
+    deployed.executescript(
+        root.joinpath("migrations/0014_speaker_profile_depth.sql").read_text()
+    )
+    migrated = deployed.execute(
+        """
+        SELECT linkedin_url, x_handle
+          FROM people WHERE id = 'legacy-profile'
+        """
+    ).fetchone()
+    if migrated != (None, None):
+        raise SystemExit(
+            "Legacy speaker profiles were not migrated with empty public depth fields"
+        )
+    if "travel_preferences" in {
+        row[1] for row in deployed.execute("PRAGMA table_info(people)")
+    }:
+        raise SystemExit("Private travel preferences were added to the global people table")
+    deployed.execute(
+        """
+        INSERT INTO event_participant_profiles (
+          event_id, organisation_id, person_id, travel_preferences,
+          last_operation_id
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            "legacy-profile-event",
+            "legacy-profile-org",
+            "legacy-profile",
+            "Step-free transport",
+            "legacy-profile-operation",
+        ),
+    )
+    try:
+        deployed.execute(
+            """
+            INSERT INTO event_participant_profiles (
+              event_id, organisation_id, person_id, travel_preferences,
+              last_operation_id
+            ) VALUES ('legacy-profile-event', 'other-profile-org',
+                      'cross-tenant-profile', 'Cross-tenant value',
+                      'cross-tenant-profile-operation')
+            """
+        )
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise SystemExit("Event profile migration accepted a cross-tenant event/org pair")
+    try:
+        deployed.execute(
+            """
+            UPDATE event_participant_profiles SET travel_preferences = '   '
+             WHERE event_id = 'legacy-profile-event'
+               AND person_id = 'legacy-profile'
+            """
+        )
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise SystemExit("Event profile migration accepted blank travel preferences")
+    try:
+        deployed.execute(
+            "UPDATE people SET x_handle = 'invalid handle' WHERE id = 'legacy-profile'"
+        )
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise SystemExit("Speaker profile migration accepted an invalid X handle")
+
+
+validate_speaker_profile_depth_forward_migration()
+
 tables = {
     row[0]
     for row in connection.execute(
@@ -385,7 +516,7 @@ tables = {
     )
 }
 required = {
-    "organisations", "people", "organisation_ai_settings", "events", "memberships",
+    "organisations", "people", "organisation_ai_settings", "events", "event_participant_profiles", "memberships",
     "organisation_contacts", "organisation_contact_profiles", "organisation_contact_tags", "organisation_contact_notes",
     "crm_segments", "crm_pipeline_entries", "crm_pipeline_activity",
     "form_definitions", "form_versions", "submissions", "submission_revisions",
@@ -432,6 +563,8 @@ def columns(table: str) -> set[str]:
 
 
 for table, expected in {
+    "people": {"linkedin_url", "x_handle", "profile_revision"},
+    "event_participant_profiles": {"event_id", "organisation_id", "person_id", "travel_preferences", "last_operation_id"},
     "organisation_ai_settings": {"provider", "model", "revision", "last_updated_by_person_id", "last_operation_id"},
     "memberships": {"organisation_id", "event_id", "person_id", "role", "revoked_at"},
     "organisation_contacts": {"organisation_id", "person_id", "source", "status", "merged_into_person_id"},
@@ -694,6 +827,10 @@ required_triggers = {
     "schedule_versions_seed_session_content",
     "sessions_seed_draft_schedule_content",
     "events_participant_retention_tombstone_immutable",
+    "people_participant_retention_no_pii_update",
+    "event_participant_profiles_retention_no_pii_insert",
+    "event_participant_profiles_retention_no_pii_update",
+    "event_participant_profiles_retention_no_pii_delete",
     "submission_revisions_participant_retention_no_pii_update",
     "review_revisions_participant_retention_no_pii_update",
     "communication_delivery_events_participant_retention_no_pii_update",

@@ -8,7 +8,10 @@ import { ResourceService } from "~/modules/resources/resource-service.server";
 import { ResendEmailProvider } from "~/modules/communications/resend.server";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
+import {
+  activateEvaluationApplicantAccount,
+  evaluationSessionCookie,
+} from "~/platform/evaluation/evaluation-session.server";
 import { processSubmissionNotification } from "../../../workers/communications-queue";
 import {
   ApplicantConfigurationError,
@@ -517,7 +520,7 @@ describe("Submissions D1 vertical slice", () => {
       ).resolves.toMatchObject({ email });
     });
 
-    it("uses a selected production evaluation identity as the clean verified applicant", async () => {
+    it("requires explicit activation before using the selected production evaluation identity as the clean verified applicant", async () => {
       const { service, slug, testEnv } = await publishedForm();
       const form = await service.getPublicForm(slug);
       await testEnv.DB.prepare(
@@ -533,6 +536,7 @@ describe("Submissions D1 vertical slice", () => {
         EVALUATION_SESSION_SECRET:
           "evaluation-session-secret-with-more-than-thirty-two-characters",
       } as CloudflareEnvironment;
+      const fixtureGeneration = crypto.randomUUID();
       await evaluationEnvironment.DB.prepare(
         `INSERT INTO audit_events (
            id, organisation_id, event_id, actor_id, action,
@@ -541,7 +545,7 @@ describe("Submissions D1 vertical slice", () => {
                    'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
                    unixepoch())`,
       )
-        .bind(crypto.randomUUID())
+        .bind(fixtureGeneration)
         .run();
       const cookie = await evaluationSessionCookie(
         evaluationEnvironment,
@@ -551,13 +555,31 @@ describe("Submissions D1 vertical slice", () => {
         headers: { cookie: cookie.split(";", 1)[0]! },
       });
 
+      const applicantSessions = new ApplicantSessionService(
+        evaluationEnvironment,
+      );
+      const unavailable = await applicantSessions
+        .get(request, form)
+        .catch((error: unknown) => error);
+      expect(unavailable).toBeInstanceOf(Response);
+      expect((unavailable as Response).status).toBe(503);
+
       await expect(
-        new ApplicantSessionService(evaluationEnvironment).get(request, form),
+        activateEvaluationApplicantAccount(
+          evaluationEnvironment,
+          fixtureGeneration,
+        ),
       ).resolves.toMatchObject({
         personId: "person-sbek-speaker",
-        email: "sbek-speaker@example.com",
-        verified: true,
+        replayed: false,
       });
+      await expect(applicantSessions.get(request, form)).resolves.toMatchObject(
+        {
+          personId: "person-sbek-speaker",
+          email: "sbek-speaker@example.com",
+          verified: true,
+        },
+      );
     });
 
     it("does not grant applicant verification to another evaluation persona", async () => {

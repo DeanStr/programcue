@@ -105,6 +105,7 @@ describe("administrator navigation context", () => {
       "schedule",
       "communications",
       "tasks",
+      "content",
       "programme",
     ]);
     expect(groups[1]?.items.map(([id]) => id)).toEqual([
@@ -112,18 +113,16 @@ describe("administrator navigation context", () => {
       "operations",
       "settings",
     ]);
-    expect(groups.flatMap((group) => group.items).map(([id]) => id)).not.toEqual(
-      expect.arrayContaining(["content", "resources", "crm"]),
-    );
+    expect(
+      groups.flatMap((group) => group.items).map(([id]) => id),
+    ).not.toEqual(expect.arrayContaining(["resources", "crm"]));
   });
 
   it("marks a contextual tool's visible parent as the current workflow", () => {
-    expect(primaryNavigationItemActive("programme", "/admin/content")).toBe(
-      true,
-    );
+    expect(primaryNavigationItemActive("content", "/admin/content")).toBe(true);
     expect(
       primaryNavigationItemActive(
-        "programme",
+        "content",
         "/admin/content/sessions/session-1",
       ),
     ).toBe(true);

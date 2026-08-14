@@ -364,6 +364,7 @@ function ReviewScorePanel() {
                 className="select"
                 name="recommendation"
                 defaultValue={workspace.review?.recommendation ?? ""}
+                required
                 disabled={readOnly}
               >
                 <option value="">Choose…</option>
@@ -380,6 +381,7 @@ function ReviewScorePanel() {
                 className="select"
                 name="confidence"
                 defaultValue={workspace.review?.confidence ?? ""}
+                required
                 disabled={readOnly}
               >
                 <option value="">Choose…</option>
@@ -439,6 +441,7 @@ function ReviewScorePanel() {
                 type="button"
                 disabled={fetcher.state !== "idle"}
                 onClick={() => {
+                  if (!formRef.current?.reportValidity()) return;
                   clearAutosaveTimer();
                   setSubmitMode("stay");
                 }}
@@ -451,6 +454,7 @@ function ReviewScorePanel() {
                 type="button"
                 disabled={fetcher.state !== "idle"}
                 onClick={() => {
+                  if (!formRef.current?.reportValidity()) return;
                   clearAutosaveTimer();
                   setSubmitMode("next");
                 }}

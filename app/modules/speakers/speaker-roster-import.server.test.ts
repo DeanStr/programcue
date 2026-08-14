@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { CrmService } from "~/modules/crm/crm-service.server";
+import { SBEK_FIXTURE_PEOPLE } from "~/platform/demo/demo-identities";
 import { ensureDemoSpeakerData } from "./demo.server";
 import { SpeakerRosterImportService } from "./speaker-roster-import.server";
 import { SpeakerService } from "./speaker-service.server";
@@ -15,6 +16,49 @@ const admin: Viewer = {
   organisationId: "org-future-events",
   eventId: "evt-foe-2025",
   demo: true,
+};
+
+const productionEvaluationAddresses = {
+  organizer: "evaluation-organizer@programcue.dev",
+  speaker: "evaluation-speaker@programcue.dev",
+  speaker2: "evaluation-speaker-2@programcue.dev",
+  reviewer: "evaluation-reviewer@programcue.dev",
+} as const;
+
+async function configureProductionEvaluationAddresses(
+  testEnv: CloudflareEnvironment,
+) {
+  await testEnv.DB.batch(
+    Object.entries(productionEvaluationAddresses).map(([identity, email]) =>
+      testEnv.DB.prepare(
+        `UPDATE people SET email = ?, updated_at = unixepoch() WHERE id = ?`,
+      ).bind(
+        email,
+        SBEK_FIXTURE_PEOPLE[
+          identity as keyof typeof productionEvaluationAddresses
+        ].personId,
+      ),
+    ),
+  );
+}
+
+function productionEnvironment(
+  testEnv: CloudflareEnvironment,
+  evaluationMode: "true" | "false",
+) {
+  return {
+    ...testEnv,
+    APP_ENV: "production",
+    DEMO_MODE: "false",
+    EVALUATION_MODE: evaluationMode,
+  } as unknown as CloudflareEnvironment;
+}
+
+const evaluationAdmin: Viewer = {
+  ...admin,
+  email: productionEvaluationAddresses.organizer,
+  demo: false,
+  evaluation: true,
 };
 
 async function confirmPreviewedRoster(
@@ -32,6 +76,163 @@ async function confirmPreviewedRoster(
 }
 
 describe("event speaker roster CSV import", () => {
+  it("routes an exact evaluator alias through the stronger preview contract", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    await configureProductionEvaluationAddresses(testEnv);
+    const service = new SpeakerRosterImportService(
+      productionEnvironment(testEnv, "true"),
+    );
+    const enteredEmail = "marcus.speaker@sbek-test.example.com";
+    const routedEmail = productionEvaluationAddresses.speaker2;
+    const csv = `name,email,title,company,bio\nMarcus Okafor,${enteredEmail},CTO,Relay Labs,Builds resilient systems.`;
+
+    const preview = await service.preview(evaluationAdmin, csv);
+    expect(preview.invalid).toEqual([]);
+    expect(preview.valid).toEqual([
+      expect.objectContaining({
+        enteredEmail,
+        email: routedEmail,
+        evaluatorEmailRouting: {
+          enteredEmail,
+          routedEmail,
+          personId: SBEK_FIXTURE_PEOPLE.speaker2.personId,
+        },
+        profileAction: "create_organisation_profile",
+      }),
+    ]);
+
+    const expectedResult = {
+      imported: 1,
+      evaluatorEmailRoutings: [
+        {
+          enteredEmail,
+          routedEmail,
+          personId: SBEK_FIXTURE_PEOPLE.speaker2.personId,
+        },
+      ],
+    };
+    const idempotencyKey = `evaluation-speaker-import:${crypto.randomUUID()}`;
+    await expect(
+      service.confirm(
+        evaluationAdmin,
+        csv,
+        idempotencyKey,
+        preview.previewFingerprint,
+      ),
+    ).resolves.toEqual(expectedResult);
+    const recoveryState = await testEnv.DB.prepare(
+      `UPDATE idempotency_records
+          SET status = 'processing', response_json = NULL
+        WHERE organisation_id = ? AND event_id = ? AND actor_id = ?
+          AND scope = 'speaker.roster.import' AND idempotency_key = ?`,
+    )
+      .bind(
+        evaluationAdmin.organisationId,
+        evaluationAdmin.eventId,
+        `person:${evaluationAdmin.personId}`,
+        idempotencyKey,
+      )
+      .run();
+    expect(recoveryState.meta.changes).toBe(1);
+    await expect(
+      service.confirm(
+        evaluationAdmin,
+        csv,
+        idempotencyKey,
+        preview.previewFingerprint,
+      ),
+    ).resolves.toEqual(expectedResult);
+
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT person_id AS personId
+           FROM memberships
+          WHERE organisation_id = ? AND event_id = ? AND role = 'speaker'
+            AND person_id = ?`,
+      )
+        .bind(
+          evaluationAdmin.organisationId,
+          evaluationAdmin.eventId,
+          SBEK_FIXTURE_PEOPLE.speaker2.personId,
+        )
+        .first(),
+    ).resolves.toEqual({ personId: SBEK_FIXTURE_PEOPLE.speaker2.personId });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM people WHERE email = ? COLLATE NOCASE`,
+      )
+        .bind(enteredEmail)
+        .first<{ count: number }>(),
+    ).resolves.toEqual({ count: 0 });
+    const audit = await testEnv.DB.prepare(
+      `SELECT metadata_json AS metadataJson
+         FROM audit_events
+        WHERE organisation_id = ? AND event_id = ?
+          AND action = 'speaker.roster.imported'
+          AND json_extract(
+            metadata_json,
+            '$.evaluatorEmailRoutings[0].enteredEmail'
+          ) = ?
+        LIMIT 1`,
+    )
+      .bind(
+        evaluationAdmin.organisationId,
+        evaluationAdmin.eventId,
+        enteredEmail,
+      )
+      .first<{ metadataJson: string }>();
+    expect(JSON.parse(audit!.metadataJson)).toEqual({
+      count: 1,
+      evaluatorEmailRoutings: expectedResult.evaluatorEmailRoutings,
+    });
+  });
+
+  it("fails exact evaluator aliases closed outside production evaluation mode", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    await configureProductionEvaluationAddresses(testEnv);
+    const enteredEmail = "marcus.speaker@sbek-test.example.com";
+    const preview = await new SpeakerRosterImportService(
+      productionEnvironment(testEnv, "false"),
+    ).preview(evaluationAdmin, `name,email\nUnrouted address,${enteredEmail}`);
+
+    expect(preview.valid).toEqual([]);
+    expect(preview.invalid).toEqual([
+      {
+        rowNumber: 2,
+        errors: [
+          "Evaluator email aliases can be used only through a signed production-evaluation session in the dedicated evaluation organisation.",
+        ],
+      },
+    ]);
+  });
+
+  it("fails preview when a fixed evaluator identity drifts to an unsafe address", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    await configureProductionEvaluationAddresses(testEnv);
+    await testEnv.DB.prepare(
+      `UPDATE people SET email = ?, updated_at = unixepoch() WHERE id = ?`,
+    )
+      .bind(
+        SBEK_FIXTURE_PEOPLE.speaker2.email,
+        SBEK_FIXTURE_PEOPLE.speaker2.personId,
+      )
+      .run();
+
+    await expect(
+      new SpeakerRosterImportService(
+        productionEnvironment(testEnv, "true"),
+      ).preview(
+        evaluationAdmin,
+        "name,email\nMarcus Okafor,marcus.speaker@sbek-test.example.com",
+      ),
+    ).rejects.toThrow(
+      `The production evaluation identity ${SBEK_FIXTURE_PEOPLE.speaker2.personId} does not have a safe routeable email address.`,
+    );
+  });
+
   it("preserves system provenance on a status-less import and then promotes confirmed participation", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
@@ -187,9 +388,7 @@ describe("event speaker roster CSV import", () => {
       await testEnv.DB.prepare("DELETE FROM memberships WHERE id = ?")
         .bind(membershipId)
         .run();
-      await testEnv.DB.prepare(
-        `DELETE FROM sessions WHERE id IN (?, ?, ?)`,
-      )
+      await testEnv.DB.prepare(`DELETE FROM sessions WHERE id IN (?, ?, ?)`)
         .bind(insertedSessionId, preservedSessionId, updatedSessionId)
         .run();
       await testEnv.DB.prepare("DELETE FROM people WHERE id IN (?, ?)")
@@ -426,11 +625,7 @@ describe("event speaker roster CSV import", () => {
       `Robin Vega,${email},Principal Engineer,Northstar Labs,Builds reliable event systems.,declined`,
     ].join("\n");
     await expect(
-      confirmPreviewedRoster(
-        service,
-        statusCsv,
-        `speaker-reimport:${suffix}`,
-      ),
+      confirmPreviewedRoster(service, statusCsv, `speaker-reimport:${suffix}`),
     ).resolves.toEqual({ imported: 1 });
     await expect(
       testEnv.DB.prepare(
@@ -477,7 +672,11 @@ describe("event speaker roster CSV import", () => {
         `INSERT INTO memberships (
            id, organisation_id, event_id, person_id, role, accepted_at, created_at
          ) VALUES (?, ?, NULL, ?, 'administrator', unixepoch(), unixepoch())`,
-      ).bind(`roster-existing-membership-${suffix}`, admin.organisationId, personId),
+      ).bind(
+        `roster-existing-membership-${suffix}`,
+        admin.organisationId,
+        personId,
+      ),
     ]);
     const service = new SpeakerRosterImportService(testEnv);
     const csv = [

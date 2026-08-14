@@ -82,6 +82,8 @@ export type Applicant =
       profileRevision: number;
       /** A co-speaker claim session may edit its speaker profile but cannot manage applications. */
       claimOnly?: boolean;
+      /** Set only by the signed production evaluation-session boundary. */
+      evaluation?: boolean;
     }
   | {
       personId: null;
@@ -149,8 +151,7 @@ export type AdminSubmission = {
 };
 
 export type AdminSubmissionRoutingFilter =
-  | "missing_automatic"
-  | "manual_override";
+  "missing_automatic" | "manual_override";
 
 export type AdminSubmissionFilters = {
   status?: string;
@@ -317,3 +318,23 @@ export class SubmissionDraftSavedError extends SubmissionStateError {
     this.name = "SubmissionDraftSavedError";
   }
 }
+
+export type SubmittedRevisionCommand = {
+  recordId: string;
+  organisationId: string;
+  eventId: string;
+  actorId: string;
+  scope: "submission.submitted.revise";
+  idempotencyKey: string;
+  requestHash: string;
+};
+
+export type SubmittedRevisionCommit = {
+  submissionId: string;
+  organisationId: string;
+  eventId: string;
+  revision: number;
+  invitationCount: number;
+  webhookCount: number;
+  auditEventId: string;
+};

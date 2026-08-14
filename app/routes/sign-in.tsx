@@ -17,6 +17,7 @@ import {
 } from "~/platform/auth/auth.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import { readEvaluationSession } from "~/platform/evaluation/evaluation-session.server";
 import {
   AbuseProtectionConfigurationError,
   AbuseRateLimitError,
@@ -27,6 +28,7 @@ import {
 } from "~/platform/http/public-abuse-protection.server";
 import { requestCorrelationId } from "~/platform/observability/request-correlation";
 import { sourceRevisionForLog } from "~/platform/observability/source-revision.server";
+import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 const ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,63}$/u;
 const MICROSOFT_ACCOUNT_NOT_LINKED = "account_not_linked";
@@ -60,6 +62,14 @@ export const meta: Route.MetaFunction = () => [
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   if (String(env.DEMO_MODE) === "true") return redirect("/demo");
+  if (
+    requireRuntimeMode(env).evaluation &&
+    (await readEvaluationSession(request, env))
+  ) {
+    return redirect("/evaluate", {
+      headers: { "cache-control": "private, no-store" },
+    });
+  }
   const url = new URL(request.url);
   const returnTo = safeReturnTo(url.searchParams.get("returnTo"));
   const oauthProvider =
@@ -295,6 +305,15 @@ export async function action({ request, context }: Route.ActionArgs) {
     });
   }
   const { env } = getCloudflareContext(context);
+  if (
+    requireRuntimeMode(env).evaluation &&
+    (await readEvaluationSession(request, env))
+  ) {
+    return redirect("/evaluate", {
+      status: 303,
+      headers: { "cache-control": "private, no-store" },
+    });
+  }
   const formData = await request.formData();
   const intent = formData.get("_intent");
   if (intent === "social_sign_in") {

@@ -180,15 +180,85 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
       throw new TaskStateError(
         "File task not found or not owned by this speaker.",
       );
-    if (["completed", "waived", "submitted"].includes(task.status))
-      throw new TaskStateError(
-        task.status === "submitted"
-          ? "This file task is already awaiting administrator review."
-          : "This task is already completed or waived.",
-      );
+    if (["completed", "waived"].includes(task.status))
+      throw new TaskStateError("This task is already completed or waived.");
     if (!(await this.dependenciesComplete(task.id)))
       throw new TaskStateError("Complete the prerequisite tasks first.");
     return task;
+  }
+
+  protected async submittedFileEvidence(
+    viewer: Viewer,
+    task: TaskRow,
+  ): Promise<{
+    assetId: string;
+    versionId: string;
+    versionNumber: number;
+  } | null> {
+    if (task.status !== "submitted") return null;
+    if (!task.evidenceJson) {
+      throw new TaskStateError(
+        "The submitted file task is missing canonical evidence metadata.",
+      );
+    }
+    let details: ReturnType<typeof parseTaskEvidenceDetails>;
+    try {
+      details = parseTaskEvidenceDetails(task.id, task.evidenceJson);
+    } catch {
+      throw new TaskStateError(
+        "The submitted file task has invalid canonical evidence metadata.",
+      );
+    }
+    if (!details.fileAssetId || !details.fileVersionId) {
+      throw new TaskStateError(
+        "The submitted file task is missing canonical evidence metadata.",
+      );
+    }
+    const canonical = await this.env.DB.prepare(
+      `SELECT version.version_number AS versionNumber
+         FROM file_assets asset
+         JOIN file_versions version
+           ON version.id = ? AND version.asset_id = asset.id
+          AND version.event_id = asset.event_id
+         JOIN task_evidence evidence
+           ON evidence.event_id = asset.event_id
+          AND evidence.task_id = asset.target_id
+          AND evidence.file_asset_id = asset.id
+          AND evidence.submitted_by_person_id = ?
+          AND evidence.status = 'submitted'
+          AND CASE WHEN json_valid(evidence.evidence_json)
+                THEN json_extract(evidence.evidence_json, '$.fileVersionId')
+              END = version.id
+        WHERE asset.id = ? AND asset.event_id = ?
+          AND asset.owner_person_id = ? AND asset.target_type = 'task'
+          AND asset.target_id = ? AND asset.asset_kind = 'task_evidence'
+          AND asset.status <> 'deleted' AND version.deleted_at IS NULL
+          AND version.created_by_person_id = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM audit_events audit
+             WHERE audit.id = 'file-erasure:' || asset.id
+          )`,
+    )
+      .bind(
+        details.fileVersionId,
+        viewer.personId,
+        details.fileAssetId,
+        viewer.eventId,
+        viewer.personId,
+        task.id,
+        viewer.personId,
+      )
+      .first<{ versionNumber: number }>();
+    if (!canonical || !Number.isSafeInteger(canonical.versionNumber)) {
+      throw new TaskStateError(
+        "The submitted file task has inconsistent canonical evidence.",
+      );
+    }
+    return {
+      assetId: details.fileAssetId,
+      versionId: details.fileVersionId,
+      versionNumber: canonical.versionNumber,
+    };
   }
 
   async completeParticipant(
@@ -730,9 +800,16 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
   ) {
     return this.env.DB.prepare(
       `
-      SELECT fa.id, fv.id AS versionId, fv.upload_status AS uploadStatus, fv.signature_status AS signatureStatus,
+      SELECT fa.id, fv.id AS versionId, fv.version_number AS versionNumber,
+             fv.upload_status AS uploadStatus, fv.signature_status AS signatureStatus,
              fv.scan_status AS scanStatus, evidence.id AS evidenceId,
-             evidence.status AS evidenceStatus
+             evidence.status AS evidenceStatus,
+             EXISTS (
+               SELECT 1 FROM task_evidence prior
+                WHERE prior.event_id = fa.event_id
+                  AND prior.task_id = fa.target_id
+                  AND prior.file_asset_id = fa.id
+             ) AS hasPriorEvidence
         FROM file_assets fa
         JOIN file_versions fv
           ON fv.id = ? AND fv.asset_id = fa.id AND fv.event_id = fa.event_id
@@ -741,7 +818,9 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
          AND evidence.task_id = fa.target_id
          AND evidence.file_asset_id = fa.id
          AND evidence.submitted_by_person_id = ?
-         AND json_extract(evidence.evidence_json, '$.fileVersionId') = fv.id
+         AND CASE WHEN json_valid(evidence.evidence_json)
+               THEN json_extract(evidence.evidence_json, '$.fileVersionId')
+             END = fv.id
        WHERE fa.id = ? AND fa.event_id = ? AND fa.owner_person_id = ?
          AND fa.target_type = 'task' AND fa.target_id = ?
          AND fa.asset_kind = 'task_evidence' AND fa.status <> 'deleted'
@@ -804,6 +883,23 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
         "File task not found or not owned by this speaker.",
       );
     let asset = await this.completedFileEvidenceAsset(viewer, input);
+    let submittedEvidence: Awaited<
+      ReturnType<ParticipantTaskWorkflows["submittedFileEvidence"]>
+    >;
+    try {
+      submittedEvidence = await this.submittedFileEvidence(viewer, ownedTask);
+    } catch (error) {
+      if (
+        error instanceof TaskStateError &&
+        asset?.evidenceId === null &&
+        asset?.uploadStatus === "uploaded" &&
+        asset.signatureStatus === "valid" &&
+        ["pending", "clean"].includes(asset.scanStatus)
+      ) {
+        throw new TaskEvidenceAttachmentConflictError(error.message);
+      }
+      throw error;
+    }
     await this.requireTaskWebhookReadiness(viewer, "task.updated");
     if (this.exactFileEvidenceAlreadyAttached(ownedTask, asset, input)) {
       const webhookWarning = await this.queueTaskWebhook(viewer, {
@@ -824,6 +920,23 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
       throw new TaskStateError(
         "The exact file version did not complete safely or is no longer attachable.",
       );
+    if (
+      submittedEvidence &&
+      (input.assetId !== submittedEvidence.assetId ||
+        input.versionId === submittedEvidence.versionId ||
+        asset.versionNumber <= submittedEvidence.versionNumber)
+    ) {
+      const message =
+        "A replacement must be a newer version of this task's canonical evidence asset.";
+      if (asset.evidenceId) throw new TaskStateError(message);
+      throw new TaskEvidenceAttachmentConflictError(message);
+    }
+    if (!submittedEvidence && asset.hasPriorEvidence) {
+      const message =
+        "Evidence from an earlier submission cannot be attached as a new task upload.";
+      if (asset.evidenceId) throw new TaskStateError(message);
+      throw new TaskEvidenceAttachmentConflictError(message);
+    }
     let task: TaskRow;
     try {
       task = await this.assertFileEvidenceUploadAllowed(viewer, input.taskId);
@@ -866,6 +979,15 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
           evidence_json = ?, submitted_at = unixepoch(), revision = revision + 1,
           last_operation_id = ?, updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND revision = ? AND status NOT IN ('completed','waived')
+           AND (
+             ? IS NULL
+             OR (
+               status = 'submitted'
+               AND json_valid(evidence_json)
+               AND json_extract(evidence_json, '$.fileAssetId') = ?
+               AND json_extract(evidence_json, '$.fileVersionId') = ?
+             )
+           )
            AND NOT EXISTS (
              SELECT 1 FROM task_instance_dependencies dep
              JOIN task_instances prerequisite ON prerequisite.id = dep.depends_on_task_id
@@ -896,6 +1018,9 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
         task.id,
         viewer.eventId,
         task.revision,
+        submittedEvidence?.versionId ?? null,
+        submittedEvidence?.assetId ?? null,
+        submittedEvidence?.versionId ?? null,
         input.versionId,
         input.assetId,
         viewer.personId,
@@ -904,13 +1029,27 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
       this.env.DB.prepare(
         `
         UPDATE task_evidence SET status = 'superseded'
-         WHERE task_id = ? AND status = 'submitted'
+         WHERE task_id = ? AND event_id = ? AND status = 'submitted'
+           AND ? IS NOT NULL AND file_asset_id = ?
+           AND CASE WHEN json_valid(evidence_json)
+                 THEN json_extract(evidence_json, '$.fileVersionId')
+               END = ?
            AND EXISTS (
              SELECT 1 FROM task_instances
               WHERE id = ? AND event_id = ? AND revision = ? AND last_operation_id = ?
            )
       `,
-      ).bind(task.id, task.id, viewer.eventId, task.revision + 1, operationId),
+      ).bind(
+        task.id,
+        viewer.eventId,
+        submittedEvidence?.versionId ?? null,
+        submittedEvidence?.assetId ?? null,
+        submittedEvidence?.versionId ?? null,
+        task.id,
+        viewer.eventId,
+        task.revision + 1,
+        operationId,
+      ),
       this.env.DB.prepare(
         `
         INSERT INTO task_evidence (id, event_id, task_id, submitted_by_person_id, file_asset_id, evidence_json, status, created_at)

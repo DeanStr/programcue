@@ -4,6 +4,7 @@ import {
   existingPersonOrganisationRelationshipSql,
   organisationRelationshipBindings,
   prepareSpeakerInvitations,
+  SpeakerInvitationAddressError,
   unacceptedEventParticipantEmails,
   unavailableDirectSessionSpeakerEmails,
 } from "~/modules/speakers/speaker-invitation.server";
@@ -35,10 +36,7 @@ import {
 } from "./submission-service-foundation.server";
 
 export abstract class SubmissionAdministrationWorkflows extends SubmissionApplicantWorkflows {
-  async listAdminSubmissions(
-    viewer: Viewer,
-    filters: AdminSubmissionFilters,
-  ) {
+  async listAdminSubmissions(viewer: Viewer, filters: AdminSubmissionFilters) {
     await this.airtable.assertReadable(viewer);
     return this.repository.listAdminSubmissions(
       viewer.organisationId,
@@ -462,18 +460,26 @@ export abstract class SubmissionAdministrationWorkflows extends SubmissionApplic
       },
       auditEventId,
     );
-    const invitationPlans = await prepareSpeakerInvitations({
-      env: this.env,
-      actor: {
-        organisationId: actor.organisationId,
-        eventId: actor.eventId,
-        personId: isSubmissionApiActor(actor) ? null : actor.personId,
-        actorId: isSubmissionApiActor(actor) ? actor.actorId : undefined,
-      },
-      commandId: command.recordId,
-      source: "direct_session",
-      emails: input.speakers.map((speaker) => speaker.email),
-    });
+    let invitationPlans: Awaited<ReturnType<typeof prepareSpeakerInvitations>>;
+    try {
+      invitationPlans = await prepareSpeakerInvitations({
+        env: this.env,
+        actor: {
+          organisationId: actor.organisationId,
+          eventId: actor.eventId,
+          personId: isSubmissionApiActor(actor) ? null : actor.personId,
+          actorId: isSubmissionApiActor(actor) ? actor.actorId : undefined,
+        },
+        commandId: command.recordId,
+        source: "direct_session",
+        emails: input.speakers.map((speaker) => speaker.email),
+      });
+    } catch (error) {
+      if (error instanceof SpeakerInvitationAddressError) {
+        throw new SubmissionStateError(error.message);
+      }
+      throw error;
+    }
     const statements: D1PreparedStatement[] = [
       ...this.adminMutationClaimStatements(command),
     ];

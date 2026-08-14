@@ -1937,7 +1937,7 @@ components:
       properties:
         revision: { type: integer, minimum: 1 }
         name: { type: string, minLength: 2, maxLength: 120 }
-        biography: { type: string, minLength: 40, maxLength: 2000 }
+        biography: { type: string, minLength: 40, maxLength: 5000 }
     ParticipantProfileCommandResponse:
       type: object
       additionalProperties: false
@@ -2448,6 +2448,7 @@ components:
               submitted_applicants,
               decision_recipients,
               accepted_speakers,
+              active_speakers,
               incomplete_speakers,
               due_speakers,
               overdue_speakers,
@@ -2478,6 +2479,7 @@ components:
               submitted_applicants,
               decision_recipients,
               accepted_speakers,
+              active_speakers,
               incomplete_speakers,
               due_speakers,
               overdue_speakers,
@@ -2513,6 +2515,7 @@ components:
               submitted_applicants,
               decision_recipients,
               accepted_speakers,
+              active_speakers,
               incomplete_speakers,
               due_speakers,
               overdue_speakers,

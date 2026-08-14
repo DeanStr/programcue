@@ -9,6 +9,7 @@ import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   action,
+  acceptedParticipantManagementHref,
   applicationDraftHref,
   claimApplicantVideoUploadOperation,
   loader,
@@ -36,6 +37,17 @@ beforeEach(async () => {
 });
 
 describe("public application mutations", () => {
+  it("routes accepted participant management through the exact event selector", () => {
+    expect(
+      acceptedParticipantManagementHref(
+        "event-with-multiple-roles",
+        "submitted-proposal",
+      ),
+    ).toBe(
+      "/events/select?eventId=event-with-multiple-roles&returnTo=%2Fparticipant%2Fapplications%3Fapplication%3Dsubmitted-proposal%23participant-application-detail",
+    );
+  });
+
   it("opens a closed form only for an exact co-speaker claim token", async () => {
     const form = await env.DB.prepare(
       `SELECT form.id, form.event_id AS eventId, version.id AS versionId
@@ -516,7 +528,7 @@ describe("public application mutations", () => {
        ) VALUES (?, 'org-future-events', 'evt-foe-2025',
                  'Application events', 'https://hooks.example.com/program-cue',
                  'unused-test-ciphertext',
-                 '["submission.created","submission.submitted","submission.withdrawn"]',
+                 '["submission.created","submission.submitted","submission.updated","submission.withdrawn"]',
                  'active',
                  unixepoch(), unixepoch())`,
     )
@@ -684,6 +696,86 @@ describe("public application mutations", () => {
       .first<{ revision: number; status: string }>();
     expect(submittedRow?.status).toBe("submitted");
 
+    const revisedDescription =
+      "Exercise every public application lifecycle event. Updated: now includes 2026 benchmark data.";
+    const crossOriginRevision = await action({
+      request: new Request("http://localhost/apply/form", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: verifiedCookie,
+          origin: "https://attacker.example",
+        },
+        body: new URLSearchParams({
+          _intent: "revise_submission",
+          intentId: crypto.randomUUID(),
+          confirmRevision: "yes",
+          ...applicationPayload,
+          revision: String(submittedRow!.revision),
+          answers: JSON.stringify({
+            ...JSON.parse(applicationPayload.answers),
+            description: revisedDescription,
+          }),
+        }),
+      }),
+      params: { slug: "form" },
+      context: context(testEnv),
+    } as never);
+    expect(crossOriginRevision).toBeInstanceOf(Response);
+    expect((crossOriginRevision as Response).status).toBe(403);
+    await expect(
+      env.DB.prepare(
+        `SELECT revision, status FROM submissions
+          WHERE id = ? AND event_id = 'evt-foe-2025'`,
+      )
+        .bind(submissionId)
+        .first(),
+    ).resolves.toEqual(submittedRow);
+
+    const revised = await action({
+      request: new Request("http://localhost/apply/form", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: verifiedCookie,
+          origin: "http://localhost",
+        },
+        body: new URLSearchParams({
+          _intent: "revise_submission",
+          intentId: crypto.randomUUID(),
+          confirmRevision: "yes",
+          ...applicationPayload,
+          revision: String(submittedRow!.revision),
+          answers: JSON.stringify({
+            ...JSON.parse(applicationPayload.answers),
+            description: revisedDescription,
+          }),
+        }),
+      }),
+      params: { slug: "form" },
+      context: context(testEnv),
+    } as never);
+    if (revised instanceof Response) {
+      throw new Error("Partially delivered revision unexpectedly redirected.");
+    }
+    expect(revised.init?.status).toBe(207);
+    expect(revised.data).toMatchObject({
+      committed: true,
+      submissionId,
+      revision: submittedRow!.revision + 1,
+    });
+    const revisedRow = await env.DB.prepare(
+      `SELECT revision, status, submitted_snapshot_json AS snapshotJson
+         FROM submissions
+        WHERE id = ? AND event_id = 'evt-foe-2025'`,
+    )
+      .bind(submissionId)
+      .first<{ revision: number; status: string; snapshotJson: string }>();
+    expect(revisedRow?.status).toBe("submitted");
+    expect(JSON.parse(revisedRow!.snapshotJson).answers.description).toBe(
+      revisedDescription,
+    );
+
     const withdrawn = await action({
       request: new Request("http://localhost/apply/form", {
         method: "POST",
@@ -695,7 +787,7 @@ describe("public application mutations", () => {
         body: new URLSearchParams({
           _intent: "withdraw",
           submissionId,
-          revision: String(submittedRow!.revision),
+          revision: String(revisedRow!.revision),
           confirmWithdrawal: "yes",
         }),
       }),
@@ -722,7 +814,7 @@ describe("public application mutations", () => {
         body: new URLSearchParams({
           _intent: "withdraw",
           submissionId,
-          revision: String(submittedRow!.revision),
+          revision: String(revisedRow!.revision),
           confirmWithdrawal: "yes",
         }),
       }),
@@ -772,6 +864,11 @@ describe("public application mutations", () => {
         entityId: submissionId,
       },
       {
+        eventType: "submission.updated",
+        entityType: "submission",
+        entityId: submissionId,
+      },
+      {
         eventType: "submission.withdrawn",
         entityType: "submission",
         entityId: submissionId,
@@ -782,6 +879,7 @@ describe("public application mutations", () => {
     ).toEqual([
       `webhook:${endpointId}:submission.created:${submissionId}`,
       `webhook:${endpointId}:submission.submitted:${submissionId}`,
+      `webhook:${endpointId}:submission.updated:${submissionId}:${revisedRow!.revision}`,
       `webhook:${endpointId}:submission.withdrawn:${submissionId}`,
     ]);
     expect(
@@ -792,7 +890,7 @@ describe("public application mutations", () => {
           "type" in message &&
           message.type === "webhook.deliver",
       ),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     expect(
       queuedMessages.filter(
         (message) =>

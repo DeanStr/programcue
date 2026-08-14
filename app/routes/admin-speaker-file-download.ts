@@ -19,6 +19,10 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       viewer,
       params.personId,
       params.assetId,
+      {
+        inlineHeadshot:
+          new URL(request.url).searchParams.get("view") === "headshot",
+      },
     );
   } catch (error) {
     if (error instanceof FileAccessError) {

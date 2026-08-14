@@ -16,6 +16,8 @@ export type {
   FormSummary,
   FormVersion,
   FormWorkspace,
+  SubmittedRevisionCommand,
+  SubmittedRevisionCommit,
 } from "./submission-repository-shared";
 
 /**
@@ -120,6 +122,12 @@ export class D1SubmissionRepository {
     ...args: Parameters<SubmissionApplicantRepository["submitDraft"]>
   ) {
     return this.applicants.submitDraft(...args);
+  }
+
+  reviseSubmitted(
+    ...args: Parameters<SubmissionApplicantRepository["reviseSubmitted"]>
+  ) {
+    return this.applicants.reviseSubmitted(...args);
   }
 
   listAdminSubmissions(

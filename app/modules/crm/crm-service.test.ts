@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { CrmService, CrmStateError } from "./crm-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { SpeakerService } from "~/modules/speakers/speaker-service.server";
 import type { OrganisationAdministrator } from "~/platform/auth/organisation.server";
 
 declare module "cloudflare:test" {
@@ -418,6 +419,47 @@ describe("organisation speaker CRM", () => {
     });
   });
 
+  it("refuses to merge a secondary identity on any event speaker roster", async () => {
+    const { testEnv, crm } = await service();
+    const suffix = crypto.randomUUID();
+    const primary = await crm.createContact(administrator, {
+      name: "Roster-linked CRM Contact",
+      email: `roster-primary-${suffix}@example.com`,
+      jobTitle: "",
+      organisationName: "",
+      biography: "",
+    });
+    const secondary = await crm.createContact(administrator, {
+      name: "Roster-linked CRM Contact",
+      email: `roster-secondary-${suffix}@example.com`,
+      jobTitle: "",
+      organisationName: "",
+      biography: "",
+    });
+    await testEnv.DB.prepare(
+      `INSERT INTO event_speaker_workflows (
+         event_id, person_id, status, source, last_operation_id,
+         updated_by_person_id, created_at, updated_at
+       ) VALUES (?, ?, 'prospect', 'manual', ?, ?, unixepoch(), unixepoch())`,
+    )
+      .bind(
+        administrator.currentEventId,
+        secondary.personId,
+        `roster-merge-guard-${suffix}`,
+        administrator.personId,
+      )
+      .run();
+
+    await expect(
+      crm.mergeContacts(administrator, primary.personId, secondary.personId),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("event roster"),
+    });
+    await expect(
+      crm.getContact(administrator, secondary.personId),
+    ).resolves.toMatchObject({ personId: secondary.personId });
+  });
+
   it("persists pipeline moves, notes and timestamped transition history", async () => {
     const { crm } = await service();
     const contact = await crm.createContact(administrator, {
@@ -461,7 +503,7 @@ describe("organisation speaker CRM", () => {
     );
   });
 
-  it("hands a canonical contact to an event and creates outreach in the existing communications domain", async () => {
+  it("hands a contact to the event roster as an idempotent, audited prospect without granting access", async () => {
     const { testEnv, crm } = await service();
     const first = await crm.createContact(administrator, {
       name: "Outreach One",
@@ -477,17 +519,48 @@ describe("organisation speaker CRM", () => {
       organisationName: "Two Co",
       biography: "Two bio",
     });
+    const rosterOnlyCrm = new CrmService(
+      new Proxy(testEnv, {
+        get(target, property) {
+          if (property === "DB") return target.DB;
+          throw new Error(
+            `Roster handoff unexpectedly read the ${String(property)} binding.`,
+          );
+        },
+      }),
+    );
+    const idempotencyKey = `crm-event-${crypto.randomUUID()}`;
+    const handoff = await rosterOnlyCrm.addContactToEvent(
+      administrator,
+      first.personId,
+      administrator.currentEventId,
+      idempotencyKey,
+    );
+    expect(handoff).toEqual({
+      eventId: administrator.currentEventId,
+      personId: first.personId,
+      workflowStatus: "prospect",
+      created: true,
+    });
     await expect(
-      crm.addContactToEvent(
+      rosterOnlyCrm.addContactToEvent(
         administrator,
         first.personId,
         administrator.currentEventId,
-        `crm-event-${crypto.randomUUID()}`,
+        idempotencyKey,
       ),
-    ).resolves.toEqual({
-      eventId: administrator.currentEventId,
-      personId: first.personId,
-      accepted: false,
+    ).resolves.toEqual(handoff);
+
+    const workflow = await testEnv.DB.prepare(
+      `SELECT status, source, revision FROM event_speaker_workflows
+        WHERE event_id = ? AND person_id = ?`,
+    )
+      .bind(administrator.currentEventId, first.personId)
+      .first<{ status: string; source: string; revision: number }>();
+    expect(workflow).toEqual({
+      status: "prospect",
+      source: "manual",
+      revision: 1,
     });
     const membership = await testEnv.DB.prepare(
       `SELECT role FROM memberships
@@ -495,7 +568,102 @@ describe("organisation speaker CRM", () => {
     )
       .bind(administrator.currentEventId, first.personId)
       .first<{ role: string }>();
-    expect(membership?.role).toBe("speaker");
+    expect(membership).toBeNull();
+    const audits = await testEnv.DB.prepare(
+      `SELECT metadata_json AS metadataJson FROM audit_events
+        WHERE organisation_id = ? AND event_id = ?
+          AND action = 'speaker.admin.prospect_added'
+          AND entity_type = 'person' AND entity_id = ?`,
+    )
+      .bind(
+        administrator.organisationId,
+        administrator.currentEventId,
+        first.personId,
+      )
+      .all<{ metadataJson: string }>();
+    expect(audits.results).toHaveLength(1);
+    expect(JSON.parse(audits.results[0]!.metadataJson)).toEqual({
+      source: "speaker_network",
+      workflowStatus: "prospect",
+      created: 1,
+    });
+    const roster = await new SpeakerService(testEnv).listAdminSpeakerPage(
+      { ...administrator, eventId: administrator.currentEventId },
+      { personId: first.personId },
+      1,
+    );
+    expect(roster.speakers).toEqual([
+      expect.objectContaining({
+        id: first.personId,
+        name: "Outreach One",
+        jobTitle: "Engineer",
+        organisationName: "One Co",
+        workflowStatus: "prospect",
+      }),
+    ]);
+
+    const confirmedOperationId = `crm-confirmed-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `UPDATE event_speaker_workflows
+          SET status = 'confirmed', revision = revision + 1,
+              last_operation_id = ?, updated_at = unixepoch()
+        WHERE event_id = ? AND person_id = ?`,
+    )
+      .bind(confirmedOperationId, administrator.currentEventId, first.personId)
+      .run();
+    await expect(
+      rosterOnlyCrm.addContactToEvent(
+        administrator,
+        first.personId,
+        administrator.currentEventId,
+        `crm-event-existing-${crypto.randomUUID()}`,
+      ),
+    ).resolves.toEqual({
+      eventId: administrator.currentEventId,
+      personId: first.personId,
+      workflowStatus: "confirmed",
+      created: false,
+    });
+    const preservedWorkflow = await testEnv.DB.prepare(
+      `SELECT status, revision, last_operation_id AS lastOperationId
+         FROM event_speaker_workflows
+        WHERE event_id = ? AND person_id = ?`,
+    )
+      .bind(administrator.currentEventId, first.personId)
+      .first<{
+        status: string;
+        revision: number;
+        lastOperationId: string;
+      }>();
+    expect(preservedWorkflow).toEqual({
+      status: "confirmed",
+      revision: 2,
+      lastOperationId: confirmedOperationId,
+    });
+
+    for (const inactiveStatus of ["declined", "withdrawn"] as const) {
+      await testEnv.DB.prepare(
+        `UPDATE event_speaker_workflows
+            SET status = ?, revision = revision + 1,
+                last_operation_id = ?, updated_at = unixepoch()
+          WHERE event_id = ? AND person_id = ?`,
+      )
+        .bind(
+          inactiveStatus,
+          `crm-inactive-${inactiveStatus}-${crypto.randomUUID()}`,
+          administrator.currentEventId,
+          first.personId,
+        )
+        .run();
+      await expect(
+        rosterOnlyCrm.addContactToEvent(
+          administrator,
+          first.personId,
+          administrator.currentEventId,
+          `crm-event-${inactiveStatus}-${crypto.randomUUID()}`,
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+    }
 
     const outreachInput = {
       personIds: [first.personId, second.personId],

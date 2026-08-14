@@ -5,13 +5,21 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { Form, useSubmit } from "react-router";
+import { Form, Link, useSubmit } from "react-router";
 
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import type { SpeakerPortal } from "~/components/speaker-dashboard-panel-shared";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { maximumMegabytes } from "~/modules/files/file-policy";
+
+function formatUploadTimestamp(epoch: number, timezone: string) {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: timezone,
+  }).format(new Date(epoch * 1_000));
+}
 
 export function SpeakerFilesPanel({
   portal,
@@ -36,38 +44,40 @@ export function SpeakerFilesPanel({
         Every upload is signature-checked and quarantined. Downloads appear only
         after an external malware scanner reports a clean result.
       </p>
-      <DirectMultipartUpload
-        target={{ targetType: "person", targetId: portal.profile.id }}
-        kinds={[
-          {
-            value: "headshot",
-            label: `Headshot (JPG, PNG, WebP · ${maximumMegabytes(portal.event.filePolicy.headshotMaximumBytes)} MB)`,
-            accept: "image/jpeg,image/png,image/webp",
-            maximumBytes: portal.event.filePolicy.headshotMaximumBytes,
-          },
-          {
-            value: "slides",
-            label: `Presentation slides (PDF, PPT, PPTX · ${maximumMegabytes(portal.event.filePolicy.slidesMaximumBytes)} MB)`,
-            accept:
-              "application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            maximumBytes: portal.event.filePolicy.slidesMaximumBytes,
-          },
-          {
-            value: "supporting_document",
-            label: `Supporting document (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB)`,
-            accept:
-              ".pdf,.doc,.docx,.xls,.xlsx,.zip,application/pdf,application/zip",
-            maximumBytes:
-              portal.event.filePolicy.supportingDocumentMaximumBytes,
-          },
-          {
-            value: "video",
-            label: `Video (MP4, WebM · ${maximumMegabytes(portal.event.filePolicy.videoMaximumBytes)} MB)`,
-            accept: "video/mp4,video/webm",
-            maximumBytes: portal.event.filePolicy.videoMaximumBytes,
-          },
-        ]}
-      />
+      <div id="headshot-upload">
+        <DirectMultipartUpload
+          target={{ targetType: "person", targetId: portal.profile.id }}
+          kinds={[
+            {
+              value: "headshot",
+              label: `Headshot (JPG, PNG, WebP · ${maximumMegabytes(portal.event.filePolicy.headshotMaximumBytes)} MB)`,
+              accept: "image/jpeg,image/png,image/webp",
+              maximumBytes: portal.event.filePolicy.headshotMaximumBytes,
+            },
+            {
+              value: "slides",
+              label: `Presentation slides (PDF, PPT, PPTX · ${maximumMegabytes(portal.event.filePolicy.slidesMaximumBytes)} MB)`,
+              accept:
+                "application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation",
+              maximumBytes: portal.event.filePolicy.slidesMaximumBytes,
+            },
+            {
+              value: "supporting_document",
+              label: `Supporting document (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB)`,
+              accept:
+                ".pdf,.doc,.docx,.xls,.xlsx,.zip,application/pdf,application/zip",
+              maximumBytes:
+                portal.event.filePolicy.supportingDocumentMaximumBytes,
+            },
+            {
+              value: "video",
+              label: `Video (MP4, WebM · ${maximumMegabytes(portal.event.filePolicy.videoMaximumBytes)} MB)`,
+              accept: "video/mp4,video/webm",
+              maximumBytes: portal.event.filePolicy.videoMaximumBytes,
+            },
+          ]}
+        />
+      </div>
       <div className="stack mt">
         {portal.files.map((file) => (
           <div className="file-version-row" key={file.id}>
@@ -79,6 +89,16 @@ export function SpeakerFilesPanel({
               <small>
                 {file.filename} · version {file.versionNumber ?? "—"}
               </small>
+              {file.downloadFilename && file.downloadUploadedAt ? (
+                <small>
+                  Current released file: {file.downloadFilename} · uploaded by{" "}
+                  {file.downloadUploaderName} ·{" "}
+                  {formatUploadTimestamp(
+                    file.downloadUploadedAt,
+                    portal.event.timezone,
+                  )}
+                </small>
+              ) : null}
             </span>
             <DomainStatusBadge
               domain="file"
@@ -155,6 +175,17 @@ export function SpeakerProfilePanel({
   portal: SpeakerPortal;
   busy: boolean;
 }) {
+  const headshot = portal.files.find(
+    (file) =>
+      file.kind === "headshot" &&
+      file.targetType === "person" &&
+      file.targetId === portal.profile.id &&
+      file.currentVersionId &&
+      file.downloadReleasedAt &&
+      file.downloadUploadedAt &&
+      file.downloadFilename &&
+      file.downloadUploaderName,
+  );
   return (
     <section className="card pad mt" id="profile">
       <div className="card-title">
@@ -163,6 +194,34 @@ export function SpeakerProfilePanel({
           <h2>Profile</h2>
         </div>
         <UserRound aria-hidden className="subtle" />
+      </div>
+      <div className="speaker-headshot-card mb">
+        {headshot ? (
+          <img
+            className="speaker-headshot-image"
+            src={`/participant/files/${headshot.id}?view=headshot`}
+            alt={`${portal.profile.name} headshot`}
+          />
+        ) : (
+          <span className="speaker-headshot-placeholder">
+            <UserRound aria-hidden size={38} />
+          </span>
+        )}
+        <div className="stack">
+          <div>
+            <strong>
+              {headshot ? "Current headshot" : "Add your headshot"}
+            </strong>
+            <p className="subtle">
+              {headshot
+                ? `${headshot.downloadFilename} · uploaded ${formatUploadTimestamp(headshot.downloadUploadedAt!, portal.event.timezone)}`
+                : "Upload a JPG, PNG or WebP file for organiser review and your published profile."}
+            </p>
+          </div>
+          <Link className="btn" to="/participant/files#headshot-upload">
+            {headshot ? "Replace headshot" : "Upload headshot"}
+          </Link>
+        </div>
       </div>
       <Form method="post" className="stack">
         <input type="hidden" name="intent" value="save-profile" />
@@ -202,6 +261,32 @@ export function SpeakerProfilePanel({
             defaultValue={portal.profile.pronunciation ?? ""}
           />
         </label>
+        <div className="form-row">
+          <label className="label">
+            LinkedIn profile URL
+            <input
+              className="field"
+              name="linkedinUrl"
+              type="url"
+              inputMode="url"
+              placeholder="https://www.linkedin.com/in/your-name"
+              defaultValue={portal.profile.linkedinUrl ?? ""}
+              maxLength={500}
+            />
+          </label>
+          <label className="label">
+            X handle
+            <input
+              className="field"
+              name="xHandle"
+              placeholder="@your_handle"
+              defaultValue={
+                portal.profile.xHandle ? `@${portal.profile.xHandle}` : ""
+              }
+              maxLength={16}
+            />
+          </label>
+        </div>
         <label className="label">
           Biography
           <textarea
@@ -209,9 +294,25 @@ export function SpeakerProfilePanel({
             name="biography"
             defaultValue={portal.profile.biography ?? ""}
             minLength={40}
+            maxLength={5_000}
             required
             rows={7}
           />
+        </label>
+        <label className="label">
+          Travel and logistics preferences
+          <textarea
+            className="textarea"
+            name="travelPreferences"
+            defaultValue={portal.profile.travelPreferences ?? ""}
+            maxLength={2_000}
+            rows={4}
+            placeholder="Arrival timing, accessibility, ground transport, dietary or other event logistics preferences"
+          />
+          <span className="help">
+            Private to you and authorised organisers; never shown on the public
+            programme.
+          </span>
         </label>
         <label className="speaker-confirm">
           <input

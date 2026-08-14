@@ -1,6 +1,8 @@
 import type { PreparedApplicantMutationEvent } from "./submission-applicant-events.server";
+import type { EvaluatorEmailRouting } from "~/platform/evaluation/evaluator-email-alias.server";
 import { SubmissionCoSpeakerRepository } from "./submission-co-speaker-repository.server";
 import { SubmissionDraftFinalizer } from "./submission-draft-finalizer.server";
+import { SubmissionRevisionFinalizer } from "./submission-revision-finalizer.server";
 import {
   mapVersion,
   SubmissionRevisionConflictError,
@@ -9,6 +11,7 @@ import {
   type ApplicantDraft,
   type FormSummary,
   type FormVersion,
+  type SubmittedRevisionCommand,
   type VersionRow,
 } from "./submission-repository-shared";
 import {
@@ -411,7 +414,10 @@ export class SubmissionApplicantRepository {
     form: FormSummary & { version: FormVersion },
     applicant: Applicant,
     payload: DraftPayload,
-    command: { operationId: string } | null = null,
+    command: {
+      operationId?: string;
+      evaluatorEmailRoutings?: EvaluatorEmailRouting[];
+    } | null = null,
   ) {
     const operationId = command?.operationId ?? crypto.randomUUID();
     const nextRevision = payload.revision + 1;
@@ -612,6 +618,9 @@ export class SubmissionApplicantRepository {
         JSON.stringify({
           speakerCount: payload.speakers.length,
           revision: nextRevision,
+          ...(command?.evaluatorEmailRoutings?.length
+            ? { evaluatorEmailRoutings: command.evaluatorEmailRoutings }
+            : {}),
         }),
         form.eventId,
         payload.submissionId,
@@ -846,11 +855,32 @@ export class SubmissionApplicantRepository {
       routedTeamIds: string[];
       upload?: { fieldId: string; assetId: string; versionId: string } | null;
       operationId?: string;
+      evaluatorEmailRoutings?: EvaluatorEmailRouting[];
     },
   ) {
     return new SubmissionDraftFinalizer(
       this.env,
       this.saveDraft.bind(this),
     ).submitDraft(form, applicant, payload, options);
+  }
+
+  async reviseSubmitted(
+    form: FormSummary & { version: FormVersion },
+    applicant: Extract<Applicant, { verified: true }>,
+    payload: DraftPayload,
+    options: {
+      trackSelections: Array<{ trackId: string; trackName: string }>;
+      routedTeamIds: string[];
+      command: SubmittedRevisionCommand;
+      event: PreparedApplicantMutationEvent;
+      evaluatorEmailRoutings?: EvaluatorEmailRouting[];
+    },
+  ) {
+    return new SubmissionRevisionFinalizer(this.env).revise(
+      form,
+      applicant,
+      payload,
+      options,
+    );
   }
 }

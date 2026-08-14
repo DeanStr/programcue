@@ -77,6 +77,11 @@ export function AdminTaskPlanPanel({
         </div>
         <Form method="post" className="stack">
           <input type="hidden" name="intent" value="assign" />
+          <input
+            type="hidden"
+            name="assignIntentId"
+            value={data.assignIntentId}
+          />
           <label className="label">
             Template
             <select
@@ -102,6 +107,10 @@ export function AdminTaskPlanPanel({
               {assignmentTargets.map((target) => (
                 <option value={target.id} key={target.id}>
                   {target.name}
+                  {selectedTemplate?.targetType === "speaker" &&
+                  "email" in target
+                    ? ` · ${target.email}`
+                    : ""}
                 </option>
               ))}
             </select>
@@ -116,11 +125,11 @@ export function AdminTaskPlanPanel({
           </button>
         </Form>
       </section>
-      <details className="card pad" open={!data.templates.length}>
-        <summary>
-          <strong>Create task template</strong>
-        </summary>
-        <Form method="post" className="stack mt">
+      <section className="card pad" aria-labelledby="create-task-template">
+        <div className="card-title">
+          <h2 id="create-task-template">Create task template</h2>
+        </div>
+        <Form method="post" className="stack">
           <input type="hidden" name="intent" value="create-template" />
           <input type="hidden" name="intentId" value={data.intentId} />
           <label className="label">
@@ -272,7 +281,7 @@ export function AdminTaskPlanPanel({
             <Plus aria-hidden size={15} /> Create template
           </button>
         </Form>
-      </details>
+      </section>
     </aside>
   );
 }

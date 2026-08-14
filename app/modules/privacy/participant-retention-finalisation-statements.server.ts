@@ -138,6 +138,12 @@ export function buildParticipantRetentionFinalisationStatements(
       viewer.eventId,
     ),
     guarded(
+      `DELETE FROM event_participant_profiles
+        WHERE event_id = ? AND organisation_id = ?`,
+      viewer.eventId,
+      viewer.organisationId,
+    ),
+    guarded(
       `UPDATE task_instances
           SET title = 'Retained participant task',
               description = NULL,
