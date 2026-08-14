@@ -569,6 +569,24 @@ def validate_canonical_demo_dates_forward_migration() -> None:
           ('demo-entry-3', 'evt-foe-2025', 'demo-schedule-published', 'demo-session-3', 'main', unixepoch('2025-05-20T15:15:00Z'), unixepoch('2025-05-20T16:15:00Z')),
           ('demo-entry-4', 'evt-foe-2025', 'demo-schedule-published', 'demo-session-4', 'main', unixepoch('2025-05-21T13:30:00Z'), unixepoch('2025-05-21T14:15:00Z')),
           ('demo-entry-5', 'evt-foe-2025', 'demo-schedule-published', 'demo-session-5', 'main', unixepoch('2025-05-21T17:00:00Z'), unixepoch('2025-05-21T18:00:00Z'));
+        UPDATE schedule_versions
+           SET status = 'archived'
+         WHERE id = 'demo-schedule-published';
+        INSERT INTO schedule_versions (
+          id, event_id, version_number, status, published_at
+        ) VALUES (
+          'evaluation-schedule-published', 'evt-foe-2025', 2, 'published',
+          unixepoch('2025-05-02T12:00:00Z')
+        );
+        INSERT INTO schedule_entries (
+          id, event_id, schedule_version_id, session_id, room_id,
+          starts_at, ends_at
+        ) VALUES (
+          'evaluation-generated-entry', 'evt-foe-2025',
+          'evaluation-schedule-published', 'demo-session-1', 'main',
+          unixepoch('2025-05-20T11:00:00Z'),
+          unixepoch('2025-05-20T12:00:00Z')
+        );
         INSERT INTO task_templates (
           id, event_id, name, target_type, task_type, impact, evidence_mode,
           due_anchor, fixed_due_at, auto_assign_on_acceptance
@@ -623,6 +641,36 @@ def validate_canonical_demo_dates_forward_migration() -> None:
         ("demo-entry-5", "2027-05-21 17:00:00", "2027-05-21 18:00:00"),
     ]:
         raise SystemExit("The existing canonical demo schedule was not migrated")
+    generated_entry_before_followup = deployed.execute(
+        """
+        SELECT datetime(starts_at, 'unixepoch'), datetime(ends_at, 'unixepoch')
+          FROM schedule_entries
+         WHERE id = 'evaluation-generated-entry'
+        """
+    ).fetchone()
+    if generated_entry_before_followup != (
+        "2025-05-20 11:00:00",
+        "2025-05-20 12:00:00",
+    ):
+        raise SystemExit(
+            "The forward-migration fixture no longer represents a generated published entry"
+        )
+    deployed.executescript(
+        root.joinpath(
+            "migrations/0016_canonical_fixture_schedule_dates.sql"
+        ).read_text()
+    )
+    generated_entry = deployed.execute(
+        """
+        SELECT datetime(starts_at, 'unixepoch'), datetime(ends_at, 'unixepoch')
+          FROM schedule_entries
+         WHERE id = 'evaluation-generated-entry'
+        """
+    ).fetchone()
+    if generated_entry != ("2027-05-20 11:00:00", "2027-05-20 12:00:00"):
+        raise SystemExit(
+            "The generated canonical fixture schedule entry was not migrated"
+        )
     deadline = deployed.execute(
         """
         SELECT datetime(form.closes_at, 'unixepoch'),
