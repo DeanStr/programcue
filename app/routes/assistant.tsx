@@ -94,6 +94,32 @@ type ActionResult =
       approval: null;
     };
 
+/**
+ * An `AiProviderError` carries the upstream provider's own wording — request
+ * ids, quota internals, model names — which is a diagnostic, not copy. What
+ * the reader needs instead is whether waiting will help. HTTP status answers
+ * that for provider responses, while `failureKind` distinguishes a transport
+ * failure from a response that arrived but did not match the contract.
+ */
+export function providerFailureMessage(error: unknown) {
+  const status = (error as { status?: number | null }).status ?? null;
+  const failureKind = (error as { failureKind?: unknown }).failureKind;
+  if (status === 401 || status === 403)
+    return "The AI provider rejected Program Cue's credentials. An organisation owner needs to check the provider settings for this organisation.";
+  if (status === 404 || status === 422 || status === 400)
+    return "The AI provider rejected the configured model or request. An organisation owner needs to review the provider and model selected for this organisation.";
+  if (status === 413)
+    return "This request is too large for the configured model. Ask about a smaller part of the event, or select a model with a larger context.";
+  if (status === 429)
+    return "The AI provider is rate limiting or has no quota left. Wait before trying again, or check the plan on your provider account.";
+  if (
+    failureKind === "transient" ||
+    (status !== null && (status === 408 || status === 425 || status >= 500))
+  )
+    return "The AI provider is temporarily unavailable. Try again in a moment.";
+  return "The AI provider returned a response Program Cue could not read. Report this if it keeps happening.";
+}
+
 function knownErrorResponse(
   error: unknown,
   intent: "ask" | "approve" | "revise" | "configure",
@@ -124,11 +150,13 @@ function knownErrorResponse(
     status = 422;
   if (status === null) return null;
   const message =
-    error instanceof ZodError
-      ? (error.issues[0]?.message ?? "Review the assistant request.")
-      : error instanceof Error
-        ? error.message
-        : "The assistant request failed.";
+    errorName === "AiProviderError"
+      ? providerFailureMessage(error)
+      : error instanceof ZodError
+        ? (error.issues[0]?.message ?? "Review the assistant request.")
+        : error instanceof Error
+          ? error.message
+          : "The assistant request failed.";
   return data<ActionResult>(
     {
       ok: false,
@@ -288,7 +316,7 @@ function StreamingAssistantForm({
         throw new Error(
           typeof failure?.message === "string"
             ? failure.message
-            : `Assistant request failed with status ${response.status}.`,
+            : "The assistant request could not be completed. Try again.",
         );
       }
       const reader = response.body.getReader();
@@ -496,9 +524,9 @@ export default function AssistantRoute() {
           </p>
         )}
         <p className="help">
-          Secrets and the Workers AI binding stay in the deployment environment.
-          Program Cue never switches providers when the selected provider is
-          unavailable.
+          Provider credentials are held in the deployment environment and are
+          never shown or entered here. Program Cue never switches to a different
+          provider when the selected one is unavailable.
         </p>
       </section>
 

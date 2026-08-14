@@ -223,7 +223,7 @@ export class EventRepositoryRecoveryService {
     this.assertFailedAirtable(event);
     if (event.operationFailureCode === EVENT_CREATION_STALLED_CODE) {
       throw new EventRepositoryRecoveryStateError(
-        "Airtable retry is unavailable after an expired creation lease because the original provider call may still finish. Explicitly keep the event on D1 or discard it.",
+        "Airtable cannot be retried after setup timed out, because the original attempt may still finish. Keep the event in Program Cue or discard it.",
       );
     }
     const connection = airtableConnectionInputSchema.parse(rawConnection);
@@ -396,7 +396,7 @@ export class EventRepositoryRecoveryService {
       (results[3]?.meta.changes ?? 0) !== 1
     )
       throw new EventRepositoryRecoveryStateError(
-        "The incomplete event changed before D1 could be selected.",
+        "This event changed before Program Cue could take over its data.",
       );
     return { eventId, operationId, activationStatus: "active" as const };
   }

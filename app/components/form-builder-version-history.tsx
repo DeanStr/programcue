@@ -1,3 +1,4 @@
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import type { FormWorkspace } from "~/modules/submissions/submission-repository.server";
 
 function publishedLabel(epoch: number, timezone: string) {
@@ -44,11 +45,10 @@ export function FormVersionHistory({
                   <strong>v{version.versionNumber}</strong>
                 </td>
                 <td>
-                  <span
-                    className={`status ${version.status === "published" ? "success" : version.status === "draft" ? "info" : "neutral"}`}
-                  >
-                    {version.status}
-                  </span>
+                  <DomainStatusBadge
+                    domain="version"
+                    status={version.status}
+                  />
                 </td>
                 <td>
                   {version.publishedAt

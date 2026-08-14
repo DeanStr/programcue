@@ -179,7 +179,7 @@ export class DataImportExecutionSupport {
       Math.floor(available / perChangedTask),
     );
     return new DataImportStateError(
-      `This import changes ${changedTaskStatusCount} task statuses with ${endpointCount} subscribed webhook endpoint${endpointCount === 1 ? "" : "s"}, which exceeds the safe D1 query budget. Split it so each file changes at most ${maximumChangedTasks} task statuses.`,
+      `This import changes ${changedTaskStatusCount} task statuses and would notify ${endpointCount} webhook endpoint${endpointCount === 1 ? "" : "s"}, which is more than one import can process safely. Split it so each file changes at most ${maximumChangedTasks} task statuses.`,
     );
   }
 

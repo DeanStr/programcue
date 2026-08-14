@@ -259,6 +259,6 @@ test("event roster previews CSV speakers and exposes explicit workflow status", 
   await status.selectOption("confirmed");
   await status.locator("..").getByRole("button", { name: "Save" }).click();
   await expect(
-    page.getByText("Speaker workflow updated to confirmed.", { exact: true }),
+    page.getByText("Speaker marked as confirmed.", { exact: true }),
   ).toBeVisible();
 });

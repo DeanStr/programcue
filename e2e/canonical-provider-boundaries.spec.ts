@@ -194,7 +194,7 @@ test.describe.serial("canonical provider boundaries", () => {
       buffer: EVIDENCE_BYTES,
     });
     await uploadTask
-      .getByRole("button", { name: "Upload directly to R2" })
+      .getByRole("button", { name: "Upload file" })
       .click();
     await expect(
       uploadTask.getByText("Submitted", { exact: true }),
@@ -293,7 +293,7 @@ test.describe.serial("canonical provider boundaries", () => {
       ),
     ).toBeVisible();
     await expect(
-      page.getByText("demo no-write", { exact: true }),
+      page.getByText("Demonstration only", { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByText("Demonstration only · provider not called", {
@@ -310,12 +310,12 @@ test.describe.serial("canonical provider boundaries", () => {
     await expect(preview).toContainText("AI in Event Operations");
     expect(await preview.getByRole("row").count()).toBeGreaterThan(1);
 
-    await page.getByRole("button", { name: "Record dry run" }).click();
+    await page.getByRole("button", { name: "Record this preview" }).click();
     await expect(page.locator(".pc-status-notice")).toContainText(
-      "Dry-run reconciliation recorded without provider writes.",
+      "Preview recorded. Nothing was written to Accelevents.",
     );
-    const dryRun = page.getByRole("row", { name: /accelevents.*Dry run/i });
-    await expect(dryRun).toContainText("succeeded");
+    const dryRun = page.getByRole("row", { name: /accelevents.*Preview only/i });
+    await expect(dryRun).toContainText("Succeeded");
 
     await waitForInterface(
       page,

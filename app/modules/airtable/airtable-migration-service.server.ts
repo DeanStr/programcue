@@ -879,7 +879,7 @@ export class AirtableMigrationService {
         plan.programmeItems.some((item) => item.action !== "noop"))
     )
       throw new AirtableMigrationStateError(
-        "Airtable event data or its published programme differs from the D1 projection. Reconcile that divergence before migrating authority to D1; the authority switch will not silently discard Airtable edits.",
+        "Airtable event data or its published programme differs from the Program Cue copy. Reconcile that divergence before migrating authority to D1; the authority switch will not silently discard Airtable edits.",
       );
 
     const runId = crypto.randomUUID();

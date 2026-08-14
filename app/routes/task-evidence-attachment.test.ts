@@ -174,7 +174,7 @@ describe("task-evidence attachment resource", () => {
     const malformed = await invoke(request("{not-json"));
     expect(malformed.status).toBe(400);
     expect(await malformed.json()).toEqual({
-      error: "Request body must contain valid JSON.",
+      error: "That request could not be read. Reload the page and try again.",
     });
 
     const invalid = await invoke(
@@ -224,13 +224,14 @@ describe("task-evidence attachment resource", () => {
     const degraded = await invoke(jsonRequest(input));
     expect(degraded.status).toBe(207);
     expect(degraded.headers.get("cache-control")).toBe("private, no-store");
-    expect(await degraded.json()).toMatchObject({
+    const degradedBody = await degraded.json();
+    expect(degradedBody).toMatchObject({
       ok: false,
       committed: true,
-      message: expect.stringContaining(
-        "EVENT_CHANNEL Durable Object binding is required",
-      ),
+      message:
+        "Your change was saved, but other open views could not be updated automatically. Refresh them before continuing.",
     });
+    expect(JSON.stringify(degradedBody)).not.toContain("EVENT_CHANNEL");
     expect(
       await workerEnv.DB.prepare(
         `SELECT status, json_extract(evidence_json, '$.fileVersionId') AS versionId

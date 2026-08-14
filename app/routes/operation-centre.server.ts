@@ -234,7 +234,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data({
         ok: true as const,
         operationId,
-        message: `Airtable projection ${operationId} was reconciled.`,
+        message: "Airtable is back in step with Program Cue for this change.",
       });
     } catch (error) {
       if (error instanceof AirtableProjectionRecoveryError) {
@@ -287,9 +287,9 @@ export async function action({ request, context }: Route.ActionArgs) {
       operationId,
       message:
         intent === "retry"
-          ? `Operation ${operationId} was queued for retry.`
+          ? "This operation was queued to run again."
           : intent === "cancel"
-            ? `Operation ${operationId} was cancelled before external work began.`
+            ? "This operation was cancelled before any external work began."
             : intent === "retry-item"
               ? "Only the selected failed Accelevents record was queued for retry."
               : "The selected Accelevents record was skipped with an audit reason.",

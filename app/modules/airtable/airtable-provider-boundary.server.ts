@@ -229,7 +229,7 @@ export class AirtableProviderBoundary {
   }
 
   /**
-   * Runs a D1 projection command behind the Airtable authority checkpoint.
+   * Runs a Program Cue copy command behind the Airtable authority checkpoint.
    * A successful replay returns the bounded result stored with the projection
    * run and never invokes the domain command again.
    */

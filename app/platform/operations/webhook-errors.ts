@@ -5,10 +5,15 @@ export class WebhookEndpointNotFoundError extends Error {
   }
 }
 
+/**
+ * `operationId` stays on the error so callers can link to the exact record; it
+ * is not spelled out in the message, because a bare identifier is not something
+ * the reader can use — the link is.
+ */
 export class WebhookQueueUnavailableError extends Error {
   constructor(readonly operationId: string) {
     super(
-      `Webhook test ${operationId} was saved but could not be queued. Retry it from the Operation Centre.`,
+      "The webhook test was saved but could not be sent. Retry it from the Operation Centre.",
     );
     this.name = "WebhookQueueUnavailableError";
   }
@@ -24,7 +29,7 @@ export class WebhookQueueConfigurationError extends Error {
 export class WebhookEventIdempotencyConflictError extends Error {
   constructor(readonly operationId: string) {
     super(
-      `Webhook operation ${operationId} already uses this idempotency key for different event content.`,
+      "An earlier webhook delivery with this reference sent different content. Open the operation in the Operation Centre before retrying.",
     );
     this.name = "WebhookEventIdempotencyConflictError";
   }

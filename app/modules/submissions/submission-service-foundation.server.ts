@@ -197,7 +197,7 @@ export class SubmissionServiceFoundation {
     )
       .bind(eventId)
       .first<{ organisationId: string }>();
-    if (!event) throw new Response("Event not found", { status: 404 });
+    if (!event) throw new Response("This event could not be found.", { status: 404 });
     return { organisationId: event.organisationId, eventId };
   }
 
@@ -367,7 +367,8 @@ export class SubmissionServiceFoundation {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ sessionFormatsJson: string }>();
-    if (!event) throw new SubmissionStateError("Event not found.");
+    if (!event)
+      throw new SubmissionStateError("This event could not be found.");
     try {
       return {
         serialized: event.sessionFormatsJson,

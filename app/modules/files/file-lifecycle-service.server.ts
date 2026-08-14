@@ -281,7 +281,7 @@ export class FileLifecycleService {
       if (providerAbortFailures.length > 0)
         throw new AggregateError(
           providerAbortFailures,
-          "One or more incomplete R2 multipart uploads could not be aborted.",
+          "One or more incomplete uploads could not be cleared.",
         );
       await this.env.DB.batch([
         this.env.DB.prepare(

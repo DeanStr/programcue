@@ -45,7 +45,7 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
     await support.fill("https://support.example.test/participants");
     await page.getByRole("button", { name: "Save event" }).click();
     await expect(
-      page.getByText("Event settings saved to D1.", { exact: true }),
+      page.getByText("Event settings saved.", { exact: true }),
     ).toBeVisible();
     await page.reload();
     await expect(venue).toHaveValue("Beanfield Centre — persistence check");
@@ -97,7 +97,7 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
     await page.getByLabel("Participant support URL").fill(originalSupport);
     await page.getByRole("button", { name: "Save event" }).click();
     await expect(
-      page.getByText("Event settings saved to D1.", { exact: true }),
+      page.getByText("Event settings saved.", { exact: true }),
     ).toBeVisible();
   }
 });
@@ -187,7 +187,7 @@ test("repository workflows remain blocked until exact Event Setup edits are save
   await expect(configure).toBeDisabled();
   await expect(
     page.getByText(
-      "Save or discard the current Event Setup edits before changing repository authority.",
+      "Save or discard your Event Setup edits before changing where event data is held.",
     ),
   ).toBeVisible();
 
@@ -199,7 +199,7 @@ test("repository workflows remain blocked until exact Event Setup edits are save
   await expect(configure).toBeEnabled();
   await expect(
     page.getByText(
-      "Save or discard the current Event Setup edits before changing repository authority.",
+      "Save or discard your Event Setup edits before changing where event data is held.",
     ),
   ).toBeHidden();
 
@@ -238,7 +238,7 @@ test("tracks added by keyboard and button survive reload and reach the schedule 
 
     await page.getByRole("button", { name: "Save event" }).click();
     await expect(
-      page.getByText("Event settings saved to D1.", { exact: true }),
+      page.getByText("Event settings saved.", { exact: true }),
     ).toBeVisible();
 
     await page.goto("/admin/schedule?session=demo-session-1");
@@ -276,7 +276,7 @@ test("tracks added by keyboard and button survive reload and reach the schedule 
     await expect(page).toHaveURL(/\/admin\/event$/);
     await page.getByRole("button", { name: "Save event" }).click();
     await expect(
-      page.getByText("Event settings saved to D1.", { exact: true }),
+      page.getByText("Event settings saved.", { exact: true }),
     ).toBeVisible();
   } finally {
     await resetDemoEvent(request);

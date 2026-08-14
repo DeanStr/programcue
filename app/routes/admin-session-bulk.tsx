@@ -13,7 +13,10 @@ import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-session-bulk";
 import { useConfirm } from "~/components/ui/confirm-dialog";
-import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import {
+  DomainStatusBadge,
+  statusPresentation,
+} from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -151,7 +154,7 @@ function itemChange(
   >["items"][number],
 ) {
   if (item.result.before.status !== item.result.after.status) {
-    return `${item.result.before.status} → ${item.result.after.status}`;
+    return `${statusPresentation("session", item.result.before.status).label} → ${statusPresentation("session", item.result.after.status).label}`;
   }
   const before = item.result.before.tags.join(", ") || "No tags";
   const after = item.result.after.tags.join(", ") || "No tags";

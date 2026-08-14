@@ -8,6 +8,7 @@ import {
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { maximumMegabytes } from "~/modules/files/file-policy";
+import { UserFacingError } from "~/platform/user-facing-error";
 import type { ParticipantTaskEvidenceVersion } from "~/modules/files/file-service.server";
 import {
   speakerDueLabel,
@@ -37,7 +38,7 @@ async function attachTaskEvidence(
   };
   if (payload.committed)
     return {
-      message: `File evidence was attached. ${payload.message ?? "An outbound update needs attention in Operations."}`,
+      message: `Your file was attached. ${payload.message ?? "The organisers may not have been notified yet; no action is needed from you."}`,
     };
   if (payload.discarded)
     throw new DirectUploadCompletionConflictError(
@@ -45,7 +46,7 @@ async function attachTaskEvidence(
         "The task changed, so the unattached upload was discarded. Reload before choosing the file again.",
     );
   if (!response.ok || payload.ok !== true)
-    throw new Error(
+    throw new UserFacingError(
       payload.error ??
         payload.message ??
         "The uploaded file could not be attached to this task.",

@@ -10,6 +10,7 @@ import {
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-crm-pipeline";
+import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { ensureDemoCrmData } from "~/modules/crm/demo.server";
 import { crmStages } from "~/modules/crm/crm-schema";
 import { CrmService, CrmStateError } from "~/modules/crm/crm-service.server";
@@ -176,7 +177,7 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
         {loaderData.columns.map((column) => (
           <div className="card pad crm-pipeline-column" key={column.stage}>
             <div className="card-title">
-              <h2>{column.label}</h2>
+              <h2>{statusPresentation("crm", column.stage).label}</h2>
               <span className="status info">{column.entries.length}</span>
             </div>
             <div className="stack mt">
@@ -212,7 +213,9 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
                         defaultValue={entry.stage}
                       >
                         {crmStages.map((stage) => (
-                          <option key={stage}>{stage}</option>
+                          <option key={stage} value={stage}>
+                            {statusPresentation("crm", stage).label}
+                          </option>
                         ))}
                       </select>
                     </label>

@@ -5,6 +5,8 @@ import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { ResponseBodyTooLargeError } from "~/platform/http/read-response";
 import { QueueClaimLeaseBusyError } from "../../../workers/queue/claim-infrastructure";
 import {
+  assertFileScanDispatchConfigured,
+  FileScanDispatchConfigurationError,
   FileScanDispatchIntegrityError,
   processFileScanDispatch,
   type FileScanQueueMessage,
@@ -79,6 +81,54 @@ describe("file scan queue dispatch", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it.each([
+    [
+      "scanner endpoint",
+      { FILE_SCANNER_API_URL: undefined },
+      "scanner-endpoint",
+    ],
+    [
+      "scanner credentials",
+      {
+        FILE_SCANNER_API_URL: "https://scanner.programcue.test",
+        FILE_SCANNER_API_TOKEN: undefined,
+      },
+      "scanner-credentials",
+    ],
+    [
+      "callback endpoint",
+      {
+        FILE_SCANNER_API_URL: "https://scanner.programcue.test",
+        FILE_SCANNER_API_TOKEN: "scanner-test-token-long-enough",
+        BETTER_AUTH_URL: undefined,
+      },
+      "callback-endpoint",
+    ],
+    [
+      "queue binding",
+      {
+        FILE_SCANNER_API_URL: "https://scanner.programcue.test",
+        FILE_SCANNER_API_TOKEN: "scanner-test-token-long-enough",
+        BETTER_AUTH_URL: "https://programcue.test",
+        OPERATIONS_QUEUE: undefined,
+      },
+      "queue-binding",
+    ],
+  ])("classifies missing %s configuration safely", (_label, overrides, reason) => {
+    let failure: unknown;
+    try {
+      assertFileScanDispatchConfigured({
+        ...(env as unknown as CloudflareEnvironment),
+        ...overrides,
+      } as CloudflareEnvironment);
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(FileScanDispatchConfigurationError);
+    expect(failure).toMatchObject({ reason });
   });
 
   it("delays a duplicate delivery while the exact operation has an active lease", async () => {

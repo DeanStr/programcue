@@ -7,7 +7,7 @@ const DEFAULT_EXACT_OPTIONS: Intl.DateTimeFormatOptions = {
 
 function assertEpochSeconds(epochSeconds: number) {
   if (!Number.isFinite(epochSeconds)) {
-    throw new Error("An event timestamp must be a finite Unix epoch value.");
+    throw new Error("An event timestamp must be a finite number of seconds.");
   }
 }
 

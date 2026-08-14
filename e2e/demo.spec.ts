@@ -81,7 +81,7 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
   await page.getByLabel("Venue").fill("Temporary evaluator reset venue");
   await page.getByRole("button", { name: "Save event" }).click();
   await expect(
-    page.getByText("Event settings saved to D1.", { exact: true }),
+    page.getByText("Event settings saved.", { exact: true }),
   ).toBeVisible();
 
   await waitForInterface(page, "/demo");

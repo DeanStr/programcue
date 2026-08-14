@@ -59,7 +59,13 @@ function logApplicantUploadFailure(
       event,
       operation,
       errorName,
-      message: "The applicant multipart request could not be completed.",
+      // A slug, never the message: several distinct configuration faults share
+      // one error class, and the class alone cannot tell them apart. The
+      // message names the variable, which must stay out of logs.
+      ...(typeof (error as { reason?: unknown })?.reason === "string"
+        ? { reason: (error as { reason: string }).reason }
+        : {}),
+      message: "An applicant file upload request could not be completed.",
     }),
   );
 }
@@ -81,7 +87,7 @@ function methodNotAllowed() {
 export async function action({ request, params, context }: Route.ActionArgs) {
   if (request.method !== "POST") return methodNotAllowed();
   if (!params.slug || !params.operation || !OPERATIONS.has(params.operation))
-    return response({ error: "Applicant multipart operation not found." }, 404);
+    return response({ error: "That upload step is not supported." }, 404);
   const { env } = getCloudflareContext(context);
   try {
     await ensureDemoSubmissionForm(env);
@@ -90,7 +96,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     try {
       body = JSON.parse(rawBody);
     } catch {
-      return response({ error: "Request body must contain valid JSON." }, 400);
+      return response({ error: "That request could not be read. Reload the page and try again." }, 400);
     }
     const scopeInput = scopeSchema.parse(body);
     const authorized = await new SubmissionService(
@@ -107,7 +113,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       const idempotencyKey = request.headers.get("idempotency-key")?.trim();
       if (!idempotencyKey)
         return response(
-          { error: "An Idempotency-Key header is required." },
+          { error: "That request was missing information needed to avoid duplicates. Reload the page and try again." },
           400,
         );
       const record = z
@@ -166,12 +172,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return response({ ok: true, upload: await service.abort(actor, body) });
   } catch (error) {
     if (error instanceof RequestBodyTooLargeError)
-      return response({ error: "Multipart request exceeds 128 KB." }, 413);
+      return response({ error: "That request was too large to process." }, 413);
     if (error instanceof Response) return error;
     if (error instanceof ZodError)
       return response(
         {
-          error: error.issues[0]?.message ?? "Invalid multipart request.",
+          error: error.issues[0]?.message ?? "That upload request could not be read.",
           issues: error.issues,
         },
         422,
@@ -193,7 +199,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         error,
       );
       return response(
-        { error: "Applicant direct upload is temporarily unavailable." },
+        { error: "Uploads are unavailable right now. Try again later." },
         503,
       );
     }
@@ -208,7 +214,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         error,
       );
       return response(
-        { error: "Applicant direct upload is temporarily unavailable." },
+        { error: "Uploads are unavailable right now. Try again later." },
         503,
       );
     }

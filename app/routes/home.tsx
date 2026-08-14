@@ -29,7 +29,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   if (!eventId) throw redirect("/events/select?returnTo=%2F");
   const event = events.find((candidate) => candidate.eventId === eventId);
   if (!event) {
-    throw new Response("You do not have permission to manage this event", {
+    throw new Response("Your account cannot manage this event.", {
       status: 403,
       statusText: "Forbidden",
     });

@@ -288,7 +288,7 @@ describe("applicant direct multipart boundary", () => {
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
-      error: "Applicant direct upload is temporarily unavailable.",
+      error: "Uploads are unavailable right now. Try again later.",
     });
     expect(logged).toHaveBeenCalledTimes(1);
     const entry = String(logged.mock.calls[0]?.[0]);
@@ -297,6 +297,9 @@ describe("applicant direct multipart boundary", () => {
       event: "upload-configuration-unavailable",
       operation: "initiate",
       errorName: "R2S3ConfigurationError",
+      // Four different variables raise this one class, so the class alone
+      // cannot be triaged. The slug says which, without naming the variable.
+      reason: "credentials",
     });
     expect(entry).not.toContain("R2_ACCESS_KEY_ID");
   });

@@ -226,7 +226,7 @@ describe("incomplete event repository recovery", () => {
     });
     await expect(
       service.retryAirtable(viewer, eventId, {}),
-    ).rejects.toThrow(/retry is unavailable after an expired creation lease/iu);
+    ).rejects.toThrow(/Airtable cannot be retried after setup timed out/iu);
     expect(
       await env.DB.prepare(
         "SELECT COUNT(*) AS count FROM operation_jobs WHERE event_id = ?",

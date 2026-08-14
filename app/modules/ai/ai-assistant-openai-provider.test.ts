@@ -456,6 +456,7 @@ describe("OpenAI Responses provider boundary", () => {
     ).rejects.toMatchObject({
       name: "AiProviderError",
       status: null,
+      failureKind: "transient",
       message: "The OpenAI request could not reach the provider.",
     });
   });

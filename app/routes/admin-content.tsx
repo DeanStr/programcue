@@ -10,7 +10,10 @@ import {
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-content";
-import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import {
+  DomainStatusBadge,
+  statusPresentation,
+} from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import {
   ContentManagementService,
@@ -274,7 +277,7 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
           {loaderData.version ? (
             <span className="pill">
               Version {loaderData.version.versionNumber} ·{" "}
-              {loaderData.version.status}
+              {statusPresentation("version", loaderData.version.status).label}
             </span>
           ) : null}
         </div>
@@ -337,7 +340,7 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
       <section className="card pad" aria-labelledby="content-files-title">
         <div className="card-title">
           <div>
-            <span className="pc-section-kicker">Private R2 inventory</span>
+            <span className="pc-section-kicker">Private file storage</span>
             <h2 id="content-files-title">Central files library</h2>
           </div>
           <span className="pill">

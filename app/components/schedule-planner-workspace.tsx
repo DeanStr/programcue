@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, Link, useFetcher, useNavigation } from "react-router";
 
 import { ScheduleContentWorkflows } from "~/components/schedule-content-workflows";
+import { statusPresentation } from "~/components/ui/domain-status-badge";
 import type { ScheduleWorkspace } from "~/modules/schedule/schedule-service.server";
 import {
   eventBoundaryCalendarDate,
@@ -534,7 +535,7 @@ export function SchedulePlannerWorkspace({
               className={`status ${workspace.version.status === "published" ? "success" : "info"}`}
             >
               Version {workspace.version.versionNumber} ·{" "}
-              {workspace.version.status}
+              {statusPresentation("version", workspace.version.status).label}
             </span>
           ) : null}
           {workspace.version?.status === "draft" ? (

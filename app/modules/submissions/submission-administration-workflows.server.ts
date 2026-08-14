@@ -746,7 +746,7 @@ export class SubmissionAdministrationWorkflows extends SubmissionServiceFoundati
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ id: string }>();
-    if (!event) throw new Response("Event not found", { status: 404 });
+    if (!event) throw new Response("This event could not be found.", { status: 404 });
     const unacceptedParticipants = await unacceptedEventParticipantEmails({
       env: this.env,
       eventId: viewer.eventId,

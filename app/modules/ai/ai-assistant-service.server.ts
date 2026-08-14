@@ -194,18 +194,34 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
     const provider = await new AiProviderSettingsService(this.env).readiness(
       viewer,
     );
-    const missing = [
-      !provider.configured ? provider.problem : null,
+    // Two kinds of blocker read differently: things this administrator can set
+    // up here, and installation-level failures they can only report. Naming
+    // the queue binding told the reader nothing they could act on.
+    const setupNeeded = [
       !templates.results.length ? "a published task-reminder template" : null,
       !sender ? "a verified sender" : null,
-      emailProviderIssue,
-      !this.env.OPERATIONS_QUEUE ? "OPERATIONS_QUEUE" : null,
     ].filter((item): item is string => Boolean(item));
+    const unavailable = [
+      !provider.configured ? provider.problem : null,
+      emailProviderIssue,
+      !this.env.OPERATIONS_QUEUE
+        ? "Scheduled delivery is unavailable for this installation."
+        : null,
+    ].filter((item): item is string => Boolean(item));
+    const problem =
+      [
+        setupNeeded.length
+          ? `Reminder delivery needs ${new Intl.ListFormat("en", { style: "long", type: "conjunction" }).format(setupNeeded)}.`
+          : null,
+        ...unavailable,
+      ]
+        .filter((item): item is string => Boolean(item))
+        .join(" ") || null;
     return {
       templates: templates.results,
       sender: sender ? `${sender.fromName} <${sender.fromEmail}>` : null,
-      configured: missing.length === 0,
-      problem: missing.length ? `${missing.join(" ")}` : null,
+      configured: problem === null,
+      problem,
     };
   }
 

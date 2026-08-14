@@ -115,7 +115,9 @@ function jsonValue(formData: FormData, key: string) {
   try {
     return JSON.parse(String(formData.get(key) ?? ""));
   } catch {
-    throw new InvalidFormPayloadError(`${key} contains invalid JSON`);
+    throw new InvalidFormPayloadError(
+      `The ${key} you submitted could not be read. Reload the page and try again.`,
+    );
   }
 }
 
@@ -174,7 +176,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
     return data<FormBuilderActionResult>({
       ok: true,
-      message: "Draft form saved to D1.",
+      message: "Draft form saved.",
     });
   } catch (error) {
     if (error instanceof ZodError) {
@@ -586,11 +588,10 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           <div>
             <h2>Visual form editor</h2>
             <p className="help">
-              Drag and edit supported fields here. Program Cue maps this canvas
-              to its normalized, versioned schema; D1 remains authoritative.
+              Drag and edit supported fields here. Program Cue turns this
+              canvas into the saved, versioned form.
             </p>
           </div>
-          <span className="pill right">Powered by bpmn.io</span>
         </div>
         {editorStatus.state === "error" ? (
           <div className="validation-item error mb" role="alert">

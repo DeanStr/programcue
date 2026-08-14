@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
@@ -9,7 +9,7 @@ import {
 } from "~/platform/api/api-realtime.server";
 import {
   EventChangeNotFoundError,
-  EventRealtimeConfigurationError,
+  EventRealtimeDeliveryError,
   EventRealtimeService,
 } from "./event-realtime.server";
 import { recordRouteChange } from "./route-realtime.server";
@@ -24,11 +24,11 @@ const viewer: Viewer = {
   demo: true,
 };
 
-function environmentWithChannel(deliveries: unknown[]) {
+function environmentWithChannel(deliveries: unknown[], status = 200) {
   const stub = {
     async fetch(_input: RequestInfo | URL, init?: RequestInit) {
       deliveries.push(JSON.parse(String(init?.body)));
-      return Response.json({ accepted: true });
+      return Response.json({ accepted: status < 400 }, { status });
     },
   };
   const namespace = {
@@ -127,7 +127,10 @@ describe("event realtime service", () => {
         entityId: "schedule-demo",
         changeType: "published",
       }),
-    ).rejects.toBeInstanceOf(EventRealtimeConfigurationError);
+    ).rejects.toMatchObject({
+      name: "EventRealtimeConfigurationError",
+      reason: "binding-missing",
+    });
 
     const fallback = await service.getChangesSince(
       viewer,
@@ -136,6 +139,22 @@ describe("event realtime service", () => {
     expect(
       fallback.changes.some((change) => change.entityType === "schedule"),
     ).toBe(true);
+  });
+
+  it("retains a safe status and reason when the event channel rejects delivery", async () => {
+    const service = new EventRealtimeService(environmentWithChannel([], 503));
+
+    await expect(
+      service.recordChange(viewer, {
+        entityType: "task_instance",
+        entityId: `task-rejected-${crypto.randomUUID()}`,
+        changeType: "progress",
+      }),
+    ).rejects.toMatchObject({
+      name: "EventRealtimeDeliveryError",
+      reason: "channel-rejected",
+      status: 503,
+    } satisfies Partial<EventRealtimeDeliveryError>);
   });
 
   it("reports a committed mutation honestly when its live broadcast is unavailable", async () => {
@@ -149,6 +168,7 @@ describe("event realtime service", () => {
       .bind(viewer.eventId)
       .first<{ cursor: number }>();
 
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const failure = await recordRouteChange(
       { DB: env.DB } as unknown as CloudflareEnvironment,
       viewer,
@@ -164,8 +184,13 @@ describe("event realtime service", () => {
       committed: true,
       entityId: "task-committed",
       message:
-        "Your change was saved, but live updates could not be broadcast: EVENT_CHANNEL Durable Object binding is required for realtime event updates. Refresh other open views before continuing.",
+        "Your change was saved, but other open views could not be updated automatically. Refresh them before continuing.",
     });
+    expect(JSON.parse(String(consoleError.mock.calls[0]?.[0]))).toMatchObject({
+      errorName: "EventRealtimeConfigurationError",
+      reason: "binding-missing",
+    });
+    consoleError.mockRestore();
 
     const committed = await env.DB.prepare(
       `

@@ -35,14 +35,14 @@ export function SpeakerFilesPanel({
       {dialog}
       <div className="card-title">
         <div>
-          <span className="pc-section-kicker">Private R2 files</span>
+          <span className="pc-section-kicker">Your private files</span>
           <h2>Files and versions</h2>
         </div>
         <FileCheck2 aria-hidden className="subtle" />
       </div>
       <p className="subtle">
-        Every upload is signature-checked and quarantined. Downloads appear only
-        after an external malware scanner reports a clean result.
+        Every upload is checked and held privately. Downloads become available
+        once the malware scan reports a clean result.
       </p>
       <div id="headshot-upload">
         <DirectMultipartUpload

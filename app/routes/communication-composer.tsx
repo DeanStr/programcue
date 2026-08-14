@@ -476,11 +476,11 @@ export default function CommunicationComposer({
               <div>
                 <h2>1. Saved draft configuration</h2>
                 <p className="help">
-                  Saving changes increments the server revision and invalidates
-                  any earlier preview.
+                  Saving changes creates a new version and discards any earlier
+                  preview.
                 </p>
               </div>
-              <span className="status success right">Stored in D1</span>
+              <span className="status success right">Saved</span>
             </div>
             <Form
               method="post"

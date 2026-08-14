@@ -9,6 +9,7 @@ import {
   type ProgramCueMultipartRequest,
   type ProgramCueMultipartSession,
 } from "~/modules/files/uppy-multipart-client";
+import { userFacingMessage } from "~/platform/user-facing-error";
 
 export type ApplicantVideoUploadRecord = {
   fieldId: string;
@@ -161,10 +162,10 @@ export function ApplicantVideoUpload({
     } catch (error) {
       setState({
         status: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "The upload stopped, but its R2 cleanup did not finish.",
+        message: userFacingMessage(
+          error,
+          "The upload stopped, but the partial file was not cleared. Try cancelling again.",
+        ),
       });
     } finally {
       if (cancellationOperation.current === operation) {
@@ -181,8 +182,8 @@ export function ApplicantVideoUpload({
     setState({
       status: paused ? "paused" : "uploading",
       message: paused
-        ? "Video upload paused. Resume to continue from the parts already in private storage."
-        : "Resuming the private video upload…",
+        ? "Video upload paused. Resume to continue from where it stopped."
+        : "Resuming your video upload…",
     });
   }
 
@@ -221,7 +222,7 @@ export function ApplicantVideoUpload({
     uploadOperation.current = operation;
     setState({
       status: "uploading",
-      message: "Resuming the private video upload…",
+      message: "Resuming your video upload…",
     });
     try {
       await finishVideoTransfer(active, operation);
@@ -229,8 +230,10 @@ export function ApplicantVideoUpload({
       if (uploadOperation.current !== operation) return;
       setState({
         status: "error",
-        message:
-          error instanceof Error ? error.message : "Video upload failed.",
+        message: userFacingMessage(
+          error,
+          "Your video could not be uploaded. Try again.",
+        ),
       });
     } finally {
       if (uploadOperation.current === operation) {
@@ -303,7 +306,7 @@ export function ApplicantVideoUpload({
           setProgress(percentage);
           setState({
             status: "uploading",
-            message: `Uploading the private video with Uppy… ${percentage}%`,
+            message: `Uploading your video… ${percentage}%`,
           });
         },
         onPauseChange: (paused) => {
@@ -312,7 +315,7 @@ export function ApplicantVideoUpload({
           setState({
             status: "paused",
             message:
-              "Video upload paused. Resume to continue from the parts already in private storage.",
+              "Video upload paused. Resume to continue from where it stopped.",
           });
         },
       });
@@ -323,15 +326,17 @@ export function ApplicantVideoUpload({
       uploadSession.current = active;
       setState({
         status: "uploading",
-        message: "Uploading the private video with Uppy…",
+        message: "Uploading your video…",
       });
       await finishVideoTransfer(active, operation);
     } catch (error) {
       if (uploadOperation.current !== operation) return;
       setState({
         status: "error",
-        message:
-          error instanceof Error ? error.message : "Video upload failed.",
+        message: userFacingMessage(
+          error,
+          "Your video could not be uploaded. Try again.",
+        ),
       });
     } finally {
       if (uploadOperation.current === operation) {
@@ -353,11 +358,11 @@ export function ApplicantVideoUpload({
   return (
     <div className="card pad mt stack">
       <div>
-        <strong>Private native video</strong>
+        <strong>Pitch video</strong>
         <p className="help">
-          Upload MP4 or WebM directly to private storage. Files up to{" "}
-          {maximumMegabytes(maximumBytes)} MB use resumable Uppy multipart
-          transfer and remain quarantined until scanned.
+          Upload an MP4 or WebM file of up to {maximumMegabytes(maximumBytes)}{" "}
+          MB. Only the review team can see it. Large uploads resume where they
+          left off, and your video stays quarantined until it has been scanned.
         </p>
       </div>
       <input

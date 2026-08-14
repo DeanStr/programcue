@@ -59,7 +59,7 @@ export class WorkersAiResponsesProvider implements AiModelProvider {
         "The Workers AI request failed before returning a provider result.",
         null,
         this.binding.aiGatewayLogId,
-        { cause: error },
+        { cause: error, failureKind: "transient" },
       );
     }
     if (raw instanceof ReadableStream) {

@@ -9,7 +9,7 @@ export abstract class ResourceServiceBase {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first();
-    if (!row) throw new Response("Event not found.", { status: 404 });
+    if (!row) throw new Response("This event could not be found.", { status: 404 });
   }
 
   protected pageSelect() {

@@ -6,6 +6,9 @@ export {
 export {
   CommunicationAutomation,
   DeliveryConfiguration,
+  SenderDnsRecords,
+  type SenderDnsRecord,
+  type SenderDnsRecordSet,
 } from "./communications-delivery-panels";
 export {
   CalendarAdministration,

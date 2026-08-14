@@ -2,6 +2,8 @@ import {
   EventDateTime,
   formatEventDateTime,
 } from "~/components/ui/event-date-time";
+import { statusPresentation } from "~/components/ui/domain-status-badge";
+import { fieldLabel, fieldValue } from "~/lib/record-labels";
 import type { loader } from "~/routes/operation-centre.server";
 
 export type OperationCentreData = Awaited<ReturnType<typeof loader>>;
@@ -53,7 +55,9 @@ export function operationMetadataSummary(value: unknown) {
     .filter(([, item]) => ["string", "number", "boolean"].includes(typeof item))
     .slice(0, 4);
   return entries.length
-    ? entries.map(([key, item]) => `${key}: ${String(item)}`).join(" · ")
+    ? entries
+        .map(([key, item]) => `${fieldLabel(key)}: ${fieldValue(item)}`)
+        .join(" · ")
     : null;
 }
 
@@ -93,8 +97,9 @@ export function taskImportTransitionSummary(value: unknown) {
   };
 }
 
-export function operationStatusLabel(value: string) {
-  return value.replaceAll("_", " ");
+/** A task status as it is worded everywhere else in the product. */
+export function operationTaskStatusLabel(value: string) {
+  return statusPresentation("task", value).label;
 }
 
 export function metadataOperationId(value: unknown) {

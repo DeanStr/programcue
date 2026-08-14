@@ -29,11 +29,22 @@ export type EventScope = {
 };
 
 export class EventRealtimeConfigurationError extends Error {
+  readonly reason = "binding-missing";
+
   constructor() {
     super(
       "EVENT_CHANNEL Durable Object binding is required for realtime event updates.",
     );
     this.name = "EventRealtimeConfigurationError";
+  }
+}
+
+export class EventRealtimeDeliveryError extends Error {
+  readonly reason = "channel-rejected";
+
+  constructor(readonly status: number) {
+    super(`Event channel rejected committed change (${status}).`);
+    this.name = "EventRealtimeDeliveryError";
   }
 }
 
@@ -255,8 +266,6 @@ export class EventRealtimeService {
       },
     );
     if (!response.ok)
-      throw new Error(
-        `Event channel rejected committed change (${response.status}).`,
-      );
+      throw new EventRealtimeDeliveryError(response.status);
   }
 }

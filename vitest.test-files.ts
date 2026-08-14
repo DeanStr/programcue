@@ -17,6 +17,7 @@ export const nodeOnlyTestFiles = [
   "app/components/ui/event-date-time.test.tsx",
   "app/components/ui/admin-page-sections.test.tsx",
   "app/components/operational-ui-rules.test.ts",
+  "app/components/user-facing-copy.lint.ts",
   "app/components/submission-data-grid.test.tsx",
   "app/components/schedule-standard-calendar.test.tsx",
   "app/components/schedule-planner-workspace.test.tsx",

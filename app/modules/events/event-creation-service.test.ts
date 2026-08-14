@@ -197,7 +197,8 @@ describe("blank event creation", () => {
     const prepared = await service.prepare(viewer);
     expect(prepared).toMatchObject({
       emailProvider: null,
-      emailProviderIssue: expect.stringContaining("EMAIL_PROVIDER"),
+      emailProviderIssue:
+        "Email delivery is not configured for this installation.",
       reusableSenderProfiles: [],
     });
 
@@ -423,7 +424,9 @@ describe("blank event creation", () => {
           tableName: "Program Cue Rooms",
         },
       ),
-    ).rejects.toThrow(/available only when creating a D1 event/i);
+    ).rejects.toThrow(
+      /reused when Program Cue holds the new event's data/i,
+    );
     await expect(
       env.DB.prepare("SELECT 1 FROM events WHERE slug = ?").bind(slug).first(),
     ).resolves.toBeNull();

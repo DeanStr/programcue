@@ -108,6 +108,26 @@ const MAX_RATE_LIMIT_WAIT_MS = 120_000;
 const PROVIDER_REQUEST_TIMEOUT_MS = 20_000;
 const PROVIDER_RESPONSE_MAX_BYTES = 4 * 1_024 * 1_024;
 
+/**
+ * What to say when Airtable rejects a request and its body carries no usable
+ * reason. Only a rate limit and Airtable's own outages clear by waiting; a
+ * rejected token or a missing base never does, so those must not be worded as
+ * though another attempt might work.
+ */
+function airtableRejectionMessage(status: number) {
+  if (status === 401 || status === 403)
+    return "Airtable rejected the stored credentials for this event. Check the personal access token and its base permissions in Event Setup.";
+  if (status === 404)
+    return "Airtable could not find the configured base or table. Check the Airtable connection in Event Setup.";
+  if (status === 422)
+    return "Airtable rejected the record contents. Review the managed Airtable fields in Event Setup.";
+  if (status === 429)
+    return "Airtable rejected the request because its rate limit was reached. Try again shortly.";
+  if (status >= 500)
+    return "Airtable is temporarily unavailable. Try again shortly.";
+  return "Airtable rejected the request. Check the Airtable connection in Event Setup.";
+}
+
 function responseErrorMessage(body: unknown, status: number) {
   const parsed = z
     .object({
@@ -124,7 +144,7 @@ function responseErrorMessage(body: unknown, status: number) {
     .safeParse(body);
   if (!parsed.success || !parsed.data.error)
     return {
-      message: `Airtable request failed with HTTP ${status}.`,
+      message: airtableRejectionMessage(status),
       code: null,
     };
   if (typeof parsed.data.error === "string")
@@ -133,7 +153,7 @@ function responseErrorMessage(body: unknown, status: number) {
     message:
       parsed.data.error.message ??
       parsed.data.error.type ??
-      `Airtable request failed with HTTP ${status}.`,
+      airtableRejectionMessage(status),
     code: parsed.data.error.type ?? null,
   };
 }

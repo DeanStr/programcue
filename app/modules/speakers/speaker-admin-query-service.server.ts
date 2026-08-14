@@ -177,7 +177,8 @@ export class SpeakerAdminQueryService {
           .bind(viewer.eventId, ...assetIds)
           .all<AdminSpeakerFileVersion>()
       : { results: [] as AdminSpeakerFileVersion[] };
-    if (!event) throw new Response("Event not found.", { status: 404 });
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
     return {
       profile,
       profileShared,
@@ -251,7 +252,8 @@ export class SpeakerAdminQueryService {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ timezone: string }>();
-    if (!event) throw new Response("Event not found.", { status: 404 });
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
     const missingWorkflow = await this.env.DB.prepare(
       `WITH expected(person_id) AS (
          SELECT person_id FROM session_speakers WHERE event_id = ?

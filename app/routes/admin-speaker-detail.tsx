@@ -13,7 +13,10 @@ import { ZodError } from "zod";
 import type { Route } from "./+types/admin-speaker-detail";
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
-import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import {
+  DomainStatusBadge,
+  statusPresentation,
+} from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
@@ -124,7 +127,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
     return data({
       ok: true,
-      message: `Saved to D1 as revision ${result.revision}. The profile is ${result.profileStatus}.`,
+      message: `Profile saved. It is now ${statusPresentation("content", result.profileStatus).label.toLowerCase()}.`,
     });
   } catch (error) {
     if (error instanceof ZodError) {
@@ -309,7 +312,7 @@ export default function AdminSpeakerDetail({
           heading={
             headshot ? "Replace speaker headshot" : "Upload speaker headshot"
           }
-          description="The browser uploads directly to private R2. The current released image stays available until the replacement passes signature validation and malware scanning."
+          description="The image uploads straight from this browser to private storage. The current published image stays available until the replacement passes format and malware checks."
         />
         <Form method="post" className="stack">
           <input type="hidden" name="_intent" value="save_speaker_profile" />
@@ -575,7 +578,7 @@ export default function AdminSpeakerDetail({
       <section className="card pad mt" id="files">
         <div className="card-title">
           <div>
-            <span className="pc-section-kicker">Private R2 files</span>
+            <span className="pc-section-kicker">Private files</span>
             <h2>Uploaded files and versions</h2>
           </div>
           <FileCheck2 aria-hidden className="subtle" />

@@ -729,7 +729,13 @@ function SessionContentPreviewPanel() {
               </div>
               <div>
                 <dt>Visibility</dt>
-                <dd>{draft.visibility}</dd>
+                <dd>
+                  {draft.visibility === "public"
+                    ? "Public"
+                    : draft.visibility === "private"
+                      ? "Private"
+                      : "Hidden"}
+                </dd>
               </div>
             </dl>
           </article>
@@ -749,7 +755,7 @@ function SessionContentPreviewPanel() {
             {calendarPreview ? (
               <details>
                 <summary>
-                  Exact ICS generated from the last saved server revision
+                  View the exact calendar file speakers will receive
                 </summary>
                 <pre className="code-block">{calendarPreview.ics}</pre>
                 <button

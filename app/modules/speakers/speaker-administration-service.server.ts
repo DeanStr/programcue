@@ -251,7 +251,8 @@ export class SpeakerAdministrationService {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first();
-    if (!event) throw new Response("Event not found.", { status: 404 });
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
 
     const mergedContact = await this.env.DB.prepare(
       `SELECT 1

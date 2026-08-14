@@ -20,6 +20,7 @@ import {
 } from "~/components/draft-recovery-feedback";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { maximumMegabytes } from "~/modules/files/file-policy";
+import { UserFacingError } from "~/platform/user-facing-error";
 import { RichResourceEditor } from "./rich-resource-editor";
 import {
   type AdminResourcesData,
@@ -47,14 +48,14 @@ export async function readResourceAttachmentCompletion(response: Response) {
     return {
       message:
         result.message ??
-        "The attachment was saved, but live updates need attention. Reload other open views before continuing.",
+        "The attachment was saved, but other open views could not be updated automatically. Reload them before continuing.",
     };
   }
   if (!response.ok || result.ok !== true)
-    throw new Error(
+    throw new UserFacingError(
       result.error ??
         result.message ??
-        `Attachment request failed (${response.status}).`,
+        "The attachment could not be saved. Try again.",
     );
   return { message: result.message };
 }
@@ -377,8 +378,8 @@ function ResourcePreviewPanel() {
         </article>
       )}
       <p className="help">
-        Preview content stays local. Saving creates the authoritative D1 draft
-        version; publishing controls what speakers can see.
+        This preview is local to your browser. Saving creates the draft version
+        of record; publishing controls what speakers can see.
       </p>
     </section>
   );
@@ -456,7 +457,7 @@ function ResourceEditorPanel() {
                 },
               ]}
               heading="Private resource attachment"
-              description={`The browser uploads PDF, Office document or ZIP attachments directly to private R2 (maximum ${maximumMegabytes(loaderData.previewEvent.filePolicy.supportingDocumentMaximumBytes)} MB). Save page edits first; the completed file is linked only to this exact draft revision and remains quarantined until scanning passes.`}
+              description={`PDF, Office document or ZIP attachments upload straight from this browser to private storage (maximum ${maximumMegabytes(loaderData.previewEvent.filePolicy.supportingDocumentMaximumBytes)} MB). Save page edits first; the completed file is linked only to this exact draft version and stays quarantined until scanning passes.`}
               disabled={
                 editing.versionStatus !== "draft" ||
                 dirty ||
@@ -712,8 +713,7 @@ function ResourceLiveUpdateNotice() {
       <div className="pc-status-notice-copy">
         <strong>Draft saved · live update delayed</strong>
         <div>
-          The new resource draft is authoritative in D1. Refresh other open
-          views before continuing.
+          Your draft is saved. Refresh other open views before continuing.
         </div>
       </div>
     </div>
@@ -763,7 +763,7 @@ function ResourceDraftConflictNotice() {
               {
                 title: "Load the latest server version?",
                 description:
-                  "The unsaved editor contents and the browser recovery copy are discarded, then this page reloads the latest draft version from D1. Export your local edits first if you still need them.",
+                  "Your unsaved edits and the copy kept in this browser are discarded, then the page reloads the latest saved draft. Export your local edits first if you still need them.",
                 confirmLabel: "Discard and reload",
               },
               () => {

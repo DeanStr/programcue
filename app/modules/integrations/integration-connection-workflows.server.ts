@@ -233,7 +233,7 @@ export abstract class IntegrationConnectionWorkflows extends IntegrationServiceF
       current.repositoryProvider === "airtable"
     )
       throw new IntegrationStateError(
-        "Migrate event-data authority back to D1 before disconnecting Airtable.",
+        "Hand event data back to Program Cue before disconnecting Airtable.",
       );
     const operationId = suppliedOperationId ?? crypto.randomUUID();
     const results = await this.env.DB.batch([

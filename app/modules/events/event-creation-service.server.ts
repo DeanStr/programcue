@@ -4,7 +4,10 @@ import {
   AIRTABLE_ROOMS_TABLE,
   airtableConnectionInputSchema,
 } from "~/modules/airtable/airtable-schema";
-import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
+import {
+  emailProviderConfigurationIssue,
+  requireEmailProviderConfiguration,
+} from "~/modules/communications/email-provider.server";
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 import {
   EVENT_CREATION_STALLED_CODE,
@@ -67,7 +70,7 @@ const eventCreationInputSchema = z
         code: "custom",
         path: ["reuseSenderProfileId"],
         message:
-          "Verified sender reuse is available only when creating a D1 event.",
+          "An existing sender can only be reused when Program Cue holds the new event's data.",
       });
     if (value.repositoryProvider !== "airtable") return;
     const connection = airtableConnectionInputSchema.safeParse({
@@ -270,14 +273,9 @@ export class EventCreationService {
     if (!source)
       throw new Response("Current event not found.", { status: 404 });
     let emailProvider: "resend" | "mailpit" | null = null;
-    let emailProviderIssue: string | null = null;
-    try {
+    const emailProviderIssue = emailProviderConfigurationIssue(this.env);
+    if (!emailProviderIssue) {
       emailProvider = requireEmailProviderConfiguration(this.env).provider;
-    } catch (error) {
-      emailProviderIssue =
-        error instanceof Error
-          ? error.message
-          : "The email provider configuration is invalid.";
     }
     const reusableSenderProfiles = emailProvider
       ? await this.env.DB.prepare(

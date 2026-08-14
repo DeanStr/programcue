@@ -437,6 +437,33 @@ async function claimCalendarLifecycle(input: {
   return claimed;
 }
 
+/**
+ * Records why calendar email is unavailable, scoped to the tenant that hit it.
+ *
+ * The reader gets a fixed sentence because the underlying message names a
+ * deployment variable. Without this the cause was discarded outright, leaving a
+ * support request with nothing to distinguish an unset provider from an
+ * unusable endpoint.
+ */
+function logCalendarConfigurationFailure(
+  scope: Pick<Viewer, "organisationId" | "eventId">,
+  error: unknown,
+) {
+  const reason = (error as { reason?: unknown })?.reason;
+  console.error(
+    JSON.stringify({
+      level: "error",
+      subsystem: "calendar-lifecycle",
+      event: "email-provider-unavailable",
+      organisationId: scope.organisationId,
+      eventId: scope.eventId,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      ...(typeof reason === "string" ? { reason } : {}),
+      message: "Calendar email delivery is not configured.",
+    }),
+  );
+}
+
 export class CalendarLifecycleService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
@@ -540,10 +567,13 @@ export class CalendarLifecycleService {
       try {
         emailProvider = requireEmailProviderConfiguration(this.env);
       } catch (error) {
+        // The message names a deployment variable the reader cannot set, so it
+        // is replaced for them and recorded here instead. `reason` distinguishes
+        // a missing provider selection from a missing credential without
+        // putting the variable name in a log line.
+        logCalendarConfigurationFailure(viewer, error);
         throw new CalendarStateError(
-          error instanceof Error
-            ? error.message
-            : "Email provider configuration is invalid.",
+          "Email delivery is not configured for this installation, so calendar invitations cannot be sent.",
         );
       }
       sender = await this.getVerifiedSender(viewer, emailProvider.provider);

@@ -530,7 +530,7 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
       <section className="card pad mb">
         <div className="card-title">
           <h2>Application queue</h2>
-          <span className="help right">D1 · tenant scoped · newest first</span>
+          <span className="help right">This event only · newest first</span>
         </div>
         <SubmissionDataGrid
           key={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}`}

@@ -134,7 +134,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
         label: TEAM_NAME,
       });
     await page.getByRole("button", { name: "Save draft" }).click();
-    await expectStatus(page, "Draft form saved to D1");
+    await expectStatus(page, "Draft form saved.");
     await page.getByRole("button", { name: "Publish version" }).click();
     await page
       .getByRole("dialog", { name: "Publish this application form version?" })
@@ -190,10 +190,10 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await page.getByLabel("Format *").selectOption("Presentation");
     await page.getByLabel("Speaker 1 name").fill(SPEAKER_NAME);
     await page.getByRole("button", { name: "Save draft" }).click();
-    await expectStatus(page, "This draft is stored in D1");
+    await expectStatus(page, "Your draft has been saved");
     await page.getByText("I have reviewed this application").click();
     await page.getByRole("button", { name: "Submit application" }).click();
-    await expectStatus(page, "This application is submitted and stored in D1");
+    await expectStatus(page, "Your application has been submitted");
 
     await switchDemoRole(page, "administrator");
     await waitForInterface(page, "/admin/review");
@@ -337,7 +337,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await switchDemoRole(page, "administrator");
     await waitForInterface(page, "/admin/schedule");
     await page.getByRole("button", { name: "Create next draft" }).click();
-    await expect(page.getByText(/Version 2 · draft/)).toBeVisible();
+    await expect(page.getByText(/Version 2 · Draft/)).toBeVisible();
     const placement = page.locator("details").filter({
       has: page.getByText("Place or move with form", { exact: true }),
     });

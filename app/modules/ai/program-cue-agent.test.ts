@@ -45,7 +45,10 @@ describe("Program Cue Cloudflare Agent", () => {
     const streamed = await new Response(stream).text();
     expect(streamed).toContain("event: status");
     expect(streamed).toContain("event: error");
-    expect(streamed).toContain("OPENAI_API_KEY");
+    expect(streamed).toContain(
+      "OpenAI credentials are not configured for this installation.",
+    );
+    expect(streamed).not.toContain("OPENAI_API_KEY");
 
     const differentViewer: Viewer = {
       ...admin,

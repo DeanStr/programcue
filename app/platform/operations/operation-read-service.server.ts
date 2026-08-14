@@ -113,7 +113,7 @@ export class OperationReadService {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ timezone: string }>();
-    if (!event) throw new Response("Event not found.", { status: 404 });
+    if (!event) throw new Response("This event could not be found.", { status: 404 });
     if (!event.timezone.trim()) {
       throw new Error("The event timezone is missing.");
     }

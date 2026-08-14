@@ -45,7 +45,7 @@ export function eventRepositoryProvisioningFailureMessage(
   failureKind: "provider" | "internal",
 ) {
   return failureKind === "provider"
-    ? "Airtable provisioning did not complete. The incomplete event is unavailable until you retry Airtable, explicitly keep it on D1, or discard it."
+    ? "Airtable setup did not complete. This event cannot be opened until you retry Airtable, keep the event in Program Cue, or discard it."
     : "Repository finalization failed unexpectedly. The incomplete event is unavailable until you recover or discard it.";
 }
 

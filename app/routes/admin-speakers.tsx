@@ -486,7 +486,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
         <div className="card-title">
           <h2>Speaker readiness</h2>
           <span className="help right">
-            D1 · event scoped · distinct identities
+            This event only · one row per person
           </span>
         </div>
         <div

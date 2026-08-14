@@ -52,7 +52,7 @@ export class ResourceAuthoringService extends ResourceServiceBase {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ name: string; brandAccent: string; filePolicyJson: string }>();
-    if (!previewEvent) throw new Response("Event not found.", { status: 404 });
+    if (!previewEvent) throw new Response("This event could not be found.", { status: 404 });
     const { filePolicyJson, ...previewEventSummary } = previewEvent;
     const pages = await this.env.DB.prepare(
       `${this.pageSelect()} WHERE rp.event_id = ? ORDER BY rp.status = 'archived', rv.category, rv.title`,

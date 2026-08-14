@@ -141,11 +141,11 @@ describe("communications presentation", () => {
 
     const markup = renderToStaticMarkup(<RouterProvider router={router} />);
 
-    expect(markup).toContain("Send to Google");
-    expect(markup).toContain("Send to Microsoft");
+    expect(markup).toContain("Send to Google Calendar");
+    expect(markup).toContain("Send to Microsoft Outlook");
     expect(markup).toContain('value="google-connection"');
     expect(markup).toContain('value="microsoft-connection"');
-    expect(markup).not.toContain("Update Google");
-    expect(markup).not.toContain("Update Microsoft");
+    expect(markup).not.toContain("Update Google Calendar");
+    expect(markup).not.toContain("Update Microsoft Outlook");
   });
 });

@@ -10,7 +10,7 @@ const PROVIDER_RESPONSE_MAX_BYTES = 512 * 1_024;
 
 export class ResendDomainConfigurationError extends Error {
   constructor(
-    message = "RESEND_API_KEY is required to provision a sender domain.",
+    message = "Email delivery is not configured for this installation, so a sender domain cannot be set up.",
   ) {
     super(message);
     this.name = "ResendDomainConfigurationError";
@@ -42,7 +42,7 @@ async function providerError(response: Response): Promise<never> {
     response,
     PROVIDER_RESPONSE_MAX_BYTES,
   ).catch(() => "");
-  let message = `Resend returned HTTP ${response.status}.`;
+  let message = "Resend rejected the sender-domain request. Try again shortly.";
   if (body) {
     try {
       const parsed = z

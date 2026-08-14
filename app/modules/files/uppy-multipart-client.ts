@@ -2,6 +2,8 @@ import Uppy from "@uppy/core";
 import AwsS3, { type AwsS3Part } from "@uppy/aws-s3";
 import { md5 } from "@noble/hashes/legacy.js";
 
+import { UserFacingError } from "~/platform/user-facing-error";
+
 import { DIRECT_MULTIPART_PART_SIZE_BYTES } from "./file-policy";
 
 export type ProgramCueMultipartOperation =
@@ -47,13 +49,19 @@ const RESUME_STORAGE_PREFIX = "program-cue:multipart-resume:v1:";
 const DEFAULT_RESUME_SECONDS = 24 * 60 * 60;
 const FINGERPRINT_SAMPLE_BYTES = 64 * 1_024;
 
-export class MultipartResumeStorageError extends Error {
+/** Browser-storage problems the reader can act on, so the message is shown. */
+export class MultipartResumeStorageError extends UserFacingError {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "MultipartResumeStorageError";
   }
 }
 
+/**
+ * A violation of the upload contract between this client and the Worker. The
+ * message names storage internals and helps whoever debugs it, never the person
+ * uploading, so it deliberately does not extend `UserFacingError`.
+ */
 export class MultipartResponseContractError extends Error {
   constructor(message: string) {
     super(message);
@@ -127,22 +135,22 @@ export async function readProgramCueMultipartResponse<T>(
   operation: ProgramCueMultipartOperation,
   failureLabel = "Upload request",
 ) {
+  // The Worker writes `error` for the person uploading; anything else here is a
+  // contract violation whose wording belongs in a bug report, not on screen.
+  const requestFailed = `${failureLabel} could not be completed. Try again.`;
   let payload: unknown;
   try {
     payload = await response.json();
   } catch {
-    if (!response.ok)
-      throw new Error(`${failureLabel} failed (${response.status}).`);
+    if (!response.ok) throw new UserFacingError(requestFailed);
     throw new MultipartResponseContractError(
       `The multipart ${operation} endpoint returned invalid JSON.`,
     );
   }
   if (!response.ok) {
     const error = isRecord(payload) ? payload.error : null;
-    throw new Error(
-      typeof error === "string" && error.length > 0
-        ? error
-        : `${failureLabel} failed (${response.status}).`,
+    throw new UserFacingError(
+      typeof error === "string" && error.length > 0 ? error : requestFailed,
     );
   }
   return parseProgramCueMultipartResponse<T>(operation, payload);
@@ -312,17 +320,21 @@ async function validateResumedParts(file: File, parts: AwsS3Part[]) {
       typeof part.ETag !== "string" ||
       !Number.isInteger(part.Size)
     )
-      throw new Error("R2 returned invalid resumable part metadata.");
+      throw new MultipartResponseContractError(
+        "Stored part metadata for the resumed upload is invalid.",
+      );
     const start = (part.PartNumber! - 1) * DIRECT_MULTIPART_PART_SIZE_BYTES;
     const end = Math.min(file.size, start + DIRECT_MULTIPART_PART_SIZE_BYTES);
     if (start >= file.size || part.Size !== end - start)
-      throw new Error("R2 returned a part outside the selected file layout.");
+      throw new MultipartResponseContractError(
+        "A stored part falls outside the selected file's layout.",
+      );
     const selectedPartEtag = hex(
       md5(new Uint8Array(await file.slice(start, end).arrayBuffer())),
     );
     if (part.ETag.replace(/^"|"$/g, "").toLowerCase() !== selectedPartEtag)
-      throw new Error(
-        "The selected file does not match the parts already stored in R2. Cancel the saved upload before starting a replacement.",
+      throw new UserFacingError(
+        "This is not the same file as the upload you paused. Cancel the paused upload before starting a new one.",
       );
     validated.push(part);
   }
@@ -474,10 +486,14 @@ export async function createProgramCueMultipartSession({
       { uploadId, key, parts, signal },
     ) => {
       if (key !== uploadId)
-        throw new Error("The multipart completion identity is invalid.");
+        throw new MultipartResponseContractError(
+          "The multipart completion identity is invalid.",
+        );
       const normalized = parts.map((part) => {
         if (!Number.isInteger(part.PartNumber) || typeof part.ETag !== "string")
-          throw new Error("Uppy returned invalid multipart completion data.");
+          throw new MultipartResponseContractError(
+            "The upload client produced invalid completion data.",
+          );
         return { partNumber: part.PartNumber!, etag: part.ETag };
       });
       const completed = await request<{ upload: ProgramCueUploadCompletion }>(

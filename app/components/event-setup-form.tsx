@@ -712,7 +712,7 @@ export function EventSetupForm({
 
       {migrationOpen ? (
         <Dialog
-          title={`Migrate event-data authority to ${event.repositoryProvider === "d1" ? "Airtable" : "D1"}`}
+          title={`Hand event data over to ${event.repositoryProvider === "d1" ? "Airtable" : "Program Cue"}`}
           onClose={() => setMigrationOpen(false)}
         >
           {repositoryData?.intent === "preview_repository_migration" &&
@@ -723,9 +723,9 @@ export function EventSetupForm({
                 {new Date(
                   repositoryData.preview.expiresAt * 1_000,
                 ).toLocaleTimeString()}
-                . Confirmation rechecks Airtable and the D1 event revision.
+                . Confirming rechecks both Airtable and this event first.
                 {repositoryData.preview.counts.noop > 0
-                  ? ` ${repositoryData.preview.counts.noop} unchanged managed records are omitted from the table.`
+                  ? ` ${repositoryData.preview.counts.noop} unchanged records are left out of the table below.`
                   : ""}
               </p>
               <div
@@ -805,17 +805,15 @@ export function EventSetupForm({
                 value={event.repositoryProvider === "d1" ? "airtable" : "d1"}
               />
               <p>
-                Program Cue will read both repositories, show the exact managed
-                event-data creates, updates and retirements across the full
-                authoritative scope, and make no authority change until you
-                confirm that diff.
+                Program Cue reads both systems, shows you every record it would
+                create, update or retire, and changes nothing until you confirm
+                that list.
               </p>
               {event.repositoryProvider === "airtable" ? (
                 <p className="help">
-                  Moving back to D1 is allowed only when its synchronized
-                  projection still matches Airtable. Any Airtable-only edit or
-                  schema divergence blocks confirmation; it is never silently
-                  discarded.
+                  Moving back to Program Cue is only possible while its copy
+                  still matches Airtable. Any edit made only in Airtable blocks
+                  the handover rather than being silently discarded.
                 </p>
               ) : null}
               {repositoryData?.intent === "preview_repository_migration" &&

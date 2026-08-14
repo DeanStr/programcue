@@ -49,7 +49,10 @@ export class AiProviderSettingsConflictError extends Error {
 
 function assertOrganisationOwner(viewer: Viewer) {
   if (viewer.role !== "owner") {
-    throw new Response("Forbidden", { status: 403 });
+    throw new Response(
+      "Only an organisation owner can change the AI provider.",
+      { status: 403 },
+    );
   }
 }
 
@@ -57,15 +60,23 @@ function configurationProblem(
   env: CloudflareEnvironment,
   selection: AiProviderSelection,
 ) {
+  // `missing` names the exact deployment variable for logs and support; the
+  // reader of `problem` chose the provider and model in this product but cannot
+  // set its credentials, so `problem` says what is wrong and who can fix it.
+  const providerLabel = aiProviderLabels[selection.provider];
+  const credentialsUnavailable = `${providerLabel} credentials are not configured for this installation. Ask whoever deploys Program Cue to add them, or select a different provider.`;
+
   if (selection.provider === "workers_ai") {
-    const missing = !env.AI ? ["AI Workers binding"] : [];
-    if (missing.length)
-      return { missing, problem: `${missing[0]} is required for Workers AI.` };
+    if (!env.AI)
+      return {
+        missing: ["AI Workers binding"],
+        problem: credentialsUnavailable,
+      };
     if (!/^@cf\/openai\/gpt-oss-(?:20b|120b)$/u.test(selection.model)) {
       return {
         missing: [],
         problem:
-          "Workers AI currently requires @cf/openai/gpt-oss-20b or @cf/openai/gpt-oss-120b because the assistant depends on the Responses API and strict function calling.",
+          "Workers AI currently requires the model @cf/openai/gpt-oss-20b or @cf/openai/gpt-oss-120b. Choose one of those models for this organisation.",
       };
     }
     return { missing: [], problem: null };
@@ -77,26 +88,21 @@ function configurationProblem(
     selection.provider === "openai"
       ? env.OPENAI_API_KEY?.trim()
       : env.ANTHROPIC_API_KEY?.trim();
-  if (!key) {
-    return {
-      missing: [keyName],
-      problem: `${keyName} is required for ${aiProviderLabels[selection.provider]}.`,
-    };
-  }
-  if (key.length < 20) {
-    return {
-      missing: [],
-      problem: `${keyName} is invalid; it must contain at least 20 characters.`,
-    };
-  }
+  if (!key) return { missing: [keyName], problem: credentialsUnavailable };
+  if (key.length < 20)
+    return { missing: [keyName], problem: credentialsUnavailable };
+  const endpointName =
+    selection.provider === "openai"
+      ? "OPENAI_RESPONSES_URL"
+      : "ANTHROPIC_MESSAGES_URL";
   const endpoint =
     selection.provider === "openai"
       ? env.OPENAI_RESPONSES_URL?.trim()
       : env.ANTHROPIC_MESSAGES_URL?.trim();
   if (endpoint && !endpointSchema.safeParse(endpoint).success) {
     return {
-      missing: [],
-      problem: `${selection.provider === "openai" ? "OPENAI_RESPONSES_URL" : "ANTHROPIC_MESSAGES_URL"} must be an explicit HTTPS URL.`,
+      missing: [endpointName],
+      problem: `The ${providerLabel} endpoint configured for this installation is not a valid HTTPS address. Ask whoever deploys Program Cue to correct it.`,
     };
   }
   return { missing: [], problem: null };

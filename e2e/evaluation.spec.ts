@@ -191,7 +191,7 @@ test("the exact SBEK reviewer invitation hands off to Sam without claiming email
   await invitation.getByLabel("Email").fill("sbek-reviewer@example.com");
   await invitation.getByRole("button", { name: "Send invitation" }).click();
   await expect(
-    page.getByText(/exact SBEK fixture identity was activated locally/i),
+    page.getByText(/fixed demo identity was activated locally/i),
   ).toBeVisible();
   await expect(invitation.getByText("Unaccepted invitations")).toHaveCount(0);
 

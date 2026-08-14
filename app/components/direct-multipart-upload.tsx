@@ -10,6 +10,10 @@ import {
   type ProgramCueMultipartSession,
 } from "~/modules/files/uppy-multipart-client";
 import { maximumMegabytes } from "~/modules/files/file-policy";
+import {
+  UserFacingError,
+  userFacingMessage,
+} from "~/platform/user-facing-error";
 
 type DirectUploadTarget = {
   targetType: "person" | "task" | "resource";
@@ -30,7 +34,7 @@ type DirectUploadState =
   | { status: "error"; message: string; reloadRequired?: boolean }
   | { status: "complete"; message: string };
 
-export class DirectUploadCompletionConflictError extends Error {
+export class DirectUploadCompletionConflictError extends UserFacingError {
   constructor(message: string) {
     super(message);
     this.name = "DirectUploadCompletionConflictError";
@@ -59,8 +63,8 @@ async function jsonRequest<T>(
 export function DirectMultipartUpload({
   target,
   kinds,
-  heading = "Direct private upload",
-  description = "The browser uploads directly to private R2. Program Cue validates the completed object and keeps it quarantined until malware scanning passes.",
+  heading = "Upload a file",
+  description = "Your file uploads straight from this browser to private storage. Program Cue checks the completed file and keeps it quarantined until the malware scan passes.",
   onCompleted,
   disabled = false,
 }: {
@@ -155,10 +159,10 @@ export function DirectMultipartUpload({
     } catch (error) {
       setState({
         status: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "The upload stopped, but R2 cleanup did not finish.",
+        message: userFacingMessage(
+          error,
+          "The upload stopped, but the partial file was not cleared. Try cancelling again.",
+        ),
       });
     }
   }
@@ -174,8 +178,8 @@ export function DirectMultipartUpload({
     setState({
       status: paused ? "paused" : "uploading",
       message: paused
-        ? "Upload paused. Resume to continue with the parts already stored in R2."
-        : "Resuming the private multipart upload…",
+        ? "Upload paused. Resume to continue from where it stopped."
+        : "Resuming your upload…",
       progress,
     });
   }
@@ -199,15 +203,17 @@ export function DirectMultipartUpload({
     try {
       setState({
         status: "uploading",
-        message: "Resuming the private multipart upload…",
+        message: "Resuming your upload…",
         progress: 0,
       });
       await finishTransfer(active);
     } catch (error) {
       setState({
         status: "error",
-        message:
-          error instanceof Error ? error.message : "Direct upload failed.",
+        message: userFacingMessage(
+          error,
+          "The upload could not be completed. Try again.",
+        ),
         reloadRequired: error instanceof DirectUploadCompletionConflictError,
       });
       if (error instanceof DirectUploadCompletionConflictError)
@@ -273,7 +279,7 @@ export function DirectMultipartUpload({
         onProgress: (progress) =>
           setState({
             status: "uploading",
-            message: `Uploading directly to private R2 with Uppy… ${progress}%`,
+            message: `Uploading… ${progress}%`,
             progress,
           }),
         onPauseChange: (paused) => {
@@ -281,7 +287,7 @@ export function DirectMultipartUpload({
           setState((current) => ({
             status: "paused",
             message:
-              "Upload paused. Resume to continue with the parts already stored in R2.",
+              "Upload paused. Resume to continue from where it stopped.",
             progress:
               current.status === "uploading" || current.status === "paused"
                 ? current.progress
@@ -292,15 +298,17 @@ export function DirectMultipartUpload({
       session.current = active;
       setState({
         status: "uploading",
-        message: "Uploading directly to private R2 with Uppy…",
+        message: "Uploading…",
         progress: 0,
       });
       await finishTransfer(active);
     } catch (error) {
       setState({
         status: "error",
-        message:
-          error instanceof Error ? error.message : "Direct upload failed.",
+        message: userFacingMessage(
+          error,
+          "The upload could not be completed. Try again.",
+        ),
         reloadRequired: error instanceof DirectUploadCompletionConflictError,
       });
       if (error instanceof DirectUploadCompletionConflictError)
@@ -369,7 +377,7 @@ export function DirectMultipartUpload({
             Boolean(session.current)
           }
         >
-          <UploadCloud aria-hidden size={15} /> Upload directly to R2
+          <UploadCloud aria-hidden size={15} /> Upload file
         </button>
         {transferActive ? (
           <button className="btn" type="button" onClick={pauseResumeUpload}>

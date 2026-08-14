@@ -1,7 +1,25 @@
 const encoder = new TextEncoder();
 
+/**
+ * A stable slug naming which part of the upload configuration is wrong.
+ *
+ * The message names the exact variable, which is useful when this throws at
+ * startup but must not reach a log line — `applicant-file-multipart.test.ts`
+ * asserts that variable names never appear in one. `reason` is safe to log, and
+ * without it every failure here arrives as the same class name, leaving no way
+ * to tell a missing account from a malformed bucket name.
+ */
+export type R2S3ConfigurationReason =
+  | "account"
+  | "bucket"
+  | "credentials"
+  | "unknown";
+
 export class R2S3ConfigurationError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly reason: R2S3ConfigurationReason = "unknown",
+  ) {
     super(message);
     this.name = "R2S3ConfigurationError";
   }
@@ -17,12 +35,14 @@ type R2S3Configuration = {
 function requireValue(
   value: string | undefined,
   name: string,
+  reason: R2S3ConfigurationReason,
   minimumLength = 1,
 ) {
   const normalized = value?.trim() ?? "";
   if (normalized.length < minimumLength)
     throw new R2S3ConfigurationError(
       `${name} is required for direct R2 uploads.`,
+      reason,
     );
   return normalized;
 }
@@ -30,21 +50,28 @@ function requireValue(
 export function requireR2S3Configuration(
   env: CloudflareEnvironment,
 ): R2S3Configuration {
-  const accountId = requireValue(env.R2_ACCOUNT_ID, "R2_ACCOUNT_ID");
-  const bucketName = requireValue(env.R2_BUCKET_NAME, "R2_BUCKET_NAME");
-  const accessKeyId = requireValue(env.R2_ACCESS_KEY_ID, "R2_ACCESS_KEY_ID");
+  const accountId = requireValue(env.R2_ACCOUNT_ID, "R2_ACCOUNT_ID", "account");
+  const bucketName = requireValue(env.R2_BUCKET_NAME, "R2_BUCKET_NAME", "bucket");
+  const accessKeyId = requireValue(
+    env.R2_ACCESS_KEY_ID,
+    "R2_ACCESS_KEY_ID",
+    "credentials",
+  );
   const secretAccessKey = requireValue(
     env.R2_SECRET_ACCESS_KEY,
     "R2_SECRET_ACCESS_KEY",
+    "credentials",
     16,
   );
   if (!/^[a-zA-Z0-9_-]+$/.test(accountId))
     throw new R2S3ConfigurationError(
       "R2_ACCOUNT_ID contains invalid characters.",
+      "account",
     );
   if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucketName))
     throw new R2S3ConfigurationError(
       "R2_BUCKET_NAME is not a valid R2 bucket name.",
+      "bucket",
     );
   return { accountId, bucketName, accessKeyId, secretAccessKey };
 }

@@ -170,7 +170,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         ok: true,
         intent: "preview_repository_migration",
         message:
-          "Migration preview recorded. Review every managed event-data change before confirming the authority switch.",
+          "Handover preview ready. Review every listed change before confirming.",
         preview,
       });
     }
@@ -190,8 +190,8 @@ export async function action({ request, context }: Route.ActionArgs) {
           ok: !realtimeFailure,
           intent: "confirm_repository_migration",
           message: realtimeFailure
-            ? `Repository authority changed to ${result.provider === "airtable" ? "Airtable" : "D1"}. ${realtimeFailure.message}`
-            : `Repository authority changed to ${result.provider === "airtable" ? "Airtable" : "D1"} after reconciliation.`,
+            ? `${result.provider === "airtable" ? "Airtable" : "Program Cue"} now holds this event's data. ${realtimeFailure.message}`
+            : `${result.provider === "airtable" ? "Airtable" : "Program Cue"} now holds this event's data, and both systems match.`,
           committed: true,
         },
         realtimeFailure ? { status: 207 } : undefined,
@@ -254,7 +254,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         message:
           result.delivery === "sent"
             ? `${result.scope === "organisation" ? "Organisation" : "Event"} administrator invitation created and a one-time sign-in link was sent.`
-            : `Demo ${result.scope === "organisation" ? "organisation" : "event"} administrator invitation created in D1. No email was sent in explicit demo mode.`,
+            : `Demo ${result.scope === "organisation" ? "organisation" : "event"} administrator invitation created. No email was sent, because this is demo mode.`,
       });
     }
 
@@ -336,8 +336,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       intent: "save",
       message:
         formData.get("repositoryProvider") === "airtable"
-          ? "Event settings saved. Airtable event-data authority and the D1 control projection reconciled."
-          : "Event settings saved to D1.",
+          ? "Event settings saved, and Airtable is up to date."
+          : "Event settings saved.",
     });
   } catch (error) {
     if (error instanceof ZodError) {

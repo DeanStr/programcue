@@ -417,3 +417,84 @@ export function CommunicationAutomation({
     </section>
   );
 }
+
+export type SenderDnsRecord = {
+  type: string;
+  name: string;
+  value: string;
+  priority: string | null;
+};
+
+export type SenderDnsRecordSet = {
+  readable: SenderDnsRecord[];
+  /** Verbatim entries whose shape this table could not read. */
+  unreadable: string[];
+};
+
+/**
+ * The reader has to retype each of these into their DNS host, so the records
+ * are a table they can read a row at a time. The provider's raw JSON was
+ * accurate but unusable for the one job this panel has.
+ *
+ * Any entry the table cannot read is still shown, verbatim and labelled as
+ * such. Publishing an incomplete set leaves the domain unverified with nothing
+ * on screen to explain why, so an unrecognised record has to stay visible.
+ */
+export function SenderDnsRecords({ records }: { records: SenderDnsRecordSet }) {
+  return (
+    <>
+      {records.readable.length ? (
+        <div
+          className="table-wrap mt"
+          tabIndex={0}
+          aria-label="DNS records to add"
+        >
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th scope="col">Type</th>
+                <th scope="col">Name</th>
+                <th scope="col">Value</th>
+                <th scope="col">Priority</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.readable.map((record) => (
+                <tr key={`${record.type}:${record.name}:${record.value}`}>
+                  <td data-label="Type">{record.type}</td>
+                  <td data-label="Name">
+                    <code>{record.name}</code>
+                  </td>
+                  <td data-label="Value">
+                    <code>{record.value}</code>
+                  </td>
+                  <td data-label="Priority">{record.priority ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {records.unreadable.length ? (
+        <div className="validation-item warn mt" role="alert">
+          <strong>
+            {records.unreadable.length} record
+            {records.unreadable.length === 1 ? "" : "s"} could not be displayed
+          </strong>
+          <span>
+            Resend returned {records.unreadable.length === 1 ? "it" : "them"} in
+            a shape Program Cue does not recognise. Add{" "}
+            {records.unreadable.length === 1 ? "it" : "them"} from your Resend
+            dashboard as well; the domain will not verify until every record is
+            published.
+          </span>
+          {records.unreadable.map((entry) => (
+            <pre className="code-block" key={entry}>
+              {entry}
+            </pre>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+}

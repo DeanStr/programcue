@@ -1,6 +1,7 @@
 import { data } from "react-router";
 import { ZodError } from "zod";
 
+import { fieldLabel } from "~/lib/record-labels";
 import { PersonDuplicateService } from "~/modules/people/person-duplicate-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { SpeakerInvitationDeliveryError } from "~/modules/speakers/speaker-invitation.server";
@@ -193,7 +194,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
       return data<ActionResult>({
         ok: true,
-        message: `Speaker workflow updated to ${result.status}.`,
+        message: `Speaker marked as ${fieldLabel(result.status).toLowerCase()}.`,
       });
     } catch (error) {
       if (error instanceof ZodError) {

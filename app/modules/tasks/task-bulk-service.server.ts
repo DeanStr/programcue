@@ -243,7 +243,7 @@ export class TaskBulkService {
         .bind(viewer.organisationId, viewer.eventId, selectionLimit)
         .all<TaskRow>(),
     ]);
-    if (!event) throw new Response("Event not found.", { status: 404 });
+    if (!event) throw new Response("This event could not be found.", { status: 404 });
     return {
       templates: templates.results,
       speakers: speakers.results,

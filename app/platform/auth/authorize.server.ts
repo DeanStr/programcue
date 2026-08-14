@@ -67,7 +67,7 @@ function requireEvaluationIdentity(
 ): never {
   if (unauthenticatedBehavior === "redirect") throw redirect("/evaluate");
   forbidden(
-    "Choose an evaluation identity before opening a private workspace",
+    "Choose an evaluation identity before opening a private workspace.",
     401,
   );
 }
@@ -112,7 +112,7 @@ export async function requireAuthenticatedPerson(
         throw redirect(signInLocation(request, true));
       }
       forbidden(
-        "Choose a demo identity before opening a private workspace",
+        "Choose a demo identity before opening a private workspace.",
         401,
       );
     }
@@ -149,7 +149,7 @@ export async function requireAuthenticatedPerson(
   if (!session?.user) {
     if (unauthenticatedBehavior === "redirect")
       throw redirect(signInLocation(request));
-    forbidden("Authentication is required", 401);
+    forbidden("Sign in to open this page.", 401);
   }
   return {
     personId: session.user.id,
@@ -174,7 +174,7 @@ async function resolveEventRole(
     await requireAuthenticatedPerson(request, env, unauthenticatedBehavior);
 
   if (allowedRoles.length === 0)
-    forbidden("You do not have permission to manage this event");
+    forbidden("Your account cannot manage this event.");
   const rolePlaceholders = allowedRoles.map(() => "?").join(",");
 
   let membership = await env.DB.prepare(
@@ -358,7 +358,7 @@ async function resolveEventRole(
   }
 
   if (!membership) {
-    forbidden("You do not have permission to manage this event");
+    forbidden("Your account cannot manage this event.");
   }
 
   return {
@@ -409,7 +409,9 @@ export function acceptEventInvitation(
     });
   }
   if (request.headers.get("origin") !== new URL(request.url).origin) {
-    forbidden("A same-origin request is required to accept an invitation");
+    forbidden(
+      "This invitation must be accepted from Program Cue itself. Open the invitation link again.",
+    );
   }
   return resolveEventRole(
     request,

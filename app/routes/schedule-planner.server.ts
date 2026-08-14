@@ -476,7 +476,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           webhook.warning
         ) {
           const calendarMessage = publication.calendar.dispatchError
-            ? ` Calendar fan-out operation ${publication.calendar.operationId} could not be queued: ${publication.calendar.dispatchError}`
+            ? " Calendar invitations could not be sent. Retry them from the Operation Centre."
             : "";
           return data(
             {
@@ -491,7 +491,8 @@ export async function action({ request, context }: Route.ActionArgs) {
         }
         return {
           ok: true,
-          message: `Schedule published. Calendar fan-out operation ${publication.calendar.operationId} queued.`,
+          message:
+            "Schedule published. Calendar invitations are being sent to speakers.",
           calendar: publication.calendar,
           webhookDeliveries: webhook.deliveries,
         };

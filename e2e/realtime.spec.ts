@@ -141,7 +141,7 @@ test("an Event Setup commit invalidates another authenticated browser page over 
     const saveNotice = editor
       .locator(".validation-item.ok[role='status']")
       .filter({
-        has: editor.getByText("Event settings saved to D1.", { exact: true }),
+        has: editor.getByText("Event settings saved.", { exact: true }),
       });
     await expect(saveNotice).toBeVisible();
 

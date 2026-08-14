@@ -54,7 +54,7 @@ test.describe.serial("submissions vertical slice", () => {
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect(
       page.locator(".validation-item.ok[role='status']").filter({
-        hasText: "Draft form saved to D1",
+        hasText: "Draft form saved.",
       }),
     ).toBeVisible();
     await expect(
@@ -129,7 +129,7 @@ test.describe.serial("submissions vertical slice", () => {
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect(
       page.locator(".validation-item.ok[role='status']").filter({
-        hasText: "Draft form saved to D1",
+        hasText: "Draft form saved.",
       }),
     ).toBeVisible();
 
@@ -221,14 +221,14 @@ test.describe.serial("submissions vertical slice", () => {
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect(
       page.locator(".validation-item.ok[role='status']").filter({
-        hasText: "This draft is stored in D1.",
+        hasText: "Your draft has been saved.",
       }),
     ).toBeVisible();
     await page.getByText("I have reviewed this application").click();
     await page.getByRole("button", { name: "Submit application" }).click();
     await expect(
       page.locator(".validation-item.ok[role='status']").filter({
-        hasText: "This application is submitted and stored in D1.",
+        hasText: "Your application has been submitted.",
       }),
     ).toBeVisible();
     await expect(
@@ -256,7 +256,7 @@ test.describe.serial("submissions vertical slice", () => {
       .click();
     await expect(
       page.locator(".validation-item.ok[role='status']").filter({
-        hasText: "Your revised application is submitted and stored in D1.",
+        hasText: "Your revised application has been submitted.",
       }),
     ).toBeVisible();
     await page.reload();

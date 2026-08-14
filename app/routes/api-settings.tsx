@@ -14,6 +14,10 @@ import { ZodError } from "zod";
 
 import type { Route } from "./+types/api-settings";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import {
+  DomainStatusBadge,
+  statusPresentation,
+} from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
 import { apiKeyLifecycleState } from "~/platform/api/api-key-state";
 import {
@@ -596,11 +600,10 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                     </td>
                     <td>{endpoint.eventTypes.length} selected</td>
                     <td>
-                      <span
-                        className={`status ${endpoint.status === "active" ? "success" : endpoint.status === "failing" ? "danger" : "warning"}`}
-                      >
-                        {endpoint.status}
-                      </span>
+                      <DomainStatusBadge
+                        domain="webhookEndpoint"
+                        status={endpoint.status}
+                      />
                       {endpoint.failureCount ? (
                         <small className="subtle" style={{ display: "block" }}>
                           {endpoint.failureCount} consecutive failures
@@ -614,10 +617,18 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                             <Link
                               to={`/admin/operations?operation=${encodeURIComponent(endpoint.latestDelivery.operationId)}`}
                             >
-                              {endpoint.latestDelivery.status}
+                              {
+                                statusPresentation(
+                                  "webhookDelivery",
+                                  endpoint.latestDelivery.status,
+                                ).label
+                              }
                             </Link>
                           ) : (
-                            endpoint.latestDelivery.status
+                            statusPresentation(
+                              "webhookDelivery",
+                              endpoint.latestDelivery.status,
+                            ).label
                           )}
                           <small
                             className="subtle"

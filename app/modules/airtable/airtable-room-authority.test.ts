@@ -456,7 +456,7 @@ describe("Airtable authoritative room repository", () => {
   });
 
   describe("room authority workflows", () => {
-    it("writes Airtable first, reconciles the D1 projection, and retires removed rooms", async () => {
+    it("writes Airtable first, reconciles the Program Cue copy, and retires removed rooms", async () => {
       const provider = fakeAirtable();
       const repository = new AirtableRoomRepository(
         env as unknown as CloudflareEnvironment,

@@ -19,7 +19,7 @@ function limitValue(url: URL) {
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
-  if (!params.eventId) throw new Response("Event not found", { status: 404 });
+  if (!params.eventId) throw new Response("This event could not be found.", { status: 404 });
   const viewer = await requireEventRole(
     request,
     env,

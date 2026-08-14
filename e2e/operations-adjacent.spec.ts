@@ -73,7 +73,7 @@ test("event cloning shows its copy boundary and records a clean event", async ({
     .filter({ hasText: "Clone complete" });
   await expect(cloneStatus).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "view clone audit" }),
+    page.getByRole("link", { name: "View the clone record" }),
   ).toBeVisible();
 });
 
@@ -101,13 +101,13 @@ test("blank event creation keeps templates empty and makes repository authority 
     }),
   ).toHaveCount(1);
   await expect(
-    page.getByRole("radio", { name: /Cloudflare D1/ }),
+    page.getByRole("radio", { name: /Program Cue — recommended/ }),
   ).toBeChecked();
   await page.getByRole("radio", { name: /Airtable/ }).check();
   await expect(page.getByLabel("Reuse verified sender")).toHaveCount(0);
   await expect(page.getByLabel("Personal access token")).toBeVisible();
   await expect(page.getByLabel("Base ID")).toBeVisible();
-  await page.getByRole("radio", { name: /Cloudflare D1/ }).check();
+  await page.getByRole("radio", { name: /Program Cue — recommended/ }).check();
   await page.getByLabel("Event name").fill(`Browser blank event ${unique}`);
   await page.getByLabel("Public slug").fill(`browser-blank-event-${unique}`);
   await page.getByRole("button", { name: "Create blank event" }).click();
@@ -185,13 +185,15 @@ test("failed Airtable creation stays inaccessible until D1 is explicitly selecte
     page.getByRole("heading", { name: "Airtable recovery browser fixture" }),
   ).toBeVisible();
   await expect(
-    page.getByText("provisioning failed", { exact: true }),
+    page.getByText("Provisioning failed", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText(/no provider request was made/)).toBeVisible();
   await expect(page.getByLabel("Base ID")).toHaveValue("");
   await expect(page.getByLabel("Rooms table")).toHaveValue("");
 
-  await page.getByRole("button", { name: "Explicitly keep on D1" }).click();
+  await page
+    .getByRole("button", { name: "Keep this event in Program Cue" })
+    .click();
   await acceptConfirm(page);
   await expect(
     page.getByText("Recovery complete", { exact: true }),
@@ -257,7 +259,7 @@ test("CSV import exposes a durable preview before confirming", async ({
     .getByRole("row")
     .filter({ hasText: operationId! });
   await expect(
-    operationRow.getByRole("link", { name: "data.import", exact: true }),
+    operationRow.getByRole("link", { name: "Data import", exact: true }),
   ).toBeVisible();
 });
 
@@ -295,13 +297,11 @@ test("task import previews disclose every lifecycle transition before confirmati
 
   await expect(page.getByText("1 task lifecycle change")).toBeVisible();
   await expect(
-    page.getByText("(task-demo-handbook): not started → waived (waive)", {
-      exact: false,
-    }),
+    page.getByText("Not started → Waived (waive)", { exact: false }).first(),
   ).toBeVisible();
   await expect(
     page.getByRole("cell", {
-      name: "Task status: not started → waived · transition: waive",
+      name: "Task status: Not started → Waived (waive)",
     }),
   ).toBeVisible();
 
@@ -327,7 +327,10 @@ test("task import previews disclose every lifecycle transition before confirmati
     page
       .getByRole("main")
       .getByRole("status")
-      .filter({ hasText: `Operation ${operationId} was cancelled` }),
+      .filter({
+        hasText:
+          "This operation was cancelled before any external work began.",
+      }),
   ).toBeVisible();
 });
 

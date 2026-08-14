@@ -44,7 +44,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 207 },
       );
     }
-    return data({ ok: true, message: "Profile saved to D1." });
+    return data({ ok: true, message: "Your profile was saved." });
   } catch (error) {
     const message =
       error instanceof ZodError

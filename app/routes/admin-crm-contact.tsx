@@ -22,6 +22,10 @@ import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-crm-contact";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import {
+  DomainStatusBadge,
+  statusPresentation,
+} from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
 import { ensureDemoCrmData } from "~/modules/crm/demo.server";
 import { crmStages } from "~/modules/crm/crm-schema";
@@ -484,7 +488,10 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
           {contact.pipeline ? (
             <div className="stack mt">
               <p>
-                <span className="status info">{contact.pipeline.stage}</span>
+                <DomainStatusBadge
+                  domain="crm"
+                  status={contact.pipeline.stage}
+                />
                 {contact.pipeline.score !== null
                   ? ` · fit score ${contact.pipeline.score}`
                   : ""}
@@ -534,7 +541,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                 <select className="select" name="stage">
                   {crmStages.map((stage) => (
                     <option value={stage} key={stage}>
-                      {stage}
+                      {statusPresentation("crm", stage).label}
                     </option>
                   ))}
                 </select>

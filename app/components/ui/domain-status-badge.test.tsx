@@ -1,7 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { DomainStatusBadge, statusPresentation } from "./domain-status-badge";
+import {
+  DomainStatusBadge,
+  STATUS_PRESENTATIONS,
+  statusPresentation,
+  type StatusPresentation,
+} from "./domain-status-badge";
 
 describe("controlled status presentation", () => {
   it("uses one user-facing label for legacy and canonical review states", () => {
@@ -26,5 +31,18 @@ describe("controlled status presentation", () => {
     expect(() => statusPresentation("task", "done-ish")).toThrow(
       "Unsupported task status: done-ish.",
     );
+  });
+
+  it("words every status as a phrase rather than its stored value", () => {
+    const domains: Array<[string, Record<string, StatusPresentation>]> =
+      Object.entries(STATUS_PRESENTATIONS);
+    const stored: string[] = [];
+    for (const [domain, statuses] of domains) {
+      for (const [status, { label }] of Object.entries(statuses)) {
+        if (!/^[A-Z]/u.test(label) || /[_.]/u.test(label))
+          stored.push(`${domain}.${status} → ${label}`);
+      }
+    }
+    expect(stored).toEqual([]);
   });
 });

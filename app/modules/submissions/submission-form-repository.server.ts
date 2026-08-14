@@ -140,7 +140,7 @@ export class SubmissionFormRepository {
     )
       .bind(eventId, organisationId)
       .first<{ id: string; timezone: string }>();
-    if (!eventExists) throw new Response("Event not found", { status: 404 });
+    if (!eventExists) throw new Response("This event could not be found.", { status: 404 });
 
     const [created, versionCreated] = await this.env.DB.batch([
       this.env.DB.prepare(

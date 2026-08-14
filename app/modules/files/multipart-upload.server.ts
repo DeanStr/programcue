@@ -132,7 +132,7 @@ function normalizedManifest(
       );
     if (!/^[\x21-\x7e]{1,200}$/.test(part.etag))
       throw new FileMultipartStateError(
-        `Part ${part.partNumber} has an invalid R2 ETag.`,
+        `Part ${part.partNumber} was not stored correctly. Start the upload again.`,
       );
   });
   return normalized;
@@ -499,7 +499,7 @@ export class MultipartUploadService {
         ).bind(row.versionId, actor.eventId),
       ]);
       throw new FileMultipartIncompleteError(
-        "R2 could not initialize the direct multipart upload.",
+        "The upload could not be started. Try again.",
         true,
         { cause: error },
       );
@@ -568,8 +568,8 @@ export class MultipartUploadService {
           ).bind(
             providerAborted ? null : multipart.uploadId,
             providerAborted
-              ? "R2 multipart initialization metadata did not commit; provider upload was aborted."
-              : "R2 multipart initialization metadata did not commit; provider abort must be retried.",
+              ? "The upload could not be recorded, so it was cancelled. Try again."
+              : "The upload could not be recorded and its partial file was left behind. Try again.",
             row.versionId,
             actor.eventId,
           ),
@@ -592,8 +592,8 @@ export class MultipartUploadService {
       }
       throw new FileMultipartIncompleteError(
         providerAborted
-          ? "The R2 multipart upload was aborted because its metadata could not be committed."
-          : "The multipart intent was revoked, but the R2 provider upload could not be aborted. Retry abort.",
+          ? "The upload was cancelled because it could not be recorded."
+          : "The upload was cancelled, but its partial file could not be cleared. Try cancelling again.",
         true,
         {
           cause:
@@ -790,19 +790,19 @@ export class MultipartUploadService {
         const expected = boundedEnd - start;
         if (start < 0 || end < start || start > row.sizeBytes || expected < 1)
           throw new FileMultipartStateError(
-            "Signature inspection requested an invalid R2 byte range.",
+            "The uploaded file could not be checked. Upload it again.",
           );
         const object = await bucket.get(row.objectKey, {
           range: { offset: start, length: expected },
         });
         if (!object)
           throw new FileMultipartStateError(
-            "The completed R2 object disappeared during signature inspection.",
+            "The uploaded file was no longer available when it was checked. Upload it again.",
           );
         const bytes = await object.arrayBuffer();
         if (bytes.byteLength !== expected)
           throw new FileMultipartStateError(
-            "R2 returned an incomplete range during signature inspection.",
+            "The uploaded file could not be read for checking. Upload it again.",
           );
         return bytes;
       },
@@ -957,7 +957,7 @@ export class MultipartUploadService {
   private async ensureScan(actor: MultipartActor, row: MultipartRow) {
     if (!row.objectEtag)
       throw new FileMultipartStateError(
-        "Completed multipart metadata is missing the R2 object ETag.",
+        "This upload is missing the record of what was stored. Upload the file again.",
       );
     return enqueueFileScan(this.env, actor, {
       versionId: row.versionId,
@@ -983,7 +983,7 @@ export class MultipartUploadService {
     ) {
       if (!row.uploadId)
         throw new FileMultipartStateError(
-          "Revoked multipart metadata is missing its R2 upload identifier.",
+          "This cancelled upload is missing its storage record, so it cannot be cleared.",
         );
       await this.removeRevokedProviderState({ ...row, uploadId: row.uploadId });
       throw new FileMultipartStateError(
@@ -1009,7 +1009,7 @@ export class MultipartUploadService {
     else if (row.status === "completing") {
       if (!row.uploadId)
         throw new FileMultipartStateError(
-          "Completing multipart metadata is missing its R2 upload identifier.",
+          "This upload is missing its storage record, so it cannot be completed.",
         );
       try {
         await this.assertCurrentUploadAllowed(actor, row);
@@ -1119,7 +1119,7 @@ export class MultipartUploadService {
         )
         .run();
       throw new FileMultipartIncompleteError(
-        "R2 multipart completion did not finish. Retry with the same part manifest.",
+        "The upload did not finish. Try again with the same file.",
         true,
         { cause: error },
       );
@@ -1143,7 +1143,7 @@ export class MultipartUploadService {
         row,
         null,
         new FilePolicyError(
-          "The completed R2 object does not match the declared multipart upload.",
+          "The stored file does not match the upload it was meant to complete.",
         ),
       );
     }
@@ -1332,7 +1332,7 @@ export class MultipartUploadService {
         failures.push(error);
       }
       throw new FileMultipartIncompleteError(
-        "The completed R2 object was revoked before its quarantined metadata could commit.",
+        "The stored file was cancelled before the upload could be recorded. Upload it again.",
         true,
         failures.length
           ? {
@@ -1352,7 +1352,7 @@ export class MultipartUploadService {
       row.objectEtag !== object.httpEtag
     )
       throw new FileMultipartIncompleteError(
-        "The R2 object completed, but its quarantined metadata did not commit. Retry completion.",
+        "The file was stored, but the upload could not be recorded. Try finishing it again.",
         true,
       );
     return row;

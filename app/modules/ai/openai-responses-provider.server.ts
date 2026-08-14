@@ -89,15 +89,33 @@ export class AiConfigurationError extends Error {
   }
 }
 
+export type AiProviderFailureKind =
+  | "transient"
+  | "request-rejected"
+  | "invalid-response";
+
+type AiProviderErrorOptions = ErrorOptions & {
+  failureKind?: AiProviderFailureKind;
+};
+
 export class AiProviderError extends Error {
+  readonly failureKind: AiProviderFailureKind;
+
   constructor(
     message: string,
     readonly status: number | null = null,
     readonly providerRequestId: string | null = null,
-    options?: ErrorOptions,
+    options?: AiProviderErrorOptions,
   ) {
     super(message, options);
     this.name = "AiProviderError";
+    this.failureKind =
+      options?.failureKind ??
+      (status === null || (status >= 200 && status < 400)
+        ? "invalid-response"
+        : status === 408 || status === 425 || status === 429 || status >= 500
+          ? "transient"
+          : "request-rejected");
   }
 }
 
@@ -311,7 +329,7 @@ export class OpenAiResponsesProvider {
         "The OpenAI request could not reach the provider.",
         null,
         null,
-        { cause: error },
+        { cause: error, failureKind: "transient" },
       );
     }
     const providerRequestId = normalizeAiProviderRequestId(

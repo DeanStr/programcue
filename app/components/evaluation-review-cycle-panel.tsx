@@ -112,7 +112,7 @@ export function EvaluationReviewCyclePanel() {
               <input type="checkbox" name="anonymous" value="true" />
               <span>
                 <strong>Hide author and co-author identity</strong>
-                Apply the blinded reviewer projection to this new round.
+                Reviewers in this round will not see who submitted.
               </span>
             </label>
             <div className="validation-item info">

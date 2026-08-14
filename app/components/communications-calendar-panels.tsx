@@ -1,6 +1,9 @@
 import { Form, Link, useSubmit } from "react-router";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
+import { providerLabel } from "~/lib/provider-labels";
+import { shortReference } from "~/lib/short-reference";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
   communicationCategoryLabel as categoryLabel,
@@ -87,9 +90,9 @@ function CalendarAction({
           ? "Cancel invitation"
           : provider === "email_ics"
             ? creating
-              ? "Send email ICS"
-              : "Email ICS update"
-            : `${creating ? "Send to" : "Update"} ${provider === "google" ? "Google" : "Microsoft"}`}
+              ? "Email the invitation"
+              : "Email an update"
+            : `${creating ? "Send to" : "Update"} ${provider === "google" ? "Google Calendar" : "Microsoft Outlook"}`}
       </button>
     </Form>
   );
@@ -399,7 +402,9 @@ export function CalendarLifecycleTable({
                 <tr key={invitation.id}>
                   <td className="pc-record-primary-cell" data-label="Session">
                     {invitation.sessionTitle}
-                    <small>{invitation.icalUid}</small>
+                    <small>
+                      Calendar reference {shortReference(invitation.icalUid)}
+                    </small>
                   </td>
                   <td data-label="Speaker">
                     <CommunicationRecipientIdentity
@@ -408,15 +413,21 @@ export function CalendarLifecycleTable({
                     />
                   </td>
                   <td data-label="Provider">
-                    {invitation.provider ?? "Pending"}
+                    {providerLabel(invitation.provider, "Not sent yet")}
                   </td>
                   <td data-label="Lifecycle">
-                    <span
-                      className={`status ${invitation.status === "sent" || invitation.status === "confirmed" ? "success" : invitation.status === "failed" ? "danger" : "info"}`}
-                    >
-                      {invitation.method} · seq {invitation.sequenceNumber} ·{" "}
-                      {invitation.status}
-                    </span>
+                    <DomainStatusBadge
+                      domain="calendarInvitation"
+                      status={invitation.status}
+                    />
+                    <small className="subtle" style={{ display: "block" }}>
+                      {invitation.method === "CANCEL"
+                        ? "Cancellation"
+                        : "Invitation"}
+                      {invitation.sequenceNumber > 0
+                        ? ` · update ${invitation.sequenceNumber}`
+                        : ""}
+                    </small>
                   </td>
                 </tr>
               ))}

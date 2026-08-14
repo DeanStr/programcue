@@ -2,12 +2,14 @@ import { Form, Link, useNavigation, useSubmit } from "react-router";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
+import { fieldLabel } from "~/lib/record-labels";
+import { shortReference } from "~/lib/short-reference";
 import {
   metadataOperationId,
   OperationDateTime,
   operationItemLink as itemLink,
   operationMetadataSummary as metadataSummary,
-  operationStatusLabel as statusLabel,
+  operationTaskStatusLabel as statusLabel,
   taskImportTransitionSummary,
   type OperationCentreData,
 } from "./operation-centre-shared";
@@ -97,9 +99,7 @@ export function ActivityTimelinePanel({
             const operationId = metadataOperationId(item.metadata);
             return (
               <li key={item.id}>
-                <strong>
-                  {item.action.replaceAll(".", " · ").replaceAll("_", " ")}
-                </strong>
+                <strong>{fieldLabel(item.action.replaceAll(".", " "))}</strong>
                 <span>
                   {item.actorName} ·{" "}
                   <OperationDateTime
@@ -111,10 +111,13 @@ export function ActivityTimelinePanel({
                 <small className="subtle">
                   {entityHref ? (
                     <Link to={entityHref}>
-                      {item.entityType}: {item.entityId}
+                      {fieldLabel(item.entityType)}
+                      {item.entityId
+                        ? ` ${shortReference(item.entityId)}`
+                        : ""}
                     </Link>
                   ) : (
-                    `${item.entityType}${item.entityId ? `: ${item.entityId}` : ""}`
+                    `${fieldLabel(item.entityType)}${item.entityId ? ` ${shortReference(item.entityId)}` : ""}`
                   )}
                   {operationId ? (
                     <>
@@ -123,7 +126,7 @@ export function ActivityTimelinePanel({
                       <Link
                         to={`/admin/operations?operation=${encodeURIComponent(operationId)}`}
                       >
-                        operation {operationId}
+                        View operation
                       </Link>
                     </>
                   ) : null}
@@ -191,10 +194,15 @@ export function OperationsListPanel({
                       <Link
                         to={`/admin/operations?operation=${encodeURIComponent(operation.id)}`}
                       >
-                        <strong>{operation.type}</strong>
+                        <strong>
+                          {fieldLabel(operation.type.replaceAll(".", " "))}
+                        </strong>
                       </Link>
+                      {/* The full identifier stays here: this is the one
+                          surface where an operator arrives holding one from a
+                          log or a link, so it has to be matchable in full. */}
                       <small className="subtle" style={{ display: "block" }}>
-                        {operation.id}
+                        Reference <code>{operation.id}</code>
                       </small>
                     </td>
                     <td>
@@ -412,7 +420,9 @@ export function OperationDetailPanel({
                             className="subtle"
                             style={{ display: "block" }}
                           >
-                            {item.entityType ?? "operation item"}
+                            {item.entityType
+                              ? fieldLabel(item.entityType)
+                              : "Operation item"}
                           </small>
                         </td>
                         <td data-label="Status">
@@ -425,7 +435,7 @@ export function OperationDetailPanel({
                         <td data-label="Result">
                           {item.errorMessage ??
                             (taskTransition
-                              ? `Task status: ${statusLabel(taskTransition.beforeStatus)} → ${statusLabel(taskTransition.afterStatus)} · transition: ${statusLabel(taskTransition.transition)}`
+                              ? `Task status: ${statusLabel(taskTransition.beforeStatus)} → ${statusLabel(taskTransition.afterStatus)} (${fieldLabel(taskTransition.transition).toLowerCase()})`
                               : metadataSummary(item.result)) ??
                             "—"}
                         </td>

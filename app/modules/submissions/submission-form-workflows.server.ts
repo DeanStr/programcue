@@ -113,7 +113,8 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
         .first<{ accessMode: SaveFormInput["accessMode"] }>(),
       this.listRoutingTracks(viewer),
     ]);
-    if (!event) throw new Response("Event not found", { status: 404 });
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
     return this.defaultFormInput(event.accessMode, tracks);
   }
 

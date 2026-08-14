@@ -162,7 +162,7 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
     await invitation.getByLabel("Email").fill(SAM_EMAIL);
     await invitation.getByRole("button", { name: "Send invitation" }).click();
     await expect(
-      page.getByText(/exact SBEK fixture identity was activated locally/i),
+      page.getByText(/fixed demo identity was activated locally/i),
     ).toBeVisible();
 
     await initialCard
@@ -259,12 +259,12 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect(
       page.locator(".validation-item.ok[role='status']"),
-    ).toContainText("This draft is stored in D1");
+    ).toContainText("Your draft has been saved");
     await page.getByText("I have reviewed this application").click();
     await page.getByRole("button", { name: "Submit application" }).click();
     await expect(
       page.locator(".validation-item.ok[role='status']"),
-    ).toContainText("This application is submitted and stored in D1");
+    ).toContainText("Your application has been submitted");
 
     await switchDemoRole(page, "administrator", "/admin/review");
     await waitForInterface(page, "/admin/review");
@@ -281,7 +281,7 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
     await expect(aiAssessmentDialog).toContainText(SUBMISSION_TITLE);
     await expect(aiAssessmentDialog).toContainText(INITIAL_ROUND);
     await expect(aiAssessmentDialog).toContainText(
-      "provider request cannot be undone",
+      "The request to the provider cannot be undone",
     );
     await aiAssessmentDialog.getByRole("button", { name: "Cancel" }).click();
     const assignmentSelect = submissionRow.getByLabel(

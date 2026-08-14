@@ -382,7 +382,7 @@ export class TaskServiceFoundation {
         timezone: string;
         startsAt: number;
       }>();
-    if (!row) throw new Response("Event not found.", { status: 404 });
+    if (!row) throw new Response("This event could not be found.", { status: 404 });
     return row;
   }
 

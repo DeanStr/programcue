@@ -4,6 +4,7 @@ import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-event-new";
+import { shortReference } from "~/lib/short-reference";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   EventCreationInProgressError,
@@ -88,7 +89,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data<ActionResponse>({
       ok: true,
       committed: true,
-      message: `Blank event created with ${result.repositoryProvider === "airtable" ? "Airtable" : "D1"} as its event-data authority.${senderOutcome}`,
+      message: `Blank event created. ${result.repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} holds its event data.${senderOutcome}`,
       result,
     });
   } catch (error) {
@@ -199,8 +200,9 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
             <div>{actionData.message}</div>
             {actionData.result ? (
               <>
-                <p>
-                  <code>{actionData.result.eventId}</code>
+                <p className="subtle">
+                  Event reference{" "}
+                  <code>{shortReference(actionData.result.eventId)}</code>
                 </p>
                 {actionData.ok ? (
                   <>
@@ -319,9 +321,9 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                   onChange={() => setRepositoryProvider("d1")}
                 />
                 <span>
-                  <strong>Cloudflare D1 — recommended</strong>
+                  <strong>Program Cue — recommended</strong>
                   <small>
-                    Transactional default with no external credentials.
+                    Keep event data here. Nothing else to set up.
                   </small>
                 </span>
               </label>
@@ -339,8 +341,8 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                 <span>
                   <strong>Airtable</strong>
                   <small>
-                    Saves the event safely in D1, then validates, synchronizes
-                    and activates the managed Airtable schema.
+                    Creates the event here first, then checks your Airtable
+                    base, copies the event into it and hands over.
                   </small>
                 </span>
               </label>
@@ -435,7 +437,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                 confirm(
                   {
                     title: "Create this blank event?",
-                    description: `The event is created with ${repositoryProvider === "airtable" ? "Airtable" : "D1"} as its event-data authority.${selectedSender ? ` The verified sender ${selectedSender.fromName} <${selectedSender.fromEmail}> is copied from ${selectedSender.sourceEventName}.` : " No sender is copied; email sends remain blocked until one is configured."} Changing repository authority later requires the full preview, reconciliation and confirmation workflow.`,
+                    description: `${repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} will hold this event's data.${selectedSender ? ` The verified sender ${selectedSender.fromName} <${selectedSender.fromEmail}> is copied from ${selectedSender.sourceEventName}.` : " No sender is copied, so email sending stays blocked until you configure one."} Changing this later means reviewing and confirming a full list of changes.`,
                     confirmLabel: "Create blank event",
                     tone: "primary",
                   },

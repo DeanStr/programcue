@@ -10,6 +10,7 @@ import {
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import type { ApplicantDraft } from "~/modules/submissions/submission-repository.server";
 import {
   DEFAULT_FORM_PRESENTATION,
@@ -311,11 +312,7 @@ export function DraftEditor({
       ) : null}
       <div className="card-title">
         <div>
-          <span
-            className={`status ${draft.status === "draft" ? "info" : draft.status === "withdrawn" ? "warning" : "success"}`}
-          >
-            {draft.status}
-          </span>
+          <DomainStatusBadge domain="submission" status={draft.status} />
           <h1 className="mt">{draft.title}</h1>
         </div>
         <span className="subtle right">Form version {draft.versionNumber}</span>
@@ -648,7 +645,7 @@ export function DraftEditor({
           </label>
           <div className="page-actions">
             <span className={`status ${dirty ? "warning" : "success"}`}>
-              {dirty ? "Unsaved changes" : "Loaded from D1"}
+              {dirty ? "Unsaved changes" : "All changes saved"}
             </span>
             <DraftRecoveryStatus state={recovery.state} />
             {!revisionMode ? (

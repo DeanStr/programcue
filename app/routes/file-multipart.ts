@@ -42,7 +42,13 @@ function logMultipartFailure(event: string, operation: string, error: unknown) {
       event,
       operation,
       errorName,
-      message: "The direct multipart request could not be completed.",
+      // A slug, never the message: several distinct configuration faults share
+      // one error class, and the class alone cannot tell them apart. The
+      // message names the variable, which must stay out of logs.
+      ...(typeof (error as { reason?: unknown })?.reason === "string"
+        ? { reason: (error as { reason: string }).reason }
+        : {}),
+      message: "A file upload request could not be completed.",
     }),
   );
 }
@@ -64,7 +70,7 @@ function methodNotAllowed() {
 export async function action({ request, params, context }: Route.ActionArgs) {
   if (request.method !== "POST") return methodNotAllowed();
   if (!params.operation || !OPERATIONS.has(params.operation))
-    return response({ error: "Unsupported multipart operation." }, 404);
+    return response({ error: "That upload step is not supported." }, 404);
   const { env } = getCloudflareContext(context);
   try {
     const viewer = await requireCurrentEventRole(
@@ -85,14 +91,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     try {
       body = JSON.parse(rawBody);
     } catch {
-      return response({ error: "Request body must contain valid JSON." }, 400);
+      return response({ error: "That request could not be read. Reload the page and try again." }, 400);
     }
     const service = new MultipartUploadService(env);
     if (params.operation === "initiate" || params.operation === "resume") {
       const idempotencyKey = request.headers.get("idempotency-key")?.trim();
       if (!idempotencyKey)
         return response(
-          { error: "An Idempotency-Key header is required." },
+          { error: "That request was missing information needed to avoid duplicates. Reload the page and try again." },
           400,
         );
       const record =
@@ -115,11 +121,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return response({ ok: true, upload: await service.abort(viewer, body) });
   } catch (error) {
     if (error instanceof RequestBodyTooLargeError)
-      return response({ error: "Multipart request exceeds 128 KB." }, 413);
+      return response({ error: "That request was too large to process." }, 413);
     if (error instanceof ZodError)
       return response(
         {
-          error: error.issues[0]?.message ?? "Invalid multipart request.",
+          error: error.issues[0]?.message ?? "That upload request could not be read.",
           issues: error.issues,
         },
         422,
@@ -128,13 +134,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       return response({ error: error.message }, 403);
     if (error instanceof FilePolicyError)
       return response({ error: error.message }, 422);
+    // Both errors name a deployment variable the uploader cannot set, so the
+    // reader gets a fixed sentence. `logMultipartFailure` records the error
+    // class and the failing operation, deliberately not the message: this
+    // project keeps configuration variable names out of logs, which
+    // `applicant-file-multipart.test.ts` asserts.
     if (error instanceof R2S3ConfigurationError) {
       logMultipartFailure(
         "upload-configuration-unavailable",
         params.operation,
         error,
       );
-      return response({ error: error.message }, 503);
+      return response(
+        { error: "Uploads are unavailable right now. Try again later." },
+        503,
+      );
     }
     if (error instanceof FileScanDispatchConfigurationError) {
       logMultipartFailure(
@@ -142,7 +156,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         params.operation,
         error,
       );
-      return response({ error: error.message }, 503);
+      return response(
+        { error: "Uploads are unavailable right now. Try again later." },
+        503,
+      );
     }
     if (
       error instanceof FileMultipartStateError ||

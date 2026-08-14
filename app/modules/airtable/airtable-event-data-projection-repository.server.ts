@@ -188,7 +188,7 @@ export class AirtableEventProjectionCommitError extends Error {
     cause: unknown,
   ) {
     super(
-      `The D1 projection command committed, but Airtable did not reconcile: ${cause instanceof Error ? cause.message : String(cause)}. Run ${runId} must be retried before this event can be read or changed.`,
+      `The Program Cue copy command committed, but Airtable did not reconcile: ${cause instanceof Error ? cause.message : String(cause)}. Run ${runId} must be retried before this event can be read or changed.`,
     );
     this.name = "AirtableEventProjectionCommitError";
   }
@@ -321,7 +321,7 @@ export class AirtableEventDataProjectionRepository {
                   ? error.message
                   : String(error);
             throw new AirtableEventDataSchemaError(
-              `D1 ${spec.entityType} projection does not match the managed Airtable schema: ${detail ?? "invalid row"}.`,
+              `The Program Cue copy of ${spec.entityType} does not match the Airtable structure: ${detail ?? "invalid row"}.`,
             );
           }
           const entityId = spec.entityId(payload);
@@ -702,7 +702,7 @@ export class AirtableEventDataProjectionRepository {
       mapping.sourceHash !== airtable.hash
     ) {
       const reason =
-        "The Airtable canonical snapshot and D1 projection diverged. Reconcile the connection before continuing.";
+        "The Airtable canonical snapshot and Program Cue copy diverged. Reconcile the connection before continuing.";
       await this.rooms.markNeedsAttention(organisationId, eventId, reason);
       throw new AirtableEventDataUnsynchronizedError(reason);
     }
@@ -746,7 +746,7 @@ export class AirtableEventDataProjectionRepository {
     const changedPlan = plan.filter((item) => item.action !== "noop");
     if (changedPlan.length > AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES)
       throw new AirtableEventDataUnsynchronizedError(
-        `The initial Airtable synchronization would change ${changedPlan.length} managed records, above the ${AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES}-record synchronous limit. Keep this event on D1.`,
+        `Setting up Airtable would change ${changedPlan.length} records, which is more than the ${AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES} that can be handled while you wait. Keep this event in Program Cue.`,
       );
     const runId = crypto.randomUUID();
     const summary = {
@@ -833,7 +833,7 @@ export class AirtableEventDataProjectionRepository {
         (completed[3]?.meta.changes ?? 0) !== 1
       )
         throw new AirtableRepositoryReconciliationError(
-          "Airtable synchronized, but its D1 mapping and audit did not finalize completely.",
+          "Airtable was updated, but Program Cue could not finish recording the result.",
         );
       return { runId, idempotent: false };
     } catch (error) {

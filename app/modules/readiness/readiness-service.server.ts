@@ -337,7 +337,7 @@ export class ReadinessService {
         publicationComplete: number;
         baselineCursor: number;
       }>();
-    if (!event) throw new Response("Event not found", { status: 404 });
+    if (!event) throw new Response("This event could not be found.", { status: 404 });
 
     const now = Math.floor(Date.now() / 1000);
     // Capture the cursor before the snapshot. Any mutation that commits while

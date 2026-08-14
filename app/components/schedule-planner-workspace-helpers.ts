@@ -221,7 +221,7 @@ export function serializeAutoPlacementPreview(preview: AutoPlacementPreview) {
     ),
   });
   if (payload === undefined) {
-    throw new Error("The auto-place preview could not be serialized.");
+    throw new Error("The suggested placements could not be prepared.");
   }
   return payload;
 }

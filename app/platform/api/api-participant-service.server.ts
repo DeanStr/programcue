@@ -418,7 +418,7 @@ export class ApiParticipantService {
       );
     } catch {
       realtimeWarning =
-        "The profile was saved, but live updates could not be broadcast. Refresh other open views before continuing.";
+        "The profile was saved, but other open views could not be updated automatically. Refresh them before continuing.";
     }
     return {
       response: {

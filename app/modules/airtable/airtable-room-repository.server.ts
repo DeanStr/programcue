@@ -282,7 +282,7 @@ export class AirtableRoomRepository {
       : namedTables[0];
     if (expectedTableId && !table)
       throw new AirtableRepositorySchemaError(
-        `The configured Airtable table “${tableName}” (${expectedTableId}) no longer exists. Restore it or migrate authority back to D1 before changing repositories.`,
+        `The Airtable table “${tableName}” no longer exists. Restore it, or hand event data back to Program Cue, before changing this setting.`,
       );
     if (!table) {
       table = await client.createTable(tableName, fields);
@@ -530,7 +530,7 @@ export class AirtableRoomRepository {
         input.tableName !== authoritativeConfiguration.tables.rooms.name
       )
         throw new AirtableRepositoryConfigurationError(
-          "An authoritative Airtable repository cannot be switched to another base or room table through reconfiguration. Migrate authority to D1 first.",
+          "While Airtable holds this event's data, it cannot be pointed at a different base or rooms table. Hand event data back to Program Cue first.",
         );
     }
     const prepared = await this.provisionConnection(viewer.eventId, input, {
@@ -848,7 +848,7 @@ export class AirtableRoomRepository {
         resources = JSON.parse(row.resourcesJson);
       } catch {
         throw new AirtableRepositorySchemaError(
-          `D1 room ${row.id} has invalid resource inventory JSON.`,
+          `The stored room resources for room ${row.id} could not be read.`,
         );
       }
       try {
@@ -867,7 +867,7 @@ export class AirtableRoomRepository {
               ? error.message
               : String(error);
         throw new AirtableRepositorySchemaError(
-          `D1 room ${row.id} does not match the managed Airtable room projection: ${detail ?? "invalid row"}.`,
+          `The Program Cue copy of room ${row.id} does not match Airtable: ${detail ?? "invalid row"}.`,
         );
       }
     });
@@ -876,7 +876,7 @@ export class AirtableRoomRepository {
     );
     if (!sameActiveRoomProjection(sortRooms(d1Rooms), authoritativeRooms))
       throw new AirtableRepositoryReconciliationError(
-        "The authoritative Airtable rooms and D1 scheduling projection diverged. Review the Airtable rooms in Event Setup and save them before continuing.",
+        "The rooms in Airtable and the copy used for scheduling no longer match. Review the Airtable rooms in Event Setup and save them before continuing.",
       );
     return snapshot;
   }

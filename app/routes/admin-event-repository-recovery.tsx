@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-event-repository-recovery";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { fieldLabel } from "~/lib/record-labels";
 import {
   EventRepositoryRecoveryService,
   EventRepositoryRecoveryStateError,
@@ -73,7 +74,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         const result = await service.keepOnD1(viewer, params.eventId);
         return data({
           ok: true as const,
-          message: "The event is now active with D1 as its explicit authority.",
+          message: "The event is active, with Program Cue holding its data.",
           result,
         });
       }
@@ -158,14 +159,14 @@ export default function AdminEventRepositoryRecovery({
       {dialog}
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Repository recovery</span>
+          <span className="pc-page-eyebrow">Incomplete event setup</span>
           <h1>{loaderData.name}</h1>
           <p>
             {active
-              ? "Repository recovery is complete and this event is available for normal use."
+              ? "This event is fully set up and available for normal use."
               : discarded
-                ? "This discarded control-plane record remains only as an inaccessible audit tombstone."
-                : "This control-plane record is isolated from normal event access until its selected repository is established or you explicitly choose D1."}
+                ? "This event was discarded. Only its history remains, and it cannot be opened."
+                : "This event cannot be opened until its Airtable connection is completed, or you choose to keep it in Program Cue instead."}
           </p>
         </div>
         <Link className="btn" to="/admin/event">
@@ -207,14 +208,16 @@ export default function AdminEventRepositoryRecovery({
 
       <section className="card pad stack">
         <div>
-          <strong>Current authority</strong>
+          <strong>Event data held by</strong>
           <div>
-            {loaderData.repositoryProvider === "airtable" ? "Airtable" : "D1"}
+            {loaderData.repositoryProvider === "airtable"
+              ? "Airtable"
+              : "Program Cue"}
           </div>
         </div>
         <div>
           <strong>Activation state</strong>
-          <div>{loaderData.activationStatus.replaceAll("_", " ")}</div>
+          <div>{fieldLabel(loaderData.activationStatus)}</div>
         </div>
         <div>
           <strong>Last operation</strong>
@@ -240,8 +243,8 @@ export default function AdminEventRepositoryRecovery({
             <AlertTriangle aria-hidden size={19} />
           </div>
           <p>
-            The creation lease expired without a terminal result. Move this
-            event to explicit recovery before retrying Airtable, choosing D1 or
+            Setup ran out of time without finishing. Move this event to
+            recovery before retrying Airtable, keeping it in Program Cue or
             discarding it. This action does not contact Airtable.
           </p>
           <Form method="post">
@@ -256,7 +259,7 @@ export default function AdminEventRepositoryRecovery({
                   {
                     title: "Move this stalled creation to recovery?",
                     description:
-                      "The expired operation cannot resume after this change, and you then choose between retrying Airtable, keeping D1 or discarding the event. Airtable is not contacted.",
+                      "The timed-out setup cannot resume after this change. You then choose between retrying Airtable, keeping the event in Program Cue, or discarding it. Airtable is not contacted.",
                     records: [`${loaderData.name} · ${loaderData.slug}`],
                     confirmLabel: "Move to recovery",
                   },
@@ -283,10 +286,10 @@ export default function AdminEventRepositoryRecovery({
             </div>
             {retryFenced ? (
               <p>
-                The expired executor may still finish its provider request, so
-                starting another Airtable provisioning attempt is unsafe. Keep
-                this event on D1 or discard it; Program Cue will not guess that
-                the old provider work has stopped.
+                The timed-out attempt may still be running against Airtable, so
+                starting another one is unsafe. Keep this event in Program Cue
+                or discard it; Program Cue will not assume the earlier attempt
+                has stopped.
               </p>
             ) : (
               <>
@@ -338,23 +341,23 @@ export default function AdminEventRepositoryRecovery({
                   const form = event.currentTarget.form;
                   confirm(
                     {
-                      title: "Keep this event on D1?",
+                      title: "Keep this event in Program Cue?",
                       description:
-                        "The D1 projection is activated as the explicit authority and the incomplete Airtable connection is disconnected. Airtable can no longer be retried for this event.",
+                        "Program Cue takes over this event's data and the incomplete Airtable connection is removed. Airtable cannot be retried for this event afterwards.",
                       records: [`${loaderData.name} · ${loaderData.slug}`],
-                      confirmLabel: "Keep on D1",
+                      confirmLabel: "Keep in Program Cue",
                       tone: "primary",
                     },
                     () => form?.requestSubmit(),
                   );
                 }}
               >
-                Explicitly keep on D1
+                Keep this event in Program Cue
               </button>
             </Form>
             <p>
-              This activates the D1 projection only after your explicit choice
-              and disconnects the incomplete Airtable connection.
+              This activates the event with Program Cue holding its data, and
+              removes the incomplete Airtable connection.
             </p>
             <Form method="post">
               <input type="hidden" name="intent" value="discard" />

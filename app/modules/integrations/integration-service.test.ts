@@ -1196,7 +1196,7 @@ describe("Accelevents integration service", () => {
     );
 
     await expect(service.disconnect(viewer, connectionId)).rejects.toThrow(
-      /migrate event-data authority back to D1/iu,
+      /Hand event data back to Program Cue before disconnecting Airtable/iu,
     );
     await expect(
       env.DB.prepare(

@@ -143,13 +143,13 @@ describe("frontend route fail-fast boundaries", () => {
       committed: true,
       entityId: "decision-test",
       message:
-        "Your change was saved, but live updates could not be broadcast. Refresh other open views before continuing.",
+        "Your change was saved, but other open views could not be updated automatically. Refresh them before continuing.",
     });
 
     expect(outcome).toEqual({
       partial: true,
       message:
-        "Decision released. Its notification is saved but needs a queue retry. Your change was saved, but live updates could not be broadcast. Refresh other open views before continuing.",
+        "Decision released. Its notification is saved but needs a queue retry. Your change was saved, but other open views could not be updated automatically. Refresh them before continuing.",
     });
   });
 

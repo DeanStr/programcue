@@ -174,7 +174,7 @@ test("assistant reminder preview can be edited and queues exactly once only afte
     page.getByRole("heading", { name: "Operation Centre" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "communication.send" }),
+    page.getByRole("link", { name: "Communication send" }),
   ).toBeVisible();
 });
 
@@ -188,7 +188,9 @@ test("contextual AI actions stay inside the readiness and review workflows", asy
   });
   await expect(readinessAction).toBeVisible();
   await readinessAction.click();
-  await expect(page.getByRole("alert")).toContainText("OPENAI_API_KEY");
+  await expect(page.getByRole("alert")).toContainText(
+    "OpenAI credentials are not configured for this installation.",
+  );
 
   await page.context().addCookies([
     {

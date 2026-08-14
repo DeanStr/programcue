@@ -11,7 +11,8 @@
     "react-router.config.ts",
     "scanner/src/contract.ts",
     "scanner/src/contract.test.ts",
-    "e2e/**/*.ts"
+    "e2e/**/*.ts",
+    "app/**/*.lint.ts"
   ],
   "compilerOptions": {
     "composite": true,

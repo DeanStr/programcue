@@ -182,7 +182,7 @@ test("Uppy resumes an interrupted direct upload from R2's server-authoritative p
     buffer: fileBuffer,
   };
   await uploader.locator('input[type="file"]').setInputFiles(file);
-  await uploader.getByRole("button", { name: "Upload directly to R2" }).click();
+  await uploader.getByRole("button", { name: "Upload file" }).click();
   await expect
     .poll(async () =>
       Number(await uploader.locator("progress").getAttribute("value")),
@@ -203,7 +203,7 @@ test("Uppy resumes an interrupted direct upload from R2's server-authoritative p
   uploader = profileUploader();
   await uploader.getByLabel("File purpose").selectOption("video");
   await uploader.locator('input[type="file"]').setInputFiles(file);
-  await uploader.getByRole("button", { name: "Upload directly to R2" }).click();
+  await uploader.getByRole("button", { name: "Upload file" }).click();
   await expect(uploader.getByRole("status")).toContainText("Upload complete");
   expect(initiateCalls).toBe(1);
   expect(listCalls).toBe(1);
@@ -350,7 +350,7 @@ test("a failed direct transfer remains resumable and cancellable in place", asyn
     mimeType: "video/mp4",
     buffer: fileBuffer,
   });
-  await uploader.getByRole("button", { name: "Upload directly to R2" }).click();
+  await uploader.getByRole("button", { name: "Upload file" }).click();
 
   await expect(
     uploader.getByRole("button", { name: "Resume upload" }),

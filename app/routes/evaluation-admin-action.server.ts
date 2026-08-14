@@ -217,8 +217,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
           ? `${roleLabel} invitation created and a one-time sign-in link was sent.`
           : result.demoAccessActivation === "activated" ||
               result.demoAccessActivation === "already_active"
-            ? `Demo ${roleLabel.toLowerCase()} invitation created in D1 and the exact SBEK fixture identity was activated locally. No email was sent.`
-            : `Demo ${roleLabel.toLowerCase()} invitation created in D1. No email was sent in explicit demo mode.`;
+            ? `Demo ${roleLabel.toLowerCase()} invitation created, and the fixed demo identity was activated locally. No email was sent.`
+            : `Demo ${roleLabel.toLowerCase()} invitation created. No email was sent, because this is demo mode.`;
       const routingDisclosure = evaluatorEmailRoutingMessage(
         "routing" in result ? (result.routing ?? null) : null,
       );

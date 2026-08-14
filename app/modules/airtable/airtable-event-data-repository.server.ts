@@ -277,7 +277,7 @@ export class AirtableEventDataRepository extends AirtableEventDataProjectionRepo
     if (results.some((result) => (result.meta.changes ?? 0) !== 1))
       throw new AirtableEventProjectionCommitError(
         token.runId,
-        "The committed D1 projection could not be recorded as a durable Airtable run.",
+        "The committed Program Cue copy could not be recorded as a durable Airtable run.",
       );
     return plan;
   }
@@ -316,7 +316,7 @@ export class AirtableEventDataRepository extends AirtableEventDataProjectionRepo
       ]);
       if (current.hash !== token.beforeHash)
         throw new AirtableEventDataUnsynchronizedError(
-          "Airtable changed while the D1 projection command was running.",
+          "Airtable changed while the Program Cue copy command was running.",
         );
       await this.recordCommittedProjection(token, desired, current);
       await this.writePlan(
@@ -389,7 +389,7 @@ export class AirtableEventDataRepository extends AirtableEventDataProjectionRepo
     const d1 = await this.readD1Projection(completion.eventId);
     if (d1.hash !== completion.afterHash)
       throw new AirtableEventDataUnsynchronizedError(
-        "The D1 projection changed before the Airtable command could finalize.",
+        "The Program Cue copy changed before the Airtable command could finalize.",
       );
     // prepareCommandCompletion has already read the provider back and matched
     // its complete snapshot hash. A later external edit is detected at the next
@@ -515,7 +515,7 @@ export class AirtableEventDataRepository extends AirtableEventDataProjectionRepo
     if ((recorded.meta.changes ?? 0) !== 1)
       throw new AirtableEventProjectionCommitError(
         token.runId,
-        "The committed D1 projection could not be checkpointed for Airtable recovery.",
+        "The committed Program Cue copy could not be checkpointed for Airtable recovery.",
       );
     throw new AirtableEventProjectionCommitError(token.runId, cause);
   }
@@ -528,7 +528,7 @@ export class AirtableEventDataRepository extends AirtableEventDataProjectionRepo
         cause instanceof Error
           ? cause
           : new Error(
-              "The domain command reported failure after changing the D1 projection.",
+              "The domain command reported failure after changing the Program Cue copy.",
             ),
       );
     }
@@ -644,7 +644,7 @@ export class AirtableEventDataRepository extends AirtableEventDataProjectionRepo
     const afterHash = summary.afterHash ?? d1.hash;
     if (d1.hash !== afterHash)
       throw new AirtableEventDataUnsynchronizedError(
-        "The D1 projection changed again after the interrupted Airtable command.",
+        "The Program Cue copy changed again after the interrupted Airtable command.",
       );
     const token: AirtableProjectionCommandToken = {
       runId,

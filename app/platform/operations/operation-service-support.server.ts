@@ -1,9 +1,14 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 
+/**
+ * `operationId` stays on the error so callers can link to the exact record; it
+ * is not spelled out in the message, because a bare identifier is not something
+ * the reader can use — the link is.
+ */
 export class OperationQueueUnavailableError extends Error {
   constructor(readonly operationId: string) {
     super(
-      `Operation ${operationId} was saved but could not be queued. Retry it from the operation centre.`,
+      "This work was saved but could not be started. Retry it from the Operation Centre.",
     );
     this.name = "OperationQueueUnavailableError";
   }

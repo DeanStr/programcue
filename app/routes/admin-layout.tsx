@@ -2,6 +2,7 @@ import { isRouteErrorResponse, Link, Outlet, useRevalidator } from "react-router
 
 import type { Route } from "./+types/admin-layout";
 import { AdminShell } from "~/components/admin-shell";
+import { routeErrorCopy, routeErrorMessage } from "~/lib/route-error-copy";
 import { EventService } from "~/modules/events/event-service.server";
 import {
   loadCurrentEventAdminShellContext,
@@ -135,16 +136,11 @@ export function ErrorBoundary({
 
   const routeError = isRouteErrorResponse(error) ? error : null;
   const title = routeError
-    ? routeError.status === 404
-      ? "Page not found"
-      : `${routeError.status} ${routeError.statusText}`
+    ? routeErrorCopy(routeError.status).title
     : "This page could not load";
-  const message =
-    routeError && routeError.status < 500 && typeof routeError.data === "string"
-      ? routeError.data
-      : routeError?.status === 404
-        ? "That page does not exist, or the link has changed."
-        : "The page failed to load. Your work has not been lost.";
+  const message = routeError
+    ? routeErrorMessage(routeError.status, routeError.data)
+    : "The page failed to load. Check your latest changes before trying again.";
 
   const errorContent = (
     <section className="card pad" style={{ maxWidth: 620 }}>

@@ -181,7 +181,7 @@ describe("submission administration list", () => {
     ).rejects.toThrow(/missing persisted track selections/i);
   });
 
-  it("does not read the D1 projection when Airtable freshness fails", async () => {
+  it("does not read the Program Cue copy when Airtable freshness fails", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     const boundary = {
       assertReadable: async () => {

@@ -62,7 +62,7 @@ export class PersonDuplicateService {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ duplicatePersonWarnings: number }>();
-    if (!event) throw new Response("Event not found", { status: 404 });
+    if (!event) throw new Response("This event could not be found.", { status: 404 });
     if (!event.duplicatePersonWarnings) {
       return { enabled: false, matches: [], truncated: false };
     }

@@ -4,6 +4,7 @@ import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
+import { shortReference } from "~/lib/short-reference";
 
 export function EvaluationSubmissionQueue() {
   const {
@@ -529,7 +530,7 @@ export function EvaluationSubmissionQueue() {
                                         "This creates a separate provider attempt and retains the failed operation. The earlier request may have been accepted or charged even though Program Cue received no usable result, so another provider charge or duplicate result is possible.",
                                       records: [
                                         `${submission.title} · ${selectedResultsRound.name}`,
-                                        `Failed attempt: ${aiAssessmentGenerationAttempt.operationId}`,
+                                        `Failed attempt ${shortReference(aiAssessmentGenerationAttempt.operationId)}`,
                                       ],
                                       confirmLabel: "Retry first pass",
                                       tone: "primary",
@@ -589,7 +590,7 @@ export function EvaluationSubmissionQueue() {
                                   {
                                     title: "Generate AI first-pass assessment?",
                                     description:
-                                      "Program Cue sends the authorised immutable proposal projection and persisted rubric to the configured AI provider, then saves its advisory score and rationale. The provider request cannot be undone.",
+                                      "Program Cue sends a fixed copy of this proposal and its rubric to the AI provider, then saves the advisory score and rationale it returns. The request to the provider cannot be undone.",
                                     records: [
                                       `${submission.title} · ${selectedResultsRound.name}`,
                                     ],

@@ -15,6 +15,7 @@ import { BrandMark } from "~/components/brand-mark";
 import { DraftEditor } from "~/components/application-draft-editor";
 import { PublicApplicationLanding } from "~/components/application-public-landing";
 import { TurnstileWidget } from "~/components/turnstile-widget";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 
 export { action, loader } from "./application-form.server";
 export { claimApplicantVideoUploadOperation };
@@ -815,11 +816,10 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
                         to={applicationDraftHref(draft.id, claimedSpeakerId)}
                         key={draft.id}
                       >
-                        <span
-                          className={`status ${draft.status === "draft" ? "info" : "success"}`}
-                        >
-                          {draft.status}
-                        </span>
+                        <DomainStatusBadge
+                          domain="submission"
+                          status={draft.status}
+                        />
                         <h3>{draft.title}</h3>
                         <small className="subtle">
                           v{draft.versionNumber} · {draft.speakers.length}{" "}

@@ -9,6 +9,7 @@
     "workers/**/*",
     "worker-configuration.d.ts"
   ],
+  "exclude": ["app/**/*.lint.ts"],
   "compilerOptions": {
     "composite": true,
     "strict": true,

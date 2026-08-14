@@ -275,7 +275,7 @@ export default function FormJsEditorClient({
           ) {
             onStatusRef.current({
               state: "ready",
-              message: "Visual editor ready. Powered by bpmn.io.",
+              message: "Visual editor ready.",
             });
           }
         } catch (error) {

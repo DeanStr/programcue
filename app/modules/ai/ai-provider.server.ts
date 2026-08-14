@@ -412,7 +412,7 @@ export class AnthropicMessagesProvider implements AiModelProvider {
         "The Anthropic request could not reach the provider.",
         null,
         null,
-        { cause: error },
+        { cause: error, failureKind: "transient" },
       );
     }
     const providerRequestId = normalizeAiProviderRequestId(

@@ -318,11 +318,11 @@ export class PublishedHeadshotService {
     }
     const object = await this.env.FILES.get(headshot.objectKey);
     if (!object) {
-      throw new Error("The released public headshot R2 object is missing.");
+      throw new Error("The published public headshot file is missing.");
     }
     if (object.httpEtag !== headshot.objectEtag) {
       throw new Error(
-        "The released public headshot R2 object no longer matches its scanned version.",
+        "The published public headshot file no longer matches the version that was scanned.",
       );
     }
     const current = await this.findPublishedHeadshot(slug, personId);

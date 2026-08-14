@@ -4,6 +4,7 @@ import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-event-clone";
+import { shortReference } from "~/lib/short-reference";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { isAirtableRepositoryError } from "~/modules/airtable/airtable-room-repository.server";
 import { EventRepositoryProvisioningError } from "~/modules/events/event-repository-provisioning.server";
@@ -65,7 +66,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     });
     return data({
       ok: true as const,
-      message: `Event created from the current configuration with ${result.repositoryProvider === "airtable" ? "Airtable" : "D1"} authority. Operational records, unrelated provider credentials, sender identities and publication state were not copied.`,
+      message: `Event created from the current settings. ${result.repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} holds its event data. People, submissions, schedules, credentials and published programmes were not copied.`,
       result,
     });
   } catch (error) {
@@ -158,12 +159,13 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
             <div>{actionData.message}</div>
             {actionData.result ? (
               <>
-                <p>
-                  <code>{actionData.result.eventId}</code> ·{" "}
+                <p className="subtle">
+                  Event reference{" "}
+                  <code>{shortReference(actionData.result.eventId)}</code> ·{" "}
                   <Link
                     to={`/admin/operations?operation=${encodeURIComponent(actionData.result.operationId)}`}
                   >
-                    view clone audit
+                    View the clone record
                   </Link>
                 </p>
                 {actionData.ok ? (
@@ -262,10 +264,8 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                   onChange={() => setRepositoryProvider("d1")}
                 />
                 <span>
-                  <strong>Cloudflare D1 — recommended</strong>
-                  <small>
-                    Clone all reusable configuration transactionally.
-                  </small>
+                  <strong>Program Cue — recommended</strong>
+                  <small>Copy all reusable settings in one step.</small>
                 </span>
               </label>
               <label className="pc-repository-choice mt">
@@ -279,8 +279,8 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                 <span>
                   <strong>Airtable</strong>
                   <small>
-                    Save the D1 clone first, then validate and synchronize its
-                    managed schema before activating Airtable authority.
+                    Creates the copy here first, then checks your Airtable base,
+                    copies the event into it and hands over.
                   </small>
                 </span>
               </label>
@@ -337,7 +337,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                 confirm(
                   {
                     title: "Create this clean clone?",
-                    description: `A new event is created from ${loaderData.source.name} with ${repositoryProvider === "airtable" ? "Airtable" : "D1"} as its event-data authority. Branding, rooms, tracks, policies and reusable templates are copied; people, submissions, schedules, credentials and publication state are not.`,
+                    description: `A new event is created from ${loaderData.source.name}, with ${repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} holding its event data. Branding, rooms, tracks, policies and reusable templates are copied; people, submissions, schedules, credentials and published programmes are not.`,
                     confirmLabel: "Create clean clone",
                     tone: "primary",
                   },

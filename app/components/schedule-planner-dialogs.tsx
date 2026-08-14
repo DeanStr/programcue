@@ -60,10 +60,9 @@ export function AutoPlacementPreviewDialog({
     >
       <div className="stack" data-testid="auto-placement-preview">
         <p>
-          Deterministic first-fit assistance for draft version{" "}
-          <strong>{preview.scheduleVersionId}</strong> at expected schedule
-          revision <strong>{preview.scheduleRevision}</strong>. No publication
-          is part of this action.
+          Suggested placements for this draft schedule, based on what is already
+          scheduled. Nothing is published by this action, and you can change any
+          placement afterwards.
         </p>
         <div className="grid grid-3">
           <div className="metric">

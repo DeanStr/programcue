@@ -42,9 +42,9 @@ describe("Event Setup repository controls", () => {
     const markup = renderPanel(true);
 
     expect(button(markup, "Revalidate")).toContain("disabled");
-    expect(button(markup, "Preview migration to")).toContain("disabled");
+    expect(button(markup, "Preview handover to")).toContain("disabled");
     expect(markup).toContain(
-      "Save or discard the current Event Setup edits before changing repository authority.",
+      "Save or discard your Event Setup edits before changing where event data is held.",
     );
     expect(markup).toContain('href="/admin/files/retention"');
   });
@@ -53,7 +53,7 @@ describe("Event Setup repository controls", () => {
     const markup = renderPanel(false);
 
     expect(button(markup, "Revalidate")).not.toContain("disabled");
-    expect(button(markup, "Preview migration to")).not.toContain("disabled");
+    expect(button(markup, "Preview handover to")).not.toContain("disabled");
     expect(markup).not.toContain("event-repository-unsaved-help");
   });
 });

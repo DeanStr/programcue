@@ -27,8 +27,18 @@ export const fileScanQueueMessageSchema = z.object({
 
 export type FileScanQueueMessage = z.infer<typeof fileScanQueueMessageSchema>;
 
+export type FileScanDispatchConfigurationReason =
+  | "scanner-endpoint"
+  | "scanner-credentials"
+  | "callback-endpoint"
+  | "queue-binding"
+  | "storage-binding";
+
 export class FileScanDispatchConfigurationError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly reason: FileScanDispatchConfigurationReason,
+  ) {
     super(message);
     this.name = "FileScanDispatchConfigurationError";
   }
@@ -61,6 +71,7 @@ function requireScannerConfiguration(env: CloudflareEnvironment) {
   if (!rawUrl)
     throw new FileScanDispatchConfigurationError(
       "FILE_SCANNER_API_URL is required to dispatch malware scans.",
+      "scanner-endpoint",
     );
   let endpoint: URL;
   try {
@@ -68,21 +79,25 @@ function requireScannerConfiguration(env: CloudflareEnvironment) {
   } catch {
     throw new FileScanDispatchConfigurationError(
       "FILE_SCANNER_API_URL must be a valid absolute URL.",
+      "scanner-endpoint",
     );
   }
   if (endpoint.protocol !== "https:")
     throw new FileScanDispatchConfigurationError(
       "FILE_SCANNER_API_URL must use HTTPS.",
+      "scanner-endpoint",
     );
   const token = env.FILE_SCANNER_API_TOKEN?.trim();
   if (!token || token.length < 16)
     throw new FileScanDispatchConfigurationError(
       "FILE_SCANNER_API_TOKEN must contain at least 16 characters.",
+      "scanner-credentials",
     );
   const callbackBase = env.BETTER_AUTH_URL?.trim();
   if (!callbackBase)
     throw new FileScanDispatchConfigurationError(
       "BETTER_AUTH_URL is required to build the scanner callback URL.",
+      "callback-endpoint",
     );
   let callback: URL;
   try {
@@ -90,6 +105,7 @@ function requireScannerConfiguration(env: CloudflareEnvironment) {
   } catch {
     throw new FileScanDispatchConfigurationError(
       "BETTER_AUTH_URL must be a valid absolute URL.",
+      "callback-endpoint",
     );
   }
   const permitsLocalHttp =
@@ -99,6 +115,7 @@ function requireScannerConfiguration(env: CloudflareEnvironment) {
   if (callback.protocol !== "https:" && !permitsLocalHttp)
     throw new FileScanDispatchConfigurationError(
       "The scanner callback URL must use HTTPS outside local development.",
+      "callback-endpoint",
     );
   return { endpoint, token, callback };
 }
@@ -114,6 +131,7 @@ export function assertFileScanDispatchConfigured(env: CloudflareEnvironment) {
   if (!env.OPERATIONS_QUEUE)
     throw new FileScanDispatchConfigurationError(
       "Required OPERATIONS_QUEUE binding is unavailable.",
+      "queue-binding",
     );
   return configuration;
 }
@@ -434,6 +452,7 @@ export async function processFileScanDispatch(
     if (!env.FILES)
       throw new FileScanDispatchConfigurationError(
         "Required private R2 binding FILES is unavailable.",
+        "storage-binding",
       );
     const object = await env.FILES.head(message.objectKey);
     if (

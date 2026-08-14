@@ -361,7 +361,7 @@ describe("CSV imports", () => {
 
       await expect(
         service.confirm(viewer, preview.operationId),
-      ).rejects.toThrow("exceeds the safe D1 query budget");
+      ).rejects.toThrow("more than one import can process safely");
       await expect(
         env.DB.prepare(
           "SELECT status, revision FROM task_instances WHERE id = ?",

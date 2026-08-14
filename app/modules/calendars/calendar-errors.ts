@@ -5,13 +5,18 @@ export class CalendarStateError extends Error {
   }
 }
 
+/**
+ * The cause is kept for logs rather than appended to the message: it is an
+ * infrastructure diagnostic, and the reader's next step is the same either way.
+ */
 export class CalendarQueueUnavailableError extends Error {
   constructor(
     readonly operationId: string,
     cause?: unknown,
   ) {
     super(
-      `Calendar intent was saved, but operation ${operationId} could not be queued. Retry it from the Operation Centre.${cause ? ` ${cause instanceof Error ? cause.message : String(cause)}` : ""}`,
+      "The calendar invitation was saved but could not be sent. Retry it from the Operation Centre.",
+      cause ? { cause } : undefined,
     );
     this.name = "CalendarQueueUnavailableError";
   }

@@ -657,8 +657,8 @@ export function EventRepositoryPanel({
             className={`status ${event.repositoryProvider === "airtable" ? "success" : "info"}`}
           >
             {event.repositoryProvider === "airtable"
-              ? "Airtable event data"
-              : "D1 native"}
+              ? "Airtable holds event data"
+              : "Program Cue holds event data"}
           </span>
         </div>
         <input
@@ -668,8 +668,8 @@ export function EventRepositoryPanel({
         />
         <p className="help">
           {event.repositoryProvider === "airtable"
-            ? "Airtable is authoritative for managed event configuration, rooms and resources, tracks and formats, forms and submissions, evaluation workflow, accepted/direct sessions, schedules, onboarding tasks and the versioned published programme. D1 retains tenancy, identity, secrets, audit, outbox and operation control plus an exact synchronized projection. Files, communications, calendars and resource pages remain explicitly D1-backed."
-            : "D1 is authoritative. Airtable can become authoritative for the complete managed event-data scope only through a validated, confirmed migration. Files, communications, calendars and resource pages remain D1-backed."}
+            ? "Airtable is the source of truth for event settings, rooms and resources, tracks and formats, forms and submissions, evaluation workflow, accepted and direct sessions, schedules, onboarding tasks and the published programme. Program Cue keeps accounts, permissions, credentials, history and a matching copy of everything above. Files, communications, calendars and resource pages always stay in Program Cue."
+            : "Program Cue is the source of truth for this event. Airtable can take over event data only through a preview you review and confirm. Files, communications, calendars and resource pages always stay in Program Cue."}
         </p>
         <div className="stack-list mt">
           <div className="validation-item">
@@ -678,7 +678,7 @@ export function EventRepositoryPanel({
               <div className="help">
                 {event.repositoryFreshness.source === "airtable"
                   ? `${event.repositoryFreshness.cached ? "Cached" : "Fetched"} from Airtable at ${new Date(event.repositoryFreshness.fetchedAt * 1_000).toLocaleString()}`
-                  : "Current D1 transaction state"}
+                  : "Live from Program Cue"}
               </div>
             </div>
           </div>
@@ -711,14 +711,15 @@ export function EventRepositoryPanel({
               disabled={hasUnsavedChanges}
               aria-describedby={hasUnsavedChanges ? unsavedHelpId : undefined}
             >
-              Preview migration to{" "}
-              {event.repositoryProvider === "d1" ? "Airtable" : "D1"}
+              Preview handover to{" "}
+              {event.repositoryProvider === "d1" ? "Airtable" : "Program Cue"}
             </button>
             <p className="help mt">
-              Authority migration is synchronous and fails before changing data
-              when more than {AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES}{" "}
-              managed records would change. Keep larger events on the
-              recommended D1 provider.
+              The handover runs while you wait, and stops before changing
+              anything if more than{" "}
+              {AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES} records would change.
+              Keep larger events on Program Cue, which is the recommended
+              option.
             </p>
           </div>
         ) : null}
@@ -728,8 +729,8 @@ export function EventRepositoryPanel({
             id={unsavedHelpId}
             role="status"
           >
-            Save or discard the current Event Setup edits before changing
-            repository authority.
+            Save or discard your Event Setup edits before changing where event
+            data is held.
           </p>
         ) : null}
         {event.repositoryLockedAt ? (

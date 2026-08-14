@@ -15,8 +15,11 @@ import {
   CommunicationAutomation,
   DeliveryConfiguration,
   RecentCommunications,
+  SenderDnsRecords,
   TemplateEditor,
   TemplateVersionList,
+  type SenderDnsRecord,
+  type SenderDnsRecordSet,
   type TemplateDraftFields,
 } from "~/components/communications-centre-panels";
 import { DraftRecoveryFeedback } from "~/components/draft-recovery-feedback";
@@ -24,6 +27,7 @@ import {
   AdminPageSection,
   AdminPageSectionNavigation,
 } from "~/components/ui/admin-page-sections";
+import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { CalendarService } from "~/modules/calendars/calendar-service.server";
 import {
   CalendarQueueUnavailableError,
@@ -67,10 +71,46 @@ export type ActionResult = {
   intent: string;
   message: string;
   operationId?: string;
-  senderRecords?: string;
+  senderRecords?: SenderDnsRecordSet;
 };
 
 export type CommunicationsCentreLoaderData = Route.ComponentProps["loaderData"];
+
+/**
+ * Resend returns its DNS records as loosely typed objects, and the reader has
+ * to copy every one of them into their DNS host for the domain to verify.
+ *
+ * Anything this cannot read is therefore kept verbatim rather than dropped: a
+ * record silently missing from the table looks like a record that was not
+ * required, and the domain then never verifies for a reason nothing on screen
+ * explains.
+ */
+function senderDnsRecords(
+  records: ReadonlyArray<unknown>,
+): SenderDnsRecordSet {
+  const text = (value: unknown) =>
+    typeof value === "string"
+      ? value
+      : typeof value === "number"
+        ? String(value)
+        : null;
+  const readable: SenderDnsRecord[] = [];
+  const unreadable: string[] = [];
+  for (const entry of records) {
+    if (entry && typeof entry === "object") {
+      const record = entry as Record<string, unknown>;
+      const type = text(record.type);
+      const name = text(record.name);
+      const value = text(record.value);
+      if (type && name && value) {
+        readable.push({ type, name, value, priority: text(record.priority) });
+        continue;
+      }
+    }
+    unreadable.push(JSON.stringify(entry));
+  }
+  return { readable, unreadable };
+}
 
 async function viewerFor(
   request: Request,
@@ -193,10 +233,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       : null,
     eventTimezone: event.timezone,
     notice: persistedSave
-      ? `Draft version ${selected.versionNumber} is stored in D1.`
+      ? `Draft version ${selected.versionNumber} saved.`
       : "",
     deliveryNotice: composedCommunication
-      ? `Communication ${composedCommunication.id} is ${composedCommunication.status}. This is the authoritative delivery result for that draft.`
+      ? `This communication is ${statusPresentation("communication", composedCommunication.status).label.toLowerCase()}. That is the authoritative delivery result for the draft.`
       : discardedCommunication
         ? "The communication draft was discarded and retained as cancelled history."
         : "",
@@ -232,6 +272,16 @@ export async function action({ request, context }: Route.ActionArgs) {
         viewer,
         String(form.get("senderProfileId") ?? ""),
       );
+      const senderRecords =
+        result.status === "verified"
+          ? undefined
+          : senderDnsRecords(result.records);
+      // Only promise records "below" when there are records below. Resend
+      // returns none while a domain is still being created, and pointing the
+      // reader at an empty panel reads as a product fault.
+      const publishedRecordCount = senderRecords
+        ? senderRecords.readable.length + senderRecords.unreadable.length
+        : 0;
       return data<ActionResult>({
         ok: result.status === "verified",
         intent,
@@ -240,11 +290,10 @@ export async function action({ request, context }: Route.ActionArgs) {
             ? result.provider === "mailpit"
               ? "This sender is verified for the explicitly selected local Mailpit capture service."
               : `${result.domain} is verified by Resend and can send production email.`
-            : `${result.domain} remains ${result.providerStatus}. Publish the provider DNS records, then check again.`,
-        senderRecords:
-          result.status === "verified"
-            ? undefined
-            : JSON.stringify(result.records, null, 2),
+            : publishedRecordCount > 0
+              ? `${result.domain} is not verified yet. Publish the DNS records below with your domain host, then check again.`
+              : `${result.domain} is not verified yet, and Resend has not returned its DNS records. Check the domain in your Resend dashboard, then check again here.`,
+        senderRecords,
       });
     }
     if (intent === "disable-sender" || intent === "enable-sender") {
@@ -256,7 +305,12 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data<ActionResult>({
         ok: true,
         intent,
-        message: `Sender profile is now ${result.status}.`,
+        message:
+          result.status === "disabled"
+            ? "This sender is disabled and can no longer send email."
+            : result.status === "verified"
+              ? "This sender is enabled and verified for sending."
+              : "This sender is enabled, but still needs to be verified before it can send.",
       });
     }
     if (intent === "save-template") {
@@ -608,13 +662,11 @@ export default function CommunicationsCentre({
             {actionData.operationId ? (
               <>
                 {" "}
-                <Link to="/admin/operations">
-                  Open {actionData.operationId}
-                </Link>
+                <Link to="/admin/operations">Follow it in Operations</Link>
               </>
             ) : null}
             {actionData.senderRecords ? (
-              <pre className="code-block">{actionData.senderRecords}</pre>
+              <SenderDnsRecords records={actionData.senderRecords} />
             ) : null}
           </div>
         </div>

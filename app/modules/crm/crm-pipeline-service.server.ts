@@ -9,10 +9,6 @@ import {
 } from "./crm-schema";
 import { CrmStateError } from "./crm-errors";
 
-function displayStage(stage: CrmStage) {
-  return stage.replace(/^./, (letter) => letter.toUpperCase());
-}
-
 export class CrmPipelineService {
   constructor(
     private readonly env: CloudflareEnvironment,
@@ -56,9 +52,11 @@ export class CrmPipelineService {
         jobTitle: string | null;
         organisationName: string | null;
       }>();
+    // Stage wording belongs to the presentation layer, which labels the badge
+    // on every card in the same column; returning a second copy here let the
+    // two drift.
     return crmStages.map((stage) => ({
       stage,
-      label: displayStage(stage),
       entries: rows.results.filter((entry) => entry.stage === stage),
     }));
   }

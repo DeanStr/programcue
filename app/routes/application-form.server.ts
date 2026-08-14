@@ -157,7 +157,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       : null;
     const webhookWarning = applicationNotice?.webhookWarning ?? false;
     const notice = webhookWarning
-      ? "This change is stored in D1, but its outbound webhook could not be recorded or queued. Check the integration operation before retrying."
+      ? "Your change was saved, but the organisers' systems could not be notified. They can retry the notification from Operations."
       : applicationNotice?.kind === "withdrawn"
         ? "This application was withdrawn. Its submitted snapshot remains in the audit history."
         : applicationNotice?.kind === "claimed"
@@ -167,13 +167,13 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
             : applicationNotice?.kind === "submission_blocked"
               ? "Your latest changes were saved, but the draft was not submitted because a required form, routing or invitation setting changed. Review the current notice before trying again."
               : applicationNotice?.kind === "submitted"
-                ? "This application is submitted and stored in D1."
+                ? "Your application has been submitted."
                 : applicationNotice?.kind === "revised"
-                  ? "Your revised application is submitted and stored in D1."
+                  ? "Your revised application has been submitted."
                   : applicationNotice?.kind === "saved"
-                    ? "This draft is stored in D1."
+                    ? "Your draft has been saved."
                     : applicationNotice?.kind === "created"
-                      ? "This private draft is stored in D1."
+                      ? "Your private draft has been created."
                       : "";
     return {
       ...portal,
@@ -299,7 +299,7 @@ function parsePayload(formData: FormData) {
     };
   } catch {
     throw new InvalidApplicationPayloadError(
-      "The application payload is invalid. Refresh and try again.",
+      "This form could not be read. Refresh the page and try again.",
     );
   }
 }

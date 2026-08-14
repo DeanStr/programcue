@@ -13,6 +13,12 @@ import { Toaster } from "sonner";
 
 import type { Route } from "./+types/root";
 import { BrandMark } from "~/components/brand-mark";
+import {
+  routeErrorCopy,
+  routeErrorMessage,
+  UNKNOWN_ROUTE_ERROR_MESSAGE,
+  UNKNOWN_ROUTE_ERROR_TITLE,
+} from "~/lib/route-error-copy";
 import { installDraftRecoverySignOutCleanup } from "~/platform/drafts/draft-recovery";
 import { RouteProgress } from "~/components/ui/route-progress";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -134,23 +140,16 @@ export default function App({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let title = "Something went wrong";
-  let message = "The request could not be completed.";
+  let title = UNKNOWN_ROUTE_ERROR_TITLE;
+  let message = UNKNOWN_ROUTE_ERROR_MESSAGE;
   // Home, not Event Setup: an arbitrary failure is not evidence the user was
   // setting up an event.
   let returnHref = "/admin/command";
   let returnLabel = "Go to Command Centre";
 
   if (isRouteErrorResponse(error)) {
-    title =
-      error.status === 404
-        ? "Page not found"
-        : `${error.status} ${error.statusText}`;
-    if (error.status === 404) {
-      message = "That page does not exist, or the link has changed.";
-    }
-    if (error.status < 500 && typeof error.data === "string")
-      message = error.data;
+    title = routeErrorCopy(error.status).title;
+    message = routeErrorMessage(error.status, error.data);
     if ([400, 403, 428].includes(error.status)) {
       returnHref = "/events/select";
       returnLabel = "Choose an event";

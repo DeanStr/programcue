@@ -1,7 +1,9 @@
 import { Form, Link, useNavigation, useSubmit } from "react-router";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { fieldLabel } from "~/lib/record-labels";
+import { shortReference } from "~/lib/short-reference";
 import {
-  operationStatusLabel as statusLabel,
+  operationTaskStatusLabel as statusLabel,
   taskImportTransitionSummary,
   type OperationCentreData,
 } from "./operation-centre-shared";
@@ -20,31 +22,26 @@ export function AirtableRecoveryPanel({
       <div className="card-title">
         <h2 id="airtable-recovery-heading">Airtable recovery</h2>
         <span className="status danger">
-          {loaderData.airtableRecoveries.length} blocked projection
-          {loaderData.airtableRecoveries.length === 1 ? "" : "s"}
+          {loaderData.airtableRecoveries.length} change
+          {loaderData.airtableRecoveries.length === 1 ? "" : "s"} not in Airtable
         </span>
       </div>
       <p>
-        These event-data commands committed their D1 projection but did not
-        finish reconciling Airtable. Review the exact run before retrying;
-        ordinary reads never recover it automatically.
+        These changes were saved in Program Cue but did not finish reaching
+        Airtable. Review each one before retrying; nothing repairs them
+        automatically.
       </p>
       <div className="stack">
         {loaderData.airtableRecoveries.map((run) => (
           <div className="validation-item warn" key={run.runId}>
             <div>
-              <strong>{run.operation.replaceAll("_", " ")}</strong>
+              <strong>{fieldLabel(run.operation)}</strong>
               <span>
-                Run {run.runId} · {run.status.replaceAll("_", " ")} ·{" "}
-                {run.phase.replaceAll("_", " ")} · {run.itemCount} managed
-                change
+                Run {shortReference(run.runId)} · {fieldLabel(run.status)} ·{" "}
+                {fieldLabel(run.phase)} · {run.itemCount} managed change
                 {run.itemCount === 1 ? "" : "s"}
               </span>
               {run.error ? <span>{run.error}</span> : null}
-              <span>
-                Projection {run.beforeHash.slice(0, 10)} →{" "}
-                {run.afterHash?.slice(0, 10) ?? "pending"}
-              </span>
             </div>
             <Form method="post">
               <input
@@ -58,7 +55,7 @@ export function AirtableRecoveryPanel({
                 type="submit"
                 disabled={navigation.state !== "idle"}
               >
-                Retry this projection
+                Retry this Airtable update
               </button>
             </Form>
           </div>
@@ -108,7 +105,7 @@ export function OperationFiltersPanel({
             <option value="">All types</option>
             {loaderData.types.map((type) => (
               <option value={type} key={type}>
-                {type.replaceAll("_", " ")}
+                {fieldLabel(type.replaceAll(".", " "))}
               </option>
             ))}
           </select>
@@ -317,7 +314,7 @@ export function DataImportPanel({
                 {previewedTaskTransitions.map((transition) => (
                   <li key={transition.taskId}>
                     <strong>{transition.title}</strong>{" "}
-                    {`(${transition.taskId}): ${statusLabel(transition.beforeStatus)} → ${statusLabel(transition.afterStatus)} (${statusLabel(transition.transition)})`}
+                    {`${statusLabel(transition.beforeStatus)} → ${statusLabel(transition.afterStatus)} (${fieldLabel(transition.transition).toLowerCase()})`}
                   </li>
                 ))}
               </ul>
@@ -340,7 +337,7 @@ export function DataImportPanel({
                     records: previewedTaskTransitions.length
                       ? previewedTaskTransitions.map(
                           (transition) =>
-                            `${transition.title} (${transition.taskId}): ${statusLabel(transition.beforeStatus)} → ${statusLabel(transition.afterStatus)}`,
+                            `${transition.title}: ${statusLabel(transition.beforeStatus)} → ${statusLabel(transition.afterStatus)}`,
                         )
                       : loaderData.operationDetail?.items.map(
                           (item) => item.entityId ?? item.itemKey,

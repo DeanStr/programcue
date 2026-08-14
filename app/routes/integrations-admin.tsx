@@ -11,7 +11,13 @@ import { ZodError } from "zod";
 
 import type { Route } from "./+types/integrations-admin";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import {
+  DomainStatusBadge,
+  statusPresentation,
+} from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
+import { providerLabel } from "~/lib/provider-labels";
+import { fieldLabel, fieldValue } from "~/lib/record-labels";
 import { AcceleventsProviderError } from "~/modules/integrations/accelevents-provider.server";
 import { isAcceleventsTerminalRunStatus } from "~/modules/integrations/accelevents-run-contract";
 import { IntegrationCredentialConfigurationError } from "~/modules/integrations/integration-credentials.server";
@@ -100,12 +106,12 @@ export async function action({ request, context }: Route.ActionArgs) {
         ok: true as const,
         message:
           form.get("mode") === "dry_run"
-            ? "Dry-run reconciliation recorded without provider writes."
+            ? "Preview recorded. Nothing was written to Accelevents."
             : result.replayed
-              ? "This exact export request was already recorded. Open its operation to inspect the current or completed result."
+              ? "This exact export was already recorded. Open it in Operations to see how it finished."
               : result.queued
-                ? "Export queued. Follow record-level progress in Operations."
-                : "No provider changes were required; the run completed without enqueueing work.",
+                ? "Export started. Follow record-level progress in Operations."
+                : "Nothing needed to change in Accelevents, so no export was started.",
         connectionId: String(form.get("connectionId") ?? ""),
         operationId: result.operationId,
       });
@@ -163,15 +169,6 @@ function operationalDateTime(epoch: number | null) {
   }).format(new Date(epoch * 1_000))} UTC`;
 }
 
-function statusTone(status: string) {
-  if (["connected", "succeeded", "completed"].includes(status))
-    return "success";
-  if (["failed", "partially_failed", "needs_attention"].includes(status))
-    return "danger";
-  if (["queued", "running"].includes(status)) return "warning";
-  return "info";
-}
-
 export default function IntegrationsAdmin({
   loaderData,
 }: Route.ComponentProps) {
@@ -184,12 +181,12 @@ export default function IntegrationsAdmin({
       {dialog}
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">External provider boundaries</span>
+          <span className="pc-page-eyebrow">External providers</span>
           <h1>Integrations</h1>
           <p>
-            Preview exact Accelevents record changes, then run a durable one-way
-            export. Provider writes never occur during a dry run. Airtable
-            repository authority is managed in Event Setup.
+            Preview the exact record changes, then export them to Accelevents.
+            A preview never writes anything to Accelevents. Which system owns
+            your event data is set in Event Setup.
           </p>
         </div>
         <div className="page-actions">
@@ -304,20 +301,21 @@ export default function IntegrationsAdmin({
               {loaderData.connections.map((connection) => (
                 <article className="validation-item" key={connection.id}>
                   <div>
-                    <strong>{connection.provider}</strong>
+                    <strong>{providerLabel(connection.provider)}</strong>
                     <div className="help">
                       {connection.demoNoWriteFixture
                         ? "Demonstration only · no credentials or provider validation"
                         : `Updated ${operationalDateTime(connection.updatedAt)}`}
                     </div>
                   </div>
-                  <span
-                    className={`status ${connection.demoNoWriteFixture ? "warning" : statusTone(connection.status)}`}
-                  >
-                    {connection.demoNoWriteFixture
-                      ? "demo no-write"
-                      : connection.status.replaceAll("_", " ")}
-                  </span>
+                  {connection.demoNoWriteFixture ? (
+                    <span className="status warning">Demonstration only</span>
+                  ) : (
+                    <DomainStatusBadge
+                      domain="integrationConnection"
+                      status={connection.status}
+                    />
+                  )}
                   <Link
                     className="btn small"
                     to={`/admin/integrations?${new URLSearchParams({ connection: connection.id })}`}
@@ -343,11 +341,11 @@ export default function IntegrationsAdmin({
             <div>
               <h2>Mapping preview</h2>
               <p className="help">
-                {loaderData.preview.summary.create} create ·{" "}
-                {loaderData.preview.summary.update} update ·{" "}
+                {loaderData.preview.summary.create} to create ·{" "}
+                {loaderData.preview.summary.update} to update ·{" "}
                 {loaderData.preview.summary.noop} unchanged
                 {loaderData.preview.summary.blocked
-                  ? ` · ${loaderData.preview.summary.blocked} blocked by the published provider contract`
+                  ? ` · ${loaderData.preview.summary.blocked} that Accelevents does not accept`
                   : ""}
               </p>
             </div>
@@ -391,13 +389,12 @@ export default function IntegrationsAdmin({
                       <td>
                         <strong>{item.label}</strong>
                       </td>
-                      <td>{item.entityType}</td>
+                      <td>{fieldLabel(item.entityType)}</td>
                       <td>
-                        <span
-                          className={`status ${item.action === "noop" ? "info" : "warning"}`}
-                        >
-                          {item.action}
-                        </span>
+                        <DomainStatusBadge
+                          domain="integrationChange"
+                          status={item.action}
+                        />
                         {item.providerSupport === "blocked" &&
                         item.action !== "noop" ? (
                           <small
@@ -418,9 +415,9 @@ export default function IntegrationsAdmin({
                             <ul>
                               {item.changes.map((change) => (
                                 <li key={change.field}>
-                                  <strong>{change.field}</strong>:{" "}
-                                  {JSON.stringify(change.before)} →{" "}
-                                  {JSON.stringify(change.after)}
+                                  <strong>{fieldLabel(change.field)}</strong>:{" "}
+                                  {fieldValue(change.before)} →{" "}
+                                  {fieldValue(change.after)}
                                 </li>
                               ))}
                             </ul>
@@ -470,7 +467,7 @@ export default function IntegrationsAdmin({
                 value="dry_run"
                 disabled={busy}
               >
-                Record dry run
+                Record this preview
               </button>
             </Form>
             <Form method="post">
@@ -505,12 +502,14 @@ export default function IntegrationsAdmin({
                   confirm(
                     {
                       title: "Queue a live export to Accelevents?",
-                      description: `The displayed speaker, track, session and association changes are written to Accelevents. This external effect cannot be undone in Program Cue.${blocked ? ` ${blocked} displayed item(s) have no documented provider write and will fail explicitly without a fabricated success.` : ""}`,
+                      description: `The displayed speaker, track, session and association changes are written to Accelevents. This cannot be undone from Program Cue.${blocked ? ` ${blocked} of the listed changes are not something Accelevents accepts; they will be reported as failures rather than quietly skipped.` : ""}`,
                       records:
                         loaderData.preview?.items
                           .filter((item) => item.action !== "noop")
-                          .map((item) => `${item.label} · ${item.action}`) ??
-                        [],
+                          .map(
+                            (item) =>
+                              `${item.label} · ${statusPresentation("integrationChange", item.action).label}`,
+                          ) ?? [],
                       confirmLabel: "Queue live export",
                     },
                     () => form?.requestSubmit(),
@@ -578,12 +577,13 @@ export default function IntegrationsAdmin({
               <tbody>
                 {loaderData.runs.map((run) => (
                   <tr key={run.id}>
-                    <td>{run.provider}</td>
-                    <td>{run.dryRun ? "Dry run" : "Live"}</td>
+                    <td>{providerLabel(run.provider)}</td>
+                    <td>{run.dryRun ? "Preview only" : "Live"}</td>
                     <td>
-                      <span className={`status ${statusTone(run.status)}`}>
-                        {run.status.replaceAll("_", " ")}
-                      </span>
+                      <DomainStatusBadge
+                        domain="integration"
+                        status={run.status}
+                      />
                     </td>
                     <td>{operationalDateTime(run.createdAt)}</td>
                     <td>
@@ -612,8 +612,8 @@ export default function IntegrationsAdmin({
           </div>
         ) : (
           <EmptyState
-            title="No integration runs"
-            description="Dry runs and live exports appear here with their operation and reconciliation report."
+            title="No exports yet"
+            description="Recorded previews and live exports appear here, each with its report."
             icon={RefreshCw}
           />
         )}

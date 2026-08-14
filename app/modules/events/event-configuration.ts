@@ -62,7 +62,7 @@ export function parseSessionFormatsConfiguration(value: string) {
     decoded = JSON.parse(value);
   } catch {
     throw new EventConfigurationDataError(
-      "The event has invalid session-format configuration JSON.",
+      "The event has unreadable session-format configuration.",
     );
   }
   const parsed = sessionFormatInputSchema
