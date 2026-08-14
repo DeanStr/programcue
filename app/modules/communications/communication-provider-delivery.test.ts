@@ -780,7 +780,7 @@ describe("Communications D1 vertical slice", () => {
       expect(requests).toHaveLength(1);
       expect(requests[0]).toMatchObject({
         to: ["avery@example.com"],
-        subject: "Update from Future of Events 2025",
+        subject: "Update from Future of Events 2027",
       });
       expect(String(requests[0]?.html)).not.toContain(
         "/communications/unsubscribe/",

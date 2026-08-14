@@ -458,7 +458,7 @@ describe("evaluation demo data", () => {
       service.getReviewerWorkbench(evaluator),
     ).resolves.toMatchObject({
       kind: "ready",
-      eventName: "Future of Events 2025",
+      eventName: "Future of Events 2027",
       workspace: { selected: { id: "demo-evaluation-assignment-1" } },
     });
   });

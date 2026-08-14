@@ -16,6 +16,9 @@
   background: var(--brand-50);
   color: var(--brand-700);
 }
+.comms-production-layout .template-item.active small {
+  color: var(--text-secondary);
+}
 .channel-tabs {
   display: flex;
   gap: var(--space-1);

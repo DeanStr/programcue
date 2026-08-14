@@ -123,7 +123,7 @@ describe("new event route", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: sourceSenderId,
-          sourceEventName: "Future of Events 2025",
+          sourceEventName: "Future of Events 2027",
           provider: "resend",
         }),
       ]),

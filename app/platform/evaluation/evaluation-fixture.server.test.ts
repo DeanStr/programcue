@@ -53,7 +53,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     const result = await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
 
@@ -130,7 +130,7 @@ describe("production evaluation fixture", () => {
 
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
 
@@ -143,7 +143,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     await environment.DB.prepare(
@@ -166,7 +166,7 @@ describe("production evaluation fixture", () => {
 
     const reset = await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
 
@@ -183,7 +183,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     await environment.DB.batch([
@@ -254,7 +254,7 @@ describe("production evaluation fixture", () => {
 
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
 
@@ -331,7 +331,7 @@ describe("production evaluation fixture", () => {
     await expect(
       resetProductionEvaluationFixture(
         environment,
-        "Future of Events 2025",
+        "Future of Events 2027",
         verifiedDomains,
       ),
     ).resolves.toMatchObject({
@@ -365,7 +365,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     await environment.DB.prepare(
@@ -440,7 +440,7 @@ describe("production evaluation fixture", () => {
       await expect(
         resetProductionEvaluationFixture(
           productionEnvironment({ DB: boundaryDb }),
-          "Future of Events 2025",
+          "Future of Events 2027",
           verifiedDomains,
         ),
       ).rejects.toThrow(/extra events have active work/iu);
@@ -478,7 +478,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     const priorCookie = await evaluationSessionCookie(environment, "organizer");
@@ -541,7 +541,7 @@ describe("production evaluation fixture", () => {
     });
     const owningReset = resetProductionEvaluationFixture(
       productionEnvironment({ DB: blockingDb }),
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     await ownerStartRecorded;
@@ -550,7 +550,7 @@ describe("production evaluation fixture", () => {
       await expect(
         resetProductionEvaluationFixture(
           environment,
-          "Future of Events 2025",
+          "Future of Events 2027",
           verifiedDomains,
         ),
       ).rejects.toThrow(/already in progress/iu);
@@ -594,7 +594,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     const priorGeneration = await environment.DB.prepare(
@@ -625,7 +625,7 @@ describe("production evaluation fixture", () => {
     await expect(
       resetProductionEvaluationFixture(
         environment,
-        "Future of Events 2025",
+        "Future of Events 2027",
         verifiedDomains,
       ),
     ).resolves.toMatchObject({
@@ -659,7 +659,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     await environment.DB.prepare(
@@ -717,7 +717,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     await environment.DB.batch([
@@ -738,7 +738,7 @@ describe("production evaluation fixture", () => {
       await expect(
         resetProductionEvaluationFixture(
           environment,
-          "Future of Events 2025",
+          "Future of Events 2027",
           verifiedDomains,
         ),
       ).rejects.toThrow(
@@ -760,7 +760,7 @@ describe("production evaluation fixture", () => {
         productionEnvironment({
           EVALUATOR_SPEAKER_EMAIL: "eval-organizer@programcue.com",
         }),
-        "Future of Events 2025",
+        "Future of Events 2027",
         verifiedDomains,
       ),
     ).rejects.toThrow(/distinct/u);
@@ -770,7 +770,7 @@ describe("production evaluation fixture", () => {
         productionEnvironment({
           EVALUATOR_REVIEWER_EMAIL: "reviewer@example.com",
         }),
-        "Future of Events 2025",
+        "Future of Events 2027",
         verifiedDomains,
       ),
     ).rejects.toThrow(/reserved/u);
@@ -782,7 +782,7 @@ describe("production evaluation fixture", () => {
       "UPDATE events SET name = 'Provider preflight sentinel' WHERE id = 'evt-foe-2025'",
     ).run();
     await expect(
-      resetProductionEvaluationFixture(environment, "Future of Events 2025", {
+      resetProductionEvaluationFixture(environment, "Future of Events 2027", {
         list: async () => [],
       }),
     ).rejects.toThrow(/must report programcue.com as verified/u);
@@ -796,7 +796,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     const sessionCookie = await evaluationSessionCookie(
@@ -815,7 +815,7 @@ describe("production evaluation fixture", () => {
     await expect(
       resetProductionEvaluationFixture(
         productionEnvironment({ FILES: unavailableFiles }),
-        "Future of Events 2025",
+        "Future of Events 2027",
         verifiedDomains,
       ),
     ).rejects.toThrow(/fixture storage unavailable/u);
@@ -854,7 +854,7 @@ describe("production evaluation fixture", () => {
     await expect(
       resetProductionEvaluationFixture(
         environment,
-        "Future of Events 2025",
+        "Future of Events 2027",
         verifiedDomains,
       ),
     ).resolves.toMatchObject({
@@ -869,7 +869,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     await environment.DB.prepare(
@@ -901,7 +901,7 @@ describe("production evaluation fixture", () => {
     await expect(
       resetProductionEvaluationFixture(
         productionEnvironment({ FILES: stuckFiles }),
-        "Future of Events 2025",
+        "Future of Events 2027",
         verifiedDomains,
       ),
     ).rejects.toThrow(/did not make progress/iu);
@@ -921,7 +921,7 @@ describe("production evaluation fixture", () => {
       await expect(
         resetProductionEvaluationFixture(
           environment,
-          "Future of Events 2025",
+          "Future of Events 2027",
           verifiedDomains,
         ),
       ).rejects.toThrow(/organisation identity is not dedicated/u);
@@ -943,7 +943,7 @@ describe("production evaluation fixture", () => {
       const environment = productionEnvironment();
       await resetProductionEvaluationFixture(
         environment,
-        "Future of Events 2025",
+        "Future of Events 2027",
         verifiedDomains,
       );
       const suffix = relationship.replace("_", "-");
@@ -1011,7 +1011,7 @@ describe("production evaluation fixture", () => {
         await expect(
           resetProductionEvaluationFixture(
             environment,
-            "Future of Events 2025",
+            "Future of Events 2027",
             verifiedDomains,
           ),
         ).rejects.toThrow(/linked outside/iu);
@@ -1028,7 +1028,7 @@ describe("production evaluation fixture", () => {
           .bind(organisationId)
           .run();
         await environment.DB.prepare(
-          "UPDATE events SET name = 'Future of Events 2025' WHERE id = 'evt-foe-2025'",
+          "UPDATE events SET name = 'Future of Events 2027' WHERE id = 'evt-foe-2025'",
         ).run();
       }
     },
@@ -1038,7 +1038,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     await environment.DB.batch([
@@ -1085,7 +1085,7 @@ describe("production evaluation fixture", () => {
       await expect(
         resetProductionEvaluationFixture(
           environment,
-          "Future of Events 2025",
+          "Future of Events 2027",
           verifiedDomains,
         ),
       ).rejects.toThrow(/linked outside/iu);
@@ -1121,7 +1121,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     await environment.DB.prepare(
@@ -1188,7 +1188,7 @@ describe("production evaluation fixture", () => {
 
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
 
@@ -1216,7 +1216,7 @@ describe("production evaluation fixture", () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     await environment.DB.prepare(
@@ -1233,7 +1233,7 @@ describe("production evaluation fixture", () => {
 
     await resetProductionEvaluationFixture(
       environment,
-      "Future of Events 2025",
+      "Future of Events 2027",
       verifiedDomains,
     );
     const remaining = await environment.DB.prepare(
@@ -1261,7 +1261,7 @@ describe("production evaluation fixture", () => {
       await expect(
         resetProductionEvaluationFixture(
           environment,
-          "Future of Events 2025",
+          "Future of Events 2027",
           verifiedDomains,
         ),
       ).rejects.toThrow(/linked outside/u);

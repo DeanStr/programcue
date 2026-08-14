@@ -567,7 +567,12 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                   ),
                 )}
               </div>
-              <div className="table-wrap">
+              <div
+                className="table-wrap"
+                role="region"
+                aria-label="CRM import preview"
+                tabIndex={0}
+              >
                 <table className="data-table">
                   <thead>
                     <tr>

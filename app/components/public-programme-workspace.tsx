@@ -508,8 +508,6 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
     programme,
     speakerById,
     selected,
-    setTurnstileToken,
-    turnstileResetKey,
     selectSavedSession,
   } = model;
   const calendarExportHref = `/api/v1/public/events/${encodeURIComponent(
@@ -537,19 +535,7 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
           {fetcher.data.error}
         </p>
       ) : null}
-      {loaderData.itineraryVerificationRequired ? (
-        <div className="stack mb">
-          <p className="help">
-            Complete the security check once to start this browser's itinerary.
-          </p>
-          <TurnstileWidget
-            siteKey={loaderData.turnstileSiteKey}
-            action="public_itinerary_create"
-            onTokenChange={setTurnstileToken}
-            resetKey={turnstileResetKey}
-          />
-        </div>
-      ) : null}
+      <ItineraryVerificationPrompt model={model} />
       {savedSessions.length ? (
         <>
           <div className="itinerary-items">
@@ -616,11 +602,7 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
               </fetcher.Form>
             </div>
           ) : (
-            <a
-              className="btn primary mt"
-              href={calendarExportHref}
-              download
-            >
+            <a className="btn primary mt" href={calendarExportHref} download>
               <CalendarDays aria-hidden size={15} /> Export itinerary
             </a>
           )}
@@ -652,8 +634,6 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
     shared,
     saved,
     fetcher,
-    loaderData,
-    turnstileToken,
     showSpeakers,
   } = model;
   if (!selected) return null;
@@ -720,13 +700,12 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
         <button
           type="button"
           className={`btn${saved.includes(selected.id) ? "" : " primary"}`}
-          disabled={
-            fetcher.state !== "idle" ||
-            (!saved.includes(selected.id) &&
-              loaderData.itineraryVerificationRequired &&
-              loaderData.turnstileSiteKey !== null &&
-              !turnstileToken)
+          aria-describedby={
+            model.requiresItineraryVerification(selected.id)
+              ? "itinerary-verification-help"
+              : undefined
           }
+          disabled={fetcher.state !== "idle"}
           onClick={() => model.toggle(selected.id)}
         >
           {fetcher.state !== "idle"
@@ -763,6 +742,50 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
         Shareable session link
       </Link>
     </section>
+  );
+}
+
+function ItineraryVerificationPrompt({
+  model,
+}: {
+  model: PublicProgrammeModel;
+}) {
+  const {
+    loaderData,
+    itineraryVerificationPrompted,
+    itineraryVerificationRef,
+    turnstileToken,
+    updateTurnstileToken,
+    turnstileResetKey,
+  } = model;
+  if (!loaderData.itineraryVerificationRequired) return null;
+  return (
+    <div
+      className={`itinerary-verification stack mb${itineraryVerificationPrompted ? " prompted" : ""}`}
+      ref={itineraryVerificationRef}
+      tabIndex={-1}
+      aria-labelledby="itinerary-verification-help"
+    >
+      <p
+        className={
+          itineraryVerificationPrompted ? "validation-item warn" : "help"
+        }
+        id="itinerary-verification-help"
+        role={
+          itineraryVerificationPrompted || turnstileToken ? "status" : undefined
+        }
+      >
+        {turnstileToken
+          ? "Security check complete. Choose Save again to start this browser's itinerary."
+          : "Complete this security check once, then choose Save again to start this browser's itinerary."}
+      </p>
+      <TurnstileWidget
+        siteKey={loaderData.turnstileSiteKey}
+        action="public_itinerary_create"
+        onTokenChange={updateTurnstileToken}
+        resetKey={turnstileResetKey}
+      />
+    </div>
   );
 }
 
@@ -910,6 +933,7 @@ export function PublicProgrammeWorkspace({
       >
         {!overviewSurface ? (
           <div className="public-surface-content">
+            <ItineraryVerificationPrompt model={model} />
             <PublicProgrammeSurfaceContent model={model} />
           </div>
         ) : (

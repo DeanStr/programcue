@@ -151,7 +151,7 @@ test.describe.serial("submissions vertical slice", () => {
 
     await page.goto("/apply/form");
     await expect(
-      page.getByRole("heading", { name: "Future of Events 2025" }),
+      page.getByRole("heading", { name: "Future of Events 2027" }),
     ).toBeVisible();
     await expect(page.getByText("Preview the application")).toBeVisible();
     await expect(page.getByText(/Up to \d+ proposal questions/)).toBeVisible();

@@ -378,7 +378,12 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
             <span className="status neutral">{activeKeyCount} active</span>
           </div>
           {loaderData.keys.length ? (
-            <div className="table-wrap">
+            <div
+              className="table-wrap"
+              role="region"
+              aria-label="Event API credentials"
+              tabIndex={0}
+            >
               <table className="data-table">
                 <thead>
                   <tr>
@@ -564,7 +569,12 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
           </span>
         </div>
         {loaderData.webhooks.length ? (
-          <div className="table-wrap">
+          <div
+            className="table-wrap"
+            role="region"
+            aria-label="Outbound webhook endpoints"
+            tabIndex={0}
+          >
             <table className="data-table">
               <thead>
                 <tr>

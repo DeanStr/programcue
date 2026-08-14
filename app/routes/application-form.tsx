@@ -576,7 +576,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
       className="public-shell event-branded"
       style={{ "--event-accent": form.brandAccent } as CSSProperties}
     >
-      <header className="public-top">
+      <header className="public-top application-top">
         <Link
           aria-label={`${form.eventName} application home`}
           className="brand"
@@ -627,6 +627,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
       </header>
       <main
         id="main"
+        className="application-main"
         style={{
           maxWidth: applicant ? 1120 : 760,
           margin: "30px auto",

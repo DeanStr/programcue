@@ -353,7 +353,12 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
         {loaderData.files.length ? (
           <Form method="post" className="stack">
             <input type="hidden" name="intent" value="preview-zip" />
-            <div className="table-wrap">
+            <div
+              className="table-wrap"
+              role="region"
+              aria-label="Private file inventory"
+              tabIndex={0}
+            >
               <table>
                 <thead>
                   <tr>

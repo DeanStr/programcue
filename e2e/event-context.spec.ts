@@ -54,13 +54,13 @@ test("an event switch persists across reloads on the local HTTP Worker", async (
   const originalChoice = page
     .getByRole("dialog", { name: "Current event" })
     .locator("form")
-    .filter({ hasText: "Future of Events 2025" });
+    .filter({ hasText: "Future of Events 2027" });
   await originalChoice.getByRole("button", { name: "Switch event" }).click();
   await expect(page.locator(".event-switcher strong")).toHaveText(
-    "Future of Events 2025",
+    "Future of Events 2027",
   );
   await expect(page.getByLabel("Event name")).toHaveValue(
-    "Future of Events 2025",
+    "Future of Events 2027",
   );
 });
 

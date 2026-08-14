@@ -23,7 +23,12 @@ export function FormVersionHistory({
           Published submissions retain their original form version.
         </span>
       </div>
-      <div className="table-wrap">
+      <div
+        className="table-wrap"
+        role="region"
+        aria-label="Form version history"
+        tabIndex={0}
+      >
         <table className="data-table">
           <thead>
             <tr>

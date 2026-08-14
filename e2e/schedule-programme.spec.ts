@@ -36,9 +36,9 @@ test("schedule and programme render the event calendar date and timezone", async
   page,
 }) => {
   await expect(page.locator(".hero")).toContainText(
-    "Tuesday, May 20–Thursday, May 22",
+    "Thursday, May 20–Saturday, May 22",
   );
-  await expect(page.locator(".hero")).not.toContainText("Monday, May 19");
+  await expect(page.locator(".hero")).not.toContainText("Wednesday, May 19");
   await waitForInterface(page, "/public/programme/future-of-events-2025");
   await expect(page.locator(".public-top .brand")).toHaveAttribute(
     "href",
@@ -84,14 +84,14 @@ test("schedule and programme render the event calendar date and timezone", async
     page.getByRole("button", { name: "Room", pressed: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Tue, May 20 · Room view" }),
+    page.getByRole("heading", { name: "Thu, May 20 · Room view" }),
   ).toBeVisible();
   await expect(
     page.getByText("9:00 AM", { exact: true }).first(),
   ).toBeVisible();
-  await page.getByRole("button", { name: /Wed, May 21.*2 placed/ }).click();
+  await page.getByRole("button", { name: /Fri, May 21.*2 placed/ }).click();
   await expect(
-    page.getByRole("heading", { name: "Wed, May 21 · Room view" }),
+    page.getByRole("heading", { name: "Fri, May 21 · Room view" }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Community and Connection", exact: true }),
@@ -132,7 +132,7 @@ test("schedule and programme render the event calendar date and timezone", async
     page.getByText("Event timezone · America/Toronto"),
   ).toBeVisible();
   await expect(
-    page.getByText(/May 20, 2025.*9:00 AM.*(?:EDT|GMT-4)/).first(),
+    page.getByText(/May 20, 2027.*9:00 AM.*(?:EDT|GMT-4)/).first(),
   ).toBeVisible();
   await expect(page.getByLabel("Iframe code")).toHaveValue(
     new RegExp(`<iframe src="${e2eOrigin}/embed/future-of-events-2025`),
@@ -162,7 +162,7 @@ test("configures, previews and copies a constrained programme embed", async ({
     page.getByRole("heading", { name: "Configure embed" }),
   ).toBeVisible();
 
-  await page.getByLabel("Initial day").selectOption("2025-05-21");
+  await page.getByLabel("Initial day").selectOption("2027-05-21");
   await page.getByLabel("Initial track").selectOption("AI & Innovation");
   await page.getByLabel("Initial format").selectOption("breakout");
   await page.getByLabel("Initial room").selectOption("Room 303");
@@ -179,7 +179,7 @@ test("configures, previews and copies a constrained programme embed", async ({
   const preview = page.locator(".programme-embed-preview iframe");
   await expect(preview).toHaveAttribute(
     "src",
-    /day=2025-05-21.*track=AI\+%26\+Innovation.*format=breakout.*room=Room\+303.*query=Building.*controls=search.*density=compact.*speakers=hide/,
+    /day=2027-05-21.*track=AI\+%26\+Innovation.*format=breakout.*room=Room\+303.*query=Building.*controls=search.*density=compact.*speakers=hide/,
   );
   const previewFrame = preview.contentFrame();
   await previewFrame.locator("body[data-hydrated='true']").waitFor();
@@ -198,7 +198,7 @@ test("configures, previews and copies a constrained programme embed", async ({
   );
   await page.getByRole("button", { name: "Widget", exact: true }).click();
   await expect(page.getByLabel("Auto-resizing widget code")).toHaveValue(
-    /programcue-widget\.js.*data-day="2025-05-21".*data-track="AI &amp; Innovation".*data-format="breakout".*data-room="Room 303".*data-query="Building".*data-controls="search".*data-density="compact".*data-speakers="hide"/s,
+    /programcue-widget\.js.*data-day="2027-05-21".*data-track="AI &amp; Innovation".*data-format="breakout".*data-room="Room 303".*data-query="Building".*data-controls="search".*data-density="compact".*data-speakers="hide"/s,
   );
 
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -356,7 +356,7 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
           <script src="${e2eOrigin}/programcue-widget.js"
             data-programcue-event="future-of-events-2025"
             data-target="#programme-widget"
-            data-day="2025-05-21"
+            data-day="2027-05-21"
             data-accent="#0d9488"
             data-controls="search"
             data-density="compact"></script>
@@ -367,7 +367,7 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
   const frame = page.locator("#programme-widget iframe");
   await expect(frame).toHaveAttribute(
     "src",
-    /\/embed\/future-of-events-2025\?day=2025-05-21&accent=%230d9488&controls=search&density=compact$/,
+    /\/embed\/future-of-events-2025\?day=2027-05-21&accent=%230d9488&controls=search&density=compact$/,
   );
   await frame.contentFrame().locator("body[data-hydrated='true']").waitFor();
   await expect(
@@ -775,7 +775,7 @@ test("keeps personal itinerary state private and disables it in embeds", async (
 test("keeps programme detail panels inside the active embed filters", async ({
   page,
 }) => {
-  await waitForInterface(page, "/embed/future-of-events-2025?day=2025-05-21");
+  await waitForInterface(page, "/embed/future-of-events-2025?day=2027-05-21");
   const firstVisibleTitle = await page
     .locator(".programme-row h3")
     .first()

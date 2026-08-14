@@ -525,7 +525,12 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
             evaluator access.
           </p>
         </div>
-        <div className="table-wrap pc-responsive-table-wrap">
+        <div
+          className="table-wrap pc-responsive-table-wrap"
+          role="region"
+          aria-label="Demo test identities"
+          tabIndex={0}
+        >
           <table className="data-table pc-responsive-table">
             <thead>
               <tr>
@@ -594,9 +599,7 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
           <div className="pc-section-heading">
             <div>
               <span className="pc-section-kicker">Guided workflow</span>
-              <h2 id="demo-walkthrough-heading">
-                Follow the programme story
-              </h2>
+              <h2 id="demo-walkthrough-heading">Follow the programme story</h2>
             </div>
             <p>
               Complete the core path in order. The final phase also exposes

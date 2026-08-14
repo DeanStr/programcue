@@ -15,6 +15,9 @@
   .command-mid > :last-child {
     grid-column: span 2;
   }
+  .command-mid.command-mid-two > :last-child {
+    grid-column: auto;
+  }
   .builder-layout {
     grid-template-columns: 200px minmax(330px, 1fr) 290px;
   }
@@ -116,6 +119,9 @@
   }
   .command-mid,
   .command-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .command-mid.command-mid-two {
     grid-template-columns: minmax(0, 1fr);
   }
   .command-mid > :last-child {

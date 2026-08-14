@@ -360,8 +360,8 @@ describe("published programme and itinerary", () => {
     const programme = await service.getPublished("future-of-events-2025");
     expect(programme?.version.id).toBe("demo-schedule-published");
     expect(programme?.event).toMatchObject({
-      startDate: "2025-05-20",
-      endDate: "2025-05-22",
+      startDate: "2027-05-20",
+      endDate: "2027-05-22",
     });
     expect(programme?.event).not.toHaveProperty("startsAt");
     expect(programme?.event).not.toHaveProperty("endsAt");
@@ -1596,6 +1596,14 @@ describe("published programme and itinerary", () => {
       ...(env as unknown as CloudflareEnvironment),
       DEMO_MODE: "false",
     } as CloudflareEnvironment);
+    await env.DB.prepare(
+      `UPDATE events
+          SET starts_at = unixepoch('1999-12-30T00:00:00Z'),
+              ends_at = unixepoch('2000-01-01T23:59:59Z')
+        WHERE id = ?`,
+    )
+      .bind("evt-foe-2025")
+      .run();
     const programme = await service.getPublished("future-of-events-2025");
     expect(programme).not.toBeNull();
     await expect(

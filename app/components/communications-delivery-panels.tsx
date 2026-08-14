@@ -68,7 +68,12 @@ export function DeliveryConfiguration({
             </button>
           </Form>
           {loaderData.senders.length ? (
-            <div className="table-wrap">
+            <div
+              className="table-wrap"
+              role="region"
+              aria-label="Sender profiles"
+              tabIndex={0}
+            >
               <table className="data-table">
                 <thead>
                   <tr>
@@ -357,7 +362,12 @@ export function CommunicationAutomation({
         </button>
       </Form>
       {loaderData.triggers.length ? (
-        <div className="table-wrap mt">
+        <div
+          className="table-wrap mt"
+          role="region"
+          aria-label="Automatic reminder triggers"
+          tabIndex={0}
+        >
           <table className="data-table">
             <thead>
               <tr>

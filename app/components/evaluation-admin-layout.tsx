@@ -1,6 +1,7 @@
 import { Form, Link } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { AdminPageSectionNavigation } from "~/components/ui/admin-page-sections";
 import { EvaluationPlanState } from "~/components/evaluation-admin-configuration-panels";
 import {
   BulkAssignmentDialog,
@@ -126,9 +127,25 @@ export function EvaluationAssignmentUndo() {
 }
 
 export function EvaluationAdminPage() {
+  const { loaderData } = useEvaluationAdminModel();
   return (
     <>
       <EvaluationHeader />
+      <AdminPageSectionNavigation
+        label="Evaluation administration sections"
+        links={
+          loaderData.plan
+            ? [
+                { id: "evaluation-overview", label: "Overview" },
+                { id: "evaluation-access", label: "Access" },
+                { id: "evaluation-rounds", label: "Rounds" },
+                { id: "evaluation-proposals", label: "Proposals" },
+                { id: "evaluation-sessions", label: "Sessions" },
+                { id: "evaluation-moderation", label: "Moderation" },
+              ]
+            : [{ id: "evaluation-setup", label: "Create plan" }]
+        }
+      />
       <EvaluationFilterNotice />
       <EvaluationActionNotice />
       <EvaluationAssignmentUndo />

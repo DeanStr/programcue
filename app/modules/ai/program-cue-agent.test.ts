@@ -1,9 +1,7 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-import {
-  getProgramCueEventAgent,
-} from "./program-cue-agent-client.server";
+import { getProgramCueEventAgent } from "./program-cue-agent-client.server";
 import { programCueAgentInstanceName } from "./program-cue-agent.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
@@ -29,7 +27,7 @@ describe("Program Cue Cloudflare Agent", () => {
       admin,
     );
     await expect(agent.getWorkspace(admin)).resolves.toMatchObject({
-      eventName: "Future of Events 2025",
+      eventName: "Future of Events 2027",
     });
     const state = await runInDurableObject(
       agent,
@@ -54,8 +52,8 @@ describe("Program Cue Cloudflare Agent", () => {
       personId: "person-demo-owner",
       email: "owner@example.com",
     };
-    await expect(programCueAgentInstanceName(differentViewer)).resolves.not.toBe(
-      instanceName,
-    );
+    await expect(
+      programCueAgentInstanceName(differentViewer),
+    ).resolves.not.toBe(instanceName);
   });
 });

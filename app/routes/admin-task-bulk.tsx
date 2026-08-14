@@ -397,7 +397,12 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
               <span>blocked</span>
             </div>
           </div>
-          <div className="table-wrap pc-responsive-table-wrap">
+          <div
+            className="table-wrap pc-responsive-table-wrap"
+            role="region"
+            aria-label="Bulk task update preview"
+            tabIndex={0}
+          >
             <table className="data-table pc-responsive-table">
               <thead>
                 <tr>

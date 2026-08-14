@@ -95,7 +95,7 @@ describe("production evaluation fixture reset route", () => {
             ...authorizedHeaders,
             "content-type": "application/json-patch+json",
           },
-          body: JSON.stringify({ confirmation: "Future of Events 2025" }),
+          body: JSON.stringify({ confirmation: "Future of Events 2027" }),
         },
       ),
       environment,

@@ -147,6 +147,9 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const fetcher = useFetcher<PublicProgrammeAction>();
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const [itineraryVerificationPrompted, setItineraryVerificationPrompted] =
+    useState(false);
+  const itineraryVerificationRef = useRef<HTMLDivElement | null>(null);
   const previousFetcherState = useRef(fetcher.state);
   const shareUrl =
     fetcher.data &&
@@ -451,8 +454,37 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     setSelectedId(sessionId);
   }
 
+  function requiresItineraryVerification(sessionId: string) {
+    return (
+      !saved.includes(sessionId) &&
+      loaderData.itineraryVerificationRequired &&
+      loaderData.turnstileSiteKey !== null &&
+      !turnstileToken
+    );
+  }
+
+  function updateTurnstileToken(token: string) {
+    setTurnstileToken(token);
+    if (token) setItineraryVerificationPrompted(false);
+  }
+
   function toggle(sessionId: string) {
     if (shared) return;
+    if (requiresItineraryVerification(sessionId)) {
+      setItineraryVerificationPrompted(true);
+      window.requestAnimationFrame(() => {
+        const verification = itineraryVerificationRef.current;
+        verification?.focus({ preventScroll: true });
+        verification?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+            .matches
+            ? "auto"
+            : "smooth",
+          block: "center",
+        });
+      });
+      return;
+    }
     void fetcher.submit(
       {
         intent: saved.includes(sessionId) ? "remove" : "add",
@@ -471,8 +503,10 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     embedOptions,
     fetcher,
     turnstileToken,
-    setTurnstileToken,
+    updateTurnstileToken,
     turnstileResetKey,
+    itineraryVerificationPrompted,
+    itineraryVerificationRef,
     shareUrl,
     saved,
     query,
@@ -520,6 +554,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     toggleSpeakerBiography,
     clearFilters,
     selectSavedSession,
+    requiresItineraryVerification,
     toggle,
   };
 }

@@ -20,6 +20,10 @@ import {
   type TemplateDraftFields,
 } from "~/components/communications-centre-panels";
 import { DraftRecoveryFeedback } from "~/components/draft-recovery-feedback";
+import {
+  AdminPageSection,
+  AdminPageSectionNavigation,
+} from "~/components/ui/admin-page-sections";
 import { CalendarService } from "~/modules/calendars/calendar-service.server";
 import {
   CalendarQueueUnavailableError,
@@ -532,6 +536,17 @@ export default function CommunicationsCentre({
         </div>
       </div>
 
+      <AdminPageSectionNavigation
+        label="Communications Centre sections"
+        links={[
+          { id: "communications-delivery", label: "Delivery" },
+          { id: "communications-templates", label: "Templates" },
+          { id: "communications-history", label: "History" },
+          { id: "communications-automation", label: "Automation" },
+          { id: "communications-calendars", label: "Calendars" },
+        ]}
+      />
+
       {loaderData.activeFilter === "failed" ? (
         <div className="validation-item error mb" role="status">
           <strong>Failed delivery filter</strong>
@@ -605,99 +620,130 @@ export default function CommunicationsCentre({
         </div>
       ) : null}
 
-      <div className="comms-provider-strip card pad mb">
-        <span>
-          <strong>Sender</strong>
-          <small>
-            {loaderData.provider.sender ?? "No verified sender profile"}
-          </small>
-        </span>
-        <span>
-          <strong>
-            {loaderData.provider.name === "mailpit" ? "Mailpit" : "Resend"}
-          </strong>
-          <small>
-            {loaderData.provider.configured
-              ? loaderData.provider.name === "mailpit"
-                ? "Local capture endpoint and verified sender present"
-                : "API key and verified sender present"
-              : "Configuration required"}
-          </small>
-        </span>
-        <span>
-          <strong>Queue</strong>
-          <small>
-            {loaderData.provider.queueConfigured
-              ? "Operations Queue bound"
-              : "OPERATIONS_QUEUE is unavailable"}
-          </small>
-        </span>
-        <span>
-          <strong>Policy</strong>
-          <small>No provider simulation or silent fallback</small>
-        </span>
-      </div>
+      <AdminPageSection
+        id="communications-delivery"
+        label="Delivery configuration"
+        description="Sender, provider and Queue readiness"
+      >
+        <div className="comms-provider-strip card pad mb">
+          <span>
+            <strong>Sender</strong>
+            <small>
+              {loaderData.provider.sender ?? "No verified sender profile"}
+            </small>
+          </span>
+          <span>
+            <strong>
+              {loaderData.provider.name === "mailpit" ? "Mailpit" : "Resend"}
+            </strong>
+            <small>
+              {loaderData.provider.configured
+                ? loaderData.provider.name === "mailpit"
+                  ? "Local capture endpoint and verified sender present"
+                  : "API key and verified sender present"
+                : "Configuration required"}
+            </small>
+          </span>
+          <span>
+            <strong>Queue</strong>
+            <small>
+              {loaderData.provider.queueConfigured
+                ? "Operations Queue bound"
+                : "OPERATIONS_QUEUE is unavailable"}
+            </small>
+          </span>
+          <span>
+            <strong>Policy</strong>
+            <small>No provider simulation or silent fallback</small>
+          </span>
+        </div>
 
-      <DeliveryConfiguration
-        loaderData={loaderData}
-        working={working}
-        pendingIntent={pendingIntent}
-      />
-
-      <div className="comms-layout comms-production-layout">
-        <TemplateVersionList loaderData={loaderData} selected={selected} />
-        <main className="stack">
-          <DraftRecoveryFeedback recovery={recovery} className="" />
-          <TemplateEditor
-            selected={selected}
-            working={working}
-            pendingIntent={pendingIntent}
-            templateDirty={templateDirty}
-            draft={templateDraft}
-            recoveryState={recovery.state}
-            onChange={(draft) => {
-              setTemplateDraft(draft);
-              setTemplateDirty(true);
-            }}
-          />
-          <section className="card pad">
-            <div className="card-title">
-              <div>
-                <h2>Compose and send</h2>
-                <p className="help">
-                  Audience configuration, preview and confirmation live in a
-                  durable communication draft that can be resumed safely.
-                </p>
-              </div>
-              <Link
-                className="btn primary right"
-                to="/admin/communications/compose"
-              >
-                New communication
-              </Link>
-            </div>
-          </section>
-        </main>
-      </div>
-
-      <div className="grid grid-2 mt comms-history">
-        <RecentCommunications
+        <DeliveryConfiguration
           loaderData={loaderData}
           working={working}
           pendingIntent={pendingIntent}
         />
-        <CalendarLifecycleTable loaderData={loaderData} />
-      </div>
-      <CommunicationAutomation
-        loaderData={loaderData}
-        working={working}
-        pendingIntent={pendingIntent}
-      />
-      <CalendarAdministration
-        loaderData={loaderData}
-        working={working}
-        pendingIntent={pendingIntent}
-      />
+      </AdminPageSection>
+
+      <AdminPageSection
+        id="communications-templates"
+        label="Templates and composition"
+        description="Versioned content and durable communication drafts"
+        defaultExpandedOnMobile
+      >
+        <div className="comms-layout comms-production-layout">
+          <TemplateVersionList loaderData={loaderData} selected={selected} />
+          <main className="stack">
+            <DraftRecoveryFeedback recovery={recovery} className="" />
+            <TemplateEditor
+              selected={selected}
+              working={working}
+              pendingIntent={pendingIntent}
+              templateDirty={templateDirty}
+              draft={templateDraft}
+              recoveryState={recovery.state}
+              onChange={(draft) => {
+                setTemplateDraft(draft);
+                setTemplateDirty(true);
+              }}
+            />
+            <section className="card pad">
+              <div className="card-title">
+                <div>
+                  <h2>Compose and send</h2>
+                  <p className="help">
+                    Audience configuration, preview and confirmation live in a
+                    durable communication draft that can be resumed safely.
+                  </p>
+                </div>
+                <Link
+                  className="btn primary right"
+                  to="/admin/communications/compose"
+                >
+                  New communication
+                </Link>
+              </div>
+            </section>
+          </main>
+        </div>
+      </AdminPageSection>
+
+      <AdminPageSection
+        id="communications-history"
+        label="Communication history"
+        description="Delivery records and calendar lifecycle"
+      >
+        <div className="grid grid-2 comms-history">
+          <RecentCommunications
+            loaderData={loaderData}
+            working={working}
+            pendingIntent={pendingIntent}
+          />
+          <CalendarLifecycleTable loaderData={loaderData} />
+        </div>
+      </AdminPageSection>
+      <AdminPageSection
+        id="communications-automation"
+        label="Automatic reminders"
+        description="Scheduled reminder and escalation policy"
+      >
+        <CommunicationAutomation
+          loaderData={loaderData}
+          working={working}
+          pendingIntent={pendingIntent}
+        />
+      </AdminPageSection>
+      <AdminPageSection
+        id="communications-calendars"
+        label="Calendar administration"
+        description="Connections and published-session invitations"
+      >
+        <CalendarAdministration
+          loaderData={loaderData}
+          working={working}
+          pendingIntent={pendingIntent}
+        />
+      </AdminPageSection>
     </>
   );
 }

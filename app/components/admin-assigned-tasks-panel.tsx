@@ -38,7 +38,12 @@ export function AdminAssignedTasksPanel({
           Dependencies refresh before every read
         </span>
       </div>
-      <div className="table-wrap pc-responsive-table-wrap">
+      <div
+        className="table-wrap pc-responsive-table-wrap"
+        role="region"
+        aria-label="Assigned speaker work"
+        tabIndex={0}
+      >
         <table className="data-table pc-responsive-table">
           <thead>
             <tr>

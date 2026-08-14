@@ -306,7 +306,12 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
             ) : null}
           </div>
 
-          <div className="table-wrap pc-responsive-table-wrap">
+          <div
+            className="table-wrap pc-responsive-table-wrap"
+            role="region"
+            aria-label="Sessions available for bulk update"
+            tabIndex={0}
+          >
             <table
               className="data-table pc-responsive-table"
               aria-label="Sessions available for bulk update"
@@ -407,7 +412,12 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
               <strong>{operation.summary.invalidCount}</strong>
             </div>
           </div>
-          <div className="table-wrap pc-responsive-table-wrap">
+          <div
+            className="table-wrap pc-responsive-table-wrap"
+            role="region"
+            aria-label="Bulk session update preview"
+            tabIndex={0}
+          >
             <table
               className="data-table pc-responsive-table"
               aria-label="Bulk session update preview"

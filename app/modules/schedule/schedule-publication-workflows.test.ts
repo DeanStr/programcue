@@ -23,7 +23,7 @@ describe("schedule publication workflows", () => {
     const publicProgramme = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
-    const publishedStartsAt = Date.parse("2025-05-20T13:00:00Z") / 1_000;
+    const publishedStartsAt = Date.parse("2027-05-22T13:00:00Z") / 1_000;
     const publishedEndsAt = publishedStartsAt + 3_600;
     await env.DB.batch([
       env.DB.prepare(

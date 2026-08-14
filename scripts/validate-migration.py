@@ -509,6 +509,156 @@ def validate_speaker_profile_depth_forward_migration() -> None:
 
 validate_speaker_profile_depth_forward_migration()
 
+
+def validate_canonical_demo_dates_forward_migration() -> None:
+    deployed = sqlite3.connect(":memory:")
+    deployed.execute("PRAGMA foreign_keys = ON")
+    for path in migration_files:
+        if path.name == "0015_canonical_demo_dates.sql":
+            break
+        deployed.executescript(path.read_text())
+    deployed.executescript(
+        """
+        INSERT INTO organisations (id, name, slug)
+        VALUES ('org-future-events', 'Future Events Association', 'future-events-association');
+        INSERT INTO events (
+          id, organisation_id, name, slug, timezone, starts_at, ends_at,
+          file_policy_json
+        ) VALUES (
+           'evt-foe-2025', 'org-future-events', 'Future of Events 2025',
+          'future-of-events-2025', 'America/Toronto',
+          unixepoch('2025-05-20T00:00:00Z'),
+          unixepoch('2025-05-22T23:59:59Z'),
+          '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}'
+        );
+        INSERT INTO form_definitions (
+          id, event_id, name, kind, status, public_slug, closes_at
+        ) VALUES (
+          'demo-form', 'evt-foe-2025', 'Call for proposals', 'submission',
+          'published', 'form', NULL
+        );
+        INSERT INTO form_versions (
+          id, event_id, form_id, version_number, schema_json,
+          settings_snapshot_json, status, published_at
+        ) VALUES (
+          'demo-form-version', 'evt-foe-2025', 'demo-form', 1, '{}',
+          '{"closesAt":null}', 'published', unixepoch('2025-05-01T12:00:00Z')
+        );
+        INSERT INTO rooms (id, event_id, name, capacity)
+        VALUES ('main', 'evt-foe-2025', 'Main room', 500);
+        INSERT INTO sessions (
+          id, event_id, title, slug, format, duration_minutes, status
+        ) VALUES
+          ('demo-session-1', 'evt-foe-2025', 'Session 1', 'session-1', 'presentation', 45, 'published'),
+          ('demo-session-2', 'evt-foe-2025', 'Session 2', 'session-2', 'presentation', 60, 'published'),
+          ('demo-session-3', 'evt-foe-2025', 'Session 3', 'session-3', 'workshop', 60, 'published'),
+          ('demo-session-4', 'evt-foe-2025', 'Session 4', 'session-4', 'panel', 45, 'published'),
+          ('demo-session-5', 'evt-foe-2025', 'Session 5', 'session-5', 'breakout', 60, 'published');
+        INSERT INTO schedule_versions (
+          id, event_id, version_number, status, published_at
+        ) VALUES (
+          'demo-schedule-published', 'evt-foe-2025', 1, 'published',
+          unixepoch('2025-05-01T12:00:00Z')
+        );
+        INSERT INTO schedule_entries (
+          id, event_id, schedule_version_id, session_id, room_id,
+          starts_at, ends_at
+        ) VALUES
+          ('demo-entry-1', 'evt-foe-2025', 'demo-schedule-published', 'demo-session-1', 'main', unixepoch('2025-05-20T13:00:00Z'), unixepoch('2025-05-20T13:45:00Z')),
+          ('demo-entry-2', 'evt-foe-2025', 'demo-schedule-published', 'demo-session-2', 'main', unixepoch('2025-05-20T14:00:00Z'), unixepoch('2025-05-20T15:00:00Z')),
+          ('demo-entry-3', 'evt-foe-2025', 'demo-schedule-published', 'demo-session-3', 'main', unixepoch('2025-05-20T15:15:00Z'), unixepoch('2025-05-20T16:15:00Z')),
+          ('demo-entry-4', 'evt-foe-2025', 'demo-schedule-published', 'demo-session-4', 'main', unixepoch('2025-05-21T13:30:00Z'), unixepoch('2025-05-21T14:15:00Z')),
+          ('demo-entry-5', 'evt-foe-2025', 'demo-schedule-published', 'demo-session-5', 'main', unixepoch('2025-05-21T17:00:00Z'), unixepoch('2025-05-21T18:00:00Z'));
+        INSERT INTO task_templates (
+          id, event_id, name, target_type, task_type, impact, evidence_mode,
+          due_anchor, fixed_due_at, auto_assign_on_acceptance
+        ) VALUES
+          ('task-template-profile', 'evt-foe-2025', 'Complete your speaker profile',
+           'speaker', 'short_form', 'high', 'checkbox', 'fixed',
+           unixepoch('2025-05-10T16:00:00Z'), 1),
+          ('task-template-slides', 'evt-foe-2025', 'Upload presentation slides',
+           'speaker', 'file_upload', 'critical', 'file', 'fixed',
+           unixepoch('2025-05-10T16:00:00Z'), 1),
+          ('task-template-handbook', 'evt-foe-2025', 'Read the speaker handbook',
+           'speaker', 'acknowledgement', 'medium', 'checkbox', 'fixed',
+           unixepoch('2025-05-12T16:00:00Z'), 1);
+        INSERT INTO task_instances (
+          id, event_id, template_id, target_type, target_id, title, task_type,
+          impact, status, readiness_state, readiness_percent, due_at
+        ) VALUES
+          ('task-demo-profile', 'evt-foe-2025', 'task-template-profile', 'speaker', 'person-demo-speaker', 'Complete your speaker profile', 'short_form', 'high', 'completed', 'on_track', 100, unixepoch('2025-05-10T16:00:00Z')),
+          ('task-demo-slides', 'evt-foe-2025', 'task-template-slides', 'speaker', 'person-demo-speaker', 'Upload presentation slides', 'file_upload', 'critical', 'not_started', 'at_risk', 0, unixepoch('2025-05-16T16:00:00Z')),
+          ('task-demo-handbook', 'evt-foe-2025', 'task-template-handbook', 'speaker', 'person-demo-speaker', 'Read the speaker handbook', 'acknowledgement', 'medium', 'not_started', 'on_track', 0, unixepoch('2025-05-12T16:00:00Z'));
+        """
+    )
+    deployed.executescript(
+        root.joinpath("migrations/0015_canonical_demo_dates.sql").read_text()
+    )
+    event = deployed.execute(
+        """
+        SELECT name, datetime(starts_at, 'unixepoch'), datetime(ends_at, 'unixepoch')
+          FROM events
+         WHERE id = 'evt-foe-2025'
+        """
+    ).fetchone()
+    if event != (
+        "Future of Events 2027",
+        "2027-05-20 00:00:00",
+        "2027-05-22 23:59:59",
+    ):
+        raise SystemExit("The existing canonical demo event dates were not migrated")
+    schedule = deployed.execute(
+        """
+        SELECT id, datetime(starts_at, 'unixepoch'), datetime(ends_at, 'unixepoch')
+          FROM schedule_entries
+         WHERE schedule_version_id = 'demo-schedule-published'
+         ORDER BY id
+        """
+    ).fetchall()
+    if schedule != [
+        ("demo-entry-1", "2027-05-20 13:00:00", "2027-05-20 13:45:00"),
+        ("demo-entry-2", "2027-05-20 14:00:00", "2027-05-20 15:00:00"),
+        ("demo-entry-3", "2027-05-20 15:15:00", "2027-05-20 16:15:00"),
+        ("demo-entry-4", "2027-05-21 13:30:00", "2027-05-21 14:15:00"),
+        ("demo-entry-5", "2027-05-21 17:00:00", "2027-05-21 18:00:00"),
+    ]:
+        raise SystemExit("The existing canonical demo schedule was not migrated")
+    deadline = deployed.execute(
+        """
+        SELECT datetime(form.closes_at, 'unixepoch'),
+               datetime(json_extract(version.settings_snapshot_json, '$.closesAt'), 'unixepoch')
+          FROM form_definitions form
+          JOIN form_versions version ON version.form_id = form.id
+         WHERE form.event_id = 'evt-foe-2025' AND form.public_slug = 'form'
+        """
+    ).fetchone()
+    if deadline != ("2027-05-01 03:59:59", "2027-05-01 03:59:59"):
+        raise SystemExit("The existing canonical demo application deadline was not migrated")
+    speaker_dates = deployed.execute(
+        """
+        SELECT
+          datetime((SELECT fixed_due_at FROM task_templates WHERE id = 'task-template-profile'), 'unixepoch'),
+          datetime((SELECT fixed_due_at FROM task_templates WHERE id = 'task-template-slides'), 'unixepoch'),
+          datetime((SELECT fixed_due_at FROM task_templates WHERE id = 'task-template-handbook'), 'unixepoch'),
+          datetime((SELECT due_at FROM task_instances WHERE id = 'task-demo-profile'), 'unixepoch'),
+          datetime((SELECT due_at FROM task_instances WHERE id = 'task-demo-slides'), 'unixepoch'),
+          datetime((SELECT due_at FROM task_instances WHERE id = 'task-demo-handbook'), 'unixepoch')
+        """
+    ).fetchone()
+    if speaker_dates != (
+        "2027-05-10 16:00:00",
+        "2027-05-10 16:00:00",
+        "2027-05-12 16:00:00",
+        "2027-05-10 16:00:00",
+        "2027-05-16 16:00:00",
+        "2027-05-12 16:00:00",
+    ):
+        raise SystemExit("The existing canonical demo speaker deadlines were not migrated")
+
+
+validate_canonical_demo_dates_forward_migration()
+
+
 tables = {
     row[0]
     for row in connection.execute(

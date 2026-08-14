@@ -264,8 +264,8 @@ SELECT printf('perf-scale-entry-%03d', value),
          WHEN 3 THEN '302'
          ELSE '303'
        END,
-       unixepoch('2025-05-20T13:00:00Z') + CAST((value - 1) / 5 AS INTEGER) * 1800,
-       unixepoch('2025-05-20T13:00:00Z') + CAST((value - 1) / 5 AS INTEGER) * 1800 + 1800,
+       unixepoch('2027-05-20T13:00:00Z') + CAST((value - 1) / 5 AS INTEGER) * 1800,
+       unixepoch('2027-05-20T13:00:00Z') + CAST((value - 1) / 5 AS INTEGER) * 1800 + 1800,
        1,
        1735689600 + value,
        1735689600 + value

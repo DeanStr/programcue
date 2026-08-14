@@ -90,8 +90,8 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
         duplicate_person_warnings, file_policy_json, revision, last_updated_by_person_id,
         created_at, updated_at
       ) VALUES (
-        ?, ?, 'Future of Events 2025', 'future-of-events-2025', 'America/Toronto',
-        unixepoch('2025-05-20T00:00:00Z'), unixepoch('2025-05-22T23:59:59Z'),
+        ?, ?, 'Future of Events 2027', 'future-of-events-2025', 'America/Toronto',
+        unixepoch('2027-05-20T00:00:00Z'), unixepoch('2027-05-22T23:59:59Z'),
         'Metro Toronto Convention Centre', 'Toronto',
         'The conference for modern event professionals.', '#4f46e5', 'd1',
         ?, 24, 'email_verified', 1, 1, ?, 1, ?, unixepoch(), unixepoch()
@@ -316,36 +316,36 @@ export async function ensureDemoProgramme(env: CloudflareEnvironment) {
       "demo-entry-1",
       "demo-session-1",
       "main",
-      "2025-05-20T13:00:00Z",
-      "2025-05-20T13:45:00Z",
+      "2027-05-20T13:00:00Z",
+      "2027-05-20T13:45:00Z",
     ],
     [
       "demo-entry-2",
       "demo-session-2",
       "301a",
-      "2025-05-20T14:00:00Z",
-      "2025-05-20T15:00:00Z",
+      "2027-05-20T14:00:00Z",
+      "2027-05-20T15:00:00Z",
     ],
     [
       "demo-entry-3",
       "demo-session-3",
       "301b",
-      "2025-05-20T15:15:00Z",
-      "2025-05-20T16:15:00Z",
+      "2027-05-20T15:15:00Z",
+      "2027-05-20T16:15:00Z",
     ],
     [
       "demo-entry-4",
       "demo-session-4",
       "302",
-      "2025-05-21T13:30:00Z",
-      "2025-05-21T14:15:00Z",
+      "2027-05-21T13:30:00Z",
+      "2027-05-21T14:15:00Z",
     ],
     [
       "demo-entry-5",
       "demo-session-5",
       "303",
-      "2025-05-21T17:00:00Z",
-      "2025-05-21T18:00:00Z",
+      "2027-05-21T17:00:00Z",
+      "2027-05-21T18:00:00Z",
     ],
   ] as const;
   await env.DB.batch([

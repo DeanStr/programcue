@@ -59,7 +59,7 @@ describe("programme administration overview", () => {
       track: expect.any(String),
       format: expect.any(String),
     });
-    expect(overview.eventName).toBe("Future of Events 2025");
+    expect(overview.eventName).toBe("Future of Events 2027");
     expect(overview.brandAccent).toMatch(/^#[0-9a-f]{6}$/i);
   });
 

@@ -591,7 +591,7 @@ test.describe("explicit local performance evidence", () => {
       `);
       if (!schedule) throw new Error("The scale schedule draft disappeared.");
       const startsAt =
-        Math.floor(Date.parse("2025-05-21T16:00:00Z") / 1_000) +
+        Math.floor(Date.parse("2027-05-21T16:00:00Z") / 1_000) +
         (index % 2) * 3_600;
       const startedAt = performance.now();
       const response = await page.request.post("/admin/schedule", {

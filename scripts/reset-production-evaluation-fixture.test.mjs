@@ -54,7 +54,7 @@ describe("production evaluation fixture reset command", () => {
       `Bearer ${"s".repeat(32)}`,
     );
     assert.deepEqual(JSON.parse(captured.init.body), {
-      confirmation: "Future of Events 2025",
+      confirmation: "Future of Events 2027",
     });
     assert.equal(result.evidence.fixturePeople, 4);
   });

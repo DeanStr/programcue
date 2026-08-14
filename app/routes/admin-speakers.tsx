@@ -507,7 +507,12 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
         {actionData?.importPreview ? (
           <div className="stack mt">
             <h3>Import preview</h3>
-            <div className="table-wrap">
+            <div
+              className="table-wrap"
+              role="region"
+              aria-label="Speaker import preview"
+              tabIndex={0}
+            >
               <table className="data-table">
                 <thead>
                   <tr>
@@ -819,7 +824,12 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
             D1 · event scoped · distinct identities
           </span>
         </div>
-        <div className="table-wrap pc-responsive-table-wrap">
+        <div
+          className="table-wrap pc-responsive-table-wrap"
+          role="region"
+          aria-label="Speaker readiness"
+          tabIndex={0}
+        >
           <table className="data-table pc-responsive-table">
             <thead>
               <tr>

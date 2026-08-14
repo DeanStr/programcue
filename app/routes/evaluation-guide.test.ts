@@ -137,7 +137,7 @@ describe("production evaluation guide", () => {
     } as never);
     expect(unlockedGuide).toMatchObject({
       unlocked: true,
-      eventName: "Future of Events 2025",
+      eventName: "Future of Events 2027",
     });
     expect(
       unlockedGuide.identities

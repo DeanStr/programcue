@@ -7,7 +7,7 @@
       brand colour, so two events never look like the same product.
    2. Time is the spine. Every list is grouped by day, the date is stated once
       in a heading, and rows carry only the clock range. The previous layout
-      repeated "Tuesday, May 20, 2025 · 9:00 AM–9:45 AM EDT" on every row inside
+      repeated "Thursday, May 20, 2027 · 9:00 AM–9:45 AM EDT" on every row inside
       a 110px column, which wrapped to four lines and buried the session title.
 */
 
@@ -279,6 +279,15 @@
 }
 .public-shell > .public-main {
   flex: 1;
+}
+.itinerary-verification {
+  scroll-margin-top: 88px;
+}
+.itinerary-verification.prompted {
+  padding: var(--space-2);
+  border: 1px solid var(--state-warn-solid);
+  border-radius: var(--radius-sm);
+  background: var(--state-warn-surface);
 }
 
 /* --- Footer -------------------------------------------------------------- */

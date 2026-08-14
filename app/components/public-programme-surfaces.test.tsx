@@ -7,7 +7,10 @@ import type {
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
 import { PublicSpeakerGallerySurface } from "./public-programme-surfaces";
-import { PublicSpeakerAvatar } from "./public-programme-parts";
+import {
+  PublicSpeakerAvatar,
+  SaveSessionButton,
+} from "./public-programme-parts";
 import {
   sessionSpeakerDetails,
   speakerAffiliation,
@@ -105,6 +108,28 @@ describe("public programme speaker surfaces", () => {
     expect(markup).not.toContain("Job title not provided");
     expect(markup).not.toContain("Company not provided");
     expect(markup).not.toContain("public-speaker-metadata");
+  });
+
+  it("keeps first-save controls actionable while describing verification", () => {
+    const markup = renderToStaticMarkup(
+      <SaveSessionButton
+        session={session}
+        model={model({
+          saved: [],
+          loaderData: {
+            itineraryVerificationRequired: true,
+            turnstileSiteKey: "turnstile-site-key",
+          },
+          fetcher: { state: "idle" },
+          requiresItineraryVerification: () => true,
+          toggle: vi.fn(),
+        } as unknown as Partial<PublicProgrammeModel>)}
+      />,
+    );
+
+    expect(markup).not.toContain("disabled");
+    expect(markup).toContain('aria-describedby="itinerary-verification-help"');
+    expect(markup).toContain("Save The Future of Attendee Engagement");
   });
 
   it("renders a searchable visual gallery card with released photo metadata", () => {

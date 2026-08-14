@@ -442,7 +442,12 @@ export default function AdminSpeakerDetail({
           <CalendarClock aria-hidden className="subtle" />
         </div>
         {sessions.length ? (
-          <div className="table-wrap pc-responsive-table-wrap">
+          <div
+            className="table-wrap pc-responsive-table-wrap"
+            role="region"
+            aria-label="Linked speaker sessions"
+            tabIndex={0}
+          >
             <table className="data-table pc-responsive-table">
               <thead>
                 <tr>

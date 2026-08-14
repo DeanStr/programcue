@@ -270,7 +270,12 @@ export function EvaluationSubmissionQueue() {
         </div>
       </div>
       {loaderData.submissions.length ? (
-        <div className="table-wrap pc-responsive-table-wrap">
+        <div
+          className="table-wrap pc-responsive-table-wrap"
+          role="region"
+          aria-label="Evaluation proposal queue"
+          tabIndex={0}
+        >
           <table className="data-table pc-responsive-table">
             <thead>
               <tr>
@@ -862,7 +867,12 @@ export function AcceptedSpeakerInvitationsPanel() {
           </p>
         </div>
       </div>
-      <div className="table-wrap pc-responsive-table-wrap">
+      <div
+        className="table-wrap pc-responsive-table-wrap"
+        role="region"
+        aria-label="Speaker access invitations"
+        tabIndex={0}
+      >
         <table className="data-table pc-responsive-table">
           <thead>
             <tr>
@@ -960,7 +970,12 @@ export function EvaluationSessionQueue() {
         </div>
       </div>
       {loaderData.sessions.length ? (
-        <div className="table-wrap pc-responsive-table-wrap">
+        <div
+          className="table-wrap pc-responsive-table-wrap"
+          role="region"
+          aria-label="Evaluation session queue"
+          tabIndex={0}
+        >
           <table className="data-table pc-responsive-table">
             <thead>
               <tr>

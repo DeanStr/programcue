@@ -54,7 +54,7 @@ export const representativeMergeValues: MergeValues = {
   "recipient.name": "Alex Morgan",
   "recipient.firstName": "Alex",
   "event.name": "Future of Events",
-  "event.dates": "20–22 May 2025",
+  "event.dates": "20–22 May 2027",
   "submission.title": "A practical session proposal",
   "decision.outcome": "accepted",
   "decision.rationale":

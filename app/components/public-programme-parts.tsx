@@ -150,11 +150,7 @@ export function SaveSessionButton({
   model: PublicProgrammeModel;
 }) {
   const saved = model.saved.includes(session.id);
-  const blockedByVerification =
-    !saved &&
-    model.loaderData.itineraryVerificationRequired &&
-    model.loaderData.turnstileSiteKey !== null &&
-    !model.turnstileToken;
+  const verificationRequired = model.requiresItineraryVerification(session.id);
   return (
     <button
       type="button"
@@ -165,12 +161,15 @@ export function SaveSessionButton({
           ? `Remove ${session.title} from my itinerary`
           : `Save ${session.title} to my itinerary`
       }
+      aria-describedby={
+        verificationRequired ? "itinerary-verification-help" : undefined
+      }
       title={
-        blockedByVerification
-          ? "Complete the security check in My itinerary first"
+        verificationRequired
+          ? "Security verification is required before the first save"
           : undefined
       }
-      disabled={model.fetcher.state !== "idle" || blockedByVerification}
+      disabled={model.fetcher.state !== "idle"}
       onClick={() => model.toggle(session.id)}
     >
       {saved ? (

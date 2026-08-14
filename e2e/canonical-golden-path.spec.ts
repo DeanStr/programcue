@@ -465,7 +465,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     );
     expect(publishedSession).toMatchObject({
       room: "Room 303",
-      startsAt: "2025-05-20T12:00:00.000Z",
+      startsAt: "2027-05-20T12:00:00.000Z",
     });
     expect(
       Date.parse(publishedSession!.endsAt) -

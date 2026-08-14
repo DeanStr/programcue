@@ -125,9 +125,28 @@ describe("administrator task filters", () => {
       ),
     ).toBe(true);
 
-    const overdue = await load("?state=overdue");
-    expect(overdue.tasks.length).toBeGreaterThan(0);
-    expect(overdue.tasks.every((task) => task.isOverdue)).toBe(true);
+    await workerEnv.DB.prepare(
+      `UPDATE task_instances
+          SET due_at = unixepoch() - 60
+        WHERE id = 'task-demo-handbook' AND event_id = ?`,
+    )
+      .bind(eventId)
+      .run();
+    try {
+      const overdue = await load("?state=overdue");
+      expect(overdue.tasks.map((task) => task.id)).toContain(
+        "task-demo-handbook",
+      );
+      expect(overdue.tasks.every((task) => task.isOverdue)).toBe(true);
+    } finally {
+      await workerEnv.DB.prepare(
+        `UPDATE task_instances
+            SET due_at = unixepoch('2027-05-12T16:00:00Z')
+          WHERE id = 'task-demo-handbook' AND event_id = ?`,
+      )
+        .bind(eventId)
+        .run();
+    }
   });
 
   it.each([

@@ -133,7 +133,12 @@ export function ProposalApproval({
         </span>
       </div>
       <p>{proposal.summary}</p>
-      <div className="table-wrap">
+      <div
+        className="table-wrap"
+        role="region"
+        aria-label="Proposed changes"
+        tabIndex={0}
+      >
         <table className="data-table">
           <thead>
             <tr>
@@ -255,7 +260,12 @@ export function ProposalApproval({
             <summary>
               Review all {reminder.recipients.selected} selected recipients
             </summary>
-            <div className="table-wrap">
+            <div
+              className="table-wrap"
+              role="region"
+              aria-label="Selected communication recipients"
+              tabIndex={0}
+            >
               <table className="data-table">
                 <thead>
                   <tr>

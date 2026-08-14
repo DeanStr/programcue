@@ -128,9 +128,9 @@ export default function DesignSystem() {
               <h2>Type scale</h2>
             </div>
             <p>
-              Eight roles. 12px is the floor — anything smaller was unreadable at
-              exactly the moments that mattered most: errors, required marks and
-              record metadata.
+              Eight roles. 12px is the floor — anything smaller was unreadable
+              at exactly the moments that mattered most: errors, required marks
+              and record metadata.
             </p>
           </div>
           <div className="pc-scale-list">
@@ -212,7 +212,12 @@ export default function DesignSystem() {
             </span>
           </div>
           <div className="pc-rail-row mt">
-            <div className="card pad rail-top" style={{ "--rail": "var(--state-bad-solid)" } as React.CSSProperties}>
+            <div
+              className="card pad rail-top"
+              style={
+                { "--rail": "var(--state-bad-solid)" } as React.CSSProperties
+              }
+            >
               <div className="label">Overdue tasks</div>
               <div className="value" style={{ color: "var(--state-bad-text)" }}>
                 12
@@ -221,9 +226,17 @@ export default function DesignSystem() {
                 The numeral carries the tone; the container stays neutral.
               </small>
             </div>
-            <div className="card pad rail-top" style={{ "--rail": "var(--state-good-solid)" } as React.CSSProperties}>
+            <div
+              className="card pad rail-top"
+              style={
+                { "--rail": "var(--state-good-solid)" } as React.CSSProperties
+              }
+            >
               <div className="label">Sessions published</div>
-              <div className="value" style={{ color: "var(--state-good-text)" }}>
+              <div
+                className="value"
+                style={{ color: "var(--state-good-text)" }}
+              >
                 48
               </div>
               <small className="subtle">
@@ -301,7 +314,7 @@ export default function DesignSystem() {
               >
                 <input
                   className="field"
-                  value="Future of Events 2025"
+                  value="Future of Events 2027"
                   readOnly
                   required
                 />

@@ -132,7 +132,7 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       ) VALUES (
         'task-template-profile', ?, 'Complete your speaker profile', 'Confirm your biography, role and pronunciation.',
         'speaker', 'short_form', 'high', 'checkbox', 'fixed', NULL,
-        unixepoch('2025-05-10T16:00:00Z'), 1, '{}', 'active', unixepoch(), unixepoch()
+        unixepoch('2027-05-10T16:00:00Z'), 1, '{}', 'active', unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID),
@@ -145,7 +145,7 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       ) VALUES (
         'task-template-slides', ?, 'Upload presentation slides', 'Upload the final PDF, PPT or PPTX deck.',
         'speaker', 'file_upload', 'critical', 'file', 'fixed', NULL,
-        unixepoch('2025-05-10T16:00:00Z'), 1, '{}', 'active', unixepoch(), unixepoch()
+        unixepoch('2027-05-10T16:00:00Z'), 1, '{}', 'active', unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID),
@@ -158,7 +158,7 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       ) VALUES (
         'task-template-handbook', ?, 'Read the speaker handbook', 'Read and acknowledge the current handbook.',
         'speaker', 'acknowledgement', 'medium', 'checkbox', 'fixed', NULL,
-        unixepoch('2025-05-12T16:00:00Z'), 1,
+        unixepoch('2027-05-12T16:00:00Z'), 1,
         '{"resourcePageId":"resource-speaker-handbook"}', 'active', unixepoch(), unixepoch()
       )
     `,
@@ -176,7 +176,7 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       ) VALUES (
         'task-demo-profile', ?, 'task-template-profile', 'speaker', ?, ?, 'Complete your speaker profile',
         'Confirm your biography, role and pronunciation.', 'short_form', 'high', 'completed', 'on_track', 100, 1,
-        unixepoch('2025-05-10T16:00:00Z'), '{"confirmed":true}', unixepoch(), ?, unixepoch(), unixepoch()
+        unixepoch('2027-05-10T16:00:00Z'), '{"confirmed":true}', unixepoch(), ?, unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID, SPEAKER_ID, SPEAKER_ID, SPEAKER_ID),
@@ -188,7 +188,7 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       ) VALUES (
         'task-demo-slides', ?, 'task-template-slides', 'speaker', ?, ?, 'Upload presentation slides',
         'Upload the final PDF, PPT or PPTX deck.', 'file_upload', 'critical', 'not_started', 'at_risk', 0, 1,
-        unixepoch('2025-05-16T16:00:00Z'), unixepoch(), unixepoch()
+        unixepoch('2027-05-16T16:00:00Z'), unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID, SPEAKER_ID, SPEAKER_ID),
@@ -204,7 +204,7 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       ) VALUES (
         'resource-speaker-handbook', ?, 'Speaker handbook', 'speaker-handbook', 'Getting ready',
         'published', 'all_speakers', 1, 1, ?,
-        unixepoch('2025-05-01T12:00:00Z'), unixepoch('2025-05-01T12:00:00Z')
+        unixepoch('2026-08-01T12:00:00Z'), unixepoch('2026-08-01T12:00:00Z')
       )
     `,
     ).bind(EVENT_ID, ADMIN_ID),
@@ -218,7 +218,7 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
         'resource-version-handbook-1', ?, 'resource-speaker-handbook', 1,
         'Speaker handbook', 'speaker-handbook', 'Getting ready', 'all_speakers', 1, ?,
         '<h2>Before the event</h2><ul><li>Publish your speaker profile and confirm pronunciation details.</li><li>Upload slides in PDF or PPTX format before the due date.</li><li>Review your room, arrival time and A/V requirements.</li></ul><h2>On-site arrival</h2><p>Arrive at speaker check-in 45 minutes before your session and bring your event badge.</p>',
-        'published', ?, unixepoch('2025-05-01T12:00:00Z'), unixepoch('2025-05-01T12:00:00Z')
+        'published', ?, unixepoch('2026-08-01T12:00:00Z'), unixepoch('2026-08-01T12:00:00Z')
       )
     `,
     ).bind(EVENT_ID, JSON.stringify(handbookDocument), ADMIN_ID),
@@ -231,7 +231,7 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       ) VALUES (
         'task-demo-handbook', ?, 'task-template-handbook', 'speaker', ?, ?, 'Read the speaker handbook',
         'Read and acknowledge the current handbook.', 'acknowledgement', 'medium', 'not_started', 'on_track', 0, 1,
-        unixepoch('2025-05-12T16:00:00Z'), unixepoch(), unixepoch()
+        unixepoch('2027-05-12T16:00:00Z'), unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID, SPEAKER_ID, SPEAKER_ID),

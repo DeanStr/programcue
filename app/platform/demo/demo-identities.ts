@@ -1,6 +1,6 @@
 export const DEMO_EVENT_ID = "evt-foe-2025";
 export const DEMO_ORGANISATION_ID = "org-future-events";
-export const DEMO_RESET_CONFIRMATION = "Future of Events 2025";
+export const DEMO_RESET_CONFIRMATION = "Future of Events 2027";
 export const DEMO_R2_PREFIX = `private/events/${DEMO_EVENT_ID}/`;
 export const DEMO_ASSISTANT_FIXTURE_MODEL = "demo-fixture-no-provider-call";
 export const DEMO_IDENTITY_COOKIE = "program_cue_demo_identity";

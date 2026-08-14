@@ -15,6 +15,7 @@ export const nodeOnlyTestFiles = [
   "app/components/sessionize-profile-import.test.ts",
   "app/components/ui/domain-status-badge.test.tsx",
   "app/components/ui/event-date-time.test.tsx",
+  "app/components/ui/admin-page-sections.test.tsx",
   "app/components/operational-ui-rules.test.ts",
   "app/components/submission-data-grid.test.tsx",
   "app/components/schedule-standard-calendar.test.tsx",

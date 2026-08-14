@@ -355,7 +355,7 @@ describe("speaker resource service", () => {
     );
     await expect(service.getAdminWorkspace(admin)).resolves.toMatchObject({
       previewEvent: {
-        name: "Future of Events 2025",
+        name: "Future of Events 2027",
         brandAccent: expect.any(String),
       },
     });

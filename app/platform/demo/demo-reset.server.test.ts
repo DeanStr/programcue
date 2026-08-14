@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { assistantProposalMetadataSchema } from "~/modules/ai/ai-tools.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
+import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   DEMO_ASSISTANT_FIXTURE_MODEL,
@@ -217,7 +218,8 @@ describe("complete evaluator demo reset", () => {
               participant_support_url AS participantSupportUrl,
               json_extract(session_formats_json, '$[0].key') AS firstFormat,
               json_extract(file_policy_json, '$.headshotMaximumBytes') AS headshotMaximumBytes,
-              participant_retention_completed_at AS retentionCompletedAt
+              participant_retention_completed_at AS retentionCompletedAt,
+              starts_at AS startsAt, ends_at AS endsAt, timezone
          FROM events WHERE id = ?`,
     )
       .bind(DEMO_EVENT_ID)
@@ -232,9 +234,12 @@ describe("complete evaluator demo reset", () => {
         firstFormat: string;
         headshotMaximumBytes: number;
         retentionCompletedAt: number | null;
+        startsAt: number;
+        endsAt: number;
+        timezone: string;
       }>();
     expect(event).toEqual({
-      name: "Future of Events 2025",
+      name: "Future of Events 2027",
       accent: "#4f46e5",
       provider: "d1",
       activationStatus: "active",
@@ -244,7 +249,20 @@ describe("complete evaluator demo reset", () => {
       firstFormat: "keynote",
       headshotMaximumBytes: 10 * 1_048_576,
       retentionCompletedAt: null,
+      startsAt: Date.parse("2027-05-20T00:00:00Z") / 1_000,
+      endsAt: Date.parse("2027-05-22T23:59:59Z") / 1_000,
+      timezone: "America/Toronto",
     });
+    const form = await testEnvironment.DB.prepare(
+      `SELECT closes_at AS closesAt
+         FROM form_definitions
+        WHERE event_id = ? AND public_slug = 'form'`,
+    )
+      .bind(DEMO_EVENT_ID)
+      .first<{ closesAt: number }>();
+    expect(eventLocalCalendarDate(form!.closesAt, event!.timezone)).toBe(
+      "2027-04-30",
+    );
     await expect(
       testEnvironment.DB.prepare(
         `SELECT id, person_id AS personId, role
@@ -275,14 +293,28 @@ describe("complete evaluator demo reset", () => {
       speakerAction: "warn",
     });
     const datedSpeakerTasks = await testEnvironment.DB.prepare(
-      `SELECT COUNT(*) AS count
+      `SELECT id, due_at AS dueAt
          FROM task_instances
         WHERE event_id = ? AND owner_person_id = 'person-demo-speaker'
-          AND due_at IS NOT NULL`,
+          AND due_at IS NOT NULL
+        ORDER BY id`,
     )
       .bind(DEMO_EVENT_ID)
-      .first<{ count: number }>();
-    expect(Number(datedSpeakerTasks?.count ?? 0)).toBeGreaterThanOrEqual(3);
+      .all<{ id: string; dueAt: number }>();
+    expect(datedSpeakerTasks.results).toEqual([
+      {
+        id: "task-demo-handbook",
+        dueAt: Date.parse("2027-05-12T16:00:00Z") / 1_000,
+      },
+      {
+        id: "task-demo-profile",
+        dueAt: Date.parse("2027-05-10T16:00:00Z") / 1_000,
+      },
+      {
+        id: "task-demo-slides",
+        dueAt: Date.parse("2027-05-16T16:00:00Z") / 1_000,
+      },
+    ]);
     const communicationCentre = await new CommunicationService(
       testEnvironment,
     ).listCentre(demoAdministrator);

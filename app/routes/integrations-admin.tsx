@@ -104,8 +104,8 @@ export async function action({ request, context }: Route.ActionArgs) {
             : result.replayed
               ? "This exact export request was already recorded. Open its operation to inspect the current or completed result."
               : result.queued
-              ? "Export queued. Follow record-level progress in Operations."
-              : "No provider changes were required; the run completed without enqueueing work.",
+                ? "Export queued. Follow record-level progress in Operations."
+                : "No provider changes were required; the run completed without enqueueing work.",
         connectionId: String(form.get("connectionId") ?? ""),
         operationId: result.operationId,
       });
@@ -509,7 +509,8 @@ export default function IntegrationsAdmin({
                       records:
                         loaderData.preview?.items
                           .filter((item) => item.action !== "noop")
-                          .map((item) => `${item.label} · ${item.action}`) ?? [],
+                          .map((item) => `${item.label} · ${item.action}`) ??
+                        [],
                       confirmLabel: "Queue live export",
                     },
                     () => form?.requestSubmit(),
@@ -557,7 +558,12 @@ export default function IntegrationsAdmin({
           <h2>Recent integration runs</h2>
         </div>
         {loaderData.runs.length ? (
-          <div className="table-wrap">
+          <div
+            className="table-wrap"
+            role="region"
+            aria-label="Recent integration runs"
+            tabIndex={0}
+          >
             <table className="data-table">
               <thead>
                 <tr>

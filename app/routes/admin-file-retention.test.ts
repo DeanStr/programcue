@@ -43,7 +43,7 @@ describe("owner file-retention route", () => {
       context: context(),
     } as never);
     expect(result.state).toMatchObject({
-      name: "Future of Events 2025",
+      name: "Future of Events 2027",
       retentionMonths: 24,
       holdAt: null,
     });

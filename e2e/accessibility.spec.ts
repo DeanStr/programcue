@@ -182,7 +182,7 @@ test("admin child-route errors preserve navigation and event context", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Switch event" }),
-  ).toContainText("Future of Events 2025");
+  ).toContainText("Future of Events 2027");
 });
 
 test("shared form errors connect labels, help and corrective links", async ({

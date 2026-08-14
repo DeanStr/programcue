@@ -74,7 +74,7 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
       page.getByText("Welcome to the browser-verified participant workspace."),
     ).toBeVisible();
     await expect(
-      page.getByAltText("Future of Events 2025 logo"),
+      page.getByAltText("Future of Events 2027 logo"),
     ).toHaveAttribute("src", "https://branding.example.test/event.svg");
     await expect(
       page.getByRole("link", { name: "Participant support" }),

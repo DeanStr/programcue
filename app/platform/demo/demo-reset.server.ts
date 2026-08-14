@@ -177,7 +177,7 @@ const DEMO_SUBMISSION_CONFIRMATION_VERSION_ID =
 const DEMO_DECISION_TEMPLATE_ID = "572ae193-24e3-4746-b148-4757f54f83bd";
 const DEMO_DECISION_VERSION_ID = "95e1b191-434c-4be1-acb8-915f435f561f";
 const DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP = Math.floor(
-  Date.parse("2025-05-01T12:00:00Z") / 1_000,
+  Date.parse("2026-08-01T12:00:00Z") / 1_000,
 );
 
 function assertDemoRuntime(env: CloudflareEnvironment) {
@@ -327,10 +327,10 @@ async function resetMutableIdentity(env: CloudflareEnvironment) {
     ).bind(DEMO_ORGANISATION_ID),
     env.DB.prepare(
       `UPDATE events
-          SET name = 'Future of Events 2025', slug = 'future-of-events-2025',
+          SET name = 'Future of Events 2027', slug = 'future-of-events-2025',
               timezone = 'America/Toronto',
-              starts_at = unixepoch('2025-05-20T00:00:00Z'),
-              ends_at = unixepoch('2025-05-22T23:59:59Z'),
+              starts_at = unixepoch('2027-05-20T00:00:00Z'),
+              ends_at = unixepoch('2027-05-22T23:59:59Z'),
               venue_name = 'Metro Toronto Convention Centre', city = 'Toronto',
               description = 'The conference for modern event professionals.',
               brand_accent = '#4f46e5', participant_logo_url = NULL,

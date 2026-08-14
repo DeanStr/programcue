@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { acceptConfirm } from "./support/confirm-dialog";
 
-const resetConfirmation = "Future of Events 2025";
+const resetConfirmation = "Future of Events 2027";
 
 async function waitForInterface(
   page: import("@playwright/test").Page,
@@ -44,7 +44,9 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
     "Prepare speakers",
     "Publish and verify",
   ]) {
-    await expect(walkthrough.getByRole("heading", { name: phase })).toBeVisible();
+    await expect(
+      walkthrough.getByRole("heading", { name: phase }),
+    ).toBeVisible();
   }
   await expect(
     walkthrough.getByText("Technical evidence", { exact: true }),
@@ -83,7 +85,7 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
   ).toBeVisible();
 
   await waitForInterface(page, "/demo");
-  const resetInput = page.getByLabel(/Type Future of Events 2025 to confirm/);
+  const resetInput = page.getByLabel(/Type Future of Events 2027 to confirm/);
   await resetInput.fill(resetConfirmation);
   await resetInput.press("Enter");
   await acceptConfirm(page);
@@ -179,6 +181,6 @@ test("an unselected demo browser is anonymous on private routes", async ({
   );
   expect(publicResponse?.ok()).toBeTruthy();
   await expect(
-    page.getByRole("heading", { name: "Future of Events 2025" }),
+    page.getByRole("heading", { name: "Future of Events 2027" }),
   ).toBeVisible();
 });

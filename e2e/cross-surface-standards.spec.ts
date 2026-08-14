@@ -37,7 +37,7 @@ test.describe.serial("cross-surface interaction standards", () => {
       breadcrumbs.getByRole("link", { name: "Future Events Association" }),
     ).toBeVisible();
     await expect(
-      breadcrumbs.getByRole("link", { name: "Future of Events 2025" }),
+      breadcrumbs.getByRole("link", { name: "Future of Events 2027" }),
     ).toBeVisible();
     await expect(
       breadcrumbs.getByText("Submissions", { exact: true }),

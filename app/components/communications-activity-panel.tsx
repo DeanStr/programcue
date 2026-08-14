@@ -29,7 +29,12 @@ export function RecentCommunications({
         </span>
       </div>
       {loaderData.communications.length ? (
-        <div className="table-wrap">
+        <div
+          className="table-wrap"
+          role="region"
+          aria-label="Recent communications"
+          tabIndex={0}
+        >
           <table className="data-table">
             <thead>
               <tr>

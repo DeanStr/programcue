@@ -122,7 +122,12 @@ export function CalendarAdministration({
         </Link>
       </div>
       {loaderData.connections.length ? (
-        <div className="table-wrap mb">
+        <div
+          className="table-wrap mb"
+          role="region"
+          aria-label="Calendar connections"
+          tabIndex={0}
+        >
           <table className="data-table">
             <thead>
               <tr>
@@ -236,7 +241,12 @@ export function CalendarAdministration({
       )}
       <h3>Published-session invitations</h3>
       {loaderData.calendarTargets.length ? (
-        <div className="table-wrap pc-responsive-table-wrap">
+        <div
+          className="table-wrap pc-responsive-table-wrap"
+          role="region"
+          aria-label="Published-session calendar invitations"
+          tabIndex={0}
+        >
           <table className="data-table pc-responsive-table">
             <thead>
               <tr>
@@ -369,7 +379,12 @@ export function CalendarLifecycleTable({
         </span>
       </div>
       {loaderData.invitations.length ? (
-        <div className="table-wrap">
+        <div
+          className="table-wrap"
+          role="region"
+          aria-label="Calendar invitation activity"
+          tabIndex={0}
+        >
           <table className="data-table">
             <thead>
               <tr>

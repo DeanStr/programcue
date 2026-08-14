@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const RESET_CONFIRMATION = "Future of Events 2025";
+const RESET_CONFIRMATION = "Future of Events 2027";
 const RESET_PATH = "/api/internal/evaluation-fixture/reset";
 const RESPONSE_LIMIT = 64 * 1024;
 const PRODUCTION_ORIGIN = "https://app.programcue.com";

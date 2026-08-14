@@ -139,7 +139,12 @@ export function CommunicationDraftPreview({
         </div>
         <div>
           <h3>Recipient sample</h3>
-          <div className="table-wrap pc-responsive-table-wrap">
+          <div
+            className="table-wrap pc-responsive-table-wrap"
+            role="region"
+            aria-label="Deliverable recipient sample"
+            tabIndex={0}
+          >
             <table
               className="data-table pc-responsive-table comms-recipient-sample"
               aria-label="Deliverable recipient sample"

@@ -395,7 +395,12 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
           <History aria-hidden className="subtle" />
         </div>
         {contact.connections.length ? (
-          <div className="table-wrap mt">
+          <div
+            className="table-wrap mt"
+            role="region"
+            aria-label="Contact event and session history"
+            tabIndex={0}
+          >
             <table className="data-table">
               <thead>
                 <tr>

@@ -164,7 +164,12 @@ export function OperationsListPanel({
         </span>
       </div>
       {loaderData.operations.length ? (
-        <div className="table-wrap">
+        <div
+          className="table-wrap"
+          role="region"
+          aria-label="Background operations"
+          tabIndex={0}
+        >
           <table className="data-table">
             <thead>
               <tr>
@@ -359,7 +364,12 @@ export function OperationDetailPanel({
                 controls; successful records are not resent.
               </p>
             ) : null}
-            <div className="table-wrap pc-responsive-table-wrap">
+            <div
+              className="table-wrap pc-responsive-table-wrap"
+              role="region"
+              aria-label="Operation record results"
+              tabIndex={0}
+            >
               <table className="data-table pc-responsive-table operation-record-results-table">
                 <thead>
                   <tr>

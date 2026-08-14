@@ -23,10 +23,7 @@ function ContextAction({
   description,
   focusLabel,
 }: {
-  kind:
-    | "review_aid"
-    | "readiness_summary"
-    | "schedule_conflict_explanation";
+  kind: "review_aid" | "readiness_summary" | "schedule_conflict_explanation";
   fields?: Record<string, string>;
   buttonLabel: string;
   pendingLabel: string;
@@ -47,7 +44,7 @@ function ContextAction({
           <label className="label">
             {focusLabel}
             <input
-              className="input"
+              className="field"
               type="text"
               name="focus"
               maxLength={500}
@@ -135,7 +132,7 @@ export function ReminderDraftAction({
         <label className="label">
           Approved reminder foundation
           <select
-            className="select"
+            className="select command-template-select"
             name="baseTemplateVersionId"
             required
             disabled={!options.templates.length}
@@ -167,9 +164,9 @@ export function ReminderDraftAction({
           </select>
         </label>
         <p className="help">
-          AI drafts the copy. Program Cue then saves an immutable draft template,
-          resolves every recipient and suppression, and stops at an exact
-          preview. Nothing is queued until a separate explicit approval.
+          AI drafts the copy. Program Cue then saves an immutable draft
+          template, resolves every recipient and suppression, and stops at an
+          exact preview. Nothing is queued until a separate explicit approval.
         </p>
         {!options.configured ? (
           <p className="status danger" role="alert">
@@ -184,7 +181,9 @@ export function ReminderDraftAction({
           disabled={pending || !options.configured}
         >
           <Sparkles aria-hidden size={14} />
-          {pending ? "Drafting and resolving recipients…" : "Draft exact reminder preview"}
+          {pending
+            ? "Drafting and resolving recipients…"
+            : "Draft exact reminder preview"}
         </button>
       </fetcher.Form>
       {fetcher.data?.ok ? (

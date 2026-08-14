@@ -262,10 +262,10 @@
   border-bottom: 0;
 }
 .tone-success {
-  color: var(--green);
+  color: var(--state-good-text);
 }
 .tone-warning {
-  color: var(--amber);
+  color: var(--state-warn-text);
 }
 .command-agenda-link {
   color: inherit;

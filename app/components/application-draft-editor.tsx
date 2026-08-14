@@ -348,7 +348,6 @@ export function DraftEditor({
             <fieldset
               className="application-choice-field"
               key={field.id}
-              aria-required={field.required || undefined}
               aria-invalid={Boolean(error) || undefined}
               aria-describedby={describedBy}
             >
@@ -415,7 +414,6 @@ export function DraftEditor({
             <fieldset
               className="application-choice-field"
               key={field.id}
-              aria-required={field.required || undefined}
               aria-invalid={Boolean(error) || undefined}
               aria-describedby={describedBy}
             >

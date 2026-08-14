@@ -3,7 +3,7 @@ import { UNSAFE_decodeViaTurboStream } from "react-router";
 
 import { e2eOrigin } from "./e2e-origin";
 
-const confirmation = "Future of Events 2025";
+const confirmation = "Future of Events 2027";
 const sameOriginHeaders = { origin: e2eOrigin };
 
 export async function resetDemoEvent(request: APIRequestContext) {

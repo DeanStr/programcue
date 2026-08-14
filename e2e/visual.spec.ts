@@ -215,7 +215,7 @@ async function waitForSurfaceReady(page: Page, name: string) {
     ).toBeVisible();
   } else if (name === "communications") {
     await expect(
-      page.getByText("Operations Queue bound", { exact: true }),
+      page.getByRole("heading", { name: "Template versions" }),
     ).toBeVisible();
   } else if (name === "settings") {
     await expect(
@@ -551,7 +551,7 @@ test.describe.serial("responsive visual inventory", () => {
 
     await openHydrated(page, "/events/select");
     const defaultEvent = page.locator("main form").filter({
-      hasText: "Future of Events 2025",
+      hasText: "Future of Events 2027",
     });
     await defaultEvent.getByRole("button", { name: "Use this event" }).click();
     await expect(page).toHaveURL(/\/admin\/event$/);

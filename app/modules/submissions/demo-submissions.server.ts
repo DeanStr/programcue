@@ -9,7 +9,7 @@ const DEMO_VIEWER: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
-const DEMO_TIMESTAMP = Math.floor(Date.parse("2025-05-01T12:00:00Z") / 1_000);
+const DEMO_TIMESTAMP = Math.floor(Date.parse("2026-08-01T12:00:00Z") / 1_000);
 
 export async function ensureDemoSubmissionForm(env: CloudflareEnvironment) {
   if (String(env.DEMO_MODE) !== "true") return;
@@ -26,6 +26,7 @@ export async function ensureDemoSubmissionForm(env: CloudflareEnvironment) {
   const formId = await service.saveForm(DEMO_VIEWER, {
     ...input,
     publicSlug: "form",
+    closeDate: "2027-04-30",
     schema: {
       ...input.schema,
       presentation: {

@@ -90,5 +90,10 @@ export default defineConfig({
       use: { ...devices["Desktop Safari"] },
       testMatch: /cross-browser-smoke\.spec\.ts/,
     },
+    {
+      name: "mobile-webkit-ux",
+      use: { ...devices["iPhone 13"] },
+      testMatch: /ux-fixes\.spec\.ts/,
+    },
   ],
 });

@@ -189,7 +189,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     toolName: "propose_task" as const,
     title: TASK_TITLE,
     summary:
-      "Create one high administrator only task for Future of Events 2025.",
+      "Create one high administrator only task for Future of Events 2027.",
     consequence:
       "Approval creates one durable task in this event. It does not send a message, publish data or create additional tasks.",
     changes: [
@@ -197,7 +197,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
       {
         field: "Target",
         before: null,
-        after: "event: Future of Events 2025",
+        after: "event: Future of Events 2027",
       },
       { field: "Impact", before: null, after: "high" },
       { field: "Due date", before: null, after: "No due date" },

@@ -154,16 +154,16 @@ describe("event cloning", () => {
     );
     await expect(service.prepare(viewer)).resolves.toMatchObject({
       source: {
-        name: "Future of Events 2025",
+        name: "Future of Events 2027",
         slug: "future-of-events-2025",
         timezone: "America/Toronto",
       },
       defaults: {
-        name: "Future of Events 2025 Copy",
+        name: "Future of Events 2027 Copy",
         slug: "future-of-events-2025-copy",
         timezone: "America/Toronto",
-        startDate: "2026-05-20",
-        endDate: "2026-05-22",
+        startDate: "2028-05-20",
+        endDate: "2028-05-22",
       },
     });
 
@@ -191,7 +191,7 @@ describe("event cloning", () => {
       expect(prepared.defaults.slug).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u);
     } finally {
       await env.DB.prepare(
-        "UPDATE events SET name = 'Future of Events 2025', slug = 'future-of-events-2025' WHERE id = ?",
+        "UPDATE events SET name = 'Future of Events 2027', slug = 'future-of-events-2025' WHERE id = ?",
       )
         .bind(viewer.eventId)
         .run();
