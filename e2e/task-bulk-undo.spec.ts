@@ -81,10 +81,10 @@ test("task dashboard filters visible work and keeps template creation open", asy
     assignedWork.getByText("Upload presentation slides", { exact: true }),
   ).toHaveCount(0);
 
-  await filters.getByLabel("Status").selectOption("overdue");
+  await filters.getByLabel("Status").selectOption("not_started");
   await filters.getByLabel("Task type").selectOption("file_upload");
   await filters.getByRole("button", { name: "Apply filters" }).click();
-  await expect(page).toHaveURL(/state=overdue/u);
+  await expect(page).toHaveURL(/state=not_started/u);
   await expect(page).toHaveURL(/type=file_upload/u);
   await expect(
     assignedWork.getByText("Upload presentation slides", { exact: true }),

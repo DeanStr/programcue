@@ -349,7 +349,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     const start = placement.getByLabel(/Start · America\/Toronto/);
     const speakerConflictSlot = (
       await start.locator("option").allTextContents()
-    ).find((label) => /Wed, May 21.*9:30 AM/.test(label));
+    ).find((label) => /Fri, May 21.*9:30 AM/.test(label));
     expect(speakerConflictSlot).toBeTruthy();
     await start.selectOption({ label: speakerConflictSlot! });
     await placement.getByLabel("Duration (minutes)").fill("60");
@@ -371,7 +371,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     });
     await placement.getByLabel("Room").selectOption({ label: "Main Stage" });
     const occupiedSlot = (await start.locator("option").allTextContents()).find(
-      (label) => /Tue, May 20.*9:00 AM/.test(label),
+      (label) => /Thu, May 20.*9:00 AM/.test(label),
     );
     expect(occupiedSlot).toBeTruthy();
     await start.selectOption({ label: occupiedSlot! });
@@ -386,7 +386,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
 
     await placement.getByLabel("Room").selectOption({ label: "Room 303" });
     const freeSlot = (await start.locator("option").allTextContents()).find(
-      (label) => /Tue, May 20.*8:00 AM/.test(label),
+      (label) => /Thu, May 20.*8:00 AM/.test(label),
     );
     expect(freeSlot).toBeTruthy();
     await start.selectOption({ label: freeSlot! });

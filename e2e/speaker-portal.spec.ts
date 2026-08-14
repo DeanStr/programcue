@@ -245,11 +245,12 @@ test("administrator speaker filters use the event-scoped server list", async ({
   ).toBeVisible();
   await expect(page.getByText("Priya Shah", { exact: true })).toBeVisible();
 
-  await page.getByLabel("Readiness").selectOption("needs_attention");
+  const readinessFilter = page.locator('select[name="readiness"]');
+  await readinessFilter.selectOption("needs_attention");
   await page.getByRole("button", { name: "Apply filters" }).click();
 
   await expect(page).toHaveURL(/readiness=needs_attention/u);
-  await expect(page.getByLabel("Readiness")).toHaveValue("needs_attention");
+  await expect(readinessFilter).toHaveValue("needs_attention");
   await expect(page.getByText("Priya Shah", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("cell", { name: "Needs attention", exact: true }),
