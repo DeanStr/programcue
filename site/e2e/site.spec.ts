@@ -123,6 +123,30 @@ test(
   },
 );
 
+test("sticky navigation leaves section headings visible", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openReady(page, "/");
+
+  for (const id of ["workflow", "capabilities", "roles"] as const) {
+    await page.locator(`.site-nav a[href="#${id}"]`).click();
+    const geometry = await page.evaluate((sectionId) => {
+      const header = document.querySelector(".site-header");
+      const intro = document.querySelector(`#${sectionId} .section-intro`);
+      if (!(header instanceof HTMLElement) || !(intro instanceof HTMLElement)) {
+        throw new Error(`Missing navigation geometry for ${sectionId}`);
+      }
+      return {
+        headerBottom: header.getBoundingClientRect().bottom,
+        introTop: intro.getBoundingClientRect().top,
+      };
+    }, id);
+    expect(
+      geometry.introTop,
+      `${id} heading should clear the sticky header`,
+    ).toBeGreaterThanOrEqual(geometry.headerBottom);
+  }
+});
+
 test("homepage retains its responsive marketing hierarchy", async ({
   page,
 }) => {
