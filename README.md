@@ -365,3 +365,10 @@ docs/                       Decisions, security, design system, API and verified
 ```
 
 The canonical product scope is [the full implementation specification](sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md). The competition build also includes Speaker Network, a deliberately bounded extra-credit surface for cross-event speaker relationships and sourcing. General-purpose CRM, broad marketing automation, payments, multilingual expansion and a general-purpose CMS remain excluded.
+
+## License
+
+Copyright © 2026 Program Cue contributors. Program Cue is free software
+licensed under the [GNU Affero General Public License version 3](LICENSE) only
+(`AGPL-3.0-only`). The canonical source repository is
+[GitHub](https://github.com/DeanStr/programcue).

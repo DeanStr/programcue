@@ -2,6 +2,15 @@
 
 This file records durable decisions. It does not imply that every decided capability is implemented; verified delivery status lives in `IMPLEMENTATION_STATUS.md`.
 
+## Licensing
+
+Program Cue is released under the GNU Affero General Public License version 3
+only (`AGPL-3.0-only`), without the automatic “or later” option. The licence
+governs the repository source but does not itself grant trademark rights in the
+Program Cue name or marks; bundled third-party works retain their own licences.
+The public landing-page footer links to the canonical, publicly accessible
+GitHub repository so remote users can obtain the source code.
+
 ## Modular monolith ownership boundaries
 
 The public service and route entrypoints remain stable facades, but their

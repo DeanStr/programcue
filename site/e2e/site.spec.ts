@@ -37,7 +37,16 @@ test(
       "href",
       "https://app.programcue.com/sign-in",
     );
+    await expect(
+      page.getByRole("link", { name: "GitHub", exact: true }),
+    ).toHaveAttribute("href", "https://github.com/DeanStr/programcue");
     await expect(page.getByText("Illustrative event workspace")).toBeVisible();
+
+    await openReady(page, "/terms");
+    await expect(page.locator("main")).toContainText(
+      "GNU Affero General Public License version 3 only",
+    );
+    await expect(page.getByText(/reverse engineer/iu)).toHaveCount(0);
   },
 );
 

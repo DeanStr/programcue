@@ -2,6 +2,7 @@
   "name": "program-cue",
   "version": "0.4.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "description": "Conference programme operations platform built as a React Router and Cloudflare Workers modular monolith.",
   "scripts": {
