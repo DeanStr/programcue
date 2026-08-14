@@ -349,6 +349,9 @@ export function SchedulePlannerWorkspace({
      themselves. Switching the day first means the jump works for a conflict
      that is not on the day currently on screen. */
   function revealConflictEntries(entryIds: string[]) {
+    // Conflict cards only exist in the room board. Switch views in the same
+    // render that stages the reveal so the focus effect can find its target.
+    setView("room");
     const implicated = workspace.entries.filter((entry) =>
       entryIds.includes(entry.id),
     );

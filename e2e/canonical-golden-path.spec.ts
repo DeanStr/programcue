@@ -372,6 +372,24 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await expect(warningNotice).toContainText(
       "speaker: A speaker also appears in “Community and Connection”",
     );
+    await page.getByRole("button", { name: "List", pressed: false }).click();
+    await expect(
+      page.getByRole("region", { name: "list schedule calendar" }),
+    ).toBeVisible();
+    const recordedConflict = page
+      .locator(".schedule-conflict-item")
+      .filter({ hasText: "Community and Connection" });
+    await recordedConflict
+      .getByRole("button", { name: "Show on board" })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Room", pressed: true }),
+    ).toBeVisible();
+    const revealedConflictEntry = page
+      .locator(".schedule-room-board [data-entry-id].revealed")
+      .first();
+    await expect(revealedConflictEntry).toBeVisible();
+    await expect(revealedConflictEntry).toBeFocused();
     await page.getByRole("button", { name: "Undo" }).click();
     await expectStatus(page, "Schedule change undone");
 

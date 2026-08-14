@@ -307,7 +307,10 @@ export function EventSetupForm({
     setNewRoomName("");
     setNewRoomCapacity("100");
     setPanelGeneration((generation) => generation + 1);
-    updateNamedFieldDirtyState(form);
+    // Controlled fields such as Brand accent retain their old DOM value until
+    // the remount above commits, so a synchronous form comparison sees a
+    // change that has already been discarded.
+    setNamedFieldChangeCount(0);
   }
 
   function clearRemovedRecordFocus(kind: "room" | "track", id: string) {

@@ -77,7 +77,7 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
       page.getByAltText("Future of Events 2027 logo"),
     ).toHaveAttribute("src", "https://branding.example.test/event.svg");
     await expect(
-      page.getByRole("link", { name: "Participant support" }),
+      page.getByRole("link", { name: "Support", exact: true }),
     ).toHaveAttribute("href", "https://support.example.test/participants");
   } finally {
     await page.context().addCookies([
@@ -202,6 +202,14 @@ test("repository workflows remain blocked until exact Event Setup edits are save
       "Save or discard your Event Setup edits before changing where event data is held.",
     ),
   ).toBeHidden();
+
+  const brandAccent = page.getByLabel("Brand accent", { exact: true });
+  const originalBrandAccent = await brandAccent.inputValue();
+  await brandAccent.fill("#0d9488");
+  await expect(configure).toBeDisabled();
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  await expect(brandAccent).toHaveValue(originalBrandAccent);
+  await expect(configure).toBeEnabled();
 
   await page.getByRole("link", { name: "Submissions", exact: true }).click();
   await expect(

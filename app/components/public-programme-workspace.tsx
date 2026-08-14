@@ -735,9 +735,11 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
   } = model;
   if (!selected) return null;
   const classification = [
-    selected.track,
-    selected.format,
-    formatProgrammeDuration(selected.startsAt, selected.endsAt),
+    model.showEmbedField("track") ? selected.track : null,
+    model.showEmbedField("format") ? selected.format : null,
+    model.showEmbedField("time")
+      ? formatProgrammeDuration(selected.startsAt, selected.endsAt)
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");

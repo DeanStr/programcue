@@ -442,6 +442,9 @@ test("keeps omitted fields out of session and speaker detail views", async ({
   const sessionDetail = page.locator(".session-detail-panel");
   await expect(sessionDetail.locator(".session-detail-when")).toHaveCount(0);
   await expect(sessionDetail.locator(".session-place")).toHaveCount(0);
+  await expect(
+    sessionDetail.locator(".session-detail-classification"),
+  ).toHaveCount(0);
 
   await page
     .locator("#speakers > .grid article")
