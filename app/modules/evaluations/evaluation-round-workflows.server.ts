@@ -1,6 +1,5 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
-import { EvaluationConfigurationWorkflows } from "./evaluation-configuration-workflows.server";
 import {
   EvaluationRevisionConflictError,
   EvaluationStateError,
@@ -13,6 +12,7 @@ import {
 } from "./evaluation-schema";
 import {
   advancementCommandResultSchema,
+  EvaluationServiceFoundation,
   evaluationAuditActor,
   persistedRubricSignature,
   roundCommandResultSchema,
@@ -137,7 +137,7 @@ async function requireScorecardSourceRoundId(
   return sourceRounds.results[0]!.sourceRoundId;
 }
 
-export abstract class EvaluationRoundWorkflows extends EvaluationConfigurationWorkflows {
+export class EvaluationRoundWorkflows extends EvaluationServiceFoundation {
   async addNextRound(
     viewer: EvaluationAdminActor,
     input: unknown,

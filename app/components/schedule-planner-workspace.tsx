@@ -11,7 +11,6 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, Link, useFetcher, useNavigation } from "react-router";
 
-import { Dialog } from "~/components/dialog";
 import { ScheduleContentWorkflows } from "~/components/schedule-content-workflows";
 import type { ScheduleWorkspace } from "~/modules/schedule/schedule-service.server";
 import {
@@ -24,6 +23,10 @@ import {
 } from "~/modules/schedule/schedule-time";
 import type { action } from "~/routes/schedule-planner.server";
 import { ScheduleCanvasPanel } from "./schedule-planner-canvas-panel";
+import {
+  AutoPlacementPreviewDialog,
+  SchedulePublicationDialog,
+} from "./schedule-planner-dialogs";
 import type { SchedulePlannerWorkspaceData } from "./schedule-planner-panel-types";
 import { ScheduleSourcePanel } from "./schedule-planner-source-panel";
 import { ScheduleValidationPanel } from "./schedule-planner-validation-panel";
@@ -848,273 +851,25 @@ export function SchedulePlannerWorkspace({
             : null
         }
       />
-      {autoPreview ? (
-        <Dialog
-          title="Preview auto-placement"
-          onClose={() => {
-            if (autoPlacementFetcher.state === "idle") dismissAutoPreview();
-          }}
-          footer={
-            <>
-              <button
-                className="btn"
-                type="button"
-                disabled={autoPlacementFetcher.state !== "idle"}
-                onClick={dismissAutoPreview}
-              >
-                Cancel
-              </button>
-              <autoPlacementFetcher.Form
-                method="post"
-                onSubmit={clearAutoError}
-              >
-                <input type="hidden" name="intent" value="auto-place-confirm" />
-                <input
-                  type="hidden"
-                  name="proposal"
-                  value={autoPlacementPayload}
-                />
-                <button
-                  className="btn primary"
-                  type="submit"
-                  disabled={
-                    autoPreview.placements.length === 0 ||
-                    autoPlacementFetcher.state !== "idle"
-                  }
-                >
-                  {autoPlacementFetcher.state === "idle"
-                    ? "Confirm placements"
-                    : "Applying placements…"}
-                </button>
-              </autoPlacementFetcher.Form>
-            </>
-          }
-        >
-          <div className="stack" data-testid="auto-placement-preview">
-            <p>
-              Deterministic first-fit assistance for draft version{" "}
-              <strong>{autoPreview.scheduleVersionId}</strong> at expected
-              schedule revision <strong>{autoPreview.scheduleRevision}</strong>.
-              No publication is part of this action.
-            </p>
-            <div className="grid grid-3">
-              <div className="metric">
-                <span className="value">
-                  {autoPreview.sessionRevisions.length}
-                </span>
-                <span className="label">Unscheduled inspected</span>
-              </div>
-              <div className="metric">
-                <span className="value">{autoPreview.placements.length}</span>
-                <span className="label">Proposed placements</span>
-              </div>
-              <div className="metric">
-                <span className="value">{autoPreview.unplaced.length}</span>
-                <span className="label">Unplaced</span>
-              </div>
-            </div>
-            <p className="help">
-              Event configuration revision {autoPreview.eventRevision}, conflict
-              policy revision {autoPreview.policyRevision}, and every listed
-              session revision will be revalidated on confirmation.
-            </p>
-            <section aria-labelledby="auto-placement-proposed-heading">
-              <h3 id="auto-placement-proposed-heading">Proposed placements</h3>
-              {autoPreview.placements.length ? (
-                <div className="stack">
-                  {autoPreview.placements.map((placement) => {
-                    const session = sessionById.get(placement.sessionId);
-                    const room = workspace.rooms.find(
-                      (candidate) => candidate.id === placement.roomId,
-                    );
-                    return (
-                      <div
-                        className={`validation-item ${placement.warnings.length ? "warn" : "ok"}`}
-                        data-testid="auto-placement-proposal"
-                        key={placement.sessionId}
-                      >
-                        <strong>{session?.title ?? placement.sessionId}</strong>
-                        <span>
-                          {room?.name ?? placement.roomId} ·{" "}
-                          {scheduleDateTimeLabel(
-                            placement.startsAt,
-                            workspace.event.timezone,
-                          )}{" "}
-                          –{" "}
-                          {scheduleDateTimeLabel(
-                            placement.endsAt,
-                            workspace.event.timezone,
-                          )}
-                        </span>
-                        {placement.warnings.length ? (
-                          <small>
-                            Warning:{" "}
-                            {placement.warnings
-                              .map((warning) => warning.message)
-                              .join(" ")}
-                          </small>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="validation-item warn">
-                  No valid placements were found. Confirmation is disabled.
-                </div>
-              )}
-            </section>
-            <section aria-labelledby="auto-placement-unplaced-heading">
-              <h3 id="auto-placement-unplaced-heading">Unplaced sessions</h3>
-              {autoPreview.unplaced.length ? (
-                <div className="stack">
-                  {autoPreview.unplaced.map((item) => (
-                    <div
-                      className="validation-item warn"
-                      data-testid="auto-placement-unplaced"
-                      key={item.sessionId}
-                    >
-                      <strong>
-                        {sessionById.get(item.sessionId)?.title ??
-                          item.sessionId}
-                      </strong>
-                      <span>{item.reason}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="help">
-                  Every inspected unscheduled session has a proposal.
-                </p>
-              )}
-            </section>
-          </div>
-        </Dialog>
+      {autoPreview && autoPlacementPayload ? (
+        <AutoPlacementPreviewDialog
+          preview={autoPreview}
+          proposal={autoPlacementPayload}
+          workspace={workspace}
+          sessionById={sessionById}
+          fetcher={autoPlacementFetcher}
+          dismiss={dismissAutoPreview}
+          clearError={clearAutoError}
+        />
       ) : null}
       {publishOpen && workspace.version ? (
-        <Dialog
-          title="Publish schedule"
-          onClose={() => setPublishOpen(false)}
-          footer={
-            <>
-              <button
-                className="btn"
-                type="button"
-                onClick={() => setPublishOpen(false)}
-              >
-                Cancel
-              </button>
-              <fetcher.Form
-                method="post"
-                onSubmit={() => setPublishOpen(false)}
-              >
-                <input type="hidden" name="intent" value="publish" />
-                <input
-                  type="hidden"
-                  name="scheduleVersionId"
-                  value={workspace.version.id}
-                />
-                <input
-                  type="hidden"
-                  name="scheduleRevision"
-                  value={workspace.version.revision}
-                />
-                <button
-                  className="btn primary"
-                  disabled={publicContentVisibilityBlockers.length > 0}
-                >
-                  Confirm publication
-                </button>
-              </fetcher.Form>
-            </>
-          }
-        >
-          <p>
-            Publish version {workspace.version.versionNumber} with{" "}
-            <strong>{workspace.entries.length} scheduled sessions</strong>.
-          </p>
-          <p className="help">
-            Confirming publication makes this exact schedule-version snapshot
-            authoritative. Editorial statuses stay unchanged.
-          </p>
-          {publicContentVisibilityBlockers.length ? (
-            <div className="validation-item error">
-              <strong>
-                {publicContentVisibilityBlockers.length} scheduled public
-                content record
-                {publicContentVisibilityBlockers.length === 1
-                  ? " is"
-                  : "s are"}{" "}
-                private or hidden.
-              </strong>{" "}
-              Public sessions require public content snapshots. Correct each
-              listed session before publishing.
-              <ul>
-                {publicContentVisibilityBlockers.slice(0, 5).map((session) => (
-                  <li key={session.id}>
-                    {session.title} · {session.visibility}
-                  </li>
-                ))}
-                {publicContentVisibilityBlockers.length > 5 ? (
-                  <li>{publicContentVisibilityBlockers.length - 5} more</li>
-                ) : null}
-              </ul>
-            </div>
-          ) : (
-            <div className="validation-item ok">
-              Every scheduled public session has a public content snapshot.
-            </div>
-          )}
-          {contentReviewAdvisories.length ? (
-            <div className="validation-item warn">
-              <strong>
-                {contentReviewAdvisories.length} scheduled content record
-                {contentReviewAdvisories.length === 1 ? " is" : "s are"} not
-                marked Approved.
-              </strong>{" "}
-              Editorial status is advisory. Publication uses the exact public
-              snapshot and leaves these statuses unchanged.
-              <ul>
-                {contentReviewAdvisories.slice(0, 5).map((session) => (
-                  <li key={session.id}>
-                    {session.title} ·{" "}
-                    {session.contentStatus.replaceAll("_", " ")}
-                  </li>
-                ))}
-                {contentReviewAdvisories.length > 5 ? (
-                  <li>{contentReviewAdvisories.length - 5} more</li>
-                ) : null}
-              </ul>
-            </div>
-          ) : (
-            <div className="validation-item ok">
-              Every scheduled content record is marked Approved.
-            </div>
-          )}
-          <div
-            className={`validation-item ${workspace.publicationConflicts.some((conflict) => conflict.severity === "blocking") ? "error" : workspace.publicationConflicts.length ? "warn" : "ok"}`}
-          >
-            {workspace.publicationConflicts.length
-              ? `${workspace.publicationConflicts.length} current conflict${workspace.publicationConflicts.length === 1 ? "" : "s"} will be revalidated before publication.`
-              : "No current conflicts. All placements will be revalidated before publication."}
-            {workspace.publicationConflicts.length ? (
-              <ul>
-                {workspace.publicationConflicts.map((conflict, index) => (
-                  <li
-                    key={`${conflict.type}:${conflict.conflictingEntryId ?? "entry"}:${index}`}
-                  >
-                    {conflict.severity === "blocking" ? "Blocking" : "Warning"}:{" "}
-                    {conflict.message}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-          <p className="help">
-            The current public version remains available in history. Calendar
-            updates are queued separately.
-          </p>
-        </Dialog>
+        <SchedulePublicationDialog
+          workspace={{ ...workspace, version: workspace.version }}
+          fetcher={fetcher}
+          contentReviewAdvisories={contentReviewAdvisories}
+          publicContentVisibilityBlockers={publicContentVisibilityBlockers}
+          close={() => setPublishOpen(false)}
+        />
       ) : null}
     </>
   );

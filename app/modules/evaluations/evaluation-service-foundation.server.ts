@@ -366,7 +366,7 @@ export function requireSessionReviewSnapshot(
   return snapshot.data;
 }
 
-export abstract class EvaluationServiceFoundation {
+export class EvaluationServiceFoundation {
   protected readonly airtable;
   constructor(
     protected readonly env: CloudflareEnvironment,

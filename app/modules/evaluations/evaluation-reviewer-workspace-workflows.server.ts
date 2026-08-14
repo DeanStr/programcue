@@ -1,7 +1,6 @@
 import { reviewerVisibleAnswers } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
-import { EvaluationAssignmentWorkflows } from "./evaluation-assignment-workflows.server";
 import {
   EvaluationRevisionConflictError,
   EvaluationStateError,
@@ -17,6 +16,7 @@ import {
 import {
   parseSubmittedSnapshot,
   blindReviewerVisibleAnswers,
+  EvaluationServiceFoundation,
   requireSessionReviewSnapshot,
   requireSubmittedSnapshot,
   reviewerCanSeeSubmissionAttachment,
@@ -59,7 +59,7 @@ function parseReviewerCriterionOptions(
   return parsed as string[];
 }
 
-export abstract class EvaluationReviewerWorkspaceWorkflows extends EvaluationAssignmentWorkflows {
+export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFoundation {
   async getReviewerWorkspace(viewer: Viewer, selectedAssignmentId?: string) {
     return this.readAuthoritative(viewer, () =>
       this.getReviewerWorkspaceD1(viewer, selectedAssignmentId),

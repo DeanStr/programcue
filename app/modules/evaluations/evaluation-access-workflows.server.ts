@@ -15,13 +15,13 @@ import {
   EvaluationRevisionConflictError,
   EvaluationStateError,
 } from "./evaluation-errors";
-import { EvaluationPlanWorkflows } from "./evaluation-plan-workflows.server";
+import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
 import {
   committeeChairAccessSchema,
   evaluationMemberInvitationSchema,
 } from "./evaluation-schema";
 
-export abstract class EvaluationAccessWorkflows extends EvaluationPlanWorkflows {
+export class EvaluationAccessWorkflows extends EvaluationServiceFoundation {
   async inviteEvaluationMember(viewer: Viewer, input: unknown) {
     return this.projectCommand(
       viewer,

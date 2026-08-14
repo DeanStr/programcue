@@ -10,10 +10,14 @@ import {
   type SubmittedRevisionCommand,
   type SubmittedRevisionCommit,
 } from "./submission-repository-shared";
+import { type DraftPayload } from "./submission-schema";
 import {
-  submittedSnapshotSchema,
-  type DraftPayload,
-} from "./submission-schema";
+  assertCurrentRevisionState,
+  assertSubmittedRevisionRequest,
+  parseCurrentSubmittedSnapshot,
+  planSubmittedRevisionSpeakers,
+  type PersistedRevisionSpeaker,
+} from "./submission-revision-plan";
 
 type RevisionOptions = {
   trackSelections: Array<{ trackId: string; trackName: string }>;
@@ -21,17 +25,6 @@ type RevisionOptions = {
   command: SubmittedRevisionCommand;
   event: PreparedApplicantMutationEvent;
   evaluatorEmailRoutings?: EvaluatorEmailRouting[];
-};
-
-type CurrentSpeaker = {
-  id: string;
-  personId: string | null;
-  email: string;
-  displayName: string;
-  position: number;
-  invitationStatus: string;
-  isPrimary: number;
-  claimedBiography: string;
 };
 
 function uploadEntries(
@@ -60,33 +53,14 @@ export class SubmissionRevisionFinalizer {
     payload: DraftPayload,
     options: RevisionOptions,
   ) {
-    if (
-      options.event.eventId !== form.eventId ||
-      options.event.webhook.eventId !== form.eventId ||
-      options.command.eventId !== form.eventId
-    ) {
-      throw new Error(
-        "The prepared revision event does not belong to the submission event.",
-      );
-    }
-    if (
-      options.command.scope !== "submission.submitted.revise" ||
-      options.command.actorId !== `person:${applicant.personId}`
-    ) {
-      throw new Error(
-        "The submitted-revision command does not belong to the verified applicant.",
-      );
-    }
-    if (form.kind !== "submission") {
-      throw new SubmissionStateError(
-        "Only a submitted proposal can be revised through this workflow.",
-      );
-    }
-    if (options.trackSelections.length === 0) {
-      throw new SubmissionStateError(
-        "A submission must retain at least one submitted event track.",
-      );
-    }
+    assertSubmittedRevisionRequest({
+      form,
+      applicant,
+      command: options.command,
+      preparedEventId: options.event.eventId,
+      preparedWebhookEventId: options.event.webhook.eventId,
+      trackSelectionCount: options.trackSelections.length,
+    });
 
     const current = await this.env.DB.prepare(
       `SELECT submission.status, submission.revision,
@@ -191,54 +165,22 @@ export class SubmissionRevisionFinalizer {
         "The prepared revision event does not belong to the submission organisation.",
       );
     }
-    if (current.revision !== payload.revision) {
-      throw new SubmissionRevisionConflictError();
-    }
-    if (current.status !== "submitted") {
-      throw new SubmissionStateError(
-        "Only a submitted application with no review in progress can be revised.",
-      );
-    }
-    if (current.hasDownstreamWork) {
-      throw new SubmissionStateError(
-        "This application already has review or decision work and can no longer be revised.",
-      );
-    }
-    if (
-      current.formStatus !== "published" ||
-      (current.closesAt !== null &&
-        current.closesAt < Math.floor(Date.now() / 1_000))
-    ) {
-      throw new SubmissionStateError(
-        "Applications for this event are closed, so this submission cannot be revised.",
-      );
-    }
-    if (!current.submittedSnapshotJson) {
-      throw new Error(
-        `Submission ${payload.submissionId} is missing its submitted snapshot.`,
-      );
-    }
-    const snapshot = submittedSnapshotSchema.safeParse(
-      JSON.parse(current.submittedSnapshotJson),
-    );
-    if (!snapshot.success) {
-      throw new Error(
-        `Submission ${payload.submissionId} has an invalid submitted snapshot.`,
-      );
-    }
-    if (
-      snapshot.data.formVersionId !== form.version.id ||
-      snapshot.data.versionNumber !== form.version.versionNumber
-    ) {
-      throw new Error(
-        `Submission ${payload.submissionId} has a submitted snapshot for the wrong form version.`,
-      );
-    }
-    if (!sameUploads(snapshot.data.uploads, payload.uploads)) {
-      throw new SubmissionStateError(
-        "A submitted native upload cannot be added, removed or replaced while revising the application.",
-      );
-    }
+    assertCurrentRevisionState({
+      submissionId: payload.submissionId,
+      expectedRevision: payload.revision,
+      currentRevision: current.revision,
+      status: current.status,
+      hasDownstreamWork: current.hasDownstreamWork,
+      formStatus: current.formStatus,
+      closesAt: current.closesAt,
+    });
+    const snapshot = parseCurrentSubmittedSnapshot({
+      submissionId: payload.submissionId,
+      snapshotJson: current.submittedSnapshotJson,
+      form,
+      payload,
+      sameUploads,
+    });
 
     const currentSpeakers = await this.env.DB.prepare(
       `SELECT speaker.id, speaker.person_id AS personId, speaker.email,
@@ -252,87 +194,17 @@ export class SubmissionRevisionFinalizer {
         ORDER BY speaker.position, speaker.id`,
     )
       .bind(payload.submissionId, form.eventId)
-      .all<CurrentSpeaker>();
-    const primary = currentSpeakers.results.filter((speaker) =>
-      Boolean(speaker.isPrimary),
-    );
-    if (
-      primary.length !== 1 ||
-      primary[0]!.personId !== applicant.personId ||
-      primary[0]!.email.toLowerCase() !== applicant.email.toLowerCase()
-    ) {
-      throw new Error(
-        `Submission ${payload.submissionId} has an invalid primary-speaker relationship.`,
-      );
-    }
-    const submittedSpeakersByEmail = new Map<
-      string,
-      (typeof snapshot.data.speakers)[number]
-    >();
-    for (const speaker of snapshot.data.speakers) {
-      const email = speaker.email.toLowerCase();
-      if (submittedSpeakersByEmail.has(email)) {
-        throw new Error(
-          `Submission ${payload.submissionId} has duplicate speaker identities in its submitted snapshot.`,
-        );
-      }
-      submittedSpeakersByEmail.set(email, speaker);
-    }
-    for (const [position, persisted] of currentSpeakers.results.entries()) {
-      if (persisted.position !== position) {
-        throw new Error(
-          `Submission ${payload.submissionId} has non-contiguous speaker positions.`,
-        );
-      }
-      const requested = payload.speakers[position];
-      const submittedSpeaker = submittedSpeakersByEmail.get(
-        persisted.email.toLowerCase(),
-      );
-      const usesSubmittedBiography =
-        Boolean(persisted.isPrimary) ||
-        persisted.invitationStatus !== "claimed";
-      let persistedBiography: string;
-      if (usesSubmittedBiography) {
-        if (!submittedSpeaker) {
-          throw new Error(
-            `Submission ${payload.submissionId} has a persisted speaker relationship missing from its submitted snapshot.`,
-          );
-        }
-        persistedBiography = submittedSpeaker.biography ?? "";
-      } else {
-        persistedBiography = persisted.claimedBiography;
-      }
-      if (
-        !requested ||
-        requested.email.toLowerCase() !== persisted.email.toLowerCase() ||
-        requested.name !== persisted.displayName ||
-        (requested.biography ?? "") !== persistedBiography
-      ) {
-        throw new SubmissionStateError(
-          "Existing speaker relationships cannot be removed, reordered or edited through a submission revision. Add a new co-speaker or update the application answers instead.",
-        );
-      }
-    }
-    const existingSpeakerRelationshipsJson = JSON.stringify(
-      currentSpeakers.results.map((speaker) => ({
-        id: speaker.id,
-        personId: speaker.personId,
-        email: speaker.email,
-        displayName: speaker.displayName,
-        position: speaker.position,
-        invitationStatus: speaker.invitationStatus,
-        isPrimary: speaker.isPrimary,
-        claimedBiography: speaker.claimedBiography,
-      })),
-    );
-
-    const newInvitees = payload.speakers
-      .slice(currentSpeakers.results.length)
-      .map((speaker, index) => ({
-        ...speaker,
-        id: crypto.randomUUID(),
-        position: currentSpeakers.results.length + index,
-      }));
+      .all<PersistedRevisionSpeaker>();
+    const {
+      existingRelationshipsJson: existingSpeakerRelationshipsJson,
+      newInvitees,
+    } = planSubmittedRevisionSpeakers({
+      submissionId: payload.submissionId,
+      applicant,
+      persisted: currentSpeakers.results,
+      submitted: snapshot.speakers,
+      requested: payload.speakers,
+    });
     const operationsQueue = this.env.OPERATIONS_QUEUE;
     if (newInvitees.length > 0 && !operationsQueue) {
       throw new Error("Required OPERATIONS_QUEUE binding is unavailable.");

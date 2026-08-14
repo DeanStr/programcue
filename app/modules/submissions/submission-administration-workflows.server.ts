@@ -11,7 +11,7 @@ import {
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { hashApplicantToken } from "./applicant-session.server";
-import { SubmissionApplicantWorkflows } from "./submission-applicant-workflows.server";
+import { SubmissionServiceFoundation } from "./submission-service-foundation.server";
 import {
   D1SubmissionRepository,
   SubmissionStateError,
@@ -35,7 +35,7 @@ import {
   type SubmissionApiActor,
 } from "./submission-service-foundation.server";
 
-export abstract class SubmissionAdministrationWorkflows extends SubmissionApplicantWorkflows {
+export class SubmissionAdministrationWorkflows extends SubmissionServiceFoundation {
   async listAdminSubmissions(viewer: Viewer, filters: AdminSubmissionFilters) {
     await this.airtable.assertReadable(viewer);
     return this.repository.listAdminSubmissions(

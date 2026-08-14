@@ -6,14 +6,14 @@ import {
   EvaluationValidationError,
 } from "./evaluation-errors";
 import { calculateRubricWeightedScore } from "./evaluation-rules";
-import { EvaluationReviewerWorkspaceWorkflows } from "./evaluation-reviewer-workspace-workflows.server";
 import {
   conflictDeclarationSchema,
   reviewDraftSchema,
 } from "./evaluation-schema";
 import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
+import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
 
-export abstract class EvaluationReviewSubmissionWorkflows extends EvaluationReviewerWorkspaceWorkflows {
+export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFoundation {
   async saveReview(viewer: Viewer, input: unknown) {
     return this.projectCommand(
       viewer,

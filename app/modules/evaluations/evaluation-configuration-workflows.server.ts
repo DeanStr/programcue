@@ -3,7 +3,6 @@ import {
   EvaluationRevisionConflictError,
   EvaluationStateError,
 } from "./evaluation-errors";
-import { EvaluationAccessWorkflows } from "./evaluation-access-workflows.server";
 import {
   evaluationRoundReviewerSchema,
   evaluationTeamMemberSchema,
@@ -11,12 +10,13 @@ import {
 } from "./evaluation-schema";
 import {
   roundReviewerCommandResultSchema,
+  EvaluationServiceFoundation,
   type EvaluationAdminActor,
   type EvaluationApiCommand,
   type EvaluationRoundReviewerResult,
 } from "./evaluation-service-foundation.server";
 
-export abstract class EvaluationConfigurationWorkflows extends EvaluationAccessWorkflows {
+export class EvaluationConfigurationWorkflows extends EvaluationServiceFoundation {
   async saveTeam(viewer: Viewer, input: unknown) {
     return this.projectCommand(
       viewer,

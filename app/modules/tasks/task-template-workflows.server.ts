@@ -108,7 +108,7 @@ async function dependencyAssignmentOperationId(
   return `dep:${boundedHash}`;
 }
 
-export abstract class TaskTemplateWorkflows extends TaskServiceFoundation {
+export class TaskTemplateWorkflows extends TaskServiceFoundation {
   async createTemplate(
     viewer: Viewer,
     rawInput: unknown,
@@ -1282,14 +1282,4 @@ export abstract class TaskTemplateWorkflows extends TaskServiceFoundation {
     };
   }
 
-  protected taskAccessClause() {
-    return `(
-      ti.owner_person_id = ?
-      OR (ti.target_type = 'speaker' AND ti.target_id = ?)
-      OR (ti.target_type = 'session' AND EXISTS (
-        SELECT 1 FROM session_speakers ss
-         WHERE ss.event_id = ti.event_id AND ss.session_id = ti.target_id AND ss.person_id = ?
-      ))
-    )`;
-  }
 }

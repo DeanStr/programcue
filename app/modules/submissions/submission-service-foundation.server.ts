@@ -176,7 +176,7 @@ export type AdminMutationRecord = {
   entityId: string | null;
 };
 
-export abstract class SubmissionServiceFoundation {
+export class SubmissionServiceFoundation {
   readonly repository: D1SubmissionRepository;
   readonly applicants: ApplicantSessionService;
   protected readonly airtable: AirtableProviderBoundary;
@@ -203,6 +203,120 @@ export abstract class SubmissionServiceFoundation {
 
   getApplicationEventScope(eventId: string) {
     return this.publicScope(eventId);
+  }
+
+  async getPublicForm(publicSlug: string) {
+    const form = await this.getPublicFormD1(publicSlug);
+    const freshness = await this.airtable.assertReadable(
+      await this.publicScope(form.eventId),
+    );
+    return freshness === null ? form : this.getPublicFormD1(publicSlug);
+  }
+
+  protected async getPublicFormD1(publicSlug: string) {
+    const form = await this.repository.getPublicForm(publicSlug);
+    if (!form)
+      throw new Response("Application form not found", { status: 404 });
+    return form;
+  }
+
+  protected async requireCoSpeakerClaimForm(
+    publicSlug: string,
+    speakerId: string,
+    rawToken: string,
+  ) {
+    const form = await this.repository.getCoSpeakerClaimForm(
+      publicSlug,
+      speakerId,
+    );
+    if (!form || !(await this.getCoSpeakerClaimD1(form, speakerId, rawToken))) {
+      throw new SubmissionStateError(
+        "This co-speaker claim link is invalid or has been replaced.",
+      );
+    }
+    return form;
+  }
+
+  async requireClaimedCoSpeakerContext(
+    publicSlug: string,
+    speakerIdInput: string,
+    request: Request,
+  ) {
+    const speakerId = z.string().min(1).max(100).parse(speakerIdInput);
+    const form = await this.repository.getCoSpeakerClaimForm(
+      publicSlug,
+      speakerId,
+    );
+    if (!form) {
+      throw new Response("Application form not found", { status: 404 });
+    }
+    const applicant = await this.applicants.get(request, form);
+    const claimedRelationship = applicant?.verified
+      ? await this.env.DB.prepare(
+          `SELECT 1 AS available
+             FROM submission_speakers speaker
+             JOIN submissions submission
+               ON submission.id = speaker.submission_id
+              AND submission.event_id = speaker.event_id
+             JOIN form_versions version
+               ON version.id = submission.form_version_id
+              AND version.event_id = submission.event_id
+            WHERE speaker.id = ? AND speaker.person_id = ?
+              AND speaker.invitation_status = 'claimed'
+              AND version.form_id = ? AND speaker.event_id = ?
+            LIMIT 1`,
+        )
+          .bind(speakerId, applicant.personId, form.id, form.eventId)
+          .first<{ available: number }>()
+      : null;
+    if (!applicant?.verified || !claimedRelationship) {
+      throw new Response("Application form not found", { status: 404 });
+    }
+    return { form, applicant };
+  }
+
+  protected async getCoSpeakerClaimD1(
+    form: PublicForm,
+    speakerId: string,
+    rawToken: string,
+  ) {
+    if (!speakerId || !rawToken) return null;
+    const tokenHash = await hashApplicantToken(
+      `co-speaker-claim:${form.id}:${speakerId}:${rawToken}`,
+    );
+    const claim = await this.env.DB.prepare(
+      `SELECT speaker.id, speaker.email, speaker.display_name AS displayName,
+              speaker.invitation_expires_at AS expiresAt,
+              submission.id AS submissionId,
+              submission.title AS submissionTitle
+         FROM submission_speakers speaker
+         JOIN submissions submission
+           ON submission.id = speaker.submission_id
+          AND submission.event_id = speaker.event_id
+         JOIN form_versions version
+           ON version.id = submission.form_version_id
+          AND version.event_id = submission.event_id
+        WHERE speaker.id = ? AND speaker.event_id = ?
+          AND speaker.claim_token_hash = ?
+          AND speaker.invitation_status IN ('pending','sent','expired')
+          AND version.form_id = ?`,
+    )
+      .bind(speakerId, form.eventId, tokenHash, form.id)
+      .first<{
+        id: string;
+        email: string;
+        displayName: string;
+        expiresAt: number | null;
+        submissionId: string;
+        submissionTitle: string;
+      }>();
+    if (!claim) return null;
+    return {
+      ...claim,
+      expired:
+        claim.expiresAt === null ||
+        claim.expiresAt <= Math.floor(Date.now() / 1_000),
+    };
   }
 
   protected async projectCommand<T>(

@@ -5,11 +5,11 @@ import {
   EvaluationStateError,
   EvaluationValidationError,
 } from "./evaluation-errors";
-import { EvaluationReviewSubmissionWorkflows } from "./evaluation-review-submission-workflows.server";
 import { moderationSchema, reviewReopenSchema } from "./evaluation-schema";
+import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
 import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 
-export abstract class EvaluationReviewerWorkflows extends EvaluationReviewSubmissionWorkflows {
+export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
   async moderate(viewer: Viewer, input: unknown) {
     return this.projectCommand(
       viewer,

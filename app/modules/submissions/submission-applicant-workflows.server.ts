@@ -12,7 +12,7 @@ import {
 import { type PublicForm } from "./applicant-session.server";
 import { SubmissionApplicantEventService } from "./submission-applicant-events.server";
 import { dispatchCoSpeakerInvitationsForSubmissionRevision } from "./co-speaker-invitation.server";
-import { SubmissionCoSpeakerWorkflows } from "./submission-co-speaker-workflows.server";
+import { SubmissionServiceFoundation } from "./submission-service-foundation.server";
 import {
   SubmissionRevisionConflictError,
   SubmissionStateError,
@@ -103,7 +103,7 @@ async function routeEvaluationCoSpeakerEmails<
   };
 }
 
-export abstract class SubmissionApplicantWorkflows extends SubmissionCoSpeakerWorkflows {
+export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
   async authorizeApplicantProfileImport(request: Request, publicSlug: string) {
     const form = await this.getPublicForm(publicSlug);
     const applicant = await this.applicants.get(request, form);
@@ -201,7 +201,7 @@ export abstract class SubmissionApplicantWorkflows extends SubmissionCoSpeakerWo
   }
 
   protected applicationAvailability(
-    form: Awaited<ReturnType<SubmissionCoSpeakerWorkflows["getPublicForm"]>>,
+    form: Awaited<ReturnType<SubmissionServiceFoundation["getPublicForm"]>>,
   ) {
     if (form.status !== "published") {
       return {
@@ -231,7 +231,7 @@ export abstract class SubmissionApplicantWorkflows extends SubmissionCoSpeakerWo
   }
 
   protected applicationRevisionAvailability(
-    form: Awaited<ReturnType<SubmissionCoSpeakerWorkflows["getPublicForm"]>>,
+    form: Awaited<ReturnType<SubmissionServiceFoundation["getPublicForm"]>>,
   ) {
     if (form.status !== "published") {
       return {

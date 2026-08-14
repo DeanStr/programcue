@@ -19,10 +19,10 @@ import {
   statusProgress,
   structuredTaskEvidence,
   structuredTaskForm,
+  TaskServiceFoundation,
 } from "./task-service-foundation.server";
-import { TaskTemplateWorkflows } from "./task-template-workflows.server";
 
-export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
+export class ParticipantTaskWorkflows extends TaskServiceFoundation {
   async listParticipantTasks(viewer: Viewer) {
     await this.projectCommand(
       viewer,
@@ -143,34 +143,6 @@ export abstract class ParticipantTaskWorkflows extends TaskTemplateWorkflows {
         viewer.personId,
       )
       .first<TaskRow & { evidenceMode: TemplateRow["evidenceMode"] | null }>();
-  }
-
-  protected async dependenciesComplete(taskId: string) {
-    const incomplete = await this.env.DB.prepare(
-      `
-      SELECT COUNT(*) AS count FROM task_instance_dependencies dep
-      JOIN task_instances prerequisite ON prerequisite.id = dep.depends_on_task_id
-      WHERE dep.task_id = ? AND prerequisite.status NOT IN ('completed','waived')
-    `,
-    )
-      .bind(taskId)
-      .first<{ count: number }>();
-    return (incomplete?.count ?? 0) === 0;
-  }
-
-  protected async dependentRevisionSnapshot(taskId: string) {
-    const dependents = await this.env.DB.prepare(
-      `
-      SELECT dependent.id AS taskId, dependent.revision
-        FROM task_instance_dependencies dependency
-        JOIN task_instances dependent ON dependent.id = dependency.task_id
-       WHERE dependency.depends_on_task_id = ?
-       ORDER BY dependent.id
-    `,
-    )
-      .bind(taskId)
-      .all<{ taskId: string; revision: number }>();
-    return dependents.results;
   }
 
   async assertFileEvidenceUploadAllowed(viewer: Viewer, taskId: string) {

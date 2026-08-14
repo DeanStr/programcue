@@ -14,7 +14,7 @@ import {
 } from "./submission-schema";
 import { SubmissionServiceFoundation } from "./submission-service-foundation.server";
 
-export abstract class SubmissionFormWorkflows extends SubmissionServiceFoundation {
+export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
   async getAdminWorkspace(viewer: Viewer, formId?: string) {
     await this.airtable.assertReadable(viewer);
     return this.repository.getAdminWorkspace(
@@ -548,21 +548,4 @@ export abstract class SubmissionFormWorkflows extends SubmissionServiceFoundatio
     return tracks.results;
   }
 
-  async getPublicForm(publicSlug: string) {
-    const form = await this.getPublicFormD1(publicSlug);
-    const freshness = await this.airtable.assertReadable(
-      await this.publicScope(form.eventId),
-    );
-    // Airtable-backed reads refresh the D1 projection. Read the form again so
-    // this request cannot return the pre-refresh version that was used only to
-    // discover the public form's event scope.
-    return freshness === null ? form : this.getPublicFormD1(publicSlug);
-  }
-
-  protected async getPublicFormD1(publicSlug: string) {
-    const form = await this.repository.getPublicForm(publicSlug);
-    if (!form)
-      throw new Response("Application form not found", { status: 404 });
-    return form;
-  }
 }

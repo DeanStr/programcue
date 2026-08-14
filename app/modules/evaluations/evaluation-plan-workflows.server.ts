@@ -143,7 +143,7 @@ async function assertPersistedScorecardConsistency(
   }
 }
 
-export abstract class EvaluationPlanWorkflows extends EvaluationServiceFoundation {
+export class EvaluationPlanWorkflows extends EvaluationServiceFoundation {
   async getAdminWorkspace(viewer: Viewer) {
     await this.assertViewerEvent(viewer);
     this.assertEvaluationManager(viewer);

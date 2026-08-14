@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
-import { ParticipantTaskWorkflows } from "./participant-task-workflows.server";
 import {
   type TaskCompletionMutationResult,
   type TaskRow,
@@ -12,9 +11,10 @@ import {
   randomUndoSecret,
   statusProgress,
   structuredTaskForm,
+  TaskServiceFoundation,
 } from "./task-service-foundation.server";
 
-export abstract class TaskAdministrationWorkflows extends ParticipantTaskWorkflows {
+export class TaskAdministrationWorkflows extends TaskServiceFoundation {
   async getAdminWorkspace(viewer: Viewer) {
     await this.projectCommand(
       viewer,

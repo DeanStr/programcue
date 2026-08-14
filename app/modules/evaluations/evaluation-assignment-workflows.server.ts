@@ -3,13 +3,13 @@ import {
   EvaluationRevisionConflictError,
   EvaluationStateError,
 } from "./evaluation-errors";
-import { EvaluationRoundWorkflows } from "./evaluation-round-workflows.server";
 import {
   assignmentBatchSchema,
   assignmentUndoSchema,
 } from "./evaluation-schema";
 import {
   assignmentCommandResultSchema,
+  EvaluationServiceFoundation,
   evaluationAuditActor,
   type EvaluationAdminActor,
   type EvaluationApiCommand,
@@ -17,7 +17,7 @@ import {
 } from "./evaluation-service-foundation.server";
 import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 
-export abstract class EvaluationAssignmentWorkflows extends EvaluationRoundWorkflows {
+export class EvaluationAssignmentWorkflows extends EvaluationServiceFoundation {
   async assign(
     viewer: EvaluationAdminActor,
     input: unknown,

@@ -304,6 +304,197 @@ function parsePayload(formData: FormData) {
   }
 }
 
+async function handleClaimedSpeakerIntent(input: {
+  intent: string;
+  actionUrl: URL;
+  request: Request;
+  claimedSpeakerId: string | null;
+  formData: FormData;
+  service: SubmissionService;
+  slug: string;
+  env: CloudflareEnvironment;
+}) {
+  const {
+    intent,
+    actionUrl,
+    request,
+    claimedSpeakerId,
+    formData,
+    service,
+    slug,
+    env,
+  } = input;
+  if (intent === "claim_token") {
+    const speakerId = String(
+      formData.get("speakerId") ??
+        actionUrl.searchParams.get("speaker") ??
+        "",
+    );
+    const rawToken = String(
+      formData.get("claimToken") ?? actionUrl.searchParams.get("claim") ?? "",
+    );
+    const result = await service.claimCoSpeakerToken(
+      slug,
+      speakerId,
+      rawToken,
+    );
+    const query = await applicationNoticeQuery(env, {
+      slug,
+      kind: "claimed",
+      submissionId: null,
+      webhookWarning: false,
+    });
+    query.set("claimedSpeaker", speakerId);
+    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`, {
+      headers: { "set-cookie": result.cookie },
+    });
+  }
+  if (intent === "update_profile" && claimedSpeakerId) {
+    await service.updateClaimedCoSpeakerProfile(
+      slug,
+      claimedSpeakerId,
+      request,
+      {
+        revision: formData.get("revision"),
+        name: formData.get("name"),
+        biography: formData.get("biography"),
+      },
+    );
+    const query = await applicationNoticeQuery(env, {
+      slug,
+      kind: "profile_updated",
+      submissionId: null,
+      webhookWarning: false,
+    });
+    query.set("claimedSpeaker", claimedSpeakerId);
+    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
+  }
+  return null;
+}
+
+function verificationStage(intent: string, formData: FormData) {
+  return intent === "verify_code"
+    ? {
+        stage: "code" as const,
+        email: String(formData.get("email") ?? ""),
+      }
+    : {};
+}
+
+async function translateApplicationActionError(input: {
+  error: unknown;
+  intent: string;
+  formData: FormData;
+  env: CloudflareEnvironment;
+  slug: string;
+}) {
+  const { error, intent, formData, env, slug } = input;
+  if (error instanceof Response) throw error;
+  if (error instanceof ZodError) {
+    return data<ActionResult>(
+      {
+        ok: false,
+        ...verificationStage(intent, formData),
+        message: "Complete the required application fields.",
+        errors: error.flatten().fieldErrors,
+      },
+      { status: 400 },
+    );
+  }
+  if (
+    error instanceof ApplicantInputError ||
+    error instanceof InvalidApplicationPayloadError
+  ) {
+    return data<ActionResult>(
+      {
+        ok: false,
+        ...verificationStage(intent, formData),
+        message: error.message,
+      },
+      { status: 400 },
+    );
+  }
+  if (error instanceof AbuseRateLimitError) {
+    return data<ActionResult>(
+      {
+        ok: false,
+        ...verificationStage(intent, formData),
+        message: error.message,
+      },
+      {
+        status: 429,
+        headers: { "retry-after": String(error.retryAfterSeconds) },
+      },
+    );
+  }
+  if (error instanceof TurnstileRejectedError) {
+    return data<ActionResult>(
+      {
+        ok: false,
+        ...verificationStage(intent, formData),
+        message: error.message,
+      },
+      { status: 422 },
+    );
+  }
+  if (
+    error instanceof TurnstileUnavailableError ||
+    error instanceof AbuseProtectionConfigurationError
+  ) {
+    console.error("Public application abuse protection failed", {
+      errorName: error.name,
+    });
+    return data<ActionResult>(
+      {
+        ok: false,
+        ...verificationStage(intent, formData),
+        message:
+          "The security check is temporarily unavailable. Try again later.",
+      },
+      { status: 503 },
+    );
+  }
+  if (error instanceof SubmissionDraftSavedError) {
+    const query = await applicationNoticeQuery(env, {
+      slug,
+      kind: "submission_blocked",
+      submissionId: error.submissionId,
+      webhookWarning: false,
+    });
+    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
+  }
+  if (
+    error instanceof SubmissionRevisionConflictError ||
+    error instanceof SubmissionStateError ||
+    error instanceof PublicFormUnavailableError
+  ) {
+    return data<ActionResult>(
+      {
+        ok: false,
+        message: error.message,
+        conflict: error instanceof SubmissionRevisionConflictError,
+      },
+      { status: 409 },
+    );
+  }
+  if (
+    error instanceof ApplicantConfigurationError ||
+    error instanceof ApplicantDeliveryError
+  ) {
+    return data<ActionResult>(
+      {
+        ok: false,
+        ...(intent === "request_code"
+          ? {}
+          : verificationStage(intent, formData)),
+        message: error.message,
+      },
+      { status: 503 },
+    );
+  }
+  throw error;
+}
+
 export async function action({ request, context, params }: Route.ActionArgs) {
   const rejectedOrigin = rejectCrossOriginBrowserMutation(request);
   if (rejectedOrigin) return rejectedOrigin;
@@ -354,51 +545,17 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   try {
     const actionUrl = new URL(request.url);
     const claimedSpeakerId = actionUrl.searchParams.get("claimedSpeaker");
-    if (intent === "claim_token") {
-      const speakerId = String(
-        formData.get("speakerId") ??
-          actionUrl.searchParams.get("speaker") ??
-          "",
-      );
-      const rawToken = String(
-        formData.get("claimToken") ?? actionUrl.searchParams.get("claim") ?? "",
-      );
-      const result = await service.claimCoSpeakerToken(
-        slug,
-        speakerId,
-        rawToken,
-      );
-      const query = await applicationNoticeQuery(env, {
-        slug,
-        kind: "claimed",
-        submissionId: null,
-        webhookWarning: false,
-      });
-      query.set("claimedSpeaker", speakerId);
-      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`, {
-        headers: { "set-cookie": result.cookie },
-      });
-    }
-    if (intent === "update_profile" && claimedSpeakerId) {
-      await service.updateClaimedCoSpeakerProfile(
-        slug,
-        claimedSpeakerId,
-        request,
-        {
-          revision: formData.get("revision"),
-          name: formData.get("name"),
-          biography: formData.get("biography"),
-        },
-      );
-      const query = await applicationNoticeQuery(env, {
-        slug,
-        kind: "profile_updated",
-        submissionId: null,
-        webhookWarning: false,
-      });
-      query.set("claimedSpeaker", claimedSpeakerId);
-      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
-    }
+    const claimedSpeakerResponse = await handleClaimedSpeakerIntent({
+      intent,
+      actionUrl,
+      request,
+      claimedSpeakerId,
+      formData,
+      service,
+      slug,
+      env,
+    });
+    if (claimedSpeakerResponse) return claimedSpeakerResponse;
     const claimedSignOutContext =
       intent === "sign_out" && claimedSpeakerId
         ? await service.requireClaimedCoSpeakerContext(
@@ -772,139 +929,12 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     }
     throw new Error("Application action dispatch reached an invalid state.");
   } catch (error) {
-    if (error instanceof Response) throw error;
-    if (error instanceof ZodError) {
-      return data<ActionResult>(
-        {
-          ok: false,
-          ...(intent === "verify_code"
-            ? {
-                stage: "code" as const,
-                email: String(formData.get("email") ?? ""),
-              }
-            : {}),
-          message: "Complete the required application fields.",
-          errors: error.flatten().fieldErrors,
-        },
-        { status: 400 },
-      );
-    }
-    if (
-      error instanceof ApplicantInputError ||
-      error instanceof InvalidApplicationPayloadError
-    ) {
-      return data<ActionResult>(
-        {
-          ok: false,
-          ...(intent === "verify_code"
-            ? {
-                stage: "code" as const,
-                email: String(formData.get("email") ?? ""),
-              }
-            : {}),
-          message: error.message,
-        },
-        { status: 400 },
-      );
-    }
-    if (error instanceof AbuseRateLimitError) {
-      return data<ActionResult>(
-        {
-          ok: false,
-          ...(intent === "verify_code"
-            ? {
-                stage: "code" as const,
-                email: String(formData.get("email") ?? ""),
-              }
-            : {}),
-          message: error.message,
-        },
-        {
-          status: 429,
-          headers: { "retry-after": String(error.retryAfterSeconds) },
-        },
-      );
-    }
-    if (error instanceof TurnstileRejectedError) {
-      return data<ActionResult>(
-        {
-          ok: false,
-          ...(intent === "verify_code"
-            ? {
-                stage: "code" as const,
-                email: String(formData.get("email") ?? ""),
-              }
-            : {}),
-          message: error.message,
-        },
-        { status: 422 },
-      );
-    }
-    if (
-      error instanceof TurnstileUnavailableError ||
-      error instanceof AbuseProtectionConfigurationError
-    ) {
-      console.error("Public application abuse protection failed", {
-        errorName: error.name,
-      });
-      return data<ActionResult>(
-        {
-          ok: false,
-          ...(intent === "verify_code"
-            ? {
-                stage: "code" as const,
-                email: String(formData.get("email") ?? ""),
-              }
-            : {}),
-          message:
-            "The security check is temporarily unavailable. Try again later.",
-        },
-        { status: 503 },
-      );
-    }
-    if (error instanceof SubmissionDraftSavedError) {
-      const query = await applicationNoticeQuery(env, {
-        slug,
-        kind: "submission_blocked",
-        submissionId: error.submissionId,
-        webhookWarning: false,
-      });
-      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
-    }
-    if (
-      error instanceof SubmissionRevisionConflictError ||
-      error instanceof SubmissionStateError ||
-      error instanceof PublicFormUnavailableError
-    ) {
-      return data<ActionResult>(
-        {
-          ok: false,
-          message: error.message,
-          conflict: error instanceof SubmissionRevisionConflictError,
-        },
-        { status: 409 },
-      );
-    }
-    if (
-      error instanceof ApplicantConfigurationError ||
-      error instanceof ApplicantDeliveryError
-    ) {
-      return data<ActionResult>(
-        {
-          ok: false,
-          ...(intent === "request_code"
-            ? {}
-            : intent === "verify_code"
-              ? {
-                  stage: "code" as const,
-                  email: String(formData.get("email") ?? ""),
-                }
-              : {}),
-          message: error.message,
-        },
-        { status: 503 },
-      );
-    }
-    throw error;
+    return translateApplicationActionError({
+      error,
+      intent,
+      formData,
+      env,
+      slug,
+    });
   }
 }
