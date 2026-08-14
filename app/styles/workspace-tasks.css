@@ -23,7 +23,7 @@
   color: #b91c1c;
 }
 .impact.high {
-  color: #c2410c;
+  color: var(--orange);
 }
 .impact.medium {
   color: #a16207;

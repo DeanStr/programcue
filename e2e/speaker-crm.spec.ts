@@ -12,7 +12,7 @@ const fixture = path.join(
   "speakers.csv",
 );
 
-test.beforeAll(async ({ request }) => {
+test.beforeEach(async ({ request }) => {
   await resetDemoEvent(request);
 });
 
@@ -185,7 +185,10 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
     .filter({ hasText: "marcus.speaker@sbek-test.example.com" });
   await expect(pendingMarcusInvitation).toHaveCount(0);
 
-  await page.getByRole("link", { name: "Speaker Network" }).click();
+  await page
+    .getByRole("main")
+    .getByRole("link", { name: "Speaker Network" })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Top companies" }),
   ).toBeVisible();
@@ -220,6 +223,16 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
 test("event roster previews CSV speakers and exposes explicit workflow status", async ({
   page,
 }) => {
+  /* A reset intentionally removes organisation contacts but retains global
+     person identities. Unique addresses keep this event-import test
+     independent of identities created by earlier CRM runs. */
+  const emailToken = crypto.randomUUID();
+  const eventRosterCsv = [
+    "name,email,title,company,bio",
+    `Priya Raman,priya-${emailToken}@sbek-test.example.com,Principal Engineer,Latticework Systems,"Leads the build-tooling platform team at Latticework Systems."`,
+    `Marcus Okafor,marcus-${emailToken}@sbek-test.example.com,Staff Developer Advocate,Cloudreach Labs,"Focused on AI agents in production; writes Agents Weekly."`,
+    `Dana Kowalski,dana-${emailToken}@sbek-test.example.com,Engineering Manager,Substrate,"Runs the developer-experience org at Substrate; ex-CI lead at a fintech."`,
+  ].join("\n");
   await page.context().addCookies([
     {
       name: "program_cue_event",
@@ -232,7 +245,11 @@ test("event roster previews CSV speakers and exposes explicit workflow status", 
   ]);
   await page.goto("/admin/speakers");
   await page.getByText("Import event speakers from CSV").click();
-  await page.getByLabel("Event speaker CSV").setInputFiles(fixture);
+  await page.getByLabel("Event speaker CSV").setInputFiles({
+    name: "event-speakers.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(eventRosterCsv),
+  });
   await page.getByRole("button", { name: "Preview speaker import" }).click();
   await expect(
     page.getByRole("heading", { name: "Import preview" }),
@@ -241,7 +258,9 @@ test("event roster previews CSV speakers and exposes explicit workflow status", 
   const priyaPreview = page.getByRole("row", { name: /Priya Raman/ });
   await expect(priyaPreview).toContainText("Principal Engineer");
   await expect(priyaPreview).toContainText("Latticework Systems");
-  await expect(priyaPreview).toContainText("imported details already match");
+  await expect(priyaPreview).toContainText(
+    "New neutral identity and organisation profile",
+  );
   await expect(
     page.getByRole("cell", { name: "Prospect" }).first(),
   ).toBeVisible();

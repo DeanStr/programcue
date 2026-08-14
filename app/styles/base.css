@@ -131,7 +131,7 @@ a {
   /* If the rail ever does overflow it has to say so. A default overlay
      scrollbar on near-black leaves no evidence that anything is below. */
   scrollbar-width: thin;
-  scrollbar-color: #2b3d59 transparent;
+  scrollbar-color: var(--nav-scrollbar) transparent;
 }
 .nav-group,
 .nav-item,
@@ -194,7 +194,7 @@ a {
 .nav-child a {
   padding-left: calc(var(--space-4) - 3px + 20px + var(--space-3));
   font-weight: var(--weight-medium);
-  color: #aebbd0;
+  color: var(--nav-text-muted);
 }
 .sidebar-bottom {
   margin-top: auto;
@@ -275,7 +275,7 @@ a {
   flex: none;
   border-radius: var(--radius-xs);
   background: var(--nav-2);
-  border: 1px solid #263750;
+  border: 1px solid var(--nav-border);
   display: grid;
   place-items: center;
   color: var(--nav-text);
@@ -404,7 +404,7 @@ a {
 }
 .btn.danger {
   color: var(--red);
-  border-color: #fecaca;
+  border-color: var(--state-bad-border);
   background: var(--surface);
 }
 .btn.danger:hover {
@@ -414,7 +414,7 @@ a {
 .btn.warning {
   color: var(--state-warn-text);
   border-color: #fde68a;
-  background: #fffbeb;
+  background: var(--state-warn-surface-subtle);
 }
 .btn.ghost {
   border-color: transparent;
@@ -809,7 +809,7 @@ a {
 .metric.alert-red {
   --metric-tone: var(--state-bad-text);
   --rail: var(--state-bad-solid);
-  border-color: #fecaca;
+  border-color: var(--state-bad-border);
 }
 .metric.alert-amber {
   --metric-tone: var(--state-warn-text);
@@ -914,7 +914,7 @@ a {
    page renders as the faintest thing on it. */
 .progress.is-zero {
   background: var(--state-bad-surface);
-  box-shadow: inset 0 0 0 1px #fecaca;
+  box-shadow: inset 0 0 0 1px var(--state-bad-border);
 }
 .progress-row {
   display: grid;

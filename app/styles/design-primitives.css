@@ -107,7 +107,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid #fecaca;
+  border: 1px solid var(--state-bad-border);
   border-radius: var(--radius);
   background: #fff7f7;
   color: var(--state-bad-text);
@@ -231,7 +231,7 @@
   color: var(--state-warn-text);
 }
 .pc-status-notice.is-danger {
-  border-color: #fecaca;
+  border-color: var(--state-bad-border);
   border-left-color: var(--red);
   background: #fff8f8;
   color: var(--state-bad-text);

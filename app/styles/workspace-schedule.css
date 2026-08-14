@@ -104,15 +104,15 @@
 }
 .session-card.keynote,
 .schedule-format-key .keynote {
-  --pc-format-rail: #7c3aed;
+  --pc-format-rail: var(--violet);
 }
 .session-card.presentation,
 .schedule-format-key .presentation {
-  --pc-format-rail: #2563eb;
+  --pc-format-rail: var(--blue);
 }
 .session-card.panel,
 .schedule-format-key .panel {
-  --pc-format-rail: #c2410c;
+  --pc-format-rail: var(--orange);
 }
 .session-card.workshop,
 .schedule-format-key .workshop {
@@ -120,7 +120,7 @@
 }
 .session-card.breakout,
 .schedule-format-key .breakout {
-  --pc-format-rail: #0e7490;
+  --pc-format-rail: var(--cyan);
 }
 .session-card.conflict {
   border-color: var(--state-bad-solid);
@@ -133,7 +133,7 @@
   border-color: var(--state-warn-solid);
   border-left-color: var(--state-warn-solid);
   box-shadow: inset 0 0 0 1px var(--state-warn-solid);
-  background: #fffbeb;
+  background: var(--state-warn-surface-subtle);
   color: var(--state-warn-text);
 }
 .drop-target {
@@ -169,7 +169,7 @@
 }
 .pending-change {
   border: 1px solid #fde68a;
-  background: #fffbeb;
+  background: var(--state-warn-surface-subtle);
   border-radius: var(--radius-sm);
   padding: var(--space-3);
 }

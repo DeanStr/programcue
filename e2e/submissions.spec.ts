@@ -121,8 +121,8 @@ test.describe.serial("submissions vertical slice", () => {
     await editor.getByLabel("Field label").fill(visualLabel);
 
     await expect(
-      page.getByText(visualLabel, { exact: true }).first(),
-    ).toBeVisible();
+      editor.getByRole("textbox", { name: visualLabel }),
+    ).toBeVisible({ timeout: 10_000 });
     await expect(
       page.getByRole("button", { name: "Save draft" }),
     ).toBeEnabled();
@@ -138,8 +138,10 @@ test.describe.serial("submissions vertical slice", () => {
       page.getByLabel("Visual call-for-speakers form editor"),
     ).toBeVisible();
     await expect(
-      page.getByText(visualLabel, { exact: true }).first(),
-    ).toBeVisible();
+      page
+        .getByLabel("Visual call-for-speakers form editor")
+        .getByRole("textbox", { name: visualLabel }),
+    ).toBeVisible({ timeout: 10_000 });
   });
 
   test("applicant verifies email, saves a multi-speaker draft, submits it and appears in the admin queue", async ({

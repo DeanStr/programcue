@@ -52,7 +52,17 @@ for (const source of sources.values()) {
   }
 }
 /* Set from TSX via inline style, not from CSS. */
-for (const name of ["--event-accent", "--pct", "--rail", "--grid-min"]) {
+for (const name of [
+  "--event-accent",
+  "--pct",
+  "--rail",
+  "--grid-min",
+  "--hero-image",
+  "--pc-entry-offset",
+  "--pc-entry-minutes",
+  "--pc-entry-column",
+  "--pc-entry-columns",
+]) {
   definedTokens.add(name);
 }
 

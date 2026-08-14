@@ -30,7 +30,11 @@ if (!skipBuild) {
 console.log(
   `\nRunning Playwright in ${shardCount} isolated shard${shardCount === 1 ? "" : "s"}.`,
 );
-const playwright = resolvePackageExecutable("playwright", "playwright");
+/* Resolve the CLI from the same package test files import. A worktree can
+   contain an extraneous top-level `playwright` directory alongside pnpm's
+   `@playwright/test` graph; launching that copy creates two test runtimes and
+   makes every shard fail during discovery. */
+const playwright = resolvePackageExecutable("@playwright/test", "playwright");
 const shardRuns = runtimes.map((runtime) => {
   const { inspectorPort, port, shard, statePathFromRepository } = runtime;
   return runProcess(

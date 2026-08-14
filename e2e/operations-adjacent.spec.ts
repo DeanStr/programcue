@@ -122,7 +122,7 @@ test("blank event creation keeps templates empty and makes repository authority 
   );
   await waitForInterface(page, "/admin/command");
   await expect(
-    page.getByRole("heading", { name: "Run this programme" }),
+    page.getByRole("heading", { name: "Programme setup", level: 2 }),
   ).toBeVisible();
   await expect(page.getByText("0 of 4 phases ready")).toBeVisible();
   for (const phase of [
@@ -324,13 +324,9 @@ test("task import previews disclose every lifecycle transition before confirmati
   ).toBeFocused();
   await acceptConfirm(page);
   await expect(
-    page
-      .getByRole("main")
-      .getByRole("status")
-      .filter({
-        hasText:
-          "This operation was cancelled before any external work began.",
-      }),
+    page.getByRole("main").getByRole("status").filter({
+      hasText: "This operation was cancelled before any external work began.",
+    }),
   ).toBeVisible();
 });
 

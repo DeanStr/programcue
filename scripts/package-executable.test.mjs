@@ -9,7 +9,7 @@ test("package executables resolve when dependencies are installed above a worktr
   for (const [packageName, executableName] of [
     ["wrangler", "wrangler"],
     ["tsx", "tsx"],
-    ["playwright", "playwright"],
+    ["@playwright/test", "playwright"],
   ]) {
     await access(
       resolvePackageExecutable(packageName, executableName),

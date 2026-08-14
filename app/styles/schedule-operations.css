@@ -211,7 +211,7 @@
   cursor: pointer;
 }
 .schedule-summary-jump:hover {
-  background: #fecaca;
+  background: var(--state-bad-border);
 }
 /* Title, message and action stacked. In a 280px rail a centred nowrap row
    gave each of the three about 85px and wrapped all of them to four lines. */

@@ -191,7 +191,7 @@ test.describe("mutable schedule authoring", () => {
       "Restore these draft-only production notes after reconnecting.";
     await waitForInterface(page, "/admin/schedule?session=demo-session-1");
     await page.getByRole("button", { name: "Create next draft" }).click();
-    await expect(page.getByText(/Version \d+ · draft/)).toBeVisible();
+    await expect(page.getByText(/Version \d+ · Draft/)).toBeVisible();
 
     const editor = page.getByTestId("session-content-editor");
     await expect(editor.getByLabel("Title")).toHaveValue(
@@ -213,7 +213,9 @@ test.describe("mutable schedule authoring", () => {
     await expect(preview.getByText(description, { exact: true })).toBeVisible();
     await preview.getByRole("button", { name: "Calendar" }).click();
     await preview
-      .getByText("Exact ICS generated from the last saved server revision")
+      .getByText("View the exact calendar file speakers will receive", {
+        exact: true,
+      })
       .click();
     await expect(preview.locator("pre")).toContainText(`SUMMARY:${title}`);
 
@@ -365,7 +367,7 @@ test.describe("mutable schedule authoring", () => {
 
     await waitForInterface(page, "/admin/schedule");
     await page.getByRole("button", { name: "Create next draft" }).click();
-    await expect(page.getByText(/Version \d+ · draft/)).toBeVisible();
+    await expect(page.getByText(/Version \d+ · Draft/)).toBeVisible();
     await page.getByText("Session required resources", { exact: true }).click();
     await page
       .getByRole("checkbox", { name: /livestream crew/i })
@@ -453,7 +455,7 @@ test.describe("mutable schedule authoring", () => {
 
     await waitForInterface(page, "/admin/schedule");
     await page.getByRole("button", { name: "Create next draft" }).click();
-    await expect(page.getByText(/Version \d+ · draft/)).toBeVisible();
+    await expect(page.getByText(/Version \d+ · Draft/)).toBeVisible();
 
     const autoPlace = page.getByRole("button", {
       name: "Auto-place unscheduled sessions",
@@ -500,7 +502,7 @@ test.describe("mutable schedule authoring", () => {
     expect(publicProgrammeBody).not.toContain(titles[1]);
 
     await waitForInterface(page, "/admin/schedule");
-    await expect(page.getByText(/Version \d+ · draft/)).toBeVisible();
+    await expect(page.getByText(/Version \d+ · Draft/)).toBeVisible();
     for (const title of titles) {
       await expect(
         page.locator(".schedule-entry-draggable").filter({
@@ -518,7 +520,7 @@ test("schedule contains its room grid and explains mobile scrolling", async ({
   await waitForInterface(page, "/admin/schedule");
 
   await expect(
-    page.getByText("Swipe horizontally to see every room"),
+    page.getByText("Scroll sideways to see every room"),
   ).toBeVisible();
   const roomGrid = page.getByRole("region", {
     name: /room schedule\. Scroll horizontally/i,

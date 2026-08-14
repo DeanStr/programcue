@@ -143,7 +143,7 @@
   grid-template-columns: 150px minmax(0, 1fr);
 }
 .conflict-box {
-  border: 1px solid #fecaca;
+  border: 1px solid var(--state-bad-border);
   background: #fff7f7;
   border-radius: var(--radius-sm);
   padding: var(--space-3);

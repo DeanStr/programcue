@@ -54,7 +54,7 @@ import {
 } from "~/platform/auth/authorize.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
 
 type DemoWalkthroughStep = {
   phase: ProgrammeWorkflowPhaseKey;
@@ -334,27 +334,20 @@ export async function action({ request, context }: Route.ActionArgs) {
       viewer.personId,
       form.get("confirmation"),
     );
-    const realtimeFailure = await recordRouteChange(env, viewer, {
+    /* A reset replaces the event-change timeline that the current Durable
+       Object cursor describes. Persist a fresh polling cursor, but do not
+       publish it through that stale channel: local Workerd can leave the
+       publish blocked behind a pre-reset socket forever. */
+    await new EventRealtimeService(env).commitChange(viewer, {
       entityType: "event",
       entityId: viewer.eventId,
       changeType: "updated",
     });
-    if (realtimeFailure) {
-      return data(
-        {
-          ok: false as const,
-          committed: true,
-          message: `The D1/R2 demo reset committed. ${realtimeFailure.message}`,
-          result,
-        },
-        { status: 207 },
-      );
-    }
     return data({
       ok: true as const,
       committed: true,
       message:
-        "The D1 event and private demo file prefix were restored to the judged baseline.",
+        "The D1 event and private demo file prefix were restored to the judged baseline. Refresh other open views before continuing.",
       result,
     });
   } catch (error) {

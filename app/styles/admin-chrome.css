@@ -8,20 +8,20 @@
 }
 .app-admin .event-switcher {
   background: var(--nav-2);
-  border-color: #263750;
+  border-color: var(--nav-border);
   color: var(--soft);
 }
 .app-admin .event-switcher small {
   color: #a9b8cc;
 }
 .app-admin .event-thumb {
-  background: #1b2b45;
-  border-color: #33455f;
-  color: #e2e8f0;
+  background: var(--nav-control);
+  border-color: var(--nav-control-border);
+  color: var(--nav-control-text);
 }
 .app-admin .command-trigger {
   background: var(--nav-2);
-  border-color: #263750;
+  border-color: var(--nav-border);
   color: #b8c5d8;
 }
 .app-admin .command-trigger kbd {
@@ -31,12 +31,12 @@
 }
 .app-admin .topbar .icon-btn {
   background: var(--nav-2);
-  border-color: #263750;
+  border-color: var(--nav-border);
   color: var(--soft);
 }
 .app-admin .topbar .avatar {
   background: var(--nav-2);
-  border: 1px solid #263750;
+  border: 1px solid var(--nav-border);
   color: var(--nav-text);
 }
 /* Cut out of the bar it sits on. A white ring was the only white object in the
