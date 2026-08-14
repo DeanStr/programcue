@@ -401,7 +401,13 @@ describe("Submissions D1 vertical slice", () => {
         organisationId: viewer.organisationId,
         eventId: viewer.eventId,
         demo: true,
+        evaluation: true,
       };
+      await testEnv.DB.prepare(
+        "UPDATE people SET email_verified = 0 WHERE id = ?",
+      )
+        .bind(applicant.personId)
+        .run();
 
       const reservedEmail = `reserved-after-acceptance-${crypto.randomUUID()}@example.com`;
       const reservedOperationId = `reserved-after-acceptance-${crypto.randomUUID()}`;
@@ -455,6 +461,21 @@ describe("Submissions D1 vertical slice", () => {
         commandCount: 0,
         communicationCount: 0,
       });
+
+      await expect(
+        service.inviteAcceptedCoSpeaker(
+          { ...participantViewer, evaluation: false },
+          {
+            submissionId,
+            revision: accepted!.revision,
+            name: "Unverified ordinary applicant co-speaker",
+            email: coSpeakerEmail,
+            roleLabel: "Co-author",
+            confirmed: true,
+          },
+          `unverified-speaker-${crypto.randomUUID()}`,
+        ),
+      ).rejects.toThrow(/verify your email before inviting/i);
 
       const result = await service.inviteAcceptedCoSpeaker(
         participantViewer,

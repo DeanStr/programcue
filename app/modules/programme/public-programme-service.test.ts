@@ -267,6 +267,25 @@ describe("published programme and itinerary", () => {
     );
   });
 
+  it("uses the matched route parameter for programme data revalidation", async () => {
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: env as unknown as CloudflareEnvironment,
+      ctx: {} as ExecutionContext,
+    });
+    const result = await publicProgrammePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2027/schedule.data?_routes=public-programme-surface",
+      ),
+      params: { slug: "future-of-events-2027", surface: "schedule" },
+      context,
+    } as never);
+    if (result instanceof Response) {
+      throw new Error("Programme revalidation returned a raw response.");
+    }
+    expect(result.data.surface).toBe("schedule");
+  });
+
   it("returns the public calendar 404 in the versioned API error envelope", async () => {
     const correlationId = "00000000-0000-4000-8000-000000000404";
     const context = new RouterContextProvider();

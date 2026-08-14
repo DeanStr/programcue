@@ -402,6 +402,75 @@ describe("speaker profile service", () => {
       profileStatus: before.profile.profileStatus,
       revision: before.profile.revision,
     });
+
+    const scoped = await service.updateAdminScopedSpeakerProfile(
+      admin,
+      speaker.personId,
+      {
+        profileRevision: before.profile.revision,
+        organisationProfileOperationId:
+          before.profile.organisationProfileOperationId,
+        travelProfileOperationId: before.profile.travelProfileOperationId,
+        name: "Priya for Future Events",
+        biography: "Organisation-owned biography for this event programme.",
+        organisationName: "Future Events Association",
+        jobTitle: "Guest programme speaker",
+        travelPreferences: "Vegetarian meals and step-free transport.",
+      },
+    );
+    expect(scoped.webhookWarning).toBeNull();
+    const afterScoped = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    expect(afterScoped).toMatchObject({
+      profileShared: true,
+      profileScoped: true,
+      profile: {
+        name: "Priya for Future Events",
+        biography: "Organisation-owned biography for this event programme.",
+        organisationName: "Future Events Association",
+        jobTitle: "Guest programme speaker",
+        travelPreferences: "Vegetarian meals and step-free transport.",
+        revision: before.profile.revision,
+      },
+    });
+    await expect(
+      service.updateAdminScopedSpeakerProfile(admin, speaker.personId, {
+        profileRevision: before.profile.revision,
+        organisationProfileOperationId:
+          before.profile.organisationProfileOperationId,
+        travelProfileOperationId: before.profile.travelProfileOperationId,
+        name: "Stale scoped overwrite",
+        biography: "This stale change must roll back.",
+        organisationName: "Stale organisation",
+        jobTitle: "Stale title",
+        travelPreferences: "Stale travel preferences",
+      }),
+    ).rejects.toBeInstanceOf(SpeakerProfileConflictError);
+    const afterStaleScoped = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    expect(afterStaleScoped.profile.name).toBe("Priya for Future Events");
+    expect(afterStaleScoped.profile.travelPreferences).toBe(
+      "Vegetarian meals and step-free transport.",
+    );
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT display_name AS name, biography, organisation_name AS organisationName,
+                job_title AS jobTitle, profile_revision AS revision
+           FROM people WHERE id = ?`,
+      )
+        .bind(speaker.personId)
+        .first(),
+    ).resolves.toEqual({
+      name: before.profile.name,
+      biography: before.profile.biography,
+      organisationName: before.profile.organisationName,
+      jobTitle: before.profile.jobTitle,
+      revision: before.profile.revision,
+    });
   });
 
   it("treats a roster workflow in another event as a shared profile association", async () => {
@@ -601,6 +670,18 @@ describe("speaker profile service", () => {
         jobTitle: "Network Role",
       }),
     ]);
+    const detail = await new SpeakerService(testEnv).getAdminSpeakerDetail(
+      admin,
+      personId,
+    );
+    expect(detail).toMatchObject({
+      profileScoped: true,
+      profile: {
+        name: "Network Display Name",
+        organisationName: "Network Company",
+        jobTitle: "Network Role",
+      },
+    });
   });
 
   it("queues the advertised speaker.updated event after the profile commit", async () => {

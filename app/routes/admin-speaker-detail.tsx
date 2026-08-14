@@ -62,6 +62,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const intent = form.get("_intent");
   if (
     intent !== "save_speaker_profile" &&
+    intent !== "save_speaker_scoped_profile" &&
     intent !== "confirm_external_participation"
   ) {
     return data(
@@ -95,22 +96,48 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           : `Participation for “${result.title}” was already confirmed.`,
       });
     }
-    const result = await new SpeakerService(env).updateAdminSpeakerProfile(
-      viewer,
-      params.personId,
-      {
-        revision: form.get("revision"),
-        name: form.get("name"),
-        biography: form.get("biography"),
-        pronunciation: form.get("pronunciation"),
-        organisationName: form.get("organisationName"),
-        jobTitle: form.get("jobTitle"),
-        linkedinUrl: form.get("linkedinUrl"),
-        xHandle: form.get("xHandle"),
-        travelPreferences: form.get("travelPreferences"),
-        profileStatus: form.get("profileStatus"),
-      },
-    );
+    const speakerService = new SpeakerService(env);
+    let result: { webhookWarning: string | null };
+    let successMessage: string;
+    if (intent === "save_speaker_scoped_profile") {
+      result = await speakerService.updateAdminScopedSpeakerProfile(
+        viewer,
+        params.personId,
+        {
+          profileRevision: form.get("profileRevision"),
+          organisationProfileOperationId: form.get(
+            "organisationProfileOperationId",
+          ),
+          travelProfileOperationId: form.get("travelProfileOperationId"),
+          name: form.get("name"),
+          biography: form.get("biography"),
+          organisationName: form.get("organisationName"),
+          jobTitle: form.get("jobTitle"),
+          travelPreferences: form.get("travelPreferences"),
+        },
+      );
+      successMessage =
+        "Organisation and event speaker details saved. The participant-owned public identity was unchanged.";
+    } else {
+      const canonicalResult = await speakerService.updateAdminSpeakerProfile(
+        viewer,
+        params.personId,
+        {
+          revision: form.get("revision"),
+          name: form.get("name"),
+          biography: form.get("biography"),
+          pronunciation: form.get("pronunciation"),
+          organisationName: form.get("organisationName"),
+          jobTitle: form.get("jobTitle"),
+          linkedinUrl: form.get("linkedinUrl"),
+          xHandle: form.get("xHandle"),
+          travelPreferences: form.get("travelPreferences"),
+          profileStatus: form.get("profileStatus"),
+        },
+      );
+      result = canonicalResult;
+      successMessage = `Profile saved. It is now ${statusPresentation("content", canonicalResult.profileStatus).label.toLowerCase()}.`;
+    }
     const realtimeFailure = await recordRouteChange(env, viewer, {
       entityType: "person",
       entityId: params.personId,
@@ -127,7 +154,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
     return data({
       ok: true,
-      message: `Profile saved. It is now ${statusPresentation("content", result.profileStatus).label.toLowerCase()}.`,
+      message: successMessage,
     });
   } catch (error) {
     if (error instanceof ZodError) {
@@ -170,7 +197,15 @@ export default function AdminSpeakerDetail({
   loaderData,
 }: Route.ComponentProps) {
   const { detail } = loaderData;
-  const { profile, profileShared, event, sessions, files, tasks } = detail;
+  const {
+    profile,
+    profileShared,
+    profileScoped,
+    event,
+    sessions,
+    files,
+    tasks,
+  } = detail;
   const headshot = files.find(
     (file) =>
       file.kind === "headshot" &&
@@ -248,9 +283,10 @@ export default function AdminSpeakerDetail({
           <div className="validation-item warn mb" role="status">
             <strong>Shared identity</strong>
             <span>
-              This person is linked to another event or an organisation-wide
-              role. They must update their shared profile from their own speaker
-              workspace so one organiser cannot change another event's records.
+              This person owns a canonical identity used outside this event.
+              Public identity, social links and publication status remain
+              participant-managed; organisation details and private event
+              logistics can be maintained below without changing other events.
             </span>
           </div>
         ) : null}
@@ -314,127 +350,214 @@ export default function AdminSpeakerDetail({
           }
           description="The image uploads straight from this browser to private storage. The current published image stays available until the replacement passes format and malware checks."
         />
-        <Form method="post" className="stack">
-          <input type="hidden" name="_intent" value="save_speaker_profile" />
-          <input type="hidden" name="revision" value={profile.revision} />
-          <fieldset
-            className="stack pc-plain-fieldset"
-            disabled={profileShared}
-          >
-            <label className="label">
-              Display name
-              <input
-                className="field"
-                name="name"
-                defaultValue={profile.name}
-                required
-                minLength={2}
-                maxLength={120}
-              />
-            </label>
-            <div className="form-row">
+        {profileScoped ? (
+          <Form method="post" className="stack">
+            <input
+              type="hidden"
+              name="_intent"
+              value="save_speaker_scoped_profile"
+            />
+            <input
+              type="hidden"
+              name="profileRevision"
+              value={profile.revision}
+            />
+            <input
+              type="hidden"
+              name="organisationProfileOperationId"
+              value={profile.organisationProfileOperationId}
+            />
+            <input
+              type="hidden"
+              name="travelProfileOperationId"
+              value={profile.travelProfileOperationId}
+            />
+            <fieldset className="stack pc-plain-fieldset">
+              <p className="help">
+                These values belong to {event.name} and its organisation. They
+                do not overwrite the participant-owned public identity.
+              </p>
               <label className="label">
-                Job title
+                Organisation display name
                 <input
                   className="field"
-                  name="jobTitle"
-                  defaultValue={profile.jobTitle ?? ""}
-                  maxLength={160}
+                  name="name"
+                  defaultValue={profile.name}
+                  required
+                  minLength={2}
+                  maxLength={120}
+                />
+              </label>
+              <div className="form-row">
+                <label className="label">
+                  Job title
+                  <input
+                    className="field"
+                    name="jobTitle"
+                    defaultValue={profile.jobTitle ?? ""}
+                    maxLength={160}
+                  />
+                </label>
+                <label className="label">
+                  Organisation
+                  <input
+                    className="field"
+                    name="organisationName"
+                    defaultValue={profile.organisationName ?? ""}
+                    maxLength={160}
+                  />
+                </label>
+              </div>
+              <label className="label">
+                Organisation biography
+                <textarea
+                  className="textarea"
+                  name="biography"
+                  defaultValue={profile.biography ?? ""}
+                  maxLength={5_000}
+                  rows={7}
                 />
               </label>
               <label className="label">
-                Organisation
+                Travel and logistics preferences
+                <textarea
+                  className="textarea"
+                  name="travelPreferences"
+                  defaultValue={profile.travelPreferences ?? ""}
+                  maxLength={2_000}
+                  rows={4}
+                  placeholder="Arrival timing, accessibility, ground transport, dietary or other event logistics preferences"
+                />
+                <span className="help">
+                  Private to the participant and authorised organisers; never
+                  shown on the public programme.
+                </span>
+              </label>
+              <button className="btn primary" type="submit" disabled={busy}>
+                {busy ? "Saving…" : "Save organisation and event details"}
+              </button>
+            </fieldset>
+          </Form>
+        ) : (
+          <Form method="post" className="stack">
+            <input type="hidden" name="_intent" value="save_speaker_profile" />
+            <input type="hidden" name="revision" value={profile.revision} />
+            <fieldset className="stack pc-plain-fieldset">
+              <label className="label">
+                Display name
                 <input
                   className="field"
-                  name="organisationName"
-                  defaultValue={profile.organisationName ?? ""}
-                  maxLength={160}
+                  name="name"
+                  defaultValue={profile.name}
+                  required
+                  minLength={2}
+                  maxLength={120}
                 />
               </label>
-            </div>
-            <div className="form-row">
+              <div className="form-row">
+                <label className="label">
+                  Job title
+                  <input
+                    className="field"
+                    name="jobTitle"
+                    defaultValue={profile.jobTitle ?? ""}
+                    maxLength={160}
+                  />
+                </label>
+                <label className="label">
+                  Organisation
+                  <input
+                    className="field"
+                    name="organisationName"
+                    defaultValue={profile.organisationName ?? ""}
+                    maxLength={160}
+                  />
+                </label>
+              </div>
+              <div className="form-row">
+                <label className="label">
+                  LinkedIn profile URL
+                  <input
+                    className="field"
+                    name="linkedinUrl"
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://www.linkedin.com/in/your-name"
+                    defaultValue={profile.linkedinUrl ?? ""}
+                    maxLength={500}
+                  />
+                </label>
+                <label className="label">
+                  X handle
+                  <input
+                    className="field"
+                    name="xHandle"
+                    placeholder="@your_handle"
+                    defaultValue={profile.xHandle ? `@${profile.xHandle}` : ""}
+                    maxLength={16}
+                  />
+                </label>
+              </div>
+              <div className="form-row">
+                <label className="label">
+                  Name pronunciation
+                  <input
+                    className="field"
+                    name="pronunciation"
+                    defaultValue={profile.pronunciation ?? ""}
+                    maxLength={160}
+                  />
+                </label>
+                <label className="label">
+                  Profile status
+                  <select
+                    className="select"
+                    name="profileStatus"
+                    defaultValue={profile.profileStatus}
+                  >
+                    <option value="draft">
+                      Draft — hidden from the programme
+                    </option>
+                    <option value="published">
+                      Published — visible in the public programme
+                    </option>
+                    <option value="archived">
+                      Archived — retained but not published
+                    </option>
+                  </select>
+                </label>
+              </div>
               <label className="label">
-                LinkedIn profile URL
-                <input
-                  className="field"
-                  name="linkedinUrl"
-                  type="url"
-                  inputMode="url"
-                  placeholder="https://www.linkedin.com/in/your-name"
-                  defaultValue={profile.linkedinUrl ?? ""}
-                  maxLength={500}
+                Biography
+                <textarea
+                  className="textarea"
+                  name="biography"
+                  defaultValue={profile.biography ?? ""}
+                  maxLength={5_000}
+                  rows={7}
                 />
               </label>
               <label className="label">
-                X handle
-                <input
-                  className="field"
-                  name="xHandle"
-                  placeholder="@your_handle"
-                  defaultValue={profile.xHandle ? `@${profile.xHandle}` : ""}
-                  maxLength={16}
+                Travel and logistics preferences
+                <textarea
+                  className="textarea"
+                  name="travelPreferences"
+                  defaultValue={profile.travelPreferences ?? ""}
+                  maxLength={2_000}
+                  rows={4}
+                  placeholder="Arrival timing, accessibility, ground transport, dietary or other event logistics preferences"
                 />
+                <span className="help">
+                  Private to the participant and authorised organisers; never
+                  shown on the public programme.
+                </span>
               </label>
-            </div>
-            <div className="form-row">
-              <label className="label">
-                Name pronunciation
-                <input
-                  className="field"
-                  name="pronunciation"
-                  defaultValue={profile.pronunciation ?? ""}
-                  maxLength={160}
-                />
-              </label>
-              <label className="label">
-                Profile status
-                <select
-                  className="select"
-                  name="profileStatus"
-                  defaultValue={profile.profileStatus}
-                >
-                  <option value="draft">
-                    Draft — hidden from the programme
-                  </option>
-                  <option value="published">
-                    Published — visible in the public programme
-                  </option>
-                  <option value="archived">
-                    Archived — retained but not published
-                  </option>
-                </select>
-              </label>
-            </div>
-            <label className="label">
-              Biography
-              <textarea
-                className="textarea"
-                name="biography"
-                defaultValue={profile.biography ?? ""}
-                maxLength={5_000}
-                rows={7}
-              />
-            </label>
-            <label className="label">
-              Travel and logistics preferences
-              <textarea
-                className="textarea"
-                name="travelPreferences"
-                defaultValue={profile.travelPreferences ?? ""}
-                maxLength={2_000}
-                rows={4}
-                placeholder="Arrival timing, accessibility, ground transport, dietary or other event logistics preferences"
-              />
-              <span className="help">
-                Private to the participant and authorised organisers; never
-                shown on the public programme.
-              </span>
-            </label>
-            <button className="btn primary" type="submit" disabled={busy}>
-              {busy ? "Saving…" : "Save profile"}
-            </button>
-          </fieldset>
-        </Form>
+              <button className="btn primary" type="submit" disabled={busy}>
+                {busy ? "Saving…" : "Save profile"}
+              </button>
+            </fieldset>
+          </Form>
+        )}
       </section>
       <section className="card pad mt" id="sessions">
         <div className="card-title">

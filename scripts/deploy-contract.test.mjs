@@ -45,7 +45,7 @@ async function discoverTestFiles(directory = repositoryRoot) {
         "\\",
         "/",
       );
-      return /(?:\.test\.(?:mjs|ts|tsx)|\.unit\.ts|\.spec\.ts)$/u.test(
+      return /(?:\.test\.(?:mjs|ts|tsx)|\.unit\.ts|\.lint\.ts|\.spec\.ts)$/u.test(
         repositoryPath,
       )
         ? [repositoryPath]

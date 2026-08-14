@@ -177,7 +177,7 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
         "This accepted application is unavailable to the current participant.",
       );
     }
-    if (!context.actorEmailVerified) {
+    if (!context.actorEmailVerified && viewer.evaluation !== true) {
       throw new SubmissionStateError(
         "Verify your email before inviting a co-speaker.",
       );

@@ -79,7 +79,9 @@ test("speaker profile, sessions and D1 task state render through the production 
     .getByLabel("Travel and logistics preferences")
     .fill("Arrival May 11, aisle seat; dietary: Vegetarian");
   await page.getByRole("button", { name: "Save profile" }).click();
-  await expect(page.getByRole("status")).toContainText("Your profile was saved");
+  await expect(page.getByRole("status")).toContainText(
+    "Your profile was saved",
+  );
   await page.reload();
   await expect(page.getByLabel("Job title")).toHaveValue(/Director/);
   await expect(page.getByLabel("LinkedIn profile URL")).toHaveValue(
@@ -94,7 +96,9 @@ test("speaker profile, sessions and D1 task state render through the production 
   await page.getByLabel("X handle").fill("");
   await page.getByLabel("Travel and logistics preferences").fill("");
   await page.getByRole("button", { name: "Save profile" }).click();
-  await expect(page.getByRole("status")).toContainText("Your profile was saved");
+  await expect(page.getByRole("status")).toContainText(
+    "Your profile was saved",
+  );
 });
 
 test("a submitter enters the same participant workspace and can open applications", async ({
@@ -156,17 +160,7 @@ async function useDemoEvent(page: Page) {
   ]);
 }
 
-/**
- * Adds a speaker who exists in this event and nowhere else, and returns their
- * detail path.
- *
- * Editing is refused for an identity shared with another event, which is why
- * the seeded demo speaker cannot be used here: `event-context.spec.ts` adds
- * Priya Shah to a second event, and no product action removes a person from a
- * roster once added, so that association is permanent for the rest of the run.
- * A speaker created here has exactly one event association by construction, so
- * this test no longer depends on which specs ran before it.
- */
+/** Adds an organisation-owned speaker record and opens its event detail. */
 async function addEventOwnedSpeaker(page: Page, name: string, email: string) {
   await page.goto("/admin/speakers");
   await page.locator("body[data-hydrated='true']").waitFor();
@@ -184,7 +178,9 @@ async function addEventOwnedSpeaker(page: Page, name: string, email: string) {
   );
   if (await duplicateConfirmation.isVisible().catch(() => false)) {
     await duplicateConfirmation.check();
-    await addSpeaker.getByRole("button", { name: "Add speaker record" }).click();
+    await addSpeaker
+      .getByRole("button", { name: "Add speaker record" })
+      .click();
   }
   const row = page.getByRole("row").filter({
     has: page.getByRole("link", { name, exact: true }),
@@ -227,7 +223,7 @@ test("organiser speaker detail shows the event-scoped record for a seeded speake
   );
 });
 
-test("organiser speaker detail edits the profile and keeps a durable save confirmation", async ({
+test("organiser speaker detail edits organisation and event fields without rewriting the canonical identity", async ({
   page,
 }) => {
   await useDemoEvent(page);
@@ -237,51 +233,67 @@ test("organiser speaker detail edits the profile and keeps a durable save confir
   const detailPath = new URL(page.url()).pathname;
 
   const notice = page.locator(".pc-status-notice");
+  await page
+    .getByLabel("Organisation display name")
+    .fill(`${name} · Program team`);
   await page.getByLabel("Job title").fill("Head of Experience Design");
   await page
-    .getByLabel("LinkedIn profile URL")
-    .fill("https://www.linkedin.com/in/rowan-ellis");
-  await page.getByLabel("X handle").fill("@rowan_ellis");
+    .getByLabel("Organisation", { exact: true })
+    .fill("Program Cue Events");
+  await page
+    .getByLabel("Organisation biography")
+    .fill("Organisation-owned speaker notes for this event.");
   await page
     .getByLabel("Travel and logistics preferences")
     .fill("Arrival May 11, aisle seat; dietary: Vegetarian");
-  await page.getByLabel("Profile status").selectOption("published");
-  await page.getByRole("button", { name: "Save profile" }).click();
-  await expect(notice).toContainText("Profile saved.");
+  await page
+    .getByRole("button", { name: "Save organisation and event details" })
+    .click();
+  await expect(notice).toContainText(
+    "Organisation and event speaker details saved",
+  );
 
   // The durable confirmation is server state, so it survives a reload while the
   // transient action notice does not.
   await page.reload();
+  await expect(page.getByLabel("Organisation display name")).toHaveValue(
+    `${name} · Program team`,
+  );
   await expect(page.getByLabel("Job title")).toHaveValue(
     "Head of Experience Design",
   );
-  await expect(page.getByLabel("LinkedIn profile URL")).toHaveValue(
-    "https://www.linkedin.com/in/rowan-ellis",
+  await expect(page.getByLabel("Organisation", { exact: true })).toHaveValue(
+    "Program Cue Events",
   );
-  await expect(page.getByLabel("X handle")).toHaveValue("@rowan_ellis");
+  await expect(page.getByLabel("Organisation biography")).toHaveValue(
+    "Organisation-owned speaker notes for this event.",
+  );
   await expect(page.getByLabel("Travel and logistics preferences")).toHaveValue(
     "Arrival May 11, aisle seat; dietary: Vegetarian",
   );
-  await expect(page.getByText(/Last saved .* · revision \d+/)).toBeVisible();
   await expect(notice).toHaveCount(0);
 
   // A second organiser holding the previous revision is refused rather than
   // silently overwriting the saved profile.
   const stalePage = await page.context().newPage();
   await stalePage.goto(detailPath);
-  await page.getByLabel("Name pronunciation").fill("ROH-an ELL-iss");
-  await page.getByRole("button", { name: "Save profile" }).click();
-  await expect(notice).toContainText("Profile saved.");
+  await page.getByLabel("Job title").fill("Experience Director");
+  await page
+    .getByRole("button", { name: "Save organisation and event details" })
+    .click();
+  await expect(notice).toContainText(
+    "Organisation and event speaker details saved",
+  );
   await stalePage.getByLabel("Job title").fill("Stale Organiser Title");
-  await stalePage.getByRole("button", { name: "Save profile" }).click();
+  await stalePage
+    .getByRole("button", { name: "Save organisation and event details" })
+    .click();
   await expect(stalePage.getByRole("alert")).toContainText(
     "changed after the page loaded",
   );
   await stalePage.close();
   await page.reload();
-  await expect(page.getByLabel("Job title")).toHaveValue(
-    "Head of Experience Design",
-  );
+  await expect(page.getByLabel("Job title")).toHaveValue("Experience Director");
 });
 
 test("administrator speaker filters use the event-scoped server list", async ({

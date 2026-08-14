@@ -30,8 +30,7 @@ export class SpeakerService {
     env: CloudflareEnvironment,
     dependencies: { airtable?: AirtableProviderBoundary } = {},
   ) {
-    const airtable =
-      dependencies.airtable ?? new AirtableProviderBoundary(env);
+    const airtable = dependencies.airtable ?? new AirtableProviderBoundary(env);
     this.participation = new SpeakerParticipationService(env, airtable);
     this.administration = new SpeakerAdministrationService(env, { airtable });
   }
@@ -78,6 +77,18 @@ export class SpeakerService {
     rawInput: unknown,
   ) {
     return this.administration.updateAdminSpeakerProfile(
+      viewer,
+      personId,
+      rawInput,
+    );
+  }
+
+  updateAdminScopedSpeakerProfile(
+    viewer: Viewer,
+    personId: string,
+    rawInput: unknown,
+  ) {
+    return this.administration.updateAdminScopedSpeakerProfile(
       viewer,
       personId,
       rawInput,

@@ -76,13 +76,6 @@ export async function action({ request, context }: Route.ActionArgs) {
       });
       return data({ ok: true as const, preview });
     }
-    if (intent === "download-zip") {
-      return service.downloadZip(viewer, {
-        manifest: form.get("manifest"),
-        groupBy: form.get("groupBy"),
-        confirmed: form.get("confirmed"),
-      });
-    }
     return data(
       { ok: false as const, message: "Unsupported content-library action." },
       { status: 400 },
@@ -541,7 +534,12 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
               </li>
             ))}
           </ul>
-          <Form method="post" className="stack mt" reloadDocument>
+          <Form
+            method="post"
+            action="/admin/content/export.zip"
+            className="stack mt"
+            reloadDocument
+          >
             <input type="hidden" name="intent" value="download-zip" />
             <input
               type="hidden"

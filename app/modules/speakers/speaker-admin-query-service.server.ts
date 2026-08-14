@@ -30,33 +30,50 @@ export class SpeakerAdminQueryService {
       throw new Response("Speaker not found in this event.", { status: 404 });
     const profile = await this.env.DB.prepare(
       `
-      SELECT person.id, person.email, person.display_name AS name,
-             person.biography, person.pronunciation,
-             person.organisation_name AS organisationName,
-             person.job_title AS jobTitle,
+      SELECT person.id, person.email,
+             COALESCE(contact_profile.display_name, person.display_name) AS name,
+             COALESCE(contact_profile.biography, person.biography) AS biography,
+             person.pronunciation,
+             COALESCE(contact_profile.organisation_name, person.organisation_name) AS organisationName,
+             COALESCE(contact_profile.job_title, person.job_title) AS jobTitle,
              person.linkedin_url AS linkedinUrl,
              person.x_handle AS xHandle,
-             (SELECT event_profile.travel_preferences
-                FROM event_participant_profiles event_profile
-               WHERE event_profile.event_id = ?
-                 AND event_profile.organisation_id = ?
-                 AND event_profile.person_id = person.id
-             ) AS travelPreferences,
+             event_profile.travel_preferences AS travelPreferences,
+             contact_profile.person_id IS NOT NULL AS hasOrganisationProfile,
+             COALESCE(contact_profile.last_operation_id, '') AS organisationProfileOperationId,
+             COALESCE(event_profile.last_operation_id, '') AS travelProfileOperationId,
              person.profile_status AS profileStatus,
              person.profile_revision AS revision,
              person.updated_at AS updatedAt
         FROM people person
+        LEFT JOIN organisation_contacts contact
+          ON contact.organisation_id = ? AND contact.person_id = person.id
+        LEFT JOIN organisation_contact_profiles contact_profile
+          ON contact_profile.organisation_id = contact.organisation_id
+         AND contact_profile.person_id = contact.person_id
+        LEFT JOIN event_participant_profiles event_profile
+          ON event_profile.event_id = ?
+         AND event_profile.organisation_id = ?
+         AND event_profile.person_id = person.id
        WHERE person.id = ? AND ${adminSpeakerScopeSql()}
     `,
     )
       .bind(
+        viewer.organisationId,
         viewer.eventId,
         viewer.organisationId,
         personId,
         viewer.eventId,
         viewer.organisationId,
       )
-      .first<ProfileRow & { updatedAt: number }>();
+      .first<
+        ProfileRow & {
+          updatedAt: number;
+          hasOrganisationProfile: number;
+          organisationProfileOperationId: string;
+          travelProfileOperationId: string;
+        }
+      >();
     if (!profile)
       throw new Response("Speaker not found in this event.", { status: 404 });
     const [event, sessions, files, tasks, profileShared] = await Promise.all([
@@ -182,6 +199,7 @@ export class SpeakerAdminQueryService {
     return {
       profile,
       profileShared,
+      profileScoped: profileShared || Boolean(profile.hasOrganisationProfile),
       event: {
         name: event.name,
         timezone: event.timezone,

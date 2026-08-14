@@ -44,22 +44,9 @@ function isEvaluationFixtureEvent(env: CloudflareEnvironment, eventId: string) {
   );
 }
 
-function surfaceFromRequest(request: Request): PublicProgrammeSurface {
-  const segments = new URL(request.url).pathname
-    .split("/")
-    .filter(Boolean)
-    .map((segment) => {
-      try {
-        return decodeURIComponent(segment);
-      } catch {
-        return segment;
-      }
-    });
-  const publicIndex = segments.indexOf("public");
-  const candidate =
-    publicIndex >= 0 && segments[publicIndex + 1] === "programme"
-      ? segments[publicIndex + 3]
-      : undefined;
+function surfaceFromParam(
+  candidate: string | undefined,
+): PublicProgrammeSurface {
   if (!candidate) return "overview";
   if (
     !PUBLIC_PROGRAMME_SURFACES.includes(
@@ -124,7 +111,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!programme)
     throw new Response("Published event programme not found", { status: 404 });
   const embedded = new URL(request.url).pathname.startsWith("/embed/");
-  const surface = embedded ? "overview" : surfaceFromRequest(request);
+  const surface = embedded ? "overview" : surfaceFromParam(params.surface);
   const url = new URL(request.url);
   let embedOptions;
   try {

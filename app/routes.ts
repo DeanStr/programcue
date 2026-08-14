@@ -165,6 +165,7 @@ export default [
     route("admin/tasks", "routes/admin-tasks.tsx"),
     route("admin/tasks/bulk", "routes/admin-task-bulk.tsx"),
     route("admin/content", "routes/admin-content.tsx"),
+    route("admin/content/export.zip", "routes/admin-content-zip.ts"),
     route(
       "admin/content/sessions/:sessionId",
       "routes/admin-content-session.tsx",
