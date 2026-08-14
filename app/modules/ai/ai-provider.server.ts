@@ -169,6 +169,7 @@ function normalizeAnthropicMessage(
   return aiProviderResponseSchema.parse({
     id: message.id,
     model: message.model,
+    status: "completed",
     output: [
       ...(text
         ? [

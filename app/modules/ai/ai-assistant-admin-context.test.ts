@@ -73,6 +73,7 @@ function toolResponse(
   return providerJson({
     id,
     model: providerConfiguration.model,
+    status: "completed",
     output: [
       {
         type: "reasoning",
@@ -94,6 +95,7 @@ function textResponse(text: string, id = crypto.randomUUID()) {
   return providerJson({
     id,
     model: providerConfiguration.model,
+    status: "completed",
     output: [
       {
         type: "message",

@@ -53,11 +53,16 @@ Owners and administrators may record a revision-checked human override, but
 the override is stored and audited separately so the original model output,
 provider, model and response identity remain visible. Invalid structured model
 output, missing provider configuration and round/rubric drift fail without a
-default or simulated score. A failed provider attempt is never retried
-automatically. An administrator may explicitly create one new attempt for the
-same current target only after acknowledging that an indeterminate provider
-outcome may produce a duplicate request or charge; the failed operation and its
-provider evidence remain immutable and the new operation links back to it.
+default or simulated score. Responses-compatible providers must return a
+`completed` response; `incomplete`, failed or still-running statuses are rejected
+before output parsing and retain the provider request identity and reason. The
+generated rationale is bounded to 2,000 characters and receives a 4,000-token
+response budget because GPT-OSS reasoning and final output share that budget.
+A failed provider attempt is never retried automatically. An administrator may
+explicitly create one new attempt for the same current target only after
+acknowledging that an indeterminate provider outcome may produce a duplicate
+request or charge; the failed operation and its provider evidence remain
+immutable and the new operation links back to it.
 The evaluation UI resolves the leaf of that complete durable attempt chain, so
 a running retry suppresses its failed parent and links to the exact operation;
 the current navigation supplies an honest starting state before loader

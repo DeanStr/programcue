@@ -75,7 +75,7 @@ const overrideInputSchema = z
 const generatedAssessmentSchema = z
   .object({
     score: z.number().finite().min(1).max(5),
-    rationale: z.string().trim().min(40).max(6_000),
+    rationale: z.string().trim().min(40).max(2_000),
   })
   .strict();
 
@@ -95,7 +95,7 @@ const generatedAssessmentTextFormat = {
       rationale: {
         type: "string",
         minLength: 40,
-        maxLength: 6000,
+        maxLength: 2000,
         description:
           "Submission-specific reasoning grounded in the supplied abstract and rubric.",
       },
@@ -1065,7 +1065,7 @@ Return exactly one overall score from 1 to 5 (decimals are allowed) and a substa
         safetyIdentifier: `pc_${await sha256(
           `${viewer.organisationId}:${viewer.personId}`,
         )}`,
-        maxOutputTokens: 1_200,
+        maxOutputTokens: 4_000,
         textFormat: generatedAssessmentTextFormat,
       });
       if (openAiFunctionCalls(response).length) {

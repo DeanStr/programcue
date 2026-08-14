@@ -19,6 +19,19 @@ export const aiProviderResponseSchema = z
   .object({
     id: z.string().min(1).max(200),
     model: z.string().min(1).max(200).optional(),
+    status: z.enum([
+      "completed",
+      "failed",
+      "in_progress",
+      "cancelled",
+      "queued",
+      "incomplete",
+    ]),
+    incomplete_details: z
+      .object({ reason: z.string().trim().min(1).max(200) })
+      .passthrough()
+      .nullable()
+      .optional(),
     output: z.array(z.unknown()).max(100),
     output_text: z.string().max(512_000).optional(),
   })
@@ -90,9 +103,7 @@ export class AiConfigurationError extends Error {
 }
 
 export type AiProviderFailureKind =
-  | "transient"
-  | "request-rejected"
-  | "invalid-response";
+  "transient" | "request-rejected" | "invalid-response";
 
 type AiProviderErrorOptions = ErrorOptions & {
   failureKind?: AiProviderFailureKind;
@@ -137,6 +148,23 @@ export function normalizeAiProviderRequestId(value: string | null) {
   return trimmed && trimmed.length <= AI_PROVIDER_REQUEST_ID_MAX_LENGTH
     ? trimmed
     : null;
+}
+
+export function requireCompletedResponsesApiResult(
+  response: OpenAiResponse,
+  providerName: AiProviderLabel,
+  httpStatus: number | null,
+  providerRequestId: string | null,
+) {
+  if (response.status === "completed") return response;
+  const reason =
+    response.incomplete_details?.reason ?? safeProviderMessage(response);
+  const detail = reason ? ` (${reason})` : "";
+  throw new AiProviderError(
+    `${providerName} response status was ${response.status}${detail}; no result was accepted.`,
+    httpStatus,
+    providerRequestId ?? response.id,
+  );
 }
 
 const streamEventSchema = z
@@ -254,7 +282,12 @@ export async function readResponsesApiStream(
       providerRequestId,
     );
   }
-  return parsed.data;
+  return requireCompletedResponsesApiResult(
+    parsed.data,
+    providerName,
+    response.status,
+    providerRequestId,
+  );
 }
 
 export class OpenAiResponsesProvider {
@@ -377,7 +410,12 @@ export class OpenAiResponsesProvider {
         providerRequestId,
       );
     }
-    return parsed.data;
+    return requireCompletedResponsesApiResult(
+      parsed.data,
+      this.providerName,
+      response.status,
+      providerRequestId,
+    );
   }
 }
 

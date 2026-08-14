@@ -251,17 +251,24 @@ omit participant identity, identifying references and attachments server-side.
 One immutable provider-attributed AI first-pass score/rationale may be generated
 for an exact round, rubric and submitted snapshot; a human override is stored
 and audited separately, and missing/invalid provider behavior fails without a
-simulated score. A failed generation remains durable and is never retried
-automatically; an explicit acknowledged retry creates a separately idempotent,
-linked attempt and prevents another concurrent attempt for the same target.
+simulated score. Responses providers now reject explicit non-completed statuses
+before parsing output, and the bounded rationale has a response budget that
+allows for GPT-OSS reasoning tokens. A failed generation remains durable and is
+never retried automatically; an explicit acknowledged retry creates a separately
+idempotent, linked attempt and prevents another concurrent attempt for the same
+target.
 Focused Worker coverage exercises review advancement,
 archived-cycle decisions, late co-speaker claim/profile/session/task propagation
 and AI persistence/idempotency. The ABS-S2/S3 Chromium workflow exercises cycle
 creation, round/rubric edit and deletion, reviewer pools/progress/reminder
 draft preparation, result sorting/export, server-side blinding, an explicit
-decision override and confirmed co-speaker invitation. Real Workers AI
-generation and the invited person's claim remain provider/persona acceptance
-rather than local-browser evidence.
+decision override and confirmed co-speaker invitation. On 14 August 2026, a
+synthetic live Workers AI probe against the selected
+`@cf/openai/gpt-oss-120b` contract returned `incomplete` with
+`max_output_tokens` under an intentionally tiny budget and returned completed,
+schema-valid assessment JSON under the corrected 4,000-token budget. The
+application-path correction is not deployed evidence; a real assessment retry
+and the invited person's claim remain provider/persona acceptance.
 
 ### Deterministic auto-placement evidence
 
