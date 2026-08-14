@@ -2,6 +2,19 @@
 
 This file records durable decisions. It does not imply that every decided capability is implemented; verified delivery status lives in `IMPLEMENTATION_STATUS.md`.
 
+## Modular monolith ownership boundaries
+
+The public service and route entrypoints remain stable facades, but their
+implementation is owned by focused collaborators: domain schema modules feed
+one canonical Drizzle barrel; Airtable table specifications are grouped by the
+same product domains; route modules delegate substantial server dispatch and
+read-model projection; and provider/state-machine services separate read
+models, durable recovery, archive/download, or published-asset work when those
+concerns have independent invariants. These are direct modules, not a plugin or
+generic handler framework. Domain authorization remains at the server service
+boundary, and extracted collaborators continue to receive the exact authorised
+viewer and organisation/event scope rather than reconstructing authority.
+
 ## Identity creation and access
 
 Email magic links, Google and Microsoft may create an authenticated Program Cue

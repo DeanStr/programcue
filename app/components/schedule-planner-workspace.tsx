@@ -13,10 +13,6 @@ import { Form, Link, useFetcher, useNavigation } from "react-router";
 
 import { Dialog } from "~/components/dialog";
 import { ScheduleContentWorkflows } from "~/components/schedule-content-workflows";
-import type {
-  AutoPlacementPreview,
-  AutoPlacementUnplaced,
-} from "~/modules/schedule/schedule-auto-placement";
 import type { ScheduleWorkspace } from "~/modules/schedule/schedule-service.server";
 import {
   eventBoundaryCalendarDate,
@@ -28,230 +24,25 @@ import {
 } from "~/modules/schedule/schedule-time";
 import type { action } from "~/routes/schedule-planner.server";
 import { ScheduleCanvasPanel } from "./schedule-planner-canvas-panel";
+import type { SchedulePlannerWorkspaceData } from "./schedule-planner-panel-types";
 import { ScheduleSourcePanel } from "./schedule-planner-source-panel";
 import { ScheduleValidationPanel } from "./schedule-planner-validation-panel";
-import type { SchedulePlannerWorkspaceData } from "./schedule-planner-panel-types";
+import { useScheduleAutoPlacement } from "./use-schedule-auto-placement";
+import { useScheduleUndoAvailability } from "./use-schedule-undo-availability";
 
-function localHour(epoch: number, timezone: string) {
-  const hour = new Intl.DateTimeFormat("en", {
-    hour: "numeric",
-    hourCycle: "h23",
-    timeZone: timezone,
-  })
-    .formatToParts(new Date(epoch * 1_000))
-    .find((part) => part.type === "hour")?.value;
-  if (hour === undefined) throw new Error("Could not format schedule hour.");
-  return Number(hour);
-}
+export {
+  parseScheduleActionNotices,
+  SCHEDULE_ACTION_INVALID_RESPONSE_MESSAGE,
+} from "./schedule-planner-workspace-helpers";
 
-function scheduleDateTimeLabel(epoch: number, timezone: string) {
-  return new Intl.DateTimeFormat("en", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: timezone,
-  }).format(new Date(epoch * 1_000));
-}
-
-type AutoPlacementResultNotice = {
-  appliedCount: number;
-  unplacedCount: number;
-  unplaced: AutoPlacementUnplaced[];
-  warning: string | null;
-};
-
-type ScheduleActionConflictNotice = {
-  type: string;
-  severity: "warning" | "blocking";
-  message: string;
-};
-
-export const SCHEDULE_ACTION_INVALID_RESPONSE_MESSAGE =
-  "The schedule action returned an invalid response. Refresh and try again.";
-
-type ScheduleActionNotices = {
-  conflicts: ScheduleActionConflictNotice[];
-  warnings: ScheduleActionConflictNotice[];
-  error: string | null;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isPositiveSafeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
-}
-
-function isNonNegativeSafeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-function isScheduleActionConflictNotice(
-  value: unknown,
-): value is ScheduleActionConflictNotice {
-  return (
-    isRecord(value) &&
-    typeof value.type === "string" &&
-    value.type.length > 0 &&
-    (value.severity === "warning" || value.severity === "blocking") &&
-    typeof value.message === "string" &&
-    value.message.length > 0 &&
-    (value.conflictingEntryId === undefined ||
-      typeof value.conflictingEntryId === "string")
-  );
-}
-
-export function parseScheduleActionNotices(
-  result: unknown,
-): ScheduleActionNotices {
-  const empty = { conflicts: [], warnings: [] };
-  if (result === undefined) return { ...empty, error: null };
-  if (!isRecord(result)) {
-    return { ...empty, error: SCHEDULE_ACTION_INVALID_RESPONSE_MESSAGE };
-  }
-  const conflicts =
-    "conflicts" in result && Array.isArray(result.conflicts)
-      ? result.conflicts
-      : "conflicts" in result
-        ? null
-        : [];
-  const warnings =
-    "warnings" in result && Array.isArray(result.warnings)
-      ? result.warnings
-      : "warnings" in result
-        ? null
-        : [];
-  if (
-    !conflicts ||
-    !warnings ||
-    !conflicts.every(isScheduleActionConflictNotice) ||
-    !warnings.every(
-      (warning) =>
-        isScheduleActionConflictNotice(warning) &&
-        warning.severity === "warning",
-    )
-  ) {
-    return { ...empty, error: SCHEDULE_ACTION_INVALID_RESPONSE_MESSAGE };
-  }
-  return { conflicts, warnings, error: null };
-}
-
-function conflictTypeLabel(type: string) {
-  return type.replaceAll("_", " ");
-}
-
-function isAutoPlacementUnplaced(
-  value: unknown,
-): value is AutoPlacementUnplaced {
-  return (
-    isRecord(value) &&
-    typeof value.sessionId === "string" &&
-    value.sessionId.length > 0 &&
-    typeof value.reason === "string" &&
-    value.reason.length > 0
-  );
-}
-
-function isAutoPlacementPreview(value: unknown): value is AutoPlacementPreview {
-  if (!isRecord(value)) return false;
-  if (
-    typeof value.idempotencyKey !== "string" ||
-    typeof value.scheduleVersionId !== "string" ||
-    !isPositiveSafeInteger(value.scheduleRevision) ||
-    !isPositiveSafeInteger(value.eventRevision) ||
-    !isPositiveSafeInteger(value.policyRevision) ||
-    !Array.isArray(value.sessionRevisions) ||
-    !Array.isArray(value.placements) ||
-    !Array.isArray(value.unplaced)
-  ) {
-    return false;
-  }
-  if (
-    !value.sessionRevisions.every(
-      (revision) =>
-        isRecord(revision) &&
-        typeof revision.sessionId === "string" &&
-        revision.sessionId.length > 0 &&
-        isPositiveSafeInteger(revision.revision),
-    )
-  ) {
-    return false;
-  }
-  if (!value.unplaced.every(isAutoPlacementUnplaced)) return false;
-  return value.placements.every((placement) => {
-    if (!isRecord(placement)) return false;
-    if (
-      typeof placement.sessionId !== "string" ||
-      placement.sessionId.length === 0 ||
-      typeof placement.roomId !== "string" ||
-      placement.roomId.length === 0 ||
-      !isPositiveSafeInteger(placement.startsAt) ||
-      !isPositiveSafeInteger(placement.endsAt) ||
-      placement.endsAt <= placement.startsAt ||
-      !Array.isArray(placement.warnings)
-    ) {
-      return false;
-    }
-    return placement.warnings.every(
-      (warning) =>
-        isRecord(warning) &&
-        typeof warning.type === "string" &&
-        (warning.severity === "warning" || warning.severity === "blocking") &&
-        typeof warning.message === "string" &&
-        (warning.conflictingEntryId === undefined ||
-          typeof warning.conflictingEntryId === "string"),
-    );
-  });
-}
-
-type AutoPlacementConfirmation = {
-  committed: true;
-  appliedCount: number;
-  scheduleRevision: number;
-  unplacedCount: number;
-  warning: string | null;
-};
-
-function isAutoPlacementConfirmation(
-  value: unknown,
-): value is AutoPlacementConfirmation {
-  return (
-    isRecord(value) &&
-    value.committed === true &&
-    isNonNegativeSafeInteger(value.appliedCount) &&
-    isPositiveSafeInteger(value.scheduleRevision) &&
-    isNonNegativeSafeInteger(value.unplacedCount) &&
-    (value.warning === null ||
-      (typeof value.warning === "string" && value.warning.length > 0))
-  );
-}
-
-function autoPlacementResponseError(result: Record<string, unknown>) {
-  return typeof result.error === "string" && result.error.length > 0
-    ? result.error
-    : "Auto-place returned an invalid response. Refresh and try again.";
-}
-
-function serializeAutoPlacementPreview(preview: AutoPlacementPreview) {
-  const payload = JSON.stringify({
-    ...preview,
-    placements: preview.placements.map(
-      ({ sessionId, roomId, startsAt, endsAt }) => ({
-        sessionId,
-        roomId,
-        startsAt,
-        endsAt,
-      }),
-    ),
-  });
-  if (payload === undefined) {
-    throw new Error("The auto-place preview could not be serialized.");
-  }
-  return payload;
-}
+import {
+  conflictTypeLabel,
+  isRecord,
+  localHour,
+  parseScheduleActionNotices,
+  scheduleDateTimeLabel,
+  serializeAutoPlacementPreview,
+} from "./schedule-planner-workspace-helpers";
 
 export function SchedulePlannerWorkspace({
   workspace,
@@ -276,12 +67,6 @@ export function SchedulePlannerWorkspace({
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(
     null,
   );
-  const [autoPreview, setAutoPreview] = useState<AutoPlacementPreview | null>(
-    null,
-  );
-  const [autoResult, setAutoResult] =
-    useState<AutoPlacementResultNotice | null>(null);
-  const [autoError, setAutoError] = useState<string | null>(null);
   const eventDays = useMemo(
     () =>
       eventCalendarDayBoundaries(
@@ -357,9 +142,7 @@ export function SchedulePlannerWorkspace({
     () =>
       workspace.entries.flatMap((entry) => {
         const session = sessionById.get(entry.sessionId);
-        return session && session.contentStatus !== "approved"
-          ? [session]
-          : [];
+        return session && session.contentStatus !== "approved" ? [session] : [];
       }),
     [sessionById, workspace.entries],
   );
@@ -432,50 +215,14 @@ export function SchedulePlannerWorkspace({
   const defaultQuickRoomId = workspace.rooms[0]?.id ?? "";
 
   const autoActionResult = autoPlacementFetcher.data;
-  useEffect(() => {
-    if (autoActionResult === undefined) return;
-    if (!isRecord(autoActionResult)) {
-      setAutoPreview(null);
-      setAutoResult(null);
-      setAutoError(
-        "Auto-place returned an invalid response. Refresh and try again.",
-      );
-      return;
-    }
-    const result = autoActionResult as unknown as Record<string, unknown>;
-    if (result.intent === "auto-place-preview") {
-      if (isAutoPlacementPreview(result.autoPreview)) {
-        setAutoPreview(result.autoPreview);
-        setAutoResult(null);
-        setAutoError(null);
-      } else {
-        setAutoPreview(null);
-        setAutoResult(null);
-        setAutoError(autoPlacementResponseError(result));
-      }
-      return;
-    }
-    if (result.intent === "auto-place-confirm") {
-      if (isAutoPlacementConfirmation(result)) {
-        setAutoResult({
-          appliedCount: result.appliedCount,
-          unplacedCount: result.unplacedCount,
-          unplaced: autoPreview?.unplaced ?? [],
-          warning: result.warning,
-        });
-        setAutoPreview(null);
-        setAutoError(null);
-        return;
-      }
-      setAutoPreview(null);
-      setAutoResult(null);
-      setAutoError(autoPlacementResponseError(result));
-      return;
-    }
-    setAutoPreview(null);
-    setAutoResult(null);
-    setAutoError(autoPlacementResponseError(result));
-  }, [autoActionResult]);
+  const {
+    preview: autoPreview,
+    outcome: autoResult,
+    error: autoError,
+    clearError: clearAutoError,
+    clearFeedback: clearAutoFeedback,
+    dismissPreview: dismissAutoPreview,
+  } = useScheduleAutoPlacement(autoActionResult);
 
   useEffect(() => {
     if (workspace.focusedSessionId) {
@@ -738,19 +485,7 @@ export function SchedulePlannerWorkspace({
           scheduleRevision: actionResult.scheduleRevision,
         }
       : null;
-  const [undoClock, setUndoClock] = useState(() =>
-    Math.floor(Date.now() / 1_000),
-  );
-  useEffect(() => {
-    if (!undo) return;
-    const delay = Math.max(0, undo.expiresAt * 1_000 - Date.now());
-    const timeout = window.setTimeout(
-      () => setUndoClock(Math.floor(Date.now() / 1_000)),
-      delay + 50,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [undo?.expiresAt, undo?.token]);
-  const undoAvailable = undo && undo.expiresAt > undoClock ? undo : null;
+  const undoAvailable = useScheduleUndoAvailability(undo);
   const autoPlacementPayload = autoPreview
     ? serializeAutoPlacementPreview(autoPreview)
     : undefined;
@@ -780,8 +515,7 @@ export function SchedulePlannerWorkspace({
                     : undefined
             }
             onClick={() => {
-              setAutoError(null);
-              setAutoResult(null);
+              clearAutoFeedback();
               autoPlacementFetcher.submit(
                 { intent: "auto-place-preview" },
                 { method: "post" },
@@ -1118,7 +852,7 @@ export function SchedulePlannerWorkspace({
         <Dialog
           title="Preview auto-placement"
           onClose={() => {
-            if (autoPlacementFetcher.state === "idle") setAutoPreview(null);
+            if (autoPlacementFetcher.state === "idle") dismissAutoPreview();
           }}
           footer={
             <>
@@ -1126,13 +860,13 @@ export function SchedulePlannerWorkspace({
                 className="btn"
                 type="button"
                 disabled={autoPlacementFetcher.state !== "idle"}
-                onClick={() => setAutoPreview(null)}
+                onClick={dismissAutoPreview}
               >
                 Cancel
               </button>
               <autoPlacementFetcher.Form
                 method="post"
-                onSubmit={() => setAutoError(null)}
+                onSubmit={clearAutoError}
               >
                 <input type="hidden" name="intent" value="auto-place-confirm" />
                 <input
@@ -1310,18 +1044,17 @@ export function SchedulePlannerWorkspace({
                 content record
                 {publicContentVisibilityBlockers.length === 1
                   ? " is"
-                  : "s are"} private or hidden.
+                  : "s are"}{" "}
+                private or hidden.
               </strong>{" "}
               Public sessions require public content snapshots. Correct each
               listed session before publishing.
               <ul>
-                {publicContentVisibilityBlockers
-                  .slice(0, 5)
-                  .map((session) => (
-                    <li key={session.id}>
-                      {session.title} · {session.visibility}
-                    </li>
-                  ))}
+                {publicContentVisibilityBlockers.slice(0, 5).map((session) => (
+                  <li key={session.id}>
+                    {session.title} · {session.visibility}
+                  </li>
+                ))}
                 {publicContentVisibilityBlockers.length > 5 ? (
                   <li>{publicContentVisibilityBlockers.length - 5} more</li>
                 ) : null}
@@ -1335,8 +1068,7 @@ export function SchedulePlannerWorkspace({
           {contentReviewAdvisories.length ? (
             <div className="validation-item warn">
               <strong>
-                {contentReviewAdvisories.length} scheduled content
-                record
+                {contentReviewAdvisories.length} scheduled content record
                 {contentReviewAdvisories.length === 1 ? " is" : "s are"} not
                 marked Approved.
               </strong>{" "}
@@ -1345,7 +1077,8 @@ export function SchedulePlannerWorkspace({
               <ul>
                 {contentReviewAdvisories.slice(0, 5).map((session) => (
                   <li key={session.id}>
-                    {session.title} · {session.contentStatus.replaceAll("_", " ")}
+                    {session.title} ·{" "}
+                    {session.contentStatus.replaceAll("_", " ")}
                   </li>
                 ))}
                 {contentReviewAdvisories.length > 5 ? (

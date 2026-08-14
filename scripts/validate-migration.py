@@ -22,7 +22,10 @@ if duplicate_migration_numbers:
     )
     raise SystemExit(f"Migration numbers must be unique ({details})")
 sql = "\n".join(path.read_text() for path in migration_files)
-schema_source = root.joinpath("app/platform/database/schema.ts").read_text()
+schema_source = "\n".join(
+    path.read_text()
+    for path in sorted(root.joinpath("app/platform/database").glob("schema*.ts"))
+)
 
 connection = sqlite3.connect(":memory:")
 connection.execute("PRAGMA foreign_keys = ON")

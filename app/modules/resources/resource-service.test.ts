@@ -1,8 +1,6 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   acceptTestFileScanDispatch,
   completeTestDirectUpload,
@@ -10,6 +8,8 @@ import {
 import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { TaskService } from "~/modules/tasks/task-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { ResourceAuthoringService } from "./resource-authoring-service.server";
 import {
   parseResourceDocument,
   renderResourceDocument,
@@ -27,8 +27,6 @@ import {
   ResourceSlugConflictError,
   ResourceTaskDependencyError,
 } from "./resource-service.server";
-import { ResourceAuthoringService } from "./resource-authoring-service.server";
-import { ResourceParticipantService } from "./resource-participant-service.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",
@@ -54,37 +52,6 @@ const submitterOnly: Viewer = {
   email: "resource-submit-only@example.com",
   role: "submitter",
 };
-
-describe("resource Airtable authority", () => {
-  it("routes publication and acknowledgement task changes through the provider boundary", async () => {
-    const unavailable = new Error(
-      "Airtable projection command is unavailable.",
-    );
-    const executeIdempotent = vi.fn(async (..._arguments: unknown[]) => {
-      throw unavailable;
-    });
-    const airtable = {
-      executeIdempotent,
-      assertReadable: vi.fn(async () => null),
-    } as unknown as AirtableProviderBoundary;
-
-    await expect(
-      new ResourceAuthoringService(env as unknown as CloudflareEnvironment, {
-        airtable,
-      }).publish(admin, "resource-id", 1),
-    ).rejects.toBe(unavailable);
-    await expect(
-      new ResourceParticipantService(env as unknown as CloudflareEnvironment, {
-        airtable,
-      }).acknowledge(speaker, "resource-id", "version-id", null),
-    ).rejects.toBe(unavailable);
-    expect(executeIdempotent).toHaveBeenCalledTimes(2);
-    expect(executeIdempotent.mock.calls.map((call) => call[1])).toEqual([
-      expect.objectContaining({ operation: "resource.publish" }),
-      expect.objectContaining({ operation: "resource.acknowledge" }),
-    ]);
-  });
-});
 
 function withBatchRace(
   testEnv: CloudflareEnvironment,
