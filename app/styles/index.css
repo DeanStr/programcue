@@ -40,6 +40,7 @@
 @import "./workspace-speaker.css";
 @import "./workspace-public-programme.css";
 @import "./workspace-public-application.css";
+@import "./workspace-evaluation-access.css";
 @import "./responsive-refinements.css";
 @import "./responsive-command.css";
 @import "./schedule-format-tokens.css";

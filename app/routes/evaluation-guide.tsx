@@ -1,15 +1,5 @@
 import {
-  ArrowRight,
-  CalendarDays,
-  ExternalLink,
-  KeyRound,
-  RotateCcw,
-  ShieldCheck,
-} from "lucide-react";
-import {
   data,
-  Form,
-  Link,
   redirect,
   redirectDocument,
   useActionData,
@@ -17,7 +7,7 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/evaluation-guide";
-import { BrandMark } from "~/components/brand-mark";
+import { EvaluationAccessSurface } from "~/components/evaluation-access-surface";
 import {
   currentEventCookie,
   clearCurrentEventCookie,
@@ -71,6 +61,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           identityKey: selected.identityKey,
           name: selected.name,
           label: selected.definition.label,
+          destination: selected.definition.destination,
         }
       : null,
     identities: Object.entries(EVALUATION_IDENTITIES).map(
@@ -302,311 +293,21 @@ export async function action({ request, context }: Route.ActionArgs) {
   });
 }
 
-function RoleCards({
-  identities,
-  group,
-  busy,
-}: {
-  identities: Awaited<ReturnType<typeof loader>>["identities"];
-  group: "showcase" | "scenario";
-  busy: boolean;
-}) {
-  return (
-    <div className="grid grid-3">
-      {identities
-        .filter((identity) => identity.group === group)
-        .map((identity) => (
-          <article className="card pad" key={identity.key}>
-            <span className="pc-page-eyebrow">{identity.label}</span>
-            <h3>{identity.name}</h3>
-            <p>{identity.description}</p>
-            <p className="subtle">
-              <strong>What to try:</strong> {identity.whatToTry}
-            </p>
-            <Form method="post">
-              <input
-                type="hidden"
-                name="_intent"
-                value={
-                  identity.requiresAccountActivation
-                    ? "activate_account"
-                    : "select_identity"
-                }
-              />
-              <input type="hidden" name="identity" value={identity.key} />
-              <button className="btn primary" type="submit" disabled={busy}>
-                {identity.requiresAccountActivation
-                  ? "Create evaluator submitter account"
-                  : `Open as ${identity.label}`}{" "}
-                <ArrowRight aria-hidden size={15} />
-              </button>
-              {identity.requiresAccountActivation ? (
-                <p className="help">
-                  Activates only this fixed fixture identity. No verification
-                  email or external-provider delivery is claimed.
-                </p>
-              ) : null}
-            </Form>
-            {identity.requiresAccountActivation ? (
-              <Form method="post" className="mt">
-                <input
-                  type="hidden"
-                  name="_intent"
-                  value="activate_account_and_choose_event"
-                />
-                <input type="hidden" name="identity" value={identity.key} />
-                <button className="btn" type="submit" disabled={busy}>
-                  Activate account and choose event
-                </button>
-                <p className="help">
-                  Opens only events where this fixed identity already has
-                  accepted access or a pending invitation. Accepting an
-                  invitation remains a separate explicit step.
-                </p>
-              </Form>
-            ) : null}
-          </article>
-        ))}
-    </div>
-  );
-}
-
 export default function EvaluationGuide({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<ActionResult>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
-  const resetBusy =
-    busy && navigation.formData?.get("_intent") === "reset_fixture";
-  if (!loaderData.unlocked) {
-    return (
-      <main className="design-board" id="main" style={{ minHeight: "100vh" }}>
-        <section
-          className="card pad"
-          style={{ maxWidth: 560, margin: "8vh auto" }}
-        >
-          <div className="brand" style={{ color: "var(--ink)", padding: 0 }}>
-            <BrandMark /> <span>Program Cue</span>
-          </div>
-          <span className="pc-page-eyebrow">Private evaluation workspace</span>
-          <h1>Evaluation access</h1>
-          <p>
-            Enter the access code supplied with the evaluation instructions. It
-            unlocks only fixed identities in the dedicated evaluation fixture.
-          </p>
-          {actionData && !actionData.ok ? (
-            <p className="validation-item error" role="alert">
-              {actionData.message}
-            </p>
-          ) : null}
-          <Form method="post" className="stack">
-            <input type="hidden" name="_intent" value="unlock" />
-            <label className="label">
-              Access code
-              <input
-                className="field"
-                name="accessCode"
-                type="password"
-                required
-                autoComplete="off"
-              />
-            </label>
-            <button className="btn primary" type="submit" disabled={busy}>
-              <KeyRound aria-hidden size={16} />{" "}
-              {busy ? "Checking…" : "Unlock evaluation"}
-            </button>
-          </Form>
-        </section>
-      </main>
-    );
-  }
-
   return (
-    <main className="design-board" id="main">
-      <header className="page-head pc-page-header">
-        <div>
-          <span className="pc-page-eyebrow">Production evaluation mode</span>
-          <h1>Choose an evaluator journey</h1>
-          <p>
-            Explore the real production role boundaries with dedicated seeded
-            data. Return here at any time to change roles without creating
-            accounts or sharing magic links.
-          </p>
-        </div>
-        <Form method="post">
-          <input type="hidden" name="_intent" value="lock" />
-          <button className="btn" type="submit">
-            <ShieldCheck aria-hidden size={15} /> Lock evaluation
-          </button>
-        </Form>
-      </header>
-      <section
-        className="pc-status-notice is-info mb"
-        aria-label="Seeded evaluation event"
-      >
-        <CalendarDays aria-hidden size={18} />
-        <div className="pc-status-notice-copy">
-          <strong>Seeded event: {loaderData.eventName}</strong>
-        </div>
-      </section>
-      {loaderData.selected ? (
-        <div className="pc-status-notice is-success mb" role="status">
-          <ShieldCheck aria-hidden size={18} />
-          <div>
-            <strong>Current persona: {loaderData.selected.label}</strong>
-            <div>{loaderData.selected.name}</div>
-          </div>
-        </div>
-      ) : null}
-      {actionData ? (
-        <div
-          className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
-          role={actionData.ok ? "status" : "alert"}
-        >
-          <div className="pc-status-notice-copy">
-            <strong>{actionData.message}</strong>
-          </div>
-        </div>
-      ) : null}
-
-      <section className="mb" aria-labelledby="role-cards-title">
-        <div className="card-title">
-          <div>
-            <h2 id="role-cards-title">Showcase personas</h2>
-            <p className="subtle">Each opens on useful seeded work.</p>
-          </div>
-        </div>
-        <RoleCards
-          identities={loaderData.identities}
-          group="showcase"
-          busy={busy}
-        />
-      </section>
-
-      <section className="card pad mb" aria-labelledby="proof-links-title">
-        <div className="card-title">
-          <div>
-            <h2 id="proof-links-title">Direct proof links</h2>
-            <p className="subtle">
-              Public output remains accessible without a private persona.
-            </p>
-          </div>
-        </div>
-        <div className="page-actions">
-          <Link
-            className="btn primary"
-            to="/public/programme/future-of-events-2027"
-          >
-            Published programme <ExternalLink aria-hidden size={14} />
-          </Link>
-          <Link
-            className="btn"
-            to="/public/programme/future-of-events-2027/schedule"
-          >
-            Schedule
-          </Link>
-          <Link
-            className="btn"
-            to="/public/programme/future-of-events-2027/gallery"
-          >
-            Speaker gallery
-          </Link>
-          <Link className="btn" to="/apply/form">
-            Application form
-          </Link>
-          <Link className="btn" to="/api/docs">
-            API documentation
-          </Link>
-        </div>
-        <hr />
-        <h3>Operations proof</h3>
-        <p className="subtle">
-          Choose the Organisation owner or Event organiser first. Production
-          authorisation still applies to every link.
-        </p>
-        <div className="page-actions">
-          <Link className="btn" to="/admin/submissions">
-            Submissions
-          </Link>
-          <Link className="btn" to="/admin/review">
-            Review &amp; decisions
-          </Link>
-          <Link className="btn" to="/admin/speakers">
-            Speakers
-          </Link>
-          <Link className="btn" to="/admin/tasks">
-            Tasks
-          </Link>
-          <Link className="btn" to="/admin/content">
-            Content &amp; files
-          </Link>
-          <Link className="btn" to="/admin/schedule">
-            Schedule
-          </Link>
-          <Link className="btn" to="/admin/communications">
-            Communications
-          </Link>
-          <Link className="btn" to="/admin/crm">
-            Speaker CRM
-          </Link>
-          <Link className="btn" to="/admin/events/new">
-            Create event
-          </Link>
-        </div>
-      </section>
-
-      <details className="card pad mb pc-disclosure">
-        <summary>
-          <strong>Automated scenario starting identities</strong>{" "}
-          <span className="subtle">clean fixture state</span>
-        </summary>
-        <div className="mt">
-          <RoleCards
-            identities={loaderData.identities}
-            group="scenario"
-            busy={busy}
-          />
-        </div>
-      </details>
-
-      <details className="card pad mb pc-disclosure">
-        <summary>
-          <strong>Reset evaluation data</strong>{" "}
-          <span className="subtle">destructive</span>
-        </summary>
-        <div className="mt stack">
-          <p>
-            Restore the complete dedicated evaluation fixture before starting a
-            separate human or automated run. This removes evaluator-created
-            event data, invalidates every saved evaluator session and affects
-            anyone currently using this evaluation workspace.
-          </p>
-          <p className="subtle">
-            Reset is refused while fixture events have active external work or
-            when the provisioned identities, sender or tenant boundary have
-            drifted.
-          </p>
-          <Form method="post" className="stack">
-            <input type="hidden" name="_intent" value="reset_fixture" />
-            <label className="label">
-              Type {loaderData.eventName} to confirm
-              <input
-                className="field"
-                name="confirmation"
-                required
-                autoComplete="off"
-              />
-            </label>
-            <div>
-              <button className="btn danger" type="submit" disabled={busy}>
-                <RotateCcw aria-hidden size={15} />{" "}
-                {resetBusy
-                  ? "Resetting evaluation data…"
-                  : "Reset evaluation data"}
-              </button>
-            </div>
-          </Form>
-        </div>
-      </details>
-    </main>
+    <EvaluationAccessSurface
+      actionData={actionData}
+      busy={busy}
+      eventName={loaderData.eventName}
+      identities={loaderData.identities}
+      resetBusy={
+        busy && navigation.formData?.get("_intent") === "reset_fixture"
+      }
+      selected={loaderData.selected}
+      unlocked={loaderData.unlocked}
+    />
   );
 }

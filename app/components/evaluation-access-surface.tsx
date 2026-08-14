@@ -1,0 +1,748 @@
+import {
+  ArrowRight,
+  BookOpen,
+  Building2,
+  CalendarClock,
+  CalendarDays,
+  ClipboardCheck,
+  Code,
+  Contact,
+  Eye,
+  EyeOff,
+  FileText,
+  FolderOpen,
+  Gavel,
+  Images,
+  ListChecks,
+  type LucideIcon,
+  Mail,
+  Megaphone,
+  Mic,
+  PanelsTopLeft,
+  Plus,
+  RotateCcw,
+  ScanEye,
+  ShieldCheck,
+  Sparkles,
+  TriangleAlert,
+  UserRound,
+  Users,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Form, Link } from "react-router";
+
+import { BrandMark } from "~/components/brand-mark";
+
+export type EvaluationPersonaCard = {
+  key: string;
+  label: string;
+  name: string;
+  description: string;
+  destination: string;
+  whatToTry: string;
+  group: "showcase" | "scenario";
+  requiresAccountActivation: boolean;
+};
+
+export type EvaluationSelection = {
+  identityKey: string;
+  name: string;
+  label: string;
+  destination: string;
+};
+
+export type EvaluationActionResult = { ok: boolean; message: string };
+
+export type EvaluationAccessSurfaceProps = {
+  unlocked: boolean;
+  eventName: string;
+  selected: EvaluationSelection | null;
+  identities: readonly EvaluationPersonaCard[];
+  actionData?: EvaluationActionResult;
+  busy: boolean;
+  resetBusy: boolean;
+};
+
+const PERSONA_ICONS: Record<string, LucideIcon> = {
+  owner: Building2,
+  organizer: PanelsTopLeft,
+  chair: Gavel,
+  reviewer: ScanEye,
+  applicant: FileText,
+  speaker: Mic,
+  sbek_applicant: Sparkles,
+  sbek_reviewer: ScanEye,
+};
+
+type Destination = {
+  to: string;
+  icon: LucideIcon;
+  label: string;
+  detail: string;
+};
+
+export const PUBLIC_DESTINATIONS: readonly Destination[] = [
+  {
+    to: "/public/programme/future-of-events-2027",
+    icon: BookOpen,
+    label: "Published programme",
+    detail: "The live attendee programme.",
+  },
+  {
+    to: "/public/programme/future-of-events-2027/schedule",
+    icon: CalendarDays,
+    label: "Schedule",
+    detail: "The published day-by-day agenda.",
+  },
+  {
+    to: "/public/programme/future-of-events-2027/gallery",
+    icon: Images,
+    label: "Speaker gallery",
+    detail: "Published speaker profiles.",
+  },
+  {
+    to: "/apply/form",
+    icon: FileText,
+    label: "Application form",
+    detail: "The open call for proposals.",
+  },
+  {
+    to: "/api/docs",
+    icon: Code,
+    label: "API documentation",
+    detail: "The public programme API reference.",
+  },
+];
+
+const OPERATIONS_DESTINATIONS: readonly Destination[] = [
+  {
+    to: "/admin/submissions",
+    icon: FileText,
+    label: "Submissions",
+    detail: "Proposal intake and triage.",
+  },
+  {
+    to: "/admin/review",
+    icon: ClipboardCheck,
+    label: "Review & decisions",
+    detail: "Rounds, scoring and outcomes.",
+  },
+  {
+    to: "/admin/speakers",
+    icon: Users,
+    label: "Speakers",
+    detail: "Roster, profiles and readiness.",
+  },
+  {
+    to: "/admin/tasks",
+    icon: ListChecks,
+    label: "Tasks",
+    detail: "Assigned operational work.",
+  },
+  {
+    to: "/admin/content",
+    icon: FolderOpen,
+    label: "Content & files",
+    detail: "Resources, uploads and retention.",
+  },
+  {
+    to: "/admin/schedule",
+    icon: CalendarClock,
+    label: "Schedule",
+    detail: "The planner and its conflicts.",
+  },
+  {
+    to: "/admin/communications",
+    icon: Megaphone,
+    label: "Communications",
+    detail: "Templates and delivery results.",
+  },
+  {
+    to: "/admin/crm",
+    icon: Contact,
+    label: "Speaker CRM",
+    detail: "Prospects and the invitation pipeline.",
+  },
+  {
+    to: "/admin/events/new",
+    icon: Plus,
+    label: "Create event",
+    detail: "A blank event in the same organisation.",
+  },
+];
+
+function DestinationLinks({
+  destinations,
+  label,
+}: {
+  destinations: readonly Destination[];
+  label: string;
+}) {
+  return (
+    <ul aria-label={label} className="pc-eval-links">
+      {destinations.map((destination) => {
+        const Icon = destination.icon;
+        return (
+          <li key={destination.to}>
+            <Link className="pc-eval-link" to={destination.to}>
+              <span className="pc-eval-link-icon">
+                <Icon aria-hidden size={17} />
+              </span>
+              <span>
+                <strong>{destination.label}</strong>
+                <span>{destination.detail}</span>
+              </span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function PersonaCard({
+  identity,
+  busy,
+  isCurrent,
+}: {
+  identity: EvaluationPersonaCard;
+  busy: boolean;
+  isCurrent: boolean;
+}) {
+  const Icon = PERSONA_ICONS[identity.key] ?? UserRound;
+  return (
+    <article
+      className={`card pad pc-eval-persona${isCurrent ? " is-current" : ""}`}
+    >
+      <div className="pc-eval-persona-head">
+        <span className="pc-eval-persona-icon" data-tone={identity.group}>
+          <Icon aria-hidden size={19} />
+        </span>
+        <div>
+          <h3>{identity.label}</h3>
+          <p>{identity.name}</p>
+        </div>
+        {isCurrent ? <span className="status success">Current</span> : null}
+      </div>
+      <p className="pc-eval-persona-copy">{identity.description}</p>
+      <div className="pc-eval-try">
+        <span>What to try</span>
+        <p>{identity.whatToTry}</p>
+      </div>
+      {identity.key === "sbek_reviewer" ? (
+        <div className="pc-status-notice is-warning">
+          <TriangleAlert aria-hidden size={16} />
+          <div className="pc-status-notice-copy">
+            <strong>No event access yet, by design.</strong>
+            <div>
+              The organiser has to invite this reviewer and the reviewer has to
+              accept before any workbench opens.
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <div className="pc-eval-persona-foot">
+        <span className="pc-eval-route">
+          Opens <code>{identity.destination}</code>
+        </span>
+        <Form method="post">
+          <input
+            type="hidden"
+            name="_intent"
+            value={
+              identity.requiresAccountActivation
+                ? "activate_account"
+                : "select_identity"
+            }
+          />
+          <input type="hidden" name="identity" value={identity.key} />
+          <button className="btn primary" disabled={busy} type="submit">
+            {identity.requiresAccountActivation
+              ? "Create evaluator submitter account"
+              : `Open as ${identity.label}`}{" "}
+            <ArrowRight aria-hidden size={15} />
+          </button>
+        </Form>
+        {identity.requiresAccountActivation ? (
+          <>
+            <p className="help">
+              Activates only this fixed fixture identity. No verification email
+              or external-provider delivery is claimed.
+            </p>
+            <Form method="post">
+              <input
+                type="hidden"
+                name="_intent"
+                value="activate_account_and_choose_event"
+              />
+              <input type="hidden" name="identity" value={identity.key} />
+              <button className="btn" disabled={busy} type="submit">
+                Activate account and choose event
+              </button>
+            </Form>
+            <p className="help">
+              Opens only events where this fixed identity already has accepted
+              access or a pending invitation. Accepting an invitation remains a
+              separate explicit step.
+            </p>
+          </>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function PersonaCards({
+  identities,
+  group,
+  busy,
+  currentKey,
+}: {
+  identities: readonly EvaluationPersonaCard[];
+  group: "showcase" | "scenario";
+  busy: boolean;
+  currentKey: string | null;
+}) {
+  return (
+    <div
+      className={`grid is-equal ${group === "showcase" ? "grid-3" : "grid-2"}`}
+    >
+      {identities
+        .filter((identity) => identity.group === group)
+        .map((identity) => (
+          <PersonaCard
+            busy={busy}
+            identity={identity}
+            isCurrent={identity.key === currentKey}
+            key={identity.key}
+          />
+        ))}
+    </div>
+  );
+}
+
+function AccessGate({
+  actionData,
+  busy,
+  eventName,
+}: {
+  actionData?: EvaluationActionResult;
+  busy: boolean;
+  eventName: string;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (actionData && !actionData.ok) errorRef.current?.focus();
+  }, [actionData]);
+  return (
+    <main className="pc-eval-gate" id="main">
+      <div className="pc-eval-gate-panel">
+        <section className="pc-eval-ground pc-eval-gate-intro">
+          <div className="pc-eval-brand">
+            <BrandMark /> <span>Program Cue</span>
+          </div>
+          <div>
+            <h1>Evaluation access</h1>
+            <p className="pc-eval-gate-lede">
+              Start here rather than the normal sign-in page. Production sign-in
+              is invitation-only, and no evaluator address was pre-invited.
+            </p>
+          </div>
+          <ul className="pc-eval-points">
+            <li>
+              <ShieldCheck aria-hidden size={18} />
+              <span>
+                <strong>Fixed personas, real permissions</strong>
+                Every persona runs against the same server-side authorisation as
+                any other production tenant.
+              </span>
+            </li>
+            <li>
+              <CalendarDays aria-hidden size={18} />
+              <span>
+                <strong>Seeded examples, clean scenarios</strong>
+                Populated showcase roles open on {eventName} data. Clean
+                scenario identities start before access or work is created.
+              </span>
+            </li>
+            <li>
+              <Mail aria-hidden size={18} />
+              <span>
+                <strong>No mailbox needed</strong>
+                No magic link and no access to a seeded inbox is required to
+                start.
+              </span>
+            </li>
+          </ul>
+        </section>
+        <section className="pc-eval-gate-form">
+          <div>
+            <h2>Enter the evaluation access code</h2>
+            <p className="help pc-eval-gate-hint">
+              The code was supplied with your evaluation instructions. It
+              unlocks only the fixed identities in the dedicated evaluation
+              fixture.
+            </p>
+          </div>
+          {actionData && !actionData.ok ? (
+            <div
+              className="pc-status-notice is-danger"
+              ref={errorRef}
+              role="alert"
+              tabIndex={-1}
+            >
+              <TriangleAlert aria-hidden size={18} />
+              <div className="pc-status-notice-copy">
+                <strong>{actionData.message}</strong>
+              </div>
+            </div>
+          ) : null}
+          <Form className="stack" method="post">
+            <input type="hidden" name="_intent" value="unlock" />
+            <label className="label" htmlFor="evaluation-access-code">
+              Access code
+            </label>
+            <div className="pc-eval-code">
+              <input
+                autoCapitalize="none"
+                autoComplete="off"
+                autoCorrect="off"
+                autoFocus
+                className="field"
+                id="evaluation-access-code"
+                name="accessCode"
+                required
+                spellCheck={false}
+                type={revealed ? "text" : "password"}
+              />
+              <button
+                aria-label={revealed ? "Hide access code" : "Show access code"}
+                aria-pressed={revealed}
+                className="icon-btn"
+                onClick={() => setRevealed((value) => !value)}
+                type="button"
+              >
+                {revealed ? (
+                  <EyeOff aria-hidden size={16} />
+                ) : (
+                  <Eye aria-hidden size={16} />
+                )}
+              </button>
+            </div>
+            <button className="btn primary" disabled={busy} type="submit">
+              {busy ? "Checking…" : "Unlock evaluation"}{" "}
+              <ArrowRight aria-hidden size={15} />
+            </button>
+          </Form>
+          <hr className="pc-eval-rule" />
+          <div>
+            <p className="help pc-eval-gate-hint">
+              Public output needs no code:
+            </p>
+            <ul className="pc-eval-gate-links">
+              {PUBLIC_DESTINATIONS.map((destination) => (
+                <li key={destination.to}>
+                  <Link to={destination.to}>{destination.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+export function EvaluationAccessSurface({
+  unlocked,
+  eventName,
+  selected,
+  identities,
+  actionData,
+  busy,
+  resetBusy,
+}: EvaluationAccessSurfaceProps) {
+  const [resetConfirmation, setResetConfirmation] = useState("");
+  const noticeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (actionData) noticeRef.current?.focus();
+    if (actionData?.ok) setResetConfirmation("");
+  }, [actionData]);
+
+  if (!unlocked) {
+    return (
+      <AccessGate actionData={actionData} busy={busy} eventName={eventName} />
+    );
+  }
+
+  return (
+    <main className="design-board pc-design-board pc-eval-board" id="main">
+      <header className="pc-eval-hero">
+        <div className="pc-eval-ground pc-eval-hero-top">
+          <div className="pc-eval-hero-copy">
+            <span className="pc-eval-hero-eyebrow">
+              <BrandMark size="small" /> Production evaluation mode
+            </span>
+            <h1>Choose an evaluation persona</h1>
+            <p>
+              Each persona opens the real production application with real
+              server-side permissions and the seeded data for its role.
+              Switching between showcase personas never creates an account and
+              never needs a magic link; the clean applicant has one explicit,
+              audited activation step.
+            </p>
+            <ul className="pc-eval-hero-chips">
+              <li>
+                <CalendarDays aria-hidden size={13} /> Seeded event: {eventName}
+              </li>
+              <li>
+                <ShieldCheck aria-hidden size={13} /> Production authorisation
+                applies
+              </li>
+            </ul>
+          </div>
+          <Form method="post">
+            <input type="hidden" name="_intent" value="lock" />
+            <button className="btn pc-eval-quiet" type="submit">
+              <ShieldCheck aria-hidden size={15} /> Lock evaluation
+            </button>
+          </Form>
+        </div>
+        <div className="pc-eval-hero-session">
+          <span aria-hidden className="pc-eval-hero-mark">
+            {selected ? selected.name.charAt(0) : <UserRound size={20} />}
+          </span>
+          <div className="pc-eval-hero-session-copy">
+            {selected ? (
+              <>
+                <strong>
+                  Current persona: {selected.label} · {selected.name}
+                </strong>
+                <p>
+                  Private workspaces open with this identity until you choose
+                  another persona or lock the evaluation.
+                </p>
+              </>
+            ) : (
+              <>
+                <strong>No persona selected</strong>
+                <p>
+                  The access gate is unlocked. Public output is already open
+                  below; operations workspaces need a persona first.
+                </p>
+              </>
+            )}
+          </div>
+          {selected ? (
+            <Link className="btn pc-eval-cta" to={selected.destination}>
+              Continue as {selected.name} <ArrowRight aria-hidden size={15} />
+            </Link>
+          ) : null}
+        </div>
+      </header>
+
+      {actionData ? (
+        <div
+          className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
+          ref={noticeRef}
+          role={actionData.ok ? "status" : "alert"}
+          tabIndex={-1}
+        >
+          {actionData.ok ? (
+            <ShieldCheck aria-hidden size={18} />
+          ) : (
+            <TriangleAlert aria-hidden size={18} />
+          )}
+          <div className="pc-status-notice-copy">
+            <strong>{actionData.message}</strong>
+          </div>
+        </div>
+      ) : null}
+
+      <ol aria-label="How evaluation access works" className="pc-eval-steps mb">
+        <li className="is-done">
+          <div>
+            <strong>Access code entered</strong>
+            <span>
+              The gate stays unlocked in this browser until you lock it.
+            </span>
+          </div>
+        </li>
+        <li className={selected ? "is-done" : undefined}>
+          <div>
+            <strong>Choose a persona</strong>
+            <span>
+              Fixed identities only. Each one opens its own seeded work.
+            </span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>Work the role</strong>
+            <span>
+              Everything you do is production behaviour on the evaluation
+              organisation.
+            </span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>Switch or lock</strong>
+            <span>
+              Return here or use Change persona to switch. Lock evaluation
+              clears the gate and asks for the code again.
+            </span>
+          </div>
+        </li>
+      </ol>
+
+      <section aria-labelledby="showcase-personas-title" className="mb">
+        <div className="pc-admin-section-head">
+          <div className="pc-admin-section-head-copy">
+            <h2 id="showcase-personas-title">Showcase personas</h2>
+            <p>
+              Populated roles for exploring the product. Each opens on useful
+              seeded work rather than an empty workspace.
+            </p>
+          </div>
+        </div>
+        <PersonaCards
+          busy={busy}
+          currentKey={selected?.identityKey ?? null}
+          group="showcase"
+          identities={identities}
+        />
+      </section>
+
+      <section aria-labelledby="scenario-personas-title" className="mb">
+        <div className="pc-admin-section-head">
+          <div className="pc-admin-section-head-copy">
+            <h2 id="scenario-personas-title">
+              Automated scenario starting identities
+            </h2>
+            <p>
+              Clean fixture state for a chained human or automated run. These
+              two start before any assignment exists so a scenario can create
+              it.
+            </p>
+          </div>
+        </div>
+        <PersonaCards
+          busy={busy}
+          currentKey={selected?.identityKey ?? null}
+          group="scenario"
+          identities={identities}
+        />
+      </section>
+
+      <section aria-labelledby="public-output-title" className="mb">
+        <div className="pc-admin-section-head">
+          <div className="pc-admin-section-head-copy">
+            <h2 id="public-output-title">Public output</h2>
+            <p>Open to anyone. No persona and no access code required.</p>
+          </div>
+        </div>
+        <DestinationLinks
+          destinations={PUBLIC_DESTINATIONS}
+          label="Public output"
+        />
+      </section>
+
+      <section aria-labelledby="operations-title" className="mb">
+        <div className="pc-admin-section-head">
+          <div className="pc-admin-section-head-copy">
+            <h2 id="operations-title">Operations workspaces</h2>
+            <p>
+              {selected
+                ? `Authorisation is enforced on the server, so what opens depends on what ${selected.label} may see.`
+                : "Authorisation is enforced on the server rather than by hiding links, so opening one without a persona returns you to this page."}
+            </p>
+          </div>
+        </div>
+        <DestinationLinks
+          destinations={OPERATIONS_DESTINATIONS}
+          label="Operations workspaces"
+        />
+      </section>
+
+      <aside aria-label="Outbound email" className="pc-status-notice mb">
+        <Mail aria-hidden size={18} />
+        <div className="pc-status-notice-copy">
+          <strong>Outbound email workflows are available to test.</strong>
+          <div>
+            The fixed evaluator addresses are scenario identities rather than
+            inbox credentials, so there is no seeded mailbox to open. A send can
+            still fail or bounce, and this page does not verify delivery. For a
+            manual delivery test, use an address you control.
+          </div>
+        </div>
+      </aside>
+
+      <details className="card pad mb pc-disclosure pc-eval-danger">
+        <summary>
+          <RotateCcw aria-hidden size={15} />
+          <strong>Reset evaluation data</strong>
+          <span className="status danger">Destructive</span>
+        </summary>
+        <div className="mt stack">
+          <p>
+            Restore the complete dedicated evaluation fixture before starting a
+            separate human or automated run. Reset only before a new complete
+            run, never between related scenarios.
+          </p>
+          <ul className="pc-eval-reset-effects">
+            <li>Removes evaluator-created event data across the fixture.</li>
+            <li>
+              Invalidates every evaluator&rsquo;s saved persona session,
+              including anyone else currently using this workspace.
+            </li>
+            <li>
+              Returns this browser to the unlocked picker with no persona.
+            </li>
+          </ul>
+          <p className="subtle">
+            Reset is refused while fixture events have active external work or
+            when the provisioned identities, sender or tenant boundary have
+            drifted.
+          </p>
+          <Form className="stack pc-eval-reset-form" method="post">
+            <input type="hidden" name="_intent" value="reset_fixture" />
+            <label
+              className="label pc-eval-reset-label"
+              htmlFor="evaluation-reset-confirmation"
+            >
+              Type <span className="pc-eval-phrase">{eventName}</span> to
+              confirm
+            </label>
+            <input
+              aria-describedby="evaluation-reset-hint"
+              autoComplete="off"
+              className="field"
+              id="evaluation-reset-confirmation"
+              name="confirmation"
+              onChange={(event) => setResetConfirmation(event.target.value)}
+              required
+              value={resetConfirmation}
+            />
+            <p className="help" id="evaluation-reset-hint">
+              The reset button stays disabled until the name matches exactly.
+            </p>
+            <div>
+              <button
+                className="btn danger"
+                disabled={busy || resetConfirmation !== eventName}
+                type="submit"
+              >
+                <RotateCcw aria-hidden size={15} />{" "}
+                {resetBusy
+                  ? "Resetting evaluation data…"
+                  : "Reset evaluation data"}
+              </button>
+            </div>
+          </Form>
+        </div>
+      </details>
+    </main>
+  );
+}

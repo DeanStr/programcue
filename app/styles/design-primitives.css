@@ -266,12 +266,13 @@
   margin-bottom: var(--space-4);
   padding: var(--space-7);
   background:
-    radial-gradient(
-      circle at 84% 20%,
-      rgba(129, 140, 248, 0.42),
-      transparent 32%
-    ),
-    linear-gradient(130deg, #0b1428, #172554 55%, var(--brand-900));
+    radial-gradient(circle at 84% 20%, var(--hero-glow), transparent 32%),
+    linear-gradient(
+      130deg,
+      var(--hero-ink-1),
+      var(--hero-ink-2) 55%,
+      var(--brand-900)
+    );
   border: 0;
   color: #fff;
   box-shadow: 0 24px 55px rgba(30, 41, 79, 0.22);

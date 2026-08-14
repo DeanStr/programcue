@@ -8,6 +8,7 @@ export const nodeOnlyTestFiles = [
   "app/components/application-public-landing.test.tsx",
   "app/components/public-programme-surfaces.test.tsx",
   "app/components/communications-centre-panels.test.tsx",
+  "app/components/evaluation-access-surface.test.tsx",
   "app/components/evaluation-review-cycle-panel.test.tsx",
   "app/components/evaluation-ai-attempt-panel.test.tsx",
   "app/components/event-repository-panel.test.tsx",

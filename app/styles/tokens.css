@@ -81,6 +81,12 @@
   /* A cool hairline reads blue against warm paper, so the editorial surface
      carries its own. */
   --border-editorial: #dedbd5;
+  /* The one dark gradient ground in the product: the design-system hero and
+     the evaluation surfaces. Held as tokens because two files were painting
+     the same three values by hand. */
+  --hero-ink-1: #0b1428;
+  --hero-ink-2: #172554;
+  --hero-glow: rgba(129, 140, 248, 0.42);
 
   /* --- State on dark grounds ---------------------------------------------
      The *-solid values are tuned to clear 3:1 against light tracks and go
