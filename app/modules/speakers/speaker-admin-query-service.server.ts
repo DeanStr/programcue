@@ -5,17 +5,17 @@ import {
   adminProfileIsShared,
   adminSpeakerScopeSql,
 } from "./speaker-admin-scope.server";
+import type {
+  AdminSpeakerFileVersion,
+  AdminSpeakerFilters,
+  AdminSpeakerListItem,
+} from "./speaker-administration-contracts.server";
 import {
   type FileRow,
   type ProfileRow,
   type SessionRow,
 } from "./speaker-portal-service.server";
 import { SpeakerAdminIntegrityError } from "./speaker-service-errors";
-import type {
-  AdminSpeakerFileVersion,
-  AdminSpeakerFilters,
-  AdminSpeakerListItem,
-} from "./speaker-service.server";
 
 export class SpeakerAdminQueryService {
   constructor(
