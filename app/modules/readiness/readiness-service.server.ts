@@ -275,6 +275,7 @@ async function loadCommandCentreRecords(
                COALESCE(SUM(CASE WHEN status IN ('failed','queue_failed','partially_failed') THEN 1 ELSE 0 END), 0) AS failed
           FROM operation_jobs
          WHERE event_id = ? AND status <> 'cancelled'
+           AND alert_acknowledged_at IS NULL
       `,
     )
       .bind(viewer.eventId)
@@ -590,9 +591,9 @@ export class ReadinessService {
           label: "Operation failures",
           count: operationFailed,
           severity: "danger",
-          detail: "Recent durable operations failed or partially failed.",
+          detail: "Active durable operations failed or partially failed.",
           href: "/admin/operations?status=failed",
-          action: "Retry failed operations",
+          action: "Review failed operations",
         },
         {
           key: "unpublished_schedule",

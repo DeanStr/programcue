@@ -1,4 +1,8 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  canAcknowledgeOperationFailure,
+  genericRetryableOperationTypesSql,
+} from "./operation-service-support.server";
 
 const STALE_QUEUED_OPERATION_SECONDS = 60;
 
@@ -20,7 +24,51 @@ export type OperationListItem = {
   scope: string | null;
   warning: string | null;
   retryable: boolean;
+  alertAcknowledgedAt: number | null;
+  alertAcknowledgedByName: string | null;
+  canAcknowledgeFailure: boolean;
 };
+
+export type OperationFailurePage = {
+  items: OperationListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  from: number;
+  to: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
+};
+
+type OperationListRow = Omit<
+  OperationListItem,
+  "retryable" | "cancellable" | "canAcknowledgeFailure"
+> & {
+  retryable: number;
+  cancellable: number;
+};
+
+function normalizeOperationListItem(
+  operation: OperationListRow,
+): OperationListItem {
+  const hasAcknowledgementActor =
+    operation.alertAcknowledgedByName !== null &&
+    operation.alertAcknowledgedByName.trim().length > 0;
+  if ((operation.alertAcknowledgedAt === null) !== !hasAcknowledgementActor) {
+    throw new Error(
+      `Operation ${operation.id} has inconsistent failure acknowledgement attribution.`,
+    );
+  }
+  const normalized = {
+    ...operation,
+    retryable: operation.retryable === 1,
+    cancellable: operation.cancellable === 1,
+  };
+  return {
+    ...normalized,
+    canAcknowledgeFailure: canAcknowledgeOperationFailure(normalized),
+  };
+}
 
 export type OperationApiListItem = {
   id: string;
@@ -113,7 +161,8 @@ export class OperationReadService {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ timezone: string }>();
-    if (!event) throw new Response("This event could not be found.", { status: 404 });
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
     if (!event.timezone.trim()) {
       throw new Error("The event timezone is missing.");
     }
@@ -163,8 +212,25 @@ export class OperationReadService {
     };
   }
 
-  async list(viewer: Viewer, limit = 100): Promise<OperationListItem[]> {
-    const safeLimit = Math.max(1, Math.min(200, Math.trunc(limit)));
+  private async listRows(
+    viewer: Viewer,
+    options: {
+      limit: number;
+      offset: number;
+      failureOnly: boolean;
+      type: string;
+    },
+  ): Promise<OperationListItem[]> {
+    if (
+      !Number.isInteger(options.limit) ||
+      options.limit < 1 ||
+      options.limit > 200
+    ) {
+      throw new Error("Operation list limit must be between 1 and 200.");
+    }
+    if (!Number.isSafeInteger(options.offset) || options.offset < 0) {
+      throw new Error("Operation list offset must be a non-negative integer.");
+    }
     const result = await this.env.DB.prepare(
       `
       SELECT o.id, o.type, o.status, o.attempt_count AS attemptCount,
@@ -174,6 +240,8 @@ export class OperationReadService {
              o.started_at AS startedAt, o.completed_at AS completedAt,
              p.display_name AS requestedByName, o.correlation_id AS correlationId,
              o.cancellable,
+             o.alert_acknowledged_at AS alertAcknowledgedAt,
+             acknowledgement_person.display_name AS alertAcknowledgedByName,
              COALESCE(
                json_extract(o.payload_json, '$.communicationId'),
                json_extract(o.payload_json, '$.scheduleVersionId'),
@@ -184,12 +252,7 @@ export class OperationReadService {
              ) AS scope,
              json_extract(o.result_json, '$.realtimeWarning') AS warning,
              CASE
-               WHEN o.type NOT IN (
-                 'communication.send', 'calendar.sync', 'decision.notification',
-                 'submission.notification', 'schedule.calendar_fanout',
-                 'integration.accelevents.export', 'webhook.deliver',
-                 'file.scan.dispatch'
-               ) THEN 0
+               WHEN o.type NOT IN (${genericRetryableOperationTypesSql}) THEN 0
                WHEN o.type = 'communication.send' AND EXISTS (
                  SELECT 1 FROM communications communication
                  JOIN communication_deliveries delivery
@@ -215,23 +278,103 @@ export class OperationReadService {
         FROM operation_jobs o
         JOIN events e ON e.id = o.event_id
         LEFT JOIN people p ON p.id = o.requested_by_person_id
+        LEFT JOIN people acknowledgement_person
+          ON acknowledgement_person.id = o.alert_acknowledged_by_person_id
        WHERE o.event_id = ? AND e.organisation_id = ?
-       ORDER BY o.created_at DESC
-       LIMIT ?
+         AND (? = 0 OR o.status IN ('queue_failed','failed','partially_failed'))
+         AND (? = '' OR o.type = ?)
+       ORDER BY CASE
+                  WHEN ? = 1 AND o.alert_acknowledged_at IS NULL THEN 0
+                  ELSE 1
+                END,
+                o.created_at DESC,
+                o.id DESC
+       LIMIT ? OFFSET ?
     `,
     )
-      .bind(viewer.eventId, viewer.organisationId, safeLimit)
-      .all<
-        Omit<OperationListItem, "retryable" | "cancellable"> & {
-          retryable: number;
-          cancellable: number;
-        }
-      >();
-    return result.results.map((operation) => ({
-      ...operation,
-      retryable: operation.retryable === 1,
-      cancellable: operation.cancellable === 1,
-    }));
+      .bind(
+        viewer.eventId,
+        viewer.organisationId,
+        options.failureOnly ? 1 : 0,
+        options.type,
+        options.type,
+        options.failureOnly ? 1 : 0,
+        options.limit,
+        options.offset,
+      )
+      .all<OperationListRow>();
+    return result.results.map(normalizeOperationListItem);
+  }
+
+  list(viewer: Viewer, limit = 100): Promise<OperationListItem[]> {
+    return this.listRows(viewer, {
+      limit,
+      offset: 0,
+      failureOnly: false,
+      type: "",
+    });
+  }
+
+  async listFailurePage(
+    viewer: Viewer,
+    options: { page: number; pageSize: number; type: string },
+  ): Promise<OperationFailurePage> {
+    if (!Number.isSafeInteger(options.page) || options.page < 1) {
+      throw new Response("Failure page must be a positive integer.", {
+        status: 400,
+      });
+    }
+    if (
+      !Number.isInteger(options.pageSize) ||
+      options.pageSize < 1 ||
+      options.pageSize > 200
+    ) {
+      throw new Error("Failure page size must be between 1 and 200.");
+    }
+    const offset = (options.page - 1) * options.pageSize;
+    if (!Number.isSafeInteger(offset)) {
+      throw new Response("Failure page is too large.", { status: 400 });
+    }
+    const [items, count] = await Promise.all([
+      this.listRows(viewer, {
+        limit: options.pageSize,
+        offset,
+        failureOnly: true,
+        type: options.type,
+      }),
+      this.env.DB.prepare(
+        `SELECT COUNT(*) AS total
+           FROM operation_jobs operation
+           JOIN events event
+             ON event.id = operation.event_id
+            AND event.organisation_id = ?
+          WHERE operation.event_id = ?
+            AND operation.status IN ('queue_failed','failed','partially_failed')
+            AND (? = '' OR operation.type = ?)`,
+      )
+        .bind(viewer.organisationId, viewer.eventId, options.type, options.type)
+        .first<{ total: number }>(),
+    ]);
+    if (!count || !Number.isSafeInteger(count.total) || count.total < 0) {
+      throw new Error("The failed operation count is invalid.");
+    }
+    const total = count.total;
+    const pageCount = Math.max(1, Math.ceil(total / options.pageSize));
+    if (options.page > pageCount) {
+      throw new Response("This failed operation page does not exist.", {
+        status: 404,
+      });
+    }
+    return {
+      items,
+      page: options.page,
+      pageSize: options.pageSize,
+      total,
+      from: total === 0 ? 0 : offset + 1,
+      to: offset + items.length,
+      hasPrevious: options.page > 1,
+      hasNext: options.page < pageCount,
+    };
   }
 
   async find(
@@ -246,6 +389,8 @@ export class OperationReadService {
               o.started_at AS startedAt, o.completed_at AS completedAt,
               p.display_name AS requestedByName, o.correlation_id AS correlationId,
               o.cancellable,
+              o.alert_acknowledged_at AS alertAcknowledgedAt,
+              acknowledgement_person.display_name AS alertAcknowledgedByName,
               COALESCE(
                 json_extract(o.payload_json, '$.communicationId'),
                 json_extract(o.payload_json, '$.scheduleVersionId'),
@@ -256,12 +401,7 @@ export class OperationReadService {
               ) AS scope,
               json_extract(o.result_json, '$.realtimeWarning') AS warning,
               CASE
-                WHEN o.type NOT IN (
-                  'communication.send', 'calendar.sync', 'decision.notification',
-                  'submission.notification', 'schedule.calendar_fanout',
-                  'integration.accelevents.export', 'webhook.deliver',
-                  'file.scan.dispatch'
-                ) THEN 0
+                WHEN o.type NOT IN (${genericRetryableOperationTypesSql}) THEN 0
                 WHEN o.type = 'communication.send' AND EXISTS (
                   SELECT 1 FROM communications communication
                   JOIN communication_deliveries delivery
@@ -287,23 +427,15 @@ export class OperationReadService {
          FROM operation_jobs o
          JOIN events e ON e.id = o.event_id AND e.organisation_id = ?
          LEFT JOIN people p ON p.id = o.requested_by_person_id
+         LEFT JOIN people acknowledgement_person
+           ON acknowledgement_person.id = o.alert_acknowledged_by_person_id
         WHERE o.id = ? AND o.event_id = ?
         LIMIT 1`,
     )
       .bind(viewer.organisationId, operationId, viewer.eventId)
-      .first<
-        Omit<OperationListItem, "retryable" | "cancellable"> & {
-          retryable: number;
-          cancellable: number;
-        }
-      >();
-    return operation
-      ? {
-          ...operation,
-          retryable: operation.retryable === 1,
-          cancellable: operation.cancellable === 1,
-        }
-      : null;
+      .first<OperationListRow>();
+    if (!operation) return null;
+    return normalizeOperationListItem(operation);
   }
 
   async detail(viewer: Viewer, operationId: string): Promise<OperationDetail> {

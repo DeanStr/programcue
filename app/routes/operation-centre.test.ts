@@ -148,6 +148,137 @@ describe("Operation Centre Airtable recovery", () => {
 });
 
 describe("Operation Centre import presentation", () => {
+  it("paginates the complete type-filtered failure history without overlap", async () => {
+    const prefix = crypto.randomUUID();
+    const operationType = `test.pagination.${prefix}`;
+    await workerEnv.DB.prepare(
+      `WITH RECURSIVE sequence(value) AS (
+         VALUES (1)
+         UNION ALL SELECT value + 1 FROM sequence WHERE value < 51
+       )
+       INSERT INTO operation_jobs (
+         id, organisation_id, event_id, requested_by_person_id, type,
+         idempotency_key, correlation_id, status, payload_json, last_error,
+         completed_at, created_at, updated_at
+       )
+       SELECT ? || ':' || value, ?, ?, 'person-demo-admin', ?,
+              ? || ':key:' || value, ? || ':correlation:' || value,
+              'failed', '{}', 'Paginated historical failure',
+              value, value, value
+         FROM sequence`,
+    )
+      .bind(prefix, organisationId, eventId, operationType, prefix, prefix)
+      .run();
+
+    const first = await loader({
+      request: request(
+        undefined,
+        `?status=failed&type=${encodeURIComponent(operationType)}&page=1`,
+      ),
+      params: {},
+      context: context(),
+    } as never);
+    const second = await loader({
+      request: request(
+        undefined,
+        `?status=failed&type=${encodeURIComponent(operationType)}&page=2`,
+      ),
+      params: {},
+      context: context(),
+    } as never);
+
+    expect(first.failurePagination).toEqual({
+      page: 1,
+      pageSize: 50,
+      total: 51,
+      from: 1,
+      to: 50,
+      hasPrevious: false,
+      hasNext: true,
+    });
+    expect(second.failurePagination).toEqual({
+      page: 2,
+      pageSize: 50,
+      total: 51,
+      from: 51,
+      to: 51,
+      hasPrevious: true,
+      hasNext: false,
+    });
+    expect(first.operations).toHaveLength(50);
+    expect(second.operations).toHaveLength(1);
+    const firstIds = new Set(first.operations.map(({ id }) => id));
+    expect(second.operations.every(({ id }) => !firstIds.has(id))).toBe(true);
+
+    await expect(
+      loader({
+        request: request(
+          undefined,
+          `?status=failed&type=${encodeURIComponent(operationType)}&page=3`,
+        ),
+        params: {},
+        context: context(),
+      } as never),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      loader({
+        request: request(undefined, "?status=failed&page=0"),
+        params: {},
+        context: context(),
+      } as never),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("queries failures directly so an old alert is not hidden by recent successful work", async () => {
+    const failureId = `older-failure-${crypto.randomUUID()}`;
+    const fillerPrefix = crypto.randomUUID();
+    await workerEnv.DB.batch([
+      workerEnv.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json, last_error,
+           completed_at, created_at, updated_at
+         ) VALUES (?, ?, ?, 'person-demo-admin', 'data.export', ?, ?,
+                   'failed', '{}', 'Historical export failure', 1, 1, 1)`,
+      ).bind(
+        failureId,
+        organisationId,
+        eventId,
+        `older-failure-key-${fillerPrefix}`,
+        failureId,
+      ),
+      workerEnv.DB.prepare(
+        `WITH RECURSIVE sequence(value) AS (
+           VALUES (1)
+           UNION ALL SELECT value + 1 FROM sequence WHERE value < 101
+         )
+         INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json,
+           completed_at, created_at, updated_at
+         )
+         SELECT ? || ':' || value, ?, ?, 'person-demo-admin', 'data.export',
+                ? || ':key:' || value, ? || ':correlation:' || value,
+                'completed', '{}', unixepoch(), unixepoch(), unixepoch()
+           FROM sequence`,
+      ).bind(fillerPrefix, organisationId, eventId, fillerPrefix, fillerPrefix),
+    ]);
+
+    const result = await loader({
+      request: request(undefined, "?status=failed&type=data.export"),
+      params: {},
+      context: context(),
+    } as never);
+
+    expect(result.operations).toContainEqual(
+      expect.objectContaining({
+        id: failureId,
+        status: "failed",
+        canAcknowledgeFailure: true,
+      }),
+    );
+  });
+
   it("loads a directly selected operation outside the recent list window", async () => {
     const operationId = `older-import-${crypto.randomUUID()}`;
     const fillerPrefix = crypto.randomUUID();
@@ -192,7 +323,6 @@ describe("Operation Centre import presentation", () => {
       context: context(),
     } as never);
 
-    expect(result.totalOperations).toBe(100);
     expect(result.operations).toEqual([
       expect.objectContaining({
         id: operationId,

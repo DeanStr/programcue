@@ -23,6 +23,9 @@ const ACCELEVENTS_OPERATION_ITEM_ID = "demo-accelevents-failed-operation-item";
 const REPOSITORY_RECOVERY_EVENT_ID = "demo-airtable-recovery-event";
 const REPOSITORY_RECOVERY_OPERATION_ID =
   "demo-airtable-recovery-failed-operation";
+const FAILURE_ALERT_OPERATION_ID = "demo-non-actionable-failed-operation";
+const FAILURE_PAGINATION_PREFIX = "demo-paginated-failure-";
+const FAILURE_PAGINATION_TYPE = "demo.pagination.failure";
 
 function requireDemo(env: CloudflareEnvironment) {
   if (
@@ -334,6 +337,92 @@ async function seedEventRepositoryRecovery(env: CloudflareEnvironment) {
   };
 }
 
+async function seedNonActionableFailureAlert(env: CloudflareEnvironment) {
+  await ensureDemoProgramme(env);
+  await env.DB.batch([
+    env.DB.prepare(
+      `DELETE FROM audit_events
+        WHERE event_id = ? AND entity_type = 'operation' AND entity_id = ?`,
+    ).bind(DEMO_EVENT_ID, FAILURE_ALERT_OPERATION_ID),
+    env.DB.prepare(
+      `DELETE FROM operation_jobs WHERE id = ? AND event_id = ?`,
+    ).bind(FAILURE_ALERT_OPERATION_ID, DEMO_EVENT_ID),
+    env.DB.prepare(
+      `INSERT INTO operation_jobs (
+         id, organisation_id, event_id, requested_by_person_id, type,
+         idempotency_key, correlation_id, status, payload_json, result_json,
+         progress_total, progress_completed, progress_failed, attempt_count,
+         last_error, cancellable, completed_at, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, 'ai.context.run',
+                 'demo-non-actionable-failed-operation', ?, 'failed', ?, ?,
+                 1, 0, 1, 1, ?, 0, unixepoch(), unixepoch(), unixepoch())`,
+    ).bind(
+      FAILURE_ALERT_OPERATION_ID,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.administrator.personId,
+      "demo-non-actionable-failed-correlation",
+      JSON.stringify({
+        runId: FAILURE_ALERT_OPERATION_ID,
+        kind: "readiness_summary",
+        demonstrationOnly: true,
+      }),
+      JSON.stringify({ errorType: "DemoHistoricalFailure" }),
+      "Demo fixture: a historical AI context run failed before the bug was corrected.",
+    ),
+  ]);
+  return {
+    operationId: FAILURE_ALERT_OPERATION_ID,
+    operationType: "ai.context.run",
+    providerCalled: false,
+  };
+}
+
+async function seedFailureAlertPagination(env: CloudflareEnvironment) {
+  await ensureDemoProgramme(env);
+  await env.DB.batch([
+    env.DB.prepare(
+      `DELETE FROM audit_events
+        WHERE event_id = ? AND entity_type = 'operation'
+          AND entity_id LIKE ?`,
+    ).bind(DEMO_EVENT_ID, `${FAILURE_PAGINATION_PREFIX}%`),
+    env.DB.prepare(
+      `DELETE FROM operation_jobs
+        WHERE event_id = ? AND id LIKE ?`,
+    ).bind(DEMO_EVENT_ID, `${FAILURE_PAGINATION_PREFIX}%`),
+    env.DB.prepare(
+      `WITH RECURSIVE sequence(value) AS (
+         VALUES (1)
+         UNION ALL SELECT value + 1 FROM sequence WHERE value < 51
+       )
+       INSERT INTO operation_jobs (
+         id, organisation_id, event_id, requested_by_person_id, type,
+         idempotency_key, correlation_id, status, payload_json, last_error,
+         cancellable, completed_at, created_at, updated_at
+       )
+       SELECT printf('%s%03d', ?, value), ?, ?, ?, ?,
+              printf('%skey-%03d', ?, value),
+              printf('%scorrelation-%03d', ?, value),
+              'failed', '{}', 'Demo fixture: paginated historical failure.',
+              0, value, value, value
+         FROM sequence`,
+    ).bind(
+      FAILURE_PAGINATION_PREFIX,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.administrator.personId,
+      FAILURE_PAGINATION_TYPE,
+      FAILURE_PAGINATION_PREFIX,
+      FAILURE_PAGINATION_PREFIX,
+    ),
+  ]);
+  return {
+    operationType: FAILURE_PAGINATION_TYPE,
+    operationCount: 51,
+    providerCalled: false,
+  };
+}
+
 export async function action({ request, context }: ActionFunctionArgs) {
   const { env } = getCloudflareContext(context);
   requireDemo(env);
@@ -352,7 +441,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
         ? await seedAcceleventsNoWriteFixture(env)
         : intent === "seed_event_repository_recovery"
           ? await seedEventRepositoryRecovery(env)
-          : null;
+          : intent === "seed_non_actionable_failure_alert"
+            ? await seedNonActionableFailureAlert(env)
+            : intent === "seed_failure_alert_pagination"
+              ? await seedFailureAlertPagination(env)
+              : null;
   if (!result)
     throw new Response("Unsupported demo fixture action", { status: 400 });
   return data(

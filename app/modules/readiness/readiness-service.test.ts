@@ -302,6 +302,30 @@ describe("D1-backed command centre", () => {
     );
     expect(operations?.total).toBeGreaterThan(snapshot.operations.length);
     expect(operations?.score).toBeLessThan(100);
+
+    await env.DB.prepare(
+      `UPDATE operation_jobs
+          SET alert_acknowledged_at = unixepoch(),
+              alert_acknowledged_by_person_id = ?
+        WHERE id = ?`,
+    )
+      .bind(viewer.personId, failedId)
+      .run();
+    const acknowledged = await new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+    ).getCommandCentre(viewer);
+    expect(
+      acknowledged.blockers.find(
+        (blocker) => blocker.key === "operation_failures",
+      )?.count ?? 0,
+    ).toBe(
+      (snapshot.blockers.find((blocker) => blocker.key === "operation_failures")
+        ?.count ?? 0) - 1,
+    );
+    expect(
+      acknowledged.workflows.find((workflow) => workflow.key === "operations")
+        ?.total,
+    ).toBe((operations?.total ?? 0) - 1);
   });
 
   it("does not treat intentional cancellations as incomplete readiness work", async () => {

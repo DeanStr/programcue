@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { e2eOrigin } from "./support/e2e-origin";
+import { acceptConfirm, confirmDialog } from "./support/confirm-dialog";
 
 const FIXTURE_CONFIRMATION = "seed-assistant-approval-browser-fixture";
 
@@ -228,6 +229,117 @@ test("contextual AI actions stay inside the readiness and review workflows", asy
   await expect(
     page.getByText(/cannot score, submit or change your review/i),
   ).toBeVisible();
+});
+
+test("a non-actionable failed operation can be archived without erasing its history", async ({
+  page,
+  request,
+}) => {
+  const fixture = await request.post("/demo/fixtures/golden-path", {
+    form: {
+      intent: "seed_non_actionable_failure_alert",
+      confirm: "seed-golden-path-browser-fixture",
+    },
+    headers: { origin: e2eOrigin },
+  });
+  const fixtureBody = await fixture.text();
+  expect(fixture.ok(), fixtureBody).toBeTruthy();
+  const fixtureData = JSON.parse(fixtureBody) as {
+    operationId: string;
+    providerCalled: boolean;
+  };
+  expect(fixtureData.providerCalled).toBe(false);
+
+  await page.goto(
+    `/admin/operations?operation=${encodeURIComponent(fixtureData.operationId)}`,
+  );
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const notificationsButton = page.getByRole("button", {
+    name: /operational notifications?$/,
+  });
+  const notificationLabel =
+    await notificationsButton.getAttribute("aria-label");
+  const notificationCount = Number.parseInt(notificationLabel ?? "", 10);
+  expect(notificationCount).toBeGreaterThan(0);
+
+  const failedOperation = page
+    .getByRole("table")
+    .getByRole("row")
+    .filter({ hasText: fixtureData.operationId });
+  await expect(failedOperation).toContainText("Ai context run");
+  await expect(failedOperation).toContainText(
+    "a historical AI context run failed before the bug was corrected",
+  );
+  await failedOperation.getByRole("button", { name: "Archive alert" }).click();
+  await expect(confirmDialog(page)).toContainText(
+    "The failed operation, recorded error and audit history remain available.",
+  );
+  await acceptConfirm(page);
+  await expect(
+    page.getByRole("status").filter({
+      hasText:
+        "The failure was acknowledged and removed from active operational alerts.",
+    }),
+  ).toBeVisible();
+  await expect(failedOperation).toContainText("Alert archived by");
+  await expect(failedOperation).toContainText(
+    "failed before the bug was corrected",
+  );
+  await expect(page.getByRole("region", { name: "Audit trail" })).toContainText(
+    "operation · failure_acknowledged",
+  );
+});
+
+test("failed operation history exposes every bounded page", async ({
+  page,
+  request,
+}) => {
+  const fixture = await request.post("/demo/fixtures/golden-path", {
+    form: {
+      intent: "seed_failure_alert_pagination",
+      confirm: "seed-golden-path-browser-fixture",
+    },
+    headers: { origin: e2eOrigin },
+  });
+  const fixtureBody = await fixture.text();
+  expect(fixture.ok(), fixtureBody).toBeTruthy();
+  const fixtureData = JSON.parse(fixtureBody) as {
+    operationType: string;
+    operationCount: number;
+    providerCalled: boolean;
+  };
+  expect(fixtureData).toMatchObject({
+    operationCount: 51,
+    providerCalled: false,
+  });
+
+  await page.goto(
+    `/admin/operations?status=failed&type=${encodeURIComponent(fixtureData.operationType)}`,
+  );
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const firstPageNavigation = page.getByRole("navigation", {
+    name: "Failed operation pages",
+  });
+  await expect(firstPageNavigation).toContainText(
+    "Showing 1–50 of 51 failed operations",
+  );
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(50);
+
+  await firstPageNavigation.getByRole("link", { name: "Next page" }).click();
+  await expect(page).toHaveURL(/(?:\?|&)page=2(?:&|$)/);
+  const secondPageNavigation = page.getByRole("navigation", {
+    name: "Failed operation pages",
+  });
+  await expect(secondPageNavigation).toContainText(
+    "Showing 51–51 of 51 failed operations",
+  );
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(1);
+  await expect(
+    secondPageNavigation.getByRole("link", { name: "Previous page" }),
+  ).toBeVisible();
+  await expect(
+    secondPageNavigation.getByRole("link", { name: "Next page" }),
+  ).toHaveCount(0);
 });
 
 test("an accidental contextual AI document GET renders the application error page", async ({

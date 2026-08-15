@@ -21,6 +21,7 @@ import {
   activityAreas,
 } from "~/platform/operations/operation-service.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
+import { notifyRouteChange } from "~/platform/realtime/route-realtime.server";
 
 const exportResources = [
   "people",
@@ -31,6 +32,31 @@ const exportResources = [
   "tasks",
   "audit",
 ] as const;
+
+const FAILURE_PAGE_SIZE = 50;
+
+function failurePageFromSearch(search: URLSearchParams, status: string) {
+  const rawPage = search.get("page");
+  if (status !== "failed") {
+    if (rawPage !== null) {
+      throw new Response("Operation pages require the failed status filter.", {
+        status: 400,
+      });
+    }
+    return 1;
+  }
+  if (rawPage === null) return 1;
+  if (!/^[1-9]\d*$/.test(rawPage)) {
+    throw new Response("Failure page must be a positive integer.", {
+      status: 400,
+    });
+  }
+  const page = Number(rawPage);
+  if (!Number.isSafeInteger(page)) {
+    throw new Response("Failure page is too large.", { status: 400 });
+  }
+  return page;
+}
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
@@ -43,16 +69,40 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // and force the browser to revalidate rather than being silently missed.
   const cursor = await new EventRealtimeService(env).getLatestCursor(viewer);
   const service = new OperationService(env);
-  const [operations, airtableRecoveries, eventTimezone] = await Promise.all([
-    service.list(viewer),
-    new AirtableProjectionRecoveryService(env).list(viewer),
-    service.eventTimezone(viewer),
-  ]);
   const search = new URL(request.url).searchParams;
   const status = search.get("status") ?? "";
   const type = search.get("type") ?? "";
   const operationId = search.get("operation") ?? "";
   const panel = search.get("panel") ?? "";
+  const failurePage = failurePageFromSearch(search, status);
+  const operationRead =
+    status === "failed"
+      ? service.listFailurePage(viewer, {
+          page: failurePage,
+          pageSize: FAILURE_PAGE_SIZE,
+          type,
+        })
+      : service.list(viewer);
+  const [operationResult, airtableRecoveries, eventTimezone] =
+    await Promise.all([
+      operationRead,
+      new AirtableProjectionRecoveryService(env).list(viewer),
+      service.eventTimezone(viewer),
+    ]);
+  const failurePagination = Array.isArray(operationResult)
+    ? null
+    : {
+        page: operationResult.page,
+        pageSize: operationResult.pageSize,
+        total: operationResult.total,
+        from: operationResult.from,
+        to: operationResult.to,
+        hasPrevious: operationResult.hasPrevious,
+        hasNext: operationResult.hasNext,
+      };
+  const operations = Array.isArray(operationResult)
+    ? operationResult
+    : operationResult.items;
   const activityFilters = {
     area: search.get("activityArea") ?? "",
     actorPersonId: search.get("activityActor") ?? "",
@@ -92,8 +142,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     operationDetail,
     selectedOperation,
     selectedOperationId: operationId,
-    types: [...new Set(candidates.map((operation) => operation.type))].sort(),
+    types: [
+      ...new Set([
+        ...candidates.map((operation) => operation.type),
+        ...(type ? [type] : []),
+      ]),
+    ].sort(),
     filters: { status, type },
+    failurePagination,
     panel,
     activity,
     activityAreas,
@@ -108,7 +164,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       ).values(),
     ].sort((left, right) => left.name.localeCompare(right.name)),
     activityFilters,
-    totalOperations: operations.length,
     filterActive: Boolean(status || type || operationId),
     eventId: viewer.eventId,
     eventTimezone,
@@ -254,6 +309,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (
     intent !== "retry" &&
     intent !== "cancel" &&
+    intent !== "acknowledge-failure" &&
     intent !== "retry-item" &&
     intent !== "skip-item"
   )
@@ -267,6 +323,20 @@ export async function action({ request, context }: Route.ActionArgs) {
       await service.retry(viewer, operationId);
     } else if (intent === "cancel") {
       await service.cancel(viewer, operationId);
+    } else if (intent === "acknowledge-failure") {
+      const acknowledgement = await service.acknowledgeFailure(
+        viewer,
+        operationId,
+      );
+      const realtimeFailure = await notifyRouteChange(
+        env,
+        viewer,
+        acknowledgement.changeSequence,
+        operationId,
+      );
+      if (realtimeFailure) {
+        return data({ ...realtimeFailure, operationId }, { status: 207 });
+      }
     } else {
       const itemId = String(form.get("itemId") ?? "");
       if (!itemId)
@@ -290,9 +360,11 @@ export async function action({ request, context }: Route.ActionArgs) {
           ? "This operation was queued to run again."
           : intent === "cancel"
             ? "This operation was cancelled before any external work began."
-            : intent === "retry-item"
-              ? "Only the selected failed Accelevents record was queued for retry."
-              : "The selected Accelevents record was skipped with an audit reason.",
+            : intent === "acknowledge-failure"
+              ? "The failure was acknowledged and removed from active operational alerts. Its operation and audit history remain available."
+              : intent === "retry-item"
+                ? "Only the selected failed Accelevents record was queued for retry."
+                : "The selected Accelevents record was skipped with an audit reason.",
     });
   } catch (error) {
     if (error instanceof OperationQueueUnavailableError) {

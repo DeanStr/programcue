@@ -55,6 +55,10 @@ export const operationJobs = sqliteTable(
     dispatchedAt: integer("dispatched_at"),
     startedAt: integer("started_at"),
     completedAt: integer("completed_at"),
+    alertAcknowledgedAt: integer("alert_acknowledged_at"),
+    alertAcknowledgedByPersonId: text(
+      "alert_acknowledged_by_person_id",
+    ).references(() => people.id),
     createdAt: integer("created_at").notNull().default(epochNow),
     updatedAt: integer("updated_at").notNull().default(epochNow),
   },
@@ -74,6 +78,12 @@ export const operationJobs = sqliteTable(
       table.type,
       table.status,
       table.dispatchedAt,
+      table.createdAt,
+    ),
+    index("idx_operation_jobs_event_failure_alert").on(
+      table.eventId,
+      table.status,
+      table.alertAcknowledgedAt,
       table.createdAt,
     ),
   ],

@@ -110,7 +110,9 @@ export function OperationCentreWorkspace({
             Activity timeline
           </Link>
           <span className="status info">
-            {loaderData.operations.length} recent operations
+            {loaderData.failurePagination
+              ? `${loaderData.failurePagination.from}–${loaderData.failurePagination.to} of ${loaderData.failurePagination.total} failed operations`
+              : `${loaderData.operations.length} recent operations`}
           </span>
         </div>
       </div>
@@ -129,8 +131,7 @@ export function OperationCentreWorkspace({
         <div className="validation-item warn card pad mb" role="status">
           <strong>Filtered</strong>
           <span>
-            Showing {loaderData.operations.length} of{" "}
-            {loaderData.totalOperations} operations.{" "}
+            Showing {loaderData.operations.length} matching operations.{" "}
             <Link to="/admin/operations">Clear filters</Link>
           </span>
         </div>

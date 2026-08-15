@@ -302,6 +302,24 @@ the human checklist.
   Event-local calendar dates drive task due-distance labels, including midnight
   boundaries.
 
+The current repository candidate extends the Operations production slice with
+an audited, actor-attributed acknowledgement for terminal failures that expose
+neither retry nor cancel in the Operation Centre. Acknowledgement preserves the
+failed operation and its error while removing only its active shell alert and
+readiness blocker; actionable failures cannot use this path. The failed view
+queries failure records directly, prioritises active alerts and exposes the
+complete type-filtered history in explicit 50-row pages, so an old alert is not
+hidden by newer successful work. Migration `0026` adds the acknowledgement
+fields, bounded alert index and triggers requiring timestamp and actor together;
+the read path also rejects inconsistent attribution instead of inventing an
+actor name. The same transaction persists an operation invalidation cursor and
+the route broadcasts it after commit, keeping concurrent views current while
+preserving D1 polling when live delivery fails. Focused Worker coverage verifies
+eligibility, tenant-scoped persistence, immutable failure status, audit evidence
+and alert/readiness removal; the Chromium assistant workflow exercises the
+confirmation and preserved archived error. This is repository evidence only
+until the migration and candidate are deployed.
+
 ### Committee, delivery-health and speaker-link evidence
 
 - **Production slice; deployed; repository acceptance:** Evaluation administration now

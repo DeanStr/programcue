@@ -111,7 +111,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
               count: shellContext.notificationCounts.failedOperations,
               href: "/admin/operations?status=failed",
               severity: "warning" as const,
-              detail: "Inspect the recorded error, then retry",
+              detail: "Inspect the error, then retry or archive the alert",
             },
           ].filter((notification) => notification.count > 0),
   };

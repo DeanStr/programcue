@@ -433,7 +433,8 @@ export async function loadCurrentEventAdminShellContext(
            FROM operation_jobs operation
            JOIN current_event event ON event.id = operation.event_id
           WHERE operation.organisation_id = event.organisation_id
-            AND operation.status IN ('queue_failed','failed','partially_failed')) AS failedOperations
+            AND operation.status IN ('queue_failed','failed','partially_failed')
+            AND operation.alert_acknowledged_at IS NULL) AS failedOperations
     `,
     )
       .bind(

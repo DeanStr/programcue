@@ -28,6 +28,37 @@ export class OperationStateError extends Error {
   }
 }
 
+export const genericRetryableOperationTypes = [
+  "communication.send",
+  "calendar.sync",
+  "decision.notification",
+  "submission.notification",
+  "schedule.calendar_fanout",
+  "integration.accelevents.export",
+  "webhook.deliver",
+  "file.scan.dispatch",
+] as const;
+
+export const genericRetryableOperationTypesSql = genericRetryableOperationTypes
+  .map((type) => `'${type}'`)
+  .join(", ");
+
+const failureStatuses = new Set(["queue_failed", "failed", "partially_failed"]);
+
+export function canAcknowledgeOperationFailure(operation: {
+  status: string;
+  retryable: boolean;
+  cancellable: boolean;
+  alertAcknowledgedAt: number | null;
+}) {
+  return (
+    failureStatuses.has(operation.status) &&
+    !operation.retryable &&
+    !operation.cancellable &&
+    operation.alertAcknowledgedAt === null
+  );
+}
+
 export function parseRetryQueueMessage(
   payloadJson: string,
   operation: { id: string; type: string },

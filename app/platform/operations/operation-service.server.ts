@@ -4,6 +4,7 @@ import {
   parseJsonRecord,
   type ActivityTimelineItem,
   type OperationDetail,
+  type OperationFailurePage,
   type OperationListItem,
 } from "./operation-read-service.server";
 export { activityAreas } from "./operation-read-service.server";
@@ -14,36 +15,62 @@ export type {
   OperationAuditItem,
   OperationDetail,
   OperationDetailItem,
+  OperationFailurePage,
   OperationListItem,
 } from "./operation-read-service.server";
 import { CommunicationDeliveryService } from "~/modules/communications/communication-delivery-service.server";
 import { fileScanQueueMessageSchema } from "~/modules/files/file-scan-dispatch.server";
 import { TaskBulkService } from "~/modules/tasks/task-bulk-service.server";
-
-const STALE_QUEUED_OPERATION_SECONDS = 60;
-const retryableOperationTypes = new Set([
-  "communication.send",
-  "calendar.sync",
-  "decision.notification",
-  "submission.notification",
-  "schedule.calendar_fanout",
-  "integration.accelevents.export",
-  "webhook.deliver",
-  "file.scan.dispatch",
-]);
-
 import { AcceleventsOperationItemService } from "./accelevents-operation-items.server";
 import {
   OperationNotFoundError,
   OperationQueueUnavailableError,
   OperationStateError,
+  genericRetryableOperationTypes,
+  genericRetryableOperationTypesSql,
   parseRetryQueueMessage,
 } from "./operation-service-support.server";
+
+const STALE_QUEUED_OPERATION_SECONDS = 60;
+
+// Keep the mutation-side guard aligned with the retry rules exposed by the
+// Operation Centre. Co-speaker invitations deliberately use their owning
+// workflow instead of generic operation retry, so an archived old failure and
+// any replacement work remain distinct records.
+const failureAcknowledgementEligibilitySql = `
+  operation.status IN ('queue_failed','failed','partially_failed')
+  AND operation.cancellable = 0
+  AND operation.alert_acknowledged_at IS NULL
+  AND (
+    operation.type NOT IN (${genericRetryableOperationTypesSql})
+    OR (
+      operation.type = 'communication.send'
+      AND EXISTS (
+        SELECT 1
+          FROM communications communication
+          JOIN communication_deliveries delivery
+            ON delivery.communication_id = communication.id
+           AND delivery.event_id = communication.event_id
+          JOIN submission_speakers speaker
+            ON speaker.id = delivery.source_id
+           AND speaker.event_id = delivery.event_id
+         WHERE communication.operation_id = operation.id
+           AND communication.event_id = operation.event_id
+           AND json_extract(communication.audience_json, '$.type') =
+               'co_speaker_invitation'
+           AND json_extract(communication.audience_json, '$.speakerId') =
+               speaker.id
+      )
+    )
+  )`;
+
 export {
   OperationNotFoundError,
   OperationQueueUnavailableError,
   OperationStateError,
 } from "./operation-service-support.server";
+
+const retryableOperationTypes = new Set<string>(genericRetryableOperationTypes);
 
 export class OperationService {
   constructor(private readonly env: CloudflareEnvironment) {}
@@ -67,6 +94,13 @@ export class OperationService {
     return this.readService().list(viewer, limit);
   }
 
+  listFailurePage(
+    viewer: Viewer,
+    options: { page: number; pageSize: number; type: string },
+  ): Promise<OperationFailurePage> {
+    return this.readService().listFailurePage(viewer, options);
+  }
+
   find(viewer: Viewer, operationId: string): Promise<OperationListItem | null> {
     return this.readService().find(viewer, operationId);
   }
@@ -81,6 +115,126 @@ export class OperationService {
     limit = 200,
   ): Promise<ActivityTimelineItem[]> {
     return this.readService().activity(viewer, filters, limit);
+  }
+
+  async acknowledgeFailure(
+    viewer: Viewer,
+    operationId: string,
+  ): Promise<{ changeSequence: number }> {
+    const operation = await this.find(viewer, operationId);
+    if (!operation) throw new OperationNotFoundError();
+    if (operation.alertAcknowledgedAt !== null) {
+      throw new OperationStateError(
+        "This operation failure alert has already been acknowledged.",
+      );
+    }
+    if (!operation.canAcknowledgeFailure) {
+      throw new OperationStateError(
+        "Only a failed operation with no retry or cancel action in the Operation Centre can be acknowledged.",
+      );
+    }
+
+    const auditId = crypto.randomUUID();
+    const results = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, operation.organisation_id, operation.event_id, ?,
+                'operation.failure_acknowledged', 'operation', operation.id,
+                json_object('type', operation.type, 'status', operation.status),
+                unixepoch()
+           FROM operation_jobs operation
+           JOIN events event
+             ON event.id = operation.event_id
+            AND event.organisation_id = operation.organisation_id
+          WHERE operation.id = ? AND operation.event_id = ?
+            AND operation.organisation_id = ?
+            AND operation.status = ?
+            AND operation.type = ?
+            AND ${failureAcknowledgementEligibilitySql}`,
+      ).bind(
+        auditId,
+        viewer.personId,
+        operationId,
+        viewer.eventId,
+        viewer.organisationId,
+        operation.status,
+        operation.type,
+      ),
+      this.env.DB.prepare(
+        `UPDATE operation_jobs AS operation
+            SET alert_acknowledged_at = unixepoch(),
+                alert_acknowledged_by_person_id = ?,
+                updated_at = unixepoch()
+          WHERE operation.id = ? AND operation.event_id = ?
+            AND operation.organisation_id = ?
+            AND operation.status = ?
+            AND operation.type = ?
+            AND ${failureAcknowledgementEligibilitySql}
+            AND EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = ?
+                 AND audit.organisation_id = operation.organisation_id
+                 AND audit.event_id = operation.event_id
+                 AND audit.action = 'operation.failure_acknowledged'
+                 AND audit.entity_type = 'operation'
+                 AND audit.entity_id = operation.id
+            )`,
+      ).bind(
+        viewer.personId,
+        operationId,
+        viewer.eventId,
+        viewer.organisationId,
+        operation.status,
+        operation.type,
+        auditId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type,
+           correlation_id, created_at
+         )
+         SELECT operation.event_id, 'operation', operation.id, 'updated',
+                operation.correlation_id, unixepoch()
+           FROM operation_jobs operation
+          WHERE operation.id = ? AND operation.event_id = ?
+            AND operation.organisation_id = ?
+            AND operation.alert_acknowledged_at IS NOT NULL
+            AND operation.alert_acknowledged_by_person_id = ?
+            AND EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = ?
+                 AND audit.organisation_id = operation.organisation_id
+                 AND audit.event_id = operation.event_id
+                 AND audit.action = 'operation.failure_acknowledged'
+                 AND audit.entity_type = 'operation'
+                 AND audit.entity_id = operation.id
+            )
+         RETURNING sequence`,
+      ).bind(
+        operationId,
+        viewer.eventId,
+        viewer.organisationId,
+        viewer.personId,
+        auditId,
+      ),
+    ]);
+    const change = results[2]?.results[0] as { sequence: number } | undefined;
+    if (
+      (results[0].meta.changes ?? 0) !== 1 ||
+      (results[1].meta.changes ?? 0) !== 1 ||
+      (results[2].meta.changes ?? 0) !== 1 ||
+      !change ||
+      !Number.isSafeInteger(change.sequence) ||
+      change.sequence < 1
+    ) {
+      throw new OperationStateError(
+        "The operation changed before its failure alert could be acknowledged.",
+      );
+    }
+    return { changeSequence: change.sequence };
   }
 
   async cancel(viewer: Viewer, operationId: string) {
