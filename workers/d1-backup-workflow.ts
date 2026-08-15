@@ -20,8 +20,8 @@ export const D1_BACKUP_CRON = "17 2 * * *";
 export const D1_BACKUP_FORMAT = "program-cue-d1-logical-backup-v1";
 
 const BACKUP_PREFIX = "d1-logical";
-const MAX_EXPORT_POLLS = 240;
-const EXPORT_POLL_DELAY = "10 seconds";
+const MAX_EXPORT_POLLS = 2_400;
+const EXPORT_POLL_DELAY = "1 second";
 const EXPORT_API_TIMEOUT_MS = 60_000;
 const EXPORT_API_RESPONSE_MAX_BYTES = 256 * 1024;
 const EXPORT_DOWNLOAD_TIMEOUT_MS = 12 * 60_000;
@@ -392,6 +392,13 @@ export function parseD1ExportEnvelope(value: unknown): D1ExportState {
   }
 
   const result = envelope.result as D1ExportApiResult;
+  if (result.success === false) {
+    const detail =
+      typeof result.error === "string" && result.error.trim()
+        ? result.error.trim()
+        : "the export job failed without an error message";
+    throw new NonRetryableError(`Cloudflare D1 export failed: ${detail}`);
+  }
   const bookmark =
     typeof result.at_bookmark === "string" ? result.at_bookmark.trim() : "";
   if (!bookmark) {
@@ -908,11 +915,13 @@ export async function runD1BackupWorkflow(
     );
     let pollCount = 0;
     while (state.phase === "pending" && pollCount < MAX_EXPORT_POLLS) {
-      await step.sleep("wait before D1 export poll", EXPORT_POLL_DELAY);
       state = await step.do("poll D1 logical export", API_RETRY, () =>
         requestD1ExportState(configuration, state.bookmark),
       );
       pollCount += 1;
+      if (state.phase === "pending") {
+        await step.sleep("wait before D1 export poll", EXPORT_POLL_DELAY);
+      }
     }
     if (state.phase !== "complete") {
       throw new NonRetryableError(

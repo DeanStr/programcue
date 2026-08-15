@@ -284,6 +284,15 @@ describe("scheduled D1 backup Workflow boundaries", () => {
         }),
       ),
     ).toThrow("outside the HTTPS R2 service domain");
+    expect(() =>
+      parseD1ExportEnvelope(
+        envelope({
+          at_bookmark: undefined,
+          success: false,
+          error: "Not currently exporting anything.",
+        }),
+      ),
+    ).toThrow("Cloudflare D1 export failed: Not currently exporting anything.");
   });
 
   it("uses the documented initiate and bookmark-poll request bodies", async () => {
@@ -665,10 +674,12 @@ describe("scheduled D1 backup Workflow boundaries", () => {
         return Response.json(
           apiCalls === 1
             ? envelope({ status: "active" })
-            : envelope({
-                status: "complete",
-                result: { filename: "export.sql", signed_url: signedUrl },
-              }),
+            : apiCalls === 2
+              ? envelope({ status: "active" })
+              : envelope({
+                  status: "complete",
+                  result: { filename: "export.sql", signed_url: signedUrl },
+                }),
         );
       }
       if (url === signedUrl) {
@@ -695,10 +706,10 @@ describe("scheduled D1 backup Workflow boundaries", () => {
         backupDate: "2026-08-11",
         workflowInstanceId: "d1-backup-2026-08-11",
       });
-      expect(apiCalls).toBe(2);
+      expect(apiCalls).toBe(3);
       expect(step.sleep).toHaveBeenCalledWith(
         "wait before D1 export poll",
-        "10 seconds",
+        "1 second",
       );
       expect(
         await bucket.head(
