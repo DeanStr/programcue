@@ -15,7 +15,6 @@
     "app/**/*.lint.ts"
   ],
   "compilerOptions": {
-    "composite": true,
     "strict": true,
     "allowImportingTsExtensions": true,
     "types": ["node"],

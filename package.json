@@ -11,7 +11,7 @@
     "start": "npm run dev",
     "preview": "npm run build && vite preview",
     "types:generate": "wrangler types && react-router typegen",
-    "typecheck:generated": "tsc -b",
+    "typecheck:generated": "tsc -p tsconfig.node.json && tsc -p tsconfig.cloudflare.json",
     "typecheck": "npm run types:generate && npm run typecheck:generated",
     "test": "npm run test:unit && npm run test:worker",
     "test:unit": "vitest run --config vitest.unit.config.ts",

@@ -329,6 +329,17 @@ detail overlays those scoped values without rewriting the canonical person;
 both scoped rows, the audit and webhook intent commit in one compare-and-set D1
 batch.
 
+## TypeScript validation decision
+
+The Node/tooling and Cloudflare application graphs are independent no-emit
+checks. They run directly with `tsc -p` rather than as composite project
+references. Composite mode implicitly computes declaration signatures even
+when `noEmit` is set; after workflow modules were split into focused exported
+classes, that unused declaration graph exhausted more than 16 GB while the
+identical ordinary check completed below 2 GB. No package consumes generated
+TypeScript declarations, so declaration-producing composite validation adds
+cost without enforcing an additional contract.
+
 ## Managed programme embed decision
 
 This supersedes only the earlier decision that embed configuration must remain
