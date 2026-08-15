@@ -155,7 +155,11 @@ Schedule placement errors identify the affected speaker and both clashing
 session titles instead of reducing a rejected overlap to a transient conflict
 count. The programme embed builder uses one labelled native output-format
 selector for iframe and auto-resizing widget snippets, so its selected state
-and generated code cannot diverge.
+and generated code cannot diverge. Managed embed creation, configuration
+updates and lifecycle transitions now persist their exact audit record first
+and condition the domain mutation on that audit identity; focused Worker fault
+injection verifies that suppressing any required audit leaves the embed absent
+or unchanged.
 
 ### Production evaluation release-candidate evidence
 

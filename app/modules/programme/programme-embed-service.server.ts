@@ -196,62 +196,89 @@ export class ProgrammeEmbedService {
     const installationNote = optionalNote(input.installationNote);
     const configuration = parseConfigurationJson(input.configurationJson);
     const configurationJson = JSON.stringify(configuration);
-    const [created] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `INSERT INTO programme_embeds (
-           id, event_id, organisation_id, name, slug, status,
-           configuration_json, installation_note, revision,
-           created_by_person_id, updated_by_person_id, created_at, updated_at
-         )
-         SELECT ?, event.id, event.organisation_id, ?, ?, 'draft', ?, ?, 1,
-                ?, ?, unixepoch(), unixepoch()
-           FROM events event
-          WHERE event.id = ? AND event.organisation_id = ?
-            AND NOT EXISTS (
-              SELECT 1 FROM programme_embeds existing
-               WHERE existing.event_id = event.id AND existing.slug = ?
-            )`,
-      ).bind(
-        id,
-        name,
-        slug,
-        configurationJson,
-        installationNote,
-        viewer.personId,
-        viewer.personId,
-        viewer.eventId,
-        viewer.organisationId,
-        slug,
-      ),
-      this.env.DB.prepare(
-        `INSERT INTO audit_events (
+    const auditId = crypto.randomUUID();
+    let audited: D1Result;
+    let created: D1Result;
+    try {
+      [audited, created] = await this.env.DB.batch([
+        this.env.DB.prepare(
+          `INSERT INTO audit_events (
            id, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, embed.event_id, ?, 'programme_embed.created',
-                'programme_embed', embed.id, ?, unixepoch()
-           FROM programme_embeds embed
-          WHERE embed.id = ? AND embed.event_id = ?`,
-      ).bind(
-        crypto.randomUUID(),
-        viewer.organisationId,
-        viewer.personId,
-        auditMetadata(null, {
+         SELECT ?, event.organisation_id, event.id, ?, 'programme_embed.created',
+                'programme_embed', ?, ?, unixepoch()
+           FROM events event
+          WHERE event.id = ? AND event.organisation_id = ?`,
+        ).bind(
+          auditId,
+          viewer.personId,
+          id,
+          auditMetadata(null, {
+            name,
+            slug,
+            status: "draft",
+            configuration,
+            installationNote,
+            revision: 1,
+          }),
+          viewer.eventId,
+          viewer.organisationId,
+        ),
+        this.env.DB.prepare(
+          `INSERT INTO programme_embeds (
+             id, event_id, organisation_id, name, slug, status,
+             configuration_json, installation_note, revision,
+             created_by_person_id, updated_by_person_id, created_at, updated_at
+           )
+           SELECT ?, event.id, event.organisation_id, ?, ?, 'draft', ?, ?, 1,
+                  ?, ?, unixepoch(), unixepoch()
+             FROM events event
+            WHERE event.id = ? AND event.organisation_id = ?
+              AND EXISTS (
+                SELECT 1 FROM audit_events audit
+                 WHERE audit.id = ?
+                   AND audit.organisation_id = event.organisation_id
+                   AND audit.event_id = event.id
+                   AND audit.action = 'programme_embed.created'
+                   AND audit.entity_type = 'programme_embed'
+                   AND audit.entity_id = ?
+              )`,
+        ).bind(
+          id,
           name,
           slug,
-          status: "draft",
-          configuration,
+          configurationJson,
           installationNote,
-          revision: 1,
-        }),
-        id,
-        viewer.eventId,
-      ),
-    ]);
-    if ((created.meta.changes ?? 0) !== 1) {
+          viewer.personId,
+          viewer.personId,
+          viewer.eventId,
+          viewer.organisationId,
+          auditId,
+          id,
+        ),
+      ]);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /UNIQUE constraint failed: programme_embeds\.event_id, programme_embeds\.slug/iu.test(
+          error.message,
+        )
+      ) {
+        throw new ProgrammeEmbedStateError(
+          "That stable slug is already reserved for this event.",
+          409,
+        );
+      }
+      throw error;
+    }
+    if (
+      (audited.meta.changes ?? 0) !== 1 ||
+      (created.meta.changes ?? 0) !== 1
+    ) {
       throw new ProgrammeEmbedStateError(
-        "That stable slug is already reserved for this event.",
-        409,
+        "The managed embed could not be created with its required audit history.",
+        500,
       );
     }
     return id;
@@ -297,14 +324,47 @@ export class ProgrammeEmbedService {
       installationNote,
       revision: revision + 1,
     };
-    const [updated] = await this.env.DB.batch([
+    const auditId = crypto.randomUUID();
+    const [audited, updated] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, embed.organisation_id, embed.event_id, ?,
+                'programme_embed.updated', 'programme_embed', embed.id, ?, unixepoch()
+           FROM programme_embeds embed
+           JOIN events event
+             ON event.id = embed.event_id
+            AND event.organisation_id = embed.organisation_id
+          WHERE embed.id = ? AND embed.event_id = ?
+            AND embed.organisation_id = ? AND embed.revision = ?
+            AND embed.status <> 'revoked'`,
+      ).bind(
+        auditId,
+        viewer.personId,
+        auditMetadata(auditSnapshot(current), after),
+        id,
+        viewer.eventId,
+        viewer.organisationId,
+        revision,
+      ),
       this.env.DB.prepare(
         `UPDATE programme_embeds
             SET name = ?, configuration_json = ?, installation_note = ?,
                 revision = revision + 1, updated_by_person_id = ?,
                 updated_at = unixepoch()
           WHERE id = ? AND event_id = ? AND organisation_id = ?
-            AND revision = ? AND status <> 'revoked'`,
+            AND revision = ? AND status <> 'revoked'
+            AND EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = ?
+                 AND audit.organisation_id = programme_embeds.organisation_id
+                 AND audit.event_id = programme_embeds.event_id
+                 AND audit.action = 'programme_embed.updated'
+                 AND audit.entity_type = 'programme_embed'
+                 AND audit.entity_id = programme_embeds.id
+            )`,
       ).bind(
         name,
         JSON.stringify(configuration),
@@ -314,30 +374,14 @@ export class ProgrammeEmbedService {
         viewer.eventId,
         viewer.organisationId,
         revision,
-      ),
-      this.env.DB.prepare(
-        `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
-           entity_type, entity_id, metadata_json, created_at
-         )
-         SELECT ?, ?, embed.event_id, ?, 'programme_embed.updated',
-                'programme_embed', embed.id, ?, unixepoch()
-           FROM programme_embeds embed
-          WHERE embed.id = ? AND embed.event_id = ?
-            AND embed.organisation_id = ? AND embed.revision = ?`,
-      ).bind(
-        crypto.randomUUID(),
-        viewer.organisationId,
-        viewer.personId,
-        auditMetadata(auditSnapshot(current), after),
-        id,
-        viewer.eventId,
-        viewer.organisationId,
-        revision + 1,
+        auditId,
       ),
     ]);
-    if ((updated.meta.changes ?? 0) !== 1) {
-      throw new ProgrammeEmbedRevisionConflictError();
+    if (
+      (audited.meta.changes ?? 0) !== 1 ||
+      (updated.meta.changes ?? 0) !== 1
+    ) {
+      await this.throwAuditBoundaryFailure(viewer, id, revision, current.status);
     }
   }
 
@@ -396,14 +440,49 @@ export class ProgrammeEmbedService {
         : nextStatus === "paused"
           ? "programme_embed.paused"
           : "programme_embed.revoked";
-    const [updated] = await this.env.DB.batch([
+    const auditId = crypto.randomUUID();
+    const [audited, updated] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, embed.organisation_id, embed.event_id, ?, ?,
+                'programme_embed', embed.id, ?, unixepoch()
+           FROM programme_embeds embed
+           JOIN events event
+             ON event.id = embed.event_id
+            AND event.organisation_id = embed.organisation_id
+          WHERE embed.id = ? AND embed.event_id = ?
+            AND embed.organisation_id = ? AND embed.revision = ?
+            AND embed.status = ?`,
+      ).bind(
+        auditId,
+        viewer.personId,
+        action,
+        auditMetadata(auditSnapshot(current), after),
+        id,
+        viewer.eventId,
+        viewer.organisationId,
+        revision,
+        current.status,
+      ),
       this.env.DB.prepare(
         `UPDATE programme_embeds
             SET status = ?, revision = revision + 1,
                 updated_by_person_id = ?, updated_at = unixepoch(),
                 revoked_at = CASE WHEN ? = 'revoked' THEN unixepoch() ELSE NULL END
           WHERE id = ? AND event_id = ? AND organisation_id = ?
-            AND revision = ? AND status = ?`,
+            AND revision = ? AND status = ?
+            AND EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = ?
+                 AND audit.organisation_id = programme_embeds.organisation_id
+                 AND audit.event_id = programme_embeds.event_id
+                 AND audit.action = ?
+                 AND audit.entity_type = 'programme_embed'
+                 AND audit.entity_id = programme_embeds.id
+            )`,
       ).bind(
         nextStatus,
         viewer.personId,
@@ -413,30 +492,15 @@ export class ProgrammeEmbedService {
         viewer.organisationId,
         revision,
         current.status,
-      ),
-      this.env.DB.prepare(
-        `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
-           entity_type, entity_id, metadata_json, created_at
-         )
-         SELECT ?, ?, embed.event_id, ?, ?, 'programme_embed', embed.id, ?, unixepoch()
-           FROM programme_embeds embed
-          WHERE embed.id = ? AND embed.event_id = ?
-            AND embed.organisation_id = ? AND embed.revision = ?`,
-      ).bind(
-        crypto.randomUUID(),
-        viewer.organisationId,
-        viewer.personId,
+        auditId,
         action,
-        auditMetadata(auditSnapshot(current), after),
-        id,
-        viewer.eventId,
-        viewer.organisationId,
-        revision + 1,
       ),
     ]);
-    if ((updated.meta.changes ?? 0) !== 1) {
-      throw new ProgrammeEmbedRevisionConflictError();
+    if (
+      (audited.meta.changes ?? 0) !== 1 ||
+      (updated.meta.changes ?? 0) !== 1
+    ) {
+      await this.throwAuditBoundaryFailure(viewer, id, revision, current.status);
     }
   }
 
@@ -494,6 +558,25 @@ export class ProgrammeEmbedService {
       .first<EmbedRow>();
     if (!row) throw new ProgrammeEmbedStateError("Managed embed not found.", 404);
     return parseRow(row);
+  }
+
+  private async throwAuditBoundaryFailure(
+    viewer: Viewer,
+    id: string,
+    expectedRevision: number,
+    expectedStatus: ProgrammeEmbedStatus,
+  ): Promise<never> {
+    const latest = await this.current(viewer, id);
+    if (
+      latest.revision !== expectedRevision ||
+      latest.status !== expectedStatus
+    ) {
+      throw new ProgrammeEmbedRevisionConflictError();
+    }
+    throw new ProgrammeEmbedStateError(
+      "The managed embed change could not be saved with its required audit history.",
+      500,
+    );
   }
 
   private async requirePublishedConfiguration(

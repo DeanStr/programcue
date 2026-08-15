@@ -133,6 +133,212 @@ describe("managed programme embeds", () => {
         configurationJson: JSON.stringify(configuration),
       }),
     ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      testEnvironment.DB.prepare(
+        `SELECT COUNT(*) AS count
+           FROM audit_events
+          WHERE entity_type = 'programme_embed'
+            AND action = 'programme_embed.created'
+            AND json_extract(metadata_json, '$.after.slug') = ?`,
+      )
+        .bind(slug)
+        .first(),
+    ).resolves.toEqual({ count: 1 });
+  });
+
+  it("does not create an embed when its required audit insert is suppressed", async () => {
+    const testEnvironment = env as unknown as CloudflareEnvironment;
+    await ensureDemoProgramme(testEnvironment);
+    const service = new ProgrammeEmbedService(testEnvironment);
+    const slug = `suppressed-create-${crypto.randomUUID().slice(0, 8)}`;
+    await testEnvironment.DB.prepare(
+      `CREATE TRIGGER suppress_programme_embed_created_audit
+       BEFORE INSERT ON audit_events
+       WHEN NEW.action = 'programme_embed.created'
+       BEGIN
+         SELECT RAISE(IGNORE);
+       END`,
+    ).run();
+    try {
+      await expect(
+        service.create(admin, {
+          name: "Suppressed create audit",
+          slug,
+          installationNote: "",
+          configurationJson: JSON.stringify(
+            defaultProgrammeEmbedConfiguration(),
+          ),
+        }),
+      ).rejects.toMatchObject({
+        status: 500,
+        message: expect.stringMatching(/required audit history/i),
+      });
+      await expect(
+        testEnvironment.DB.prepare(
+          `SELECT COUNT(*) AS count
+             FROM programme_embeds
+            WHERE event_id = ? AND slug = ?`,
+        )
+          .bind(admin.eventId, slug)
+          .first(),
+      ).resolves.toEqual({ count: 0 });
+    } finally {
+      await testEnvironment.DB.prepare(
+        "DROP TRIGGER IF EXISTS suppress_programme_embed_created_audit",
+      ).run();
+    }
+  });
+
+  it("does not update or transition an embed when its audit insert is suppressed", async () => {
+    const testEnvironment = env as unknown as CloudflareEnvironment;
+    await ensureDemoProgramme(testEnvironment);
+    const service = new ProgrammeEmbedService(testEnvironment);
+    const configuration = defaultProgrammeEmbedConfiguration();
+    const updateId = await service.create(admin, {
+      name: "Suppressed update audit",
+      slug: `suppressed-update-${crypto.randomUUID().slice(0, 8)}`,
+      installationNote: "Before",
+      configurationJson: JSON.stringify(configuration),
+    });
+    const transitionId = await service.create(admin, {
+      name: "Suppressed transition audit",
+      slug: `suppressed-transition-${crypto.randomUUID().slice(0, 8)}`,
+      installationNote: "",
+      configurationJson: JSON.stringify(configuration),
+    });
+    await testEnvironment.DB.prepare(
+      `CREATE TRIGGER suppress_programme_embed_change_audit
+       BEFORE INSERT ON audit_events
+       WHEN NEW.action IN ('programme_embed.updated', 'programme_embed.activated')
+       BEGIN
+         SELECT RAISE(IGNORE);
+       END`,
+    ).run();
+    try {
+      await expect(
+        service.update(admin, {
+          id: updateId,
+          revision: 1,
+          name: "Unaudited update",
+          installationNote: "After",
+          configurationJson: JSON.stringify({
+            ...configuration,
+            density: "compact",
+          }),
+          confirmed: "yes",
+        }),
+      ).rejects.toMatchObject({
+        status: 500,
+        message: expect.stringMatching(/required audit history/i),
+      });
+      await expect(
+        service.transition(admin, {
+          id: transitionId,
+          revision: 1,
+          nextStatus: "active",
+          confirmed: "yes",
+        }),
+      ).rejects.toMatchObject({
+        status: 500,
+        message: expect.stringMatching(/required audit history/i),
+      });
+
+      const embeds = await service.list(admin);
+      expect(embeds.find(({ id }) => id === updateId)).toMatchObject({
+        name: "Suppressed update audit",
+        installationNote: "Before",
+        revision: 1,
+        configuration: { density: "comfortable" },
+      });
+      expect(embeds.find(({ id }) => id === transitionId)).toMatchObject({
+        status: "draft",
+        revision: 1,
+      });
+      await expect(
+        testEnvironment.DB.prepare(
+          `SELECT COUNT(*) AS count
+             FROM audit_events
+            WHERE entity_type = 'programme_embed'
+              AND entity_id IN (?, ?)
+              AND action <> 'programme_embed.created'`,
+        )
+          .bind(updateId, transitionId)
+          .first(),
+      ).resolves.toEqual({ count: 0 });
+    } finally {
+      await testEnvironment.DB.prepare(
+        "DROP TRIGGER IF EXISTS suppress_programme_embed_change_audit",
+      ).run();
+    }
+  });
+
+  it("preserves the revision-conflict contract for a race before the audit batch", async () => {
+    const testEnvironment = env as unknown as CloudflareEnvironment;
+    await ensureDemoProgramme(testEnvironment);
+    const configuration = defaultProgrammeEmbedConfiguration();
+    const id = await new ProgrammeEmbedService(testEnvironment).create(admin, {
+      name: "Concurrent embed",
+      slug: `concurrent-embed-${crypto.randomUUID().slice(0, 8)}`,
+      installationNote: "",
+      configurationJson: JSON.stringify(configuration),
+    });
+    let injectRace = true;
+    const racingDatabase = new Proxy(testEnvironment.DB, {
+      get(target, property) {
+        if (property === "batch") {
+          return async (statements: D1PreparedStatement[]) => {
+            if (injectRace) {
+              injectRace = false;
+              await target
+                .prepare(
+                  `UPDATE programme_embeds
+                      SET name = 'Concurrent winner', revision = revision + 1,
+                          updated_at = unixepoch()
+                    WHERE id = ? AND event_id = ? AND organisation_id = ?`,
+                )
+                .bind(id, admin.eventId, admin.organisationId)
+                .run();
+            }
+            return target.batch(statements);
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const racingEnvironment = new Proxy(testEnvironment, {
+      get(target, property) {
+        return property === "DB" ? racingDatabase : Reflect.get(target, property);
+      },
+    });
+
+    await expect(
+      new ProgrammeEmbedService(racingEnvironment).update(admin, {
+        id,
+        revision: 1,
+        name: "Stale contender",
+        installationNote: "",
+        configurationJson: JSON.stringify(configuration),
+        confirmed: "yes",
+      }),
+    ).rejects.toBeInstanceOf(ProgrammeEmbedRevisionConflictError);
+    await expect(
+      testEnvironment.DB.prepare(
+        `SELECT name, revision,
+                (SELECT COUNT(*) FROM audit_events audit
+                  WHERE audit.entity_type = 'programme_embed'
+                    AND audit.entity_id = embed.id
+                    AND audit.action = 'programme_embed.updated') AS updateAuditCount
+           FROM programme_embeds embed
+          WHERE embed.id = ?`,
+      )
+        .bind(id)
+        .first(),
+    ).resolves.toEqual({
+      name: "Concurrent winner",
+      revision: 2,
+      updateAuditCount: 0,
+    });
   });
 
   it("requires explicit confirmation for consequential changes", async () => {
