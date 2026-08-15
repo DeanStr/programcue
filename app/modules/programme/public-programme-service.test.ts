@@ -101,6 +101,25 @@ describe("published programme and itinerary", () => {
     );
     expect(queryRejected).toMatchObject({ status: 400 });
 
+    await testEnv.DB.prepare(
+      "UPDATE programme_embeds SET configuration_json = ? WHERE id = ?",
+    )
+      .bind(
+        JSON.stringify({
+          ...defaultProgrammeEmbedConfiguration(),
+          surface: "agenda",
+          track: "Removed published track",
+        }),
+        id,
+      )
+      .run();
+    const publicationDrift = await load().catch((error: unknown) => error);
+    expect(publicationDrift).toMatchObject({ status: 500 });
+    if (!(publicationDrift instanceof Response)) {
+      throw new Error("Managed embed publication drift did not return a response.");
+    }
+    expect(publicationDrift.headers.get("cache-control")).toBe("no-store");
+
     await embedService.transition(admin, {
       id,
       revision: 2,

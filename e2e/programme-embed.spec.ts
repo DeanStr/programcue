@@ -441,6 +441,27 @@ test("widget preserves invalid options for rejection and fails before mounting",
     "Program Cue widget data-surface must be sessions, speakers, agenda, schedule or gallery.",
   );
   await expect(page.locator("#programme-widget iframe")).toHaveCount(0);
+
+  await page.route(`${e2eOrigin}/__programcue-managed-widget-conflict`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `
+        <div id="programme-widget"></div>
+        <script src="${e2eOrigin}/programcue-widget.js"
+          data-programcue-event="future-of-events-2027"
+          data-programcue-embed="homepage-schedule"
+          data-target="#programme-widget"
+          data-density="compact"></script>
+      `,
+    }),
+  );
+  const managedConflictError = page.waitForEvent("pageerror");
+  await page.goto(`${e2eOrigin}/__programcue-managed-widget-conflict`);
+  await expect(managedConflictError).resolves.toHaveProperty(
+    "message",
+    "Program Cue managed widgets do not accept stateless configuration attributes.",
+  );
+  await expect(page.locator("#programme-widget iframe")).toHaveCount(0);
 });
 
 test("exports static programme files and mounts a filtered auto-resizing widget", async ({

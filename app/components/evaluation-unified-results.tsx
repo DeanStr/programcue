@@ -269,7 +269,7 @@ export function EvaluationUnifiedResults() {
                                   <dl>
                                     {Object.entries(review.scores).map(([criterionId, value]) => (
                                       <div key={criterionId}>
-                                        <dt>{result.criterionNames[criterionId] ?? criterionId}</dt>
+                                        <dt>{loaderData.resultCriterionNames[criterionId] ?? criterionId}</dt>
                                         <dd>{typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)}</dd>
                                       </div>
                                     ))}

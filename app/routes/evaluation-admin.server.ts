@@ -414,6 +414,12 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const selectedResultsRound = workspace.plan?.rounds.find(
     (round) => round.id === resultsRoundId,
   );
+  const resultCriterionNames = Object.fromEntries(
+    (selectedResultsRound?.criteria ?? []).map((criterion) => [
+      criterion.id,
+      criterion.name,
+    ]),
+  );
   const decisionHistoryRows = resultsRoundId
     ? await env.DB.prepare(
         `SELECT decision.id, decision.submission_id AS submissionId,
@@ -500,12 +506,6 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         mixedRecommendations,
         incomplete,
         decisionReady,
-        criterionNames: Object.fromEntries(
-          (selectedResultsRound?.criteria ?? []).map((criterion) => [
-            criterion.id,
-            criterion.name,
-          ]),
-        ),
       };
     })
     .filter((result) => {
@@ -520,7 +520,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     .sort(compareResults);
   const resultsTotal = allResults.length;
   const resultsPageCount = Math.max(1, Math.ceil(resultsTotal / resultsPageSize));
-  if (resultsPage > resultsPageCount && resultsTotal > 0) {
+  if (resultsPage > resultsPageCount) {
     throw new Response("Evaluation results page not found", { status: 404 });
   }
   const results = allResults.slice(
@@ -591,6 +591,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     resultsPageSize,
     resultsTotal,
     resultsPageCount,
+    resultCriterionNames,
     resultsExportIntent: crypto.randomUUID(),
     focusedRoundId: requestedRoundId || null,
     eventTimezone: event.timezone,

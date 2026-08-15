@@ -291,6 +291,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     query: embedQuery,
     accent: embedAccent,
   } = embedOptions;
+  const rejectEmbedSelection = (message: string): never => {
+    if (managedEmbed) {
+      throw new Response(
+        "Managed embed configuration no longer matches the published programme. Contact the event organiser.",
+        { status: 500, headers: { "cache-control": "no-store" } },
+      );
+    }
+    throw new Response(message, { status: 400 });
+  };
   if (
     embedDay &&
     (!/^\d{4}-\d{2}-\d{2}$/u.test(embedDay) ||
@@ -300,52 +309,44 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
           embedDay,
       ))
   ) {
-    throw new Response("Embed day must identify a published programme day", {
-      status: 400,
-    });
+    rejectEmbedSelection("Embed day must identify a published programme day");
   }
   if (
     embedTrack &&
     (embedTrack.length > 120 ||
       !programme.sessions.some((session) => session.track === embedTrack))
   ) {
-    throw new Response("Embed track must identify a published track", {
-      status: 400,
-    });
+    rejectEmbedSelection("Embed track must identify a published track");
   }
   if (
     embedFormat &&
     (embedFormat.length > 120 ||
       !programme.sessions.some((session) => session.format === embedFormat))
   ) {
-    throw new Response("Embed format must identify a published format", {
-      status: 400,
-    });
+    rejectEmbedSelection("Embed format must identify a published format");
   }
   if (
     embedRoom &&
     (embedRoom.length > 120 ||
       !programme.sessions.some((session) => session.room === embedRoom))
   ) {
-    throw new Response("Embed room must identify a published room", {
-      status: 400,
-    });
+    rejectEmbedSelection("Embed room must identify a published room");
   }
   if (embedQuery.length > 100) {
-    throw new Response("Embed query must contain at most 100 characters", {
-      status: 400,
-    });
+    rejectEmbedSelection("Embed query must contain at most 100 characters");
   }
   if (embedAccent && !/^#[0-9a-f]{6}$/iu.test(embedAccent)) {
-    throw new Response("Embed accent must be a six-digit hexadecimal colour", {
-      status: 400,
-    });
+    rejectEmbedSelection(
+      "Embed accent must be a six-digit hexadecimal colour",
+    );
   }
   const embeddedCacheHeaders = embedded
     ? await publishedProgrammeCacheHeaders(
         request,
         programme,
-        managedEmbed ? `managed-embed-${managedEmbed.revision}` : "",
+        managedEmbed
+          ? `managed-embed-${managedEmbed.id}-${managedEmbed.revision}`
+          : "",
       )
     : null;
   if (

@@ -39,6 +39,29 @@
       "Program Cue widget data-programcue-embed must be a valid stable slug.",
     );
   }
+  var configurationAttributes = [
+    "surface",
+    "day",
+    "track",
+    "format",
+    "room",
+    "query",
+    "accent",
+    "controls",
+    "density",
+    "directory",
+    "fields",
+  ];
+  if (
+    managedEmbed &&
+    configurationAttributes.some(function hasConfigurationAttribute(name) {
+      return script.hasAttribute("data-" + name);
+    })
+  ) {
+    throw new Error(
+      "Program Cue managed widgets do not accept stateless configuration attributes.",
+    );
+  }
   var surface = script.hasAttribute("data-surface")
     ? (script.dataset.surface || "").trim()
     : "sessions";
@@ -56,20 +79,9 @@
       : "/embed/" + encodeURIComponent(slug) + "/" + surface,
     widgetOrigin,
   );
-  [
-    "day",
-    "track",
-    "format",
-    "room",
-    "query",
-    "accent",
-    "controls",
-    "density",
-    "directory",
-    "fields",
-  ].forEach(function copyFilter(name) {
+  configurationAttributes.slice(1).forEach(function copyFilter(name) {
     var value = script.dataset[name];
-    if (!managedEmbed && script.hasAttribute("data-" + name)) {
+    if (script.hasAttribute("data-" + name)) {
       frameUrl.searchParams.set(name, value);
     }
   });

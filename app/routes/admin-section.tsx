@@ -87,9 +87,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         paused: "paused",
         revoked: "permanently revoked",
       };
+      const label = labels[nextStatus];
+      if (!label) {
+        throw new Error(
+          "The managed embed service accepted an unsupported lifecycle state.",
+        );
+      }
       return data({
         ok: true,
-        message: `Managed embed ${labels[nextStatus] ?? "updated"}.`,
+        message: `Managed embed ${label}.`,
       });
     }
     return data(

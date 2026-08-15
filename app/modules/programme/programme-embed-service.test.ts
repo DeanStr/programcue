@@ -39,6 +39,22 @@ describe("managed programme embeds", () => {
     expect(await service.getPublic("future-of-events-2027", slug)).toMatchObject({
       status: "draft",
     });
+    await testEnvironment.DB.prepare(
+      "UPDATE events SET activation_status = 'provisioning_failed' WHERE id = ?",
+    )
+      .bind(admin.eventId)
+      .run();
+    try {
+      await expect(
+        service.getPublic("future-of-events-2027", slug),
+      ).resolves.toBeNull();
+    } finally {
+      await testEnvironment.DB.prepare(
+        "UPDATE events SET activation_status = 'active' WHERE id = ?",
+      )
+        .bind(admin.eventId)
+        .run();
+    }
 
     await service.update(admin, {
       id,
@@ -137,5 +153,22 @@ describe("managed programme embeds", () => {
         confirmed: null,
       }),
     ).rejects.toThrow(/preview and confirm/i);
+    const futureDraftId = await service.create(admin, {
+      name: "Future publication filter",
+      slug: `future-filter-${crypto.randomUUID().slice(0, 8)}`,
+      installationNote: "",
+      configurationJson: JSON.stringify({
+        ...defaultProgrammeEmbedConfiguration(),
+        track: "Not yet a published track",
+      }),
+    });
+    await expect(
+      service.transition(admin, {
+        id: futureDraftId,
+        revision: 1,
+        nextStatus: "active",
+        confirmed: "yes",
+      }),
+    ).rejects.toThrow(/published track/i);
   });
 });

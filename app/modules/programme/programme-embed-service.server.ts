@@ -1,8 +1,10 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import {
   parsePersistedProgrammeEmbedConfiguration,
   type ProgrammeEmbedConfiguration,
 } from "./programme-embed-configuration";
+import { PublicProgrammeService } from "./public-programme-service.server";
 
 export type ProgrammeEmbedStatus = "draft" | "active" | "paused" | "revoked";
 
@@ -25,6 +27,16 @@ type EmbedRow = Omit<ManagedProgrammeEmbed, "configuration"> & {
   configurationJson: string;
 };
 
+type PublicEmbedRow = {
+  id: string;
+  slug: string;
+  status: ProgrammeEmbedStatus;
+  configurationJson: string;
+  revision: number;
+  eventName: string;
+  eventAccent: string;
+};
+
 export class ProgrammeEmbedStateError extends Error {
   constructor(
     message: string,
@@ -43,7 +55,10 @@ export class ProgrammeEmbedRevisionConflictError extends ProgrammeEmbedStateErro
 }
 
 function requiredText(value: unknown, label: string, maximum: number) {
-  const parsed = String(value ?? "").trim();
+  if (typeof value !== "string") {
+    throw new ProgrammeEmbedStateError(`${label} must be text.`);
+  }
+  const parsed = value.trim();
   if (!parsed || parsed.length > maximum) {
     throw new ProgrammeEmbedStateError(
       `${label} must contain between 1 and ${maximum} characters.`,
@@ -53,7 +68,11 @@ function requiredText(value: unknown, label: string, maximum: number) {
 }
 
 function optionalNote(value: unknown) {
-  const parsed = String(value ?? "").trim();
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string") {
+    throw new ProgrammeEmbedStateError("Installation note must be text.");
+  }
+  const parsed = value.trim();
   if (!parsed) return null;
   if (parsed.length > 500) {
     throw new ProgrammeEmbedStateError(
@@ -74,7 +93,12 @@ function embedSlug(value: unknown) {
 }
 
 function positiveRevision(value: unknown) {
-  const parsed = Number(value);
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && /^\d+$/u.test(value)
+        ? Number(value)
+        : Number.NaN;
   if (!Number.isSafeInteger(parsed) || parsed < 1) {
     throw new ProgrammeEmbedRevisionConflictError();
   }
@@ -82,9 +106,14 @@ function positiveRevision(value: unknown) {
 }
 
 function parseConfigurationJson(value: unknown) {
+  if (typeof value !== "string") {
+    throw new ProgrammeEmbedStateError(
+      "Managed embed configuration must be JSON text. Refresh and try again.",
+    );
+  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(String(value ?? ""));
+    parsed = JSON.parse(value);
   } catch {
     throw new ProgrammeEmbedStateError(
       "Managed embed configuration is invalid. Refresh and try again.",
@@ -252,6 +281,9 @@ export class ProgrammeEmbedService {
     const name = requiredText(input.name, "Embed name", 120);
     const installationNote = optionalNote(input.installationNote);
     const configuration = parseConfigurationJson(input.configurationJson);
+    if (current.status === "active") {
+      await this.requirePublishedConfiguration(viewer, configuration);
+    }
     if (input.confirmed !== "yes") {
       throw new ProgrammeEmbedStateError(
         "Preview the configuration and confirm the update before saving.",
@@ -320,7 +352,13 @@ export class ProgrammeEmbedService {
   ) {
     const id = requiredText(input.id, "Embed id", 200);
     const revision = positiveRevision(input.revision);
-    const nextStatus = String(input.nextStatus ?? "") as ProgrammeEmbedStatus;
+    if (typeof input.nextStatus !== "string") {
+      throw new ProgrammeEmbedStateError(
+        "That managed embed lifecycle change is not allowed.",
+        409,
+      );
+    }
+    const nextStatus = input.nextStatus as ProgrammeEmbedStatus;
     const current = await this.current(viewer, id);
     if (current.revision !== revision) throw new ProgrammeEmbedRevisionConflictError();
     const allowed: Record<ProgrammeEmbedStatus, ProgrammeEmbedStatus[]> = {
@@ -342,7 +380,9 @@ export class ProgrammeEmbedService {
           : "Preview and confirm the lifecycle change before continuing.",
       );
     }
-    if (nextStatus === "active") await this.requirePublishedProgramme(viewer);
+    if (nextStatus === "active") {
+      await this.requirePublishedConfiguration(viewer, current.configuration);
+    }
     const after = {
       ...auditSnapshot(current),
       status: nextStatus,
@@ -402,25 +442,36 @@ export class ProgrammeEmbedService {
 
   async getPublic(eventSlug: string, slug: string) {
     const row = await this.env.DB.prepare(
-      `SELECT embed.id, embed.name, embed.slug, embed.status,
+      `SELECT embed.id, embed.slug, embed.status,
               embed.configuration_json AS configurationJson,
-              embed.installation_note AS installationNote,
-              embed.revision, creator.display_name AS createdByName,
-              updater.display_name AS updatedByName,
-              embed.created_at AS createdAt, embed.updated_at AS updatedAt,
-              embed.revoked_at AS revokedAt,
+              embed.revision,
               event.name AS eventName, event.brand_accent AS eventAccent
          FROM programme_embeds embed
          JOIN events event ON event.id = embed.event_id
-         JOIN people creator ON creator.id = embed.created_by_person_id
-         JOIN people updater ON updater.id = embed.updated_by_person_id
-        WHERE event.slug = ? AND embed.slug = ?`,
+        WHERE event.slug = ? AND event.activation_status = 'active'
+          AND embed.slug = ?`,
     )
       .bind(eventSlug, slug)
-      .first<EmbedRow & { eventName: string; eventAccent: string }>();
+      .first<PublicEmbedRow>();
     if (!row) return null;
-    const { eventName, eventAccent, ...embed } = row;
-    return { ...parseRow(embed), eventName, eventAccent };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(row.configurationJson);
+    } catch {
+      throw new ProgrammeEmbedStateError(
+        `Managed embed ${row.id} has corrupt persisted configuration.`,
+        500,
+      );
+    }
+    return {
+      id: row.id,
+      slug: row.slug,
+      status: row.status,
+      configuration: parsePersistedProgrammeEmbedConfiguration(parsed),
+      revision: row.revision,
+      eventName: row.eventName,
+      eventAccent: row.eventAccent,
+    };
   }
 
   private async current(viewer: Viewer, id: string) {
@@ -445,21 +496,69 @@ export class ProgrammeEmbedService {
     return parseRow(row);
   }
 
-  private async requirePublishedProgramme(viewer: Viewer) {
-    const published = await this.env.DB.prepare(
-      `SELECT 1
-         FROM schedule_versions version
-         JOIN events event
-           ON event.id = version.event_id AND event.organisation_id = ?
-        WHERE version.event_id = ? AND version.status = 'published'
-        LIMIT 1`,
+  private async requirePublishedConfiguration(
+    viewer: Viewer,
+    configuration: ProgrammeEmbedConfiguration,
+  ) {
+    const event = await this.env.DB.prepare(
+      `SELECT slug
+         FROM events
+        WHERE id = ? AND organisation_id = ? AND activation_status = 'active'`,
     )
-      .bind(viewer.organisationId, viewer.eventId)
-      .first();
-    if (!published) {
+      .bind(viewer.eventId, viewer.organisationId)
+      .first<{ slug: string }>();
+    if (!event) {
+      throw new ProgrammeEmbedStateError("Managed embed event not found.", 404);
+    }
+    const programme = await new PublicProgrammeService(this.env).getPublished(
+      event.slug,
+    );
+    if (!programme) {
       throw new ProgrammeEmbedStateError(
-        "Publish the programme before activating this embed.",
+        "Publish the programme before saving or activating this embed.",
         409,
+      );
+    }
+    if (
+      configuration.day &&
+      !programme.sessions.some(
+        (session) =>
+          eventLocalCalendarDate(session.startsAt, programme.event.timezone) ===
+          configuration.day,
+      )
+    ) {
+      throw new ProgrammeEmbedStateError(
+        "Embed day must identify a published programme day.",
+      );
+    }
+    if (
+      configuration.track &&
+      !programme.sessions.some(
+        (session) => session.track === configuration.track,
+      )
+    ) {
+      throw new ProgrammeEmbedStateError(
+        "Embed track must identify a published track.",
+      );
+    }
+    if (
+      configuration.format &&
+      !programme.sessions.some(
+        (session) => session.format === configuration.format,
+      )
+    ) {
+      throw new ProgrammeEmbedStateError(
+        "Embed format must identify a published format.",
+      );
+    }
+    if (
+      configuration.room &&
+      !programme.sessions.some(
+        (session) => session.room === configuration.room,
+      )
+    ) {
+      throw new ProgrammeEmbedStateError(
+        "Embed room must identify a published room.",
       );
     }
   }
