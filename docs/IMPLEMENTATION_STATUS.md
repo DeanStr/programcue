@@ -277,7 +277,7 @@ the human checklist.
 
 ### Committee, delivery-health and speaker-link evidence
 
-- **Production slice; repository evidence only:** Evaluation administration now
+- **Production slice; deployed; repository acceptance:** Evaluation administration now
   distinguishes incomplete targets (`assignmentCount > 0` and completed reviews
   below assignments) from unassigned targets. The D1 committee thread is
   organisation/event/round/target scoped, audited and idempotent. Evaluators
@@ -285,9 +285,11 @@ the human checklist.
   review are submitted, lose access when reopened, and cannot cross round or
   target boundaries; managers retain read-only access after archival. Focused
   Worker coverage verifies those boundaries, while Chromium verifies the
-  evaluator gate and a manager read/post round trip. Reactions, mentions,
-  editing, notifications and realtime chat are not implemented.
-- **Production slice; repository evidence only:** Communications History exposes
+  evaluator gate and a manager read/post round trip. Migration `0020` and the
+  application release are deployed; a fresh production committee post was not
+  performed. Reactions, mentions, editing, notifications and realtime chat are
+  not implemented.
+- **Production slice; deployed; repository acceptance:** Communications History exposes
   event-lifetime or selected-communication delivery health from current D1
   delivery states, explicitly rolls opened/clicked into Delivered, separates
   bounded latest recipient unsubscribes from recorded provider
@@ -296,13 +298,13 @@ the human checklist.
   coverage verifies state bucketing and tenant/send scope; Chromium verifies the
   event-lifetime panel at the supported mobile width. No new provider receipt
   acceptance is claimed.
-- **Production slice; repository evidence only:** Public speaker profiles use a
+- **Production slice; deployed; repository acceptance:** Public speaker profiles use a
   server-resolved `?speaker=` deep link, absolute speaker canonical/unfurl
   metadata, Copy link, progressive Web Share and browser history. Invalid or
   unpublished speakers return 404, and unfurl images are omitted unless a
   released anonymously readable headshot exists. Focused Worker/unit coverage
-  and the anonymous Chromium URL/history workflow are green. No deployment or
-  external social-crawler acceptance is claimed.
+  and the anonymous Chromium URL/history workflow are green. The release is
+  deployed; no external social-crawler acceptance is claimed.
 
 ### Abstract workflow evidence
 
@@ -454,25 +456,36 @@ generated typecheck and the complete core gate: 161 Worker files with 1,278
 tests plus the unit, agent, build, configuration, schema, recovery and OpenAPI
 checks. The full browser gate was not rerun because the correction changes only
 the scheduled backup Worker path and its focused/core coverage.
+Application source `a96147c` passed the complete release gate: 60 unit files
+with 337 tests, 163 Worker files with 1,294 tests, the Agents Durable Object
+test, production builds, 54 configuration tests, migration parity at 96
+application tables, 109 indexes and 96 triggers, a 144,490-byte clean-room
+recovery drill, synchronized OpenAPI at 33 paths and 459 internal references,
+and the scanner's 10 container tests. The five-shard browser run passed 136
+cases with two intentional skips after the known parallel IndexedDB
+draft-database teardown race passed unchanged in a focused serial rerun.
 
 ## Deployment evidence
 
-Application source `5109324` is deployed at `app.programcue.com` as Worker
-version `e7d12152-dbbc-42f5-9063-73bf97bafdeb`, and scanner source `c9e1287`
-is deployed at `scanner.programcue.com`; release-stamp commits `327dc62` and
+Application source `a96147c` is deployed at `app.programcue.com` as Worker
+version `6e24705e-b508-4dba-bbcd-f8dd070d7c86`, and scanner source `c9e1287`
+is deployed at `scanner.programcue.com`; release-stamp commits `7b91d60` and
 `a5e1bab` record those sources. The current application version is at 100%
-traffic, and the normal remote migration command reported no pending migration.
-The WNAM D1 ledger retains 19 migrations, `quick_check=ok`, and foreign-key
-inspection returns no rows. The separately deployed public website remains live
-at `programcue.com` and `www.programcue.com`. Health returned the exact
-application source revision with `no-store`; sign-in, evaluation access, public
-application entry, the canonical published programme and its schedule returned
-HTTP 200. A fresh production Chromium evaluation-organiser session rendered
-Command Centre and the native Call for Speakers Form Builder with ten authored
-fields and all six palette controls. Anonymous Chromium rendered and hydrated
-the published application and programme. Neither session produced an
-application-owned console error. The reset-only endpoint remained unavailable
-with HTTP 404.
+traffic. Migrations `0020_evaluation_discussions.sql` and
+`0021_require_approved_public_content.sql` applied successfully, and the normal
+remote command then reported no pending migration. The WNAM D1 ledger retains
+21 migrations, `quick_check=ok`, and foreign-key inspection returns no rows;
+the discussion table and all six publication-boundary triggers are present.
+The separately deployed public website remains live at `programcue.com` and
+`www.programcue.com`. Health returned source `a96147c` with `no-store`;
+sign-in, evaluation access, the canonical published programme, its schedule and
+the public event API returned HTTP 200. A fresh production evaluation-organiser
+unlock and fixed-identity selection rendered authenticated Command Centre with
+HTTP 200. Earlier production Chromium acceptance of the same fixture rendered
+the native Call for Speakers Form Builder with ten authored fields and all six
+palette controls, while anonymous Chromium rendered and hydrated the published
+application and programme without an application-owned console error. The
+reset-only endpoint remains unavailable with HTTP 404.
 
 Scanner-only source `c9e1287` is deployed with ClamAV 1.4.6 pinned by immutable
 multi-architecture digest. A fresh production Chromium session completed the
