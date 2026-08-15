@@ -81,8 +81,8 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   const place = [event.venue, event.city].filter(Boolean).join(", ");
   const description = loaderData.speakerShare
     ? loaderData.speakerShare.description
-    : event.description ??
-      `${sessions.length} sessions and ${speakers.length} speakers${place ? ` at ${place}` : ""}.`;
+    : (event.description ??
+      `${sessions.length} sessions and ${speakers.length} speakers${place ? ` at ${place}` : ""}.`);
   const title = loaderData.speakerShare
     ? `${loaderData.speakerShare.speakerName} · ${event.name}`
     : `Programme · ${event.name}`;
@@ -149,12 +149,16 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!slug) throw new Response("Published event not found", { status: 404 });
   const url = new URL(request.url);
   const embedded = url.pathname.startsWith("/embed/");
+  const managedEmbedSlug =
+    "embedSlug" in params && typeof params.embedSlug === "string"
+      ? params.embedSlug
+      : null;
   let managedEmbed = null;
-  if (params.embedSlug) {
+  if (managedEmbedSlug) {
     try {
       managedEmbed = await new ProgrammeEmbedService(env).getPublic(
         slug,
-        params.embedSlug,
+        managedEmbedSlug,
       );
     } catch (error) {
       if (
@@ -174,10 +178,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         headers: { "cache-control": "no-store" },
       });
     }
-    if (
-      managedEmbed.status === "paused" ||
-      managedEmbed.status === "revoked"
-    ) {
+    if (managedEmbed.status === "paused" || managedEmbed.status === "revoked") {
       const paused = managedEmbed.status === "paused";
       throw data(
         {
@@ -214,8 +215,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     surface = managedEmbed
       ? managedEmbed.configuration.surface
       : embedded
-      ? parseProgrammeEmbedSurface(params.surface)
-      : surfaceFromParam(params.surface);
+        ? parseProgrammeEmbedSurface(params.surface)
+        : surfaceFromParam(params.surface);
   } catch (error) {
     if (error instanceof ProgrammeEmbedConfigurationError) {
       throw new Response(error.message, { status: 404 });
@@ -235,8 +236,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     managedEmbed
       ? `/embed/${encodeURIComponent(programme.event.slug)}/saved/${encodeURIComponent(managedEmbed.slug)}`
       : embedded
-      ? `/embed/${encodeURIComponent(programme.event.slug)}${surface === "overview" ? "" : `/${surface}`}`
-      : `/public/programme/${encodeURIComponent(programme.event.slug)}${surface === "overview" ? "" : `/${surface}`}`,
+        ? `/embed/${encodeURIComponent(programme.event.slug)}${surface === "overview" ? "" : `/${surface}`}`
+        : `/public/programme/${encodeURIComponent(programme.event.slug)}${surface === "overview" ? "" : `/${surface}`}`,
     request.url,
   );
   let speakerShare = null;
@@ -249,11 +250,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     const fallbackDescription = speakerSession
       ? `${featuredSpeaker.displayName} is speaking at ${programme.event.name}: ${speakerSession.title}.`
       : `${featuredSpeaker.displayName} is speaking at ${programme.event.name}.`;
-    const releasedHeadshotPath =
-      await service.getReleasedPublishedHeadshotPath(
-        programme.event.slug,
-        featuredSpeaker.id,
-      );
+    const releasedHeadshotPath = await service.getReleasedPublishedHeadshotPath(
+      programme.event.slug,
+      featuredSpeaker.id,
+    );
     const shareUrl = canonicalUrl.toString();
     speakerShare = {
       speakerId: featuredSpeaker.id,
@@ -336,9 +336,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     rejectEmbedSelection("Embed query must contain at most 100 characters");
   }
   if (embedAccent && !/^#[0-9a-f]{6}$/iu.test(embedAccent)) {
-    rejectEmbedSelection(
-      "Embed accent must be a six-digit hexadecimal colour",
-    );
+    rejectEmbedSelection("Embed accent must be a six-digit hexadecimal colour");
   }
   const embeddedCacheHeaders = embedded
     ? await publishedProgrammeCacheHeaders(
@@ -590,7 +588,9 @@ export function ErrorBoundary() {
   return (
     <main className="public-shell">
       <section className="card pad empty-state" role="alert">
-        <h1>{status === 404 ? "Programme not found" : "Programme unavailable"}</h1>
+        <h1>
+          {status === 404 ? "Programme not found" : "Programme unavailable"}
+        </h1>
         <p>{message}</p>
       </section>
     </main>
