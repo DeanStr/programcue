@@ -90,7 +90,8 @@ describe("published programme and itinerary", () => {
       confirmed: "yes",
     });
     const active = await load();
-    if (active instanceof Response) throw new Error("Managed embed returned a raw response.");
+    if (active instanceof Response)
+      throw new Error("Managed embed returned a raw response.");
     expect(active.data).toMatchObject({
       embedded: true,
       surface: "agenda",
@@ -116,7 +117,9 @@ describe("published programme and itinerary", () => {
     const publicationDrift = await load().catch((error: unknown) => error);
     expect(publicationDrift).toMatchObject({ status: 500 });
     if (!(publicationDrift instanceof Response)) {
-      throw new Error("Managed embed publication drift did not return a response.");
+      throw new Error(
+        "Managed embed publication drift did not return a response.",
+      );
     }
     expect(publicationDrift.headers.get("cache-control")).toBe("no-store");
 
@@ -449,6 +452,82 @@ describe("published programme and itinerary", () => {
       throw new Error("Programme revalidation returned a raw response.");
     }
     expect(result.data.surface).toBe("schedule");
+  });
+
+  it("invalidates embed ETags when public venue presentation changes", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: testEnv,
+      ctx: {} as ExecutionContext,
+    });
+    const original = await testEnv.DB.prepare(
+      `SELECT venue_address AS venueAddress, venue_map_url AS venueMapUrl,
+              programme_hero_image_url AS heroImageUrl
+         FROM events WHERE id = 'evt-foe-2025'`,
+    ).first<{
+      venueAddress: string | null;
+      venueMapUrl: string | null;
+      heroImageUrl: string | null;
+    }>();
+    expect(original).not.toBeNull();
+
+    const load = (etag?: string) =>
+      publicProgrammePageLoader({
+        request: new Request(
+          "https://programcue.test/embed/future-of-events-2027",
+          etag ? { headers: { "if-none-match": etag } } : undefined,
+        ),
+        params: { slug: "future-of-events-2027" },
+        context,
+      } as never);
+    const readEtag = async (candidate: Awaited<ReturnType<typeof load>>) => {
+      if (candidate instanceof Response) {
+        throw new Error("Changed embed presentation returned 304.");
+      }
+      const etag = new Headers(candidate.init?.headers).get("etag");
+      expect(etag).toMatch(/^"program-cue-publication-/u);
+      return etag!;
+    };
+
+    try {
+      let etag = await readEtag(await load());
+      const unchanged = await load(etag);
+      expect(unchanged).toBeInstanceOf(Response);
+      expect((unchanged as Response).status).toBe(304);
+
+      for (const [column, value] of [
+        ["venue_address", "Level 2, 100 Test Street"],
+        ["venue_map_url", "https://maps.example.test/programme"],
+        [
+          "programme_hero_image_url",
+          "https://images.example.test/programme-hero.jpg",
+        ],
+      ] as const) {
+        await testEnv.DB.prepare(
+          `UPDATE events SET ${column} = ? WHERE id = 'evt-foe-2025'`,
+        )
+          .bind(value)
+          .run();
+        const nextEtag = await readEtag(await load(etag));
+        expect(nextEtag).not.toBe(etag);
+        etag = nextEtag;
+      }
+    } finally {
+      await testEnv.DB.prepare(
+        `UPDATE events
+            SET venue_address = ?, venue_map_url = ?,
+                programme_hero_image_url = ?
+          WHERE id = 'evt-foe-2025'`,
+      )
+        .bind(
+          original!.venueAddress,
+          original!.venueMapUrl,
+          original!.heroImageUrl,
+        )
+        .run();
+    }
   });
 
   it("returns the public calendar 404 in the versioned API error envelope", async () => {

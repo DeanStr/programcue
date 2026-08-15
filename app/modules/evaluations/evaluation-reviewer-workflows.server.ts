@@ -238,7 +238,8 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
              r.id AS reviewId, r.revision AS reviewRevision,
              r.scores_json AS scoresJson, r.recommendation, r.confidence,
              r.submitter_feedback AS submitterFeedback,
-             r.private_notes AS privateNotes
+             r.private_notes AS privateNotes,
+             r.conflict_affirmed_at AS conflictAffirmedAt
         FROM evaluator_assignments a
         JOIN reviews r ON r.assignment_id = a.id AND r.event_id = a.event_id
         JOIN evaluation_rounds round
@@ -286,6 +287,7 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         confidence: number | null;
         submitterFeedback: string | null;
         privateNotes: string | null;
+        conflictAffirmedAt: number | null;
       }>();
     if (!state) {
       throw new EvaluationStateError(
@@ -356,7 +358,8 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
       this.env.DB.prepare(
         `
         UPDATE reviews SET status = 'reopened', revision = revision + 1,
-               locked_at = NULL, last_operation_id = ?, updated_at = unixepoch()
+               locked_at = NULL, conflict_affirmed_at = NULL,
+               last_operation_id = ?, updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND revision = ?
            AND status IN ('submitted','locked')
            AND EXISTS (
@@ -399,6 +402,7 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
           confidence: state.confidence,
           submitterFeedback: state.submitterFeedback,
           privateNotes: state.privateNotes,
+          priorConflictAffirmedAt: state.conflictAffirmedAt,
           reopenReason: parsed.reason,
         }),
         viewer.personId,

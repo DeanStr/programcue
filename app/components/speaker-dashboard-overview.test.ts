@@ -24,4 +24,21 @@ describe("speaker preparation milestones", () => {
       state: "complete",
     });
   });
+
+  it("does not claim programme visibility from profile status alone", () => {
+    const profile = speakerMilestones({
+      portal: portal({
+        profile: {
+          profileStatus: "published",
+        } as SpeakerPortal["profile"],
+      }),
+      completedCount: 0,
+      requirementCount: 0,
+    }).find((milestone) => milestone.key === "profile");
+
+    expect(profile).toMatchObject({
+      detail: "Profile marked published",
+      state: "complete",
+    });
+  });
 });

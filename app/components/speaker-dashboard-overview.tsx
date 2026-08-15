@@ -38,8 +38,8 @@ export function speakerMilestones({
       key: "profile",
       label: "Profile",
       detail: profilePublished
-        ? "Published on the programme"
-        : "Not published yet",
+        ? "Profile marked published"
+        : "Profile not marked published",
       state: profilePublished ? "complete" : "in_progress",
       href: "/participant/profile",
     },

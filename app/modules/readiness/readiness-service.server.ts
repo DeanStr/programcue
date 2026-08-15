@@ -62,7 +62,7 @@ export type CommandCentreSnapshot = {
   blockers: ReadinessBlocker[];
   deliveryHealth: Array<{
     channel: DeliveryChannel;
-    successful: number;
+    acceptedOrDelivered: number;
     total: number;
     percentage: number;
   }>;
@@ -298,7 +298,7 @@ async function loadCommandCentreRecords(
     env.DB.prepare(
       `
         SELECT channel, COUNT(*) AS total,
-               COALESCE(SUM(CASE WHEN status IN ('sent','delivered','opened','clicked') THEN 1 ELSE 0 END), 0) AS successful
+               COALESCE(SUM(CASE WHEN status IN ('sent','delivered','opened','clicked') THEN 1 ELSE 0 END), 0) AS acceptedOrDelivered
           FROM communication_deliveries
          WHERE event_id = ? AND status <> 'cancelled'
          GROUP BY channel ORDER BY channel
@@ -307,7 +307,7 @@ async function loadCommandCentreRecords(
       .bind(viewer.eventId)
       .all<{
         channel: DeliveryChannel;
-        successful: number;
+        acceptedOrDelivered: number;
         total: number;
       }>(),
   ]);
@@ -497,7 +497,7 @@ export class ReadinessService {
         score: percent(deliveryComplete, deliveryTotal),
         completed: deliveryComplete,
         total: deliveryTotal,
-        detail: "Successful delivery attempts",
+        detail: "Accepted or delivered records",
         href: "/admin/communications",
       },
       {
@@ -683,7 +683,7 @@ export class ReadinessService {
       blockers,
       deliveryHealth: deliveryChannels.results.map((row) => ({
         ...row,
-        percentage: percent(row.successful, row.total),
+        percentage: percent(row.acceptedOrDelivered, row.total),
       })),
       upcoming: upcoming.results.map((session) => {
         const conflicts = numeric(session.blockingConflicts);

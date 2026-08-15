@@ -32,6 +32,7 @@ test("speaker profile, sessions and D1 task state render through the production 
     page.getByRole("heading", { name: "Your preparation" }),
   ).toBeVisible();
   await expect(stepper.locator(".speaker-stage")).toHaveCount(3);
+  await expect(stepper).toContainText("Profile marked published");
   for (const stage of ["Profile", "Sessions", "Requirements"]) {
     await expect(
       stepper.getByRole("link", { name: new RegExp(stage) }),

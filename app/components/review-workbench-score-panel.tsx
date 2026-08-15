@@ -1,5 +1,4 @@
 import { AlertTriangle, Lock, Send } from "lucide-react";
-import { useState } from "react";
 
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
 import { EmptyState } from "~/components/ui/states";
@@ -35,6 +34,7 @@ function ReviewNoteField({
   scopeLabel,
   help,
   defaultValue,
+  length,
   disabled,
 }: {
   name: string;
@@ -43,9 +43,9 @@ function ReviewNoteField({
   scopeLabel: string;
   help: string;
   defaultValue: string;
+  length: number;
   disabled: boolean;
 }) {
-  const [length, setLength] = useState(defaultValue.length);
   const fieldId = `review-note-${name}`;
   const helpId = `${fieldId}-help`;
   const countId = `${fieldId}-count`;
@@ -75,7 +75,6 @@ function ReviewNoteField({
         maxLength={REVIEW_NOTE_LIMIT}
         aria-describedby={`${helpId} ${countId}`}
         disabled={disabled}
-        onChange={(event) => setLength(event.currentTarget.value.length)}
       />
       <small
         className="subtle review-note-count pc-num"
@@ -463,6 +462,7 @@ export function ReviewScorePanel() {
               scopeLabel="Shared with the applicant"
               help="Sent to the applicant when administrators publish this decision. Write it to be read by the person who wrote the proposal."
               defaultValue={workspace.review?.submitterFeedback ?? ""}
+              length={recoveryPayload.submitterFeedback.length}
               disabled={readOnly}
             />
             <ReviewNoteField
@@ -472,6 +472,7 @@ export function ReviewScorePanel() {
               scopeLabel="Committee only"
               help="Never shown to the applicant. Visible to administrators and the evaluation committee."
               defaultValue={workspace.review?.privateNotes ?? ""}
+              length={recoveryPayload.privateNotes.length}
               disabled={readOnly}
             />
           </div>

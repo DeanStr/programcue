@@ -146,12 +146,17 @@ Operational status language names only the evidence actually checked. Upcoming
 sessions therefore report “Attention” for a blocking conflict or outstanding
 high-impact session task, and otherwise “No blockers found”; they do not claim
 the broader “On track” state. Delivery health lists only channels represented
-by durable delivery attempts and never advertises unconnected transports.
+by durable delivery records and never advertises unconnected transports. Its
+“accepted or delivered” numerator includes provider-accepted `sent` records as
+well as delivered/opened/clicked records; it does not relabel acceptance as
+provider-confirmed delivery.
 
 Reviewer conflict attestation is a durable prerequisite for new review
 submissions. A null attestation on a review completed before this policy means
 “not recorded under the prior policy”; migrations never fabricate a historical
-affirmation or timestamp.
+affirmation or timestamp. Reopening a review preserves the prior timestamp in
+the immutable reopen revision, clears it from the current review and requires
+the reviewer to answer again before resubmitting.
 
 ## Participant invitation and profile ownership
 

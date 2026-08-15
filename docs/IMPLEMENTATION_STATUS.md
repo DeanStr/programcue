@@ -281,19 +281,26 @@ the human checklist.
   HTTPS venue-map and HTTPS programme-hero fields through D1, includes them in
   Airtable event-configuration projection and event cloning, and clears them in
   the bounded demo/evaluation reset. The public programme reads them only from
-  the published event projection. Focused service coverage exercises save/read,
-  clone, Airtable projection and reset behavior; deployment is not claimed.
+  the published event projection and includes all three in its public content
+  revision so conditional embed/API reads cannot retain stale presentation.
+  Focused service coverage exercises save/read, clone, Airtable projection,
+  reset and embed ETag behavior; deployment is not claimed.
 - **Production slice; local evidence:** New review submissions require a
   persisted no-conflict attestation. Conflict declaration retains its existing
   recusal path. Pre-policy submitted or locked reviews remain explicitly
-  unattested instead of receiving a fabricated migration timestamp. Focused
-  reviewer coverage verifies the submitted record.
+  unattested instead of receiving a fabricated migration timestamp. Reopening
+  snapshots the prior attestation as revision evidence, clears the current
+  value and requires conscious reaffirmation. Focused reviewer coverage
+  verifies submission and reopen/resubmit behavior.
 - **Frontend behavior:** Command Centre delivery health no longer synthesizes
-  SMS, push or calendar support without delivery records, and upcoming-session
-  labels are bounded to the conflicts and session tasks actually queried.
-  Speaker preparation treats an empty requirement set as satisfied without
-  claiming the profile or session stages are complete. Event-local calendar
-  dates drive task due-distance labels, including midnight boundaries.
+  SMS, push or calendar support without delivery records and distinguishes
+  provider acceptance from confirmed delivery; upcoming-session labels are
+  bounded to the conflicts and session tasks actually queried. Speaker
+  preparation treats an empty requirement set as satisfied and describes only
+  stored profile status rather than claiming public-session visibility. Restored
+  review notes derive their character count from the restored recovery payload.
+  Event-local calendar dates drive task due-distance labels, including midnight
+  boundaries.
 
 ### Committee, delivery-health and speaker-link evidence
 

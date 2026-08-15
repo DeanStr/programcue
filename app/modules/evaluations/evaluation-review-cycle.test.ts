@@ -720,15 +720,38 @@ describe("explicit evaluation review cycles", () => {
       evaluator,
       acceptedAssignment.id,
     );
+    expect(reopenedWorkspace.review?.conflictAffirmedAt).toBeNull();
+    await expect(
+      env.DB.prepare(
+        `SELECT json_extract(content_json, '$.priorConflictAffirmedAt') AS priorConflictAffirmedAt
+           FROM review_revisions
+          WHERE review_id = ? AND save_kind = 'reopened'`,
+      )
+        .bind(reopenedWorkspace.review!.id)
+        .first<{ priorConflictAffirmedAt: number | null }>(),
+    ).resolves.toEqual({ priorConflictAffirmedAt: expect.any(Number) });
+    const reopenedScores = Object.fromEntries(
+      reopenedWorkspace.criteria.map((criterion) => [
+        criterion.id,
+        criterion.inputType === "free_text" ? "Corrected context." : 5,
+      ]),
+    );
+    await expect(
+      service.saveReview(evaluator, {
+        assignmentId: acceptedAssignment.id,
+        revision: reopened.revision,
+        scores: reopenedScores,
+        recommendation: "accept",
+        confidence: 5,
+        submitterFeedback: "Reviewed again in the explicit second cycle.",
+        privateNotes: "The released terminal state remains authoritative.",
+        intent: "submit",
+      }),
+    ).rejects.toThrow(/Confirm you hold no conflict of interest/u);
     await service.saveReview(evaluator, {
       assignmentId: acceptedAssignment.id,
       revision: reopened.revision,
-      scores: Object.fromEntries(
-        reopenedWorkspace.criteria.map((criterion) => [
-          criterion.id,
-          criterion.inputType === "free_text" ? "Corrected context." : 5,
-        ]),
-      ),
+      scores: reopenedScores,
       recommendation: "accept",
       confidence: 5,
       submitterFeedback: "Reviewed again in the explicit second cycle.",

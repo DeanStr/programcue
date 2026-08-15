@@ -449,8 +449,8 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                     <thead>
                       <tr>
                         <th scope="col">Channel</th>
-                        <th scope="col">Attempted</th>
-                        <th scope="col">Delivery rate</th>
+                        <th scope="col">Tracked</th>
+                        <th scope="col">Accepted or delivered rate</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -480,7 +480,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                 </div>
               ) : (
                 <p className="command-quiet">
-                  No delivery has been attempted on this event yet.
+                  No delivery records exist for this event yet.
                 </p>
               )}
             </section>

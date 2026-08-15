@@ -204,9 +204,12 @@ async function publicContentRevision(
         programme.event.startDate,
         programme.event.endDate,
         programme.event.venue,
+        programme.event.venueAddress,
+        programme.event.venueMapUrl,
         programme.event.city,
         programme.event.description,
         programme.event.brandAccent,
+        programme.event.heroImageUrl,
       ],
       version: [
         programme.version.id,

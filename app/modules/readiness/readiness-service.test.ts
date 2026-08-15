@@ -358,6 +358,61 @@ describe("D1-backed command centre", () => {
     expect(after.deliveryHealth).toEqual(before.deliveryHealth);
   });
 
+  it("reports accepted-or-delivered records without calling queued work delivered", async () => {
+    const communicationId = crypto.randomUUID();
+    await env.DB.prepare(
+      `INSERT INTO communications (
+         id, event_id, idempotency_key, kind, channel, status, audience_json,
+         content_snapshot_json, recipient_count, created_at, updated_at
+       ) VALUES (?, ?, ?, 'optional', 'push', 'sending', '{}', '{}', 7,
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(
+        communicationId,
+        viewer.eventId,
+        `delivery-health-${communicationId}`,
+      )
+      .run();
+    for (const [index, status] of [
+      "queued",
+      "sending",
+      "sent",
+      "delivered",
+      "opened",
+      "failed",
+      "cancelled",
+    ].entries()) {
+      const deliveryId = crypto.randomUUID();
+      await env.DB.prepare(
+        `INSERT INTO communication_deliveries (
+           id, event_id, communication_id, recipient_address, channel,
+           idempotency_key, status, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'push', ?, ?, unixepoch(), unixepoch())`,
+      )
+        .bind(
+          deliveryId,
+          viewer.eventId,
+          communicationId,
+          `recipient-${index}@example.test`,
+          `delivery-health-${deliveryId}`,
+          status,
+        )
+        .run();
+    }
+
+    const snapshot = await new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+    ).getCommandCentre(viewer);
+    expect(
+      snapshot.deliveryHealth.find(({ channel }) => channel === "push"),
+    ).toEqual({
+      channel: "push",
+      acceptedOrDelivered: 3,
+      total: 6,
+      percentage: 50,
+    });
+  });
+
   it("reports the exact high-impact session work behind attention status", async () => {
     const startsAt = Math.floor(Date.now() / 1000) + 3_600;
     await env.DB.batch([
