@@ -474,43 +474,49 @@ recovery drill, synchronized OpenAPI at 33 paths and 459 internal references,
 and the scanner's 10 container tests. The five-shard browser run passed 136
 cases with two intentional skips after the known parallel IndexedDB
 draft-database teardown race passed unchanged in a focused serial rerun.
+Application candidate `24a4038` passed TypeScript, 61 unit files with 341
+tests, 165 Worker files with 1,300 tests, the Agents Durable Object test, 55
+configuration tests, migration parity at 97 application tables, 111 indexes
+and 96 triggers, a 146,253-byte clean-room recovery drill, synchronized OpenAPI
+at 33 paths and 459 internal references, and the scanner's 10 tests. Its
+concurrent build lane exposed the missing Vite alias configuration introduced
+by the independent-TypeScript-project refactor. Source `14b61ab` adds the
+explicit absolute application alias and then passed generated TypeScript,
+configuration tests and standalone client/SSR production builds; the full core
+orchestrator was not rerun after that build-only correction.
 
 ## Deployment evidence
 
-Application source `4355e4e` is deployed at `app.programcue.com` as Worker
-version `e584a636-78c9-4426-aecf-10936e7f6689`, and scanner source `c9e1287`
-is deployed at `scanner.programcue.com`; release-stamp commits `c8ea6e9` and
+Application source `14b61ab` is deployed at `app.programcue.com` as Worker
+version `1aaafb43-7186-442e-80cf-4c0db6208673`, and scanner source `c9e1287`
+is deployed at `scanner.programcue.com`; release-stamp commits `450ca8f` and
 `a5e1bab` record those sources. The current application version is at 100%
-traffic. Migrations `0020_evaluation_discussions.sql` and
-`0021_require_approved_public_content.sql` applied successfully, and the normal
-remote command then reported no pending migration. The WNAM D1 ledger retains
-21 migrations, `quick_check=ok`, and foreign-key inspection returns no rows;
-the discussion table and all six publication-boundary triggers are present.
+traffic. Migration `0022_managed_programme_embeds.sql` applied successfully.
+The WNAM D1 ledger retains 22 migrations, `quick_check=ok`, and foreign-key
+inspection returns no rows; the managed-embed table and both indexes are
+present alongside the earlier discussion and publication-boundary structures.
 The separately deployed public website remains live at `programcue.com` and
-`www.programcue.com`. Health returned source `4355e4e` with `no-store`;
+`www.programcue.com`. Health returned source `14b61ab` with `no-store`;
 sign-in, evaluation access, the canonical published programme, its schedule and
 the public event API returned HTTP 200. A fresh production evaluation-organiser
-unlock and fixed-identity selection rendered authenticated Command Centre with
-HTTP 200. Earlier production Chromium acceptance of the same fixture rendered
+unlock and fixed-identity selection rendered authenticated programme
+administration with HTTP 200 and the managed-embed interface present. Earlier
+production Chromium acceptance of the same fixture rendered
 the native Call for Speakers Form Builder with ten authored fields and all six
 palette controls, while anonymous Chromium rendered and hydrated the published
 application and programme without an application-owned console error. The
 reset-only endpoint remains unavailable with HTTP 404.
 
-The deployed contextual-AI response ceiling is 4,000 tokens in source `4355e4e`, matching
-the budget already proven for GPT-OSS assessment reasoning. The current release
-candidate replaces the readiness action's free-form Markdown with a schema-bound,
-concise advisory while retaining that proven reasoning budget: Program Cue renders
-exact snapshot values, blocker metadata and action links natively, while malformed,
-incomplete, duplicate or unknown model output fails instead of being presented. A fresh production
+The deployed contextual-AI response ceiling is 4,000 tokens. Source `14b61ab`
+replaces the readiness action's free-form Markdown with a schema-bound, concise
+advisory while retaining that proven reasoning budget: Program Cue renders
+exact snapshot values, blocker metadata and action links natively, while
+malformed, incomplete, duplicate or unknown model output fails instead of being
+presented. A fresh production
 evaluation-organiser unlock and fixed-identity selection followed by the real
-readiness-summary POST returned HTTP 200 from the selected Workers AI
-`@cf/openai/gpt-oss-120b` provider. The directly affected test passed, and the
-changed-test selector passed 63 tests across 11 files. Generated TypeScript
-validation was attempted twice but exhausted the local Node heap at both the
-default limit and an increased 8 GB limit; it is not claimed as passed for this
-release. The production build and deployment configuration/secret preflights
-passed.
+structured readiness-summary POST returned HTTP 200 from the selected Workers
+AI `@cf/openai/gpt-oss-120b` provider. The production deployment configuration
+and 23-secret preflights passed.
 
 Scanner-only source `c9e1287` is deployed with ClamAV 1.4.6 pinned by immutable
 multi-architecture digest. A fresh production Chromium session completed the
