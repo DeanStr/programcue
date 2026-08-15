@@ -144,6 +144,8 @@ export default [
     route("admin/search", "routes/admin-command-search.ts"),
     route("admin/views", "routes/admin-saved-views.ts"),
     route("admin/event", "routes/event-setup.tsx"),
+    route("admin/branding", "routes/admin-branding.tsx"),
+    route("admin/branding/assets/:assetId", "routes/admin-branding-asset.ts"),
     route("admin/operations", "routes/operation-centre.tsx"),
     route(
       "admin/communications/compose/:draftId?",
@@ -232,6 +234,7 @@ export default [
     "public/programme/:slug/speakers/:personId/headshot",
     "routes/public-headshot.ts",
   ),
+  route("public/brand/:slug/:kind", "routes/public-branding-asset.ts"),
   route("embed/:slug", "routes/public-programme.tsx", {
     id: "embed-programme",
   }),

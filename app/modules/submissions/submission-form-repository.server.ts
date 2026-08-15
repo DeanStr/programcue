@@ -29,7 +29,10 @@ export class SubmissionFormRepository {
              e.venue_name AS eventVenue, e.city AS eventCity,
              e.description AS eventDescription,
              e.brand_accent AS brandAccent,
-             e.participant_logo_url AS participantLogoUrl,
+             CASE WHEN e.brand_logo_asset_id IS NOT NULL
+               THEN '/public/brand/' || e.slug || '/logo'
+               ELSE e.participant_logo_url
+             END AS participantLogoUrl,
              e.participant_welcome_text AS participantWelcomeText,
              e.participant_support_url AS participantSupportUrl,
              e.file_policy_json AS filePolicyJson,
@@ -756,7 +759,10 @@ export class SubmissionFormRepository {
              e.venue_name AS eventVenue, e.city AS eventCity,
              e.description AS eventDescription,
              e.brand_accent AS brandAccent,
-             e.participant_logo_url AS participantLogoUrl,
+             CASE WHEN e.brand_logo_asset_id IS NOT NULL
+               THEN '/public/brand/' || e.slug || '/logo'
+               ELSE e.participant_logo_url
+             END AS participantLogoUrl,
              e.participant_welcome_text AS participantWelcomeText,
              e.participant_support_url AS participantSupportUrl,
              e.file_policy_json AS filePolicyJson,
@@ -820,7 +826,10 @@ export class SubmissionFormRepository {
               e.venue_name AS eventVenue, e.city AS eventCity,
               e.description AS eventDescription,
               e.brand_accent AS brandAccent,
-              e.participant_logo_url AS participantLogoUrl,
+              CASE WHEN e.brand_logo_asset_id IS NOT NULL
+                THEN '/public/brand/' || e.slug || '/logo'
+                ELSE e.participant_logo_url
+              END AS participantLogoUrl,
               e.participant_welcome_text AS participantWelcomeText,
               e.participant_support_url AS participantSupportUrl,
               e.file_policy_json AS filePolicyJson,

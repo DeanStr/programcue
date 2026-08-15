@@ -105,9 +105,12 @@ export class SpeakerPortalService {
         .first<ProfileRow>(),
       this.env.DB.prepare(
         `
-        SELECT name, timezone, starts_at AS startsAt, ends_at AS endsAt,
+        SELECT name, slug, timezone, starts_at AS startsAt, ends_at AS endsAt,
                venue_name AS venue, city, brand_accent AS brandAccent,
-               participant_logo_url AS participantLogoUrl,
+               CASE WHEN brand_logo_asset_id IS NOT NULL
+                 THEN '/public/brand/' || slug || '/logo'
+                 ELSE participant_logo_url
+               END AS participantLogoUrl,
                participant_welcome_text AS participantWelcomeText,
                participant_support_url AS participantSupportUrl,
                file_policy_json AS filePolicyJson

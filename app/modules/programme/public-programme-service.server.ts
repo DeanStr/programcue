@@ -1,4 +1,5 @@
 import { AirtableProgrammeRepository } from "~/modules/airtable/airtable-programme-repository.server";
+import { publicEventBrandAssetPath } from "~/modules/events/event-branding";
 import { eventBoundaryCalendarDate } from "~/modules/schedule/schedule-time";
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { sortPublishedSpeakers } from "./programme-presentation";
@@ -210,6 +211,8 @@ async function publicContentRevision(
         programme.event.description,
         programme.event.brandAccent,
         programme.event.heroImageUrl,
+        programme.event.logoUrl,
+        programme.event.bannerUrl,
       ],
       version: [
         programme.version.id,
@@ -440,6 +443,9 @@ export class PublicProgrammeService {
              venue_map_url AS venueMapUrl,
              city, description, brand_accent AS brandAccent,
              programme_hero_image_url AS heroImageUrl,
+             brand_logo_asset_id AS logoAssetId,
+             brand_banner_asset_id AS bannerAssetId,
+             participant_logo_url AS legacyLogoUrl,
              organisation_id AS organisationId,
              repository_provider AS repositoryProvider
         FROM events
@@ -449,11 +455,17 @@ export class PublicProgrammeService {
     )
       .bind(slug)
       .first<
-        Omit<PublishedProgramme["event"], "startDate" | "endDate"> & {
+        Omit<
+          PublishedProgramme["event"],
+          "startDate" | "endDate" | "logoUrl" | "bannerUrl"
+        > & {
           startDateMarker: number;
           endDateMarker: number;
           organisationId: string;
           repositoryProvider: "d1" | "airtable";
+          logoAssetId: string | null;
+          bannerAssetId: string | null;
+          legacyLogoUrl: string | null;
         }
       >();
     if (!eventRow) return null;
@@ -471,6 +483,12 @@ export class PublicProgrammeService {
       description: eventRow.description,
       brandAccent: eventRow.brandAccent,
       heroImageUrl: eventRow.heroImageUrl,
+      logoUrl: eventRow.logoAssetId
+        ? publicEventBrandAssetPath(eventRow.slug, "logo")
+        : eventRow.legacyLogoUrl,
+      bannerUrl: eventRow.bannerAssetId
+        ? publicEventBrandAssetPath(eventRow.slug, "banner")
+        : null,
     };
     const version = await this.env.DB.prepare(
       `

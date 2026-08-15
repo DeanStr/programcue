@@ -374,6 +374,30 @@ export function EventSetupForm({
       >
         <input type="hidden" name="_intent" value="save" />
         <input type="hidden" name="revision" value={event.revision} />
+        {/* The domain service rejects changes to these published values.
+            They remain in the legacy command shape only while Event Setup's
+            repository projection still consumes that shape. */}
+        <input type="hidden" name="brandAccent" value={event.brandAccent} />
+        <input
+          type="hidden"
+          name="programmeHeroImageUrl"
+          value={event.programmeHeroImageUrl}
+        />
+        <input
+          type="hidden"
+          name="participantLogoUrl"
+          value={event.participantLogoUrl}
+        />
+        <input
+          type="hidden"
+          name="participantWelcomeText"
+          value={event.participantWelcomeText}
+        />
+        <input
+          type="hidden"
+          name="participantSupportUrl"
+          value={event.participantSupportUrl}
+        />
         <input
           type="hidden"
           name="rooms"

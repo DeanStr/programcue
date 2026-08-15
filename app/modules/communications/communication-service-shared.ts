@@ -30,9 +30,28 @@ export type TemplateVersionRow = {
 export type EventMergeRow = {
   eventName: string;
   brandAccent: string;
+  logoUrl: string | null;
   startsAt: number;
   endsAt: number;
 };
+
+export function eventEmailLogoUrl(
+  env: CloudflareEnvironment,
+  event: Pick<EventMergeRow, "logoUrl">,
+) {
+  if (!event.logoUrl) return undefined;
+  if (event.logoUrl.startsWith("https://")) return event.logoUrl;
+  if (!event.logoUrl.startsWith("/"))
+    throw new CommunicationStateError(
+      "The published event logo URL is invalid.",
+    );
+  const base = env.BETTER_AUTH_URL?.trim();
+  if (!base)
+    throw new CommunicationStateError(
+      "BETTER_AUTH_URL is required to render a published event logo in email.",
+    );
+  return new URL(event.logoUrl, base).toString();
+}
 
 export type SenderRow = {
   id: string;

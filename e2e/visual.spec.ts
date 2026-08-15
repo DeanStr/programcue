@@ -17,6 +17,7 @@ type Surface = {
 
 const SURFACES: readonly Surface[] = [
   { name: "event-setup", path: "/admin/event" },
+  { name: "branding", path: "/admin/branding" },
   { name: "command-centre", path: "/admin/command" },
   { name: "form-builder", path: "/admin/submissions/form" },
   {

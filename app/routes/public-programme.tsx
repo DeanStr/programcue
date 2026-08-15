@@ -86,9 +86,18 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = loaderData.speakerShare
     ? `${loaderData.speakerShare.speakerName} · ${event.name}`
     : `Programme · ${event.name}`;
+  const shareImage =
+    loaderData.speakerShare?.imageUrl ??
+    (event.bannerUrl
+      ? new URL(event.bannerUrl, loaderData.canonicalUrl).toString()
+      : event.heroImageUrl);
+  const logoUrl = event.logoUrl
+    ? new URL(event.logoUrl, loaderData.canonicalUrl).toString()
+    : null;
 
   return [
     { title },
+    ...(logoUrl ? [{ tagName: "link", rel: "icon", href: logoUrl }] : []),
     { name: "description", content: description },
     { tagName: "link", rel: "canonical", href: loaderData.canonicalUrl },
     { property: "og:type", content: "website" },
@@ -96,27 +105,25 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
     { property: "og:title", content: title },
     { property: "og:description", content: description },
     { property: "og:url", content: loaderData.canonicalUrl },
-    ...(loaderData.speakerShare?.imageUrl
+    ...(shareImage
       ? [
           {
             property: "og:image",
-            content: loaderData.speakerShare.imageUrl,
+            content: shareImage,
           },
         ]
       : []),
     {
       name: "twitter:card",
-      content: loaderData.speakerShare?.imageUrl
-        ? "summary_large_image"
-        : "summary",
+      content: shareImage ? "summary_large_image" : "summary",
     },
     { name: "twitter:title", content: title },
     { name: "twitter:description", content: description },
-    ...(loaderData.speakerShare?.imageUrl
+    ...(shareImage
       ? [
           {
             name: "twitter:image",
-            content: loaderData.speakerShare.imageUrl,
+            content: shareImage,
           },
         ]
       : []),

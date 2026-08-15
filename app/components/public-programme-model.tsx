@@ -68,11 +68,16 @@ export function normaliseDescription(description: string) {
 }
 
 /**
- * The event photograph for the masthead. A missing optional image uses the
- * accent panel; a present value that violates the persisted HTTPS contract is
- * corrupt event configuration and must not be silently hidden.
+ * A managed published banner takes precedence over the retired external hero
+ * URL. Any persisted non-null value that violates its contract is corrupt
+ * configuration and must not be silently hidden.
  */
 export function eventHeroImagePath(event: PublishedProgramme["event"]) {
+  if (event.bannerUrl !== null) {
+    if (!/^\/public\/brand\/[a-z0-9-]+\/banner$/u.test(event.bannerUrl))
+      throw new Error("Published programme banner URL is invalid.");
+    return event.bannerUrl;
+  }
   const value = event.heroImageUrl;
   if (value === null) return null;
   try {

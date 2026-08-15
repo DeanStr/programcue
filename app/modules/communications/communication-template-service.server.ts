@@ -12,6 +12,7 @@ import {
 import {
   CommunicationNotFoundError,
   CommunicationStateError,
+  eventEmailLogoUrl,
   mergeValues,
   parseContent,
   parseEmailSubject,
@@ -437,6 +438,7 @@ export class CommunicationTemplateService {
       body,
       eventName: event.eventName,
       accent: event.brandAccent,
+      logoUrl: eventEmailLogoUrl(this.env, event),
       physicalAddress: parsed.content.physicalAddress,
       buttonText: parsed.content.buttonText,
       buttonUrl: parsed.content.buttonUrl,
@@ -674,6 +676,10 @@ export class CommunicationTemplateService {
     const event = await this.env.DB.prepare(
       `
       SELECT e.name AS eventName, e.brand_accent AS brandAccent,
+             CASE WHEN e.brand_logo_asset_id IS NOT NULL
+               THEN '/public/brand/' || e.slug || '/logo'
+               ELSE e.participant_logo_url
+             END AS logoUrl,
              e.starts_at AS startsAt, e.ends_at AS endsAt
         FROM events e WHERE e.id = ? AND e.organisation_id = ?
     `,

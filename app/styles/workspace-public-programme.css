@@ -92,6 +92,21 @@
     color-mix(in srgb, var(--event-accent) 55%, white)
   );
 }
+.public-event-logo {
+  flex: none;
+  width: auto;
+  max-width: 96px;
+  height: 34px;
+  object-fit: contain;
+}
+.public-hero-logo {
+  display: block;
+  width: auto;
+  max-width: min(180px, 60%);
+  height: 56px;
+  margin-bottom: var(--space-4);
+  object-fit: contain;
+}
 .public-brand-name {
   overflow: hidden;
   font-size: var(--text-base);

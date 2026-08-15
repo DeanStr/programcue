@@ -20,7 +20,10 @@ import {
   EventTrackInUseError,
 } from "./event-repository.server";
 import { eventSetupInputSchema } from "./event-schema";
-import { EventService } from "./event-service.server";
+import {
+  EventBrandingOwnershipError,
+  EventService,
+} from "./event-service.server";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
@@ -155,21 +158,32 @@ describe("Event Setup D1 service", () => {
     ).toThrow(/valid IANA timezone/i);
   });
 
-  it("persists tenant-scoped settings and records an audit event", async () => {
+  it("rejects legacy Event Setup branding edits and persists an unchanged branding projection", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
     const service = new EventService(testEnv);
     const original = await service.getSetup(viewer);
+
+    await expect(
+      service.saveSetup(viewer, {
+        ...inputFrom(original),
+        venue: "Beanfield Centre",
+        brandAccent: "#000000",
+      }),
+    ).rejects.toBeInstanceOf(EventBrandingOwnershipError);
+
+    await expect(
+      service.saveSetup(viewer, {
+        ...inputFrom(original),
+        programmeHeroImageUrl: "https://cdn.example.com/programme-hero.jpg",
+      }),
+    ).rejects.toBeInstanceOf(EventBrandingOwnershipError);
 
     const result = await service.saveSetup(viewer, {
       ...inputFrom(original),
       venue: "Beanfield Centre",
       venueAddress: "105 Princes' Boulevard, Toronto, ON",
       venueMapUrl: "https://maps.example.com/beanfield-centre",
-      programmeHeroImageUrl: "https://cdn.example.com/programme-hero.jpg",
-      participantLogoUrl: "https://cdn.example.com/program-cue-event.svg",
-      participantWelcomeText: "Welcome to the participant workspace.",
-      participantSupportUrl: "https://support.example.com/program-cue-event",
       filePolicy: {
         ...original.filePolicy,
         videoMaximumBytes: 512 * 1_048_576,
@@ -190,18 +204,11 @@ describe("Event Setup D1 service", () => {
     expect(saved.venue).toBe("Beanfield Centre");
     expect(saved.venueAddress).toBe("105 Princes' Boulevard, Toronto, ON");
     expect(saved.venueMapUrl).toBe("https://maps.example.com/beanfield-centre");
-    expect(saved.programmeHeroImageUrl).toBe(
-      "https://cdn.example.com/programme-hero.jpg",
-    );
-    expect(saved.participantLogoUrl).toBe(
-      "https://cdn.example.com/program-cue-event.svg",
-    );
-    expect(saved.participantWelcomeText).toBe(
-      "Welcome to the participant workspace.",
-    );
-    expect(saved.participantSupportUrl).toBe(
-      "https://support.example.com/program-cue-event",
-    );
+    expect(saved.brandAccent).toBe(original.brandAccent);
+    expect(saved.programmeHeroImageUrl).toBe(original.programmeHeroImageUrl);
+    expect(saved.participantLogoUrl).toBe(original.participantLogoUrl);
+    expect(saved.participantWelcomeText).toBe(original.participantWelcomeText);
+    expect(saved.participantSupportUrl).toBe(original.participantSupportUrl);
     expect(saved.revision).toBe(original.revision + 1);
     expect(saved.filePolicy.videoMaximumBytes).toBe(512 * 1_048_576);
     expect(saved.rooms.at(-1)).toMatchObject({

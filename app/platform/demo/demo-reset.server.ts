@@ -110,6 +110,7 @@ export const DEMO_RESET_EVENT_TABLES = [
   "resource_page_versions",
   "resource_pages",
   "task_evidence",
+  "event_brand_assets",
   "file_multipart_uploads",
   "file_versions",
   "file_assets",
@@ -339,6 +340,14 @@ async function resetMutableIdentity(env: CloudflareEnvironment) {
               description = 'The conference for modern event professionals.',
               brand_accent = '#4f46e5', participant_logo_url = NULL,
               participant_welcome_text = NULL, participant_support_url = NULL,
+              brand_logo_asset_id = NULL, brand_banner_asset_id = NULL,
+              brand_draft_accent = '#4f46e5',
+              brand_draft_logo_asset_id = NULL,
+              brand_draft_banner_asset_id = NULL,
+              brand_draft_welcome_text = NULL,
+              brand_draft_support_url = NULL,
+              brand_draft_revision = 1, brand_published_revision = 1,
+              brand_published_at = unixepoch(),
               session_formats_json = ?, repository_provider = 'd1',
               activation_status = 'active',
               repository_locked_at = NULL, retention_months = 24,
@@ -624,6 +633,15 @@ async function baselineEvidence(env: CloudflareEnvironment) {
            AND venue_address IS NULL
            AND venue_map_url IS NULL
            AND programme_hero_image_url IS NULL
+           AND brand_logo_asset_id IS NULL
+           AND brand_banner_asset_id IS NULL
+           AND brand_draft_accent = '#4f46e5'
+           AND brand_draft_logo_asset_id IS NULL
+           AND brand_draft_banner_asset_id IS NULL
+           AND brand_draft_welcome_text IS NULL
+           AND brand_draft_support_url IS NULL
+           AND brand_draft_revision = 1
+           AND brand_published_revision = 1
            AND session_formats_json = ?
            AND file_policy_json = ?
            AND participant_retention_completed_at IS NULL) AS canonicalEventConfiguration,

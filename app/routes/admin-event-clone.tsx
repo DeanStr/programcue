@@ -134,8 +134,9 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
           <span className="pc-page-eyebrow">Reusable event template</span>
           <h1>Clone {loaderData.source.name}</h1>
           <p>
-            Create a clean event with the current branding, rooms, tracks,
-            policies and reusable form, evaluation, task and email templates.
+            Create a clean event with the published branding settings, rooms,
+            tracks, policies and reusable form, evaluation, task and email
+            templates.
           </p>
         </div>
         <Link className="btn" to="/admin/event">
@@ -337,7 +338,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                 confirm(
                   {
                     title: "Create this clean clone?",
-                    description: `A new event is created from ${loaderData.source.name}, with ${repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} holding its event data. Branding, rooms, tracks, policies and reusable templates are copied; people, submissions, schedules, credentials and published programmes are not.`,
+                    description: `A new event is created from ${loaderData.source.name}, with ${repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} holding its event data. Published branding settings, rooms, tracks, policies and reusable templates are copied; brand images, people, submissions, schedules, credentials and published programmes are not. Events with brand images are blocked until those images are removed.`,
                     confirmLabel: "Create clean clone",
                     tone: "primary",
                   },
@@ -356,16 +357,18 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
           </div>
           <h3>Copied as editable templates</h3>
           <p>
-            Branding and access defaults, schedule conflict policy, rooms,
-            tracks, form versions, evaluation rounds and criteria, task
-            templates and dependencies, email templates and disabled triggers.
+            Published branding text, colour and access defaults, schedule
+            conflict policy, rooms, tracks, form versions, evaluation rounds and
+            criteria, task templates and dependencies, email templates and
+            disabled triggers.
           </p>
           <h3>Intentionally excluded</h3>
           <p>
-            People and memberships other than the creator, submissions, reviews
-            and decisions, sessions and schedules, task instances, files,
-            messages, calendar invitations, API keys, provider credentials,
-            webhooks and publication state.
+            Brand images, people and memberships other than the creator,
+            submissions, reviews and decisions, sessions and schedules, task
+            instances, files, messages, calendar invitations, API keys, provider
+            credentials, webhooks and publication state. Cloning is blocked
+            while brand images or unpublished branding changes exist.
           </p>
           <p className="help">
             Fixed deadlines, form close dates and evaluation round windows are

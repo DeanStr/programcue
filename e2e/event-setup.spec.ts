@@ -21,20 +21,6 @@ test.afterAll(async ({ request }) => {
 });
 
 test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
-  await page.route("https://branding.example.test/event.svg", (route) =>
-    route.fulfill({
-      contentType: "image/svg+xml",
-      body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#4f46e5"/></svg>',
-    }),
-  );
-  await page.route(
-    "https://branding.example.test/programme-hero.jpg",
-    (route) =>
-      route.fulfill({
-        contentType: "image/svg+xml",
-        body: '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500"><rect width="1200" height="500" fill="#312e81"/></svg>',
-      }),
-  );
   await page.goto("/admin/event");
   await expect(
     page.getByRole("heading", { name: "Event Setup" }),
@@ -42,30 +28,14 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
 
   const venue = page.getByLabel("Venue", { exact: true });
   const original = await venue.inputValue();
-  const logo = page.getByLabel("Participant logo URL");
   const venueAddress = page.getByLabel("Venue address");
   const venueMapUrl = page.getByLabel("Venue map URL");
-  const programmeHero = page.getByLabel("Programme hero image URL");
-  const welcome = page.getByLabel("Participant welcome message");
-  const support = page.getByLabel("Participant support URL");
-  const originalLogo = await logo.inputValue();
-  const originalWelcome = await welcome.inputValue();
-  const originalSupport = await support.inputValue();
   const originalVenueAddress = await venueAddress.inputValue();
   const originalVenueMapUrl = await venueMapUrl.inputValue();
-  const originalProgrammeHero = await programmeHero.inputValue();
   try {
     await venue.fill("Beanfield Centre — persistence check");
     await venueAddress.fill("105 Princes' Boulevard, Toronto, ON");
     await venueMapUrl.fill("https://maps.example.test/beanfield-centre");
-    await programmeHero.fill(
-      "https://branding.example.test/programme-hero.jpg",
-    );
-    await logo.fill("https://branding.example.test/event.svg");
-    await welcome.fill(
-      "Welcome to the browser-verified participant workspace.",
-    );
-    await support.fill("https://support.example.test/participants");
     await page.getByRole("button", { name: "Save event" }).click();
     await expect(
       page.getByText("Event settings saved.", { exact: true }),
@@ -78,40 +48,6 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
     await expect(venueMapUrl).toHaveValue(
       "https://maps.example.test/beanfield-centre",
     );
-    await expect(programmeHero).toHaveValue(
-      "https://branding.example.test/programme-hero.jpg",
-    );
-    await expect(logo).toHaveValue("https://branding.example.test/event.svg");
-    await expect(welcome).toHaveValue(
-      "Welcome to the browser-verified participant workspace.",
-    );
-
-    await page.goto("/apply/form");
-    await expect(
-      page.getByText("Welcome to the browser-verified participant workspace."),
-    ).toBeVisible();
-
-    await page.context().addCookies([
-      {
-        name: "program_cue_demo_identity",
-        value: "speaker",
-        domain: "127.0.0.1",
-        path: "/",
-        httpOnly: true,
-        sameSite: "Lax",
-      },
-    ]);
-    await page.goto("/participant/dashboard");
-    await expect(
-      page.getByText("Welcome to the browser-verified participant workspace."),
-    ).toBeVisible();
-    await expect(
-      page.getByAltText("Future of Events 2027 logo"),
-    ).toHaveAttribute("src", "https://branding.example.test/event.svg");
-    await expect(
-      page.getByRole("link", { name: "Support", exact: true }),
-    ).toHaveAttribute("href", "https://support.example.test/participants");
-
     await page.goto("/public/programme/future-of-events-2027");
     await expect(
       page.getByText("105 Princes' Boulevard, Toronto, ON"),
@@ -119,7 +55,6 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
     await expect(
       page.getByRole("link", { name: /View venue map/ }),
     ).toHaveAttribute("href", "https://maps.example.test/beanfield-centre");
-    await expect(page.locator(".hero.has-image")).toBeVisible();
   } finally {
     await page.context().addCookies([
       {
@@ -135,12 +70,6 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
     await page.getByLabel("Venue", { exact: true }).fill(original);
     await page.getByLabel("Venue address").fill(originalVenueAddress);
     await page.getByLabel("Venue map URL").fill(originalVenueMapUrl);
-    await page
-      .getByLabel("Programme hero image URL")
-      .fill(originalProgrammeHero);
-    await page.getByLabel("Participant logo URL").fill(originalLogo);
-    await page.getByLabel("Participant welcome message").fill(originalWelcome);
-    await page.getByLabel("Participant support URL").fill(originalSupport);
     await page.getByRole("button", { name: "Save event" }).click();
     await expect(
       page.getByText("Event settings saved.", { exact: true }),
@@ -157,6 +86,26 @@ test("Event Setup rejects an invalid date range before persistence", async ({
   await expect(page.getByRole("alert")).toContainText(
     "End date cannot be before the start date",
   );
+});
+
+test("Event Setup rejects attempts to change Branding-owned fields", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  const venue = page.getByLabel("Venue", { exact: true });
+  const originalVenue = await venue.inputValue();
+  await venue.fill("This venue must not persist");
+  await page
+    .locator('input[name="brandAccent"]')
+    .evaluate((input: HTMLInputElement) => {
+      input.value = "#000000";
+    });
+  await page.getByRole("button", { name: "Save event" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "use the Branding workspace",
+  );
+  await page.reload();
+  await expect(venue).toHaveValue(originalVenue);
 });
 
 test("programme validation opens the affected disclosure and retains record context", async ({
@@ -249,12 +198,12 @@ test("repository workflows remain blocked until exact Event Setup edits are save
     ),
   ).toBeHidden();
 
-  const brandAccent = page.getByLabel("Brand accent", { exact: true });
-  const originalBrandAccent = await brandAccent.inputValue();
-  await brandAccent.fill("#0d9488");
+  const city = page.getByLabel("City", { exact: true });
+  const originalCity = await city.inputValue();
+  await city.fill("Unsaved city");
   await expect(configure).toBeDisabled();
   await page.getByRole("button", { name: "Discard changes" }).click();
-  await expect(brandAccent).toHaveValue(originalBrandAccent);
+  await expect(city).toHaveValue(originalCity);
   await expect(configure).toBeEnabled();
 
   await page.getByRole("link", { name: "Submissions", exact: true }).click();

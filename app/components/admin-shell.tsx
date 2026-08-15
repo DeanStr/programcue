@@ -19,6 +19,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PanelTop,
+  Palette,
   Plus,
   Search,
   Settings,
@@ -54,6 +55,7 @@ export type AdminNavigationItem = readonly [string, LucideIcon, string];
 export const NAV_ITEMS = [
   ["command", LayoutDashboard, "Command Centre"],
   ["event", CalendarCog, "Event Setup"],
+  ["branding", Palette, "Branding"],
   ["submissions", Files, "Submissions"],
   /* Sparkles is the universal "a machine wrote this" glyph and the palette
      already spends it on the assistant. Humans score submissions here. */
@@ -79,7 +81,7 @@ export const NAV_ITEMS = [
 const NAV_GROUPS = [
   {
     label: "Core work",
-    ids: ["command", "event", "submissions", "review"],
+    ids: ["command", "event", "branding", "submissions", "review"],
   },
   {
     label: "Delivery",

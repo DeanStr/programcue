@@ -56,13 +56,6 @@ export function EventIdentityPanels({
   event: EventSetup;
   actionData?: ActionResponse;
 }) {
-  // The swatch cannot show what colour it holds, so the hex value is the field
-  // that carries the name and the two are kept in step. An operator matching a
-  // brand guide needs to read and paste this, not just point at it.
-  const [brandAccent, setBrandAccent] = useState(event.brandAccent);
-  const swatchValue = /^#[0-9a-f]{6}$/i.test(brandAccent)
-    ? brandAccent
-    : "#000000";
   return (
     <>
       <section className="card pad">
@@ -179,7 +172,7 @@ export function EventIdentityPanels({
         <div className="card-title">
           <h3>Public identity</h3>
         </div>
-        <div className="form-row trailing-fit">
+        <div className="form-row">
           <label className="label">
             Public slug
             {event.programmePublished ? (
@@ -201,97 +194,6 @@ export function EventIdentityPanels({
             ) : null}
             <FieldError actionData={actionData} name="publicSlug" />
           </label>
-          <div className="label">
-            <span id="event-brand-accent-label">Brand accent</span>
-            <div className="event-accent-control">
-              <input
-                type="color"
-                value={swatchValue}
-                aria-label="Brand accent colour picker"
-                onChange={(changeEvent) =>
-                  setBrandAccent(changeEvent.target.value)
-                }
-              />
-              <input
-                className="event-accent-hex"
-                name="brandAccent"
-                value={brandAccent}
-                aria-labelledby="event-brand-accent-label"
-                spellCheck={false}
-                autoComplete="off"
-                maxLength={7}
-                pattern="#[0-9a-fA-F]{6}"
-                required
-                onChange={(changeEvent) =>
-                  setBrandAccent(changeEvent.target.value)
-                }
-              />
-            </div>
-            <FieldError actionData={actionData} name="brandAccent" />
-          </div>
-        </div>
-        <div className="form-row mt">
-          <label className="label">
-            Programme hero image URL
-            <input
-              className="field"
-              name="programmeHeroImageUrl"
-              type="url"
-              inputMode="url"
-              placeholder="https://example.org/venue-photo.jpg"
-              defaultValue={event.programmeHeroImageUrl}
-              maxLength={2048}
-            />
-            <span className="help">
-              Optional HTTPS photograph behind the public programme masthead. A
-              dark scrim is applied over it, so the heading stays legible on any
-              image. Without one the masthead uses the brand accent.
-            </span>
-            <FieldError actionData={actionData} name="programmeHeroImageUrl" />
-          </label>
-          <label className="label">
-            Participant logo URL
-            <input
-              className="field"
-              name="participantLogoUrl"
-              type="url"
-              inputMode="url"
-              placeholder="https://example.org/event-logo.svg"
-              defaultValue={event.participantLogoUrl}
-              maxLength={2048}
-            />
-            <span className="help">
-              Optional HTTPS image shown in the participant workspace and
-              application header.
-            </span>
-            <FieldError actionData={actionData} name="participantLogoUrl" />
-          </label>
-          <label className="label">
-            Participant support URL
-            <input
-              className="field"
-              name="participantSupportUrl"
-              type="url"
-              inputMode="url"
-              placeholder="https://example.org/help"
-              defaultValue={event.participantSupportUrl}
-              maxLength={2048}
-            />
-            <FieldError actionData={actionData} name="participantSupportUrl" />
-          </label>
-        </div>
-        <div className="form-row mt">
-          <label className="label">
-            Participant welcome message
-            <textarea
-              className="textarea"
-              name="participantWelcomeText"
-              defaultValue={event.participantWelcomeText}
-              maxLength={500}
-              placeholder="Welcome. Use this workspace to manage your applications and event preparation."
-            />
-            <FieldError actionData={actionData} name="participantWelcomeText" />
-          </label>
           <label className="label">
             Programme description
             <textarea
@@ -301,6 +203,18 @@ export function EventIdentityPanels({
               maxLength={2000}
             />
           </label>
+        </div>
+        <div className="validation-item mt">
+          <div>
+            <strong>Visual identity and participant welcome</strong>
+            <p className="help">
+              Logo, banner, accent, welcome message and support link use a
+              separate draft and explicit publication workflow.
+            </p>
+          </div>
+          <Link className="btn small right" to="/admin/branding">
+            Manage branding
+          </Link>
         </div>
       </section>
     </>

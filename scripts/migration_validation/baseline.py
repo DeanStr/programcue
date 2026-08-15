@@ -25,7 +25,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "programme_embeds", "public_itineraries", "public_itinerary_items",
         "task_templates", "task_template_dependencies", "task_instances",
         "task_instance_dependencies", "task_comments", "task_evidence",
-        "file_assets", "file_versions", "file_multipart_uploads", "resource_pages", "resource_page_versions",
+        "file_assets", "file_versions", "file_multipart_uploads", "event_brand_assets", "resource_pages", "resource_page_versions",
         "resource_audiences", "resource_attachments", "resource_acknowledgements",
         "sender_profiles", "communication_templates", "communication_template_versions",
         "communication_triggers", "communications", "communication_deliveries",
@@ -57,7 +57,8 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
 
 
     for table, expected in {
-        "events": {"public_projection_revision"},
+        "events": {"public_projection_revision", "brand_logo_asset_id", "brand_banner_asset_id", "brand_draft_accent", "brand_draft_logo_asset_id", "brand_draft_banner_asset_id", "brand_draft_welcome_text", "brand_draft_support_url", "brand_draft_revision", "brand_published_revision", "brand_published_at"},
+        "event_brand_assets": {"organisation_id", "event_id", "kind", "object_key", "object_etag", "original_filename", "content_type", "size_bytes", "created_by_person_id", "deleted_at"},
         "people": {"linkedin_url", "x_handle", "profile_revision"},
         "event_participant_profiles": {"event_id", "organisation_id", "person_id", "travel_preferences", "last_operation_id"},
         "organisation_ai_settings": {"provider", "model", "revision", "last_updated_by_person_id", "last_operation_id"},

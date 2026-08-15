@@ -111,7 +111,8 @@
 .cfp-content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
-  grid-template-areas: "invitation entry"
+  grid-template-areas:
+    "invitation entry"
     "outline entry";
   gap: 54px clamp(32px, 6vw, 80px);
   align-items: start;
@@ -199,7 +200,7 @@
 }
 .cfp-entry-assurances li::before {
   content: "✓";
-  color: var(--event-accent);
+  color: var(--accent-ink);
   font-weight: var(--weight-extrabold);
 }
 .cfp-section-heading {
@@ -260,7 +261,7 @@
 }
 .cfp-example span,
 .cfp-required {
-  color: var(--event-accent);
+  color: var(--accent-ink);
   font-size: var(--text-2xs);
   font-style: normal;
   font-weight: var(--weight-bold);
@@ -287,7 +288,7 @@
   border-radius: 50%;
   object-fit: cover;
   background: color-mix(in srgb, var(--event-accent) 16%, white);
-  color: var(--event-accent);
+  color: var(--accent-ink);
   font-weight: var(--weight-extrabold);
 }
 .cfp-speaker-card h3 {
@@ -321,13 +322,15 @@
   }
   .cfp-content-grid {
     grid-template-columns: 1fr;
-    grid-template-areas: "invitation"
+    grid-template-areas:
+      "invitation"
       "entry"
       "outline";
     gap: var(--space-7);
   }
   .cfp-content-grid.without-invitation {
-    grid-template-areas: "entry"
+    grid-template-areas:
+      "entry"
       "outline";
   }
   .cfp-entry {

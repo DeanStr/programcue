@@ -60,6 +60,15 @@ export class EventRepositoryMigrationRequiredError extends Error {
   }
 }
 
+export class EventBrandingOwnershipError extends Error {
+  constructor() {
+    super(
+      "Event Setup cannot change published branding. Refresh this page and use the Branding workspace for event identity changes.",
+    );
+    this.name = "EventBrandingOwnershipError";
+  }
+}
+
 export class EventAirtableProjectionCommitError extends Error {
   readonly committed = true;
 
@@ -139,12 +148,21 @@ export class EventService {
   }
 
   async saveSetup(viewer: Viewer, input: unknown) {
-    const parsed = eventSetupInputSchema.parse(input);
+    const requested = eventSetupInputSchema.parse(input);
     const current = await this.repository.getSetup(
       viewer.organisationId,
       viewer.eventId,
     );
     if (!current) throw new EventNotFoundError();
+    if (
+      requested.brandAccent !== current.brandAccent ||
+      requested.programmeHeroImageUrl !== current.programmeHeroImageUrl ||
+      requested.participantLogoUrl !== current.participantLogoUrl ||
+      requested.participantWelcomeText !== current.participantWelcomeText ||
+      requested.participantSupportUrl !== current.participantSupportUrl
+    )
+      throw new EventBrandingOwnershipError();
+    const parsed = requested;
     if (current.repositoryProvider !== parsed.repositoryProvider)
       throw new EventRepositoryMigrationRequiredError();
     await this.repository.validateSetup(

@@ -61,6 +61,17 @@ describe("event cloning", () => {
     await ensureDemoData(env as unknown as CloudflareEnvironment);
     await env.DB.batch([
       env.DB.prepare(
+        `UPDATE events
+            SET participant_logo_url = NULL, programme_hero_image_url = NULL,
+                brand_logo_asset_id = NULL, brand_banner_asset_id = NULL,
+                brand_draft_logo_asset_id = NULL,
+                brand_draft_banner_asset_id = NULL,
+                brand_draft_accent = brand_accent,
+                brand_draft_welcome_text = participant_welcome_text,
+                brand_draft_support_url = participant_support_url
+          WHERE id = ? AND organisation_id = ?`,
+      ).bind(viewer.eventId, viewer.organisationId),
+      env.DB.prepare(
         `DELETE FROM task_template_dependencies
           WHERE template_id = 'resource-ack:source-page'
              OR depends_on_template_id = 'resource-ack:source-page'`,
@@ -198,6 +209,75 @@ describe("event cloning", () => {
     }
   });
 
+  it("fails before silently dropping brand images or unpublished branding", async () => {
+    const service = new EventCloneService(
+      env as unknown as CloudflareEnvironment,
+    );
+    await env.DB.prepare(
+      `UPDATE events SET brand_logo_asset_id = 'managed-logo'
+        WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .run();
+    await expect(
+      service.clone(viewer, {
+        name: "Image clone",
+        slug: "image-clone-blocked",
+        timezone: "America/Toronto",
+        startDate: "2028-05-20",
+        endDate: "2028-05-22",
+        repositoryProvider: "d1",
+      }),
+    ).rejects.toThrow(/cannot copy safely/i);
+
+    await env.DB.prepare(
+      `UPDATE events
+          SET brand_logo_asset_id = NULL,
+              programme_hero_image_url = 'https://cdn.example.com/legacy-hero.jpg'
+        WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .run();
+    await expect(
+      service.clone(viewer, {
+        name: "Legacy hero clone",
+        slug: "legacy-hero-clone-blocked",
+        timezone: "America/Toronto",
+        startDate: "2028-05-20",
+        endDate: "2028-05-22",
+        repositoryProvider: "d1",
+      }),
+    ).rejects.toThrow(/cannot copy safely/i);
+
+    await env.DB.prepare(
+      `UPDATE events
+          SET programme_hero_image_url = NULL, brand_draft_accent = '#000000'
+        WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .run();
+    await expect(
+      service.clone(viewer, {
+        name: "Draft clone",
+        slug: "draft-clone-blocked",
+        timezone: "America/Toronto",
+        startDate: "2028-05-20",
+        endDate: "2028-05-22",
+        repositoryProvider: "d1",
+      }),
+    ).rejects.toThrow(/unpublished branding changes/i);
+    await expect(
+      env.DB.prepare(
+        `SELECT id FROM events
+          WHERE slug IN (
+            'image-clone-blocked',
+            'legacy-hero-clone-blocked',
+            'draft-clone-blocked'
+          )`,
+      ).all(),
+    ).resolves.toMatchObject({ results: [] });
+  });
+
   it("copies reusable configuration into a clean draft event", async () => {
     const sourceFilePolicy = {
       ...CANONICAL_EVENT_FILE_POLICY,
@@ -221,8 +301,7 @@ describe("event cloning", () => {
       `UPDATE events
           SET file_policy_json = ?, session_formats_json = ?,
               venue_address = '105 Princes Boulevard, Toronto',
-              venue_map_url = 'https://maps.example.com/source',
-              programme_hero_image_url = 'https://cdn.example.com/source-hero.jpg'
+              venue_map_url = 'https://maps.example.com/source'
         WHERE id = ?`,
     )
       .bind(
@@ -278,7 +357,7 @@ describe("event cloning", () => {
       filePolicyJson: expect.any(String),
       venueAddress: "105 Princes Boulevard, Toronto",
       venueMapUrl: "https://maps.example.com/source",
-      programmeHeroImageUrl: "https://cdn.example.com/source-hero.jpg",
+      programmeHeroImageUrl: null,
     });
     expect(parseEventFilePolicy(clonedEvent!.filePolicyJson)).toEqual(
       sourceFilePolicy,

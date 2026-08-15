@@ -31,6 +31,7 @@ import { EventRepositoryRecoveryService } from "~/modules/events/event-repositor
 import {
   EventAdministratorPermissionError,
   EventAirtableProjectionCommitError,
+  EventBrandingOwnershipError,
   EventInvitationAddressError,
   EventInvitationDeliveryError,
   EventRepositoryMigrationRequiredError,
@@ -430,6 +431,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       error instanceof EventResourceConfigurationError ||
       error instanceof EventPublishedScheduleConflictError ||
       error instanceof EventPublishedProgrammeSlugError ||
+      error instanceof EventBrandingOwnershipError ||
       error instanceof EventRepositoryMigrationRequiredError ||
       error instanceof AirtableMigrationStateError
     ) {

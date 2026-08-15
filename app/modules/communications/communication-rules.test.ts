@@ -8,6 +8,7 @@ import {
   calculateRecipientCount,
   communicationDraftSchema,
 } from "./communication-rules";
+import { eventEmailLogoUrl } from "./communication-service-shared";
 import { formatEventDateMarkers, formatTaskDueDate } from "./merge-template";
 
 describe("communication and readiness rules", () => {
@@ -76,5 +77,26 @@ describe("communication and readiness rules", () => {
     expect(formatTaskDueDate(dueAt, "America/Toronto")).toBe(
       "Sep 20, 2026, 5:00 PM (America/Toronto)",
     );
+  });
+
+  it("keeps legacy HTTPS email logos and resolves managed logo paths", () => {
+    expect(
+      eventEmailLogoUrl({} as CloudflareEnvironment, {
+        logoUrl: "https://cdn.example.test/event-logo.png",
+      }),
+    ).toBe("https://cdn.example.test/event-logo.png");
+    expect(
+      eventEmailLogoUrl(
+        {
+          BETTER_AUTH_URL: "https://events.example.test",
+        } as unknown as CloudflareEnvironment,
+        { logoUrl: "/public/brand/event/logo" },
+      ),
+    ).toBe("https://events.example.test/public/brand/event/logo");
+    expect(() =>
+      eventEmailLogoUrl({} as CloudflareEnvironment, {
+        logoUrl: "/public/brand/event/logo",
+      }),
+    ).toThrow(/BETTER_AUTH_URL/);
   });
 });

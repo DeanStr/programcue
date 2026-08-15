@@ -3214,7 +3214,9 @@
           "city",
           "description",
           "brandAccent",
-          "heroImageUrl"
+          "heroImageUrl",
+          "logoUrl",
+          "bannerUrl"
         ],
         "properties": {
           "id": {
@@ -3283,6 +3285,20 @@
             "format": "uri",
             "pattern": "^https://",
             "maxLength": 2048
+          },
+          "logoUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri-reference"
+          },
+          "bannerUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri-reference"
           }
         }
       },
@@ -3352,7 +3368,9 @@
               "city",
               "description",
               "brandAccent",
-              "heroImageUrl"
+              "heroImageUrl",
+              "logoUrl",
+              "bannerUrl"
             ],
             "properties": {
               "id": {
@@ -3422,6 +3440,20 @@
                 "format": "uri",
                 "pattern": "^https://",
                 "maxLength": 2048
+              },
+              "logoUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri-reference"
+              },
+              "bannerUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri-reference"
               }
             }
           },

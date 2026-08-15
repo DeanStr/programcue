@@ -10,6 +10,7 @@ import {
 import {
   assertMergeAudienceCompatible,
   CommunicationStateError,
+  eventEmailLogoUrl,
   mergeValues,
   recipientFingerprint,
   snapshotSourceValues,
@@ -93,6 +94,7 @@ export abstract class CommunicationDeliveryPreview extends CommunicationDelivery
       body,
       eventName: event.eventName,
       accent: event.brandAccent,
+      logoUrl: eventEmailLogoUrl(this.env, event),
       physicalAddress: template.content.physicalAddress,
       buttonText: template.content.buttonText,
       buttonUrl: template.content.buttonUrl,

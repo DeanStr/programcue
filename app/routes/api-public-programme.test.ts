@@ -20,6 +20,8 @@ describe("static programme HTML", () => {
         description: null,
         brandAccent: "#4f46e5",
         heroImageUrl: null,
+        logoUrl: null,
+        bannerUrl: null,
       },
       version: { id: "version-1", versionNumber: 1, publishedAt: 1 },
       sessions: [],

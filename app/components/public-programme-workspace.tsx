@@ -122,7 +122,15 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
         className="brand"
         to={programmeHref}
       >
-        <span className="public-brand-mark" aria-hidden="true" />
+        {programme.event.logoUrl ? (
+          <img
+            className="public-event-logo"
+            src={programme.event.logoUrl}
+            alt=""
+          />
+        ) : (
+          <span className="public-brand-mark" aria-hidden="true" />
+        )}
         <span className="public-brand-name">{programme.event.name}</span>
       </Link>
       <nav className="public-nav" aria-label="Programme">
@@ -177,6 +185,13 @@ function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
       }
     >
       <div className="hero-body">
+        {embedded && programme.event.logoUrl ? (
+          <img
+            className="public-hero-logo"
+            src={programme.event.logoUrl}
+            alt={`${programme.event.name} logo`}
+          />
+        ) : null}
         <h1>{programme.event.name}</h1>
         <p className="hero-meta">
           {model.showEmbedField("time") ? (

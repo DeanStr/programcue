@@ -105,6 +105,7 @@ describe("administrator navigation context", () => {
     expect(groups[0]?.items.map(([id]) => id)).toEqual([
       "command",
       "event",
+      "branding",
       "submissions",
       "review",
     ]);

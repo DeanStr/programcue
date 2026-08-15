@@ -212,6 +212,25 @@ export function buildEventClonePlan(
     communicationVersions,
     communicationTriggers,
   } = data;
+  if (
+    source.participantLogoUrl ||
+    source.programmeHeroImageUrl ||
+    source.brandLogoAssetId ||
+    source.brandBannerAssetId ||
+    source.brandDraftLogoAssetId ||
+    source.brandDraftBannerAssetId
+  )
+    throw new EventCloneConfigurationError(
+      "This event has logo or banner images that the clone workflow cannot copy safely. Remove them from both the branding draft and published branding before cloning.",
+    );
+  if (
+    source.brandDraftAccent !== source.brandAccent ||
+    source.brandDraftWelcomeText !== source.participantWelcomeText ||
+    source.brandDraftSupportUrl !== source.participantSupportUrl
+  )
+    throw new EventCloneConfigurationError(
+      "This event has unpublished branding changes. Publish or discard them before cloning so the copied branding is unambiguous.",
+    );
   const pendingAirtable = input.repositoryProvider === "airtable";
   const filePolicyJson = JSON.stringify(
     parseEventFilePolicy(source.filePolicyJson),
@@ -325,15 +344,16 @@ export function buildEventClonePlan(
          id, organisation_id, name, slug, timezone, starts_at, ends_at,
          venue_name, venue_address, venue_map_url, programme_hero_image_url,
          city, description, brand_accent, participant_logo_url,
-         participant_welcome_text, participant_support_url, session_formats_json,
+         participant_welcome_text, participant_support_url,
+         brand_draft_accent, brand_draft_welcome_text,
+         brand_draft_support_url, brand_published_at, session_formats_json,
          repository_provider, activation_status,
          retention_months, submission_access_mode, allow_anonymous_drafts,
          duplicate_person_warnings, file_policy_json, revision, last_operation_id,
          last_updated_by_person_id, created_at, updated_at
        ) VALUES (
-         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-         ?, ?, ?,
-         1, ?, ?, unixepoch(), unixepoch()
+         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, ?, ?, ?, ?, ?,
+         unixepoch(), ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, unixepoch(), unixepoch()
        )`,
     ).bind(
       eventId,
@@ -346,11 +366,12 @@ export function buildEventClonePlan(
       source.venueName,
       source.venueAddress,
       source.venueMapUrl,
-      source.programmeHeroImageUrl,
       source.city,
       source.description,
       source.brandAccent,
-      source.participantLogoUrl,
+      source.participantWelcomeText,
+      source.participantSupportUrl,
+      source.brandAccent,
       source.participantWelcomeText,
       source.participantSupportUrl,
       sessionFormatsJson,

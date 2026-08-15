@@ -29,6 +29,13 @@ export async function readEventCloneSource(
               participant_logo_url AS participantLogoUrl,
               participant_welcome_text AS participantWelcomeText,
               participant_support_url AS participantSupportUrl,
+              brand_logo_asset_id AS brandLogoAssetId,
+              brand_banner_asset_id AS brandBannerAssetId,
+              brand_draft_accent AS brandDraftAccent,
+              brand_draft_logo_asset_id AS brandDraftLogoAssetId,
+              brand_draft_banner_asset_id AS brandDraftBannerAssetId,
+              brand_draft_welcome_text AS brandDraftWelcomeText,
+              brand_draft_support_url AS brandDraftSupportUrl,
               retention_months AS retentionMonths,
               session_formats_json AS sessionFormatsJson,
               submission_access_mode AS submissionAccessMode,
@@ -49,6 +56,13 @@ export async function readEventCloneSource(
         participantLogoUrl: string | null;
         participantWelcomeText: string | null;
         participantSupportUrl: string | null;
+        brandLogoAssetId: string | null;
+        brandBannerAssetId: string | null;
+        brandDraftAccent: string;
+        brandDraftLogoAssetId: string | null;
+        brandDraftBannerAssetId: string | null;
+        brandDraftWelcomeText: string | null;
+        brandDraftSupportUrl: string | null;
         retentionMonths: number;
         sessionFormatsJson: string;
         submissionAccessMode: string;

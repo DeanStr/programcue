@@ -51,7 +51,13 @@ const session: PublishedSession = {
 };
 
 const programme = {
-  event: { slug: "future-of-events-2027", timezone: "America/Toronto" },
+  event: {
+    slug: "future-of-events-2027",
+    timezone: "America/Toronto",
+    heroImageUrl: null,
+    logoUrl: null,
+    bannerUrl: null,
+  },
 } as PublishedProgramme;
 
 function model(overrides: Partial<PublicProgrammeModel> = {}) {
@@ -101,6 +107,22 @@ describe("public programme speaker surfaces", () => {
     expect(() => eventHeroImagePath(invalidWithLegacyField)).toThrow(
       /hero image URL is invalid/iu,
     );
+  });
+
+  it("uses the managed banner before the retired hero URL and rejects invalid paths", () => {
+    expect(
+      eventHeroImagePath({
+        ...programme.event,
+        heroImageUrl: "https://images.example.test/legacy.jpg",
+        bannerUrl: "/public/brand/test-event/banner",
+      }),
+    ).toBe("/public/brand/test-event/banner");
+    expect(() =>
+      eventHeroImagePath({
+        ...programme.event,
+        bannerUrl: "https://unexpected.example/banner.png",
+      }),
+    ).toThrow(/banner URL is invalid/i);
   });
 
   it("exposes an explicit agenda detail close action", () => {

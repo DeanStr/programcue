@@ -19,6 +19,7 @@ import {
   type TurnstileStatus,
 } from "~/components/turnstile-widget";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 
 export { action, loader } from "./application-form.server";
 export { claimApplicantVideoUploadOperation };
@@ -27,6 +28,15 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   if (loaderData && "form" in loaderData) {
     return [
       { title: `${loaderData.form.name} · ${loaderData.form.eventName}` },
+      ...(loaderData.form.participantLogoUrl
+        ? [
+            {
+              tagName: "link",
+              rel: "icon",
+              href: loaderData.form.participantLogoUrl,
+            },
+          ]
+        : []),
       {
         name: "description",
         content: loaderData.form.version.schema.introduction,
@@ -40,6 +50,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
         property: "og:description",
         content: loaderData.form.version.schema.introduction,
       },
+      { name: "theme-color", content: loaderData.form.brandAccent },
     ];
   }
   return [{ title: "Call for Speakers · Program Cue" }];
@@ -588,13 +599,15 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
   );
   const isEvaluationApplicant =
     applicant?.verified === true && applicant.evaluation === true;
+  const accentPalette = programmeAccentPalette(form.brandAccent);
+  const brandStyle = {
+    "--event-accent": accentPalette.accent,
+    "--accent-ink": accentPalette.ink,
+  } as CSSProperties;
 
   if (!claimRequested && !applicant) {
     return (
-      <div
-        className="public-shell event-branded"
-        style={{ "--event-accent": form.brandAccent } as CSSProperties}
-      >
+      <div className="public-shell event-branded" style={brandStyle}>
         <header className="public-top">
           <Link
             aria-label={`${form.eventName} application home`}
@@ -646,10 +659,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <div
-      className="public-shell event-branded"
-      style={{ "--event-accent": form.brandAccent } as CSSProperties}
-    >
+    <div className="public-shell event-branded" style={brandStyle}>
       <header className="public-top application-top">
         <Link
           aria-label={`${form.eventName} application home`}

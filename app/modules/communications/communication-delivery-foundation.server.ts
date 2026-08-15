@@ -38,6 +38,10 @@ export abstract class CommunicationDeliveryFoundation {
     const event = await this.env.DB.prepare(
       `
       SELECT e.name AS eventName, e.brand_accent AS brandAccent,
+             CASE WHEN e.brand_logo_asset_id IS NOT NULL
+               THEN '/public/brand/' || e.slug || '/logo'
+               ELSE e.participant_logo_url
+             END AS logoUrl,
              e.starts_at AS startsAt, e.ends_at AS endsAt
         FROM events e WHERE e.id = ? AND e.organisation_id = ?
     `,

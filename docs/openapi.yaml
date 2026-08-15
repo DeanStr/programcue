@@ -1638,6 +1638,8 @@ components:
           description,
           brandAccent,
           heroImageUrl,
+          logoUrl,
+          bannerUrl,
         ]
       properties:
         id: { type: string }
@@ -1665,6 +1667,8 @@ components:
             pattern: "^https://",
             maxLength: 2048,
           }
+        logoUrl: { type: [string, "null"], format: uri-reference }
+        bannerUrl: { type: [string, "null"], format: uri-reference }
     PublicEventResponse:
       type: object
       additionalProperties: false
@@ -1703,6 +1707,8 @@ components:
               description,
               brandAccent,
               heroImageUrl,
+              logoUrl,
+              bannerUrl,
             ]
           properties:
             id: { type: string }
@@ -1740,6 +1746,8 @@ components:
                 pattern: "^https://",
                 maxLength: 2048,
               }
+            logoUrl: { type: [string, "null"], format: uri-reference }
+            bannerUrl: { type: [string, "null"], format: uri-reference }
         version:
           type: object
           additionalProperties: false

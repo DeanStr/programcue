@@ -99,6 +99,18 @@ export const events = sqliteTable(
     participantLogoUrl: text("participant_logo_url"),
     participantWelcomeText: text("participant_welcome_text"),
     participantSupportUrl: text("participant_support_url"),
+    brandLogoAssetId: text("brand_logo_asset_id"),
+    brandBannerAssetId: text("brand_banner_asset_id"),
+    brandDraftAccent: text("brand_draft_accent").notNull().default("#4f46e5"),
+    brandDraftLogoAssetId: text("brand_draft_logo_asset_id"),
+    brandDraftBannerAssetId: text("brand_draft_banner_asset_id"),
+    brandDraftWelcomeText: text("brand_draft_welcome_text"),
+    brandDraftSupportUrl: text("brand_draft_support_url"),
+    brandDraftRevision: integer("brand_draft_revision").notNull().default(1),
+    brandPublishedRevision: integer("brand_published_revision")
+      .notNull()
+      .default(1),
+    brandPublishedAt: integer("brand_published_at"),
     sessionFormatsJson: text("session_formats_json")
       .notNull()
       .default(
@@ -152,6 +164,36 @@ export const events = sqliteTable(
       table.organisationId,
     ),
     index("idx_events_org").on(table.organisationId),
+  ],
+);
+
+export const eventBrandAssets = sqliteTable(
+  "event_brand_assets",
+  {
+    id: text("id").primaryKey(),
+    organisationId: text("organisation_id").notNull(),
+    eventId: text("event_id").notNull(),
+    kind: text("kind").notNull().$type<"logo" | "banner">(),
+    objectKey: text("object_key").notNull(),
+    objectEtag: text("object_etag").notNull(),
+    originalFilename: text("original_filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    createdByPersonId: text("created_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    deletedAt: integer("deleted_at"),
+  },
+  (table) => [
+    uniqueIndex("event_brand_assets_object_key_unique").on(table.objectKey),
+    index("idx_event_brand_assets_event_kind")
+      .on(table.eventId, table.kind, table.createdAt)
+      .where(sql`${table.deletedAt} IS NULL`),
+    foreignKey({
+      columns: [table.eventId, table.organisationId],
+      foreignColumns: [events.id, events.organisationId],
+    }).onDelete("cascade"),
   ],
 );
 
