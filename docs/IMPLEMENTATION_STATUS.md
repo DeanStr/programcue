@@ -499,17 +499,17 @@ and the scanner's 10 tests. Its Worker lane passed 164 files and 1,307 tests;
 one large schedule workflow exceeded its five-second test timeout while another
 worktree was concurrently CPU-bound, then passed unchanged in a focused rerun
 under the normal timeout in 4.22 seconds. The Agents Durable Object test passed
-separately. The production-discovered DeepSeek correction in source `0bdb4de`
-then passed generated TypeScript and all 14 focused provider-boundary tests.
+separately. The production-discovered DeepSeek corrections through final source
+`27a9941` passed generated TypeScript and all 14 focused provider-boundary tests.
 The browser gate was not rerun because the correction changes only the
 server-side DeepSeek reasoning parameter for schema-bound requests; the exact
 production request was exercised instead.
 
 ## Deployment evidence
 
-Application source `0bdb4de` is deployed at `app.programcue.com` as Worker
-version `d08809c7-7498-41b8-bba2-c791c5d6039b`, and scanner source `c9e1287`
-is deployed at `scanner.programcue.com`; release-stamp commits `246ac4f` and
+Application source `27a9941` is deployed at `app.programcue.com` as Worker
+version `452a55e8-c95c-4639-b435-822bcfdcdf96`, and scanner source `c9e1287`
+is deployed at `scanner.programcue.com`; release-stamp commits `b505acf` and
 `a5e1bab` record those sources. The current application version is at 100%
 traffic. Migrations `0023_workers_ai_deepseek_v4_flash.sql`,
 `0024_public_projection_revision.sql` and
@@ -518,7 +518,7 @@ WNAM D1 ledger retains 25 migrations, `quick_check=ok`, and foreign-key
 inspection returns no rows. The public-projection revision trigger and both
 communication-delivery health indexes are present.
 The separately deployed public website remains live at `programcue.com` and
-`www.programcue.com`. Health returned source `0bdb4de`; sign-in, evaluation
+`www.programcue.com`. Health returned source `27a9941`; sign-in, evaluation
 access, the canonical published programme and the public programme API returned
 HTTP 200. A fresh production evaluation-organiser unlock and fixed-identity
 selection rendered authenticated programme, communications and review
@@ -532,13 +532,16 @@ reset-only endpoint remains unavailable with HTTP 404.
 The deployed contextual-AI response ceiling is 4,000 tokens. Program Cue
 renders exact readiness snapshot values, blocker metadata and action links
 natively, while malformed, incomplete, duplicate or unknown model output fails
-instead of being presented. The first live DeepSeek request correctly failed
-closed after medium reasoning consumed that entire budget. Source `0bdb4de`
-uses DeepSeek non-thinking mode for schema-bound output while retaining medium
-reasoning for open-ended/tool requests. A fresh production evaluation-organiser
-request then returned HTTP 200 and persisted a completed, provider-attributed
-operation for `@cf/deepseek-ai/deepseek-v4-flash-0731` with response ID
-`9a167a12d49c459c9cb756fee92f8842`. This accepts the deployed structured
+instead of being presented. A live DeepSeek request correctly failed closed
+after medium reasoning consumed that entire budget. Omitting the reasoning
+parameter then produced one success followed by another 4,000-token failure,
+proving that omission did not reliably disable provider-default reasoning.
+Source `27a9941` sends the binding's explicit `null` reasoning value for
+schema-bound output while retaining medium reasoning for open-ended/tool
+requests. Three consecutive production evaluation-organiser requests returned
+HTTP 200 in 10, 15 and 18 seconds and persisted three completed,
+provider-attributed operations for
+`@cf/deepseek-ai/deepseek-v4-flash-0731`. This accepts the deployed structured
 readiness path, not every DeepSeek tool/assessment path or external model
 credentials. The production deployment configuration and 23-secret preflights
 passed.
