@@ -692,6 +692,7 @@ describe("explicit evaluation review cycles", () => {
         confidence: 5,
         submitterFeedback: "Reviewed in the explicit second cycle.",
         privateNotes: "Prior terminal state remains authoritative.",
+        conflictAffirmed: true,
         intent: "submit",
       });
     }
@@ -732,6 +733,7 @@ describe("explicit evaluation review cycles", () => {
       confidence: 5,
       submitterFeedback: "Reviewed again in the explicit second cycle.",
       privateNotes: "The released terminal state remains authoritative.",
+      conflictAffirmed: true,
       intent: "submit",
     });
 

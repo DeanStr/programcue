@@ -1632,9 +1632,12 @@ components:
           startDate,
           endDate,
           venue,
+          venueAddress,
+          venueMapUrl,
           city,
           description,
           brandAccent,
+          heroImageUrl,
         ]
       properties:
         id: { type: string }
@@ -1644,9 +1647,24 @@ components:
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         venue: { type: [string, "null"] }
+        venueAddress: { type: [string, "null"], maxLength: 300 }
+        venueMapUrl:
+          {
+            type: [string, "null"],
+            format: uri,
+            pattern: "^https://",
+            maxLength: 2048,
+          }
         city: { type: [string, "null"] }
         description: { type: [string, "null"] }
         brandAccent: { type: string }
+        heroImageUrl:
+          {
+            type: [string, "null"],
+            format: uri,
+            pattern: "^https://",
+            maxLength: 2048,
+          }
     PublicEventResponse:
       type: object
       additionalProperties: false
@@ -1679,9 +1697,12 @@ components:
               startDate,
               endDate,
               venue,
+              venueAddress,
+              venueMapUrl,
               city,
               description,
               brandAccent,
+              heroImageUrl,
             ]
           properties:
             id: { type: string }
@@ -1701,9 +1722,24 @@ components:
                 description: Last event calendar date in the event timezone,
               }
             venue: { type: [string, "null"] }
+            venueAddress: { type: [string, "null"], maxLength: 300 }
+            venueMapUrl:
+              {
+                type: [string, "null"],
+                format: uri,
+                pattern: "^https://",
+                maxLength: 2048,
+              }
             city: { type: [string, "null"] }
             description: { type: [string, "null"] }
             brandAccent: { type: string }
+            heroImageUrl:
+              {
+                type: [string, "null"],
+                format: uri,
+                pattern: "^https://",
+                maxLength: 2048,
+              }
         version:
           type: object
           additionalProperties: false
@@ -2340,8 +2376,11 @@ components:
         confidence: { type: [integer, "null"], minimum: 1, maximum: 5 }
         submitterFeedback: { type: string, maxLength: 8000 }
         privateNotes: { type: string, maxLength: 8000 }
+        conflictAffirmed:
+          type: boolean
+          description: Must be true when intent is submit; optional for draft saves.
         intent: { type: string, enum: [save, submit] }
-      description: recommendation and confidence must be non-null when intent is submit.
+      description: recommendation and confidence must be non-null, and conflictAffirmed must be true, when intent is submit.
     EvaluationConflictCommand:
       type: object
       additionalProperties: false

@@ -40,6 +40,13 @@ function taskData(overrides: Partial<AdminTasksData> = {}) {
     filterSignature: "all",
     focusedTaskId: null,
     totalTaskCount: 0,
+    taskSummary: {
+      readiness: 100,
+      outstanding: 0,
+      evidenceReview: 0,
+      blocked: 0,
+      overdue: 0,
+    },
     intentId: "intent-1",
     assignIntentId: "assign-intent-1",
     ...overrides,
@@ -82,6 +89,33 @@ describe("administrator task discoverability", () => {
     expect(markup).toContain('<option value="critical" selected="">Critical');
     expect(markup).toContain("Showing 0 of 0 tasks");
     expect(markup).toContain("No assigned work matches these filters");
+  });
+
+  it("keeps event-level metrics truthful when no rows match a filter", () => {
+    const markup = renderWorkspace(
+      taskData({
+        totalTaskCount: 7,
+        taskSummary: {
+          readiness: 42,
+          outstanding: 5,
+          evidenceReview: 2,
+          blocked: 1,
+          overdue: 3,
+        },
+        filters: {
+          task: "",
+          state: "waived",
+          target: "",
+          type: "",
+          impact: "",
+        },
+      }),
+    );
+
+    expect(markup).toContain("Showing 0 of 7 tasks");
+    expect(markup).toContain('<div class="value">42%</div>');
+    expect(markup).toContain('<div class="value">5</div>');
+    expect(markup).not.toContain('<div class="value">100%</div>');
   });
 
   it("keeps task-template creation visible when templates already exist", () => {

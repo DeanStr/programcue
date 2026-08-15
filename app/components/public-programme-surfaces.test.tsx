@@ -16,7 +16,9 @@ import {
   SaveSessionButton,
 } from "./public-programme-parts";
 import {
+  eventHeroImagePath,
   sessionSpeakerDetails,
+  speakersWithMultipleSessions,
   speakerAffiliation,
   type PublicProgrammeModel,
 } from "./public-programme-model";
@@ -74,6 +76,60 @@ function model(overrides: Partial<PublicProgrammeModel> = {}) {
 }
 
 describe("public programme speaker surfaces", () => {
+  it("uses only the authoritative HTTPS programme hero field", () => {
+    expect(
+      eventHeroImagePath({
+        ...programme.event,
+        heroImageUrl: "https://images.example.test/programme_(main).webp",
+      }),
+    ).toBe("https://images.example.test/programme_(main).webp");
+    expect(
+      eventHeroImagePath({
+        ...programme.event,
+        heroImageUrl: "https://images.example.test/été programme.webp",
+      }),
+    ).toBe("https://images.example.test/%C3%A9t%C3%A9%20programme.webp");
+    expect(
+      eventHeroImagePath({ ...programme.event, heroImageUrl: null }),
+    ).toBeNull();
+    const invalidWithLegacyField: PublishedProgramme["event"] & {
+      heroImagePath: string;
+    } = {
+      ...programme.event,
+      heroImageUrl: "javascript:alert(1)",
+      heroImagePath: "/images/legacy.webp",
+    };
+    expect(() => eventHeroImagePath(invalidWithLegacyField)).toThrow(
+      /hero image URL is invalid/iu,
+    );
+  });
+
+  it("summarises only speakers who objectively appear in multiple sessions", () => {
+    const speakers = Array.from({ length: 7 }, (_, index) => ({
+      ...speaker,
+      id: `speaker-${index}`,
+      displayName: `Speaker ${index}`,
+    }));
+    const selected = speakersWithMultipleSessions({
+      speakers,
+      sessions: [
+        { speakerIds: [speakers[0]!.id, speakers[1]!.id] },
+        { speakerIds: [speakers[0]!.id, speakers[2]!.id] },
+        { speakerIds: [speakers[1]!.id] },
+      ],
+    });
+    expect(selected).toEqual([
+      { speaker: speakers[0], sessions: 2 },
+      { speaker: speakers[1], sessions: 2 },
+    ]);
+    expect(
+      speakersWithMultipleSessions({
+        speakers: speakers.slice(0, 6),
+        sessions: [],
+      }),
+    ).toEqual([]);
+  });
+
   it("exposes an explicit agenda detail close action", () => {
     const agendaProgramme = {
       ...programme,

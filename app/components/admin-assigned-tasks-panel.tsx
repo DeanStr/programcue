@@ -17,6 +17,48 @@ function dateLabel(epoch: number | null, timezone: string) {
     : "No due date";
 }
 
+/* An absolute date answers "when"; only the distance to it answers "is this a
+   problem". The table printed the first and left the reader to compute the
+   second against today's date, once per row. */
+const DAY_MILLISECONDS = 86_400_000;
+
+function localDayNumber(epoch: number, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    timeZone: timezone,
+  }).formatToParts(new Date(epoch * 1_000));
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  return (
+    Date.UTC(value("year"), value("month") - 1, value("day")) / DAY_MILLISECONDS
+  );
+}
+
+export function dueDistanceLabel(dueAt: number, now: number, timezone: string) {
+  const days = localDayNumber(dueAt, timezone) - localDayNumber(now, timezone);
+  if (days < 0) {
+    const overdue = Math.abs(days);
+    return {
+      text: overdue === 1 ? "1 day overdue" : `${overdue} days overdue`,
+      tone: "danger" as const,
+    };
+  }
+  if (days === 0) return { text: "Due today", tone: "warning" as const };
+  if (days === 1) return { text: "Due tomorrow", tone: "warning" as const };
+  if (days <= 7) return { text: `${days} days left`, tone: "warning" as const };
+  return { text: `${days} days left`, tone: "neutral" as const };
+}
+
+/* The page reports a readiness percentage at the top and the rows that produce
+   it below, and there was no column connecting the two. */
+function readinessTone(percent: number) {
+  if (percent >= 100) return "green";
+  if (percent >= 50) return "";
+  return percent > 0 ? "amber" : "red";
+}
+
 export function AdminAssignedTasksPanel({
   data,
   busy,
@@ -51,6 +93,7 @@ export function AdminAssignedTasksPanel({
               <th scope="col">Speaker</th>
               <th scope="col">Impact</th>
               <th scope="col">Due ({data.eventTimezone})</th>
+              <th scope="col">Readiness</th>
               <th scope="col">Status / evidence</th>
               <th scope="col">Administrator action</th>
             </tr>
@@ -77,15 +120,45 @@ export function AdminAssignedTasksPanel({
                 </td>
                 <td data-label={`Due (${data.eventTimezone})`}>
                   {task.dueAt ? (
-                    <EventDateTime
-                      epochSeconds={task.dueAt}
-                      timeZone={data.eventTimezone}
-                    >
-                      {dateLabel(task.dueAt, data.eventTimezone)}
-                    </EventDateTime>
+                    <div className="pc-record-stack">
+                      <EventDateTime
+                        epochSeconds={task.dueAt}
+                        timeZone={data.eventTimezone}
+                      >
+                        {dateLabel(task.dueAt, data.eventTimezone)}
+                      </EventDateTime>
+                      {(() => {
+                        const distance = dueDistanceLabel(
+                          task.dueAt,
+                          data.now,
+                          data.eventTimezone,
+                        );
+                        return (
+                          <small
+                            className={`task-due-distance ${distance.tone}`}
+                          >
+                            {distance.text}
+                          </small>
+                        );
+                      })()}
+                    </div>
                   ) : (
                     "No due date"
                   )}
+                </td>
+                <td data-label="Readiness">
+                  <div className="pc-record-stack task-readiness-cell">
+                    <div
+                      className={`progress ${readinessTone(task.readinessPercent)}${task.readinessPercent === 0 ? " is-zero" : ""}`}
+                      aria-hidden
+                    >
+                      <span style={{ width: `${task.readinessPercent}%` }} />
+                    </div>
+                    <small className="pc-num">
+                      {task.readinessPercent}%
+                      <span className="sr-only"> ready</span>
+                    </small>
+                  </div>
                 </td>
                 <td data-label="Status / evidence">
                   <div className="pc-record-stack">
@@ -290,7 +363,7 @@ export function AdminAssignedTasksPanel({
             ))}
             {!data.tasks.length ? (
               <tr className="pc-table-empty-row">
-                <td className="pc-table-empty-cell" colSpan={6}>
+                <td className="pc-table-empty-cell" colSpan={7}>
                   <div className="pc-empty-state">
                     <ListChecks aria-hidden className="pc-state-icon" />
                     <h3>No assigned work matches these filters</h3>

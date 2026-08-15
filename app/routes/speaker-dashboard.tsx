@@ -10,7 +10,10 @@ import {
 import { Link } from "react-router";
 
 import type { Route } from "./+types/speaker-dashboard";
-import { SpeakerDashboardOverview } from "~/components/speaker-dashboard-overview";
+import {
+  SpeakerDashboardOverview,
+  SpeakerWorkRail,
+} from "~/components/speaker-dashboard-overview";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { TaskService } from "~/modules/tasks/task-service.server";
@@ -33,9 +36,6 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
   const finished = tasks.filter((task) =>
     ["completed", "waived"].includes(task.status),
   ).length;
-  const progress = tasks.length
-    ? Math.round((finished / tasks.length) * 100)
-    : 100;
   const next = tasks.find(
     (task) => !["completed", "waived"].includes(task.status),
   );
@@ -49,110 +49,123 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
           <p>{portal.event.participantWelcomeText}</p>
         </section>
       ) : null}
-      <SpeakerDashboardOverview
-        portal={portal}
-        next={next}
-        progress={progress}
-        completedCount={finished}
-        requirementCount={tasks.length}
-      />
+      {/* The main column carries what the speaker has to do; the rail carries
+          the work itself and anything the team has said about it. */}
+      <div className="speaker-dashboard-layout">
+        <div className="speaker-dashboard-main">
+          <SpeakerDashboardOverview
+            portal={portal}
+            next={next}
+            completedCount={finished}
+            requirementCount={tasks.length}
+          />
 
-      {/* These are navigation links, not cards. As a two-column card grid the
-          fifth one stranded an orphan beside 580x145px of empty canvas, and
-          each tile spent a whole card on a single figure that rendered
-          smaller and greyer than its own static label. As rows the values
-          land in one column, so they can actually be compared. */}
-      <section className="mt" aria-labelledby="speaker-workspaces-heading">
-        <div className="card-title">
-          <h2 id="speaker-workspaces-heading">Event preparation</h2>
-        </div>
-        <nav className="pc-index-list" aria-labelledby="speaker-workspaces-heading">
-          {[
-            {
-              to: "/participant/applications",
-              icon: ClipboardList,
-              label: "Applications",
-              detail: "",
-              value: `${loaderData.applications.length}`,
-              unit:
-                loaderData.applications.length === 1
-                  ? "application"
-                  : "applications",
-            },
-            {
-              to: "/participant/sessions",
-              icon: Mic2,
-              label: "My sessions",
-              detail: "",
-              value: `${portal.sessions.length}`,
-              unit: portal.sessions.length === 1 ? "session" : "sessions",
-            },
-            {
-              to: "/participant/tasks",
-              icon: CheckSquare,
-              label: "Tasks",
-              detail: finished ? `${finished} complete` : "",
-              value: `${tasks.length - finished}`,
-              unit: "outstanding",
-            },
-            {
-              to: "/participant/files",
-              icon: FileStack,
-              label: "Files",
-              detail: "",
-              value: `${portal.files.length}`,
-              unit: portal.files.length === 1 ? "private file" : "private files",
-            },
-            {
-              to: "/participant/profile",
-              icon: UserRound,
-              label: "Profile",
-              detail: publishedProfile
-                ? "visible on the programme"
-                : "review before publishing",
-              value: "",
-              unit: publishedProfile ? "Published" : "Draft",
-            },
-          ].map((entry) => (
-            <Link className="pc-index-row" key={entry.to} to={entry.to}>
-              <entry.icon aria-hidden className="pc-index-icon" />
-              <span className="pc-index-label">{entry.label}</span>
-              <span className="pc-index-detail">{entry.detail}</span>
-              <span className="pc-index-measure">
-                {entry.value ? (
-                  <b className="pc-index-value pc-num">{entry.value}</b>
-                ) : null}
-                <span className="pc-index-unit">{entry.unit}</span>
-              </span>
-              <ChevronRight aria-hidden className="pc-index-chevron" />
-            </Link>
-          ))}
-        </nav>
-      </section>
+          {/* These are navigation links, not cards. As a two-column card grid
+              the fifth one stranded an orphan beside 580x145px of empty
+              canvas, and each tile spent a whole card on a single figure that
+              rendered smaller and greyer than its own static label. As rows
+              the values land in one column, so they can actually be
+              compared. */}
+          <section className="mt" aria-labelledby="speaker-workspaces-heading">
+            <div className="card-title">
+              <h2 id="speaker-workspaces-heading">Event preparation</h2>
+            </div>
+            <nav
+              className="pc-index-list"
+              aria-labelledby="speaker-workspaces-heading"
+            >
+              {[
+                {
+                  to: "/participant/applications",
+                  icon: ClipboardList,
+                  label: "Applications",
+                  detail: "",
+                  value: `${loaderData.applications.length}`,
+                  unit:
+                    loaderData.applications.length === 1
+                      ? "application"
+                      : "applications",
+                },
+                {
+                  to: "/participant/sessions",
+                  icon: Mic2,
+                  label: "My sessions",
+                  detail: "",
+                  value: `${portal.sessions.length}`,
+                  unit: portal.sessions.length === 1 ? "session" : "sessions",
+                },
+                {
+                  to: "/participant/tasks",
+                  icon: CheckSquare,
+                  label: "Tasks",
+                  detail: finished ? `${finished} complete` : "",
+                  value: `${tasks.length - finished}`,
+                  unit: "outstanding",
+                },
+                {
+                  to: "/participant/files",
+                  icon: FileStack,
+                  label: "Files",
+                  detail: "",
+                  value: `${portal.files.length}`,
+                  unit:
+                    portal.files.length === 1
+                      ? "private file"
+                      : "private files",
+                },
+                {
+                  to: "/participant/profile",
+                  icon: UserRound,
+                  label: "Profile",
+                  detail: publishedProfile
+                    ? "visible on the programme"
+                    : "review before publishing",
+                  value: "",
+                  unit: publishedProfile ? "Published" : "Draft",
+                },
+              ].map((entry) => (
+                <Link className="pc-index-row" key={entry.to} to={entry.to}>
+                  <entry.icon aria-hidden className="pc-index-icon" />
+                  <span className="pc-index-label">{entry.label}</span>
+                  <span className="pc-index-detail">{entry.detail}</span>
+                  <span className="pc-index-measure">
+                    {entry.value ? (
+                      <b className="pc-index-value pc-num">{entry.value}</b>
+                    ) : null}
+                    <span className="pc-index-unit">{entry.unit}</span>
+                  </span>
+                  <ChevronRight aria-hidden className="pc-index-chevron" />
+                </Link>
+              ))}
+            </nav>
+          </section>
 
-      <section
-        className="card pad mt"
-        aria-labelledby="speaker-calendar-heading"
-      >
-        <div className="card-title">
-          <div>
-            <CalendarDays aria-hidden className="subtle" />
-            <h2 id="speaker-calendar-heading">Calendar connection</h2>
-            <p className="subtle">
-              Connect your own calendar account for direct session updates. ICS
-              invitations remain available without a connection.
-            </p>
-          </div>
+          <section
+            className="card pad mt"
+            aria-labelledby="speaker-calendar-heading"
+          >
+            <div className="card-title">
+              <div>
+                <CalendarDays aria-hidden className="subtle" />
+                <h2 id="speaker-calendar-heading">Calendar connection</h2>
+                <p className="subtle">
+                  Connect your own calendar account for direct session updates.
+                  ICS invitations remain available without a connection.
+                </p>
+              </div>
+            </div>
+            <div className="page-actions">
+              <Link className="btn small" to="/oauth/calendar/google">
+                Connect Google Calendar
+              </Link>
+              <Link className="btn small" to="/oauth/calendar/microsoft">
+                Connect Microsoft 365
+              </Link>
+            </div>
+          </section>
         </div>
-        <div className="page-actions">
-          <Link className="btn small" to="/oauth/calendar/google">
-            Connect Google Calendar
-          </Link>
-          <Link className="btn small" to="/oauth/calendar/microsoft">
-            Connect Microsoft 365
-          </Link>
-        </div>
-      </section>
+        <SpeakerWorkRail tasks={tasks} timezone={portal.event.timezone} />
+      </div>
     </>
   );
 }

@@ -51,7 +51,19 @@ test("reviewer queue navigation and submission confirmation preserve context", a
   expect(page.url()).not.toBe(firstUrl);
   await page.getByRole("button", { name: "Previous", exact: true }).click();
 
-  await page.getByRole("button", { name: "Submit and open next" }).click();
+  // The conflict question gates submission before the rubric is even reached:
+  // a reviewer who has not answered it cannot submit at all.
+  const submitNext = page.getByRole("button", { name: "Submit and open next" });
+  await expect(submitNext).toBeDisabled();
+  await expect(
+    page.getByText(
+      "Answer the conflict of interest question before submitting",
+    ),
+  ).toBeVisible();
+  await page.getByRole("radio", { name: /No conflict/ }).check();
+  await expect(submitNext).toBeEnabled();
+
+  await submitNext.click();
   await expect(
     page.getByRole("dialog", { name: "Submit and open the next review?" }),
   ).toBeHidden();
@@ -73,7 +85,9 @@ test("reviewer queue navigation and submission confirmation preserve context", a
     await expect(chosen(index)).toBeChecked();
   }
   await expect(
-    page.getByRole("region", { name: "Score submission" }).locator(".status"),
+    page
+      .getByRole("region", { name: "Score submission" })
+      .locator(".review-score-head .status"),
   ).toContainText("4 / 4");
   await page.getByRole("button", { name: "Submit and open next" }).click();
   const confirmation = page.getByRole("dialog", {
@@ -89,16 +103,47 @@ test("reviewer queue navigation and submission confirmation preserve context", a
     page.getByRole("button", { name: "Submit and open next" }),
   ).toBeFocused();
 
-  await page.getByRole("button", { name: "Declare conflict" }).click();
+  // Declaring a conflict disables scoring and blocks submission rather than
+  // sitting beside a completed rubric as an afterthought.
+  await page.getByRole("radio", { name: /I have a conflict/ }).check();
+  await expect(page.locator(".review-rubric")).not.toHaveAttribute("inert");
+  await expect(scoreGroups.first()).toBeVisible();
+  expect(
+    await scoreGroups
+      .first()
+      .getByRole("radio")
+      .first()
+      .evaluate((input: HTMLInputElement) => input.disabled),
+  ).toBe(true);
+  await expect(
+    page.getByRole("button", { name: "Submit and open next" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText("A conflicted review cannot be submitted"),
+  ).toBeVisible();
+
+  const declare = page.getByRole("button", {
+    name: "Declare conflict and return",
+  });
+  await declare.click();
   const conflict = page.getByRole("dialog", { name: "Declare a conflict" });
   await expect(conflict).toContainText(
     "recused and returned to the committee for reassignment",
   );
   await conflict.getByRole("button", { name: "Close" }).click();
   await expect(conflict).toBeHidden();
-  await expect(
-    page.getByRole("button", { name: "Declare conflict" }),
-  ).toBeFocused();
+  await expect(declare).toBeFocused();
+  await expect(page.locator(".review-save-state")).toHaveText("Saved");
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const reloadedScoreGroups = page.locator("[data-review-scale]");
+  for (let index = 0; index < scoreGroupCount; index += 1) {
+    await expect(
+      reloadedScoreGroups
+        .nth(index)
+        .getByRole("radio", { name: "4", exact: true }),
+    ).toBeChecked();
+  }
 });
 
 test("evaluation administration exposes onboarding and consequential previews", async ({

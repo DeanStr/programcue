@@ -78,7 +78,9 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
   await expect(page).toHaveURL(/\/admin\/command/);
 
   await waitForInterface(page, "/admin/event");
-  await page.getByLabel("Venue").fill("Temporary evaluator reset venue");
+  await page
+    .getByLabel("Venue", { exact: true })
+    .fill("Temporary evaluator reset venue");
   await page.getByRole("button", { name: "Save event" }).click();
   await expect(
     page.getByText("Event settings saved.", { exact: true }),
@@ -93,7 +95,7 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
   await expect(page.getByText("2", { exact: true }).first()).toBeVisible();
 
   await waitForInterface(page, "/admin/event");
-  await expect(page.getByLabel("Venue")).toHaveValue(
+  await expect(page.getByLabel("Venue", { exact: true })).toHaveValue(
     "Metro Toronto Convention Centre",
   );
 

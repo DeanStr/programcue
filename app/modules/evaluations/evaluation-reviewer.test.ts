@@ -336,9 +336,9 @@ describe("evaluation vertical slice", () => {
             name: "Initial review",
             anonymous: true,
             criteria,
-            },
-          ],
-        });
+          },
+        ],
+      });
       await addRoundReviewer("eval-test-round");
       await service.assign(admin, {
         roundId: "eval-test-round",
@@ -403,6 +403,7 @@ describe("evaluation vertical slice", () => {
           confidence: 4,
           submitterFeedback: "Useful proposal.",
           privateNotes: "Recommend acceptance.",
+          conflictAffirmed: true,
           intent: "submit",
         }),
       ).rejects.toBeInstanceOf(EvaluationValidationError);
@@ -415,15 +416,26 @@ describe("evaluation vertical slice", () => {
         confidence: 4,
         submitterFeedback: "Useful proposal.",
         privateNotes: "Recommend acceptance.",
+        conflictAffirmed: true,
         intent: "submit",
       });
       expect(submitted.weightedScore).toBe(4.25);
       const stored = await env.DB.prepare(
-        "SELECT status, revision FROM reviews WHERE id = ?",
+        `SELECT status, revision,
+                conflict_affirmed_at AS conflictAffirmedAt
+           FROM reviews WHERE id = ?`,
       )
         .bind(submitted.reviewId)
-        .first<{ status: string; revision: number }>();
-      expect(stored).toEqual({ status: "submitted", revision: 2 });
+        .first<{
+          status: string;
+          revision: number;
+          conflictAffirmedAt: number | null;
+        }>();
+      expect(stored).toEqual({
+        status: "submitted",
+        revision: 2,
+        conflictAffirmedAt: expect.any(Number),
+      });
       const submittedWorkspace = await service.getReviewerWorkspace(evaluator);
       expect(submittedWorkspace.selected?.status).toBe("submitted");
       expect(submittedWorkspace.review?.status).toBe("submitted");
@@ -436,6 +448,7 @@ describe("evaluation vertical slice", () => {
           confidence: 5,
           submitterFeedback: "",
           privateNotes: "",
+          conflictAffirmed: true,
           intent: "submit",
         }),
       ).rejects.toThrow(/unavailable|already submitted/);
@@ -595,6 +608,7 @@ describe("evaluation vertical slice", () => {
           confidence: 4,
           submitterFeedback: "A useful proposal.",
           privateNotes: "",
+          conflictAffirmed: true,
           intent: "submit",
         }),
         service.declareConflict(evaluator, {

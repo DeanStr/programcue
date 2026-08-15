@@ -34,6 +34,43 @@ export function calculateWeightedScore(
   return Number(score.toFixed(2));
 }
 
+/* The final score is gated on a complete rubric, which is correct: no round
+   stores a partial total. But a reviewer scoring criterion three still needs to
+   know what criteria one and two put into it, and that is an exact fact per row
+   rather than a projected total. Contributions are reported as they are earned;
+   the total stays gated. */
+export function rubricContributions(
+  criteria: ReadonlyArray<WeightedCriterion>,
+  responses: Readonly<Record<string, unknown>>,
+) {
+  let weightScored = 0;
+  const perCriterion = new Map<string, number>();
+  for (const criterion of criteria) {
+    const raw = responses[criterion.id];
+    if (raw === undefined || (typeof raw === "string" && !raw.trim())) continue;
+    const numeric =
+      typeof raw === "number"
+        ? raw
+        : typeof raw === "string" && raw.trim()
+          ? Number(raw)
+          : Number.NaN;
+    const maximum = criterion.inputType === "scale_10" ? 10 : 5;
+    if (!Number.isInteger(numeric) || numeric < 1 || numeric > maximum) {
+      throw new Error(
+        `Criterion ${criterion.id} needs a whole-number score from 1 to ${maximum}.`,
+      );
+    }
+    const normalised = maximum === 10 ? numeric / 2 : numeric;
+    const contribution = (normalised * criterion.weightPercent) / 100;
+    perCriterion.set(criterion.id, Number(contribution.toFixed(2)));
+    weightScored += criterion.weightPercent;
+  }
+  return {
+    perCriterion,
+    weightScored,
+  };
+}
+
 export function calculateRubricWeightedScore(
   criteria: ReadonlyArray<WeightedCriterion>,
   responses: Readonly<Record<string, unknown>>,

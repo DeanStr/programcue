@@ -193,9 +193,12 @@ function eventInput(event: Awaited<ReturnType<EventService["getSetup"]>>) {
     startDate: event.startDate,
     endDate: event.endDate,
     venue: event.venue,
+    venueAddress: event.venueAddress,
+    venueMapUrl: event.venueMapUrl,
     city: event.city,
     publicSlug: event.publicSlug,
     brandAccent: event.brandAccent,
+    programmeHeroImageUrl: event.programmeHeroImageUrl,
     participantLogoUrl: event.participantLogoUrl,
     participantWelcomeText: event.participantWelcomeText,
     participantSupportUrl: event.participantSupportUrl,
@@ -469,6 +472,11 @@ describe("Airtable authoritative room repository", () => {
       );
       expect(external).toBeDefined();
       const payload = JSON.parse(String(external!.fields["Payload JSON"]));
+      expect(payload).toMatchObject({
+        venue_address: null,
+        venue_map_url: null,
+        programme_hero_image_url: null,
+      });
       payload.session_formats_json = JSON.stringify([
         {
           key: "talk",

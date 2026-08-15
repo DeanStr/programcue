@@ -146,6 +146,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
       confidence: values.get("confidence") || null,
       submitterFeedback: values.get("submitterFeedback"),
       privateNotes: values.get("privateNotes"),
+      conflictAffirmed: values.get("conflictAffirmed") === "affirmed",
       intent,
     });
     const realtimeFailure = await recordRouteChange(env, viewer, {

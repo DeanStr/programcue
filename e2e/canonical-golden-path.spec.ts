@@ -52,6 +52,14 @@ async function switchDemoRole(
 
 async function completeSelectedReview(page: Page) {
   const form = page.locator("#review-score-form");
+  const submit = form.getByRole("button", {
+    name: "Submit review",
+    exact: true,
+  });
+  // The conflict question gates scoring and submission, so it is answered
+  // before anything else — the same order a reviewer meets it in.
+  await expect(submit).toBeDisabled();
+  await form.getByRole("radio", { name: /No conflict/ }).check();
   const scoreGroups = form.locator("[data-review-scale]");
   const scoreGroupCount = await scoreGroups.count();
   expect(scoreGroupCount).toBeGreaterThan(0);
@@ -71,9 +79,7 @@ async function completeSelectedReview(page: Page) {
     .fill("Verified through the deterministic judged workflow.");
   await form.getByRole("button", { name: "Save draft" }).click();
   await expectStatus(page, "Review saved");
-  await form
-    .getByRole("button", { name: "Submit review", exact: true })
-    .click();
+  await submit.click();
   const confirmation = page.getByRole("dialog", {
     name: "Submit this review?",
   });

@@ -218,7 +218,12 @@ describe("event cloning", () => {
       },
     ];
     await env.DB.prepare(
-      "UPDATE events SET file_policy_json = ?, session_formats_json = ? WHERE id = ?",
+      `UPDATE events
+          SET file_policy_json = ?, session_formats_json = ?,
+              venue_address = '105 Princes Boulevard, Toronto',
+              venue_map_url = 'https://maps.example.com/source',
+              programme_hero_image_url = 'https://cdn.example.com/source-hero.jpg'
+        WHERE id = ?`,
     )
       .bind(
         JSON.stringify(sourceFilePolicy),
@@ -248,7 +253,14 @@ describe("event cloning", () => {
       communicationTemplateVersions: 1,
     });
     const clonedEvent = await env.DB.prepare(
-      "SELECT repository_provider AS provider, last_operation_id AS operationId, file_policy_json AS filePolicyJson, session_formats_json AS sessionFormatsJson FROM events WHERE id = ?",
+      `SELECT repository_provider AS provider,
+              last_operation_id AS operationId,
+              file_policy_json AS filePolicyJson,
+              session_formats_json AS sessionFormatsJson,
+              venue_address AS venueAddress,
+              venue_map_url AS venueMapUrl,
+              programme_hero_image_url AS programmeHeroImageUrl
+         FROM events WHERE id = ?`,
     )
       .bind(cloned.eventId)
       .first<{
@@ -256,11 +268,17 @@ describe("event cloning", () => {
         operationId: string;
         filePolicyJson: string;
         sessionFormatsJson: string;
+        venueAddress: string | null;
+        venueMapUrl: string | null;
+        programmeHeroImageUrl: string | null;
       }>();
     expect(clonedEvent).toMatchObject({
       provider: "d1",
       operationId: cloned.operationId,
       filePolicyJson: expect.any(String),
+      venueAddress: "105 Princes Boulevard, Toronto",
+      venueMapUrl: "https://maps.example.com/source",
+      programmeHeroImageUrl: "https://cdn.example.com/source-hero.jpg",
     });
     expect(parseEventFilePolicy(clonedEvent!.filePolicyJson)).toEqual(
       sourceFilePolicy,

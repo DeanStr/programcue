@@ -9,6 +9,75 @@
   grid-template-columns: minmax(760px, 1fr) 300px;
   gap: var(--space-3);
 }
+/* The rail carries the account of the score first and the plan editor after
+   it, so the explanation sits beside the rows it explains. */
+.tasks-rail {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.pc-weighting-intro {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+}
+.pc-weighting-table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.pc-weighting-table th,
+.pc-weighting-table td {
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-2xs);
+  overflow-wrap: anywhere;
+}
+.pc-weighting-table thead th {
+  color: var(--text-secondary);
+  font-weight: var(--weight-semibold);
+  text-align: left;
+}
+.pc-weighting-table tbody tr:last-child th,
+.pc-weighting-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.pc-weighting-table th[scope="row"] {
+  font-weight: var(--weight-normal);
+  text-align: left;
+}
+.pc-weighting-table td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.pc-weighting-note {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-2xs);
+  line-height: var(--leading-normal);
+}
+/* Readiness reads as a bar first and a numeral second: the column is scanned
+   for the short bars, not read row by row. */
+.task-readiness-cell {
+  min-width: 84px;
+  gap: var(--space-1);
+}
+.task-readiness-cell .progress {
+  width: 100%;
+}
+.task-due-distance {
+  font-weight: var(--weight-semibold);
+}
+.task-due-distance.danger {
+  color: var(--state-bad-text);
+}
+.task-due-distance.warning {
+  color: var(--state-warn-text);
+}
+.task-due-distance.neutral {
+  color: var(--muted);
+  font-weight: var(--weight-normal);
+}
 .tasks-side .field,
 .tasks-side .select,
 .tasks-side .textarea {

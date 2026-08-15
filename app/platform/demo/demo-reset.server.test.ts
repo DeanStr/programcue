@@ -129,6 +129,9 @@ describe("complete evaluator demo reset", () => {
                 participant_logo_url = 'https://example.com/stale-logo.png',
                 participant_welcome_text = 'Stale participant welcome',
                 participant_support_url = 'https://example.com/stale-support',
+                venue_address = 'Stale address',
+                venue_map_url = 'https://example.com/stale-map',
+                programme_hero_image_url = 'https://example.com/stale-hero.jpg',
                 session_formats_json = '[{"key":"stale","label":"Stale","defaultDurationMinutes":15,"position":0}]',
                 file_policy_json = '{"headshotMaximumBytes":1048576,"slidesMaximumBytes":1048576,"supportingDocumentMaximumBytes":1048576,"videoMaximumBytes":1048576}'
           WHERE id = ?`,
@@ -216,6 +219,9 @@ describe("complete evaluator demo reset", () => {
               participant_logo_url AS participantLogoUrl,
               participant_welcome_text AS participantWelcomeText,
               participant_support_url AS participantSupportUrl,
+              venue_address AS venueAddress,
+              venue_map_url AS venueMapUrl,
+              programme_hero_image_url AS programmeHeroImageUrl,
               json_extract(session_formats_json, '$[0].key') AS firstFormat,
               json_extract(file_policy_json, '$.headshotMaximumBytes') AS headshotMaximumBytes,
               participant_retention_completed_at AS retentionCompletedAt,
@@ -231,6 +237,9 @@ describe("complete evaluator demo reset", () => {
         participantLogoUrl: string | null;
         participantWelcomeText: string | null;
         participantSupportUrl: string | null;
+        venueAddress: string | null;
+        venueMapUrl: string | null;
+        programmeHeroImageUrl: string | null;
         firstFormat: string;
         headshotMaximumBytes: number;
         retentionCompletedAt: number | null;
@@ -246,6 +255,9 @@ describe("complete evaluator demo reset", () => {
       participantLogoUrl: null,
       participantWelcomeText: null,
       participantSupportUrl: null,
+      venueAddress: null,
+      venueMapUrl: null,
+      programmeHeroImageUrl: null,
       firstFormat: "keynote",
       headshotMaximumBytes: 10 * 1_048_576,
       retentionCompletedAt: null,

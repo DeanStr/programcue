@@ -804,6 +804,11 @@ a {
   font-size: var(--text-2xs);
   color: var(--muted);
 }
+/* A tile that states a derived number links to how it was derived. */
+.metric-note {
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+}
 /* Tone reaches the numeral and a leading rail, not just a border tint that
    computed 1.45:1 against white and was effectively invisible. */
 .metric.alert-red {

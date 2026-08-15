@@ -358,6 +358,80 @@ describe("D1-backed command centre", () => {
     expect(after.deliveryHealth).toEqual(before.deliveryHealth);
   });
 
+  it("reports the exact high-impact session work behind attention status", async () => {
+    const startsAt = Math.floor(Date.now() / 1000) + 3_600;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes, status,
+           visibility, revision, created_at, updated_at
+         ) VALUES ('readiness-upcoming-session', ?, 'Upcoming session',
+                   'readiness-upcoming-session', 'presentation', 45,
+                   'published', 'public', 1, unixepoch(), unixepoch())`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO rooms (id, event_id, name, capacity)
+         VALUES ('readiness-upcoming-room', ?, 'Readiness room', 100)`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO schedule_versions (id, event_id, version_number, name)
+         SELECT 'readiness-upcoming-schedule', ?,
+                COALESCE(MAX(version_number), 0) + 1,
+                'Readiness upcoming schedule'
+           FROM schedule_versions WHERE event_id = ?`,
+      ).bind(viewer.eventId, viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO schedule_entries (
+           id, event_id, schedule_version_id, session_id, room_id,
+           starts_at, ends_at
+         ) VALUES ('readiness-upcoming-entry', ?,
+                   'readiness-upcoming-schedule', 'readiness-upcoming-session',
+                   'readiness-upcoming-room', ?, ?)`,
+      ).bind(viewer.eventId, startsAt, startsAt + 2_700),
+      env.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET content_status = 'approved', approved_by_person_id = ?,
+                approved_at = unixepoch(), approval_source = 'editorial'
+          WHERE event_id = ?
+            AND schedule_version_id = 'readiness-upcoming-schedule'`,
+      ).bind(viewer.personId, viewer.eventId),
+      env.DB.prepare(
+        `UPDATE schedule_versions
+            SET status = 'published', published_at = unixepoch()
+          WHERE id = 'readiness-upcoming-schedule' AND event_id = ?`,
+      ).bind(viewer.eventId),
+    ]);
+
+    const service = new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const before = await service.getCommandCentre(viewer);
+    const target = before.upcoming.find(
+      (session) => session.id === "readiness-upcoming-session",
+    );
+    if (!target) throw new Error("The future session should be upcoming.");
+    expect(target).toMatchObject({ status: "no_blockers_detected" });
+
+    await env.DB.prepare(
+      `INSERT INTO task_instances (
+         id, event_id, target_type, target_id, title, task_type, impact,
+         status, readiness_state, readiness_percent, revision,
+         created_at, updated_at
+       ) VALUES (?, ?, 'session', ?, 'Confirm stage handoff', 'checklist',
+                 'high', 'not_started', 'on_track', 0, 1,
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(crypto.randomUUID(), viewer.eventId, target.id)
+      .run();
+
+    const after = await service.getCommandCentre(viewer);
+    expect(after.upcoming.find((session) => session.id === target.id)).toEqual({
+      ...target,
+      status: "attention_required",
+      riskReason: "1 high-impact task outstanding",
+    });
+  });
+
   it("rejects a viewer whose organisation does not own the event", async () => {
     await expect(
       new ReadinessService(

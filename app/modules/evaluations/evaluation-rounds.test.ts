@@ -990,6 +990,7 @@ describe("evaluation vertical slice", () => {
         confidence: 5,
         submitterFeedback: "Strong proposal.",
         privateNotes: "Advance to the final round.",
+        conflictAffirmed: true,
         intent: "submit",
       });
       const nonAdvancedWorkspace = await service.getReviewerWorkspace(
@@ -1009,6 +1010,7 @@ describe("evaluation vertical slice", () => {
         confidence: 4,
         submitterFeedback: "Not selected for the final round.",
         privateNotes: "Conclude after the first round.",
+        conflictAffirmed: true,
         intent: "submit",
       });
 
@@ -1401,6 +1403,7 @@ describe("evaluation vertical slice", () => {
         confidence: 5,
         submitterFeedback: "Well evidenced.",
         privateNotes: "Ready for moderation.",
+        conflictAffirmed: true,
         intent: "submit",
       });
       expect(submitted.weightedScore).toBe(5);

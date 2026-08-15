@@ -256,9 +256,24 @@ export const reviewDraftSchema = z
     confidence: z.coerce.number().int().min(1).max(5).nullable(),
     submitterFeedback: z.string().trim().max(8_000),
     privateNotes: z.string().trim().max(8_000),
+    /* The reviewer's answer to the conflict question. A draft may be saved
+       before it is answered; a submission may not. Absent means unanswered,
+       which is the same as a negative for every rule that reads it. */
+    conflictAffirmed: z
+      .union([z.boolean(), z.enum(["true", "false", ""])])
+      .optional()
+      .transform((value) => value === true || value === "true"),
     intent: z.enum(["save", "submit"]),
   })
   .superRefine((review, context) => {
+    if (review.intent === "submit" && !review.conflictAffirmed) {
+      context.addIssue({
+        code: "custom",
+        path: ["conflictAffirmed"],
+        message:
+          "Confirm you hold no conflict of interest before submitting, or declare a conflict to return this assignment.",
+      });
+    }
     if (review.intent === "submit" && !review.recommendation) {
       context.addIssue({
         code: "custom",

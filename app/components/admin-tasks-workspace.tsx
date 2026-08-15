@@ -13,6 +13,7 @@ import {
   TaskCompletionUndoControl,
   type TaskCompletionUndoNotice,
 } from "~/components/task-completion-undo-control";
+import { ReadinessWeightingCard } from "~/components/ui/readiness-weighting";
 import type { AdminTasksData } from "~/routes/admin-tasks";
 
 export function AdminTasksWorkspace({
@@ -24,18 +25,6 @@ export function AdminTasksWorkspace({
   actionNotice?: { ok: boolean; message: string } & TaskCompletionUndoNotice;
   busy: boolean;
 }) {
-  const overdue = data.tasks.filter((task) => task.isOverdue).length;
-  const blocked = data.tasks.filter((task) => task.status === "blocked").length;
-  const submitted = data.tasks.filter(
-    (task) => task.status === "submitted",
-  ).length;
-  const complete = data.tasks.filter((task) =>
-    ["completed", "waived"].includes(task.status),
-  ).length;
-  const readiness = data.tasks.length
-    ? Math.round((complete / data.tasks.length) * 100)
-    : 100;
-
   return (
     <>
       <div className="page-head pc-page-header">
@@ -167,28 +156,34 @@ export function AdminTasksWorkspace({
       <div className="grid grid-5 mb">
         <section className="card metric">
           <div className="label">Readiness</div>
-          <div className="value">{readiness}%</div>
+          <div className="value">{data.taskSummary.readiness}%</div>
+          <a className="metric-note" href="#readiness-weighting">
+            Impact-weighted
+          </a>
         </section>
         <section className="card metric">
           <div className="label">Outstanding</div>
-          <div className="value">{data.tasks.length - complete}</div>
+          <div className="value">{data.taskSummary.outstanding}</div>
         </section>
         <section className="card metric">
           <div className="label">Evidence review</div>
-          <div className="value">{submitted}</div>
+          <div className="value">{data.taskSummary.evidenceReview}</div>
         </section>
         <section className="card metric">
           <div className="label">Blocked</div>
-          <div className="value">{blocked}</div>
+          <div className="value">{data.taskSummary.blocked}</div>
         </section>
         <section className="card metric">
           <div className="label">Overdue</div>
-          <div className="value">{overdue}</div>
+          <div className="value">{data.taskSummary.overdue}</div>
         </section>
       </div>
       <div className="tasks-layout">
         <AdminAssignedTasksPanel data={data} busy={busy} />
-        <AdminTaskPlanPanel data={data} busy={busy} />
+        <div className="tasks-rail" id="readiness-weighting">
+          <ReadinessWeightingCard />
+          <AdminTaskPlanPanel data={data} busy={busy} />
+        </div>
       </div>
     </>
   );

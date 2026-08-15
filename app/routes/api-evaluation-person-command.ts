@@ -41,6 +41,7 @@ const reviewSchema = z
     confidence: z.number().int().min(1).max(5).nullable(),
     submitterFeedback: z.string().trim().max(8_000),
     privateNotes: z.string().trim().max(8_000),
+    conflictAffirmed: z.boolean().optional(),
     intent: z.enum(["save", "submit"]),
   })
   .strict()

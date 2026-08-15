@@ -132,7 +132,7 @@ test("an Event Setup commit invalidates another authenticated browser page over 
     await expect(
       editor.getByRole("heading", { name: "Event Setup" }),
     ).toBeVisible();
-    const venue = editor.getByLabel("Venue");
+    const venue = editor.getByLabel("Venue", { exact: true });
     originalVenue = await venue.inputValue();
     const changedVenue = `Realtime browser check ${Date.now()}`;
 
@@ -187,14 +187,14 @@ test("an Event Setup commit invalidates another authenticated browser page over 
   } finally {
     if (originalVenue !== undefined) {
       await editor.goto("/admin/event");
-      const venue = editor.getByLabel("Venue");
+      const venue = editor.getByLabel("Venue", { exact: true });
       if ((await venue.inputValue()) !== originalVenue) {
         await venue.fill(originalVenue);
         await editor.getByRole("button", { name: "Save event" }).click();
         await editor.waitForLoadState("networkidle");
         await editor.reload();
         await expect(
-          editor.getByLabel("Venue"),
+          editor.getByLabel("Venue", { exact: true }),
           "the test must restore the event venue",
         ).toHaveValue(originalVenue);
       }

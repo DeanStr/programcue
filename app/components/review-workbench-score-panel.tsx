@@ -1,3 +1,6 @@
+import { AlertTriangle, Lock, Send } from "lucide-react";
+import { useState } from "react";
+
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
 import { EmptyState } from "~/components/ui/states";
 import { ReviewDiscussionPanel } from "./review-workbench-discussion-panel";
@@ -23,6 +26,69 @@ function scaleOptions(inputType: string) {
   );
 }
 
+const REVIEW_NOTE_LIMIT = 8_000;
+
+function ReviewNoteField({
+  name,
+  label,
+  scope,
+  scopeLabel,
+  help,
+  defaultValue,
+  disabled,
+}: {
+  name: string;
+  label: string;
+  scope: "shared" | "private";
+  scopeLabel: string;
+  help: string;
+  defaultValue: string;
+  disabled: boolean;
+}) {
+  const [length, setLength] = useState(defaultValue.length);
+  const fieldId = `review-note-${name}`;
+  const helpId = `${fieldId}-help`;
+  const countId = `${fieldId}-count`;
+  return (
+    <div className={`review-note review-note-${scope}`}>
+      <label className="label" htmlFor={fieldId}>
+        <span className="review-note-head">
+          <span>{label}</span>
+          <span className={`review-note-scope is-${scope}`}>
+            {scope === "private" ? (
+              <Lock aria-hidden size={12} />
+            ) : (
+              <Send aria-hidden size={12} />
+            )}
+            {scopeLabel}
+          </span>
+        </span>
+      </label>
+      <small className="subtle review-note-help" id={helpId}>
+        {help}
+      </small>
+      <textarea
+        className="textarea"
+        id={fieldId}
+        name={name}
+        defaultValue={defaultValue}
+        maxLength={REVIEW_NOTE_LIMIT}
+        aria-describedby={`${helpId} ${countId}`}
+        disabled={disabled}
+        onChange={(event) => setLength(event.currentTarget.value.length)}
+      />
+      <small
+        className="subtle review-note-count pc-num"
+        id={countId}
+        aria-live="polite"
+      >
+        {length.toLocaleString()} / {REVIEW_NOTE_LIMIT.toLocaleString()}
+        <span className="sr-only"> characters used</span>
+      </small>
+    </div>
+  );
+}
+
 export function ReviewScorePanel() {
   const {
     workspace,
@@ -44,6 +110,9 @@ export function ReviewScorePanel() {
     requiredCriterionCount,
     completedCriterionCount,
     weightedScore,
+    conflictChoice,
+    contributions,
+    recoveryPayload,
     readOnly,
     revision,
     markDirty,
@@ -60,6 +129,14 @@ export function ReviewScorePanel() {
     (criterion) =>
       criterion.inputType === "scale_5" || criterion.inputType === "scale_10",
   );
+  const scoringLocked = readOnly || conflictChoice === "conflict";
+  const submitAllowed = conflictChoice === "affirmed";
+  const submitBlockedReason =
+    conflictChoice === "conflict"
+      ? "Declare the conflict to return this assignment. A conflicted review cannot be submitted."
+      : conflictChoice === "unanswered"
+        ? "Answer the conflict of interest question before submitting."
+        : undefined;
   return (
     <section className="card review-score" aria-labelledby="review-score-title">
       <fetcher.Form
@@ -93,6 +170,18 @@ export function ReviewScorePanel() {
           name="openNext"
           value={submitMode === "next" ? "true" : "false"}
         />
+        {/* Native-disabled controls stay readable but are omitted from FormData.
+            Preserve the draft while the reviewer completes recusal. */}
+        {conflictChoice === "conflict"
+          ? workspace.criteria.map((criterion) => (
+              <input
+                key={criterion.id}
+                type="hidden"
+                name={`score:${criterion.id}`}
+                value={recoveryPayload.scores[criterion.id] ?? ""}
+              />
+            ))
+          : null}
         <div className="pad review-score-body">
           <div className="card-title review-score-head">
             <h2 id="review-score-title">Score {submission.sourceType}</h2>
@@ -109,7 +198,85 @@ export function ReviewScorePanel() {
               <kbd aria-hidden="true">?</kbd>
             </button>
           </div>
-          <div className="review-rubric">
+          {!readOnly ? (
+            <fieldset
+              className="review-conflict-gate"
+              data-state={conflictChoice}
+            >
+              <legend className="review-conflict-legend">
+                <span className="review-step-index" aria-hidden="true">
+                  1
+                </span>
+                Conflict of interest
+                <span className="status warning">Required</span>
+              </legend>
+              <p className="subtle review-conflict-question">
+                Do you have a personal, professional or financial interest in
+                this {submission.sourceType} or its speakers?
+              </p>
+              <label className="review-conflict-option">
+                <input
+                  type="radio"
+                  name="conflictAffirmed"
+                  value="affirmed"
+                  defaultChecked={conflictChoice === "affirmed"}
+                />
+                <span>
+                  <strong>No conflict</strong>
+                  <small className="subtle">
+                    I can review and score this {submission.sourceType}{" "}
+                    impartially.
+                  </small>
+                </span>
+              </label>
+              <label className="review-conflict-option">
+                <input
+                  type="radio"
+                  name="conflictAffirmed"
+                  value="conflict"
+                  defaultChecked={conflictChoice === "conflict"}
+                />
+                <span>
+                  <strong>I have a conflict</strong>
+                  <small className="subtle">
+                    Scoring is disabled and this assignment returns to the
+                    committee for reassignment.
+                  </small>
+                </span>
+              </label>
+              {conflictChoice === "conflict" ? (
+                <div className="review-conflict-action" role="alert">
+                  <AlertTriangle aria-hidden size={16} />
+                  <p>
+                    Scoring is disabled. Declare the conflict to return this
+                    assignment — nothing you have already typed will be sent to
+                    the applicant.
+                  </p>
+                  <button
+                    ref={conflictTriggerRef}
+                    className="btn danger small"
+                    type="button"
+                    onClick={() => {
+                      clearAutosaveTimer();
+                      setConflictOpen(true);
+                    }}
+                  >
+                    Declare conflict and return
+                  </button>
+                </div>
+              ) : conflictChoice === "unanswered" ? (
+                <p className="review-conflict-pending subtle">
+                  Answer this before submitting. You can score a draft first,
+                  but the review will not submit until the question is answered.
+                </p>
+              ) : null}
+            </fieldset>
+          ) : null}
+          <div
+            className="review-rubric"
+            data-scoring-locked={scoringLocked ? "" : undefined}
+            aria-disabled={conflictChoice === "conflict" || undefined}
+          >
             {workspace.criteria.map((criterion) => {
               const inputId = `criterion-${criterion.id}`;
               const labelId = `${inputId}-label`;
@@ -123,6 +290,7 @@ export function ReviewScorePanel() {
                     : "no"
                   : String(currentValue);
               const scale = scaleOptions(criterion.inputType);
+              const contribution = contributions.perCriterion.get(criterion.id);
               return (
                 <div className="review-rubric-row" key={criterion.id}>
                   <div className="review-criterion">
@@ -157,6 +325,20 @@ export function ReviewScorePanel() {
                     {criterion.weightPercent > 0 ? (
                       <span className="sr-only"> weight</span>
                     ) : null}
+                    {contribution !== undefined ? (
+                      <small className="review-contribution">
+                        +{contribution.toFixed(2)}
+                        <span className="sr-only">
+                          {" "}
+                          contributed to the score
+                        </span>
+                      </small>
+                    ) : criterion.weightPercent > 0 ? (
+                      <small className="review-contribution is-pending">
+                        <span aria-hidden="true">—</span>
+                        <span className="sr-only">No contribution yet</span>
+                      </small>
+                    ) : null}
                   </span>
                   {scale ? (
                     <fieldset
@@ -177,7 +359,7 @@ export function ReviewScorePanel() {
                             name={`score:${criterion.id}`}
                             value=""
                             defaultChecked={storedValue === ""}
-                            disabled={readOnly}
+                            disabled={scoringLocked}
                           />
                           <span>
                             <span aria-hidden="true">—</span>
@@ -197,7 +379,7 @@ export function ReviewScorePanel() {
                             value={option.value}
                             defaultChecked={storedValue === option.value}
                             required={criterion.required}
-                            disabled={readOnly}
+                            disabled={scoringLocked}
                           />
                           <span className="pc-num">{option.label}</span>
                         </label>
@@ -211,7 +393,7 @@ export function ReviewScorePanel() {
                       defaultValue={storedValue}
                       aria-describedby={`${descriptionId} ${weightId}`}
                       required={criterion.required}
-                      disabled={readOnly}
+                      disabled={scoringLocked}
                     />
                   ) : (
                     <select
@@ -221,7 +403,7 @@ export function ReviewScorePanel() {
                       defaultValue={storedValue}
                       aria-describedby={`${descriptionId} ${weightId}`}
                       required={criterion.required}
-                      disabled={readOnly}
+                      disabled={scoringLocked}
                     >
                       <option value="">Choose…</option>
                       {criterion.options.map((option) => (
@@ -244,6 +426,18 @@ export function ReviewScorePanel() {
                     ? "Appears once every scored criterion has a value."
                     : "Weighted by the criterion percentages in this round."}
                 </small>
+                {weightedScore === null ? (
+                  <div className="score-summary-progress">
+                    <div className="progress" aria-hidden>
+                      <span
+                        style={{ width: `${contributions.weightScored}%` }}
+                      />
+                    </div>
+                    <small className="subtle pc-num">
+                      {contributions.weightScored}% of the rubric weight scored
+                    </small>
+                  </div>
+                ) : null}
               </div>
               <strong
                 className={`score-summary-value pc-num${weightedScore === null ? " is-pending" : ""}`}
@@ -290,44 +484,25 @@ export function ReviewScorePanel() {
             </label>
           </div>
           <div className="review-notes">
-            <label className="label">
-              Applicant feedback
-              <textarea
-                className="textarea"
-                name="submitterFeedback"
-                defaultValue={workspace.review?.submitterFeedback ?? ""}
-                disabled={readOnly}
-              />
-            </label>
-            <label className="label">
-              Private notes
-              <textarea
-                className="textarea"
-                name="privateNotes"
-                defaultValue={workspace.review?.privateNotes ?? ""}
-                disabled={readOnly}
-              />
-            </label>
+            <ReviewNoteField
+              name="submitterFeedback"
+              label="Applicant feedback"
+              scope="shared"
+              scopeLabel="Shared with the applicant"
+              help="Sent to the applicant when administrators publish this decision. Write it to be read by the person who wrote the proposal."
+              defaultValue={workspace.review?.submitterFeedback ?? ""}
+              disabled={readOnly}
+            />
+            <ReviewNoteField
+              name="privateNotes"
+              label="Private notes"
+              scope="private"
+              scopeLabel="Committee only"
+              help="Never shown to the applicant. Visible to administrators and the evaluation committee."
+              defaultValue={workspace.review?.privateNotes ?? ""}
+              disabled={readOnly}
+            />
           </div>
-          {!readOnly ? (
-            <div className="review-recusal">
-              <button
-                ref={conflictTriggerRef}
-                className="btn small"
-                type="button"
-                onClick={() => {
-                  clearAutosaveTimer();
-                  setConflictOpen(true);
-                }}
-              >
-                Declare conflict
-              </button>
-              <small className="subtle">
-                Recuses you and returns this {submission.sourceType} to the
-                committee.
-              </small>
-            </div>
-          ) : null}
         </div>
         <div className="sticky-actions review-actions">
           {readOnly ? (
@@ -360,7 +535,8 @@ export function ReviewScorePanel() {
                 ref={submitReviewTriggerRef}
                 className="btn"
                 type="button"
-                disabled={fetcher.state !== "idle"}
+                disabled={fetcher.state !== "idle" || !submitAllowed}
+                title={submitBlockedReason}
                 onClick={() => {
                   if (!formRef.current?.reportValidity()) return;
                   clearAutosaveTimer();
@@ -373,7 +549,8 @@ export function ReviewScorePanel() {
                 ref={submitNextTriggerRef}
                 className="btn primary"
                 type="button"
-                disabled={fetcher.state !== "idle"}
+                disabled={fetcher.state !== "idle" || !submitAllowed}
+                title={submitBlockedReason}
                 onClick={() => {
                   if (!formRef.current?.reportValidity()) return;
                   clearAutosaveTimer();
@@ -382,6 +559,11 @@ export function ReviewScorePanel() {
               >
                 Submit and open next
               </button>
+              {submitBlockedReason ? (
+                <p className="review-submit-block subtle" role="status">
+                  {submitBlockedReason}
+                </p>
+              ) : null}
             </>
           )}
         </div>

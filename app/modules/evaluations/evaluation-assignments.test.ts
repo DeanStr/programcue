@@ -447,6 +447,7 @@ describe("evaluation vertical slice", () => {
           confidence: 4,
           submitterFeedback: "Strong session.",
           privateNotes: "Ready.",
+          conflictAffirmed: true,
           intent: "submit",
         });
         expect(submitted.weightedScore).toBe(4);
@@ -470,6 +471,7 @@ describe("evaluation vertical slice", () => {
           confidence: 5,
           submitterFeedback: "Corrected session review.",
           privateNotes: "Ready.",
+          conflictAffirmed: true,
           intent: "submit",
         });
 
@@ -485,6 +487,7 @@ describe("evaluation vertical slice", () => {
           confidence: 4,
           submitterFeedback: "This needs another reviewer.",
           privateNotes: "A conflict became apparent after submission.",
+          conflictAffirmed: true,
           intent: "submit",
         });
         await service.reopenReview(admin, {
@@ -737,6 +740,7 @@ describe("evaluation vertical slice", () => {
           confidence: 4,
           submitterFeedback: "Ready for the programme.",
           privateNotes: "No concerns.",
+          conflictAffirmed: true,
           intent: "submit",
         });
         expect(result.nextAssignmentId).toBeNull();

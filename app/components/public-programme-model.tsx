@@ -9,6 +9,7 @@ import {
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import type {
   PublishedProgramme,
+  PublishedSession,
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
 
@@ -68,18 +69,44 @@ export function normaliseDescription(description: string) {
 }
 
 /**
- * The published snapshot does not carry the event photograph yet, so the hero
- * reads it defensively and falls back to the accent panel. The moment the
- * publication pipeline copies `presentation.heroImagePath` onto the event, the
- * customer's own photograph leads the page with no further change here.
+ * The event photograph for the masthead. A missing optional image uses the
+ * accent panel; a present value that violates the persisted HTTPS contract is
+ * corrupt event configuration and must not be silently hidden.
  */
 export function eventHeroImagePath(event: PublishedProgramme["event"]) {
-  const value = (event as { heroImagePath?: unknown }).heroImagePath;
-  // The path is interpolated into a url() custom property, so anything that
-  // could close the function or the declaration is refused outright.
-  return typeof value === "string" && /^\/[\w\-./]+$/u.test(value)
-    ? value
-    : null;
+  const value = event.heroImageUrl;
+  if (value === null) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || value.length > 2_048) throw new Error();
+    return url.href;
+  } catch {
+    throw new Error("Published programme hero image URL is invalid.");
+  }
+}
+
+export function speakersWithMultipleSessions(programme: {
+  speakers: readonly PublishedSpeaker[];
+  sessions: ReadonlyArray<Pick<PublishedSession, "speakerIds">>;
+}) {
+  if (programme.speakers.length <= 6) return [];
+  const counts = new Map<string, number>();
+  for (const session of programme.sessions)
+    for (const speakerId of session.speakerIds)
+      counts.set(speakerId, (counts.get(speakerId) ?? 0) + 1);
+  return programme.speakers
+    .map((speaker, index) => ({
+      speaker,
+      index,
+      sessions: counts.get(speaker.id) ?? 0,
+    }))
+    .filter((entry) => entry.sessions > 1)
+    .sort(
+      (left, right) =>
+        right.sessions - left.sessions || left.index - right.index,
+    )
+    .slice(0, 6)
+    .map(({ speaker, sessions }) => ({ speaker, sessions }));
 }
 
 export function initials(name: string) {
@@ -286,10 +313,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       );
       if (linked) setSelectedId(linked.id);
     }
-  }, [
-    location.hash,
-    programme.sessions,
-  ]);
+  }, [location.hash, programme.sessions]);
   const normalisedQuery = query.trim().toLocaleLowerCase();
   const sessionsMatchingFacets = useMemo(
     () =>

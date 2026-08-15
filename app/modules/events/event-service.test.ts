@@ -50,9 +50,12 @@ function inputFrom(event: Awaited<ReturnType<EventService["getSetup"]>>) {
     startDate: event.startDate,
     endDate: event.endDate,
     venue: event.venue,
+    venueAddress: event.venueAddress,
+    venueMapUrl: event.venueMapUrl,
     city: event.city,
     publicSlug: event.publicSlug,
     brandAccent: event.brandAccent,
+    programmeHeroImageUrl: event.programmeHeroImageUrl,
     participantLogoUrl: event.participantLogoUrl,
     participantWelcomeText: event.participantWelcomeText,
     participantSupportUrl: event.participantSupportUrl,
@@ -161,6 +164,9 @@ describe("Event Setup D1 service", () => {
     const result = await service.saveSetup(viewer, {
       ...inputFrom(original),
       venue: "Beanfield Centre",
+      venueAddress: "105 Princes' Boulevard, Toronto, ON",
+      venueMapUrl: "https://maps.example.com/beanfield-centre",
+      programmeHeroImageUrl: "https://cdn.example.com/programme-hero.jpg",
       participantLogoUrl: "https://cdn.example.com/program-cue-event.svg",
       participantWelcomeText: "Welcome to the participant workspace.",
       participantSupportUrl: "https://support.example.com/program-cue-event",
@@ -182,6 +188,11 @@ describe("Event Setup D1 service", () => {
 
     const saved = await service.getSetup(viewer);
     expect(saved.venue).toBe("Beanfield Centre");
+    expect(saved.venueAddress).toBe("105 Princes' Boulevard, Toronto, ON");
+    expect(saved.venueMapUrl).toBe("https://maps.example.com/beanfield-centre");
+    expect(saved.programmeHeroImageUrl).toBe(
+      "https://cdn.example.com/programme-hero.jpg",
+    );
     expect(saved.participantLogoUrl).toBe(
       "https://cdn.example.com/program-cue-event.svg",
     );

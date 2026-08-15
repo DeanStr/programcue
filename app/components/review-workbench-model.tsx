@@ -16,7 +16,10 @@ import {
   type FetcherWithComponents,
 } from "react-router";
 
-import { calculateRubricWeightedScore } from "~/modules/evaluations/evaluation-rules";
+import {
+  calculateRubricWeightedScore,
+  rubricContributions,
+} from "~/modules/evaluations/evaluation-rules";
 import {
   clearDraftRecoveryScope,
   useDraftRecovery,
@@ -38,6 +41,8 @@ type ReviewWorkbenchActionData = {
 
 type ReviewWorkbenchAction = () => Promise<ReviewWorkbenchActionData>;
 
+export type ReviewConflictChoice = "unanswered" | "affirmed" | "conflict";
+
 type ReviewWorkbenchLoaderData = Awaited<ReturnType<typeof loader>>;
 type ReviewWorkspace = ReviewWorkbenchLoaderData["workspace"];
 type ReviewAssignment = ReviewWorkspace["assignments"][number];
@@ -48,6 +53,11 @@ export type ReviewRecoveryPayload = {
   confidence: string;
   submitterFeedback: string;
   privateNotes: string;
+  /* "affirmed", "conflict" or "" for unanswered. The answer lives here rather
+     than in panel state because the score panel unmounts whenever the workspace
+     transiently has no selection, and a declaration that disappears on a
+     revalidation is worse than no declaration at all. */
+  conflictAffirmed: string;
 };
 
 export type ReviewWorkbenchModel = {
@@ -74,6 +84,11 @@ export type ReviewWorkbenchModel = {
   requiredCriterionCount: number;
   completedCriterionCount: number;
   weightedScore: number | null;
+  conflictChoice: ReviewConflictChoice;
+  contributions: {
+    perCriterion: Map<string, number>;
+    weightScored: number;
+  };
   readOnly: boolean;
   revision: number;
   committedWarning: boolean;
@@ -243,6 +258,7 @@ export function useReviewWorkbenchState({
       confidence: String(workspace.review?.confidence ?? ""),
       submitterFeedback: workspace.review?.submitterFeedback ?? "",
       privateNotes: workspace.review?.privateNotes ?? "",
+      conflictAffirmed: workspace.review?.conflictAffirmedAt ? "affirmed" : "",
     }),
     [workspace.criteria, workspace.review],
   );
@@ -284,6 +300,18 @@ export function useReviewWorkbenchState({
       return null;
     }
   }, [scaledCriteria, recoveryPayload.scores]);
+  /* Per-criterion contributions are exact the moment a criterion is scored, so
+     they do not wait on the rubric being complete the way the total does. */
+  const contributions = useMemo(
+    () => rubricContributions(scaledCriteria, recoveryPayload.scores),
+    [scaledCriteria, recoveryPayload.scores],
+  );
+  const conflictChoice: ReviewConflictChoice =
+    recoveryPayload.conflictAffirmed === "affirmed"
+      ? "affirmed"
+      : recoveryPayload.conflictAffirmed === "conflict"
+        ? "conflict"
+        : "unanswered";
   const restoreReview = useCallback((payload: ReviewRecoveryPayload) => {
     const form = formRef.current;
     if (!form) return;
@@ -319,6 +347,7 @@ export function useReviewWorkbenchState({
     setValue("confidence", payload.confidence);
     setValue("submitterFeedback", payload.submitterFeedback);
     setValue("privateNotes", payload.privateNotes);
+    setValue("conflictAffirmed", payload.conflictAffirmed);
     setRecoveryPayload(payload);
     setDirty(true);
     editGeneration.current += 1;
@@ -535,6 +564,7 @@ export function useReviewWorkbenchState({
       confidence: String(values.get("confidence") ?? ""),
       submitterFeedback: String(values.get("submitterFeedback") ?? ""),
       privateNotes: String(values.get("privateNotes") ?? ""),
+      conflictAffirmed: String(values.get("conflictAffirmed") ?? ""),
     });
   }
   function requestAssignmentNavigation(href: string) {
@@ -659,6 +689,8 @@ export function useReviewWorkbenchState({
     requiredCriterionCount,
     completedCriterionCount,
     weightedScore,
+    conflictChoice,
+    contributions,
     readOnly,
     revision,
     committedWarning,

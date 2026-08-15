@@ -343,19 +343,104 @@
   grid-column: 1/-1;
   margin-top: var(--space-1);
 }
-/* A recusal is decided after the work, not before it, and it was holding the
-   panel's top-right corner in the highest-saturation treatment on the screen.
-   The danger styling stays where the decision is confirmed. */
-.reviewer-shell .review-recusal {
+/* The conflict question is asked before the rubric, so it is a quiet enquiry
+   at rest and only takes the danger treatment once a conflict is claimed. It
+   is not an alert until there is something to be alarmed about. */
+.reviewer-shell .review-conflict-gate {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.reviewer-shell .review-conflict-gate[data-state="unanswered"] {
+  border-color: var(--state-warn-border);
+  background: var(--state-warn-surface-subtle);
+}
+.reviewer-shell .review-conflict-gate[data-state="conflict"] {
+  border-color: var(--state-bad-border);
+  background: var(--state-bad-surface);
+}
+.reviewer-shell .review-conflict-legend {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  margin-top: var(--space-5);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--line);
+  gap: var(--space-2);
+  padding: 0;
+  font-weight: var(--weight-bold);
 }
-.reviewer-shell .review-recusal small {
+/* The step number is the ordinal of a required question, not decoration, so it
+   reads as a marker rather than as part of the sentence. */
+.review-step-index {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: var(--brand-600);
+  color: var(--text-inverse);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+.reviewer-shell .review-conflict-question {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+.reviewer-shell .review-conflict-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  cursor: pointer;
+}
+.reviewer-shell .review-conflict-option:hover {
+  border-color: var(--border-strong);
+}
+.reviewer-shell .review-conflict-option:has(input:checked) {
+  border-color: var(--brand-400);
+  background: var(--brand-50);
+}
+.reviewer-shell .review-conflict-option > span {
+  display: grid;
+  gap: 1px;
   min-width: 0;
+}
+.reviewer-shell .review-conflict-option small {
+  line-height: var(--leading-snug);
+}
+.reviewer-shell .review-conflict-action {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-1) var(--space-2);
+  align-items: start;
+  color: var(--state-bad-text);
+}
+.reviewer-shell .review-conflict-action p {
+  margin: 0;
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
+.reviewer-shell .review-conflict-action .btn {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: var(--space-1);
+}
+.reviewer-shell .review-conflict-pending {
+  margin: 0;
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
+/* Locked scoring stays readable — the reviewer is recusing themselves from
+   something they still need to see. */
+.reviewer-shell .review-rubric[data-scoring-locked] {
+  opacity: 0.55;
 }
 .reviewer-shell .review-overall-fields {
   display: grid;
@@ -375,7 +460,83 @@
 .reviewer-shell .review-notes .textarea {
   min-height: 100px;
 }
+/* Two boxes that look the same do different things. The scope chip is what
+   distinguishes them at a glance; the help line states the consequence, and a
+   left rail carries it for anyone who reads neither. */
+.reviewer-shell .review-note {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--border);
+}
+.reviewer-shell .review-note-shared {
+  border-left-color: var(--brand-500);
+}
+.reviewer-shell .review-note-private {
+  border-left-color: var(--muted-2);
+}
+.reviewer-shell .review-note .label {
+  margin: 0;
+}
+.review-note-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.review-note-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+}
+.review-note-scope.is-shared {
+  background: var(--state-info-surface);
+  color: var(--state-info-text);
+}
+.review-note-scope.is-private {
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.reviewer-shell .review-note-help {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
+.reviewer-shell .review-note-count {
+  justify-self: end;
+  font-size: var(--text-2xs);
+}
+.reviewer-shell .review-submit-block {
+  flex: 0 0 100%;
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
+/* What this criterion is currently putting into the total, under the weight
+   that produced it. */
+.review-contribution {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  color: var(--state-info-text);
+}
+.review-contribution.is-pending {
+  color: var(--text-tertiary);
+  font-weight: var(--weight-normal);
+}
+.score-summary-progress {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
 .reviewer-shell .review-actions {
+  flex-wrap: wrap;
   padding-inline: var(--space-4);
 }
 /* Three commit labels in a 500px column wrapped to two lines each. They never
@@ -547,10 +708,11 @@
   .reviewer-shell .review-overall-fields {
     grid-template-columns: 1fr;
   }
-  .reviewer-shell .review-recusal {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: var(--space-2);
+  .reviewer-shell .review-conflict-gate {
+    padding: var(--space-3);
+  }
+  .reviewer-shell .review-conflict-legend {
+    flex-wrap: wrap;
   }
   /* The primary leads and takes the full width; the pair below it is
      secondary. The old two-column grid left it dangling at half width in the
@@ -559,6 +721,9 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
+  }
+  .reviewer-shell .review-actions > .review-submit-block {
+    grid-column: 1/-1;
   }
   .reviewer-shell .review-actions > .btn.primary {
     grid-column: 1/-1;

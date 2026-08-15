@@ -334,6 +334,8 @@ async function resetMutableIdentity(env: CloudflareEnvironment) {
               starts_at = unixepoch('2027-05-20T00:00:00Z'),
               ends_at = unixepoch('2027-05-22T23:59:59Z'),
               venue_name = 'Metro Toronto Convention Centre', city = 'Toronto',
+              venue_address = NULL, venue_map_url = NULL,
+              programme_hero_image_url = NULL,
               description = 'The conference for modern event professionals.',
               brand_accent = '#4f46e5', participant_logo_url = NULL,
               participant_welcome_text = NULL, participant_support_url = NULL,
@@ -619,6 +621,9 @@ async function baselineEvidence(env: CloudflareEnvironment) {
            AND participant_logo_url IS NULL
            AND participant_welcome_text IS NULL
            AND participant_support_url IS NULL
+           AND venue_address IS NULL
+           AND venue_map_url IS NULL
+           AND programme_hero_image_url IS NULL
            AND session_formats_json = ?
            AND file_policy_json = ?
            AND participant_retention_completed_at IS NULL) AS canonicalEventConfiguration,

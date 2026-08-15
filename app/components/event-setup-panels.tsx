@@ -140,6 +140,42 @@ export function EventIdentityPanels({
             />
           </label>
         </div>
+        {/* The published programme prints the venue name and offers a map
+            link; neither had a field, so every programme showed the name
+            alone. */}
+        <div className="form-row mt">
+          <label className="label">
+            Venue address
+            <input
+              className="field"
+              name="venueAddress"
+              defaultValue={event.venueAddress}
+              maxLength={300}
+              placeholder="255 Front St W, Toronto, ON M5V 2W6"
+            />
+            <span className="help">
+              Shown on the published programme. Leave blank to show the city
+              alone.
+            </span>
+            <FieldError actionData={actionData} name="venueAddress" />
+          </label>
+          <label className="label">
+            Venue map URL
+            <input
+              className="field"
+              name="venueMapUrl"
+              type="url"
+              inputMode="url"
+              placeholder="https://maps.example.com/venue"
+              defaultValue={event.venueMapUrl}
+              maxLength={2048}
+            />
+            <span className="help">
+              Optional HTTPS link opened from the programme&rsquo;s venue panel.
+            </span>
+            <FieldError actionData={actionData} name="venueMapUrl" />
+          </label>
+        </div>
       </section>
 
       <section className="card pad">
@@ -198,6 +234,24 @@ export function EventIdentityPanels({
           </div>
         </div>
         <div className="form-row mt">
+          <label className="label">
+            Programme hero image URL
+            <input
+              className="field"
+              name="programmeHeroImageUrl"
+              type="url"
+              inputMode="url"
+              placeholder="https://example.org/venue-photo.jpg"
+              defaultValue={event.programmeHeroImageUrl}
+              maxLength={2048}
+            />
+            <span className="help">
+              Optional HTTPS photograph behind the public programme masthead. A
+              dark scrim is applied over it, so the heading stays legible on any
+              image. Without one the masthead uses the brand accent.
+            </span>
+            <FieldError actionData={actionData} name="programmeHeroImageUrl" />
+          </label>
           <label className="label">
             Participant logo URL
             <input
@@ -775,10 +829,9 @@ export function EventRepositoryPanel({
             </button>
             <p className="help mt">
               The handover runs while you wait, and stops before changing
-              anything if more than{" "}
-              {AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES} records would change.
-              Keep larger events on Program Cue, which is the recommended
-              option.
+              anything if more than {AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES}{" "}
+              records would change. Keep larger events on Program Cue, which is
+              the recommended option.
             </p>
           </div>
         ) : null}

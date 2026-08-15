@@ -227,7 +227,15 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
       ? this.env.DB.prepare(
           `
       UPDATE reviews SET status = ?, scores_json = ?, weighted_score = ?, recommendation = ?, confidence = ?,
-             submitter_feedback = ?, private_notes = ?, revision = revision + 1, last_operation_id = ?,
+             submitter_feedback = ?, private_notes = ?,
+             -- The attestation is stamped the first time it is given and not
+             -- refreshed on later saves: it records when the reviewer answered,
+             -- not when they last typed.
+             conflict_affirmed_at = CASE
+               WHEN ? = 1 THEN COALESCE(conflict_affirmed_at, unixepoch())
+               ELSE NULL
+             END,
+             revision = revision + 1, last_operation_id = ?,
              updated_at = unixepoch(), submitted_at = CASE WHEN ? = 'submitted' THEN unixepoch() ELSE submitted_at END,
              locked_at = CASE WHEN ? = 'submitted' THEN unixepoch() ELSE locked_at END
        WHERE id = ? AND event_id = ?
@@ -283,6 +291,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           parsed.confidence,
           parsed.submitterFeedback || null,
           parsed.privateNotes || null,
+          parsed.conflictAffirmed ? 1 : 0,
           operationId,
           status,
           status,
@@ -297,8 +306,10 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         )
       : this.env.DB.prepare(
           `
-      INSERT INTO reviews (id, event_id, assignment_id, status, scores_json, weighted_score, recommendation, confidence, submitter_feedback, private_notes, revision, last_operation_id, created_at, updated_at, submitted_at, locked_at)
-      SELECT ?, ?, assignment.id, ?, ?, ?, ?, ?, ?, ?, 1, ?, unixepoch(), unixepoch(),
+      INSERT INTO reviews (id, event_id, assignment_id, status, scores_json, weighted_score, recommendation, confidence, submitter_feedback, private_notes, conflict_affirmed_at, revision, last_operation_id, created_at, updated_at, submitted_at, locked_at)
+      SELECT ?, ?, assignment.id, ?, ?, ?, ?, ?, ?, ?,
+             CASE WHEN ? = 1 THEN unixepoch() END,
+             1, ?, unixepoch(), unixepoch(),
              CASE WHEN ? = 'submitted' THEN unixepoch() END,
              CASE WHEN ? = 'submitted' THEN unixepoch() END
         FROM evaluator_assignments assignment
@@ -352,6 +363,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           parsed.confidence,
           parsed.submitterFeedback || null,
           parsed.privateNotes || null,
+          parsed.conflictAffirmed ? 1 : 0,
           operationId,
           status,
           status,

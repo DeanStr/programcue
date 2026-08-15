@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateRubricWeightedScore,
   calculateWeightedScore,
+  rubricContributions,
 } from "./evaluation-rules";
 import { evaluationPlanSchema, reviewDraftSchema } from "./evaluation-schema";
 
@@ -151,8 +152,79 @@ describe("evaluation rules", () => {
         confidence: null,
         submitterFeedback: "",
         privateNotes: "",
+        conflictAffirmed: true,
         intent: "submit",
       }),
     ).toThrow(/recommendation/);
+  });
+
+  it("does not submit a review without a conflict declaration", () => {
+    expect(() =>
+      reviewDraftSchema.parse({
+        assignmentId: "assignment-1",
+        revision: 0,
+        scores: { relevance: 4 },
+        recommendation: "accept",
+        confidence: 4,
+        submitterFeedback: "",
+        privateNotes: "",
+        intent: "submit",
+      }),
+    ).toThrow(/conflict of interest/i);
+  });
+
+  it("saves a draft before the conflict question is answered", () => {
+    const draft = reviewDraftSchema.parse({
+      assignmentId: "assignment-1",
+      revision: 0,
+      scores: { relevance: 4 },
+      recommendation: null,
+      confidence: null,
+      submitterFeedback: "",
+      privateNotes: "",
+      intent: "save",
+    });
+    expect(draft.conflictAffirmed).toBe(false);
+  });
+});
+
+describe("rubric contributions", () => {
+  const criteria = [
+    { id: "relevance", weightPercent: 60, inputType: "scale_5" as const },
+    { id: "originality", weightPercent: 40, inputType: "scale_5" as const },
+  ];
+
+  it("reports what each scored criterion contributes", () => {
+    const result = rubricContributions(criteria, { relevance: 4 });
+    expect(result.perCriterion.get("relevance")).toBe(2.4);
+    expect(result.perCriterion.has("originality")).toBe(false);
+    expect(result.weightScored).toBe(60);
+  });
+
+  it("reports all rubric weight once every criterion is scored", () => {
+    const responses = { relevance: 4, originality: 5 };
+    const result = rubricContributions(criteria, responses);
+    expect(result.weightScored).toBe(100);
+    expect([...result.perCriterion.values()]).toEqual([2.4, 2]);
+  });
+
+  it("normalises a ten-point scale the same way the stored total does", () => {
+    const tenPoint = [
+      { id: "depth", weightPercent: 100, inputType: "scale_10" as const },
+    ];
+    const result = rubricContributions(tenPoint, { depth: 8 });
+    expect(result.perCriterion.get("depth")).toBe(4);
+  });
+
+  it("ignores genuinely unscored criteria", () => {
+    const result = rubricContributions(criteria, { relevance: "" });
+    expect(result.perCriterion.size).toBe(0);
+    expect(result.weightScored).toBe(0);
+  });
+
+  it("fails on a malformed present score", () => {
+    expect(() => rubricContributions(criteria, { relevance: 6 })).toThrow(
+      /relevance.*1 to 5/iu,
+    );
   });
 });

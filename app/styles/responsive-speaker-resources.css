@@ -37,6 +37,16 @@
   border-radius: var(--radius);
   background: var(--surface);
 }
+@media (max-width: 1080px) {
+  /* The rail becomes a second row rather than a squeezed column: the tasks in
+     it are the point of the page and must not be the narrowest thing on it. */
+  .speaker-dashboard-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .speaker-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 @media (max-width: 900px) {
   .speaker-resource-layout {
     grid-template-columns: 1fr;
@@ -56,5 +66,30 @@
   }
   .resource-embed {
     min-height: 300px;
+  }
+  .speaker-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Stacked, the stepper becomes a list and the connector runs down the
+     markers rather than between them. */
+  .speaker-stepper {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .speaker-stage:not(:last-child)::after {
+    top: auto;
+    bottom: -6px;
+    left: 28px;
+    right: auto;
+    width: 2px;
+    height: 12px;
+  }
+  .speaker-stage-link {
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-items: start;
+    text-align: left;
+  }
+  .speaker-stage-marker {
+    width: 32px;
+    height: 32px;
   }
 }

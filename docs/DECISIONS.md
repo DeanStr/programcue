@@ -140,6 +140,18 @@ parallel content stores are not introduced.
 | Demo headshots            | Only the canonical local-demo or production-evaluation event's published programme projection and optional application featured-speaker preview may use the four bundled raster assets for the four explicitly allowlisted fixture people (Priya Shah, Alex Morgan, Priya Raman and Marcus Okafor). They are not authenticated profile or file state. Any non-deleted real headshot asset, including an unreleased, quarantined or otherwise ineligible one, suppresses that person's bundle. Ordinary production requires a released clean R2 version and never treats participant-upload metadata as upload or scanner success. |
 | Gallery accessibility     | Gallery cards are keyboard-activatable controls; detail is an in-page dialog panel with an explicit close button, deterministic biography expansion and focus restoration to the opening card. Search state remains component-owned while the panel is open.                                                                                                                                                                                                                                                                                                                                                                      |
 | Speaker amplification     | `?speaker=` is public speaker-detail state resolved server-side against the current published snapshot. Invalid or unpublished identities return 404. Opening and closing a profile changes browser history; Copy link is universal and Web Share is progressive enhancement. Canonical and unfurl URLs are absolute and speaker-specific. `og:image` is emitted only for a current anonymously readable released headshot, never for a bundled demo portrait or private file. Social OAuth and generated promotional images remain out of scope.                                                                                 |
+| Event presentation        | Venue address, HTTPS map URL and HTTPS programme hero image are event configuration, not fields inferred from venue name or city. They use the same D1/Airtable authority path as other Event Setup data, copy with reusable event configuration and reset explicitly in the demo/evaluation fixture. The venue rail renders only when address or map information adds detail beyond the masthead. |
+
+Operational status language names only the evidence actually checked. Upcoming
+sessions therefore report “Attention” for a blocking conflict or outstanding
+high-impact session task, and otherwise “No blockers found”; they do not claim
+the broader “On track” state. Delivery health lists only channels represented
+by durable delivery attempts and never advertises unconnected transports.
+
+Reviewer conflict attestation is a durable prerequisite for new review
+submissions. A null attestation on a review completed before this policy means
+“not recorded under the prior policy”; migrations never fabricate a historical
+affirmation or timestamp.
 
 ## Participant invitation and profile ownership
 

@@ -39,9 +39,14 @@ export type PublishedProgramme = {
     startDate: string;
     endDate: string;
     venue: string | null;
+    venueAddress: string | null;
+    venueMapUrl: string | null;
     city: string | null;
     description: string | null;
     brandAccent: string;
+    /* An absolute https image for the masthead. Null renders the flat brand
+       ground, which stays the fallback rather than the only option. */
+    heroImageUrl: string | null;
   };
   version: { id: string; versionNumber: number; publishedAt: number };
   sessions: PublishedSession[];

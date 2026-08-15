@@ -524,6 +524,7 @@ describe("abstract management round depth", () => {
         confidence: 5,
         submitterFeedback: "Advance this proposal.",
         privateNotes: "Partially scoped team pool.",
+        conflictAffirmed: true,
         intent: "submit",
       });
 
@@ -1173,6 +1174,7 @@ describe("abstract management round depth", () => {
       confidence: 5,
       submitterFeedback: "",
       privateNotes: "",
+      conflictAffirmed: true,
       intent: "submit",
     });
     expect(saved.reviewId).toBeTruthy();

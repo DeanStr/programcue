@@ -9,10 +9,10 @@
  *
  *   base.css                  tokens, document, app shell. Always first.
  *   <workspace-*.css>         one sheet per surface, owning that surface's classes.
+ *   speaker-resources.css     participant resource surfaces.
  *   <responsive-*.css>        breakpoint refinements for the sheets above.
  *   interaction-surfaces.css  overlays, panels and the command palette.
  *   design-primitives.css     shared pc-* primitives.
- *   speaker-resources.css     participant resource surfaces.
  *   schedule-operations.css   planner internals.
  *   reviewer-responsive-tables.css  table collapse. Deliberately last.
  *
@@ -49,9 +49,9 @@
 @import "./responsive-schedule.css";
 @import "./responsive-public-programme.css";
 @import "./responsive-application.css";
+@import "./speaker-resources.css";
 @import "./responsive-speaker-resources.css";
 @import "./interaction-surfaces.css";
 @import "./design-primitives.css";
-@import "./speaker-resources.css";
 @import "./schedule-operations.css";
 @import "./reviewer-responsive-tables.css";

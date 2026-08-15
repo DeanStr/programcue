@@ -1,35 +1,115 @@
-import { Mic2 } from "lucide-react";
+import { CheckCircle2, Circle, CircleDot, Megaphone, Mic2 } from "lucide-react";
 import { Form, Link } from "react-router";
 
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import {
+  speakerDueLabel,
   speakerStatusClass,
   type SpeakerPortal,
   type SpeakerTask,
 } from "~/components/speaker-dashboard-panel-shared";
 
+export type SpeakerMilestone = {
+  key: string;
+  label: string;
+  detail: string;
+  state: "complete" | "in_progress" | "not_started";
+  href: string;
+};
+
+/* A count says how far; named stages say where, and what is expected next. The
+   three stages are the speaker's whole obligation to the event, not just their
+   task list — which is why publishing a profile and confirming a session, both
+   previously discoverable only by reading the index below, appear here. */
+export function speakerMilestones({
+  portal,
+  completedCount,
+  requirementCount,
+}: {
+  portal: SpeakerPortal;
+  completedCount: number;
+  requirementCount: number;
+}): SpeakerMilestone[] {
+  const profilePublished = portal.profile.profileStatus === "published";
+  const liveSessions = portal.sessions.filter(
+    (session) => session.status !== "cancelled",
+  );
+  const confirmedSessions = liveSessions.filter(
+    (session) => session.participationStatus === "confirmed",
+  ).length;
+  return [
+    {
+      key: "profile",
+      label: "Profile",
+      detail: profilePublished
+        ? "Published on the programme"
+        : "Not published yet",
+      state: profilePublished ? "complete" : "in_progress",
+      href: "/participant/profile",
+    },
+    {
+      key: "sessions",
+      label: "Sessions",
+      detail: liveSessions.length
+        ? `${confirmedSessions} of ${liveSessions.length} confirmed`
+        : "No sessions linked yet",
+      state: !liveSessions.length
+        ? "not_started"
+        : confirmedSessions === liveSessions.length
+          ? "complete"
+          : confirmedSessions > 0
+            ? "in_progress"
+            : "not_started",
+      href: "/participant/sessions",
+    },
+    {
+      key: "requirements",
+      label: "Requirements",
+      detail: requirementCount
+        ? `${completedCount} of ${requirementCount} complete`
+        : "Nothing requested",
+      state: !requirementCount
+        ? "complete"
+        : completedCount === requirementCount
+          ? "complete"
+          : completedCount > 0
+            ? "in_progress"
+            : "not_started",
+      href: "/participant/tasks",
+    },
+  ];
+}
+
+const MILESTONE_STATE_LABEL: Record<SpeakerMilestone["state"], string> = {
+  complete: "Complete",
+  in_progress: "In progress",
+  not_started: "Not started",
+};
+
 export function SpeakerDashboardOverview({
   portal,
   next,
-  progress,
   completedCount,
   requirementCount,
 }: {
   portal: SpeakerPortal;
   next: SpeakerTask | undefined;
-  progress: number;
   completedCount: number;
   requirementCount: number;
 }) {
   const waitingOnTeam = next
     ? ["submitted", "blocked"].includes(next.status)
     : false;
-  // One readiness statement, in the counts a speaker can act on. The same
-  // fact used to appear four times above the fold — a 34px percentage, a
-  // donut restating it, the hero card implying it, and the Tasks tile
-  // counting it — in four different visual languages.
-  const remaining = requirementCount - completedCount;
+  const milestones = speakerMilestones({
+    portal,
+    completedCount,
+    requirementCount,
+  });
+  const completedStages = milestones.filter(
+    (milestone) => milestone.state === "complete",
+  ).length;
+  const preparationComplete = completedStages === milestones.length;
   return (
     <>
       <div className="speaker-portal-head">
@@ -39,30 +119,50 @@ export function SpeakerDashboardOverview({
             Everything the event team needs from you, with clear privacy and
             review states.
           </p>
-          {requirementCount > 0 ? (
-            <div className="speaker-readiness-line">
-              <p>
-                <strong className="pc-num">{completedCount}</strong> of{" "}
-                <strong className="pc-num">{requirementCount}</strong>{" "}
-                requirements complete
-                {remaining > 0 ? (
-                  <span className="subtle"> · {remaining} to go</span>
-                ) : null}
-              </p>
-              <div
-                className={`progress${progress >= 100 ? " green" : progress >= 60 ? "" : " amber"}`}
-                role="progressbar"
-                aria-label="Requirements complete"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progress}
-              >
-                <span style={{ width: `${progress}%` }} />
-              </div>
-            </div>
-          ) : null}
         </div>
       </div>
+      {/* The bar the stepper replaced measured tasks alone and was the only
+          progress statement on the page, which made the other two obligations
+          invisible until a speaker went looking for them. */}
+      <section
+        className="card pad speaker-stepper-card mt"
+        aria-labelledby="speaker-stepper-heading"
+      >
+        <div className="card-title">
+          <h2 id="speaker-stepper-heading">Your preparation</h2>
+          <span className="subtle right pc-num">
+            {completedStages} of {milestones.length} stages complete
+          </span>
+        </div>
+        <ol className="speaker-stepper">
+          {milestones.map((milestone) => (
+            <li
+              className="speaker-stage"
+              key={milestone.key}
+              data-state={milestone.state}
+            >
+              <Link to={milestone.href} className="speaker-stage-link">
+                <span className="speaker-stage-marker" aria-hidden>
+                  {milestone.state === "complete" ? (
+                    <CheckCircle2 size={18} />
+                  ) : milestone.state === "in_progress" ? (
+                    <CircleDot size={18} />
+                  ) : (
+                    <Circle size={18} />
+                  )}
+                </span>
+                <span className="speaker-stage-copy">
+                  <strong>{milestone.label}</strong>
+                  <small className="subtle">{milestone.detail}</small>
+                </span>
+                <span className="sr-only">
+                  {MILESTONE_STATE_LABEL[milestone.state]}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      </section>
       <section className="card next-action mt">
         <div>
           <span
@@ -72,9 +172,16 @@ export function SpeakerDashboardOverview({
               ? waitingOnTeam
                 ? "Waiting"
                 : "Next action"
-              : "Onboarding complete"}
+              : preparationComplete
+                ? "Preparation complete"
+                : "Tasks complete"}
           </span>
-          <h2>{next?.title ?? "You are ready for the event"}</h2>
+          <h2>
+            {next?.title ??
+              (preparationComplete
+                ? "You are ready for the event"
+                : "No outstanding requirements")}
+          </h2>
           <p className="subtle">
             {next
               ? waitingOnTeam
@@ -82,7 +189,9 @@ export function SpeakerDashboardOverview({
                   ? "Submitted for administrator review. No further action is required until the event team responds."
                   : "This requirement is waiting for its prerequisites to be completed."
                 : next.description
-              : "There are no outstanding requirements right now."}
+              : preparationComplete
+                ? "There are no outstanding requirements right now."
+                : "Your task list is clear. Check the preparation stages above for remaining profile or session status."}
           </p>
           {next ? (
             <Link
@@ -95,6 +204,102 @@ export function SpeakerDashboardOverview({
         </div>
       </section>
     </>
+  );
+}
+
+/* The dashboard used to be a directory: five rows that each said how many of
+   something existed and linked elsewhere. A speaker arriving here needs the
+   work itself, so the outstanding items and anything the team has said about
+   them are on the page rather than two navigations away. */
+export function SpeakerWorkRail({
+  tasks,
+  timezone,
+}: {
+  tasks: SpeakerTask[];
+  timezone: string;
+}) {
+  const outstanding = tasks.filter(
+    (task) => !["completed", "waived"].includes(task.status),
+  );
+  const updates = tasks
+    .flatMap((task) =>
+      task.comments.map((comment) => ({
+        ...comment,
+        taskTitle: task.title,
+      })),
+    )
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, 4);
+  return (
+    <div className="speaker-rail">
+      <section className="card pad" aria-labelledby="speaker-rail-tasks">
+        <div className="card-title">
+          <h2 id="speaker-rail-tasks">My tasks</h2>
+          <Link className="btn small right" to="/participant/tasks">
+            View all
+          </Link>
+        </div>
+        {outstanding.length ? (
+          <ul className="speaker-rail-list">
+            {outstanding.slice(0, 5).map((task) => (
+              <li key={task.id}>
+                <Link
+                  className="speaker-rail-task"
+                  to={`/participant/tasks#task-${task.id}`}
+                >
+                  <span className="speaker-rail-task-copy">
+                    <strong>{task.title}</strong>
+                    <small className="subtle">
+                      {speakerDueLabel(task.dueAt, timezone)}
+                    </small>
+                  </span>
+                  <span className={`status ${speakerStatusClass(task.status)}`}>
+                    {task.status.replaceAll("_", " ")}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="subtle">
+            Nothing outstanding. The event team will let you know if that
+            changes.
+          </p>
+        )}
+      </section>
+      <section className="card pad" aria-labelledby="speaker-rail-updates">
+        <div className="card-title">
+          <h2 id="speaker-rail-updates">Recent updates</h2>
+        </div>
+        {updates.length ? (
+          <ul className="speaker-rail-list">
+            {updates.map((update) => (
+              <li key={update.id}>
+                <div className="speaker-rail-update">
+                  <Megaphone aria-hidden size={15} className="subtle" />
+                  <div>
+                    <strong>{update.taskTitle}</strong>
+                    <p>{update.body}</p>
+                    <small className="subtle">
+                      {update.authorName}
+                      {" · "}
+                      <EventDateTime
+                        epochSeconds={update.createdAt}
+                        timeZone={timezone}
+                      />
+                    </small>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="subtle">
+            Comments about your requirements appear here.
+          </p>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -172,19 +377,11 @@ export function SpeakerSessionsPanel({
                     name="intent"
                     value="confirm-participation"
                   />
-                  <input
-                    type="hidden"
-                    name="sessionId"
-                    value={session.id}
-                  />
-                  <input
-                    type="hidden"
-                    name="confirmation"
-                    value="confirmed"
-                  />
+                  <input type="hidden" name="sessionId" value={session.id} />
+                  <input type="hidden" name="confirmation" value="confirmed" />
                   <p className="subtle">
-                    Confirm that you agree to participate in this session and
-                    be listed according to its programme visibility.
+                    Confirm that you agree to participate in this session and be
+                    listed according to its programme visibility.
                   </p>
                   <button
                     className="btn primary"

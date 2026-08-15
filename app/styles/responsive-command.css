@@ -64,4 +64,9 @@
   .command-session-room {
     grid-column: 2;
   }
+  .command-session-readiness,
+  .command-session-row > .status {
+    grid-column: 2;
+    justify-self: start;
+  }
 }

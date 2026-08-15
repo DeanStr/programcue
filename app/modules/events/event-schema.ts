@@ -124,7 +124,29 @@ export const eventSetupInputSchema = z
     startDate: z.iso.date(),
     endDate: z.iso.date(),
     venue: z.string().trim().max(200),
+    venueAddress: z.string().trim().max(300),
+    venueMapUrl: z
+      .union([
+        z.literal(""),
+        z.url("Enter a valid venue map URL.").startsWith("https://", {
+          message: "Venue map URLs must use HTTPS.",
+        }),
+      ])
+      .refine((value) => value.length <= 2_048, "Venue map URL is too long."),
     city: z.string().trim().max(120),
+    programmeHeroImageUrl: z
+      .union([
+        z.literal(""),
+        z
+          .url("Enter a valid programme hero image URL.")
+          .startsWith("https://", {
+            message: "Programme hero image URLs must use HTTPS.",
+          }),
+      ])
+      .refine(
+        (value) => value.length <= 2_048,
+        "Programme hero image URL is too long.",
+      ),
     publicSlug: z
       .string()
       .trim()

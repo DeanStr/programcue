@@ -8,6 +8,7 @@ import {
   TaskService,
   TaskStateError,
 } from "~/modules/tasks/task-service.server";
+import { calculateReadiness } from "~/modules/readiness/readiness-rules";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
@@ -118,6 +119,28 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       );
     })
     .map((task) => ({ ...task, isOverdue: isOverdue(task) }));
+  /* Summary tiles describe the event, not whichever rows happen to match the
+     current table filter. In particular, an empty filter result must not turn
+     a partially ready event into a 100% one. */
+  const taskSummary = {
+    readiness: calculateReadiness(
+      workspace.tasks.map((task) => ({
+        id: task.id,
+        impact: task.impact,
+        readinessPercent: ["completed", "waived"].includes(task.status)
+          ? 100
+          : task.readinessPercent,
+      })),
+    ).percentage,
+    outstanding: workspace.tasks.filter(
+      (task) => !["completed", "waived"].includes(task.status),
+    ).length,
+    evidenceReview: workspace.tasks.filter(
+      (task) => task.status === "submitted",
+    ).length,
+    blocked: workspace.tasks.filter((task) => task.status === "blocked").length,
+    overdue: workspace.tasks.filter(isOverdue).length,
+  };
   const filterSignature = JSON.stringify(filters);
   return {
     ...workspace,
@@ -126,6 +149,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     filterSignature,
     focusedTaskId: requestedTaskId || null,
     totalTaskCount: workspace.tasks.length,
+    taskSummary,
+    /* Due distances are rendered from the server clock so the first paint and
+       the hydrated tree agree. */
+    now,
     intentId: crypto.randomUUID(),
     assignIntentId: crypto.randomUUID(),
   };

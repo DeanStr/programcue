@@ -198,6 +198,12 @@ async function waitForSurfaceReady(page: Page, name: string) {
     await expect(
       page.getByRole("textbox", { name: "Display name" }),
     ).toBeVisible();
+  } else if (name === "speaker-dashboard") {
+    const main = page.locator(".speaker-dashboard-main");
+    await expect(main).toBeVisible();
+    await expect
+      .poll(async () => (await main.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(280);
   }
 }
 

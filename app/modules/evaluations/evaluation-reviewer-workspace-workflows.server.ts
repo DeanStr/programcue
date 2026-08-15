@@ -346,7 +346,8 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
         `
         SELECT r.id, r.status, r.scores_json AS scoresJson, r.weighted_score AS weightedScore,
                r.recommendation, r.confidence, r.submitter_feedback AS submitterFeedback,
-               r.private_notes AS privateNotes, r.revision
+               r.private_notes AS privateNotes,
+               r.conflict_affirmed_at AS conflictAffirmedAt, r.revision
           FROM reviews r
           JOIN evaluator_assignments a
             ON a.id = r.assignment_id AND a.event_id = r.event_id
@@ -378,6 +379,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
           confidence: number | null;
           submitterFeedback: string | null;
           privateNotes: string | null;
+          conflictAffirmedAt: number | null;
           revision: number;
         }>(),
       this.env.DB.prepare(

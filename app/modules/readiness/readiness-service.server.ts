@@ -8,6 +8,7 @@ import {
 import type { ProgrammeSetupStep } from "./programme-workflow-phases";
 
 type CountRow = { total: number; complete?: number; failed?: number };
+export type DeliveryChannel = "email" | "sms" | "push" | "calendar";
 type TaskRow = {
   id: string;
   impact: ReadinessTask["impact"];
@@ -60,7 +61,7 @@ export type CommandCentreSnapshot = {
   workflows: ReadinessWorkflow[];
   blockers: ReadinessBlocker[];
   deliveryHealth: Array<{
-    channel: string;
+    channel: DeliveryChannel;
     successful: number;
     total: number;
     percentage: number;
@@ -70,6 +71,12 @@ export type CommandCentreSnapshot = {
     title: string;
     startsAt: number;
     room: string;
+    roomCapacity: number;
+    /* Published is not the same as ready. Attention here means an unresolved
+       blocking conflict or outstanding high-impact work on the session, both
+       of which are still fixable while the session is still upcoming. */
+    status: "no_blockers_detected" | "attention_required";
+    riskReason: string | null;
   }>;
   operations: Array<{
     id: string;
@@ -211,7 +218,36 @@ async function loadCommandCentreRecords(
       .first<CountRow>(),
     env.DB.prepare(
       `
-        SELECT s.id, s.title, e.starts_at AS startsAt, r.name AS room
+        SELECT s.id, s.title, e.starts_at AS startsAt, r.name AS room,
+               r.capacity AS roomCapacity,
+               -- A session on the published schedule is not automatically
+               -- clear: an unresolved blocking conflict on it is exactly the
+               -- thing this panel exists to surface before the day arrives.
+               -- Conflicts name schedule entries, so both sides are resolved
+               -- back to their session.
+               (SELECT COUNT(*)
+                  FROM schedule_conflicts conflict
+                  LEFT JOIN schedule_entries primary_entry
+                    ON primary_entry.id = conflict.primary_entry_id
+                   AND primary_entry.event_id = conflict.event_id
+                  LEFT JOIN schedule_entries other_entry
+                    ON other_entry.id = conflict.conflicting_entry_id
+                   AND other_entry.event_id = conflict.event_id
+                 WHERE conflict.event_id = v.event_id
+                   AND conflict.schedule_version_id = v.id
+                   AND conflict.resolved_at IS NULL
+                   AND conflict.severity = 'blocking'
+                   AND (primary_entry.session_id = s.id
+                        OR other_entry.session_id = s.id)
+               ) AS blockingConflicts,
+               (SELECT COUNT(*)
+                  FROM task_instances speaker_task
+                 WHERE speaker_task.event_id = v.event_id
+                   AND speaker_task.target_type = 'session'
+                   AND speaker_task.target_id = s.id
+                   AND speaker_task.status NOT IN ('completed','waived')
+                   AND speaker_task.impact IN ('critical','high')
+               ) AS openCriticalTasks
           FROM schedule_versions v
           JOIN schedule_entries e ON e.schedule_version_id = v.id AND e.event_id = v.event_id
           JOIN sessions s ON s.id = e.session_id AND s.event_id = v.event_id
@@ -226,7 +262,15 @@ async function loadCommandCentreRecords(
       `,
     )
       .bind(viewer.eventId, now)
-      .all<{ id: string; title: string; startsAt: number; room: string }>(),
+      .all<{
+        id: string;
+        title: string;
+        startsAt: number;
+        room: string;
+        roomCapacity: number;
+        blockingConflicts: number;
+        openCriticalTasks: number;
+      }>(),
     env.DB.prepare(
       `
         SELECT COUNT(*) AS total,
@@ -264,7 +308,11 @@ async function loadCommandCentreRecords(
       `,
     )
       .bind(viewer.eventId)
-      .all<{ channel: string; successful: number; total: number }>(),
+      .all<{
+        channel: DeliveryChannel;
+        successful: number;
+        total: number;
+      }>(),
   ]);
 }
 
@@ -337,7 +385,8 @@ export class ReadinessService {
         publicationComplete: number;
         baselineCursor: number;
       }>();
-    if (!event) throw new Response("This event could not be found.", { status: 404 });
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
 
     const now = Math.floor(Date.now() / 1000);
     // Capture the cursor before the snapshot. Any mutation that commits while
@@ -639,7 +688,26 @@ export class ReadinessService {
         ...row,
         percentage: percent(row.successful, row.total),
       })),
-      upcoming: upcoming.results,
+      upcoming: upcoming.results.map((session) => {
+        const conflicts = numeric(session.blockingConflicts);
+        const openWork = numeric(session.openCriticalTasks);
+        return {
+          id: session.id,
+          title: session.title,
+          startsAt: session.startsAt,
+          room: session.room,
+          roomCapacity: session.roomCapacity,
+          status:
+            conflicts > 0 || openWork > 0
+              ? "attention_required"
+              : "no_blockers_detected",
+          riskReason: conflicts
+            ? `${conflicts} unresolved blocking conflict${conflicts === 1 ? "" : "s"}`
+            : openWork
+              ? `${openWork} high-impact task${openWork === 1 ? "" : "s"} outstanding`
+              : null,
+        };
+      }),
       operations: operationRows,
     };
   }

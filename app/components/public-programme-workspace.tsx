@@ -30,6 +30,7 @@ import {
   groupSessionsByDay,
   initials,
   normaliseDescription,
+  speakersWithMultipleSessions,
   speakerAffiliation,
   type PublicProgrammeLoaderData,
   type PublicProgrammeModel,
@@ -170,7 +171,9 @@ function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
       className={`hero${heroImage ? " has-image" : ""}`}
       style={
         heroImage
-          ? ({ "--hero-image": `url("${heroImage}")` } as CSSProperties)
+          ? ({
+              "--hero-image": `url(${JSON.stringify(heroImage)})`,
+            } as CSSProperties)
           : undefined
       }
     >
@@ -309,7 +312,7 @@ export function PublicSpeakerCard({
             aria-label={`View profile and sessions for ${speaker.displayName}`}
             onClick={(event) => {
               event.preventDefault();
-              model.openSpeakerProfile(speaker.id, event.currentTarget)
+              model.openSpeakerProfile(speaker.id, event.currentTarget);
             }}
           >
             View profile and sessions
@@ -571,6 +574,94 @@ function ProgrammeSessionList({ model }: { model: PublicProgrammeModel }) {
         </section>
       ))}
     </div>
+  );
+}
+
+/* The rail answers "what is on" and then stops, so an attendee looking for the
+   two next questions — who is speaking and where the building is — had to
+   scroll the roster or leave the page. Both panels render only when the
+   programme actually carries the data. */
+function MultipleSessionSpeakersPanel({
+  model,
+}: {
+  model: PublicProgrammeModel;
+}) {
+  const { programme } = model;
+  const multipleSessionSpeakers = speakersWithMultipleSessions(programme);
+  if (!multipleSessionSpeakers.length) return null;
+  return (
+    <section
+      className="card public-featured"
+      aria-labelledby="multiple-session-speakers-heading"
+    >
+      <div className="card-title">
+        <h2 id="multiple-session-speakers-heading">
+          Speakers in multiple sessions
+        </h2>
+        <a className="public-featured-all" href="#speakers">
+          View all speakers
+        </a>
+      </div>
+      <ul className="public-featured-list">
+        {multipleSessionSpeakers.map(({ speaker, sessions }) => (
+          <li key={speaker.id}>
+            <a
+              className="public-featured-person"
+              href={`#speaker-${speaker.id}`}
+            >
+              {speaker.imageUrl ? (
+                <img
+                  src={speaker.imageUrl}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  width={44}
+                  height={44}
+                />
+              ) : (
+                <span className="public-featured-initials" aria-hidden>
+                  {initials(speaker.displayName)}
+                </span>
+              )}
+              <span className="public-featured-name">
+                {speaker.displayName}
+                <small className="subtle">
+                  {sessions} {sessions === 1 ? "session" : "sessions"}
+                </small>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function VenuePanel({ model }: { model: PublicProgrammeModel }) {
+  const { event } = model.programme;
+  if (!event.venueAddress && !event.venueMapUrl) return null;
+  return (
+    <section className="card pad public-venue" aria-labelledby="venue-heading">
+      <div className="card-title">
+        <h2 id="venue-heading">Venue</h2>
+      </div>
+      {event.venue ? <p className="public-venue-name">{event.venue}</p> : null}
+      {event.venueAddress ? (
+        <address className="public-venue-address">{event.venueAddress}</address>
+      ) : null}
+      {event.venueMapUrl ? (
+        <a
+          className="public-venue-map"
+          href={event.venueMapUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <MapPin aria-hidden size={14} />
+          View venue map
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
+      ) : null}
+    </section>
   );
 }
 
@@ -844,7 +935,7 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
                           model.openSpeakerProfile(
                             speakerId,
                             event.currentTarget,
-                          )
+                          );
                         }}
                       >
                         View {name}’s profile
@@ -1141,6 +1232,12 @@ export function PublicProgrammeWorkspace({
             <aside id="itinerary">
               {!embedded ? <ItineraryPanel model={model} /> : null}
               <SessionDetailPanel model={model} />
+              {!embedded ? (
+                <>
+                  <MultipleSessionSpeakersPanel model={model} />
+                  <VenuePanel model={model} />
+                </>
+              ) : null}
             </aside>
             <OverviewSpeakers model={model} />
           </>

@@ -418,19 +418,6 @@
 .command-action-list .suggestion small {
   display: block;
 }
-.command-health-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 65px;
-  gap: var(--space-2);
-  align-items: center;
-  padding: var(--space-3) var(--space-1);
-  border-bottom: 1px solid var(--line);
-  color: inherit;
-  text-decoration: none;
-}
-.command-health-row:last-child {
-  border-bottom: 0;
-}
 .tone-success {
   color: var(--state-good-text);
 }
@@ -450,19 +437,10 @@
   margin-top: 2px;
 }
 @media (max-width: 760px) {
-  .command-health-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .command-health-row small {
-    grid-column: 1/-1;
-  }
   .command-agenda-link {
     grid-template-columns: 52px minmax(0, 1fr) auto;
   }
   .command-agenda-link > strong {
-    display: none;
-  }
-  .command-agenda-link .status {
     display: none;
   }
 }

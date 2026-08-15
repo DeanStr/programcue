@@ -20,7 +20,11 @@ export async function readEventCloneSource(
     communicationTriggers,
   ] = await Promise.all([
     env.DB.prepare(
-      `SELECT venue_name AS venueName, city, description,
+      `SELECT venue_name AS venueName,
+              venue_address AS venueAddress,
+              venue_map_url AS venueMapUrl,
+              programme_hero_image_url AS programmeHeroImageUrl,
+              city, description,
               brand_accent AS brandAccent,
               participant_logo_url AS participantLogoUrl,
               participant_welcome_text AS participantWelcomeText,
@@ -36,6 +40,9 @@ export async function readEventCloneSource(
       .bind(viewer.eventId, viewer.organisationId)
       .first<{
         venueName: string | null;
+        venueAddress: string | null;
+        venueMapUrl: string | null;
+        programmeHeroImageUrl: string | null;
         city: string | null;
         description: string | null;
         brandAccent: string;

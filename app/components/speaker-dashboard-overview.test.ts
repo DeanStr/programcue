@@ -1,0 +1,27 @@
+import { describe, expect, it } from "vitest";
+
+import type { SpeakerPortal } from "./speaker-dashboard-panel-shared";
+import { speakerMilestones } from "./speaker-dashboard-overview";
+
+function portal(overrides: Partial<SpeakerPortal> = {}) {
+  return {
+    profile: { profileStatus: "draft" },
+    sessions: [],
+    ...overrides,
+  } as SpeakerPortal;
+}
+
+describe("speaker preparation milestones", () => {
+  it("treats an empty requirement list as satisfied, not unstarted", () => {
+    const requirements = speakerMilestones({
+      portal: portal(),
+      completedCount: 0,
+      requirementCount: 0,
+    }).find((milestone) => milestone.key === "requirements");
+
+    expect(requirements).toMatchObject({
+      detail: "Nothing requested",
+      state: "complete",
+    });
+  });
+});

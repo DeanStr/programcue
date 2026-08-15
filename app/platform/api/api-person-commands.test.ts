@@ -4,6 +4,7 @@ import { RouterContextProvider } from "react-router";
 
 import { CommunicationTemplateService } from "~/modules/communications/communication-template-service.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
+import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { DEMO_IDENTITIES, ensureDemoData } from "~/platform/demo/seed.server";
@@ -248,6 +249,75 @@ describe("authenticated-person API commands", () => {
         .bind(assignment!.id, eventId)
         .first(),
     ).resolves.toEqual({ status: "recused" });
+  });
+
+  it("submits a review with the required conflict attestation", async () => {
+    await ensureDemoEvaluationData(testEnv);
+    const evaluator = viewer("evaluator");
+    const service = new EvaluationService(testEnv);
+    const workspace = await service.getReviewerWorkspace(evaluator);
+    expect(workspace.selected).toBeTruthy();
+    const scores = Object.fromEntries(
+      workspace.criteria.map((criterion) => {
+        if (criterion.inputType === "yes_no") return [criterion.id, "yes"];
+        if (criterion.inputType === "dropdown")
+          return [criterion.id, criterion.options[0]];
+        if (criterion.inputType === "free_text")
+          return [criterion.id, "Reviewed through the person API."];
+        return [criterion.id, 4];
+      }),
+    );
+    const invoke = (body: Record<string, unknown>) =>
+      evaluationPersonAction({
+        request: new Request(
+          `https://programcue.test/api/v1/events/${eventId}/evaluation/me/review`,
+          {
+            method: "POST",
+            headers: headers("evaluator"),
+            body: JSON.stringify(body),
+          },
+        ),
+        params: { eventId, command: "review" },
+        context: context(),
+      } as never);
+    const input = {
+      assignmentId: workspace.selected!.id,
+      revision: workspace.review?.revision ?? 0,
+      scores,
+      recommendation: "accept",
+      confidence: 4,
+      submitterFeedback: "A strong and relevant proposal.",
+      privateNotes: "Reviewed through the authenticated-person API.",
+      intent: "submit",
+    };
+
+    const unattested = await invoke(input);
+    expect(unattested.status).toBe(422);
+    await expect(unattested.json()).resolves.toMatchObject({
+      error: { code: "VALIDATION_ERROR" },
+    });
+
+    const response = await invoke({ ...input, conflictAffirmed: true });
+    expect(response.status, await response.clone().text()).toBe(200);
+    const payload = (await response.json()) as {
+      reviewId: string;
+      revision: number;
+    };
+    expect(payload).toMatchObject({
+      reviewId: expect.any(String),
+      revision: 1,
+    });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT status, conflict_affirmed_at AS conflictAffirmedAt
+           FROM reviews WHERE id = ? AND event_id = ?`,
+      )
+        .bind(payload.reviewId, eventId)
+        .first<{ status: string; conflictAffirmedAt: number | null }>(),
+    ).resolves.toEqual({
+      status: "submitted",
+      conflictAffirmedAt: expect.any(Number),
+    });
   });
 
   it("requeues a failed calendar sync through the durable operation contract", async () => {

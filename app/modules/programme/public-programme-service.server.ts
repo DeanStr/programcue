@@ -433,7 +433,10 @@ export class PublicProgrammeService {
       `
       SELECT id, slug, name, timezone, starts_at AS startDateMarker,
              ends_at AS endDateMarker,
-             venue_name AS venue, city, description, brand_accent AS brandAccent,
+             venue_name AS venue, venue_address AS venueAddress,
+             venue_map_url AS venueMapUrl,
+             city, description, brand_accent AS brandAccent,
+             programme_hero_image_url AS heroImageUrl,
              organisation_id AS organisationId,
              repository_provider AS repositoryProvider
         FROM events
@@ -459,9 +462,12 @@ export class PublicProgrammeService {
       startDate: eventBoundaryCalendarDate(eventRow.startDateMarker),
       endDate: eventBoundaryCalendarDate(eventRow.endDateMarker),
       venue: eventRow.venue,
+      venueAddress: eventRow.venueAddress,
+      venueMapUrl: eventRow.venueMapUrl,
       city: eventRow.city,
       description: eventRow.description,
       brandAccent: eventRow.brandAccent,
+      heroImageUrl: eventRow.heroImageUrl,
     };
     const version = await this.env.DB.prepare(
       `

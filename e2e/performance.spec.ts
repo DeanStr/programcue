@@ -503,7 +503,7 @@ test.describe("explicit local performance evidence", () => {
       .toEqual({ state: "open", ready: true, error: null });
 
     await page.goto("/admin/event");
-    const venue = page.getByLabel("Venue");
+    const venue = page.getByLabel("Venue", { exact: true });
     const revision = page.locator("input[name='revision']");
     const originalVenue = await venue.inputValue();
     const mutationSamples: number[] = [];

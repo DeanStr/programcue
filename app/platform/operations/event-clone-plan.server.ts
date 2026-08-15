@@ -323,7 +323,8 @@ export function buildEventClonePlan(
     env.DB.prepare(
       `INSERT INTO events (
          id, organisation_id, name, slug, timezone, starts_at, ends_at,
-         venue_name, city, description, brand_accent, participant_logo_url,
+         venue_name, venue_address, venue_map_url, programme_hero_image_url,
+         city, description, brand_accent, participant_logo_url,
          participant_welcome_text, participant_support_url, session_formats_json,
          repository_provider, activation_status,
          retention_months, submission_access_mode, allow_anonymous_drafts,
@@ -331,6 +332,7 @@ export function buildEventClonePlan(
          last_updated_by_person_id, created_at, updated_at
        ) VALUES (
          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+         ?, ?, ?,
          1, ?, ?, unixepoch(), unixepoch()
        )`,
     ).bind(
@@ -342,6 +344,9 @@ export function buildEventClonePlan(
       startEpoch(input.startDate),
       endEpoch(input.endDate),
       source.venueName,
+      source.venueAddress,
+      source.venueMapUrl,
+      source.programmeHeroImageUrl,
       source.city,
       source.description,
       source.brandAccent,

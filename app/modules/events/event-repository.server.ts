@@ -31,9 +31,12 @@ export type EventSetup = {
   startDate: string;
   endDate: string;
   venue: string;
+  venueAddress: string;
+  venueMapUrl: string;
   city: string;
   publicSlug: string;
   brandAccent: string;
+  programmeHeroImageUrl: string;
   participantLogoUrl: string;
   participantWelcomeText: string;
   participantSupportUrl: string;
@@ -350,9 +353,12 @@ export class D1EventRepository implements EventRepository {
       startDate: dateFromEpoch(event.startsAt),
       endDate: dateFromEpoch(event.endsAt),
       venue: event.venueName ?? "",
+      venueAddress: event.venueAddress ?? "",
+      venueMapUrl: event.venueMapUrl ?? "",
       city: event.city ?? "",
       publicSlug: event.slug,
       brandAccent: event.brandAccent,
+      programmeHeroImageUrl: event.programmeHeroImageUrl ?? "",
       participantLogoUrl: event.participantLogoUrl ?? "",
       participantWelcomeText: event.participantWelcomeText ?? "",
       participantSupportUrl: event.participantSupportUrl ?? "",
@@ -627,8 +633,10 @@ export class D1EventRepository implements EventRepository {
       this.env.DB.prepare(
         `
         UPDATE events
-           SET name = ?, slug = ?, timezone = ?, starts_at = ?, ends_at = ?, venue_name = ?, city = ?,
-               description = ?, brand_accent = ?, participant_logo_url = ?,
+           SET name = ?, slug = ?, timezone = ?, starts_at = ?, ends_at = ?, venue_name = ?,
+               venue_address = ?, venue_map_url = ?, city = ?,
+               description = ?, brand_accent = ?, programme_hero_image_url = ?,
+               participant_logo_url = ?,
                participant_welcome_text = ?, participant_support_url = ?,
                session_formats_json = ?,
                repository_provider = ?, retention_months = ?,
@@ -719,9 +727,12 @@ export class D1EventRepository implements EventRepository {
         startOfDayEpoch(input.startDate),
         endOfDayEpoch(input.endDate),
         input.venue || null,
+        input.venueAddress || null,
+        input.venueMapUrl || null,
         input.city || null,
         input.description || null,
         input.brandAccent.toLowerCase(),
+        input.programmeHeroImageUrl || null,
         input.participantLogoUrl || null,
         input.participantWelcomeText || null,
         input.participantSupportUrl || null,

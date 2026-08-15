@@ -17,6 +17,7 @@ import {
   AdminPageSectionNavigation,
 } from "~/components/ui/admin-page-sections";
 import { EmptyState } from "~/components/ui/states";
+import { ReadinessWeightingNote } from "~/components/ui/readiness-weighting";
 import { StatusBadge } from "~/components/ui/status-badge";
 import {
   ReadinessSummaryAction,
@@ -24,7 +25,10 @@ import {
 } from "~/modules/ai/contextual-ai-actions";
 import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
-import { ReadinessService } from "~/modules/readiness/readiness-service.server";
+import {
+  ReadinessService,
+  type DeliveryChannel,
+} from "~/modules/readiness/readiness-service.server";
 import { groupProgrammeSetupSteps } from "~/modules/readiness/programme-workflow-phases";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -110,6 +114,21 @@ function progressTone(score: number) {
   return score > 0 ? "amber" : "red";
 }
 
+function deliveryChannelLabel(channel: DeliveryChannel) {
+  switch (channel) {
+    case "email":
+      return "Email";
+    case "sms":
+      return "SMS";
+    case "push":
+      return "Push";
+    case "calendar":
+      return "Calendar";
+    default:
+      throw new Error(`Unsupported delivery channel: ${String(channel)}`);
+  }
+}
+
 /* Sessions arrive in start order, so a day break is simply the point where the
    event-local calendar date changes. Grouping is what stops the same date
    being restated on every row. */
@@ -170,6 +189,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
     loaderData.upcoming,
     loaderData.eventTimezone,
   );
+  const deliveryChannels = loaderData.deliveryHealth;
 
   return (
     <>
@@ -335,10 +355,14 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
             >
               <span style={{ width: `${loaderData.readiness.percentage}%` }} />
             </div>
-            <p className="command-score-note">
-              <span title={loaderData.readiness.explanation}>
-                Equal weighting across {loaderData.workflows.length} workflows
-              </span>
+            {/* The explanation used to be a title attribute, which keyboard
+                and touch users never receive. It is the only account of how
+                this number is produced, so it renders. */}
+            <ReadinessWeightingNote
+              workflowCount={loaderData.workflows.length}
+            />
+            <p className="command-score-caveat subtle">
+              {loaderData.readiness.explanation}
             </p>
           </section>
         </div>
@@ -410,32 +434,53 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
             <section className="card pad">
               <div className="card-title command-subhead">
                 <h2>Delivery health</h2>
+                <Link className="btn small right" to="/admin/communications">
+                  Delivery logs
+                </Link>
               </div>
-              {loaderData.deliveryHealth.length ? (
-                loaderData.deliveryHealth.map((channel) => (
-                  <Link
-                    to="/admin/communications"
-                    key={channel.channel}
-                    className="command-health-row"
-                  >
-                    <span>{channel.channel}</span>
-                    <strong
-                      className={`pc-num ${
-                        channel.percentage === 100
-                          ? "tone-success"
-                          : "tone-warning"
-                      }`}
-                    >
-                      {channel.percentage}%
-                    </strong>
-                    <small className="subtle">
-                      {channel.successful} / {channel.total}
-                    </small>
-                  </Link>
-                ))
+              {deliveryChannels.length ? (
+                <div
+                  className="table-wrap"
+                  role="region"
+                  aria-label="Delivery health by channel"
+                  tabIndex={0}
+                >
+                  <table className="jobs command-health-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Channel</th>
+                        <th scope="col">Attempted</th>
+                        <th scope="col">Delivery rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deliveryChannels.map((channel) => (
+                        <tr key={channel.channel}>
+                          <th scope="row">
+                            {deliveryChannelLabel(channel.channel)}
+                          </th>
+                          <td className="pc-num">
+                            {channel.total.toLocaleString()}
+                          </td>
+                          <td>
+                            <strong
+                              className={`pc-num ${
+                                channel.percentage === 100
+                                  ? "tone-success"
+                                  : "tone-warning"
+                              }`}
+                            >
+                              {channel.percentage}%
+                            </strong>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <p className="command-quiet">
-                  Nothing queued yet, so there is no delivery outcome to report.
+                  No delivery has been attempted on this event yet.
                 </p>
               )}
             </section>
@@ -493,12 +538,26 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                         <span className="command-session-title">
                           {session.title}
                         </span>
-                        {/* Every row here is published by definition of the
-                            heading, so a status column would repeat it five
-                            times. The room is the fact that varies. */}
+                        {/* Published is not ready. The pill is the reason this
+                            panel is worth reading before the day rather than a
+                            restatement of the heading — it names the sessions
+                            that still need work while there is time to do it. */}
                         <small className="command-session-room">
                           {session.room}
+                          <span className="command-session-capacity pc-num">
+                            {session.roomCapacity.toLocaleString()} seats
+                          </span>
                         </small>
+                        {session.status === "attention_required" ? (
+                          <span className="command-session-readiness">
+                            <StatusBadge tone="warning">Attention</StatusBadge>
+                            <small>{session.riskReason}</small>
+                          </span>
+                        ) : (
+                          <StatusBadge tone="success">
+                            No blockers found
+                          </StatusBadge>
+                        )}
                         <span className="chev" aria-hidden>
                           ›
                         </span>
@@ -578,12 +637,36 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                 </table>
               </div>
             ) : (
-              /* Nothing running is this panel's healthy state, so it gets a
-                 line rather than an illustrated placeholder. */
-              <p className="command-quiet">
-                Nothing running. Bulk sends, publications and provider work
-                appear here while they are in progress.
-              </p>
+              /* Nothing running is this panel's healthy state, so it keeps the
+                 columns it will fill rather than replacing them with a
+                 sentence. The operator learns the shape of the report before
+                 the first job rather than during it. */
+              <div
+                className="table-wrap"
+                role="region"
+                aria-label="Background operations"
+                tabIndex={0}
+              >
+                <table className="jobs">
+                  <thead>
+                    <tr>
+                      <th scope="col">Operation</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Progress</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="pc-table-empty-row">
+                      <td className="pc-table-empty-cell" colSpan={3}>
+                        <p className="command-quiet">
+                          Nothing running. Bulk sends, publications and provider
+                          work appear here while they are in progress.
+                        </p>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
         </div>

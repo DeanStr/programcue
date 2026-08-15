@@ -407,6 +407,9 @@ export const reviews = sqliteTable(
     confidence: integer("confidence"),
     submitterFeedback: text("submitter_feedback"),
     privateNotes: text("private_notes"),
+    /* When the reviewer affirmed they hold no conflict on this assignment.
+       Null means the question is unanswered, which blocks submission. */
+    conflictAffirmedAt: integer("conflict_affirmed_at"),
     revision: integer("revision").notNull().default(1),
     lastOperationId: text("last_operation_id"),
     createdAt: integer("created_at").notNull().default(epochNow),
