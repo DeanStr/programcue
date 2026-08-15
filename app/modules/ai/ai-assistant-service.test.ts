@@ -300,6 +300,16 @@ describe("organisation AI provider boundary", () => {
       instructions: "Use the tool only when needed.",
       input: [{ role: "user", content: "Inspect readiness" }],
       safetyIdentifier: "pc_test",
+      textFormat: {
+        name: "program_cue_readiness_advisory",
+        description: "A structured readiness advisory.",
+        schema: {
+          type: "object",
+          properties: { summary: { type: "string" } },
+          required: ["summary"],
+          additionalProperties: false,
+        },
+      },
       tools: [
         {
           type: "function",
@@ -323,6 +333,20 @@ describe("organisation AI provider boundary", () => {
       expect.objectContaining({
         parallel_tool_calls: false,
         tool_choice: "auto",
+        text: {
+          format: {
+            type: "json_schema",
+            name: "program_cue_readiness_advisory",
+            description: "A structured readiness advisory.",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: { summary: { type: "string" } },
+              required: ["summary"],
+              additionalProperties: false,
+            },
+          },
+        },
       }),
     );
   });

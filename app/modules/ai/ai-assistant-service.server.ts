@@ -140,7 +140,12 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
         deliveryHealth: snapshot.deliveryHealth,
         operations: snapshot.operations,
       },
-      instructions: `Explain the current event readiness state using only the supplied authoritative Program Cue snapshot. Separate recorded blockers from your prioritisation. Rank the next three actions by operational impact, cite blocker keys and links, and state any uncertainty. Do not claim that an action was performed.`,
+      readinessContext: {
+        generatedAt: snapshot.generatedAt,
+        readiness: snapshot.readiness,
+        blockers: snapshot.blockers,
+      },
+      instructions: `Return the required structured readiness advisory using only the supplied authoritative Program Cue snapshot. Write a one- or two-sentence summary without restating workflow tables or the complete blocker list. Rank exactly ${Math.min(3, snapshot.blockers.length)} distinct blocker keys from the supplied blockers by operational impact and explain each ranking without inventing dependencies, consequences or completed work. Record at most three genuine limitations of the supplied evidence as uncertainties; return an empty list when none are material. Do not recalculate readiness, repeat links or use Markdown.`,
     });
   }
 

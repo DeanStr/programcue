@@ -65,11 +65,33 @@ function Attribution({
 
 function EvidenceList({
   evidence,
+  compact = false,
 }: {
   evidence: AiAssistantResult["evidence"];
+  compact?: boolean;
 }) {
   if (!evidence.length) return null;
-  return (
+  const items = (
+    <div className="stack">
+      {evidence.map((item) => (
+        <Link className="card pad" to={item.href} key={item.id}>
+          <strong>{item.label}</strong>
+          <p className="subtle">{item.detail}</p>
+          <small className="help">
+            {item.source} <ExternalLink aria-hidden size={12} />
+          </small>
+        </Link>
+      ))}
+    </div>
+  );
+  return compact ? (
+    <details className="pc-disclosure">
+      <summary>
+        Sources inspected ({evidence.length}) · authorised Program Cue records
+      </summary>
+      <div className="mt">{items}</div>
+    </details>
+  ) : (
     <section className="card pad">
       <div className="card-title">
         <h3>Inspected evidence</h3>
@@ -77,17 +99,85 @@ function EvidenceList({
           <ShieldCheck aria-hidden size={13} /> Authorised
         </span>
       </div>
-      <div className="stack">
-        {evidence.map((item) => (
-          <Link className="card pad" to={item.href} key={item.id}>
-            <strong>{item.label}</strong>
-            <p className="subtle">{item.detail}</p>
-            <small className="help">
-              {item.source} <ExternalLink aria-hidden size={12} />
-            </small>
-          </Link>
-        ))}
+      {items}
+    </section>
+  );
+}
+
+function ReadinessAdvisoryPanel({ result }: { result: ContextualAiResult }) {
+  if (!result.readiness) {
+    throw new Error(
+      "The readiness AI result is missing its validated structured advisory.",
+    );
+  }
+  const readiness = result.readiness;
+  const statusTone =
+    readiness.status === "ready"
+      ? "success"
+      : readiness.status === "at_risk"
+        ? "danger"
+        : "warning";
+  return (
+    <section className="card pad" aria-live="polite">
+      <div className="card-title">
+        <div>
+          <h3>{result.title}</h3>
+          <p className="subtle">
+            Snapshot {readiness.generatedAt.slice(0, 19).replace("T", " ")} UTC
+          </p>
+        </div>
+        <span className={`status ${statusTone}`}>
+          {readiness.percentage}% · {readiness.status.replaceAll("_", " ")}
+        </span>
       </div>
+      <p>{readiness.summary}</p>
+      <p className="help">
+        {readiness.declaredBlockers} recorded blocker
+        {readiness.declaredBlockers === 1 ? "" : "s"}. Program Cue calculates
+        readiness; AI only prioritises the recorded evidence.
+      </p>
+      {readiness.priorities.length ? (
+        <div className="stack">
+          <h4>Recommended next actions</h4>
+          <ol className="stack">
+            {readiness.priorities.map((priority) => (
+              <li className="card pad" key={priority.blockerKey}>
+                <div className="card-title">
+                  <strong>{priority.label}</strong>
+                  <span className={`status ${priority.severity}`}>
+                    {priority.severity === "danger"
+                      ? "Critical"
+                      : "Needs attention"}
+                    {" · "}
+                    {priority.count} affected
+                  </span>
+                </div>
+                <p className="subtle">{priority.detail}</p>
+                <p>
+                  <strong>Why AI ranked this:</strong> {priority.rationale}
+                </p>
+                <Link className="btn small" to={priority.href}>
+                  {priority.action}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : (
+        <p className="status success">No recorded readiness blockers.</p>
+      )}
+      {readiness.uncertainties.length ? (
+        <div>
+          <h4>Uncertainties</h4>
+          <ul>
+            {readiness.uncertainties.map((uncertainty) => (
+              <li key={uncertainty}>{uncertainty}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <Attribution attribution={result.attribution} />
+      <EvidenceList evidence={result.evidence} compact />
     </section>
   );
 }
@@ -398,6 +488,9 @@ export function ContextualAiResultPanel({
 }: {
   result: ContextualAiResult;
 }) {
+  if (result.kind === "readiness_summary") {
+    return <ReadinessAdvisoryPanel result={result} />;
+  }
   const editable =
     result.kind === "reminder_draft" || result.kind === "session_copy";
   return (

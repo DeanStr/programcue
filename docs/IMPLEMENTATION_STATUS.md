@@ -497,8 +497,12 @@ palette controls, while anonymous Chromium rendered and hydrated the published
 application and programme without an application-owned console error. The
 reset-only endpoint remains unavailable with HTTP 404.
 
-The contextual-AI response ceiling is 4,000 tokens in source `4355e4e`, matching
-the budget already proven for GPT-OSS assessment reasoning. A fresh production
+The deployed contextual-AI response ceiling is 4,000 tokens in source `4355e4e`, matching
+the budget already proven for GPT-OSS assessment reasoning. The current release
+candidate replaces the readiness action's free-form Markdown with a schema-bound,
+concise advisory while retaining that proven reasoning budget: Program Cue renders
+exact snapshot values, blocker metadata and action links natively, while malformed,
+incomplete, duplicate or unknown model output fails instead of being presented. A fresh production
 evaluation-organiser unlock and fixed-identity selection followed by the real
 readiness-summary POST returned HTTP 200 from the selected Workers AI
 `@cf/openai/gpt-oss-120b` provider. The directly affected test passed, and the

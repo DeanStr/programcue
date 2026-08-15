@@ -108,6 +108,25 @@ export type AiAttribution = {
   advisory: true;
 };
 
+export type AiReadinessAdvisory = {
+  generatedAt: string;
+  percentage: number;
+  status: "ready" | "on_track" | "at_risk";
+  declaredBlockers: number;
+  summary: string;
+  priorities: Array<{
+    blockerKey: string;
+    label: string;
+    count: number;
+    severity: "danger" | "warning";
+    detail: string;
+    href: string;
+    action: string;
+    rationale: string;
+  }>;
+  uncertainties: string[];
+};
+
 export type AiAssistantResult = {
   runId: string;
   operationId: string;
@@ -129,6 +148,7 @@ export type ContextualAiResult = {
   attribution: AiAttribution;
   evidence: AiEvidence[];
   advisory: true;
+  readiness?: AiReadinessAdvisory;
   draft?: {
     subject: string;
     body: string;

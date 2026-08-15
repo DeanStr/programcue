@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   AiAssistantService,
@@ -18,6 +18,7 @@ import {
 } from "./ai-provider.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
+import { ReadinessService } from "~/modules/readiness/readiness-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { OperationService } from "~/platform/operations/operation-service.server";
@@ -91,7 +92,7 @@ function toolResponse(
   });
 }
 
-function textResponse(text: string, id = crypto.randomUUID()) {
+function textResponse(text: string, id: string = crypto.randomUUID()) {
   return providerJson({
     id,
     model: providerConfiguration.model,
@@ -118,6 +119,31 @@ beforeEach(async () => {
     .bind(providerConfiguration.model, admin.personId, admin.organisationId)
     .run();
 });
+
+afterEach(async () => {
+  await env.DB.prepare(
+    "DELETE FROM task_instances WHERE id LIKE 'ai-readiness-structured-%'",
+  ).run();
+});
+
+async function seedReadinessBlockers() {
+  await env.DB.prepare(
+    `INSERT INTO task_instances (
+       id, event_id, target_type, target_id, owner_person_id, title,
+       task_type, impact, status, readiness_state, readiness_percent,
+       due_at, created_at, updated_at
+     ) VALUES (?, ?, 'speaker', ?, ?, 'Upload critical speaker agreement',
+               'file_upload', 'critical', 'not_started', 'overdue', 0,
+               unixepoch() - 60, unixepoch(), unixepoch())`,
+  )
+    .bind(
+      `ai-readiness-structured-${crypto.randomUUID()}`,
+      admin.eventId,
+      admin.personId,
+      admin.personId,
+    )
+    .run();
+}
 
 async function reminderEnvironment() {
   const queued: unknown[] = [];
@@ -220,27 +246,141 @@ async function reminderEnvironment() {
 
 describe("contextual administrator actions", () => {
   it("summarises the authoritative readiness snapshot without exposing mutation tools", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        textResponse(
-          "Recorded fact: current readiness is derived from the linked Program Cue blockers. Inference: address critical tasks before lower-impact work.",
-        ),
-      );
+    await seedReadinessBlockers();
+    const responseId = `readiness-response-${crypto.randomUUID()}`;
+    const snapshot = await new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+    ).getCommandCentre(admin);
+    const priorities = snapshot.blockers.slice(0, 3).map((blocker, index) => ({
+      blockerKey: blocker.key,
+      rationale: `Priority ${index + 1} addresses ${blocker.count} recorded item${blocker.count === 1 ? "" : "s"} using the supplied readiness evidence.`,
+    }));
+    expect(priorities).toHaveLength(3);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      textResponse(
+        JSON.stringify({
+          summary:
+            "The event remains at risk while recorded operational blockers require attention.",
+          priorities,
+          uncertainties: [
+            "The snapshot does not quantify dependencies between blocker groups.",
+          ],
+        }),
+        responseId,
+      ),
+    );
     const result = await new AiAssistantService(
       env as unknown as CloudflareEnvironment,
       { fetcher, providerConfiguration },
     ).summarizeReadiness(admin);
-    expect(result.kind).toBe("readiness_summary");
+    expect(result).toMatchObject({
+      kind: "readiness_summary",
+      readiness: {
+        percentage: snapshot.readiness.percentage,
+        status: snapshot.readiness.status,
+        declaredBlockers: snapshot.readiness.declaredBlockers,
+        summary:
+          "The event remains at risk while recorded operational blockers require attention.",
+        priorities: priorities.map((priority, index) => ({
+          ...priority,
+          label: snapshot.blockers[index]!.label,
+          count: snapshot.blockers[index]!.count,
+          severity: snapshot.blockers[index]!.severity,
+          detail: snapshot.blockers[index]!.detail,
+          href: snapshot.blockers[index]!.href,
+          action: snapshot.blockers[index]!.action,
+        })),
+      },
+    });
     expect(result.evidence.map((item) => item.id)).toContain("event-readiness");
     const request = JSON.parse(String(fetcher.mock.calls[0]![1]?.body)) as {
       tools?: unknown;
       input: string;
       max_output_tokens: number;
+      text?: {
+        format?: {
+          name?: string;
+          schema?: {
+            properties?: {
+              priorities?: {
+                minItems?: number;
+                maxItems?: number;
+                items?: {
+                  properties?: { blockerKey?: { enum?: string[] } };
+                };
+              };
+            };
+          };
+        };
+      };
     };
     expect(request.tools).toBeUndefined();
     expect(request.input).toContain('"readiness"');
     expect(request.max_output_tokens).toBe(4_000);
+    expect(request.text?.format).toMatchObject({
+      name: "program_cue_readiness_advisory",
+      schema: {
+        properties: {
+          priorities: {
+            minItems: 3,
+            maxItems: 3,
+            items: {
+              properties: {
+                blockerKey: {
+                  enum: snapshot.blockers.map((blocker) => blocker.key),
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    const completedAudit = await env.DB.prepare(
+      `SELECT metadata_json AS metadataJson
+         FROM audit_events
+        WHERE event_id = ? AND action = 'assistant.context.completed'
+          AND json_extract(metadata_json, '$.responseId') = ?`,
+    )
+      .bind(admin.eventId, responseId)
+      .first<{ metadataJson: string }>();
+    const expectedHash = Array.from(
+      new Uint8Array(
+        await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode(JSON.stringify(result.readiness)),
+        ),
+      ),
+      (byte) => byte.toString(16).padStart(2, "0"),
+    ).join("");
+    expect(JSON.parse(completedAudit!.metadataJson)).toMatchObject({
+      outputHash: expectedHash,
+    });
+  });
+
+  it("rejects a readiness advisory that references a blocker outside the snapshot", async () => {
+    await seedReadinessBlockers();
+    const snapshot = await new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+    ).getCommandCentre(admin);
+    const priorities = snapshot.blockers.slice(0, 3).map((blocker, index) => ({
+      blockerKey: index === 0 ? "invented_blocker" : blocker.key,
+      rationale: `This bounded rationale is long enough for priority ${index + 1}.`,
+    }));
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher: vi.fn<typeof fetch>().mockResolvedValue(
+          textResponse(
+            JSON.stringify({
+              summary:
+                "The event has recorded blockers that need administrator attention.",
+              priorities,
+              uncertainties: [],
+            }),
+          ),
+        ),
+        providerConfiguration,
+      }).summarizeReadiness(admin),
+    ).rejects.toThrow(/unknown readiness blocker/u);
   });
 
   it("drafts a cohort reminder without exposing send tools or claiming delivery", async () => {
