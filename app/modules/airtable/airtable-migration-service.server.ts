@@ -525,6 +525,7 @@ export class AirtableMigrationService {
   ) {
     await this.validateD1ProjectionChange(viewer, activeRooms);
     const operationId = runId;
+    const auditId = crypto.randomUUID();
     const roomIdsJson = JSON.stringify(activeRooms.map((room) => room.id));
     const statements: D1PreparedStatement[] = [
       this.env.DB.prepare(
@@ -626,7 +627,7 @@ export class AirtableMigrationService {
                WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
             )`,
       ).bind(
-        crypto.randomUUID(),
+        auditId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
@@ -642,24 +643,54 @@ export class AirtableMigrationService {
         viewer.organisationId,
         operationId,
       ),
+      this.env.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type,
+           correlation_id, created_at
+         )
+         SELECT ?, 'event', ?, 'updated', ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM audit_events audit
+             WHERE audit.id = ? AND audit.organisation_id = ?
+               AND audit.event_id = ?
+               AND audit.action = 'airtable.repository.migrated'
+               AND audit.entity_id = ?
+          )
+         RETURNING sequence`,
+      ).bind(
+        viewer.eventId,
+        viewer.eventId,
+        runId,
+        auditId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.eventId,
+      ),
     ];
     const results = await this.env.DB.batch(statements);
     if ((results[0]?.meta.changes ?? 0) !== 1)
       throw new AirtableMigrationStateError(
         "The event changed after the migration preview. Create a new preview before confirming.",
       );
-    if ((results.at(-3)?.meta.changes ?? 0) !== expectedCompletedItems)
+    if ((results.at(-4)?.meta.changes ?? 0) !== expectedCompletedItems)
       throw new AirtableMigrationStateError(
         "The D1 migration completed without recording every migration item result.",
       );
-    if ((results.at(-2)?.meta.changes ?? 0) !== 1)
+    if ((results.at(-3)?.meta.changes ?? 0) !== 1)
       throw new AirtableMigrationStateError(
         "The D1 migration completed without recording its run result.",
       );
-    if ((results.at(-1)?.meta.changes ?? 0) !== 1)
+    if ((results.at(-2)?.meta.changes ?? 0) !== 1)
       throw new AirtableMigrationStateError(
         "The D1 migration completed without recording its audit result.",
       );
+    const change = results.at(-1)?.results[0] as
+      { sequence: number } | undefined;
+    if (!change || !Number.isSafeInteger(change.sequence))
+      throw new AirtableMigrationStateError(
+        "The D1 authority switch did not commit its public change cursor.",
+      );
+    return change.sequence;
   }
 
   private async completeAirtableMigration(
@@ -719,6 +750,7 @@ export class AirtableMigrationService {
       throw error;
     }
 
+    const auditId = crypto.randomUUID();
     const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `UPDATE events
@@ -773,7 +805,7 @@ export class AirtableMigrationService {
                WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
             )`,
       ).bind(
-        crypto.randomUUID(),
+        auditId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
@@ -788,6 +820,29 @@ export class AirtableMigrationService {
         viewer.eventId,
         viewer.organisationId,
         runId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type,
+           correlation_id, created_at
+         )
+         SELECT ?, 'event', ?, 'updated', ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM audit_events audit
+             WHERE audit.id = ? AND audit.organisation_id = ?
+               AND audit.event_id = ?
+               AND audit.action = 'airtable.repository.migrated'
+               AND audit.entity_id = ?
+          )
+         RETURNING sequence`,
+      ).bind(
+        viewer.eventId,
+        viewer.eventId,
+        runId,
+        auditId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.eventId,
       ),
     ]);
     if ((results[0]?.meta.changes ?? 0) !== 1) {
@@ -820,6 +875,12 @@ export class AirtableMigrationService {
       throw new AirtableMigrationStateError(
         "The authority switch completed without recording its run and audit results completely.",
       );
+    const change = results[4]?.results[0] as { sequence: number } | undefined;
+    if (!change || !Number.isSafeInteger(change.sequence))
+      throw new AirtableMigrationStateError(
+        "The Airtable authority switch did not commit its public change cursor.",
+      );
+    return change.sequence;
   }
 
   async confirm(viewer: Viewer, rawPreviewId: unknown) {
@@ -844,7 +905,12 @@ export class AirtableMigrationService {
       .bind(connection.id, idempotencyKey)
       .first<{ id: string; status: string }>();
     if (existing?.status === "succeeded")
-      return { runId: existing.id, provider: summary.to, idempotent: true };
+      return {
+        runId: existing.id,
+        provider: summary.to,
+        idempotent: true,
+        changeSequence: null,
+      };
     if (existing)
       throw new AirtableMigrationStateError(
         `The confirmed migration is already ${existing.status.replaceAll("_", " ")}. Create a new preview after inspecting that run.`,
@@ -928,8 +994,9 @@ export class AirtableMigrationService {
       );
 
     const expectedCompletedItems = changedItems.length;
+    let changeSequence: number;
     if (summary.to === "airtable") {
-      await this.completeAirtableMigration(
+      changeSequence = await this.completeAirtableMigration(
         viewer,
         summary,
         runId,
@@ -941,7 +1008,7 @@ export class AirtableMigrationService {
         (room) => room.status === "active",
       );
       try {
-        await this.completeD1Migration(
+        changeSequence = await this.completeD1Migration(
           viewer,
           summary,
           runId,
@@ -960,6 +1027,11 @@ export class AirtableMigrationService {
         throw error;
       }
     }
-    return { runId, provider: summary.to, idempotent: false };
+    return {
+      runId,
+      provider: summary.to,
+      idempotent: false,
+      changeSequence,
+    };
   }
 }

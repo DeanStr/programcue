@@ -202,6 +202,7 @@ export default [
     route("admin/:section", "routes/admin-section.tsx"),
   ]),
   route("review/workbench", "routes/review-workbench.tsx"),
+  route("review/discussion-page", "routes/evaluation-discussion-page.ts"),
   route("review/files/:assetId", "routes/review-file-download.ts"),
   layout("routes/speaker-layout.tsx", [
     route("participant/dashboard", "routes/speaker-dashboard.tsx"),

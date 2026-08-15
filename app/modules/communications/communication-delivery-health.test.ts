@@ -50,7 +50,7 @@ describe("communication delivery health", () => {
          ) VALUES (
            ?, ?, 'operation-delivery-health-other',
            'delivery-health-other-key', 'transactional', 'email', 'sent',
-           '{}', '{}', 1, ?, unixepoch(), unixepoch()
+           '{}', '{}', 2, ?, unixepoch(), unixepoch()
          )`,
       ).bind(otherCommunicationId, viewer.eventId, viewer.personId),
       env.DB.prepare(
@@ -96,6 +96,18 @@ describe("communication delivery health", () => {
            'delivery-health-other-clicked', ?, ?, 'other@example.com', '{}',
            'email', 'delivery-health-other-clicked', 'clicked',
            unixepoch(), unixepoch()
+         )`,
+      ).bind(viewer.eventId, otherCommunicationId),
+      env.DB.prepare(
+        `INSERT INTO communication_deliveries (
+           id, event_id, communication_id, recipient_address,
+           source_values_json, channel, idempotency_key, status,
+           failure_code, created_at, updated_at
+         ) VALUES (
+           'delivery-health-old-failed', ?, ?, 'old@example.com', '{}',
+           'email', 'delivery-health-old-failed', 'failed', 'old_failure',
+           unixepoch() - (100 * 24 * 60 * 60),
+           unixepoch() - (100 * 24 * 60 * 60)
          )`,
       ).bind(viewer.eventId, otherCommunicationId),
       env.DB.prepare(
@@ -151,11 +163,28 @@ describe("communication delivery health", () => {
       expect.objectContaining({ reason: "email.suppressed" }),
     ]);
 
-    const eventLifetime = await service.listDeliveryHealth(viewer);
-    expect(eventLifetime.scope).toEqual({ kind: "event_lifetime" });
-    expect(eventLifetime.summary.total).toBe(11);
-    expect(eventLifetime.summary.delivered).toBe(4);
-    expect(eventLifetime.deliveryPage.rows).toEqual([]);
+    const recentEvent = await service.listDeliveryHealth(viewer);
+    expect(recentEvent.scope).toEqual({
+      kind: "event",
+      period: "recent",
+      days: 90,
+    });
+    expect(recentEvent.summary.total).toBe(11);
+    expect(recentEvent.summary.delivered).toBe(4);
+    expect(recentEvent.recentProblems).toHaveLength(3);
+    expect(recentEvent.deliveryPage.rows).toEqual([]);
+
+    const eventLifetime = await service.listDeliveryHealth(viewer, {
+      period: "lifetime",
+    });
+    expect(eventLifetime.scope).toEqual({
+      kind: "event",
+      period: "lifetime",
+      days: null,
+    });
+    expect(eventLifetime.summary.total).toBe(12);
+    expect(eventLifetime.summary.problems).toBe(4);
+    expect(eventLifetime.recentProblems).toHaveLength(4);
   });
 
   it("does not resolve a communication through the wrong organisation", async () => {
@@ -172,10 +201,39 @@ describe("communication delivery health", () => {
     expect((rejected as Response).status).toBe(404);
   });
 
+  it("rejects non-page and out-of-range delivery offsets", async () => {
+    const service = new CommunicationService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const unaligned = await service
+      .listDeliveryHealth(viewer, {
+        communicationId: selectedCommunicationId,
+        offset: 1,
+      })
+      .catch((error: unknown) => error);
+    expect(unaligned).toBeInstanceOf(Response);
+    expect((unaligned as Response).status).toBe(400);
+
+    const beyondRecipients = await service
+      .listDeliveryHealth(viewer, {
+        communicationId: selectedCommunicationId,
+        offset: 50,
+      })
+      .catch((error: unknown) => error);
+    expect(beyondRecipients).toBeInstanceOf(Response);
+    expect((beyondRecipients as Response).status).toBe(404);
+
+    const invalidPeriod = await service
+      .listDeliveryHealth(viewer, { period: "forever" as never })
+      .catch((error: unknown) => error);
+    expect(invalidPeriod).toBeInstanceOf(Response);
+    expect((invalidPeriod as Response).status).toBe(400);
+  });
+
   it("fails fast when the delivery aggregate query violates its row contract", async () => {
     const database = {
       prepare(query: string) {
-        if (query.includes("COUNT(delivery.id) AS total")) {
+        if (query.includes("SELECT COUNT(*) AS total")) {
           return {
             bind() {
               return { first: async () => null };

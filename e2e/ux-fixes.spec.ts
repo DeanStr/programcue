@@ -136,7 +136,10 @@ test("mobile administration sections reveal linked content without overflow", as
   await expect(
     page.getByRole("heading", { name: "Delivery health" }),
   ).toBeVisible();
+  await expect(page.getByText("Current event · last 90 days")).toBeVisible();
+  await page.getByRole("link", { name: "Event lifetime" }).click();
   await expect(page.getByText("Current event · event lifetime")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Last 90 days" })).toBeVisible();
   await expectNoHorizontalPageOverflow(page);
   await expectNoContrastViolations(page, "Communications Centre");
 

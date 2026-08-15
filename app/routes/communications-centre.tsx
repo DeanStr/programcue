@@ -141,6 +141,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   if (!Number.isSafeInteger(deliveryOffset)) {
     throw new Response("Delivery page is invalid.", { status: 400 });
   }
+  const requestedDeliveryPeriod = search.get("deliveryPeriod") ?? "90d";
+  if (
+    requestedDeliveryPeriod !== "90d" &&
+    requestedDeliveryPeriod !== "lifetime"
+  ) {
+    throw new Response("Delivery health period is invalid.", { status: 400 });
+  }
   const requestedAudience = search.get("audience");
   const audiencePreset = requestedAudience
     ? audienceTypeSchema.safeParse(requestedAudience)
@@ -181,6 +188,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     communicationService.listDeliveryHealth(viewer, {
       communicationId: selectedCommunicationId || undefined,
       offset: deliveryOffset,
+      period: requestedDeliveryPeriod === "lifetime" ? "lifetime" : "recent",
     }),
   ]);
   const requestedTemplate = search.get("template");

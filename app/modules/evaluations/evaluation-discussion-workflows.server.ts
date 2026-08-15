@@ -1,7 +1,7 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   evaluationDiscussionMessageSchema,
-  evaluationDiscussionTargetSchema,
+  evaluationDiscussionPageSchema,
 } from "./evaluation-schema";
 import {
   EvaluationServiceFoundation,
@@ -31,6 +31,70 @@ type DiscussionReplay = {
   body: string | null;
 };
 
+export type EvaluationDiscussionPage = {
+  target: DiscussionTarget;
+  writable: boolean;
+  messages: Array<{
+    id: string;
+    body: string;
+    createdAt: number;
+    authorName: string;
+    authorPersonId: string;
+  }>;
+  earlierCursor: string | null;
+  postIntentId: string;
+};
+
+const DISCUSSION_PAGE_SIZE = 50;
+
+type DiscussionCursor = DiscussionTarget & {
+  version: 1;
+  createdAt: number;
+  id: string;
+};
+
+function encodeCursor(cursor: Omit<DiscussionCursor, "version">) {
+  const bytes = new TextEncoder().encode(
+    JSON.stringify({ version: 1, ...cursor } satisfies DiscussionCursor),
+  );
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/u, "");
+}
+
+function decodeCursor(value: string | undefined, target: DiscussionTarget) {
+  if (!value) return null;
+  try {
+    const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const binary = atob(padded);
+    const decoded = JSON.parse(
+      new TextDecoder().decode(
+        Uint8Array.from(binary, (character) => character.charCodeAt(0)),
+      ),
+    ) as Partial<DiscussionCursor>;
+    if (
+      decoded.version !== 1 ||
+      !Number.isSafeInteger(decoded.createdAt) ||
+      decoded.createdAt! < 0 ||
+      typeof decoded.id !== "string" ||
+      !decoded.id.length ||
+      decoded.id.length > 200 ||
+      decoded.roundId !== target.roundId ||
+      decoded.targetType !== target.targetType ||
+      decoded.targetId !== target.targetId
+    ) {
+      throw new Error("invalid cursor shape");
+    }
+    return { createdAt: decoded.createdAt!, id: decoded.id };
+  } catch {
+    throw new Response("Discussion page cursor is invalid.", { status: 400 });
+  }
+}
+
 function targetColumn(targetType: DiscussionTarget["targetType"]) {
   return targetType === "submission" ? "submission_id" : "session_id";
 }
@@ -40,12 +104,16 @@ function targetTable(targetType: DiscussionTarget["targetType"]) {
 }
 
 export class EvaluationDiscussionWorkflows extends EvaluationServiceFoundation {
-  async listDiscussion(viewer: Viewer, input: unknown) {
-    const parsed = evaluationDiscussionTargetSchema.parse(input);
+  async listDiscussion(
+    viewer: Viewer,
+    input: unknown,
+  ): Promise<EvaluationDiscussionPage> {
+    const parsed = evaluationDiscussionPageSchema.parse(input);
     return this.readAuthoritative(viewer, async () => {
       const scope = await this.discussionScope(viewer, parsed);
       this.assertCanRead(scope);
       const column = targetColumn(parsed.targetType);
+      const cursor = decodeCursor(parsed.cursor, parsed);
       const messages = await this.env.DB.prepare(
         `SELECT message.id, message.body, message.created_at AS createdAt,
                 person.display_name AS authorName,
@@ -58,13 +126,23 @@ export class EvaluationDiscussionWorkflows extends EvaluationServiceFoundation {
            JOIN people person ON person.id = message.author_person_id
           WHERE message.event_id = ? AND message.round_id = ?
             AND message.${column} = ?
-          ORDER BY message.created_at, message.id`,
+            AND (
+              ? IS NULL OR message.created_at < ?
+              OR (message.created_at = ? AND message.id < ?)
+            )
+          ORDER BY message.created_at DESC, message.id DESC
+          LIMIT ?`,
       )
         .bind(
           viewer.organisationId,
           viewer.eventId,
           parsed.roundId,
           parsed.targetId,
+          cursor?.createdAt ?? null,
+          cursor?.createdAt ?? null,
+          cursor?.createdAt ?? null,
+          cursor?.id ?? null,
+          DISCUSSION_PAGE_SIZE + 1,
         )
         .all<{
           id: string;
@@ -73,13 +151,31 @@ export class EvaluationDiscussionWorkflows extends EvaluationServiceFoundation {
           authorName: string;
           authorPersonId: string;
         }>();
+      const page = messages.results.slice(0, DISCUSSION_PAGE_SIZE);
+      const oldest = page.at(-1);
       return {
-        target: parsed,
+        target: {
+          roundId: parsed.roundId,
+          targetType: parsed.targetType,
+          targetId: parsed.targetId,
+        },
         writable: this.canPost(scope),
-        messages: messages.results.map((message) => ({
-          ...message,
-          body: message.body ?? "[redacted after event retention]",
-        })),
+        messages: page
+          .map((message) => ({
+            ...message,
+            body: message.body ?? "[redacted after event retention]",
+          }))
+          .reverse(),
+        earlierCursor:
+          messages.results.length > DISCUSSION_PAGE_SIZE && oldest
+            ? encodeCursor({
+                roundId: parsed.roundId,
+                targetType: parsed.targetType,
+                targetId: parsed.targetId,
+                createdAt: oldest.createdAt,
+                id: oldest.id,
+              })
+            : null,
         postIntentId: crypto.randomUUID(),
       };
     });

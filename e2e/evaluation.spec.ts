@@ -104,6 +104,7 @@ test("reviewer queue navigation and submission confirmation preserve context", a
 test("evaluation administration exposes onboarding and consequential previews", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   await page.context().addCookies([
     {
       name: "program_cue_event",
@@ -156,7 +157,9 @@ test("evaluation administration exposes onboarding and consequential previews", 
     unifiedResults.getByRole("columnheader", { name: "Recommendations" }),
   ).toBeVisible();
   await expect(page.getByLabel("View preset")).toContainText("Decision-ready");
-  await expect(page.getByLabel("Coverage filter")).toContainText("Incomplete reviews");
+  await expect(page.getByLabel("Coverage filter")).toContainText(
+    "Incomplete reviews",
+  );
   await page.getByRole("link", { name: "Open discussion" }).first().click();
   await expect(
     page.getByRole("heading", { name: "Committee discussion" }),
@@ -166,6 +169,46 @@ test("evaluation administration exposes onboarding and consequential previews", 
   ).toBeVisible();
   await page.getByLabel("Add to discussion").fill("Browser committee note");
   await page.getByRole("button", { name: "Add message" }).click();
+  await expect(page.getByText("Browser committee note")).toBeVisible();
+
+  const discussionUrl = new URL(page.url());
+  const roundId = discussionUrl.searchParams.get("resultsRound");
+  const submissionId = discussionUrl.searchParams.get("submission");
+  const sessionId = discussionUrl.searchParams.get("session");
+  const targetType = submissionId ? "submission" : "session";
+  const targetId = submissionId ?? sessionId;
+  if (!roundId || !targetId) {
+    throw new Error(
+      "The focused discussion URL is missing its round or target.",
+    );
+  }
+  await page.waitForTimeout(1_100);
+  await page.evaluate(
+    async ({ roundId, targetId, targetType }) => {
+      for (let index = 0; index < 50; index += 1) {
+        const response = await fetch("/admin/review", {
+          method: "POST",
+          body: new URLSearchParams({
+            intent: "add-discussion-message",
+            roundId,
+            targetType,
+            targetId,
+            body: `Browser pagination note ${String(index).padStart(2, "0")}`,
+            idempotencyKey: crypto.randomUUID(),
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`Discussion message ${index} failed to save.`);
+        }
+      }
+    },
+    { roundId, targetId, targetType },
+  );
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(page.getByText("Browser committee note")).toBeHidden();
+  await expect(page.getByText("50+ messages", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Load earlier messages" }).click();
   await expect(page.getByText("Browser committee note")).toBeVisible();
 
   const bulkAssignButton = page.getByRole("button", { name: "Bulk assign" });

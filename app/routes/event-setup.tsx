@@ -38,7 +38,10 @@ import {
 } from "~/modules/events/event-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import {
+  notifyRouteChange,
+  recordRouteChange,
+} from "~/platform/realtime/route-realtime.server";
 
 export const meta: Route.MetaFunction = () => [
   { title: "Event Setup · Program Cue" },
@@ -180,11 +183,15 @@ export async function action({ request, context }: Route.ActionArgs) {
         viewer,
         formData.get("previewId"),
       );
-      const realtimeFailure = await recordRouteChange(env, viewer, {
-        entityType: "event",
-        entityId: viewer.eventId,
-        changeType: "updated",
-      });
+      const realtimeFailure =
+        result.changeSequence === null
+          ? null
+          : await notifyRouteChange(
+              env,
+              viewer,
+              result.changeSequence,
+              viewer.eventId,
+            );
       return data<ActionResponse>(
         {
           ok: !realtimeFailure,
@@ -286,7 +293,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
     }
 
-    await service.saveSetup(viewer, {
+    const saved = await service.saveSetup(viewer, {
       revision: formData.get("revision"),
       name: formData.get("name"),
       timezone: formData.get("timezone"),
@@ -321,11 +328,12 @@ export async function action({ request, context }: Route.ActionArgs) {
       sessionFormats: parsedSessionFormats,
     });
 
-    const realtimeFailure = await recordRouteChange(env, viewer, {
-      entityType: "event",
-      entityId: viewer.eventId,
-      changeType: "updated",
-    });
+    const realtimeFailure = await notifyRouteChange(
+      env,
+      viewer,
+      saved.changeSequence,
+      viewer.eventId,
+    );
     if (realtimeFailure)
       return data<ActionResponse>(
         { ...realtimeFailure, intent: "save" },

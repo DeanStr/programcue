@@ -142,7 +142,7 @@ export class FileLifecycleService {
     const retentionBindings = input.enforceEventRetentionBoundary
       ? [viewer.eventId, viewer.organisationId]
       : [];
-    const [assetRevoked] = await this.env.DB.batch([
+    const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `UPDATE file_assets
             SET status = 'rejected', current_version_id = NULL,
@@ -225,7 +225,53 @@ export class FileLifecycleService {
         metadata,
         ...retentionBindings,
       ),
+      this.env.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type,
+           correlation_id, created_at
+         )
+         SELECT ?, 'file_asset', ?, 'deleted', ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM audit_events audit
+             WHERE audit.id = ? AND audit.organisation_id = ?
+               AND audit.event_id = ?
+               AND audit.action = 'file.erasure.requested'
+               AND audit.entity_id = ?
+          )
+            AND NOT EXISTS (
+              SELECT 1 FROM event_changes change
+               WHERE change.event_id = ?
+                 AND change.entity_type = 'file_asset'
+                 AND change.entity_id = ?
+                 AND change.correlation_id = ?
+            )
+         RETURNING sequence`,
+      ).bind(
+        viewer.eventId,
+        preview.id,
+        operationId,
+        operationId,
+        viewer.organisationId,
+        viewer.eventId,
+        preview.id,
+        viewer.eventId,
+        preview.id,
+        operationId,
+      ),
+      this.env.DB.prepare(
+        `SELECT change.sequence
+           FROM event_changes change
+           JOIN events event
+             ON event.id = change.event_id AND event.organisation_id = ?
+          WHERE change.event_id = ?
+            AND change.entity_type = 'file_asset'
+            AND change.entity_id = ?
+            AND change.correlation_id = ?
+          ORDER BY change.sequence DESC
+          LIMIT 1`,
+      ).bind(viewer.organisationId, viewer.eventId, preview.id, operationId),
     ]);
+    const [assetRevoked] = results;
     if (
       input.enforceEventRetentionBoundary &&
       (assetRevoked.meta.changes ?? 0) !== 1
@@ -245,6 +291,14 @@ export class FileLifecycleService {
         "File retention changed concurrently before the erasure intent committed.",
       );
     }
+    const change = results.at(-1)?.results[0] as
+      { sequence: number } | undefined;
+    if (!change || !Number.isSafeInteger(change.sequence)) {
+      throw new Error(
+        "The committed file erasure change cursor was not recorded.",
+      );
+    }
+    return change.sequence;
   }
 
   private async eraseAssetProviderState(
@@ -327,9 +381,15 @@ export class FileLifecycleService {
         duplicate: true,
         erasedVersions: preview.versionCount,
         affected: preview,
+        changeSequence: null,
       };
     }
-    await this.revokeAssetForErasure(viewer, input, preview, operationId);
+    const changeSequence = await this.revokeAssetForErasure(
+      viewer,
+      input,
+      preview,
+      operationId,
+    );
     const versions = await this.env.DB.prepare(
       `SELECT version.object_key AS objectKey,
               upload.upload_id AS uploadId,
@@ -354,6 +414,7 @@ export class FileLifecycleService {
       duplicate: false,
       erasedVersions: versions.results.length,
       affected: preview,
+      changeSequence,
     };
   }
 

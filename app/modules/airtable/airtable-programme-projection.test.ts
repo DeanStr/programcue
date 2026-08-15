@@ -410,6 +410,14 @@ describe("Airtable authoritative room repository", () => {
         source: "airtable",
         cached: false,
       });
+      const providerReadsAfterValidation = provider.listCalls();
+      const cachedSnapshot = await programme.readPublished(
+        viewer.organisationId,
+        viewer.eventId,
+        version!.id,
+      );
+      expect(cachedSnapshot.freshness.cached).toBe(true);
+      expect(provider.listCalls()).toBe(providerReadsAfterValidation);
       expect(
         provider.records.find(
           (record) => record.fields["Program Cue ID"] === "main",

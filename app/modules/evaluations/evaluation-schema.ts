@@ -290,6 +290,11 @@ export const evaluationDiscussionTargetSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
 });
 
+export const evaluationDiscussionPageSchema =
+  evaluationDiscussionTargetSchema.extend({
+    cursor: z.string().trim().min(1).max(512).optional(),
+  });
+
 export const evaluationDiscussionMessageSchema =
   evaluationDiscussionTargetSchema.extend({
     body: z

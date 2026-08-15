@@ -1,11 +1,13 @@
 import { Form, Link } from "react-router";
 
+import { useEvaluationDiscussionHistory } from "~/components/evaluation-discussion-history";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { EventDateTime } from "~/components/ui/event-date-time";
 
 export function EvaluationDiscussionPanel() {
   const { loaderData, navigation } = useEvaluationAdminModel();
   const discussion = loaderData.reviewDiscussion;
+  const history = useEvaluationDiscussionHistory(discussion);
   if (!discussion) return null;
   if (!loaderData.reviewDiscussionTitle) {
     throw new Error("The evaluation discussion target title is unavailable.");
@@ -28,13 +30,26 @@ export function EvaluationDiscussionPanel() {
           </p>
         </div>
         <span className="status info right">
-          {discussion.messages.length} message
-          {discussion.messages.length === 1 ? "" : "s"}
+          {history.messages.length}
+          {history.hasEarlier ? "+" : ""} message
+          {history.messages.length === 1 && !history.hasEarlier ? "" : "s"}
         </span>
       </div>
-      {discussion.messages.length ? (
+      {history.hasEarlier ? (
+        <div className="page-actions mb">
+          <button
+            className="btn small"
+            type="button"
+            disabled={history.loadingEarlier}
+            onClick={history.loadEarlier}
+          >
+            {history.loadingEarlier ? "Loading…" : "Load earlier messages"}
+          </button>
+        </div>
+      ) : null}
+      {history.messages.length ? (
         <ol className="list-clean stack">
-          {discussion.messages.map((message) => (
+          {history.messages.map((message) => (
             <li className="card pad" key={message.id}>
               <div className="card-title">
                 <strong>{message.authorName}</strong>
@@ -52,16 +67,8 @@ export function EvaluationDiscussionPanel() {
         <p className="subtle">No committee messages yet.</p>
       )}
       {discussion.writable ? (
-        <Form
-          className="stack mt"
-          key={discussion.postIntentId}
-          method="post"
-        >
-          <input
-            type="hidden"
-            name="intent"
-            value="add-discussion-message"
-          />
+        <Form className="stack mt" key={discussion.postIntentId} method="post">
+          <input type="hidden" name="intent" value="add-discussion-message" />
           <input
             type="hidden"
             name="roundId"

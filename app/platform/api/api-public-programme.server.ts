@@ -347,11 +347,10 @@ type PublishedPageDescriptor = {
   slug: string;
   timezone: string;
   repositoryProvider: "d1" | "airtable";
-  eventRevision: number;
   versionId: string;
   versionNumber: number;
   publishedAt: number;
-  latestPublicChangeSequence: number;
+  publicProjectionRevision: number;
   missingContent: number;
 };
 
@@ -392,63 +391,10 @@ async function publishedPageDescriptor(
     `
       SELECT event.id AS eventId, event.slug, event.timezone,
              event.repository_provider AS repositoryProvider,
-             event.revision AS eventRevision,
+             event.public_projection_revision AS publicProjectionRevision,
              version.id AS versionId,
              version.version_number AS versionNumber,
              version.published_at AS publishedAt,
-             COALESCE((
-               SELECT MAX(change.sequence)
-                 FROM event_changes change
-                WHERE change.event_id = event.id
-                  AND (
-                    change.entity_type = 'event'
-                    OR (change.entity_type = 'schedule_version'
-                        AND change.entity_id = version.id)
-                    OR (
-                      change.entity_type = 'session'
-                      AND EXISTS (
-                        SELECT 1 FROM schedule_entries changed_entry
-                         WHERE changed_entry.event_id = event.id
-                           AND changed_entry.schedule_version_id = version.id
-                           AND changed_entry.session_id = change.entity_id
-                      )
-                    )
-                    OR (
-                      change.entity_type = 'person'
-                      AND EXISTS (
-                        SELECT 1
-                          FROM session_speakers changed_relation
-                          JOIN schedule_entries changed_entry
-                            ON changed_entry.event_id = changed_relation.event_id
-                           AND changed_entry.session_id = changed_relation.session_id
-                         WHERE changed_relation.event_id = event.id
-                           AND changed_entry.schedule_version_id = version.id
-                           AND changed_relation.person_id = change.entity_id
-                      )
-                    )
-                    OR (
-                      change.entity_type = 'file_version'
-                      AND EXISTS (
-                        SELECT 1
-                          FROM file_versions changed_version
-                          JOIN file_assets changed_asset
-                            ON changed_asset.id = changed_version.asset_id
-                           AND changed_asset.event_id = changed_version.event_id
-                          JOIN session_speakers changed_relation
-                            ON changed_relation.event_id = changed_asset.event_id
-                           AND changed_relation.person_id = changed_asset.target_id
-                          JOIN schedule_entries changed_entry
-                            ON changed_entry.event_id = changed_relation.event_id
-                           AND changed_entry.session_id = changed_relation.session_id
-                         WHERE changed_version.id = change.entity_id
-                           AND changed_version.event_id = event.id
-                           AND changed_asset.target_type = 'person'
-                           AND changed_asset.asset_kind = 'headshot'
-                           AND changed_entry.schedule_version_id = version.id
-                      )
-                    )
-                  )
-             ), 0) AS latestPublicChangeSequence,
              (
                SELECT COUNT(*)
                  FROM schedule_entries entry
@@ -498,8 +444,7 @@ async function pageCollectionRevision(
         descriptor.versionId,
         descriptor.versionNumber,
         descriptor.publishedAt,
-        descriptor.eventRevision,
-        descriptor.latestPublicChangeSequence,
+        descriptor.publicProjectionRevision,
       ],
       resource,
       filters,

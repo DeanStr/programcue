@@ -131,6 +131,9 @@ export const events = sqliteTable(
       .default(true),
     filePolicyJson: text("file_policy_json").notNull(),
     revision: integer("revision").notNull().default(1),
+    publicProjectionRevision: integer("public_projection_revision")
+      .notNull()
+      .default(0),
     lastOperationId: text("last_operation_id"),
     lastUpdatedByPersonId: text("last_updated_by_person_id").references(
       () => people.id,

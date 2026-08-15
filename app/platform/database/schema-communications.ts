@@ -276,6 +276,16 @@ export const communicationDeliveries = sqliteTable(
       table.status,
       table.nextAttemptAt,
     ),
+    index("idx_deliveries_communication_created").on(
+      table.communicationId,
+      table.createdAt,
+      table.id,
+    ),
+    index("idx_deliveries_event_created_status").on(
+      table.eventId,
+      table.createdAt,
+      table.status,
+    ),
     index("idx_deliveries_provider_message").on(
       table.provider,
       table.providerMessageId,

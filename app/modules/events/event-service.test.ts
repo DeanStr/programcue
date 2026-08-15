@@ -158,7 +158,7 @@ describe("Event Setup D1 service", () => {
     const service = new EventService(testEnv);
     const original = await service.getSetup(viewer);
 
-    await service.saveSetup(viewer, {
+    const result = await service.saveSetup(viewer, {
       ...inputFrom(original),
       venue: "Beanfield Centre",
       participantLogoUrl: "https://cdn.example.com/program-cue-event.svg",
@@ -215,6 +215,25 @@ describe("Event Setup D1 service", () => {
     expect(JSON.parse(audit?.metadataJson ?? "{}").revision).toBe(
       saved.revision,
     );
+    const change = await testEnv.DB.prepare(
+      `SELECT sequence, entity_type AS entityType, entity_id AS entityId
+         FROM event_changes
+        WHERE event_id = ? AND sequence = ?`,
+    )
+      .bind(viewer.eventId, result.changeSequence)
+      .first<{ sequence: number; entityType: string; entityId: string }>();
+    expect(change).toEqual({
+      sequence: result.changeSequence,
+      entityType: "event",
+      entityId: viewer.eventId,
+    });
+    const projection = await testEnv.DB.prepare(
+      `SELECT public_projection_revision AS publicProjectionRevision
+         FROM events WHERE id = ?`,
+    )
+      .bind(viewer.eventId)
+      .first<{ publicProjectionRevision: number }>();
+    expect(projection?.publicProjectionRevision).toBe(result.changeSequence);
   });
 
   it("persists tracks, format defaults and room resource inventories", async () => {

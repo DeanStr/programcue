@@ -167,8 +167,9 @@ export class EventService {
         requestHash: inputHash,
       });
     }
+    let saved: { changeSequence: number };
     try {
-      await this.repository.saveSetup(
+      saved = await this.repository.saveSetup(
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
@@ -197,6 +198,7 @@ export class EventService {
         throw new EventAirtableProjectionCommitError(error);
       }
     }
+    return saved;
   }
 
   async inviteAdministrator(

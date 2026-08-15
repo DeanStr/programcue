@@ -57,6 +57,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
 
 
     for table, expected in {
+        "events": {"public_projection_revision"},
         "people": {"linkedin_url", "x_handle", "profile_revision"},
         "event_participant_profiles": {"event_id", "organisation_id", "person_id", "travel_preferences", "last_operation_id"},
         "organisation_ai_settings": {"provider", "model", "revision", "last_updated_by_person_id", "last_operation_id"},

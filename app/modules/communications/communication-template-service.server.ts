@@ -21,21 +21,37 @@ import {
   type TemplateVersionRow,
 } from "./communication-service-shared";
 
+const DELIVERY_PAGE_SIZE = 50;
+const DELIVERY_HEALTH_DEFAULT_DAYS = 90;
+const DELIVERY_HEALTH_DEFAULT_SECONDS =
+  DELIVERY_HEALTH_DEFAULT_DAYS * 24 * 60 * 60;
+
+type DeliveryHealthPeriod = "recent" | "lifetime";
+
 export class CommunicationTemplateService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
   async listDeliveryHealth(
     viewer: Viewer,
-    options: { communicationId?: string; offset?: number } = {},
+    options: {
+      communicationId?: string;
+      offset?: number;
+      period?: DeliveryHealthPeriod;
+    } = {},
   ) {
     const communicationId = options.communicationId?.trim() ?? "";
     const offset = options.offset ?? 0;
+    const period = options.period ?? "recent";
     if (communicationId.length > 200) {
       throw new Response("Communication selection is invalid.", {
         status: 400,
       });
     }
-    if (!Number.isInteger(offset) || offset < 0) {
+    if (
+      !Number.isInteger(offset) ||
+      offset < 0 ||
+      offset % DELIVERY_PAGE_SIZE !== 0
+    ) {
       throw new Response("Delivery page is invalid.", { status: 400 });
     }
     if (!communicationId && offset !== 0) {
@@ -44,6 +60,11 @@ export class CommunicationTemplateService {
         { status: 400 },
       );
     }
+    if (period !== "recent" && period !== "lifetime") {
+      throw new Response("Delivery health period is invalid.", { status: 400 });
+    }
+    const recentCutoff =
+      Math.floor(Date.now() / 1_000) - DELIVERY_HEALTH_DEFAULT_SECONDS;
     const selectedCommunication = communicationId
       ? await this.env.DB.prepare(
           `SELECT communication.id, communication.status,
@@ -70,7 +91,13 @@ export class CommunicationTemplateService {
         status: 404,
       });
     }
-    const scopeId = selectedCommunication?.id ?? "";
+    if (
+      selectedCommunication &&
+      offset > 0 &&
+      offset >= selectedCommunication.recipientCount
+    ) {
+      throw new Response("Delivery page not found.", { status: 404 });
+    }
     const [
       summary,
       recentProblems,
@@ -78,32 +105,50 @@ export class CommunicationTemplateService {
       providerSuppressions,
       deliveryPage,
     ] = await Promise.all([
-      this.env.DB.prepare(
-        `SELECT COUNT(delivery.id) AS total,
+      (selectedCommunication
+        ? this.env.DB.prepare(
+            `SELECT COUNT(*) AS total,
                   COALESCE(SUM(CASE WHEN delivery.status IN ('queued','sending') THEN 1 ELSE 0 END), 0) AS pending,
                   COALESCE(SUM(CASE WHEN delivery.status = 'sent' THEN 1 ELSE 0 END), 0) AS sent,
                   COALESCE(SUM(CASE WHEN delivery.status IN ('delivered','opened','clicked') THEN 1 ELSE 0 END), 0) AS delivered,
                   COALESCE(SUM(CASE WHEN delivery.status IN ('bounced','suppressed','failed') THEN 1 ELSE 0 END), 0) AS problems,
                   COALESCE(SUM(CASE WHEN delivery.status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled
-             FROM communications communication
-             JOIN events event
-               ON event.id = communication.event_id
-              AND event.organisation_id = ?
-             LEFT JOIN communication_deliveries delivery
-               ON delivery.communication_id = communication.id
-              AND delivery.event_id = communication.event_id
-            WHERE communication.event_id = ?
-              AND (? = '' OR communication.id = ?)`,
-      )
-        .bind(viewer.organisationId, viewer.eventId, scopeId, scopeId)
-        .first<{
-          total: number;
-          pending: number;
-          sent: number;
-          delivered: number;
-          problems: number;
-          cancelled: number;
-        }>(),
+              FROM communication_deliveries delivery
+              JOIN events event
+                ON event.id = delivery.event_id
+               AND event.organisation_id = ?
+             WHERE delivery.event_id = ? AND delivery.communication_id = ?`,
+          ).bind(
+            viewer.organisationId,
+            viewer.eventId,
+            selectedCommunication.id,
+          )
+        : this.env.DB.prepare(
+            `SELECT COUNT(*) AS total,
+                    COALESCE(SUM(CASE WHEN delivery.status IN ('queued','sending') THEN 1 ELSE 0 END), 0) AS pending,
+                    COALESCE(SUM(CASE WHEN delivery.status = 'sent' THEN 1 ELSE 0 END), 0) AS sent,
+                    COALESCE(SUM(CASE WHEN delivery.status IN ('delivered','opened','clicked') THEN 1 ELSE 0 END), 0) AS delivered,
+                    COALESCE(SUM(CASE WHEN delivery.status IN ('bounced','suppressed','failed') THEN 1 ELSE 0 END), 0) AS problems,
+                    COALESCE(SUM(CASE WHEN delivery.status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled
+               FROM communication_deliveries delivery
+               JOIN events event
+                 ON event.id = delivery.event_id
+                AND event.organisation_id = ?
+              WHERE delivery.event_id = ?
+                ${period === "recent" ? "AND delivery.created_at >= ?" : ""}`,
+          ).bind(
+            viewer.organisationId,
+            viewer.eventId,
+            ...(period === "recent" ? [recentCutoff] : []),
+          )
+      ).first<{
+        total: number;
+        pending: number;
+        sent: number;
+        delivered: number;
+        problems: number;
+        cancelled: number;
+      }>(),
       this.env.DB.prepare(
         `SELECT delivery.id, delivery.communication_id AS communicationId,
                   delivery.recipient_address AS recipientAddress,
@@ -121,11 +166,19 @@ export class CommunicationTemplateService {
               AND event.organisation_id = ?
             WHERE delivery.event_id = ?
               AND delivery.status IN ('bounced','suppressed','failed')
-              AND (? = '' OR communication.id = ?)
+              ${selectedCommunication ? "AND communication.id = ?" : ""}
+              ${!selectedCommunication && period === "recent" ? "AND delivery.created_at >= ?" : ""}
             ORDER BY delivery.updated_at DESC, delivery.id DESC
             LIMIT 30`,
       )
-        .bind(viewer.organisationId, viewer.eventId, scopeId, scopeId)
+        .bind(
+          viewer.organisationId,
+          viewer.eventId,
+          ...(selectedCommunication ? [selectedCommunication.id] : []),
+          ...(!selectedCommunication && period === "recent"
+            ? [recentCutoff]
+            : []),
+        )
         .all<{
           id: string;
           communicationId: string;
@@ -195,12 +248,13 @@ export class CommunicationTemplateService {
                   AND event.organisation_id = ?
                 WHERE delivery.event_id = ? AND delivery.communication_id = ?
                 ORDER BY delivery.created_at, delivery.id
-                LIMIT 51 OFFSET ?`,
+                LIMIT ? OFFSET ?`,
           )
             .bind(
               viewer.organisationId,
               viewer.eventId,
               selectedCommunication.id,
+              DELIVERY_PAGE_SIZE + 1,
               offset,
             )
             .all<{
@@ -225,7 +279,11 @@ export class CommunicationTemplateService {
             kind: "communication",
             communication: selectedCommunication,
           } as const)
-        : ({ kind: "event_lifetime" } as const),
+        : ({
+            kind: "event",
+            period,
+            days: period === "recent" ? DELIVERY_HEALTH_DEFAULT_DAYS : null,
+          } as const),
       summary,
       recentProblems: recentProblems.results,
       suppressions: {
@@ -233,10 +291,10 @@ export class CommunicationTemplateService {
         provider: providerSuppressions.results,
       },
       deliveryPage: {
-        rows: pageRows.slice(0, 50),
+        rows: pageRows.slice(0, DELIVERY_PAGE_SIZE),
         offset,
         hasPrevious: offset > 0,
-        hasNext: pageRows.length > 50,
+        hasNext: pageRows.length > DELIVERY_PAGE_SIZE,
       },
     };
   }

@@ -1,10 +1,12 @@
 import { useFetcher } from "react-router";
+import { useEvaluationDiscussionHistory } from "~/components/evaluation-discussion-history";
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
 import { EventDateTime } from "~/components/ui/event-date-time";
 
 export function ReviewDiscussionPanel() {
   const { workspace, eventTimezone } = useReviewWorkbenchModel();
   const discussion = workspace.discussion;
+  const history = useEvaluationDiscussionHistory(discussion);
   const discussionKey = discussion
     ? `${discussion.target.roundId}:${discussion.target.targetType}:${discussion.target.targetId}`
     : "none";
@@ -26,8 +28,9 @@ export function ReviewDiscussionPanel() {
         </div>
         {discussion.available ? (
           <span className="status info right">
-            {discussion.messages.length} message
-            {discussion.messages.length === 1 ? "" : "s"}
+            {history.messages.length}
+            {history.hasEarlier ? "+" : ""} message
+            {history.messages.length === 1 && !history.hasEarlier ? "" : "s"}
           </span>
         ) : null}
       </div>
@@ -41,9 +44,21 @@ export function ReviewDiscussionPanel() {
         </div>
       ) : (
         <>
-          {discussion.messages.length ? (
+          {history.hasEarlier ? (
+            <div className="page-actions mb">
+              <button
+                className="btn small"
+                type="button"
+                disabled={history.loadingEarlier}
+                onClick={history.loadEarlier}
+              >
+                {history.loadingEarlier ? "Loading…" : "Load earlier messages"}
+              </button>
+            </div>
+          ) : null}
+          {history.messages.length ? (
             <ol className="list-clean stack">
-              {discussion.messages.map((message) => (
+              {history.messages.map((message) => (
                 <li className="card pad" key={message.id}>
                   <div className="card-title">
                     <strong>{message.authorName}</strong>

@@ -256,4 +256,69 @@ describe("evaluation discussion", () => {
       ),
     ).rejects.toThrow("Event not found in the authorised organisation");
   });
+
+  it("returns the newest 50 messages and loads earlier messages by keyset", async () => {
+    await env.DB.prepare(
+      `INSERT INTO evaluation_discussion_messages (
+         id, event_id, round_id, submission_id, session_id,
+         author_person_id, body, idempotency_key, created_at
+       )
+       SELECT printf('discussion-page-%03d', value), ?, ?, ?, NULL, ?,
+              printf('Message %03d', value),
+              printf('00000000-0000-4000-8000-%012d', value),
+              1000 + value
+         FROM json_each(?)`,
+    )
+      .bind(
+        admin.eventId,
+        target.roundId,
+        target.targetId,
+        admin.personId,
+        JSON.stringify(Array.from({ length: 55 }, (_, index) => index)),
+      )
+      .run();
+
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const latest = await service.listDiscussion(admin, target);
+    expect(latest.messages).toHaveLength(50);
+    expect(latest.messages.at(0)?.body).toBe("Message 005");
+    expect(latest.messages.at(-1)?.body).toBe("Message 054");
+    expect(latest.earlierCursor).toEqual(expect.any(String));
+
+    const earlier = await service.listDiscussion(admin, {
+      ...target,
+      cursor: latest.earlierCursor!,
+    });
+    expect(earlier.messages.map((message) => message.body)).toEqual([
+      "Message 000",
+      "Message 001",
+      "Message 002",
+      "Message 003",
+      "Message 004",
+    ]);
+    expect(earlier.earlierCursor).toBeNull();
+    expect(
+      new Set([...earlier.messages, ...latest.messages].map(({ id }) => id))
+        .size,
+    ).toBe(55);
+
+    const crossThread = await service
+      .listDiscussion(admin, {
+        roundId: target.roundId,
+        targetType: "session",
+        targetId: "discussion-session-target",
+        cursor: latest.earlierCursor!,
+      })
+      .catch((error: unknown) => error);
+    expect(crossThread).toBeInstanceOf(Response);
+    expect((crossThread as Response).status).toBe(400);
+
+    const invalid = await service
+      .listDiscussion(admin, { ...target, cursor: "not-a-cursor" })
+      .catch((error: unknown) => error);
+    expect(invalid).toBeInstanceOf(Response);
+    expect((invalid as Response).status).toBe(400);
+  });
 });

@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RouterContextProvider } from "react-router";
 
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { EventService } from "~/modules/events/event-service.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
+import { FileService } from "~/modules/files/file-service.server";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import {
   ensureDemoData,
@@ -189,11 +191,18 @@ describe("expanded public API contract", () => {
       first.sessions.map((session) => session.id),
     );
 
-    await testEnv.DB.prepare(
-      `INSERT INTO event_changes (
-         event_id, entity_type, entity_id, change_type, created_at
-       ) VALUES ('evt-foe-2025', 'event', 'evt-foe-2025', 'updated', unixepoch())`,
-    ).run();
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE events SET description = COALESCE(description, '') || ' revised'
+          WHERE id = 'evt-foe-2025'`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type, created_at
+         ) VALUES ('evt-foe-2025', 'event', 'evt-foe-2025',
+                   'updated', unixepoch())`,
+      ),
+    ]);
     const stale = await publicSessionsLoader({
       request: new Request(nextUrl),
       params: { slug: "future-of-events-2027" },
@@ -204,6 +213,182 @@ describe("expanded public API contract", () => {
       error: { code: "PUBLICATION_CHANGED" },
     });
     fullSnapshot.mockRestore();
+  });
+
+  it("advances the persisted public projection revision for every public change category", async () => {
+    await ensureDemoProgramme(testEnv);
+    const base =
+      "https://programcue.test/api/v1/public/events/future-of-events-2027/sessions?limit=2";
+    const nextCursor = async () => {
+      const response = await publicSessionsLoader({
+        request: new Request(base),
+        params: { slug: "future-of-events-2027" },
+        context: routeContext(),
+      } as never);
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { nextCursor: string };
+      expect(body.nextCursor).toEqual(expect.any(String));
+      return body.nextCursor;
+    };
+    const expectStale = async (cursor: string) => {
+      const url = new URL(base);
+      url.searchParams.set("cursor", cursor);
+      const response = await publicSessionsLoader({
+        request: new Request(url),
+        params: { slug: "future-of-events-2027" },
+        context: routeContext(),
+      } as never);
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "PUBLICATION_CHANGED" },
+      });
+    };
+    const revision = async () => {
+      const row = await testEnv.DB.prepare(
+        `SELECT public_projection_revision AS revision
+           FROM events WHERE id = 'evt-foe-2025'`,
+      ).first<{ revision: number }>();
+      expect(row).not.toBeNull();
+      return row!.revision;
+    };
+    const expectMutationInvalidates = async (
+      mutate: () => Promise<unknown>,
+    ) => {
+      const cursor = await nextCursor();
+      const before = await revision();
+      await mutate();
+      expect(await revision()).toBeGreaterThan(before);
+      await expectStale(cursor);
+    };
+
+    const unchangedCursor = await nextCursor();
+    const beforeUnrelated = await revision();
+    await testEnv.DB.prepare(
+      `INSERT INTO event_changes (
+         event_id, entity_type, entity_id, change_type, created_at
+       ) VALUES ('evt-foe-2025', 'task_instance', 'unrelated-task',
+                 'updated', unixepoch())`,
+    ).run();
+    expect(await revision()).toBe(beforeUnrelated);
+    const unchangedUrl = new URL(base);
+    unchangedUrl.searchParams.set("cursor", unchangedCursor);
+    expect(
+      (
+        await publicSessionsLoader({
+          request: new Request(unchangedUrl),
+          params: { slug: "future-of-events-2027" },
+          context: routeContext(),
+        } as never)
+      ).status,
+    ).toBe(200);
+
+    const headshotAssetId = `public-revision-headshot-${crypto.randomUUID()}`;
+    const headshotVersionId = `public-revision-version-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, target_type, target_id, asset_kind, status,
+           created_at, updated_at
+         ) VALUES (?, 'evt-foe-2025', 'person', 'person-demo-speaker',
+                   'headshot', 'pending', unixepoch(), unixepoch())`,
+      ).bind(headshotAssetId),
+      testEnv.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, upload_status, signature_status, scan_status,
+           released_at, created_at
+         ) VALUES (?, 'evt-foe-2025', ?, 1, ?, 'headshot.webp',
+                   'image/webp', 'image/webp', 100, 'uploaded', 'valid',
+                   'clean', unixepoch(), unixepoch())`,
+      ).bind(
+        headshotVersionId,
+        headshotAssetId,
+        `tests/${headshotVersionId}.webp`,
+      ),
+      testEnv.DB.prepare(
+        `UPDATE file_assets
+            SET status = 'active', current_version_id = ?,
+                updated_at = unixepoch()
+          WHERE id = ? AND event_id = 'evt-foe-2025'`,
+      ).bind(headshotVersionId, headshotAssetId),
+    ]);
+
+    await expectMutationInvalidates(async () => {
+      const viewer = {
+        personId: "person-demo-admin",
+        name: "Olivia Bennett",
+        email: "olivia@example.com",
+        role: "administrator" as const,
+        organisationId: "org-future-events",
+        eventId: "evt-foe-2025",
+        demo: true,
+      };
+      const service = new EventService(testEnv);
+      const setup = await service.getSetup(viewer);
+      return service.saveSetup(viewer, {
+        revision: setup.revision,
+        name: setup.name,
+        timezone: setup.timezone,
+        startDate: setup.startDate,
+        endDate: setup.endDate,
+        venue: setup.venue,
+        city: setup.city,
+        publicSlug: setup.publicSlug,
+        brandAccent: setup.brandAccent,
+        participantLogoUrl: setup.participantLogoUrl,
+        participantWelcomeText: setup.participantWelcomeText,
+        participantSupportUrl: setup.participantSupportUrl,
+        description: `${setup.description} revised`,
+        repositoryProvider: setup.repositoryProvider,
+        retentionMonths: setup.retentionMonths,
+        submissionAccessMode: setup.submissionAccessMode,
+        allowAnonymousDrafts: setup.allowAnonymousDrafts,
+        duplicatePersonWarnings: setup.duplicatePersonWarnings,
+        filePolicy: setup.filePolicy,
+        rooms: setup.rooms.map((room, index) =>
+          index === 0 ? { ...room, name: `${room.name} revised` } : room,
+        ),
+        tracks: setup.tracks.map((track, index) =>
+          index === 0 ? { ...track, name: `${track.name} revised` } : track,
+        ),
+        sessionFormats: setup.sessionFormats,
+      });
+    });
+    const recordPublicChange = (entityType: string, entityId: string) =>
+      testEnv.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type, created_at
+         ) VALUES ('evt-foe-2025', ?, ?, 'updated', unixepoch())`,
+      )
+        .bind(entityType, entityId)
+        .run();
+    await expectMutationInvalidates(() =>
+      recordPublicChange("schedule_version", "demo-schedule-published"),
+    );
+    await expectMutationInvalidates(() =>
+      recordPublicChange("session", "demo-session-1"),
+    );
+    await expectMutationInvalidates(() =>
+      recordPublicChange("person", "person-demo-speaker"),
+    );
+    await expectMutationInvalidates(() =>
+      recordPublicChange("file_version", headshotVersionId),
+    );
+    await expectMutationInvalidates(() =>
+      new FileService(testEnv).eraseAsset(
+        {
+          personId: "person-demo-admin",
+          name: "Olivia Bennett",
+          email: "olivia@example.com",
+          role: "administrator",
+          organisationId: "org-future-events",
+          eventId: "evt-foe-2025",
+          demo: true,
+        },
+        { assetId: headshotAssetId, confirmed: true },
+      ),
+    );
   });
 
   it("rejects unapproving a snapshot already exposed by the public collection", async () => {

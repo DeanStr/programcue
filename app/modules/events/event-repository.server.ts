@@ -186,7 +186,7 @@ export interface EventRepository {
     eventId: string,
     actorPersonId: string,
     input: EventSetupInput,
-  ): Promise<void>;
+  ): Promise<{ changeSequence: number }>;
   inviteAdministrator(
     organisationId: string,
     eventId: string,
@@ -603,7 +603,7 @@ export class D1EventRepository implements EventRepository {
     eventId: string,
     actorPersonId: string,
     input: EventSetupInput,
-  ): Promise<void> {
+  ): Promise<{ changeSequence: number }> {
     await this.validateSetup(organisationId, eventId, input);
 
     const operationId = crypto.randomUUID();
@@ -861,6 +861,29 @@ export class D1EventRepository implements EventRepository {
         organisationId,
         operationId,
       ),
+      this.env.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type,
+           correlation_id, created_at
+         )
+         SELECT ?, 'event', ?, 'updated', ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM audit_events audit
+             WHERE audit.id = ? AND audit.organisation_id = ?
+               AND audit.event_id = ?
+               AND audit.action = 'event.settings.updated'
+               AND audit.entity_id = ?
+          )
+         RETURNING sequence`,
+      ).bind(
+        eventId,
+        eventId,
+        operationId,
+        auditId,
+        organisationId,
+        eventId,
+        eventId,
+      ),
     ];
 
     try {
@@ -959,6 +982,14 @@ export class D1EventRepository implements EventRepository {
           "Every requested track must be persisted with the event update.",
         );
       }
+      const change = results.at(-1)?.results[0] as
+        { sequence: number } | undefined;
+      if (!change || !Number.isSafeInteger(change.sequence)) {
+        throw new Error(
+          "The event settings change cursor was not committed with the update.",
+        );
+      }
+      return { changeSequence: change.sequence };
     } catch (error) {
       if (
         error instanceof EventRevisionConflictError ||

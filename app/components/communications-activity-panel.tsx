@@ -171,6 +171,8 @@ export function CommunicationDeliveryHealth({
   const health = loaderData.deliveryHealth;
   const selected =
     health.scope.kind === "communication" ? health.scope.communication : null;
+  const eventPeriod =
+    health.scope.kind === "event" ? health.scope.period : "recent";
   const pageQuery = (offset: number) =>
     `/admin/communications?${new URLSearchParams({
       deliveryCommunication: selected!.id,
@@ -188,7 +190,9 @@ export function CommunicationDeliveryHealth({
           <p className="subtle">
             {selected
               ? `Selected communication · ${selected.id} · created ${formatDate(selected.createdAt, loaderData.eventTimezone)}`
-              : "Current event · event lifetime"}
+              : eventPeriod === "lifetime"
+                ? "Current event · event lifetime"
+                : "Current event · last 90 days"}
           </p>
         </div>
         <div className="page-actions right">
@@ -210,10 +214,24 @@ export function CommunicationDeliveryHealth({
                 className="btn small"
                 to="/admin/communications#communications-health"
               >
-                Event lifetime
+                Event summary
               </Link>
             </>
-          ) : null}
+          ) : eventPeriod === "lifetime" ? (
+            <Link
+              className="btn small"
+              to="/admin/communications#communications-health"
+            >
+              Last 90 days
+            </Link>
+          ) : (
+            <Link
+              className="btn small"
+              to="/admin/communications?deliveryPeriod=lifetime#communications-health"
+            >
+              Event lifetime
+            </Link>
+          )}
         </div>
       </div>
       <div className="grid grid-5 is-equal">

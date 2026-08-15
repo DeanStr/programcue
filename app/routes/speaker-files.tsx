@@ -11,7 +11,7 @@ import {
   FileService,
 } from "~/modules/files/file-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
-import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import { notifyRouteChange } from "~/platform/realtime/route-realtime.server";
 
 export const meta = () => [{ title: "Participant Files · Program Cue" }];
 
@@ -30,11 +30,15 @@ export async function action({ request, context }: Route.ActionArgs) {
       confirmed: form.get("confirm") === "erase-all-versions",
       reason: "speaker_requested_file_deletion",
     });
-    const realtimeFailure = await recordRouteChange(env, viewer, {
-      entityType: "file_asset",
-      entityId: result.affected.id,
-      changeType: "deleted",
-    });
+    const realtimeFailure =
+      result.changeSequence === null
+        ? null
+        : await notifyRouteChange(
+            env,
+            viewer,
+            result.changeSequence,
+            result.affected.id,
+          );
     if (realtimeFailure) return data(realtimeFailure, { status: 207 });
     return data({
       ok: true,

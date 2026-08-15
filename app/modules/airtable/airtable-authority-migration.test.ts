@@ -352,6 +352,17 @@ describe("Airtable authoritative room repository", () => {
         runId: confirmed.runId,
         provider: "airtable",
         idempotent: true,
+        changeSequence: null,
+      });
+      await expect(
+        env.DB.prepare(
+          `SELECT public_projection_revision AS publicProjectionRevision
+             FROM events WHERE id = ?`,
+        )
+          .bind(viewer.eventId)
+          .first(),
+      ).resolves.toEqual({
+        publicProjectionRevision: confirmed.changeSequence,
       });
       const event = await env.DB.prepare(
         `SELECT repository_provider AS repositoryProvider,

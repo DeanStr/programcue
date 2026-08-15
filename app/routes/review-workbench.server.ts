@@ -58,6 +58,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           },
           writable: false,
           messages: [],
+          earlierCursor: null,
           postIntentId: crypto.randomUUID(),
         }
     : null;

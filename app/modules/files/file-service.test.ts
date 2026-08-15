@@ -1378,7 +1378,7 @@ describe("private R2 file lifecycle", () => {
         assetId: first.assetId,
         confirmed: true,
       }),
-    ).resolves.toMatchObject({ duplicate: true });
+    ).resolves.toMatchObject({ duplicate: true, changeSequence: null });
 
     const replacement = await completeTestDirectUpload(
       testEnv,
@@ -1448,13 +1448,34 @@ describe("private R2 file lifecycle", () => {
         .first(),
     ).toEqual({ status: "rejected", currentVersionId: null });
     expect(await testEnv.FILES.head(stored!.objectKey)).not.toBeNull();
+    const committedChange = await testEnv.DB.prepare(
+      `SELECT COUNT(*) AS count, MAX(sequence) AS sequence
+         FROM event_changes
+        WHERE event_id = ? AND entity_type = 'file_asset'
+          AND entity_id = ? AND correlation_id = ?`,
+    )
+      .bind(admin.eventId, upload.assetId, `file-erasure:${upload.assetId}`)
+      .first<{ count: number; sequence: number }>();
+    expect(committedChange).toMatchObject({ count: 1 });
 
+    const retried = await service.eraseAsset(admin, {
+      assetId: upload.assetId,
+      confirmed: true,
+    });
+    expect(retried).toMatchObject({
+      duplicate: false,
+      erasedVersions: 1,
+      changeSequence: committedChange!.sequence,
+    });
     await expect(
-      service.eraseAsset(admin, {
-        assetId: upload.assetId,
-        confirmed: true,
-      }),
-    ).resolves.toMatchObject({ duplicate: false, erasedVersions: 1 });
+      testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM event_changes
+          WHERE event_id = ? AND entity_type = 'file_asset'
+            AND entity_id = ? AND correlation_id = ?`,
+      )
+        .bind(admin.eventId, upload.assetId, `file-erasure:${upload.assetId}`)
+        .first(),
+    ).resolves.toEqual({ count: 1 });
     expect(await testEnv.FILES.head(stored!.objectKey)).toBeNull();
   });
 
