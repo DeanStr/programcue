@@ -84,6 +84,12 @@ export function buildParticipantRetentionFinalisationStatements(
       viewer.eventId,
     ),
     guarded(
+      `UPDATE evaluation_discussion_messages
+          SET body = NULL, idempotency_key = 'retained-discussion-' || id
+        WHERE event_id = ?`,
+      viewer.eventId,
+    ),
+    guarded(
       `UPDATE review_moderations SET notes = NULL WHERE event_id = ?`,
       viewer.eventId,
     ),

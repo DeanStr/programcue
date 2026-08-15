@@ -424,6 +424,70 @@ export const reviews = sqliteTable(
   ],
 );
 
+export const evaluationDiscussionMessages = sqliteTable(
+  "evaluation_discussion_messages",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    roundId: text("round_id").notNull(),
+    submissionId: text("submission_id"),
+    sessionId: text("session_id"),
+    authorPersonId: text("author_person_id")
+      .notNull()
+      .references(() => people.id),
+    body: text("body"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: integer("created_at").notNull().default(epochNow),
+  },
+  (table) => [
+    check(
+      "evaluation_discussion_messages_exact_target_check",
+      sql`(
+        (${table.submissionId} IS NOT NULL AND ${table.sessionId} IS NULL)
+        OR
+        (${table.submissionId} IS NULL AND ${table.sessionId} IS NOT NULL)
+      )`,
+    ),
+    check(
+      "evaluation_discussion_messages_body_check",
+      sql`${table.body} IS NULL OR length(trim(${table.body})) BETWEEN 1 AND 2000`,
+    ),
+    foreignKey({
+      columns: [table.roundId, table.eventId],
+      foreignColumns: [evaluationRounds.id, evaluationRounds.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.submissionId, table.eventId],
+      foreignColumns: [submissions.id, submissions.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.sessionId, table.eventId],
+      foreignColumns: [sessions.id, sessions.eventId],
+    }).onDelete("cascade"),
+    uniqueIndex("evaluation_discussion_messages_idempotency_unique").on(
+      table.eventId,
+      table.authorPersonId,
+      table.idempotencyKey,
+    ),
+    index("idx_evaluation_discussion_submission").on(
+      table.eventId,
+      table.roundId,
+      table.submissionId,
+      table.createdAt,
+      table.id,
+    ),
+    index("idx_evaluation_discussion_session").on(
+      table.eventId,
+      table.roundId,
+      table.sessionId,
+      table.createdAt,
+      table.id,
+    ),
+  ],
+);
+
 export const aiReviewAssessments = sqliteTable(
   "ai_review_assessments",
   {

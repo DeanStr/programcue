@@ -1,4 +1,5 @@
-import { MapPin, Plus } from "lucide-react";
+import { Check, Copy, MapPin, Plus, Share2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import {
   formatProgrammeDuration,
@@ -14,6 +15,96 @@ import type {
   PublishedSession,
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
+
+function legacyCopy(value: string) {
+  const input = document.createElement("textarea");
+  input.value = value;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  try {
+    input.select();
+    if (!document.execCommand("copy")) {
+      throw new Error("The browser did not copy the speaker link.");
+    }
+  } finally {
+    input.remove();
+  }
+}
+
+export function PublicSpeakerShareActions({
+  model,
+}: {
+  model: PublicProgrammeModel;
+}) {
+  const share = model.speakerShare;
+  const [canUseWebShare, setCanUseWebShare] = useState(false);
+  const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
+  useEffect(() => {
+    setCanUseWebShare(typeof navigator.share === "function");
+  }, []);
+  useEffect(() => setStatus("idle"), [share?.speakerId]);
+  if (!share) return null;
+  const resolvedShare = share;
+  async function copyLink() {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(resolvedShare.url);
+      } else {
+        legacyCopy(resolvedShare.url);
+      }
+      setStatus("copied");
+    } catch {
+      try {
+        legacyCopy(resolvedShare.url);
+        setStatus("copied");
+      } catch {
+        setStatus("failed");
+      }
+    }
+  }
+  async function shareProfile() {
+    try {
+      await navigator.share({
+        title: `${resolvedShare.speakerName} · ${model.programme.event.name}`,
+        text: resolvedShare.text,
+        url: resolvedShare.url,
+      });
+    } catch (error) {
+      if (!(error instanceof DOMException) || error.name !== "AbortError") {
+        setStatus("failed");
+      }
+    }
+  }
+  return (
+    <>
+      <button className="btn small" type="button" onClick={() => void copyLink()}>
+        {status === "copied" ? (
+          <Check aria-hidden size={14} />
+        ) : (
+          <Copy aria-hidden size={14} />
+        )}
+        {status === "copied" ? "Link copied" : "Copy profile link"}
+      </button>
+      {canUseWebShare ? (
+        <button
+          className="btn small"
+          type="button"
+          onClick={() => void shareProfile()}
+        >
+          <Share2 aria-hidden size={14} /> Share profile
+        </button>
+      ) : null}
+      {status === "failed" ? (
+        <span className="help" role="alert">
+          This browser could not share the profile. Copy the address from the
+          address bar instead.
+        </span>
+      ) : null}
+    </>
+  );
+}
 
 /**
  * A published list is grouped by day so the calendar date is stated once. The

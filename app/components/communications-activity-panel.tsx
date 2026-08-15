@@ -5,6 +5,7 @@ import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
+  communicationCategoryLabel,
   formatCommunicationDate as formatDate,
   type PendingIntent,
 } from "./communications-panel-shared";
@@ -109,10 +110,19 @@ export function RecentCommunications({
                         </button>
                       </Form>
                     ) : item.operationId ? (
-                      <Link className="btn small" to="/admin/operations">
+                      <Link
+                        className="btn small"
+                        to={`/admin/operations?operation=${encodeURIComponent(item.operationId)}`}
+                      >
                         Details
                       </Link>
                     ) : null}
+                    <Link
+                      className="btn small"
+                      to={`/admin/communications?deliveryCommunication=${encodeURIComponent(item.id)}#communications-health`}
+                    >
+                      Deliveries
+                    </Link>
                   </td>
                 </tr>
               ))}
@@ -132,6 +142,264 @@ export function RecentCommunications({
           }
         />
       )}
+    </section>
+  );
+}
+
+function DeliveryReason({
+  code,
+  message,
+}: {
+  code: string | null;
+  message: string | null;
+}) {
+  if (!code && !message)
+    return <span className="subtle">No provider reason recorded</span>;
+  return (
+    <span>
+      {message ?? code}
+      {message && code ? <small>{code}</small> : null}
+    </span>
+  );
+}
+
+export function CommunicationDeliveryHealth({
+  loaderData,
+}: {
+  loaderData: CommunicationsCentreLoaderData;
+}) {
+  const health = loaderData.deliveryHealth;
+  const selected =
+    health.scope.kind === "communication" ? health.scope.communication : null;
+  const pageQuery = (offset: number) =>
+    `/admin/communications?${new URLSearchParams({
+      deliveryCommunication: selected!.id,
+      deliveryOffset: String(offset),
+    })}#communications-health`;
+  return (
+    <section
+      className="card pad mb"
+      id="communications-health"
+      aria-labelledby="communications-health-title"
+    >
+      <div className="card-title">
+        <div>
+          <h2 id="communications-health-title">Delivery health</h2>
+          <p className="subtle">
+            {selected
+              ? `Selected communication · ${selected.id} · created ${formatDate(selected.createdAt, loaderData.eventTimezone)}`
+              : "Current event · event lifetime"}
+          </p>
+        </div>
+        <div className="page-actions right">
+          <span className="status info">
+            {health.summary.total} deliver
+            {health.summary.total === 1 ? "y" : "ies"}
+          </span>
+          {selected ? (
+            <>
+              {selected.operationId ? (
+                <Link
+                  className="btn small"
+                  to={`/admin/operations?operation=${encodeURIComponent(selected.operationId)}`}
+                >
+                  Exact operation
+                </Link>
+              ) : null}
+              <Link
+                className="btn small"
+                to="/admin/communications#communications-health"
+              >
+                Event lifetime
+              </Link>
+            </>
+          ) : null}
+        </div>
+      </div>
+      <div className="grid grid-5 is-equal">
+        {[
+          ["Pending", health.summary.pending],
+          ["Sent", health.summary.sent],
+          ["Delivered", health.summary.delivered],
+          ["Problems", health.summary.problems],
+          ["Cancelled", health.summary.cancelled],
+        ].map(([label, value]) => (
+          <div className="metric card" key={String(label)}>
+            <div className="label">{label}</div>
+            <div className="value">{value}</div>
+          </div>
+        ))}
+      </div>
+      <p className="help mt">
+        Each delivery is counted once from its current stored state. Opened and
+        clicked are included under Delivered; Sent means the provider accepted
+        the message but delivery has not been confirmed.
+      </p>
+
+      {selected ? (
+        <div className="mt">
+          <h3>Recipient deliveries</h3>
+          {health.deliveryPage.rows.length ? (
+            <div
+              className="table-wrap"
+              role="region"
+              aria-label="Selected communication recipient deliveries"
+              tabIndex={0}
+            >
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Recipient</th>
+                    <th scope="col">Current state</th>
+                    <th scope="col">Attempts</th>
+                    <th scope="col">Recorded reason</th>
+                    <th scope="col">Updated ({loaderData.eventTimezone})</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {health.deliveryPage.rows.map((delivery) => (
+                    <tr key={delivery.id}>
+                      <td>
+                        {delivery.recipientName ? (
+                          <strong>{delivery.recipientName}</strong>
+                        ) : null}
+                        <span>{delivery.recipientAddress}</span>
+                      </td>
+                      <td>
+                        <DomainStatusBadge
+                          domain="communication"
+                          status={delivery.status}
+                        />
+                      </td>
+                      <td>{delivery.attemptCount}</td>
+                      <td>
+                        <DeliveryReason
+                          code={delivery.failureCode}
+                          message={delivery.failureMessage}
+                        />
+                      </td>
+                      <td>
+                        {formatDate(
+                          delivery.updatedAt,
+                          loaderData.eventTimezone,
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="subtle">This communication has no delivery rows.</p>
+          )}
+          {health.deliveryPage.hasPrevious || health.deliveryPage.hasNext ? (
+            <nav
+              className="page-actions mt"
+              aria-label="Recipient delivery pages"
+            >
+              {health.deliveryPage.hasPrevious ? (
+                <Link
+                  className="btn small"
+                  to={pageQuery(Math.max(0, health.deliveryPage.offset - 50))}
+                >
+                  Previous 50
+                </Link>
+              ) : null}
+              {health.deliveryPage.hasNext ? (
+                <Link
+                  className="btn small"
+                  to={pageQuery(health.deliveryPage.offset + 50)}
+                >
+                  Next 50
+                </Link>
+              ) : null}
+            </nav>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="grid grid-2 mt">
+        <section>
+          <h3>Latest recorded problems</h3>
+          {health.recentProblems.length ? (
+            <ul className="list-clean stack">
+              {health.recentProblems.map((problem) => (
+                <li className="card pad" key={problem.id}>
+                  <div className="card-title">
+                    <strong>
+                      {problem.recipientName ?? problem.recipientAddress}
+                    </strong>
+                    <DomainStatusBadge
+                      className="right"
+                      domain="communication"
+                      status={problem.status}
+                    />
+                  </div>
+                  {problem.recipientName ? (
+                    <p>{problem.recipientAddress}</p>
+                  ) : null}
+                  <DeliveryReason
+                    code={problem.failureCode}
+                    message={problem.failureMessage}
+                  />
+                  {problem.operationId ? (
+                    <p>
+                      <Link
+                        to={`/admin/operations?operation=${encodeURIComponent(problem.operationId)}`}
+                      >
+                        Open exact operation
+                      </Link>
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="subtle">
+              No bounced, suppressed or failed deliveries in scope.
+            </p>
+          )}
+        </section>
+        <section>
+          <h3>Latest active exclusions</h3>
+          <p className="subtle">Current event · up to 30 in each category</p>
+          <h4>Latest recipient unsubscribes</h4>
+          {health.suppressions.recipient.length ? (
+            <ul className="list-clean">
+              {health.suppressions.recipient.map((entry) => (
+                <li key={entry.id}>
+                  <strong>{entry.address}</strong>
+                  <small>
+                    {communicationCategoryLabel(entry.category)} · recipient
+                    unsubscribe
+                  </small>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="subtle">No active recipient unsubscribes.</p>
+          )}
+          <h4>Latest provider suppressions and complaints</h4>
+          {health.suppressions.provider.length ? (
+            <ul className="list-clean">
+              {health.suppressions.provider.map((entry) => (
+                <li key={entry.id}>
+                  <strong>{entry.address}</strong>
+                  <small>{entry.reason?.replace("email.", "")}</small>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="subtle">
+              No active provider suppressions or complaints.
+            </p>
+          )}
+          <p className="help mt">
+            Bounces remain delivery outcomes above; they are not presented as
+            recipient unsubscribe choices.
+          </p>
+        </section>
+      </div>
     </section>
   );
 }

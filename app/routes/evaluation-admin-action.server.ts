@@ -95,6 +95,21 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const values = await request.formData();
   const service = new EvaluationService(env);
   try {
+    if (values.get("intent") === "add-discussion-message") {
+      const result = await service.addDiscussionMessage(viewer, {
+        roundId: values.get("roundId"),
+        targetType: values.get("targetType"),
+        targetId: values.get("targetId"),
+        body: values.get("body"),
+        idempotencyKey: values.get("idempotencyKey"),
+      });
+      return {
+        ok: true,
+        message: result.replayed
+          ? "Discussion message was already added."
+          : "Discussion message added.",
+      };
+    }
     if (values.get("intent") === "reconcile-ai-review-assessment") {
       const result = await new AiReviewAssessmentService(
         env,

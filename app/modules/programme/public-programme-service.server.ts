@@ -12,7 +12,10 @@ import type {
   PublishedSpeaker,
   PublishedSpeakerPreview,
 } from "./public-programme-types";
-import { PublishedHeadshotService } from "./published-headshot-service.server";
+import {
+  PublishedHeadshotService,
+  publishedHeadshotPath,
+} from "./published-headshot-service.server";
 export {
   PublishedProgrammeItineraryExpiredError,
   PublishedProgrammeItineraryNotFoundError,
@@ -272,6 +275,18 @@ export class PublicProgrammeService {
 
   getPublishedHeadshot(slug: string, personId: string) {
     return this.headshots.getPublishedHeadshot(slug, personId);
+  }
+
+  async getReleasedPublishedHeadshotPath(slug: string, personId: string) {
+    const headshot = await this.headshots.findPublishedHeadshot(slug, personId);
+    if (!headshot) return null;
+    if (!this.env.FILES) {
+      throw new Error("Required private R2 binding FILES is unavailable.");
+    }
+    const object = await this.env.FILES.head(headshot.objectKey);
+    return object?.httpEtag === headshot.objectEtag
+      ? publishedHeadshotPath(slug, personId)
+      : null;
   }
 
   async getPublishedLandingSummary(

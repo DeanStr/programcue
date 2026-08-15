@@ -8,7 +8,10 @@ import { ensureDemoData } from "~/platform/demo/seed.server";
 import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
 import { loader as publicCalendarLoader } from "~/routes/api-public-calendar";
 import { loader as publicProgrammeLoader } from "~/routes/api-public-programme";
-import { loader as publicProgrammePageLoader } from "~/routes/public-programme";
+import {
+  loader as publicProgrammePageLoader,
+  meta as publicProgrammeMeta,
+} from "~/routes/public-programme";
 import { sortPublishedSpeakers } from "./programme-presentation";
 import {
   itineraryCookie,
@@ -265,6 +268,63 @@ describe("published programme and itinerary", () => {
     await expect((rejected as Response).text()).resolves.toBe(
       "This shared itinerary is unavailable or empty.",
     );
+  });
+
+  it("resolves speaker deep links from the published snapshot and emits honest unfurl metadata", async () => {
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: env as unknown as CloudflareEnvironment,
+      ctx: {} as ExecutionContext,
+    });
+    const request = new Request(
+      "https://programcue.test/public/programme/future-of-events-2027?speaker=person-demo-speaker",
+    );
+    const result = await publicProgrammePageLoader({
+      request,
+      params: { slug: "future-of-events-2027" },
+      context,
+    } as never);
+    if (result instanceof Response) {
+      throw new Error("Speaker deep link returned a raw response.");
+    }
+    expect(result.data.speakerShare).toMatchObject({
+      speakerId: "person-demo-speaker",
+      speakerName: "Priya Shah",
+      url: "https://programcue.test/public/programme/future-of-events-2027?speaker=person-demo-speaker",
+      imageUrl: null,
+    });
+    expect(result.data.canonicalUrl).toBe(result.data.speakerShare?.url);
+    const metadata = publicProgrammeMeta({ loaderData: result.data } as never);
+    expect(metadata).toEqual(
+      expect.arrayContaining([
+        { title: "Priya Shah · Future of Events 2027" },
+        {
+          tagName: "link",
+          rel: "canonical",
+          href: result.data.canonicalUrl,
+        },
+        {
+          property: "og:url",
+          content: result.data.canonicalUrl,
+        },
+        { name: "twitter:card", content: "summary" },
+      ]),
+    );
+    expect(metadata).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ property: "og:image" }),
+      ]),
+    );
+
+    const invalid = await publicProgrammePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2027?speaker=not-published",
+      ),
+      params: { slug: "future-of-events-2027" },
+      context,
+    } as never).catch((error: unknown) => error);
+    expect(invalid).toBeInstanceOf(Response);
+    expect((invalid as Response).status).toBe(404);
   });
 
   it("uses the matched route parameter for programme data revalidation", async () => {

@@ -121,7 +121,7 @@ test("public programme exposes speaker affiliations and a closable profile panel
   // A shared profile URL has no opener recorded in component state, so close
   // falls back to its visible speaker-card link instead of dropping focus.
   await page.goto(
-    "/public/programme/future-of-events-2027#speaker-person-demo-speaker",
+    "/public/programme/future-of-events-2027?speaker=person-demo-speaker",
   );
   await page.locator("body[data-hydrated='true']").waitFor();
   await expect(profile).toBeVisible();

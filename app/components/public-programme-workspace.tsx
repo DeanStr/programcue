@@ -9,11 +9,13 @@ import {
   formatProgrammeTimeRange,
   programmeAccentPalette,
   publicProgrammeSurfacePath,
+  publicSpeakerProfilePath,
 } from "~/modules/programme/programme-presentation";
 import { PublicProgrammeSurfaceContent } from "~/components/public-programme-surfaces";
 import {
   ProgrammeDayHeading,
   PublicSpeakerAvatar,
+  PublicSpeakerShareActions,
   SaveSessionButton,
   SessionPlace,
   SessionSpeakerLines,
@@ -300,11 +302,15 @@ export function PublicSpeakerCard({
           <a
             className="btn small"
             id={`speaker-profile-link-${speaker.id}`}
-            href="#programme-speaker-profile"
+            href={publicSpeakerProfilePath(
+              model.programme.event.slug,
+              speaker.id,
+            )}
             aria-label={`View profile and sessions for ${speaker.displayName}`}
-            onClick={(event) =>
+            onClick={(event) => {
+              event.preventDefault();
               model.openSpeakerProfile(speaker.id, event.currentTarget)
-            }
+            }}
           >
             View profile and sessions
           </a>
@@ -829,13 +835,17 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
                     {showSpeakerDirectory ? (
                       <a
                         className="session-detail-profile-link"
-                        href={`#speaker-${speakerId}`}
-                        onClick={(event) =>
+                        href={publicSpeakerProfilePath(
+                          programme.event.slug,
+                          speakerId,
+                        )}
+                        onClick={(event) => {
+                          event.preventDefault();
                           model.openSpeakerProfile(
                             speakerId,
                             event.currentTarget,
                           )
-                        }
+                        }}
                       >
                         View {name}’s profile
                       </a>
@@ -993,9 +1003,9 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
               </div>
             </div>
             <div className="public-profile-actions">
-              <a className="btn small" href={`#speaker-${selectedSpeaker.id}`}>
-                Share profile link
-              </a>
+              {!model.embedded ? (
+                <PublicSpeakerShareActions model={model} />
+              ) : null}
               <button
                 type="button"
                 className="btn small"

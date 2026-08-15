@@ -12,6 +12,7 @@ import {
 } from "./public-programme-surfaces";
 import {
   PublicSpeakerAvatar,
+  PublicSpeakerShareActions,
   SaveSessionButton,
 } from "./public-programme-parts";
 import {
@@ -141,6 +142,27 @@ describe("public programme speaker surfaces", () => {
     expect(photoMarkup).not.toContain("headshot");
     expect(placeholderMarkup).toContain('aria-hidden="true"');
     expect(placeholderMarkup).not.toContain('role="img"');
+  });
+
+  it("always renders a copy action for a resolved speaker share", () => {
+    const markup = renderToStaticMarkup(
+      <PublicSpeakerShareActions
+        model={model({
+          speakerShare: {
+            speakerId: speaker.id,
+            speakerName: speaker.displayName,
+            sessionTitle: session.title,
+            description: speaker.biography!,
+            url: "https://programcue.test/public/programme/future-of-events-2027?speaker=person-priya",
+            text: "Priya Shah is speaking at Future of Events 2027.",
+            imageUrl: null,
+          },
+        })}
+      />,
+    );
+
+    expect(markup).toContain("Copy profile link");
+    expect(markup).not.toContain(">Share profile<");
   });
 
   it("renders only supplied affiliation fields and omits empty metadata", () => {

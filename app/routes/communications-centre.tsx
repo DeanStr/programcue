@@ -13,6 +13,7 @@ import {
   CalendarLifecycleTable,
   CalendarAdministration,
   CommunicationAutomation,
+  CommunicationDeliveryHealth,
   DeliveryConfiguration,
   DeliveryReadiness,
   RecentCommunications,
@@ -127,6 +128,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const search = new URL(request.url).searchParams;
   const activeFilter =
     search.get("filter") === "failed" ? ("failed" as const) : null;
+  const selectedCommunicationId =
+    search.get("deliveryCommunication")?.trim() ?? "";
+  if (selectedCommunicationId.length > 200) {
+    throw new Response("Communication selection is invalid.", { status: 400 });
+  }
+  const requestedDeliveryOffset = search.get("deliveryOffset") ?? "0";
+  if (!/^\d+$/u.test(requestedDeliveryOffset)) {
+    throw new Response("Delivery page is invalid.", { status: 400 });
+  }
+  const deliveryOffset = Number(requestedDeliveryOffset);
+  if (!Number.isSafeInteger(deliveryOffset)) {
+    throw new Response("Delivery page is invalid.", { status: 400 });
+  }
   const requestedAudience = search.get("audience");
   const audiencePreset = requestedAudience
     ? audienceTypeSchema.safeParse(requestedAudience)
@@ -153,6 +167,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     connections,
     calendarTargets,
     event,
+    deliveryHealth,
   ] = await Promise.all([
     communicationService.listCentre(viewer, {
       filter: activeFilter ?? undefined,
@@ -163,6 +178,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     calendarService.listConnections(viewer),
     calendarService.listTargets(viewer),
     new EventService(env).getSetup(viewer),
+    communicationService.listDeliveryHealth(viewer, {
+      communicationId: selectedCommunicationId || undefined,
+      offset: deliveryOffset,
+    }),
   ]);
   const requestedTemplate = search.get("template");
   const selected =
@@ -238,6 +257,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       ? (categoryPreset.data satisfies CommunicationCategory)
       : null,
     eventTimezone: event.timezone,
+    deliveryHealth,
     notice: persistedSave
       ? `Draft version ${selected.versionNumber} saved.`
       : "",
@@ -765,6 +785,7 @@ export default function CommunicationsCentre({
             label="History"
             description="Confirmed sends and calendar operations for this event"
           >
+            <CommunicationDeliveryHealth loaderData={loaderData} />
             <div className="grid grid-2 comms-history">
               <RecentCommunications
                 loaderData={loaderData}

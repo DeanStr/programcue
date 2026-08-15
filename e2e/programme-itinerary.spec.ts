@@ -65,15 +65,36 @@ test("publishes speaker profiles and a read-only itinerary share link", async ({
   const profileLink = page
     .getByRole("link", { name: "View profile and sessions" })
     .first();
+  await expect(profileLink).toHaveAttribute(
+    "href",
+    /^\/public\/programme\/future-of-events-2027\?speaker=[^#]+$/u,
+  );
   await profileLink.click();
   await expect(
     page.getByText("Speaker profile", { exact: true }),
   ).toBeVisible();
+  await expect(page).toHaveURL(/\?speaker=/u);
   await expect(
-    page.getByRole("link", { name: "Share profile link" }),
-  ).toHaveAttribute("href", /^#speaker-/);
+    page.getByRole("button", { name: "Copy profile link" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Copy profile link" }).click();
+  await expect(page.getByRole("button", { name: "Link copied" })).toBeVisible();
+  const speakerUrl = page.url();
+  await page.getByRole("button", { name: "Close profile" }).click();
+  await expect(page).not.toHaveURL(/\?speaker=/u);
+  await page.goBack();
+  await expect(page).toHaveURL(speakerUrl);
+  await expect(
+    page.getByText("Speaker profile", { exact: true }),
+  ).toBeVisible();
 
   await page.locator(".programme-row").first().click();
+  await expect(
+    page.getByRole("link", { name: /View .+’s profile/u }).first(),
+  ).toHaveAttribute(
+    "href",
+    /\/public\/programme\/future-of-events-2027\?speaker=/u,
+  );
   await page.getByRole("button", { name: "Add to itinerary" }).click();
   await expect(page.getByText("Saved ✓").first()).toBeVisible();
   const itineraryItem = page.locator(".itinerary-item").first();

@@ -73,12 +73,17 @@ export function EvaluationHeader() {
 
 export function EvaluationFilterNotice() {
   const { loaderData } = useEvaluationAdminModel();
-  return loaderData.unassignedOnly ? (
+  return loaderData.reviewFilter ? (
     <div className="validation-item warn card pad mb" role="status">
-      <strong>Unassigned proposals</strong>
+      <strong>
+        {loaderData.unassignedOnly
+          ? "Unassigned review targets"
+          : "Incomplete review targets"}
+      </strong>
       <span>
-        Showing {loaderData.submissions.length} of{" "}
-        {loaderData.totalSubmissionCount} submitted records.{" "}
+        {loaderData.unassignedOnly
+          ? "Showing targets with no assignments."
+          : "Showing targets with at least one assignment and fewer completed reviews than assignments."}{" "}
         <Link to="/admin/review">Clear filter</Link>
       </span>
     </div>

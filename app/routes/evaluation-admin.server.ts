@@ -17,8 +17,9 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   await ensureDemoEvaluationData(env);
   const canPrepareReviewerReminders =
     viewer.role === "owner" || viewer.role === "administrator";
+  const evaluationService = new EvaluationService(env);
   const [workspace, event, reviewerReminderTemplateRows] = await Promise.all([
-    new EvaluationService(env).getAdminWorkspace(viewer),
+    evaluationService.getAdminWorkspace(viewer),
     new EventService(env).getSetup(viewer),
     canPrepareReviewerReminders
       ? env.DB.prepare(
@@ -58,10 +59,28 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         : Promise.resolve([]),
     ]);
   const search = new URL(request.url).searchParams;
-  const unassignedOnly = search.get("filter") === "unassigned";
+  const requestedFilter = search.get("filter") ?? "";
+  if (
+    requestedFilter &&
+    !["unassigned", "incomplete"].includes(requestedFilter)
+  ) {
+    throw new Response("Invalid evaluation review filter", { status: 400 });
+  }
+  const reviewFilter =
+    requestedFilter === "unassigned" || requestedFilter === "incomplete"
+      ? requestedFilter
+      : null;
+  const unassignedOnly = reviewFilter === "unassigned";
+  const incompleteOnly = reviewFilter === "incomplete";
   const focusedSubmissionId = search.get("submission")?.trim() ?? "";
-  if (focusedSubmissionId.length > 200) {
-    throw new Response("Invalid evaluation submission focus", { status: 400 });
+  const focusedSessionId = search.get("session")?.trim() ?? "";
+  if (focusedSubmissionId.length > 200 || focusedSessionId.length > 200) {
+    throw new Response("Invalid evaluation discussion focus", { status: 400 });
+  }
+  if (focusedSubmissionId && focusedSessionId) {
+    throw new Response("Choose one evaluation discussion target", {
+      status: 400,
+    });
   }
   if (
     focusedSubmissionId &&
@@ -76,6 +95,20 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   if (focusedSubmissionId && !workspace.plan) {
     throw new Response(
       "Create an evaluation plan before opening a submission in Review.",
+      { status: 409 },
+    );
+  }
+  if (
+    focusedSessionId &&
+    !workspace.sessions.some((session) => session.id === focusedSessionId)
+  ) {
+    throw new Response("Session not found in this event's evaluation", {
+      status: 404,
+    });
+  }
+  if (focusedSessionId && !workspace.plan) {
+    throw new Response(
+      "Create an evaluation plan before opening a session in Review.",
       { status: 409 },
     );
   }
@@ -185,11 +218,17 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           : null,
     };
   });
-  const visibleSubmissions = unassignedOnly
-    ? roundScopedSubmissions.filter(
-        (submission) => submission.assignmentCount === 0,
-      )
-    : roundScopedSubmissions;
+  const matchesReviewFilter = (target: {
+    assignmentCount: number;
+    completedReviewCount: number;
+  }) =>
+    unassignedOnly
+      ? target.assignmentCount === 0
+      : incompleteOnly
+        ? target.assignmentCount > 0 &&
+          target.completedReviewCount < target.assignmentCount
+        : true;
+  const visibleSubmissions = roundScopedSubmissions.filter(matchesReviewFilter);
   const roundScopedSessions = workspace.sessions.map((session) => {
     const aggregate = sessionResults.get(session.id);
     return {
@@ -202,6 +241,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           : null,
     };
   });
+  const visibleSessions = roundScopedSessions.filter(matchesReviewFilter);
   const compareResults = (
     left: {
       id: string;
@@ -284,7 +324,38 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       completedReviewCount: session.completedReviewCount,
       averageScore: session.averageScore,
     })),
-  ].sort(compareResults);
+  ]
+    .filter(matchesReviewFilter)
+    .sort(compareResults);
+  const discussionTarget = focusedSubmissionId
+    ? ({ targetType: "submission", targetId: focusedSubmissionId } as const)
+    : focusedSessionId
+      ? ({ targetType: "session", targetId: focusedSessionId } as const)
+      : null;
+  const reviewDiscussion =
+    discussionTarget && resultsRoundId
+      ? await evaluationService.listDiscussion(viewer, {
+          roundId: resultsRoundId,
+          ...discussionTarget,
+        })
+      : null;
+  let reviewDiscussionTitle: string | null = null;
+  if (discussionTarget) {
+    const titledTarget =
+      discussionTarget.targetType === "submission"
+        ? roundScopedSubmissions.find(
+            (submission) => submission.id === discussionTarget.targetId,
+          )
+        : roundScopedSessions.find(
+            (session) => session.id === discussionTarget.targetId,
+          );
+    if (!titledTarget) {
+      throw new Error(
+        "The validated evaluation discussion target is missing from the review workspace.",
+      );
+    }
+    reviewDiscussionTitle = titledTarget.title;
+  }
   return {
     ...workspace,
     demoMode: viewer.demo,
@@ -304,15 +375,19 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       ...submission,
       aiAssessmentGenerationIntent: crypto.randomUUID(),
     })),
-    sessions: roundScopedSessions,
+    sessions: visibleSessions,
     results,
+    reviewFilter,
     unassignedOnly,
+    incompleteOnly,
     focusedSubmissionId: focusedSubmissionId || null,
+    focusedSessionId: focusedSessionId || null,
+    reviewDiscussion,
+    reviewDiscussionTitle,
     resultSort,
     resultsRoundId,
     resultsExportIntent: crypto.randomUUID(),
     focusedRoundId: requestedRoundId || null,
-    totalSubmissionCount: roundScopedSubmissions.length,
     eventTimezone: event.timezone,
     acceptedSpeakerInvitationResendEnabled: String(env.DEMO_MODE) !== "true",
   };

@@ -101,6 +101,12 @@ export function publicProgrammeSurfacePath(
   return `/public/programme/${encodeURIComponent(eventSlug)}/${surface}`;
 }
 
+export function publicSpeakerProfilePath(eventSlug: string, speakerId: string) {
+  return `/public/programme/${encodeURIComponent(eventSlug)}?${new URLSearchParams({
+    speaker: speakerId,
+  })}`;
+}
+
 const SPEAKER_HONORIFICS = new Set([
   "dr",
   "dr.",

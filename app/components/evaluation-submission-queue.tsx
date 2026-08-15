@@ -558,6 +558,22 @@ export function EvaluationSubmissionQueue() {
                     <td data-label="Reviews">
                       {submission.completedReviewCount} /{" "}
                       {submission.assignmentCount}
+                      {loaderData.resultsRoundId ? (
+                        <small>
+                          <Link
+                            to={`/admin/review?${new URLSearchParams({
+                              resultsRound: loaderData.resultsRoundId,
+                              submission: submission.id,
+                              sort: loaderData.resultSort,
+                              ...(loaderData.reviewFilter
+                                ? { filter: loaderData.reviewFilter }
+                                : {}),
+                            })}#evaluation-discussion`}
+                          >
+                            Open discussion
+                          </Link>
+                        </small>
+                      ) : null}
                     </td>
                     <td data-label="Average">
                       {submission.averageScore === null

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFetcher, useLocation } from "react-router";
+import { useFetcher, useLocation, useNavigate } from "react-router";
 
 import type { parseProgrammeEmbedSearchParameters } from "~/modules/programme/programme-embed-configuration";
 import {
@@ -24,6 +24,16 @@ export type PublicProgrammeLoaderData = {
   itinerarySynced: boolean;
   shared: boolean;
   calendarExportQuery: string;
+  canonicalUrl: string;
+  speakerShare: {
+    speakerId: string;
+    speakerName: string;
+    sessionTitle: string | null;
+    description: string;
+    url: string;
+    text: string;
+    imageUrl: string | null;
+  } | null;
 };
 
 export function formatDay(epoch: number, timezone: string) {
@@ -150,6 +160,7 @@ export function sessionSpeakerDetails(
 export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const { programme } = loaderData;
   const location = useLocation();
+  const navigate = useNavigate();
   const embedded = loaderData.embedded;
   const shared = loaderData.shared;
   const embedOptions = loaderData.embedOptions;
@@ -229,7 +240,11 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   );
   const [selectedId, setSelectedId] = useState(programme.sessions[0]?.id ?? "");
   const sessionDetailRef = useRef<HTMLElement | null>(null);
-  const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
+  const [embeddedSelectedSpeakerId, setEmbeddedSelectedSpeakerId] =
+    useState("");
+  const selectedSpeakerId = embedded
+    ? embeddedSelectedSpeakerId
+    : (loaderData.speakerShare?.speakerId ?? "");
   const [expandedSpeakerBiography, setExpandedSpeakerBiography] =
     useState(false);
   const speakerProfileRef = useRef<HTMLElement | null>(null);
@@ -270,23 +285,10 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
         (session) => session.slug === slug,
       );
       if (linked) setSelectedId(linked.id);
-    } else if (
-      showSpeakerDirectory &&
-      showSpeakerDetails &&
-      location.hash.startsWith("#speaker-")
-    ) {
-      const personId = location.hash.slice("#speaker-".length);
-      const linked = programme.speakers.find(
-        (speaker) => speaker.id === personId,
-      );
-      if (linked) setSelectedSpeakerId(linked.id);
     }
   }, [
     location.hash,
     programme.sessions,
-    programme.speakers,
-    showSpeakerDetails,
-    showSpeakerDirectory,
   ]);
   const normalisedQuery = query.trim().toLocaleLowerCase();
   const sessionsMatchingFacets = useMemo(
@@ -384,7 +386,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     );
   }, [embedded, speakerSurfaceSource, standaloneGalleryQuery]);
   const selectedSpeaker = showSpeakerDetails
-    ? (visibleSpeakers.find((speaker) => speaker.id === selectedSpeakerId) ??
+    ? (programme.speakers.find((speaker) => speaker.id === selectedSpeakerId) ??
       null)
     : null;
   const selectedSpeakerSessions = selectedSpeaker
@@ -437,19 +439,28 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     setExpandedSpeakerBiography(false);
   }, [selectedSpeakerId]);
 
-  // Do not silently reopen a profile if later filter changes remove its
-  // speaker from the result set and those filters are subsequently cleared.
-  useEffect(() => {
-    if (selectedSpeakerId && !selectedSpeaker) {
-      setSelectedSpeakerId("");
-      speakerProfileReturnFocusRef.current = null;
-    }
-  }, [selectedSpeaker, selectedSpeakerId]);
-
   function openSpeakerProfile(speakerId: string, trigger: HTMLElement) {
     if (!showSpeakerDetails) return;
     speakerProfileReturnFocusRef.current = trigger;
-    setSelectedSpeakerId(speakerId);
+    if (embedded) {
+      setEmbeddedSelectedSpeakerId(speakerId);
+      return;
+    }
+    const search = new URLSearchParams(location.search);
+    search.set("speaker", speakerId);
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: `?${search}`,
+        hash:
+          loaderData.surface === "gallery"
+            ? "#speaker-gallery-detail"
+            : loaderData.surface === "speakers"
+              ? "#public-speaker-detail"
+              : "#programme-speaker-profile",
+      },
+      { preventScrollReset: true },
+    );
   }
 
   function closeSpeakerProfile() {
@@ -472,11 +483,25 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       fallbackTargets.find((element): element is HTMLElement =>
         Boolean(element?.isConnected),
       ) ?? null;
-    setSelectedSpeakerId("");
+    if (embedded) {
+      setEmbeddedSelectedSpeakerId("");
+      speakerProfileReturnFocusRef.current = null;
+      requestAnimationFrame(() => focusTarget?.focus());
+      return;
+    }
+    const search = new URLSearchParams(location.search);
+    search.delete("speaker");
     speakerProfileReturnFocusRef.current = null;
-    requestAnimationFrame(() => {
-      focusTarget?.focus();
-    });
+    void Promise.resolve(
+      navigate(
+        {
+          pathname: location.pathname,
+          search: search.size ? `?${search}` : "",
+          hash: "",
+        },
+        { preventScrollReset: true },
+      ),
+    ).then(() => focusTarget?.focus());
   }
 
   /**
@@ -621,6 +646,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     selectedSpeaker,
     selectedSpeakerSessions,
     selectedSpeakerAllSessions,
+    speakerShare: loaderData.speakerShare,
     expandedSpeakerBiography,
     savedSessions,
     itineraryConflicts,

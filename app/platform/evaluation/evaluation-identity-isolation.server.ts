@@ -12,6 +12,7 @@ const OUTSIDE_EVENT_PERSON_ATTRIBUTIONS = [
   ["ai_review_assessments", "generated_by_person_id"],
   ["ai_review_assessments", "override_by_person_id"],
   ["review_revisions", "saved_by_person_id"],
+  ["evaluation_discussion_messages", "author_person_id"],
   ["review_moderations", "moderator_person_id"],
   ["submission_decisions", "decided_by_person_id"],
   ["tags", "created_by_person_id"],

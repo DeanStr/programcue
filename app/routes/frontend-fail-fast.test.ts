@@ -52,6 +52,7 @@ function formRequest(url: string, values: Record<string, string>) {
     headers: {
       "content-type": "application/x-www-form-urlencoded",
       cookie: ADMIN_COOKIE,
+      origin: new URL(url).origin,
     },
     body: new URLSearchParams(values),
   });

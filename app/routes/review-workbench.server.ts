@@ -15,6 +15,7 @@ import {
 } from "~/modules/evaluations/evaluation-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
@@ -27,15 +28,50 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   ]);
   await ensureDemoEvaluationData(env);
   const selected = new URL(request.url).searchParams.get("assignment");
-  const result = await new EvaluationService(env).getReviewerWorkbench(
+  const service = new EvaluationService(env);
+  const result = await service.getReviewerWorkbench(
     viewer,
     selected ?? undefined,
   );
   if (result.kind === "selection_recused") throw redirect("/review/workbench");
-  return { viewer, eventName: result.eventName, workspace: result.workspace };
+  const selectedAssignment = result.workspace.selected;
+  const manager =
+    viewer.role === "owner" ||
+    viewer.role === "administrator" ||
+    viewer.role === "committee_chair";
+  const discussion = selectedAssignment
+    ? manager || selectedAssignment.status === "submitted"
+      ? {
+          available: true as const,
+          ...(await service.listDiscussion(viewer, {
+            roundId: selectedAssignment.roundId,
+            targetType: selectedAssignment.targetType,
+            targetId: selectedAssignment.targetId,
+          })),
+        }
+      : {
+          available: false as const,
+          target: {
+            roundId: selectedAssignment.roundId,
+            targetType: selectedAssignment.targetType,
+            targetId: selectedAssignment.targetId,
+          },
+          writable: false,
+          messages: [],
+          postIntentId: crypto.randomUUID(),
+        }
+    : null;
+  return {
+    viewer,
+    eventName: result.eventName,
+    eventTimezone: result.eventTimezone,
+    workspace: { ...result.workspace, discussion },
+  };
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
+  const rejectedOrigin = rejectCrossOriginBrowserMutation(request);
+  if (rejectedOrigin) return rejectedOrigin;
   const { env } = getCloudflareContext(context);
   const viewer = await requireCurrentEventRole(request, env, [
     "owner",
@@ -46,13 +82,33 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const values = await request.formData();
   const service = new EvaluationService(env);
   const intent = String(values.get("intent") ?? "");
-  if (intent !== "conflict" && intent !== "save" && intent !== "submit") {
+  if (
+    intent !== "conflict" &&
+    intent !== "save" &&
+    intent !== "submit" &&
+    intent !== "add-discussion-message"
+  ) {
     return data(
       { ok: false, error: "Unsupported review action." },
       { status: 400 },
     );
   }
   try {
+    if (intent === "add-discussion-message") {
+      const result = await service.addDiscussionMessage(viewer, {
+        roundId: values.get("roundId"),
+        targetType: values.get("targetType"),
+        targetId: values.get("targetId"),
+        body: values.get("body"),
+        idempotencyKey: values.get("idempotencyKey"),
+      });
+      return {
+        ok: true,
+        message: result.replayed
+          ? "Discussion message was already added."
+          : "Discussion message added.",
+      };
+    }
     if (intent === "conflict") {
       await service.declareConflict(viewer, {
         assignmentId: values.get("assignmentId"),

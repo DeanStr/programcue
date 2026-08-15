@@ -54,6 +54,7 @@ export type ReviewWorkbenchModel = {
   viewer: ReviewWorkbenchLoaderData["viewer"];
   workspace: ReviewWorkspace;
   eventName: string;
+  eventTimezone: string;
   assignmentKey: string;
   fetcher: FetcherWithComponents<ReviewWorkbenchActionData>;
   formRef: RefObject<HTMLFormElement | null>;
@@ -168,7 +169,7 @@ export type ReviewWorkbenchWorkspaceProps = {
 export function useReviewWorkbenchState({
   loaderData,
 }: ReviewWorkbenchWorkspaceProps): ReviewWorkbenchModel {
-  const { viewer, eventName, workspace } = loaderData;
+  const { viewer, eventName, eventTimezone, workspace } = loaderData;
   const assignmentKey = workspace.selected?.id ?? "no-assignment";
   const fetcher = useFetcher<ReviewWorkbenchAction>({
     key: `review-workbench:${assignmentKey}`,
@@ -638,6 +639,7 @@ export function useReviewWorkbenchState({
     viewer,
     workspace,
     eventName,
+    eventTimezone,
     assignmentKey,
     fetcher,
     formRef,

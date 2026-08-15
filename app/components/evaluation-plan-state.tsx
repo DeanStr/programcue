@@ -12,6 +12,7 @@ import {
 } from "~/components/evaluation-admin-queue-panels";
 
 import { EvaluationMetrics } from "~/components/evaluation-metrics";
+import { EvaluationDiscussionPanel } from "~/components/evaluation-discussion-panel";
 import { EvaluationReviewCyclePanel } from "~/components/evaluation-review-cycle-panel";
 import { EvaluationRoundsPanel } from "~/components/evaluation-rounds-panel";
 import { RubricFields } from "~/components/evaluation-rubric-fields";
@@ -184,6 +185,7 @@ export function EvaluationPlanState() {
       >
         <EvaluationUnifiedResults />
       </AdminPageSection>
+      <EvaluationDiscussionPanel />
       <AdminPageSection
         id="evaluation-proposals"
         label="Proposal queue"

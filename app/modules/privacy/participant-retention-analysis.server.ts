@@ -121,6 +121,8 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
           + (SELECT COUNT(*) FROM review_revisions record WHERE record.event_id IN locked
             AND (COALESCE(json_extract(record.scores_json, '$.redacted'), 0) <> 1
               OR COALESCE(json_extract(record.content_json, '$.redacted'), 0) <> 1))
+          + (SELECT COUNT(*) FROM evaluation_discussion_messages record
+              WHERE record.event_id IN locked AND record.body IS NOT NULL)
           AS total`,
       },
       {

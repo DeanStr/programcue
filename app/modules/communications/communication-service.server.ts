@@ -38,6 +38,11 @@ export class CommunicationService {
   listCentre(...args: Parameters<CommunicationTemplateService["listCentre"]>) {
     return this.templates.listCentre(...args);
   }
+  listDeliveryHealth(
+    ...args: Parameters<CommunicationTemplateService["listDeliveryHealth"]>
+  ) {
+    return this.templates.listDeliveryHealth(...args);
+  }
 
   saveTemplate(
     ...args: Parameters<CommunicationTemplateService["saveTemplate"]>

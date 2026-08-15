@@ -284,6 +284,22 @@ export const conflictDeclarationSchema = z.object({
     .max(2_000),
 });
 
+export const evaluationDiscussionTargetSchema = z.object({
+  roundId: z.string().trim().min(1).max(200),
+  targetType: z.enum(["submission", "session"]),
+  targetId: z.string().trim().min(1).max(200),
+});
+
+export const evaluationDiscussionMessageSchema =
+  evaluationDiscussionTargetSchema.extend({
+    body: z
+      .string()
+      .trim()
+      .min(1, "Enter a discussion message.")
+      .max(2000, "Discussion messages must contain at most 2,000 characters."),
+    idempotencyKey: z.uuid(),
+  });
+
 export const decisionBaseSchema = z.object({
   submissionId: z.string().trim().min(1),
   decision: z.enum(["accepted", "rejected", "waitlisted"]),

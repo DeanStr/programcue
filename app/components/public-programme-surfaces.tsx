@@ -13,6 +13,7 @@ import {
 import {
   ProgrammeDayHeading,
   PublicSpeakerAvatar,
+  PublicSpeakerShareActions,
   SaveSessionButton,
   SessionPlace,
   SessionTags,
@@ -793,6 +794,7 @@ function SpeakerDetailPanel({
             <PublicSpeakerMetadata speaker={speaker} />
           ) : null}
           <div className="public-profile-actions">
+            {!model.embedded ? <PublicSpeakerShareActions model={model} /> : null}
             <button
               type="button"
               className="btn small"

@@ -73,24 +73,58 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   }
   const { event, sessions, speakers } = loaderData.programme;
   const place = [event.venue, event.city].filter(Boolean).join(", ");
-  const description =
-    event.description ??
-    `${sessions.length} sessions and ${speakers.length} speakers${place ? ` at ${place}` : ""}.`;
-  const title = `Programme · ${event.name}`;
+  const description = loaderData.speakerShare
+    ? loaderData.speakerShare.description
+    : event.description ??
+      `${sessions.length} sessions and ${speakers.length} speakers${place ? ` at ${place}` : ""}.`;
+  const title = loaderData.speakerShare
+    ? `${loaderData.speakerShare.speakerName} · ${event.name}`
+    : `Programme · ${event.name}`;
 
   return [
     { title },
     { name: "description", content: description },
+    { tagName: "link", rel: "canonical", href: loaderData.canonicalUrl },
     { property: "og:type", content: "website" },
     { property: "og:site_name", content: event.name },
     { property: "og:title", content: title },
     { property: "og:description", content: description },
-    { name: "twitter:card", content: "summary_large_image" },
+    { property: "og:url", content: loaderData.canonicalUrl },
+    ...(loaderData.speakerShare?.imageUrl
+      ? [
+          {
+            property: "og:image",
+            content: loaderData.speakerShare.imageUrl,
+          },
+        ]
+      : []),
+    {
+      name: "twitter:card",
+      content: loaderData.speakerShare?.imageUrl
+        ? "summary_large_image"
+        : "summary",
+    },
     { name: "twitter:title", content: title },
     { name: "twitter:description", content: description },
+    ...(loaderData.speakerShare?.imageUrl
+      ? [
+          {
+            name: "twitter:image",
+            content: loaderData.speakerShare.imageUrl,
+          },
+        ]
+      : []),
     { name: "theme-color", content: event.brandAccent },
   ];
 };
+
+function shareDescription(value: string | null | undefined) {
+  const normalised = value?.replace(/\s+/gu, " ").trim() ?? "";
+  if (normalised.length <= 180) return normalised;
+  const candidate = normalised.slice(0, 180);
+  const boundary = candidate.lastIndexOf(" ");
+  return `${(boundary > 90 ? candidate.slice(0, boundary) : candidate).trimEnd()}…`;
+}
 
 export function headers({
   loaderHeaders,
@@ -124,6 +158,52 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     throw error;
   }
   const url = new URL(request.url);
+  const requestedSpeakerId = url.searchParams.get("speaker");
+  const featuredSpeaker = requestedSpeakerId
+    ? (programme.speakers.find(
+        (speaker) => speaker.id === requestedSpeakerId,
+      ) ?? null)
+    : null;
+  if (requestedSpeakerId !== null && !featuredSpeaker) {
+    throw new Response("Published speaker profile not found", { status: 404 });
+  }
+  const canonicalUrl = new URL(
+    embedded
+      ? `/embed/${encodeURIComponent(programme.event.slug)}${surface === "overview" ? "" : `/${surface}`}`
+      : `/public/programme/${encodeURIComponent(programme.event.slug)}${surface === "overview" ? "" : `/${surface}`}`,
+    request.url,
+  );
+  let speakerShare = null;
+  if (featuredSpeaker) {
+    canonicalUrl.pathname = `/public/programme/${encodeURIComponent(programme.event.slug)}`;
+    canonicalUrl.searchParams.set("speaker", featuredSpeaker.id);
+    const speakerSession = programme.sessions.find((session) =>
+      featuredSpeaker.sessionIds.includes(session.id),
+    );
+    const fallbackDescription = speakerSession
+      ? `${featuredSpeaker.displayName} is speaking at ${programme.event.name}: ${speakerSession.title}.`
+      : `${featuredSpeaker.displayName} is speaking at ${programme.event.name}.`;
+    const releasedHeadshotPath =
+      await service.getReleasedPublishedHeadshotPath(
+        programme.event.slug,
+        featuredSpeaker.id,
+      );
+    const shareUrl = canonicalUrl.toString();
+    speakerShare = {
+      speakerId: featuredSpeaker.id,
+      speakerName: featuredSpeaker.displayName,
+      sessionTitle: speakerSession?.title ?? null,
+      description:
+        shareDescription(featuredSpeaker.biography) || fallbackDescription,
+      url: shareUrl,
+      text: speakerSession
+        ? `${featuredSpeaker.displayName} is speaking at ${programme.event.name}: ${speakerSession.title}.`
+        : `${featuredSpeaker.displayName} is speaking at ${programme.event.name}.`,
+      imageUrl: releasedHeadshotPath
+        ? new URL(releasedHeadshotPath, request.url).toString()
+        : null,
+    };
+  }
   let embedOptions;
   try {
     embedOptions = parseProgrammeEmbedSearchParameters(
@@ -234,6 +314,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return data(
     {
       programme,
+      canonicalUrl: canonicalUrl.toString(),
+      speakerShare,
       surface,
       itinerary,
       embedded,

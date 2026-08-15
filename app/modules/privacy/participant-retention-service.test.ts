@@ -413,6 +413,83 @@ describe("participant retention", () => {
     });
   });
 
+  it("redacts committee discussion content and blocks later discussion writes", async () => {
+    const seeded = await seedExpiredRetentionEvent();
+    const planId = id("privacy-discussion-plan");
+    const roundId = id("privacy-discussion-round");
+    const messageId = id("privacy-discussion-message");
+    await seeded.testEnv.DB.batch([
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO evaluation_plans (
+           id, event_id, name, status, created_by_person_id
+         ) VALUES (?, ?, 'Retained committee discussion', 'archived',
+                   'person-demo-owner')`,
+      ).bind(planId, seeded.eventId),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO evaluation_rounds (
+           id, event_id, plan_id, round_number, name, status, scorecard_id
+         ) VALUES (?, ?, ?, 1, 'Retained committee discussion', 'archived', ?)`,
+      ).bind(roundId, seeded.eventId, planId, roundId),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO evaluation_discussion_messages (
+           id, event_id, round_id, submission_id, author_person_id, body,
+           idempotency_key
+         ) VALUES (?, ?, ?, ?, ?,
+                   'Private committee content that must be removed.', ?)`,
+      ).bind(
+        messageId,
+        seeded.eventId,
+        roundId,
+        seeded.exclusiveSubmissionId,
+        seeded.exclusiveId,
+        id("privacy-discussion-intent"),
+      ),
+    ]);
+
+    const service = new ParticipantRetentionService(seeded.testEnv);
+    await service.anonymiseExpiredParticipants(seeded.owner, {
+      confirmation: "Expired privacy event",
+      acknowledged: true,
+    });
+
+    const retained = await seeded.testEnv.DB.prepare(
+      `SELECT author_person_id AS authorPersonId, body, idempotency_key AS idempotencyKey
+         FROM evaluation_discussion_messages
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(messageId, seeded.eventId)
+      .first<{
+        authorPersonId: string;
+        body: string | null;
+        idempotencyKey: string;
+      }>();
+    expect(retained).toMatchObject({
+      authorPersonId: expect.stringMatching(/^retained-participant-/u),
+      body: null,
+      idempotencyKey: `retained-discussion-${messageId}`,
+    });
+
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO evaluation_discussion_messages (
+           id, event_id, round_id, submission_id, author_person_id, body,
+           idempotency_key
+         ) VALUES (?, ?, ?, ?, 'person-demo-owner',
+                   'Restored private committee content', ?)`,
+      )
+        .bind(
+          id("post-retention-discussion"),
+          seeded.eventId,
+          roundId,
+          seeded.exclusiveSubmissionId,
+          id("post-retention-discussion-intent"),
+        )
+        .run(),
+    ).rejects.toThrow(
+      "event participant retention is complete; participant PII is read-only",
+    );
+  });
+
   it("deletes AI assessment content and rejects new assessments after retention", async () => {
     const seeded = await seedExpiredRetentionEvent();
     const planId = id("privacy-ai-plan");

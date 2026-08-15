@@ -139,6 +139,7 @@ parallel content stores are not introduced.
 | Public programme surfaces | Sessions, speakers, agenda, schedule/itinerary and Speaker Gallery are route-level views over one `PublishedProgramme` snapshot. The gallery does not create a second speaker or schedule store, and all private reads retain event, publication, visibility and profile predicates. Optional speaker title, organisation and biography fields render only when present; attendee surfaces do not turn missing profile data into administrator-facing quality labels.                                                                                                                                                             |
 | Demo headshots            | Only the canonical local-demo or production-evaluation event's published programme projection and optional application featured-speaker preview may use the four bundled raster assets for the four explicitly allowlisted fixture people (Priya Shah, Alex Morgan, Priya Raman and Marcus Okafor). They are not authenticated profile or file state. Any non-deleted real headshot asset, including an unreleased, quarantined or otherwise ineligible one, suppresses that person's bundle. Ordinary production requires a released clean R2 version and never treats participant-upload metadata as upload or scanner success. |
 | Gallery accessibility     | Gallery cards are keyboard-activatable controls; detail is an in-page dialog panel with an explicit close button, deterministic biography expansion and focus restoration to the opening card. Search state remains component-owned while the panel is open.                                                                                                                                                                                                                                                                                                                                                                      |
+| Speaker amplification     | `?speaker=` is public speaker-detail state resolved server-side against the current published snapshot. Invalid or unpublished identities return 404. Opening and closing a profile changes browser history; Copy link is universal and Web Share is progressive enhancement. Canonical and unfurl URLs are absolute and speaker-specific. `og:image` is emitted only for a current anonymously readable released headshot, never for a bundled demo portrait or private file. Social OAuth and generated promotional images remain out of scope. |
 
 ## Participant invitation and profile ownership
 
@@ -339,6 +340,16 @@ batch.
   proposals and sessions under explicit target-type labels and one aggregate
   score ordering. Assignment and decision queues remain target-specific. The
   existing download is labelled proposal-only until combined export exists.
+- **Review coverage filters:** incomplete means a target has at least one
+  non-recused, non-cancelled assignment and fewer submitted or locked reviews
+  than assignments. A target with no assignment is unassigned, not incomplete;
+  the two views remain separate.
+- **Committee discussion boundary:** one persisted thread is keyed by event,
+  evaluation round, target type and target ID. A reviewer may read or post only
+  after their exact assignment and review are submitted and not reopened,
+  recused or cancelled. Evaluation managers may read the exact thread; archived
+  rounds are read-only. Reactions, mentions, editing, notifications and
+  realtime chat semantics are deliberately excluded.
 - **Task identity and comment replay:** the same target cannot receive a second
   active task through another template when its normalised title, description,
   task/evidence type, evidence configuration, impact and resolved due date all
@@ -350,6 +361,21 @@ batch.
 - **Actionable schedule conflicts:** rejected speaker overlaps name the speaker
   and both session titles. A generic conflict count is not an adequate operator
   explanation.
+
+## Communication operations decisions
+
+Delivery health is a read model over existing communication and delivery rows,
+not a new tracking subsystem. It is explicitly scoped either to the current
+event lifetime or one selected communication. Every delivery is counted once
+from its current stored state: queued/sending are Pending, provider-accepted
+`sent` remains Sent, delivered/opened/clicked roll up under Delivered,
+bounced/suppressed/failed are Problems, and cancelled remains separate.
+Recipient unsubscribes are shown separately from recorded provider suppressions
+and complaints; each list is bounded to its latest 30 active records so the
+History route does not grow with the event's lifetime exclusion ledger. Failure
+links target the exact owning operation, and task reminder due/overdue behavior
+remains the two existing deterministic rules rather than a configurable cadence
+builder.
 
 ## Pre-release hardening decisions
 

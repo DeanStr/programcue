@@ -219,6 +219,13 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
       mapStatement(
         this.env,
         mappings,
+        "evaluation_discussion_messages",
+        "author_person_id",
+        "event_id = ?",
+      ),
+      mapStatement(
+        this.env,
+        mappings,
         "file_assets",
         "owner_person_id",
         "event_id = ?",

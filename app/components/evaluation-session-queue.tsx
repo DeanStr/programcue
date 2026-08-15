@@ -1,4 +1,4 @@
-import { Form } from "react-router";
+import { Form, Link } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { EmptyState } from "~/components/ui/states";
@@ -40,7 +40,14 @@ export function EvaluationSessionQueue() {
             </thead>
             <tbody>
               {loaderData.sessions.map((session) => (
-                <tr key={session.id}>
+                <tr
+                  key={session.id}
+                  className={
+                    loaderData.focusedSessionId === session.id
+                      ? "pc-focused-record"
+                      : undefined
+                  }
+                >
                   <td data-label="Session" className="pc-record-primary-cell">
                     <div className="pc-record-stack">
                       <strong>{session.title}</strong>
@@ -61,6 +68,22 @@ export function EvaluationSessionQueue() {
                   </td>
                   <td data-label="Reviews">
                     {session.completedReviewCount} / {session.assignmentCount}
+                    {loaderData.resultsRoundId ? (
+                      <small>
+                        <Link
+                          to={`/admin/review?${new URLSearchParams({
+                            resultsRound: loaderData.resultsRoundId,
+                            session: session.id,
+                            sort: loaderData.resultSort,
+                            ...(loaderData.reviewFilter
+                              ? { filter: loaderData.reviewFilter }
+                              : {}),
+                          })}#evaluation-discussion`}
+                        >
+                          Open discussion
+                        </Link>
+                      </small>
+                    ) : null}
                   </td>
                   <td data-label="Average">
                     {session.averageScore === null

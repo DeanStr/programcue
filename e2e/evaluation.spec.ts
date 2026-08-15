@@ -34,6 +34,10 @@ test("reviewer queue navigation and submission confirmation preserve context", a
   await expect(
     page.getByRole("heading", { name: "Review Workbench" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Committee discussion" }),
+  ).toBeVisible();
+  await expect(page.getByText("Independent review first")).toBeVisible();
   const queueItems = page
     .getByRole("navigation", {
       name: "Assigned review sources",
@@ -100,6 +104,24 @@ test("reviewer queue navigation and submission confirmation preserve context", a
 test("evaluation administration exposes onboarding and consequential previews", async ({
   page,
 }) => {
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+    {
+      name: "program_cue_demo_identity",
+      value: "administrator",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
   const response = await page.goto("/admin/review");
   expect(response?.ok()).toBeTruthy();
   await page.locator("body[data-hydrated='true']").waitFor();
@@ -133,6 +155,19 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await expect(
     unifiedResults.getByRole("columnheader", { name: "Type" }),
   ).toBeVisible();
+  await expect(page.getByLabel("Coverage")).toContainText(
+    "Incomplete reviews",
+  );
+  await page.getByRole("link", { name: "Open discussion" }).first().click();
+  await expect(
+    page.getByRole("heading", { name: "Committee discussion" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/thread is confined to the selected round/i),
+  ).toBeVisible();
+  await page.getByLabel("Add to discussion").fill("Browser committee note");
+  await page.getByRole("button", { name: "Add message" }).click();
+  await expect(page.getByText("Browser committee note")).toBeVisible();
 
   const bulkAssignButton = page.getByRole("button", { name: "Bulk assign" });
   await bulkAssignButton.click();

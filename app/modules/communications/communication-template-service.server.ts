@@ -24,6 +24,223 @@ import {
 export class CommunicationTemplateService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
+  async listDeliveryHealth(
+    viewer: Viewer,
+    options: { communicationId?: string; offset?: number } = {},
+  ) {
+    const communicationId = options.communicationId?.trim() ?? "";
+    const offset = options.offset ?? 0;
+    if (communicationId.length > 200) {
+      throw new Response("Communication selection is invalid.", {
+        status: 400,
+      });
+    }
+    if (!Number.isInteger(offset) || offset < 0) {
+      throw new Response("Delivery page is invalid.", { status: 400 });
+    }
+    if (!communicationId && offset !== 0) {
+      throw new Response(
+        "Choose a communication before paging through its deliveries.",
+        { status: 400 },
+      );
+    }
+    const selectedCommunication = communicationId
+      ? await this.env.DB.prepare(
+          `SELECT communication.id, communication.status,
+                  communication.operation_id AS operationId,
+                  communication.recipient_count AS recipientCount,
+                  communication.created_at AS createdAt
+             FROM communications communication
+             JOIN events event
+               ON event.id = communication.event_id
+              AND event.organisation_id = ?
+            WHERE communication.id = ? AND communication.event_id = ?`,
+        )
+          .bind(viewer.organisationId, communicationId, viewer.eventId)
+          .first<{
+            id: string;
+            status: string;
+            operationId: string | null;
+            recipientCount: number;
+            createdAt: number;
+          }>()
+      : null;
+    if (communicationId && !selectedCommunication) {
+      throw new Response("Communication not found in this event.", {
+        status: 404,
+      });
+    }
+    const scopeId = selectedCommunication?.id ?? "";
+    const [
+      summary,
+      recentProblems,
+      recipientSuppressions,
+      providerSuppressions,
+      deliveryPage,
+    ] = await Promise.all([
+      this.env.DB.prepare(
+        `SELECT COUNT(delivery.id) AS total,
+                  COALESCE(SUM(CASE WHEN delivery.status IN ('queued','sending') THEN 1 ELSE 0 END), 0) AS pending,
+                  COALESCE(SUM(CASE WHEN delivery.status = 'sent' THEN 1 ELSE 0 END), 0) AS sent,
+                  COALESCE(SUM(CASE WHEN delivery.status IN ('delivered','opened','clicked') THEN 1 ELSE 0 END), 0) AS delivered,
+                  COALESCE(SUM(CASE WHEN delivery.status IN ('bounced','suppressed','failed') THEN 1 ELSE 0 END), 0) AS problems,
+                  COALESCE(SUM(CASE WHEN delivery.status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled
+             FROM communications communication
+             JOIN events event
+               ON event.id = communication.event_id
+              AND event.organisation_id = ?
+             LEFT JOIN communication_deliveries delivery
+               ON delivery.communication_id = communication.id
+              AND delivery.event_id = communication.event_id
+            WHERE communication.event_id = ?
+              AND (? = '' OR communication.id = ?)`,
+      )
+        .bind(viewer.organisationId, viewer.eventId, scopeId, scopeId)
+        .first<{
+          total: number;
+          pending: number;
+          sent: number;
+          delivered: number;
+          problems: number;
+          cancelled: number;
+        }>(),
+      this.env.DB.prepare(
+        `SELECT delivery.id, delivery.communication_id AS communicationId,
+                  delivery.recipient_address AS recipientAddress,
+                  delivery.recipient_name AS recipientName,
+                  delivery.status, delivery.failure_code AS failureCode,
+                  delivery.failure_message AS failureMessage,
+                  delivery.updated_at AS updatedAt,
+                  communication.operation_id AS operationId
+             FROM communication_deliveries delivery
+             JOIN communications communication
+               ON communication.id = delivery.communication_id
+              AND communication.event_id = delivery.event_id
+             JOIN events event
+               ON event.id = delivery.event_id
+              AND event.organisation_id = ?
+            WHERE delivery.event_id = ?
+              AND delivery.status IN ('bounced','suppressed','failed')
+              AND (? = '' OR communication.id = ?)
+            ORDER BY delivery.updated_at DESC, delivery.id DESC
+            LIMIT 30`,
+      )
+        .bind(viewer.organisationId, viewer.eventId, scopeId, scopeId)
+        .all<{
+          id: string;
+          communicationId: string;
+          recipientAddress: string;
+          recipientName: string | null;
+          status: string;
+          failureCode: string | null;
+          failureMessage: string | null;
+          updatedAt: number;
+          operationId: string | null;
+        }>(),
+      this.env.DB.prepare(
+        `SELECT unsubscribe.id, unsubscribe.address, unsubscribe.category,
+                  unsubscribe.reason, unsubscribe.created_at AS createdAt
+             FROM communication_unsubscribes unsubscribe
+             JOIN events event
+               ON event.id = unsubscribe.event_id
+              AND event.organisation_id = ?
+            WHERE unsubscribe.event_id = ? AND unsubscribe.revoked_at IS NULL
+              AND unsubscribe.reason = 'recipient_unsubscribe'
+            ORDER BY unsubscribe.created_at DESC, unsubscribe.id DESC
+            LIMIT 30`,
+      )
+        .bind(viewer.organisationId, viewer.eventId)
+        .all<{
+          id: string;
+          address: string;
+          category: string;
+          reason: string | null;
+          createdAt: number;
+        }>(),
+      this.env.DB.prepare(
+        `SELECT unsubscribe.id, unsubscribe.address, unsubscribe.category,
+                  unsubscribe.reason, unsubscribe.created_at AS createdAt
+             FROM communication_unsubscribes unsubscribe
+             JOIN events event
+               ON event.id = unsubscribe.event_id
+              AND event.organisation_id = ?
+            WHERE unsubscribe.event_id = ? AND unsubscribe.revoked_at IS NULL
+              AND unsubscribe.reason IN ('email.complained','email.suppressed')
+            ORDER BY unsubscribe.created_at DESC, unsubscribe.id DESC
+            LIMIT 30`,
+      )
+        .bind(viewer.organisationId, viewer.eventId)
+        .all<{
+          id: string;
+          address: string;
+          category: string;
+          reason: string | null;
+          createdAt: number;
+        }>(),
+      selectedCommunication
+        ? this.env.DB.prepare(
+            `SELECT delivery.id,
+                      delivery.recipient_address AS recipientAddress,
+                      delivery.recipient_name AS recipientName,
+                      delivery.status, delivery.failure_code AS failureCode,
+                      delivery.failure_message AS failureMessage,
+                      delivery.attempt_count AS attemptCount,
+                      delivery.updated_at AS updatedAt
+                 FROM communication_deliveries delivery
+                 JOIN communications communication
+                   ON communication.id = delivery.communication_id
+                  AND communication.event_id = delivery.event_id
+                 JOIN events event
+                   ON event.id = delivery.event_id
+                  AND event.organisation_id = ?
+                WHERE delivery.event_id = ? AND delivery.communication_id = ?
+                ORDER BY delivery.created_at, delivery.id
+                LIMIT 51 OFFSET ?`,
+          )
+            .bind(
+              viewer.organisationId,
+              viewer.eventId,
+              selectedCommunication.id,
+              offset,
+            )
+            .all<{
+              id: string;
+              recipientAddress: string;
+              recipientName: string | null;
+              status: string;
+              failureCode: string | null;
+              failureMessage: string | null;
+              attemptCount: number;
+              updatedAt: number;
+            }>()
+        : Promise.resolve({ results: [] }),
+    ]);
+    if (!summary) {
+      throw new Error("The delivery health aggregate query returned no row.");
+    }
+    const pageRows = deliveryPage.results;
+    return {
+      scope: selectedCommunication
+        ? ({
+            kind: "communication",
+            communication: selectedCommunication,
+          } as const)
+        : ({ kind: "event_lifetime" } as const),
+      summary,
+      recentProblems: recentProblems.results,
+      suppressions: {
+        recipient: recipientSuppressions.results,
+        provider: providerSuppressions.results,
+      },
+      deliveryPage: {
+        rows: pageRows.slice(0, 50),
+        offset,
+        hasPrevious: offset > 0,
+        hasNext: pageRows.length > 50,
+      },
+    };
+  }
+
   async listCentre(viewer: Viewer, options: { filter?: "failed" } = {}) {
     const statusFilter = options.filter === "failed" ? "failed" : "";
     const providerIssue = emailProviderConfigurationIssue(this.env);

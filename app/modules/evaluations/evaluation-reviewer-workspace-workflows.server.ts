@@ -104,16 +104,19 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
       }
 
       const event = await this.env.DB.prepare(
-        `SELECT name
+        `SELECT name, timezone
            FROM events
           WHERE id = ? AND organisation_id = ?`,
       )
         .bind(viewer.eventId, viewer.organisationId)
-        .first<{ name: string }>();
-      if (!event) throw new Response("This event could not be found.", { status: 404 });
+        .first<{ name: string; timezone: string }>();
+      if (!event) {
+        throw new Response("This event could not be found.", { status: 404 });
+      }
       return {
         kind: "ready" as const,
         eventName: event.name,
+        eventTimezone: event.timezone,
         workspace,
       };
     });

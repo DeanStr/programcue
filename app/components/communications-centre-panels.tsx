@@ -17,4 +17,7 @@ export {
   CalendarLifecycleTable,
   CommunicationRecipientIdentity,
 } from "./communications-calendar-panels";
-export { RecentCommunications } from "./communications-activity-panel";
+export {
+  CommunicationDeliveryHealth,
+  RecentCommunications,
+} from "./communications-activity-panel";

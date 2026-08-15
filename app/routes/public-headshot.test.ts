@@ -174,6 +174,12 @@ describe("published programme headshots", () => {
         (candidate) => candidate.id === speaker.id,
       )?.imageUrl,
     ).toBe(publishedHeadshotPath("future-of-events-2027", speaker.id));
+    await expect(
+      service.getReleasedPublishedHeadshotPath(
+        "future-of-events-2027",
+        speaker.id,
+      ),
+    ).resolves.toBe(publishedHeadshotPath("future-of-events-2027", speaker.id));
 
     const response = await responseFor("future-of-events-2027", speaker.id);
     expect(response.status).toBe(200);
@@ -185,6 +191,13 @@ describe("published programme headshots", () => {
       "cross-origin",
     );
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(headshot.body);
+    await env.FILES.delete(headshot.objectKey);
+    await expect(
+      service.getReleasedPublishedHeadshotPath(
+        "future-of-events-2027",
+        speaker.id,
+      ),
+    ).resolves.toBeNull();
 
     const pendingVersionId = `pending-${crypto.randomUUID()}`;
     await env.DB.batch([
@@ -216,6 +229,25 @@ describe("published programme headshots", () => {
     expect(
       (await responseFor("future-of-events-2027", speaker.id)).status,
     ).toBe(404);
+  });
+
+  it("fails fast when a released headshot requires an unavailable FILES binding", async () => {
+    const programme = await new PublicProgrammeService(testEnv).getPublished(
+      "future-of-events-2027",
+    );
+    const speaker = programme!.speakers[0];
+    await createCleanHeadshot("evt-foe-2025", speaker.id);
+    const service = new PublicProgrammeService({
+      ...testEnv,
+      FILES: undefined,
+    } as unknown as CloudflareEnvironment);
+
+    await expect(
+      service.getReleasedPublishedHeadshotPath(
+        "future-of-events-2027",
+        speaker.id,
+      ),
+    ).rejects.toThrow("Required private R2 binding FILES is unavailable.");
   });
 
   it("does not expose a clean headshot after its speaker profile becomes private", async () => {

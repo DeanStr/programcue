@@ -17,9 +17,18 @@ export function EvaluationUnifiedResults() {
         </div>
         <div className="page-actions right">
           <Form method="get" className="inline-form">
-            {loaderData.unassignedOnly ? (
-              <input type="hidden" name="filter" value="unassigned" />
-            ) : null}
+            <label className="label">
+              Coverage
+              <select
+                className="select"
+                name="filter"
+                defaultValue={loaderData.reviewFilter ?? ""}
+              >
+                <option value="">All targets</option>
+                <option value="incomplete">Incomplete reviews</option>
+                <option value="unassigned">Unassigned</option>
+              </select>
+            </label>
             <label className="label">
               Results round
               <select

@@ -5,6 +5,7 @@ import { EvaluationAccessWorkflows } from "./evaluation-access-workflows.server"
 import { EvaluationAssignmentWorkflows } from "./evaluation-assignment-workflows.server";
 import { EvaluationConfigurationWorkflows } from "./evaluation-configuration-workflows.server";
 import { EvaluationDecisionService } from "./evaluation-decision-service.server";
+import { EvaluationDiscussionWorkflows } from "./evaluation-discussion-workflows.server";
 import { EvaluationPlanWorkflows } from "./evaluation-plan-workflows.server";
 import { EvaluationReviewSubmissionWorkflows } from "./evaluation-review-submission-workflows.server";
 import { EvaluationReviewerWorkflows } from "./evaluation-reviewer-workflows.server";
@@ -68,6 +69,7 @@ export class EvaluationService {
   private readonly reviewSubmission: EvaluationReviewSubmissionWorkflows;
   private readonly reviews: EvaluationReviewerWorkflows;
   private readonly decisions: EvaluationDecisionWorkflow;
+  private readonly discussion: EvaluationDiscussionWorkflows;
 
   constructor(
     private readonly env: CloudflareEnvironment,
@@ -94,6 +96,7 @@ export class EvaluationService {
     );
     this.reviews = new EvaluationReviewerWorkflows(env, collaborators);
     this.decisions = new EvaluationDecisionWorkflow(env, collaborators);
+    this.discussion = new EvaluationDiscussionWorkflows(env, collaborators);
   }
 
   getAdminWorkspace(...args: Parameters<EvaluationPlanWorkflows["getAdminWorkspace"]>) {
@@ -164,6 +167,12 @@ export class EvaluationService {
   }
   decide(...args: Parameters<EvaluationDecisionWorkflow["decide"]>) {
     return this.decisions.decide(...args);
+  }
+  listDiscussion(...args: Parameters<EvaluationDiscussionWorkflows["listDiscussion"]>) {
+    return this.discussion.listDiscussion(...args);
+  }
+  addDiscussionMessage(...args: Parameters<EvaluationDiscussionWorkflows["addDiscussionMessage"]>) {
+    return this.discussion.addDiscussionMessage(...args);
   }
   resendAcceptedSpeakerInvitation(viewer: Viewer, input: unknown) {
     return resendAcceptedSpeakerInvitation({
