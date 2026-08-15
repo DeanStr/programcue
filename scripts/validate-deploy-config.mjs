@@ -20,7 +20,7 @@ const profileSpecs = Object.freeze({
     sourceRevision: null,
     queueName: "program-cue-operations",
     traceSamplingRate: 0.1,
-    crons: ["* * * * *", "17 2 * * *"],
+    crons: ["* * * * *", "17 2 * * *", "47 3 * * *"],
   },
   demo: {
     workerName: "program-cue-demo",

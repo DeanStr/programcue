@@ -17,6 +17,7 @@ import {
 import { requireRuntimeMode } from "../app/platform/runtime-environment.server";
 
 export const D1_BACKUP_CRON = "17 2 * * *";
+export const D1_BACKUP_MONITOR_CRON = "47 3 * * *";
 export const D1_BACKUP_FORMAT = "program-cue-d1-logical-backup-v1";
 
 const BACKUP_PREFIX = "d1-logical";
@@ -63,6 +64,15 @@ interface D1BackupEnvironment {
 interface D1BackupScheduleEnvironment {
   D1_BACKUP_WORKFLOW: Workflow<D1BackupParameters>;
   APP_ENV?: unknown;
+  SOURCE_REVISION?: unknown;
+}
+
+interface D1BackupMonitorEnvironment {
+  BACKUPS: R2Bucket;
+  APP_ENV?: unknown;
+  DEMO_MODE?: unknown;
+  EVALUATION_MODE?: unknown;
+  D1_DATABASE_ID?: string;
   SOURCE_REVISION?: unknown;
 }
 
@@ -849,6 +859,53 @@ export async function scheduleDailyD1Backup(
     outcome: "created",
   });
   return { backupDate, instanceId, created: true };
+}
+
+export async function verifyDailyD1Backup(
+  environment: D1BackupMonitorEnvironment,
+  scheduledTime: number,
+) {
+  requireProductionBackupRuntime(environment);
+  const databaseId = environment.D1_DATABASE_ID?.trim() ?? "";
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      databaseId,
+    )
+  ) {
+    throw new NonRetryableError(
+      "D1_DATABASE_ID must be the provisioned D1 UUID before daily backups can be monitored.",
+    );
+  }
+  if (
+    !environment.BACKUPS ||
+    typeof environment.BACKUPS.get !== "function" ||
+    typeof environment.BACKUPS.head !== "function"
+  ) {
+    throw new NonRetryableError(
+      "The private BACKUPS R2 binding is required before daily backups can be monitored.",
+    );
+  }
+
+  const backupDate = utcBackupDate(scheduledTime);
+  const { backupKey, manifestKey } = backupKeys(backupDate);
+  const manifest = await readExistingBackupManifest(
+    environment.BACKUPS,
+    manifestKey,
+    { backupDate, databaseId, backupKey },
+  );
+  if (!manifest) {
+    throw new Error(
+      `The expected daily D1 backup for ${backupDate} is missing from private R2.`,
+    );
+  }
+
+  structuredLog(environment, "info", "monitor-verified", {
+    backupDate,
+    backupKey,
+    bytes: manifest.bytes,
+    sha256: manifest.sha256,
+  });
+  return manifest;
 }
 
 export async function runD1BackupWorkflow(

@@ -33,7 +33,12 @@ import {
 import { requireProductionRuntimeReadiness } from "../app/platform/runtime-readiness.server";
 import { handleProgramCueQueueMessage } from "./communications-queue";
 import { processWithConcurrency } from "./queue/bounded-concurrency";
-import { D1_BACKUP_CRON, scheduleDailyD1Backup } from "./d1-backup-workflow";
+import {
+  D1_BACKUP_CRON,
+  D1_BACKUP_MONITOR_CRON,
+  scheduleDailyD1Backup,
+  verifyDailyD1Backup,
+} from "./d1-backup-workflow";
 
 export { EventChannel } from "./event-channel";
 export { D1BackupWorkflow } from "./d1-backup-workflow";
@@ -503,6 +508,15 @@ export default {
         observe(
           "d1-backup-scheduler",
           scheduleDailyD1Backup(env, controller.scheduledTime),
+        ),
+      );
+      return;
+    }
+    if (controller.cron === D1_BACKUP_MONITOR_CRON) {
+      ctx.waitUntil(
+        observe(
+          "d1-backup-monitor",
+          verifyDailyD1Backup(env, controller.scheduledTime),
         ),
       );
       return;

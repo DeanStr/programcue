@@ -13,6 +13,7 @@ import {
   scheduleDailyD1Backup,
   storeBackupStream,
   utcBackupDate,
+  verifyDailyD1Backup,
   writeBackupManifest,
   type D1BackupManifest,
 } from "../../../workers/d1-backup-workflow";
@@ -221,6 +222,60 @@ describe("scheduled D1 backup Workflow boundaries", () => {
     expect(() => utcBackupDate(Number.NaN)).toThrow(
       "backup schedule timestamp must be finite",
     );
+  });
+
+  it("fails the daily monitor when private R2 lacks the expected backup and verifies exact stored evidence", async () => {
+    const bucket = backupBucket();
+    const backupDate = "2026-08-10";
+    const scheduledTime = Date.parse(`${backupDate}T03:47:00.000Z`);
+    const monitorEnvironment = {
+      BACKUPS: bucket,
+      APP_ENV: "production",
+      DEMO_MODE: "false",
+      EVALUATION_MODE: "true",
+      D1_DATABASE_ID: configuration.databaseId,
+      SOURCE_REVISION: "abc1234",
+    };
+
+    await expect(
+      verifyDailyD1Backup(monitorEnvironment, scheduledTime),
+    ).rejects.toThrow(`daily D1 backup for ${backupDate} is missing`);
+
+    const backupKey = `d1-logical/${backupDate}/program-cue-${backupDate}.sql`;
+    const sql = "CREATE TABLE monitor_evidence(id TEXT);\n";
+    const stored = await storeBackupStream(bucket, new Blob([sql]).stream(), {
+      backupKey,
+      backupDate,
+      databaseId: configuration.databaseId,
+      bookmark: "bookmark-monitor",
+      workflowInstanceId: `d1-backup-${backupDate}`,
+      expectedBytes: new TextEncoder().encode(sql).byteLength,
+    });
+    const manifest: D1BackupManifest = {
+      format: D1_BACKUP_FORMAT,
+      backupDate,
+      scheduledFor: `${backupDate}T02:17:00.000Z`,
+      databaseId: configuration.databaseId,
+      bookmark: "bookmark-monitor",
+      sourceFilename: "export.sql",
+      ...stored,
+      workflowInstanceId: `d1-backup-${backupDate}`,
+    };
+    await writeBackupManifest(bucket, `${backupKey}.manifest.json`, manifest);
+    const infoLog = vi
+      .spyOn(console, "info")
+      .mockImplementation(() => undefined);
+
+    await expect(
+      verifyDailyD1Backup(monitorEnvironment, scheduledTime),
+    ).resolves.toEqual(manifest);
+    expect(infoLog).toHaveBeenCalledWith(
+      expect.stringContaining('"event":"monitor-verified"'),
+    );
+    expect(infoLog).toHaveBeenCalledWith(
+      expect.stringContaining('"sourceRevision":"abc1234"'),
+    );
+    infoLog.mockRestore();
   });
 
   it("restricts direct Workflow execution to the production runtime", () => {
