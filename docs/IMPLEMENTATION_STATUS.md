@@ -364,26 +364,32 @@ npm run check:core
 npm run check
 ```
 
-The deployed application/scanner baseline release `9d1e276` passed the complete
-release gate: 161 unit/Worker test files with 1,264 tests, the Agents
-Durable Object test, production builds, a 136,880-byte clean-room recovery
-drill, synchronized OpenAPI at 33 paths and 459 internal references, 132
-application Playwright cases with two intentional skips, all 14 public-site
-browser cases and the scanner's 10 container tests. The later scanner-only
-`c9e1287` release passed its focused scanner, configuration, Worker and local
-production-container clean/EICAR checks.
+The deployed application release `c29922a` passed the complete release gate:
+61 unit files with 339 tests, 161 Worker files with 1,265 tests, the Agents
+Durable Object test, production builds, 54 configuration tests, migration
+parity at 95 application tables, 107 indexes and 88 triggers, a 136,880-byte
+clean-room recovery drill, synchronized OpenAPI at 33 paths and 459 internal
+references, 133 passing application Playwright cases with two intentional
+skips, all 14 public-site browser cases and the scanner's 10 container tests.
+The scanner-only `c9e1287` release separately passed its focused scanner,
+configuration, Worker and local production-container clean/EICAR checks.
 
 ## Deployment evidence
 
-Application source `9d1e276` is deployed at `app.programcue.com`, and the later
-scanner source `c9e1287` is deployed at `scanner.programcue.com`; release-stamp
-commits `9fc8a1b` and `a5e1bab` record those sources. The current versions are
-at 100% traffic, the WNAM D1 ledger has 19 migrations with none pending,
-`quick_check=ok`, and foreign-key inspection returns no rows. The separately
-deployed public website remains live at `programcue.com` and
-`www.programcue.com`. Health, sign-in, evaluation access, canonical public
-programme/gallery, public API and public-site smoke checks returned their
-expected successful responses; the reset-only endpoint remained unavailable.
+Application source `c29922a` is deployed at `app.programcue.com` as Worker
+version `d4f7ed11-565c-4fb7-bec2-5123397cdd81`, and scanner source `c9e1287`
+is deployed at `scanner.programcue.com`; release-stamp commits `30c3dbd` and
+`a5e1bab` record those sources. The current versions are at 100% traffic, and
+the normal remote migration command reported no pending migration. The WNAM D1
+ledger retains 19 migrations, `quick_check=ok`, and foreign-key inspection
+returns no rows. The separately deployed public website remains live at
+`programcue.com` and `www.programcue.com`. Health returned the exact application
+source revision with `no-store`; sign-in, public application entry and the
+canonical published programme returned HTTP 200. A fresh production Chromium
+evaluation-organiser session rendered Command Centre and exercised the
+redesigned command and Create dialogs, including initial focus, Escape close
+and opener focus restoration, without an application-owned console error. The
+reset-only endpoint remained unavailable with HTTP 404.
 
 Scanner-only source `c9e1287` is deployed with ClamAV 1.4.6 pinned by immutable
 multi-architecture digest. A fresh production Chromium session completed the
