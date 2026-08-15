@@ -549,25 +549,35 @@ separately. The production-discovered DeepSeek corrections through final source
 The browser gate was not rerun because the correction changes only the
 server-side DeepSeek reasoning parameter for schema-bound requests; the exact
 production request was exercised instead.
+Application candidate `0fa84a1` passed generated TypeScript, production builds,
+61 unit files with 345 tests, 167 Worker files with 1,320 tests, the Agents
+Durable Object test, 55 configuration tests, the scanner's 10 tests, recovery
+and synchronized OpenAPI validation. Its core gate correctly rejected the two
+new migrations that both used sequence `0026`; all other lanes passed. Final
+source `0eac9fb` renumbers the operation-acknowledgement migration to `0028`,
+after which migration validation passed at 97 application tables, 114 indexes
+and 99 triggers. The full browser gate was not rerun; focused production role
+smokes exercised every materially changed surface after deployment.
 
 ## Deployment evidence
 
-Application source `27a9941` is deployed at `app.programcue.com` as Worker
-version `452a55e8-c95c-4639-b435-822bcfdcdf96`, and scanner source `c9e1287`
-is deployed at `scanner.programcue.com`; release-stamp commits `b505acf` and
+Application source `0eac9fb` is deployed at `app.programcue.com` as Worker
+version `ac14c001-d2a0-40e3-97fe-bc130586ba30`, and scanner source `c9e1287`
+is deployed at `scanner.programcue.com`; release-stamp commits `b6eb630` and
 `a5e1bab` record those sources. The current application version is at 100%
-traffic. Migrations `0023_workers_ai_deepseek_v4_flash.sql`,
-`0024_public_projection_revision.sql` and
-`0025_communication_delivery_health_indexes.sql` applied successfully. The
-WNAM D1 ledger retains 25 migrations, `quick_check=ok`, and foreign-key
-inspection returns no rows. The public-projection revision trigger and both
-communication-delivery health indexes are present.
+traffic. Migrations `0026_review_conflict_attestation.sql`,
+`0027_programme_venue_presentation.sql` and
+`0028_operation_failure_alert_acknowledgements.sql` applied successfully. The
+WNAM D1 ledger retains 28 migrations, `quick_check=ok`, and foreign-key
+inspection returns no rows. The review attestation, venue presentation and
+operation alert-attribution columns, bounded failure-alert index and both
+attribution triggers are present.
 The separately deployed public website remains live at `programcue.com` and
-`www.programcue.com`. Health returned source `27a9941`; sign-in, evaluation
+`www.programcue.com`. Health returned source `0eac9fb`; sign-in, evaluation
 access, the canonical published programme and the public programme API returned
-HTTP 200. A fresh production evaluation-organiser unlock and fixed-identity
-selection rendered authenticated programme, communications and review
-administration with HTTP 200. Earlier
+HTTP 200. Fresh production evaluation identity selections rendered organiser
+Command Centre, event setup, Operation Centre and tasks, the reviewer workbench
+and speaker dashboard with HTTP 200. Earlier
 production Chromium acceptance of the same fixture rendered
 the native Call for Speakers Form Builder with ten authored fields and all six
 palette controls, while anonymous Chromium rendered and hydrated the published
