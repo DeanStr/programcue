@@ -410,32 +410,36 @@ npm run check:core
 npm run check
 ```
 
-The deployed application release `c29922a` passed the complete release gate:
-61 unit files with 339 tests, 161 Worker files with 1,265 tests, the Agents
-Durable Object test, production builds, 54 configuration tests, migration
-parity at 95 application tables, 107 indexes and 88 triggers, a 136,880-byte
-clean-room recovery drill, synchronized OpenAPI at 33 paths and 459 internal
-references, 133 passing application Playwright cases with two intentional
-skips, all 14 public-site browser cases and the scanner's 10 container tests.
-The scanner-only `c9e1287` release separately passed its focused scanner,
+Application release `6db71bf` passed the complete core gate: 60 unit files with
+335 tests, 161 Worker files with 1,277 tests, the Agents Durable Object test,
+production builds, 54 configuration tests, migration parity at 95 application
+tables, 107 indexes and 88 triggers, a 136,880-byte clean-room recovery drill,
+synchronized OpenAPI at 33 paths and 459 internal references, and the scanner's
+10 container tests. The five-shard application browser run passed 135 cases
+with two intentional skips; one draft-recovery case encountered a parallel
+IndexedDB deletion race, then passed in an unchanged focused serial rerun. The
+unchanged public-site release retains its separately passing 14-case browser
+gate. The scanner-only `c9e1287` release separately passed its focused scanner,
 configuration, Worker and local production-container clean/EICAR checks.
 
 ## Deployment evidence
 
-Application source `c29922a` is deployed at `app.programcue.com` as Worker
-version `d4f7ed11-565c-4fb7-bec2-5123397cdd81`, and scanner source `c9e1287`
-is deployed at `scanner.programcue.com`; release-stamp commits `30c3dbd` and
-`a5e1bab` record those sources. The current versions are at 100% traffic, and
-the normal remote migration command reported no pending migration. The WNAM D1
-ledger retains 19 migrations, `quick_check=ok`, and foreign-key inspection
-returns no rows. The separately deployed public website remains live at
-`programcue.com` and `www.programcue.com`. Health returned the exact application
-source revision with `no-store`; sign-in, public application entry and the
-canonical published programme returned HTTP 200. A fresh production Chromium
-evaluation-organiser session rendered Command Centre and exercised the
-redesigned command and Create dialogs, including initial focus, Escape close
-and opener focus restoration, without an application-owned console error. The
-reset-only endpoint remained unavailable with HTTP 404.
+Application source `6db71bf` is deployed at `app.programcue.com` as Worker
+version `379d9c45-b21a-46bc-8388-c0dee275c8f2`, and scanner source `c9e1287`
+is deployed at `scanner.programcue.com`; release-stamp commits `fc74cf3` and
+`a5e1bab` record those sources. The current application version is at 100%
+traffic, and the normal remote migration command reported no pending migration.
+The WNAM D1 ledger retains 19 migrations, `quick_check=ok`, and foreign-key
+inspection returns no rows. The separately deployed public website remains live
+at `programcue.com` and `www.programcue.com`. Health returned the exact
+application source revision with `no-store`; sign-in, evaluation access, public
+application entry, the canonical published programme and its schedule returned
+HTTP 200. A fresh production Chromium evaluation-organiser session rendered
+Command Centre and the native Call for Speakers Form Builder with ten authored
+fields and all six palette controls. Anonymous Chromium rendered and hydrated
+the published application and programme. Neither session produced an
+application-owned console error. The reset-only endpoint remained unavailable
+with HTTP 404.
 
 Scanner-only source `c9e1287` is deployed with ClamAV 1.4.6 pinned by immutable
 multi-architecture digest. A fresh production Chromium session completed the
