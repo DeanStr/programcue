@@ -32,7 +32,7 @@ This is an implementation baseline, not a production certification.
 
 ## Outstanding production acceptance
 
-- Turnstile and the private-R2-to-scanner clean/EICAR paths have live production evidence. Browser multipart signing/CORS, a fresh provider-error callback and provider-side erasure still require acceptance.
+- Turnstile, browser/Uppy multipart signing and CORS, the private-R2-to-scanner clean/EICAR paths and a fresh scanner-error callback have live production evidence. Provider-side erasure still requires acceptance.
 - The current content security policy permits inline scripts and styles for the application build. A nonce/hash-based production policy and third-party provider allow-list are not complete.
 - Real owner Resend magic-link delivery, tracked Resend delivered/bounced receipt reconciliation, Google/Microsoft sign-in and both calendar invitation create/update/cancel lifecycles have production evidence. Broader recipient sets, a fresh provider-error callback, Airtable, Accelevents and external AI-provider paths still require production acceptance.
 - The deployed D1-export Workflow code produced an immutable private-R2 backup and checksum manifest, and that exact object passed an isolated remote-D1 restore drill. The next autonomous post-fix cron, point-in-time restore exercise, alert delivery and measured RPO/RTO remain outstanding.
