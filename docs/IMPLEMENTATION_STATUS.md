@@ -289,6 +289,15 @@ the human checklist.
   application release are deployed; a fresh production committee post was not
   performed. Reactions, mentions, editing, notifications and realtime chat are
   not implemented.
+- **Production slice; repository evidence only:** The selected-round unified
+  results view is now the chair workbench rather than a second committee board.
+  It exposes Coverage, Decision-ready and Moderation presets, transparent
+  recommendation distributions and score ranges, recusal/incomplete/split
+  flags, expandable rubric responses and permitted comments, proposal decision
+  history, direct assignment/moderation/decision actions and 25-row server
+  pagination. Assignment count remains authoritative; no configurable review
+  target or opaque disagreement score was introduced. Pacing history and bulk
+  staged decisions remain deliberately unimplemented.
 - **Production slice; deployed; repository acceptance:** Communications History exposes
   event-lifetime or selected-communication delivery health from current D1
   delivery states, explicitly rolls opened/clicked into Delivered, separates
@@ -409,7 +418,8 @@ schedule tests verify this AIA-08 production slice.
 - **Data boundary:** Public D1 and Airtable projections require a published schedule version, public published sessions/relationships, public Approved content snapshots and published profiles. Approval provenance remains a database invariant and inconsistent state fails explicitly; the administrator UI never fabricates a missing approver. Missing, non-public or non-Approved content for a source-public session blocks publication, and Airtable staging applies the same boundary before provider writes. Headshot URLs still require released-clean current-version predicates. Only Priya Shah, Alex Morgan, Priya Raman and Marcus Okafor may use explicitly allowlisted bundled portraits on the canonical event, and only in local demo or production evaluation mode; any non-deleted real headshot asset suppresses that person's bundle. Anonymous itinerary rows use an event-specific HMAC of a signed, expiry-bound browser identifier, preventing database-level correlation across events and organisations while retaining one browser cookie. The portraits are presentation-only data, not participant upload infrastructure or an ordinary production fallback.
 - **Accessibility evidence:** Description and biography expansion controls expose `aria-expanded`/`aria-controls`; the gallery card supports pointer and keyboard activation, has an explicit close control, preserves search state and returns focus to the opener. Agenda session details likewise expose an explicit close action and restore focus to the exact trigger. Itinerary calendar export reports that the browser download was requested instead of leaving activation silent. Focused unit, Worker and anonymous Chromium coverage verifies these behaviors.
 - **Embed builder:** The page-local builder generates and previews sessions, speakers, agenda, schedule and gallery widgets from the same published snapshot. Session titles and speaker names remain the identifying minimum. The speaker-details field consistently controls rich speaker blocks, profile links and detail-panel activation across every surface; images, affiliations, biographies/pronunciation and linked sessions/counts remain independent subfields within that rich content, while speaker-directory visibility is a separate sessions-overview option. Generated iframe and auto-resizing widget snippets preserve the chosen surface and fields, while malformed values fail explicitly. The functioning sandbox retains same-origin semantics because an opaque-origin browser trial blocked the framework module graph; stronger isolation requires a dedicated embed origin rather than broad asset CORS.
-- **Scope boundary:** Saved/named embed records, arbitrary CSS, XML output, status filters, live edit propagation and participant upload infrastructure remain outside this workstream. Point-in-time consistency benefits from the single published snapshot read but is not claimed as live propagation.
+- **Managed embed production slice:** Named D1 records add immutable stable slugs, compare-and-set configuration revisions, optional operator installation notes and audited draft/active/paused/revoked lifecycle controls without removing stateless snippets. The admin uses the existing exact preview and a plain before/after summary before activation or configuration changes. Public managed URLs read only the current published snapshot: draft/missing return 404, paused returns a branded non-cacheable 503 with `Retry-After`, revoked irreversibly returns non-cacheable 410, and active representation ETags include the configuration revision. Managed URLs reject query configuration and corrupt persisted JSON fails explicitly.
+- **Scope boundary:** Automatic installation detection, deployment analytics, arbitrary CSS, XML output, a generic diff framework and participant upload infrastructure remain outside this workstream.
 
 ## Requirements traceability
 

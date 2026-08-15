@@ -116,6 +116,7 @@ export const DEMO_RESET_EVENT_TABLES = [
   "task_comments",
   "task_instances",
   "task_templates",
+  "programme_embeds",
   "public_itineraries",
   "schedule_conflicts",
   "schedule_entries",

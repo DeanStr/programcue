@@ -13,6 +13,8 @@ import {
   meta as publicProgrammeMeta,
 } from "~/routes/public-programme";
 import { sortPublishedSpeakers } from "./programme-presentation";
+import { defaultProgrammeEmbedConfiguration } from "./programme-embed-configuration";
+import { ProgrammeEmbedService } from "./programme-embed-service.server";
 import {
   itineraryCookie,
   publicItineraryIdentity,
@@ -40,6 +42,81 @@ describe("published programme and itinerary", () => {
     await expect(
       service.getPublished("future-of-events-2027"),
     ).resolves.not.toBeNull();
+  });
+
+  it("serves managed embeds with exact draft, pause and revocation semantics", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const embedService = new ProgrammeEmbedService(testEnv);
+    const admin = {
+      personId: "person-demo-admin",
+      name: "Olivia Bennett",
+      email: "olivia@example.com",
+      role: "administrator" as const,
+      organisationId: "org-future-events",
+      eventId: "evt-foe-2025",
+      demo: true,
+    };
+    const slug = `route-${crypto.randomUUID().slice(0, 8)}`;
+    const id = await embedService.create(admin, {
+      name: "Route semantics",
+      slug,
+      installationNote: "",
+      configurationJson: JSON.stringify({
+        ...defaultProgrammeEmbedConfiguration(),
+        surface: "agenda",
+      }),
+    });
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: testEnv,
+      ctx: {} as ExecutionContext,
+    });
+    const load = (query = "") =>
+      publicProgrammePageLoader({
+        request: new Request(
+          `https://programcue.test/embed/future-of-events-2027/saved/${slug}${query}`,
+        ),
+        params: { slug: "future-of-events-2027", embedSlug: slug },
+        context,
+      } as never);
+
+    const draft = await load().catch((error: unknown) => error);
+    expect(draft).toMatchObject({ status: 404 });
+    await embedService.transition(admin, {
+      id,
+      revision: 1,
+      nextStatus: "active",
+      confirmed: "yes",
+    });
+    const active = await load();
+    if (active instanceof Response) throw new Error("Managed embed returned a raw response.");
+    expect(active.data).toMatchObject({
+      embedded: true,
+      surface: "agenda",
+      managedEmbedRevision: 2,
+    });
+    const queryRejected = await load("?density=compact").catch(
+      (error: unknown) => error,
+    );
+    expect(queryRejected).toMatchObject({ status: 400 });
+
+    await embedService.transition(admin, {
+      id,
+      revision: 2,
+      nextStatus: "paused",
+      confirmed: "yes",
+    });
+    const paused = await load().catch((error: unknown) => error);
+    expect(paused).toMatchObject({ init: { status: 503 } });
+    await embedService.transition(admin, {
+      id,
+      revision: 3,
+      nextStatus: "revoked",
+      confirmed: "yes",
+    });
+    const revoked = await load().catch((error: unknown) => error);
+    expect(revoked).toMatchObject({ init: { status: 410 } });
   });
 
   it("serves the seeded published snapshot with explicit legacy approval provenance", async () => {

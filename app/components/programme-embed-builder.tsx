@@ -1,8 +1,12 @@
 import { Check, Clipboard, ExternalLink, RotateCcw } from "lucide-react";
 import { useState } from "react";
+import { Form, useActionData } from "react-router";
 
+import { EventDateTime } from "~/components/ui/event-date-time";
 import {
   defaultProgrammeEmbedConfiguration,
+  managedProgrammeEmbedUrl,
+  managedProgrammeWidgetSnippet,
   PROGRAMME_EMBED_CONTROLS,
   PROGRAMME_EMBED_FIELDS,
   PROGRAMME_EMBED_SURFACES,
@@ -17,6 +21,7 @@ import {
   type ProgrammeEmbedField,
   type ProgrammeEmbedSurface,
 } from "~/modules/programme/programme-embed-configuration";
+import type { ManagedProgrammeEmbed } from "~/modules/programme/programme-embed-service.server";
 
 type EmbedSession = {
   startsAt: number | null;
@@ -63,6 +68,7 @@ export function ProgrammeEmbedBuilder({
   eventAccent,
   timezone,
   sessions,
+  managedEmbeds,
 }: {
   publicOrigin: string;
   publicSlug: string;
@@ -70,7 +76,11 @@ export function ProgrammeEmbedBuilder({
   eventAccent: string;
   timezone: string;
   sessions: EmbedSession[];
+  managedEmbeds: ManagedProgrammeEmbed[];
 }) {
+  const actionData = useActionData() as
+    | { ok?: boolean; message?: string }
+    | undefined;
   const [configuration, setConfiguration] =
     useState<ProgrammeEmbedConfiguration>(defaultProgrammeEmbedConfiguration);
   const [heightInput, setHeightInput] = useState(
@@ -83,6 +93,11 @@ export function ProgrammeEmbedBuilder({
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
+  const [selectedEmbedId, setSelectedEmbedId] = useState<string | null>(null);
+  const [managedName, setManagedName] = useState("");
+  const [managedSlug, setManagedSlug] = useState("");
+  const [installationNote, setInstallationNote] = useState("");
+  const [managedConfirmed, setManagedConfirmed] = useState(false);
   const { days, tracks, formats, rooms } = programmeEmbedFilterOptions(
     sessions,
     timezone,
@@ -115,6 +130,38 @@ export function ProgrammeEmbedBuilder({
             title,
             configuration: outputConfiguration,
           });
+  const selectedEmbed = managedEmbeds.find(
+    (embed) => embed.id === selectedEmbedId,
+  );
+  const selectedManagedUrl = selectedEmbed
+    ? managedProgrammeEmbedUrl(publicOrigin, publicSlug, selectedEmbed.slug)
+    : null;
+  const selectedManagedCode =
+    selectedEmbed && outputConfiguration
+      ? output === "iframe"
+        ? programmeIframeSnippet(
+            selectedManagedUrl!,
+            `${eventName} ${selectedEmbed.name}`,
+            outputConfiguration.height,
+          )
+        : managedProgrammeWidgetSnippet({
+            origin: publicOrigin,
+            eventSlug: publicSlug,
+            embedSlug: selectedEmbed.slug,
+            target: `programcue-${publicSlug}-${selectedEmbed.slug}`,
+            title: `${eventName} ${selectedEmbed.name}`,
+            height: outputConfiguration.height,
+          })
+      : "";
+  const changedConfigurationFields = selectedEmbed
+    ? (Object.keys(selectedEmbed.configuration) as Array<
+        keyof ProgrammeEmbedConfiguration
+      >).filter(
+        (key) =>
+          JSON.stringify(selectedEmbed.configuration[key]) !==
+          JSON.stringify(outputConfiguration?.[key]),
+      )
+    : [];
 
   function update<Key extends keyof ProgrammeEmbedConfiguration>(
     key: Key,
@@ -122,6 +169,7 @@ export function ProgrammeEmbedBuilder({
   ) {
     setConfiguration((current) => ({ ...current, [key]: value }));
     setCopyState("idle");
+    setManagedConfirmed(false);
   }
 
   function toggleControl(control: ProgrammeEmbedControl) {
@@ -166,6 +214,26 @@ export function ProgrammeEmbedBuilder({
     setHeightInput(String(defaults.height));
     setOutput("iframe");
     setPreviewWidth("desktop");
+    setCopyState("idle");
+    setSelectedEmbedId(null);
+    setManagedName("");
+    setManagedSlug("");
+    setInstallationNote("");
+    setManagedConfirmed(false);
+  }
+
+  function loadManagedEmbed(embed: ManagedProgrammeEmbed) {
+    setSelectedEmbedId(embed.id);
+    setManagedName(embed.name);
+    setManagedSlug(embed.slug);
+    setInstallationNote(embed.installationNote ?? "");
+    setConfiguration({
+      ...embed.configuration,
+      controls: [...embed.configuration.controls],
+      fields: [...embed.configuration.fields],
+    });
+    setHeightInput(String(embed.configuration.height));
+    setManagedConfirmed(false);
     setCopyState("idle");
   }
 
@@ -357,6 +425,7 @@ export function ProgrammeEmbedBuilder({
                   onChange={(event) => {
                     setHeightInput(event.target.value);
                     setCopyState("idle");
+                    setManagedConfirmed(false);
                   }}
                 />
                 {heightError ? (
@@ -543,6 +612,285 @@ export function ProgrammeEmbedBuilder({
             policy. Every embed reads only the current published snapshot.
           </p>
         </div>
+      </div>
+
+      <div className="mt stack" id="managed-programme-embeds">
+        <div>
+          <span className="pc-page-eyebrow">Durable installations</span>
+          <h2>Managed embeds</h2>
+          <p className="help">
+            Save a named configuration behind a stable URL. Stateless snippets
+            above remain available and unchanged.
+          </p>
+        </div>
+        {actionData?.message ? (
+          <p
+            className={actionData.ok ? "validation-item success" : "validation-item error"}
+            role={actionData.ok ? "status" : "alert"}
+          >
+            {actionData.message}
+          </p>
+        ) : null}
+
+        <Form method="post" className="card pad stack">
+          <input
+            type="hidden"
+            name="intent"
+            value={
+              selectedEmbed ? "update-managed-embed" : "create-managed-embed"
+            }
+          />
+          <input type="hidden" name="id" value={selectedEmbed?.id ?? ""} />
+          <input
+            type="hidden"
+            name="revision"
+            value={selectedEmbed?.revision ?? ""}
+          />
+          <input
+            type="hidden"
+            name="configurationJson"
+            value={JSON.stringify(outputConfiguration)}
+          />
+          <div className="card-title">
+            <div>
+              <h3>{selectedEmbed ? `Edit ${selectedEmbed.name}` : "Save a new draft"}</h3>
+              <p className="help">
+                {selectedEmbed
+                  ? `Stable slug ${selectedEmbed.slug} cannot be changed. Current revision ${selectedEmbed.revision}.`
+                  : "The stable slug is permanent, including after revocation."}
+              </p>
+            </div>
+            {selectedEmbed ? (
+              <button className="btn small" type="button" onClick={reset}>
+                New draft
+              </button>
+            ) : null}
+          </div>
+          <div className="grid grid-2">
+            <label className="label">
+              Embed name
+              <input
+                className="field"
+                name="name"
+                required
+                maxLength={120}
+                value={managedName}
+                onChange={(event) => {
+                  setManagedName(event.target.value);
+                  setManagedConfirmed(false);
+                }}
+              />
+            </label>
+            <label className="label">
+              Stable slug
+              <input
+                className="field"
+                name="slug"
+                required={!selectedEmbed}
+                disabled={Boolean(selectedEmbed)}
+                maxLength={80}
+                pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                value={managedSlug}
+                onChange={(event) => setManagedSlug(event.target.value)}
+                placeholder="conference-homepage"
+              />
+            </label>
+          </div>
+          <label className="label">
+            Installation note (optional)
+            <textarea
+              className="textarea"
+              name="installationNote"
+              maxLength={500}
+              rows={2}
+              value={installationNote}
+              onChange={(event) => {
+                setInstallationNote(event.target.value);
+                setManagedConfirmed(false);
+              }}
+              placeholder="Customer-entered location, owner or handoff note"
+            />
+          </label>
+          {selectedEmbed ? (
+            <>
+              <div className="notice">
+                <strong>Before/after preview</strong>
+                <p className="help">
+                  Revision {selectedEmbed.revision} → {selectedEmbed.revision + 1}.
+                  {changedConfigurationFields.length
+                    ? ` Configuration changes: ${changedConfigurationFields.join(", ")}.`
+                    : " Configuration values are unchanged."}
+                  {selectedEmbed.name !== managedName.trim()
+                    ? " Name will change."
+                    : ""}
+                  {(selectedEmbed.installationNote ?? "") !== installationNote.trim()
+                    ? " Installation note will change."
+                    : ""}
+                </p>
+              </div>
+              <label className="choice">
+                <input
+                  type="checkbox"
+                  name="confirmed"
+                  value="yes"
+                  checked={managedConfirmed}
+                  onChange={(event) => setManagedConfirmed(event.target.checked)}
+                />
+                I reviewed the live preview and this before/after summary.
+              </label>
+            </>
+          ) : null}
+          <div className="page-actions">
+            <button
+              className="btn primary"
+              disabled={
+                outputConfiguration === null ||
+                !managedName.trim() ||
+                (!selectedEmbed && !managedSlug.trim()) ||
+                (Boolean(selectedEmbed) && !managedConfirmed)
+              }
+            >
+              {selectedEmbed ? "Confirm update" : "Save draft"}
+            </button>
+          </div>
+        </Form>
+
+        {selectedEmbed && selectedManagedUrl ? (
+          <div className="card pad stack">
+            <h3>Stable installation</h3>
+            <p className="help">
+              This URL does not change when the configuration revision changes.
+            </p>
+            <a href={selectedManagedUrl} target="_blank" rel="noopener noreferrer">
+              {selectedManagedUrl} <ExternalLink aria-hidden size={13} />
+            </a>
+            <label className="label">
+              Managed {output === "iframe" ? "iframe" : "widget"} code
+              <textarea
+                className="textarea programme-embed-code"
+                value={selectedManagedCode}
+                readOnly
+                rows={output === "iframe" ? 6 : 7}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+            </label>
+          </div>
+        ) : null}
+
+        {managedEmbeds.length ? (
+          <div className="table-wrap" role="region" aria-label="Managed programme embeds" tabIndex={0}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Embed</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Revision</th>
+                  <th scope="col">Installation note</th>
+                  <th scope="col">Updated</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {managedEmbeds.map((embed) => {
+                  const nextStatus =
+                    embed.status === "draft" || embed.status === "paused"
+                      ? "active"
+                      : embed.status === "active"
+                        ? "paused"
+                        : null;
+                  return (
+                    <tr key={embed.id}>
+                      <td>
+                        <strong>{embed.name}</strong>
+                        <div className="help">{embed.slug}</div>
+                      </td>
+                      <td><span className="status info">{embed.status}</span></td>
+                      <td>{embed.revision}</td>
+                      <td>{embed.installationNote ?? "—"}</td>
+                      <td>
+                        <EventDateTime
+                          epochSeconds={embed.updatedAt}
+                          timeZone={timezone}
+                        />
+                        <small className="subtle">
+                          by {embed.updatedByName}
+                        </small>
+                        <small className="subtle">
+                          Created{" "}
+                          <EventDateTime
+                            epochSeconds={embed.createdAt}
+                            timeZone={timezone}
+                          />{" "}
+                          by {embed.createdByName}
+                        </small>
+                      </td>
+                      <td>
+                        <div className="stack">
+                          {embed.status !== "revoked" ? (
+                            <button className="btn small" type="button" onClick={() => loadManagedEmbed(embed)}>
+                              Load and preview
+                            </button>
+                          ) : null}
+                          {nextStatus ? (
+                            <Form method="post" className="stack">
+                              <input type="hidden" name="intent" value="transition-managed-embed" />
+                              <input type="hidden" name="id" value={embed.id} />
+                              <input type="hidden" name="revision" value={embed.revision} />
+                              <input type="hidden" name="nextStatus" value={nextStatus} />
+                              <label className="choice">
+                                <input type="checkbox" name="confirmed" value="yes" required />
+                                {nextStatus === "active"
+                                  ? "I previewed this configuration."
+                                  : "I confirm visitors will see an unavailable response."}
+                              </label>
+                              <button
+                                className="btn small"
+                                disabled={
+                                  nextStatus === "active" &&
+                                  (selectedEmbedId !== embed.id ||
+                                    changedConfigurationFields.length > 0)
+                                }
+                              >
+                                {nextStatus === "active"
+                                  ? embed.status === "paused" ? "Resume" : "Activate"
+                                  : "Pause"}
+                              </button>
+                              {nextStatus === "active" &&
+                              (selectedEmbedId !== embed.id ||
+                                changedConfigurationFields.length > 0) ? (
+                                <span className="help">
+                                  Load this saved revision into the live preview
+                                  before activation.
+                                </span>
+                              ) : null}
+                            </Form>
+                          ) : null}
+                          {embed.status !== "revoked" ? (
+                            <Form method="post" className="stack">
+                              <input type="hidden" name="intent" value="transition-managed-embed" />
+                              <input type="hidden" name="id" value={embed.id} />
+                              <input type="hidden" name="revision" value={embed.revision} />
+                              <input type="hidden" name="nextStatus" value="revoked" />
+                              <label className="choice">
+                                <input type="checkbox" name="confirmed" value="yes" required />
+                                I understand this URL will permanently return 410.
+                              </label>
+                              <button className="btn small danger">Revoke</button>
+                            </Form>
+                          ) : (
+                            <span className="help">Stable slug permanently reserved.</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="help">No managed embeds have been saved yet.</p>
+        )}
       </div>
     </section>
   );

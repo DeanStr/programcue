@@ -1,0 +1,466 @@
+import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  parsePersistedProgrammeEmbedConfiguration,
+  type ProgrammeEmbedConfiguration,
+} from "./programme-embed-configuration";
+
+export type ProgrammeEmbedStatus = "draft" | "active" | "paused" | "revoked";
+
+export type ManagedProgrammeEmbed = {
+  id: string;
+  name: string;
+  slug: string;
+  status: ProgrammeEmbedStatus;
+  configuration: ProgrammeEmbedConfiguration;
+  installationNote: string | null;
+  revision: number;
+  createdByName: string;
+  updatedByName: string;
+  createdAt: number;
+  updatedAt: number;
+  revokedAt: number | null;
+};
+
+type EmbedRow = Omit<ManagedProgrammeEmbed, "configuration"> & {
+  configurationJson: string;
+};
+
+export class ProgrammeEmbedStateError extends Error {
+  constructor(
+    message: string,
+    readonly status = 422,
+  ) {
+    super(message);
+    this.name = "ProgrammeEmbedStateError";
+  }
+}
+
+export class ProgrammeEmbedRevisionConflictError extends ProgrammeEmbedStateError {
+  constructor() {
+    super("This managed embed changed since the page loaded. Refresh and try again.", 409);
+    this.name = "ProgrammeEmbedRevisionConflictError";
+  }
+}
+
+function requiredText(value: unknown, label: string, maximum: number) {
+  const parsed = String(value ?? "").trim();
+  if (!parsed || parsed.length > maximum) {
+    throw new ProgrammeEmbedStateError(
+      `${label} must contain between 1 and ${maximum} characters.`,
+    );
+  }
+  return parsed;
+}
+
+function optionalNote(value: unknown) {
+  const parsed = String(value ?? "").trim();
+  if (!parsed) return null;
+  if (parsed.length > 500) {
+    throw new ProgrammeEmbedStateError(
+      "Installation note must contain at most 500 characters.",
+    );
+  }
+  return parsed;
+}
+
+function embedSlug(value: unknown) {
+  const parsed = requiredText(value, "Stable slug", 80);
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(parsed)) {
+    throw new ProgrammeEmbedStateError(
+      "Stable slug must use lowercase letters, numbers and single hyphens.",
+    );
+  }
+  return parsed;
+}
+
+function positiveRevision(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new ProgrammeEmbedRevisionConflictError();
+  }
+  return parsed;
+}
+
+function parseConfigurationJson(value: unknown) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(value ?? ""));
+  } catch {
+    throw new ProgrammeEmbedStateError(
+      "Managed embed configuration is invalid. Refresh and try again.",
+    );
+  }
+  return parsePersistedProgrammeEmbedConfiguration(parsed);
+}
+
+function parseRow(row: EmbedRow): ManagedProgrammeEmbed {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(row.configurationJson);
+  } catch {
+    throw new ProgrammeEmbedStateError(
+      `Managed embed ${row.id} has corrupt persisted configuration.`,
+      500,
+    );
+  }
+  return {
+    ...row,
+    configuration: parsePersistedProgrammeEmbedConfiguration(parsed),
+  };
+}
+
+function auditMetadata(before: unknown, after: unknown) {
+  return JSON.stringify({ before, after });
+}
+
+function auditSnapshot(embed: ManagedProgrammeEmbed) {
+  return {
+    name: embed.name,
+    slug: embed.slug,
+    status: embed.status,
+    configuration: embed.configuration,
+    installationNote: embed.installationNote,
+    revision: embed.revision,
+  };
+}
+
+export class ProgrammeEmbedService {
+  constructor(private readonly env: CloudflareEnvironment) {}
+
+  async list(viewer: Viewer) {
+    const rows = await this.env.DB.prepare(
+      `SELECT embed.id, embed.name, embed.slug, embed.status,
+              embed.configuration_json AS configurationJson,
+              embed.installation_note AS installationNote,
+              embed.revision, creator.display_name AS createdByName,
+              updater.display_name AS updatedByName,
+              embed.created_at AS createdAt, embed.updated_at AS updatedAt,
+              embed.revoked_at AS revokedAt
+         FROM programme_embeds embed
+         JOIN events event
+           ON event.id = embed.event_id AND event.organisation_id = ?
+         JOIN people creator ON creator.id = embed.created_by_person_id
+         JOIN people updater ON updater.id = embed.updated_by_person_id
+        WHERE embed.event_id = ?
+        ORDER BY CASE embed.status
+                   WHEN 'active' THEN 0 WHEN 'paused' THEN 1
+                   WHEN 'draft' THEN 2 ELSE 3 END,
+                 embed.updated_at DESC, embed.id`,
+    )
+      .bind(viewer.organisationId, viewer.eventId)
+      .all<EmbedRow>();
+    return rows.results.map(parseRow);
+  }
+
+  async create(
+    viewer: Viewer,
+    input: {
+      name: unknown;
+      slug: unknown;
+      installationNote: unknown;
+      configurationJson: unknown;
+    },
+  ) {
+    const id = crypto.randomUUID();
+    const name = requiredText(input.name, "Embed name", 120);
+    const slug = embedSlug(input.slug);
+    const installationNote = optionalNote(input.installationNote);
+    const configuration = parseConfigurationJson(input.configurationJson);
+    const configurationJson = JSON.stringify(configuration);
+    const [created] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `INSERT INTO programme_embeds (
+           id, event_id, organisation_id, name, slug, status,
+           configuration_json, installation_note, revision,
+           created_by_person_id, updated_by_person_id, created_at, updated_at
+         )
+         SELECT ?, event.id, event.organisation_id, ?, ?, 'draft', ?, ?, 1,
+                ?, ?, unixepoch(), unixepoch()
+           FROM events event
+          WHERE event.id = ? AND event.organisation_id = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM programme_embeds existing
+               WHERE existing.event_id = event.id AND existing.slug = ?
+            )`,
+      ).bind(
+        id,
+        name,
+        slug,
+        configurationJson,
+        installationNote,
+        viewer.personId,
+        viewer.personId,
+        viewer.eventId,
+        viewer.organisationId,
+        slug,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, ?, embed.event_id, ?, 'programme_embed.created',
+                'programme_embed', embed.id, ?, unixepoch()
+           FROM programme_embeds embed
+          WHERE embed.id = ? AND embed.event_id = ?`,
+      ).bind(
+        crypto.randomUUID(),
+        viewer.organisationId,
+        viewer.personId,
+        auditMetadata(null, {
+          name,
+          slug,
+          status: "draft",
+          configuration,
+          installationNote,
+          revision: 1,
+        }),
+        id,
+        viewer.eventId,
+      ),
+    ]);
+    if ((created.meta.changes ?? 0) !== 1) {
+      throw new ProgrammeEmbedStateError(
+        "That stable slug is already reserved for this event.",
+        409,
+      );
+    }
+    return id;
+  }
+
+  async update(
+    viewer: Viewer,
+    input: {
+      id: unknown;
+      revision: unknown;
+      name: unknown;
+      installationNote: unknown;
+      configurationJson: unknown;
+      confirmed: unknown;
+    },
+  ) {
+    const id = requiredText(input.id, "Embed id", 200);
+    const revision = positiveRevision(input.revision);
+    const current = await this.current(viewer, id);
+    if (current.status === "revoked") {
+      throw new ProgrammeEmbedStateError(
+        "A revoked embed is permanent and cannot be changed.",
+        409,
+      );
+    }
+    if (current.revision !== revision) throw new ProgrammeEmbedRevisionConflictError();
+    const name = requiredText(input.name, "Embed name", 120);
+    const installationNote = optionalNote(input.installationNote);
+    const configuration = parseConfigurationJson(input.configurationJson);
+    if (input.confirmed !== "yes") {
+      throw new ProgrammeEmbedStateError(
+        "Preview the configuration and confirm the update before saving.",
+      );
+    }
+    const after = {
+      name,
+      slug: current.slug,
+      status: current.status,
+      configuration,
+      installationNote,
+      revision: revision + 1,
+    };
+    const [updated] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `UPDATE programme_embeds
+            SET name = ?, configuration_json = ?, installation_note = ?,
+                revision = revision + 1, updated_by_person_id = ?,
+                updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND organisation_id = ?
+            AND revision = ? AND status <> 'revoked'`,
+      ).bind(
+        name,
+        JSON.stringify(configuration),
+        installationNote,
+        viewer.personId,
+        id,
+        viewer.eventId,
+        viewer.organisationId,
+        revision,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, ?, embed.event_id, ?, 'programme_embed.updated',
+                'programme_embed', embed.id, ?, unixepoch()
+           FROM programme_embeds embed
+          WHERE embed.id = ? AND embed.event_id = ?
+            AND embed.organisation_id = ? AND embed.revision = ?`,
+      ).bind(
+        crypto.randomUUID(),
+        viewer.organisationId,
+        viewer.personId,
+        auditMetadata(auditSnapshot(current), after),
+        id,
+        viewer.eventId,
+        viewer.organisationId,
+        revision + 1,
+      ),
+    ]);
+    if ((updated.meta.changes ?? 0) !== 1) {
+      throw new ProgrammeEmbedRevisionConflictError();
+    }
+  }
+
+  async transition(
+    viewer: Viewer,
+    input: {
+      id: unknown;
+      revision: unknown;
+      nextStatus: unknown;
+      confirmed: unknown;
+    },
+  ) {
+    const id = requiredText(input.id, "Embed id", 200);
+    const revision = positiveRevision(input.revision);
+    const nextStatus = String(input.nextStatus ?? "") as ProgrammeEmbedStatus;
+    const current = await this.current(viewer, id);
+    if (current.revision !== revision) throw new ProgrammeEmbedRevisionConflictError();
+    const allowed: Record<ProgrammeEmbedStatus, ProgrammeEmbedStatus[]> = {
+      draft: ["active", "revoked"],
+      active: ["paused", "revoked"],
+      paused: ["active", "revoked"],
+      revoked: [],
+    };
+    if (!allowed[current.status].includes(nextStatus)) {
+      throw new ProgrammeEmbedStateError(
+        "That managed embed lifecycle change is not allowed.",
+        409,
+      );
+    }
+    if (input.confirmed !== "yes") {
+      throw new ProgrammeEmbedStateError(
+        nextStatus === "revoked"
+          ? "Confirm permanent revocation before continuing."
+          : "Preview and confirm the lifecycle change before continuing.",
+      );
+    }
+    if (nextStatus === "active") await this.requirePublishedProgramme(viewer);
+    const after = {
+      ...auditSnapshot(current),
+      status: nextStatus,
+      revision: revision + 1,
+    };
+    const action =
+      nextStatus === "active"
+        ? current.status === "paused"
+          ? "programme_embed.resumed"
+          : "programme_embed.activated"
+        : nextStatus === "paused"
+          ? "programme_embed.paused"
+          : "programme_embed.revoked";
+    const [updated] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `UPDATE programme_embeds
+            SET status = ?, revision = revision + 1,
+                updated_by_person_id = ?, updated_at = unixepoch(),
+                revoked_at = CASE WHEN ? = 'revoked' THEN unixepoch() ELSE NULL END
+          WHERE id = ? AND event_id = ? AND organisation_id = ?
+            AND revision = ? AND status = ?`,
+      ).bind(
+        nextStatus,
+        viewer.personId,
+        nextStatus,
+        id,
+        viewer.eventId,
+        viewer.organisationId,
+        revision,
+        current.status,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, organisation_id, event_id, actor_person_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         )
+         SELECT ?, ?, embed.event_id, ?, ?, 'programme_embed', embed.id, ?, unixepoch()
+           FROM programme_embeds embed
+          WHERE embed.id = ? AND embed.event_id = ?
+            AND embed.organisation_id = ? AND embed.revision = ?`,
+      ).bind(
+        crypto.randomUUID(),
+        viewer.organisationId,
+        viewer.personId,
+        action,
+        auditMetadata(auditSnapshot(current), after),
+        id,
+        viewer.eventId,
+        viewer.organisationId,
+        revision + 1,
+      ),
+    ]);
+    if ((updated.meta.changes ?? 0) !== 1) {
+      throw new ProgrammeEmbedRevisionConflictError();
+    }
+  }
+
+  async getPublic(eventSlug: string, slug: string) {
+    const row = await this.env.DB.prepare(
+      `SELECT embed.id, embed.name, embed.slug, embed.status,
+              embed.configuration_json AS configurationJson,
+              embed.installation_note AS installationNote,
+              embed.revision, creator.display_name AS createdByName,
+              updater.display_name AS updatedByName,
+              embed.created_at AS createdAt, embed.updated_at AS updatedAt,
+              embed.revoked_at AS revokedAt,
+              event.name AS eventName, event.brand_accent AS eventAccent
+         FROM programme_embeds embed
+         JOIN events event ON event.id = embed.event_id
+         JOIN people creator ON creator.id = embed.created_by_person_id
+         JOIN people updater ON updater.id = embed.updated_by_person_id
+        WHERE event.slug = ? AND embed.slug = ?`,
+    )
+      .bind(eventSlug, slug)
+      .first<EmbedRow & { eventName: string; eventAccent: string }>();
+    if (!row) return null;
+    const { eventName, eventAccent, ...embed } = row;
+    return { ...parseRow(embed), eventName, eventAccent };
+  }
+
+  private async current(viewer: Viewer, id: string) {
+    const row = await this.env.DB.prepare(
+      `SELECT embed.id, embed.name, embed.slug, embed.status,
+              embed.configuration_json AS configurationJson,
+              embed.installation_note AS installationNote,
+              embed.revision, creator.display_name AS createdByName,
+              updater.display_name AS updatedByName,
+              embed.created_at AS createdAt, embed.updated_at AS updatedAt,
+              embed.revoked_at AS revokedAt
+         FROM programme_embeds embed
+         JOIN events event
+           ON event.id = embed.event_id AND event.organisation_id = ?
+         JOIN people creator ON creator.id = embed.created_by_person_id
+         JOIN people updater ON updater.id = embed.updated_by_person_id
+        WHERE embed.id = ? AND embed.event_id = ?`,
+    )
+      .bind(viewer.organisationId, id, viewer.eventId)
+      .first<EmbedRow>();
+    if (!row) throw new ProgrammeEmbedStateError("Managed embed not found.", 404);
+    return parseRow(row);
+  }
+
+  private async requirePublishedProgramme(viewer: Viewer) {
+    const published = await this.env.DB.prepare(
+      `SELECT 1
+         FROM schedule_versions version
+         JOIN events event
+           ON event.id = version.event_id AND event.organisation_id = ?
+        WHERE version.event_id = ? AND version.status = 'published'
+        LIMIT 1`,
+    )
+      .bind(viewer.organisationId, viewer.eventId)
+      .first();
+    if (!published) {
+      throw new ProgrammeEmbedStateError(
+        "Publish the programme before activating this embed.",
+        409,
+      );
+    }
+  }
+}

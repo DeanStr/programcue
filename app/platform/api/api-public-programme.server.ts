@@ -981,11 +981,12 @@ async function publicResourceRevision(
 export async function publishedProgrammeCacheHeaders(
   request: Request,
   programme: Pick<PublishedProgramme, "contentRevision">,
+  representationRevision = "",
 ) {
   return {
     "cache-control":
       "public, max-age=0, s-maxage=300, stale-while-revalidate=60, must-revalidate",
-    etag: `"program-cue-publication-${await publicResourceRevision(request, programme.contentRevision)}"`,
+    etag: `"program-cue-publication-${await publicResourceRevision(request, `${programme.contentRevision}\n${representationRevision}`)}"`,
   } as const;
 }
 

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   defaultProgrammeEmbedConfiguration,
+  managedProgrammeEmbedUrl,
+  managedProgrammeWidgetSnippet,
+  parsePersistedProgrammeEmbedConfiguration,
   parseProgrammeEmbedControls,
   parseProgrammeEmbedDensity,
   parseProgrammeEmbedFields,
@@ -266,5 +269,59 @@ describe("programme embed configuration", () => {
         configuration: { ...configuration, fields: [...configuration.fields] },
       }),
     ).toContain('data-surface="gallery"');
+  });
+
+  it("validates persisted managed configurations without filling missing values", () => {
+    const configuration = defaultProgrammeEmbedConfiguration();
+    expect(
+      parsePersistedProgrammeEmbedConfiguration(
+        JSON.parse(JSON.stringify(configuration)),
+      ),
+    ).toEqual(configuration);
+    expect(() =>
+      parsePersistedProgrammeEmbedConfiguration({
+        ...configuration,
+        controls: ["unknown"],
+      }),
+    ).toThrow(/unique comma-separated selection/i);
+    const { density: _density, ...missingDensity } = configuration;
+    expect(() =>
+      parsePersistedProgrammeEmbedConfiguration(missingDensity),
+    ).toThrow(/invalid shape/i);
+    expect(() =>
+      parsePersistedProgrammeEmbedConfiguration({
+        ...configuration,
+        unexpected: true,
+      }),
+    ).toThrow(/invalid shape/i);
+  });
+
+  it("generates stable managed iframe and widget destinations", () => {
+    expect(
+      managedProgrammeEmbedUrl(
+        "https://events.example.com",
+        "future-of-events-2027",
+        "homepage-schedule",
+      ),
+    ).toBe(
+      "https://events.example.com/embed/future-of-events-2027/saved/homepage-schedule",
+    );
+    expect(
+      managedProgrammeWidgetSnippet({
+        origin: "https://events.example.com",
+        eventSlug: "future-of-events-2027",
+        embedSlug: "homepage-schedule",
+        target: "programme-widget",
+        title: "Homepage programme",
+        height: 640,
+      }),
+    ).toContain('data-programcue-embed="homepage-schedule"');
+    expect(() =>
+      managedProgrammeEmbedUrl(
+        "https://events.example.com",
+        "future-of-events-2027",
+        "Invalid Slug",
+      ),
+    ).toThrow(/managed embed slug/i);
   });
 });

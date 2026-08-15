@@ -1,5 +1,5 @@
 import { CalendarDays, ExternalLink } from "lucide-react";
-import { Link } from "react-router";
+import { data, Link } from "react-router";
 
 import type { Route } from "./+types/admin-section";
 import { ProgrammeEmbedBuilder } from "~/components/programme-embed-builder";
@@ -11,6 +11,11 @@ import {
   summarizeProgramme,
 } from "~/modules/programme/programme-presentation";
 import { ProgrammeAdminService } from "~/modules/programme/programme-admin-service.server";
+import {
+  ProgrammeEmbedService,
+  ProgrammeEmbedStateError,
+} from "~/modules/programme/programme-embed-service.server";
+import { ProgrammeEmbedConfigurationError } from "~/modules/programme/programme-embed-configuration";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
@@ -24,12 +29,89 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     "administrator",
   ]);
 
-  const overview = await new ProgrammeAdminService(env).getOverview(viewer);
+  const [overview, managedEmbeds] = await Promise.all([
+    new ProgrammeAdminService(env).getOverview(viewer),
+    new ProgrammeEmbedService(env).list(viewer),
+  ]);
   return {
     section: "programme" as const,
     ...overview,
     publicOrigin: new URL(request.url).origin,
+    managedEmbeds,
   };
+}
+
+export async function action({ request, params, context }: Route.ActionArgs) {
+  if (params.section !== "programme") {
+    throw new Response("Admin section not found", { status: 404 });
+  }
+  const { env } = getCloudflareContext(context);
+  const viewer = await requireCurrentEventRole(request, env, [
+    "owner",
+    "administrator",
+  ]);
+  const form = await request.formData();
+  const intent = String(form.get("intent") ?? "");
+  const service = new ProgrammeEmbedService(env);
+  try {
+    if (intent === "create-managed-embed") {
+      await service.create(viewer, {
+        name: form.get("name"),
+        slug: form.get("slug"),
+        installationNote: form.get("installationNote"),
+        configurationJson: form.get("configurationJson"),
+      });
+      return data({ ok: true, message: "Managed embed saved as a draft." });
+    }
+    if (intent === "update-managed-embed") {
+      await service.update(viewer, {
+        id: form.get("id"),
+        revision: form.get("revision"),
+        name: form.get("name"),
+        installationNote: form.get("installationNote"),
+        configurationJson: form.get("configurationJson"),
+        confirmed: form.get("confirmed"),
+      });
+      return data({ ok: true, message: "Managed embed configuration updated." });
+    }
+    if (intent === "transition-managed-embed") {
+      const nextStatus = String(form.get("nextStatus") ?? "");
+      await service.transition(viewer, {
+        id: form.get("id"),
+        revision: form.get("revision"),
+        nextStatus,
+        confirmed: form.get("confirmed"),
+      });
+      const labels: Record<string, string> = {
+        active: "activated",
+        paused: "paused",
+        revoked: "permanently revoked",
+      };
+      return data({
+        ok: true,
+        message: `Managed embed ${labels[nextStatus] ?? "updated"}.`,
+      });
+    }
+    return data(
+      { ok: false, message: "Unsupported managed embed action." },
+      { status: 400 },
+    );
+  } catch (error) {
+    if (
+      error instanceof ProgrammeEmbedStateError ||
+      error instanceof ProgrammeEmbedConfigurationError
+    ) {
+      return data(
+        { ok: false, message: error.message },
+        {
+          status:
+            error instanceof ProgrammeEmbedStateError ? error.status : 422,
+        },
+      );
+    }
+    if (error instanceof Response) throw error;
+    throw error;
+  }
 }
 
 export default function AdminSection({ loaderData }: Route.ComponentProps) {
@@ -189,6 +271,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
           eventAccent={loaderData.brandAccent}
           timezone={loaderData.timezone}
           sessions={loaderData.sessions}
+          managedEmbeds={loaderData.managedEmbeds}
         />
       ) : (
         <section className="card pad mt">

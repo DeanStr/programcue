@@ -118,6 +118,73 @@ export const schedulePolicies = sqliteTable("schedule_policies", {
   updatedAt: integer("updated_at").notNull().default(epochNow),
 });
 
+export const programmeEmbeds = sqliteTable(
+  "programme_embeds",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id").notNull(),
+    organisationId: text("organisation_id").notNull(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    status: text("status")
+      .notNull()
+      .default("draft")
+      .$type<"draft" | "active" | "paused" | "revoked">(),
+    configurationJson: text("configuration_json").notNull(),
+    installationNote: text("installation_note"),
+    revision: integer("revision").notNull().default(1),
+    createdByPersonId: text("created_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    updatedByPersonId: text("updated_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+    revokedAt: integer("revoked_at"),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.eventId, table.organisationId],
+      foreignColumns: [events.id, events.organisationId],
+    }).onDelete("cascade"),
+    uniqueIndex("programme_embeds_event_slug_unique").on(
+      table.eventId,
+      table.slug,
+    ),
+    index("idx_programme_embeds_event_status").on(
+      table.eventId,
+      table.status,
+      table.updatedAt,
+    ),
+    check(
+      "programme_embeds_status_check",
+      sql`${table.status} IN ('draft','active','paused','revoked')`,
+    ),
+    check(
+      "programme_embeds_name_length_check",
+      sql`length(trim(${table.name})) BETWEEN 1 AND 120`,
+    ),
+    check(
+      "programme_embeds_slug_check",
+      sql`length(${table.slug}) BETWEEN 1 AND 80 AND ${table.slug} NOT GLOB '*[^a-z0-9-]*' AND ${table.slug} NOT LIKE '-%' AND ${table.slug} NOT LIKE '%-' AND ${table.slug} NOT LIKE '%--%'`,
+    ),
+    check(
+      "programme_embeds_configuration_check",
+      sql`json_valid(${table.configurationJson})`,
+    ),
+    check(
+      "programme_embeds_installation_note_length_check",
+      sql`${table.installationNote} IS NULL OR length(${table.installationNote}) BETWEEN 1 AND 500`,
+    ),
+    check("programme_embeds_revision_check", sql`${table.revision} >= 1`),
+    check(
+      "programme_embeds_revoked_at_check",
+      sql`(${table.status} = 'revoked') = (${table.revokedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
 export const sessions = sqliteTable(
   "sessions",
   {

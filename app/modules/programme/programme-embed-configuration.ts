@@ -296,7 +296,7 @@ function assertTextLength(label: string, value: string, maximum: number) {
   }
 }
 
-function assertProgrammeEmbedConfiguration(
+export function assertProgrammeEmbedConfiguration(
   configuration: ProgrammeEmbedConfiguration,
 ) {
   parseProgrammeEmbedSurface(configuration.surface);
@@ -333,6 +333,74 @@ function assertProgrammeEmbedConfiguration(
       "Embed accent must be a six-digit hexadecimal colour.",
     );
   }
+  assertEmbedHeight(configuration.height);
+}
+
+export function parsePersistedProgrammeEmbedConfiguration(
+  value: unknown,
+): ProgrammeEmbedConfiguration {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ProgrammeEmbedConfigurationError(
+      "Managed embed configuration must be an object.",
+    );
+  }
+  const candidate = value as Record<string, unknown>;
+  const keys = [
+    "surface",
+    "day",
+    "track",
+    "format",
+    "room",
+    "query",
+    "accent",
+    "controls",
+    "density",
+    "showSpeakerDirectory",
+    "fields",
+    "height",
+  ] as const;
+  if (
+    Object.keys(candidate).length !== keys.length ||
+    keys.some((key) => !(key in candidate)) ||
+    ["day", "track", "format", "room", "query", "accent"].some(
+      (key) => typeof candidate[key] !== "string",
+    ) ||
+    !Array.isArray(candidate.controls) ||
+    candidate.controls.some((control) => typeof control !== "string") ||
+    !Array.isArray(candidate.fields) ||
+    candidate.fields.some((field) => typeof field !== "string") ||
+    typeof candidate.showSpeakerDirectory !== "boolean" ||
+    typeof candidate.height !== "number"
+  ) {
+    throw new ProgrammeEmbedConfigurationError(
+      "Managed embed configuration has an invalid shape.",
+    );
+  }
+  const configuration = candidate as ProgrammeEmbedConfiguration;
+  assertProgrammeEmbedConfiguration(configuration);
+  return {
+    ...configuration,
+    controls: [...configuration.controls],
+    fields: [...configuration.fields],
+  };
+}
+
+export function programmeEmbedSearchConfiguration(
+  configuration: ProgrammeEmbedConfiguration,
+): ProgrammeEmbedSearchConfiguration {
+  assertProgrammeEmbedConfiguration(configuration);
+  return {
+    day: configuration.day || null,
+    track: configuration.track || null,
+    format: configuration.format || null,
+    room: configuration.room || null,
+    query: configuration.query.trim(),
+    accent: configuration.accent || null,
+    controls: [...configuration.controls],
+    density: configuration.density,
+    showSpeakerDirectory: configuration.showSpeakerDirectory,
+    fields: [...configuration.fields],
+  };
 }
 
 export function programmeEmbedUrl(
@@ -378,6 +446,22 @@ export function programmeEmbedUrl(
     );
   }
   return url.toString();
+}
+
+export function managedProgrammeEmbedUrl(
+  origin: string,
+  eventSlug: string,
+  embedSlug: string,
+) {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(embedSlug)) {
+    throw new ProgrammeEmbedConfigurationError(
+      "Managed embed slug must use lowercase letters, numbers and single hyphens.",
+    );
+  }
+  return new URL(
+    `/embed/${encodeURIComponent(eventSlug)}/saved/${encodeURIComponent(embedSlug)}`,
+    origin,
+  ).toString();
 }
 
 function escapeHtmlAttribute(value: string) {
@@ -477,4 +561,25 @@ export function programmeWidgetSnippet({
     .join(" ");
   const scriptUrl = new URL("/programcue-widget.js", origin).toString();
   return `<div id="${escapeHtmlAttribute(target)}"></div>\n<script src="${escapeHtmlAttribute(scriptUrl)}" ${serialized} async></script>`;
+}
+
+export function managedProgrammeWidgetSnippet({
+  origin,
+  eventSlug,
+  embedSlug,
+  target,
+  title,
+  height,
+}: {
+  origin: string;
+  eventSlug: string;
+  embedSlug: string;
+  target: string;
+  title: string;
+  height: number;
+}) {
+  assertEmbedHeight(height);
+  managedProgrammeEmbedUrl(origin, eventSlug, embedSlug);
+  const scriptUrl = new URL("/programcue-widget.js", origin).toString();
+  return `<div id="${escapeHtmlAttribute(target)}"></div>\n<script src="${escapeHtmlAttribute(scriptUrl)}" data-programcue-event="${escapeHtmlAttribute(eventSlug)}" data-programcue-embed="${escapeHtmlAttribute(embedSlug)}" data-target="#${escapeHtmlAttribute(target)}" data-title="${escapeHtmlAttribute(title)}" data-height="${height}" async></script>`;
 }

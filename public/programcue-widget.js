@@ -30,6 +30,15 @@
   }
 
   var widgetOrigin = new URL(script.src, document.baseURI).origin;
+  var managedEmbed = (script.dataset.programcueEmbed || "").trim();
+  if (
+    script.hasAttribute("data-programcue-embed") &&
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(managedEmbed)
+  ) {
+    throw new Error(
+      "Program Cue widget data-programcue-embed must be a valid stable slug.",
+    );
+  }
   var surface = script.hasAttribute("data-surface")
     ? (script.dataset.surface || "").trim()
     : "sessions";
@@ -39,7 +48,12 @@
     );
   }
   var frameUrl = new URL(
-    "/embed/" + encodeURIComponent(slug) + "/" + surface,
+    managedEmbed
+      ? "/embed/" +
+          encodeURIComponent(slug) +
+          "/saved/" +
+          encodeURIComponent(managedEmbed)
+      : "/embed/" + encodeURIComponent(slug) + "/" + surface,
     widgetOrigin,
   );
   [
@@ -55,7 +69,7 @@
     "fields",
   ].forEach(function copyFilter(name) {
     var value = script.dataset[name];
-    if (script.hasAttribute("data-" + name)) {
+    if (!managedEmbed && script.hasAttribute("data-" + name)) {
       frameUrl.searchParams.set(name, value);
     }
   });

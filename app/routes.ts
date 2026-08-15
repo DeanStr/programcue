@@ -234,6 +234,9 @@ export default [
   route("embed/:slug", "routes/public-programme.tsx", {
     id: "embed-programme",
   }),
+  route("embed/:slug/saved/:embedSlug", "routes/public-programme.tsx", {
+    id: "managed-embed-programme",
+  }),
   route("embed/:slug/:surface", "routes/public-programme.tsx", {
     id: "embed-programme-surface",
   }),

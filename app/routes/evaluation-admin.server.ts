@@ -2,6 +2,12 @@ import { type LoaderFunctionArgs } from "react-router";
 import { AiReviewAssessmentService } from "~/modules/ai/ai-review-assessment.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
+import {
+  EVALUATION_RESULT_PRESETS,
+  evaluationResultFlags,
+  matchesEvaluationResultPreset,
+  type EvaluationResultPreset,
+} from "~/modules/evaluations/evaluation-result-workbench";
 import { EventService } from "~/modules/events/event-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -59,6 +65,22 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         : Promise.resolve([]),
     ]);
   const search = new URL(request.url).searchParams;
+  const requestedPreset = search.get("preset") ?? "all";
+  if (!EVALUATION_RESULT_PRESETS.some((preset) => preset === requestedPreset)) {
+    throw new Response("Invalid evaluation results preset", { status: 400 });
+  }
+  const resultPreset = requestedPreset as EvaluationResultPreset;
+  const requestedPage = search.get("page") ?? "1";
+  const resultsPage = Number(requestedPage);
+  if (
+    !/^\d+$/u.test(requestedPage) ||
+    !Number.isSafeInteger(resultsPage) ||
+    resultsPage < 1 ||
+    resultsPage > 100_000
+  ) {
+    throw new Response("Invalid evaluation results page", { status: 400 });
+  }
+  const resultsPageSize = 25;
   const requestedFilter = search.get("filter") ?? "";
   if (
     requestedFilter &&
@@ -159,6 +181,19 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       completedReviewCount: number;
       scoredReviewCount: number;
       scoreTotal: number;
+      minimumScore: number | null;
+      maximumScore: number | null;
+      recusedCount: number;
+      recommendations: Record<string, number>;
+      reviews: Array<{
+        assignmentId: string;
+        evaluatorName: string;
+        weightedScore: number | null;
+        recommendation: string | null;
+        privateNotes: string | null;
+        submitterFeedback: string | null;
+        scores: Record<string, string | number | boolean>;
+      }>;
     }
   >();
   const sessionResults = new Map<
@@ -168,13 +203,25 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       completedReviewCount: number;
       scoredReviewCount: number;
       scoreTotal: number;
+      minimumScore: number | null;
+      maximumScore: number | null;
+      recusedCount: number;
+      recommendations: Record<string, number>;
+      reviews: Array<{
+        assignmentId: string;
+        evaluatorName: string;
+        weightedScore: number | null;
+        recommendation: string | null;
+        privateNotes: string | null;
+        submitterFeedback: string | null;
+        scores: Record<string, string | number | boolean>;
+      }>;
     }
   >();
   if (resultsRoundId) {
     for (const assignment of workspace.assignments) {
       if (
         assignment.roundId !== resultsRoundId ||
-        assignment.status === "recused" ||
         assignment.status === "cancelled"
       ) {
         continue;
@@ -191,7 +238,17 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         completedReviewCount: 0,
         scoredReviewCount: 0,
         scoreTotal: 0,
+        minimumScore: null,
+        maximumScore: null,
+        recusedCount: 0,
+        recommendations: {},
+        reviews: [],
       };
+      if (assignment.status === "recused") {
+        aggregate.recusedCount += 1;
+        targetResults.set(targetId, aggregate);
+        continue;
+      }
       aggregate.assignmentCount += 1;
       if (
         assignment.reviewStatus === "submitted" ||
@@ -201,7 +258,48 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         if (assignment.weightedScore !== null) {
           aggregate.scoredReviewCount += 1;
           aggregate.scoreTotal += assignment.weightedScore;
+          aggregate.minimumScore =
+            aggregate.minimumScore === null
+              ? assignment.weightedScore
+              : Math.min(aggregate.minimumScore, assignment.weightedScore);
+          aggregate.maximumScore =
+            aggregate.maximumScore === null
+              ? assignment.weightedScore
+              : Math.max(aggregate.maximumScore, assignment.weightedScore);
         }
+        if (assignment.recommendation) {
+          aggregate.recommendations[assignment.recommendation] =
+            (aggregate.recommendations[assignment.recommendation] ?? 0) + 1;
+        }
+        let scores: Record<string, string | number | boolean> = {};
+        if (assignment.scoresJson !== null) {
+          const parsed: unknown = JSON.parse(assignment.scoresJson);
+          if (
+            !parsed ||
+            typeof parsed !== "object" ||
+            Array.isArray(parsed) ||
+            Object.values(parsed).some(
+              (value) =>
+                typeof value !== "string" &&
+                typeof value !== "number" &&
+                typeof value !== "boolean",
+            )
+          ) {
+            throw new Error(
+              `Submitted review ${assignment.reviewId ?? assignment.id} has invalid persisted criterion responses.`,
+            );
+          }
+          scores = parsed as Record<string, string | number | boolean>;
+        }
+        aggregate.reviews.push({
+          assignmentId: assignment.id,
+          evaluatorName: assignment.evaluatorName,
+          weightedScore: assignment.weightedScore,
+          recommendation: assignment.recommendation,
+          privateNotes: assignment.privateNotes,
+          submitterFeedback: assignment.submitterFeedback,
+          scores,
+        });
       }
       targetResults.set(targetId, aggregate);
     }
@@ -216,6 +314,11 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         aggregate && aggregate.scoredReviewCount > 0
           ? aggregate.scoreTotal / aggregate.scoredReviewCount
           : null,
+      minimumScore: aggregate?.minimumScore ?? null,
+      maximumScore: aggregate?.maximumScore ?? null,
+      recusedCount: aggregate?.recusedCount ?? 0,
+      recommendations: aggregate?.recommendations ?? {},
+      reviews: aggregate?.reviews ?? [],
     };
   });
   const matchesReviewFilter = (target: {
@@ -239,6 +342,11 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         aggregate && aggregate.scoredReviewCount > 0
           ? aggregate.scoreTotal / aggregate.scoredReviewCount
           : null,
+      minimumScore: aggregate?.minimumScore ?? null,
+      maximumScore: aggregate?.maximumScore ?? null,
+      recusedCount: aggregate?.recusedCount ?? 0,
+      recommendations: aggregate?.recommendations ?? {},
+      reviews: aggregate?.reviews ?? [],
     };
   });
   const visibleSessions = roundScopedSessions.filter(matchesReviewFilter);
@@ -303,7 +411,38 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     );
   };
   const sortedSubmissions = [...visibleSubmissions].sort(compareResults);
-  const results = [
+  const selectedResultsRound = workspace.plan?.rounds.find(
+    (round) => round.id === resultsRoundId,
+  );
+  const decisionHistoryRows = resultsRoundId
+    ? await env.DB.prepare(
+        `SELECT decision.id, decision.submission_id AS submissionId,
+                decision.revision_number AS revisionNumber,
+                decision.status, decision.decision, decision.rationale,
+                decision.decided_at AS decidedAt,
+                decision.published_at AS publishedAt,
+                person.display_name AS decidedByName
+           FROM submission_decisions decision
+           JOIN events event
+             ON event.id = decision.event_id AND event.organisation_id = ?
+           JOIN people person ON person.id = decision.decided_by_person_id
+          WHERE decision.event_id = ? AND decision.round_id = ?
+          ORDER BY decision.submission_id, decision.revision_number DESC`,
+      )
+        .bind(viewer.organisationId, viewer.eventId, resultsRoundId)
+        .all<{
+          id: string;
+          submissionId: string;
+          revisionNumber: number;
+          status: string;
+          decision: string;
+          rationale: string | null;
+          decidedAt: number;
+          publishedAt: number | null;
+          decidedByName: string;
+        }>()
+    : { results: [] };
+  const allResults = [
     ...roundScopedSubmissions.map((submission) => ({
       targetType: "proposal" as const,
       id: submission.id,
@@ -313,6 +452,20 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       assignmentCount: submission.assignmentCount,
       completedReviewCount: submission.completedReviewCount,
       averageScore: submission.averageScore,
+      minimumScore: submission.minimumScore,
+      maximumScore: submission.maximumScore,
+      recusedCount: submission.recusedCount,
+      recommendations: submission.recommendations,
+      reviews: submission.reviews,
+      moderation:
+        workspace.moderations.find(
+          (moderation) =>
+            moderation.roundId === resultsRoundId &&
+            moderation.submissionId === submission.id,
+        ) ?? null,
+      decisionHistory: decisionHistoryRows.results.filter(
+        (decision) => decision.submissionId === submission.id,
+      ),
     })),
     ...roundScopedSessions.map((session) => ({
       targetType: "session" as const,
@@ -323,10 +476,57 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       assignmentCount: session.assignmentCount,
       completedReviewCount: session.completedReviewCount,
       averageScore: session.averageScore,
+      minimumScore: session.minimumScore,
+      maximumScore: session.maximumScore,
+      recusedCount: session.recusedCount,
+      recommendations: session.recommendations,
+      reviews: session.reviews,
+      moderation: null,
+      decisionHistory: [],
     })),
   ]
     .filter(matchesReviewFilter)
+    .map((result) => {
+      const { mixedRecommendations, incomplete, decisionReady } =
+        evaluationResultFlags({
+          assignmentCount: result.assignmentCount,
+          completedReviewCount: result.completedReviewCount,
+          recusedCount: result.recusedCount,
+          recommendationCounts: result.recommendations,
+          moderationStatus: result.moderation?.status ?? null,
+        });
+      return {
+        ...result,
+        mixedRecommendations,
+        incomplete,
+        decisionReady,
+        criterionNames: Object.fromEntries(
+          (selectedResultsRound?.criteria ?? []).map((criterion) => [
+            criterion.id,
+            criterion.name,
+          ]),
+        ),
+      };
+    })
+    .filter((result) => {
+      return matchesEvaluationResultPreset(resultPreset, {
+        assignmentCount: result.assignmentCount,
+        completedReviewCount: result.completedReviewCount,
+        recusedCount: result.recusedCount,
+        recommendationCounts: result.recommendations,
+        moderationStatus: result.moderation?.status ?? null,
+      });
+    })
     .sort(compareResults);
+  const resultsTotal = allResults.length;
+  const resultsPageCount = Math.max(1, Math.ceil(resultsTotal / resultsPageSize));
+  if (resultsPage > resultsPageCount && resultsTotal > 0) {
+    throw new Response("Evaluation results page not found", { status: 404 });
+  }
+  const results = allResults.slice(
+    (resultsPage - 1) * resultsPageSize,
+    resultsPage * resultsPageSize,
+  );
   const discussionTarget = focusedSubmissionId
     ? ({ targetType: "submission", targetId: focusedSubmissionId } as const)
     : focusedSessionId
@@ -385,7 +585,12 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     reviewDiscussion,
     reviewDiscussionTitle,
     resultSort,
+    resultPreset,
     resultsRoundId,
+    resultsPage,
+    resultsPageSize,
+    resultsTotal,
+    resultsPageCount,
     resultsExportIntent: crypto.randomUUID(),
     focusedRoundId: requestedRoundId || null,
     eventTimezone: event.timezone,

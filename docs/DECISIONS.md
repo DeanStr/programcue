@@ -329,6 +329,27 @@ detail overlays those scoped values without rewriting the canonical person;
 both scoped rows, the audit and webhook intent commit in one compare-and-set D1
 batch.
 
+## Managed programme embed decision
+
+This supersedes only the earlier decision that embed configuration must remain
+stateless. Stateless URLs and snippets remain supported. An organiser may also
+save a named current configuration at an immutable event-scoped slug with a
+compare-and-set revision, optional operator-entered installation note and
+creator/updater timestamps. The lifecycle is `draft → active ↔ paused →
+revoked`; revocation is terminal and retains the row so its slug cannot be
+reused.
+
+Draft and missing public URLs are indistinguishable 404s. Paused URLs return a
+branded non-cacheable 503 with `Retry-After`; revoked URLs return a
+non-cacheable 410. Active URLs read only the current published snapshot and
+include the managed revision in their representation ETag. Managed URLs reject
+query-string configuration, and missing or corrupt persisted configuration
+fails explicitly instead of falling back to stateless defaults. Configuration
+updates and lifecycle transitions require explicit preview/confirmation and
+write ordinary before/after audit evidence. Automatic installation discovery,
+analytics, arbitrary CSS, a generic diff framework and a separate cache
+invalidation subsystem remain excluded.
+
 ## Evaluation regression decisions
 
 - **Form configuration authority:** protected Track and Format questions are
@@ -340,6 +361,18 @@ batch.
   proposals and sessions under explicit target-type labels and one aggregate
   score ordering. Assignment and decision queues remain target-specific. The
   existing download is labelled proposal-only until combined export exists.
+- **Chair results workbench:** the unified result view is also the chair's
+  operational surface; no parallel committee board exists. Coverage,
+  decision-ready and moderation presets derive from current assignments,
+  submitted reviews, recusals and moderation state. Recommendation splits,
+  minimum/maximum score ranges and named flags stay transparent. Assignment
+  count is the workload authority: decision-ready requires at least one active
+  assignment, every active non-recused assignment complete, no recusal gap and
+  no split recommendations. Criterion responses, comments already permitted to
+  evaluation managers and proposal decision history expand inline. Results are
+  server-paged. A pacing chart waits for honest assignment/review history; bulk
+  staged decisions remain excluded pending a separate consequential mutation
+  and recovery design.
 - **Review coverage filters:** incomplete means a target has at least one
   non-recused, non-cancelled assignment and fewer submitted or locked reviews
   than assignments. A target with no assignment is unassigned, not incomplete;

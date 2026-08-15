@@ -1,11 +1,17 @@
-import { data } from "react-router";
+import { data, isRouteErrorResponse, useRouteError } from "react-router";
+import type { CSSProperties } from "react";
 
 import type { Route } from "./+types/public-programme";
 import {
   ProgrammeEmbedConfigurationError,
+  programmeEmbedSearchConfiguration,
   parseProgrammeEmbedSurface,
   parseProgrammeEmbedSearchParameters,
 } from "~/modules/programme/programme-embed-configuration";
+import {
+  ProgrammeEmbedService,
+  ProgrammeEmbedStateError,
+} from "~/modules/programme/programme-embed-service.server";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import {
   PUBLIC_PROGRAMME_SURFACES,
@@ -141,14 +147,73 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   const slug = params.slug;
   if (!slug) throw new Response("Published event not found", { status: 404 });
+  const url = new URL(request.url);
+  const embedded = url.pathname.startsWith("/embed/");
+  let managedEmbed = null;
+  if (params.embedSlug) {
+    try {
+      managedEmbed = await new ProgrammeEmbedService(env).getPublic(
+        slug,
+        params.embedSlug,
+      );
+    } catch (error) {
+      if (
+        error instanceof ProgrammeEmbedConfigurationError ||
+        error instanceof ProgrammeEmbedStateError
+      ) {
+        throw new Response(
+          "Managed embed configuration is invalid. Contact the event organiser.",
+          { status: 500, headers: { "cache-control": "no-store" } },
+        );
+      }
+      throw error;
+    }
+    if (!managedEmbed || managedEmbed.status === "draft") {
+      throw new Response("Managed embed not found", {
+        status: 404,
+        headers: { "cache-control": "no-store" },
+      });
+    }
+    if (
+      managedEmbed.status === "paused" ||
+      managedEmbed.status === "revoked"
+    ) {
+      const paused = managedEmbed.status === "paused";
+      throw data(
+        {
+          embedUnavailable: true as const,
+          eventName: managedEmbed.eventName,
+          eventAccent: managedEmbed.eventAccent,
+          state: managedEmbed.status,
+          message: paused
+            ? "This programme embed is temporarily unavailable."
+            : "This programme embed is no longer available.",
+        },
+        {
+          status: paused ? 503 : 410,
+          headers: {
+            "cache-control": "no-store",
+            ...(paused ? { "retry-after": "300" } : {}),
+          },
+        },
+      );
+    }
+    if (url.search) {
+      throw new Response(
+        "Managed embed URLs do not accept query-string configuration.",
+        { status: 400, headers: { "cache-control": "no-store" } },
+      );
+    }
+  }
   const service = new PublicProgrammeService(env);
   const programme = await service.getPublished(slug);
   if (!programme)
     throw new Response("Published event programme not found", { status: 404 });
-  const embedded = new URL(request.url).pathname.startsWith("/embed/");
   let surface: PublicProgrammeSurface;
   try {
-    surface = embedded
+    surface = managedEmbed
+      ? managedEmbed.configuration.surface
+      : embedded
       ? parseProgrammeEmbedSurface(params.surface)
       : surfaceFromParam(params.surface);
   } catch (error) {
@@ -157,7 +222,6 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     }
     throw error;
   }
-  const url = new URL(request.url);
   const requestedSpeakerId = url.searchParams.get("speaker");
   const featuredSpeaker = requestedSpeakerId
     ? (programme.speakers.find(
@@ -168,7 +232,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     throw new Response("Published speaker profile not found", { status: 404 });
   }
   const canonicalUrl = new URL(
-    embedded
+    managedEmbed
+      ? `/embed/${encodeURIComponent(programme.event.slug)}/saved/${encodeURIComponent(managedEmbed.slug)}`
+      : embedded
       ? `/embed/${encodeURIComponent(programme.event.slug)}${surface === "overview" ? "" : `/${surface}`}`
       : `/public/programme/${encodeURIComponent(programme.event.slug)}${surface === "overview" ? "" : `/${surface}`}`,
     request.url,
@@ -206,9 +272,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   }
   let embedOptions;
   try {
-    embedOptions = parseProgrammeEmbedSearchParameters(
-      embedded ? url.searchParams : new URLSearchParams(),
-    );
+    embedOptions = managedEmbed
+      ? programmeEmbedSearchConfiguration(managedEmbed.configuration)
+      : parseProgrammeEmbedSearchParameters(
+          embedded ? url.searchParams : new URLSearchParams(),
+        );
   } catch (error) {
     if (error instanceof ProgrammeEmbedConfigurationError) {
       throw new Response(error.message, { status: 400 });
@@ -274,7 +342,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     });
   }
   const embeddedCacheHeaders = embedded
-    ? await publishedProgrammeCacheHeaders(request, programme)
+    ? await publishedProgrammeCacheHeaders(
+        request,
+        programme,
+        managedEmbed ? `managed-embed-${managedEmbed.revision}` : "",
+      )
     : null;
   if (
     embeddedCacheHeaders &&
@@ -320,6 +392,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       itinerary,
       embedded,
       embedOptions,
+      managedEmbedRevision: managedEmbed?.revision ?? null,
       signedIn: personId !== null,
       itineraryVerificationRequired,
       turnstileSiteKey: itineraryVerificationRequired
@@ -479,4 +552,46 @@ export { descriptionSnippet } from "~/components/public-programme-model";
 
 export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
   return <PublicProgrammeWorkspace loaderData={loaderData} />;
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  if (
+    isRouteErrorResponse(error) &&
+    error.data &&
+    typeof error.data === "object" &&
+    "embedUnavailable" in error.data
+  ) {
+    const unavailable = error.data as {
+      eventName: string;
+      eventAccent: string;
+      message: string;
+    };
+    return (
+      <main
+        className="public-shell event-branded embedded"
+        style={{ "--event-accent": unavailable.eventAccent } as CSSProperties}
+      >
+        <section className="card pad empty-state" role="status">
+          <span className="pc-page-eyebrow">{unavailable.eventName}</span>
+          <h1>Programme unavailable</h1>
+          <p>{unavailable.message}</p>
+        </section>
+      </main>
+    );
+  }
+  const status = isRouteErrorResponse(error) ? error.status : 500;
+  const message = isRouteErrorResponse(error)
+    ? typeof error.data === "string"
+      ? error.data
+      : error.statusText || "Published programme unavailable"
+    : "Published programme unavailable";
+  return (
+    <main className="public-shell">
+      <section className="card pad empty-state" role="alert">
+        <h1>{status === 404 ? "Programme not found" : "Programme unavailable"}</h1>
+        <p>{message}</p>
+      </section>
+    </main>
+  );
 }

@@ -149,15 +149,14 @@ test("evaluation administration exposes onboarding and consequential previews", 
     name: "Unified evaluation results",
   });
   await expect(
-    page.getByRole("heading", { name: "All review targets" }),
+    page.getByRole("heading", { name: "Chair results workbench" }),
   ).toBeVisible();
   await expect(unifiedResults).toBeVisible();
   await expect(
-    unifiedResults.getByRole("columnheader", { name: "Type" }),
+    unifiedResults.getByRole("columnheader", { name: "Recommendations" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Coverage")).toContainText(
-    "Incomplete reviews",
-  );
+  await expect(page.getByLabel("View preset")).toContainText("Decision-ready");
+  await expect(page.getByLabel("Coverage filter")).toContainText("Incomplete reviews");
   await page.getByRole("link", { name: "Open discussion" }).first().click();
   await expect(
     page.getByRole("heading", { name: "Committee discussion" }),

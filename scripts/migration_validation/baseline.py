@@ -22,7 +22,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "tracks", "rooms", "schedule_policies", "sessions", "session_speakers", "event_speaker_workflows",
         "tags", "session_tags", "session_archives",
         "schedule_versions", "schedule_session_contents", "session_content_revisions", "schedule_entries", "schedule_conflicts",
-        "public_itineraries", "public_itinerary_items",
+        "programme_embeds", "public_itineraries", "public_itinerary_items",
         "task_templates", "task_template_dependencies", "task_instances",
         "task_instance_dependencies", "task_comments", "task_evidence",
         "file_assets", "file_versions", "file_multipart_uploads", "resource_pages", "resource_page_versions",

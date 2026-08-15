@@ -402,6 +402,7 @@ export class EvaluationAdminWorkspaceReader {
                p.display_name AS evaluatorName, a.team_id AS teamId,
                t.name AS teamName, a.status, a.revision,
                r.id AS reviewId, r.status AS reviewStatus,
+               r.scores_json AS scoresJson,
                r.weighted_score AS weightedScore,
                r.recommendation, r.confidence,
                r.submitter_feedback AS submitterFeedback,
@@ -464,6 +465,7 @@ export class EvaluationAdminWorkspaceReader {
           revision: number;
           reviewId: string | null;
           reviewStatus: string | null;
+          scoresJson: string | null;
           weightedScore: number | null;
           recommendation: string | null;
           confidence: number | null;
