@@ -452,7 +452,7 @@ export class CommandPaletteService {
         `
         SELECT s.id, ea.id AS assignmentId,
                'submission' AS kind, s.title AS label,
-               s.status || ' · ' || s.public_reference AS description,
+               replace(s.status, '_', ' ') || ' · ' || s.public_reference AS description,
                e.id AS eventId, e.name AS eventName
           FROM submissions s
           JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
@@ -537,7 +537,7 @@ export class CommandPaletteService {
              AND (instr(lower(p.display_name), lower(?)) > 0 OR instr(lower(p.email), lower(?)) > 0 OR instr(lower(COALESCE(p.organisation_name, '')), lower(?)) > 0)
           UNION ALL
           SELECT s.id, 'submission' AS kind, s.title AS label,
-                 s.status || ' · ' || s.public_reference AS description,
+                 replace(s.status, '_', ' ') || ' · ' || s.public_reference AS description,
                  e.id AS eventId, e.name AS eventName
            FROM submissions s
             JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
@@ -559,7 +559,7 @@ export class CommandPaletteService {
              )
           UNION ALL
           SELECT s.id, 'session' AS kind, s.title AS label,
-                 s.status || ' · ' || s.format AS description,
+                 replace(s.status, '_', ' ') || ' · ' || replace(s.format, '_', ' ') AS description,
                  e.id AS eventId, e.name AS eventName
             FROM sessions s
             JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
@@ -568,7 +568,7 @@ export class CommandPaletteService {
              AND (instr(lower(s.title), lower(?)) > 0 OR instr(lower(s.slug), lower(?)) > 0 OR instr(lower(COALESCE(s.description, '')), lower(?)) > 0)
           UNION ALL
           SELECT ti.id, 'task' AS kind, ti.title AS label,
-                 ti.status || ' · ' || ti.impact AS description,
+                 replace(ti.status, '_', ' ') || ' · ' || replace(ti.impact, '_', ' ') AS description,
                  e.id AS eventId, e.name AS eventName
             FROM task_instances ti
             JOIN events e ON e.id = ti.event_id AND e.organisation_id = ?
@@ -638,7 +638,7 @@ export class CommandPaletteService {
              AND (instr(lower(track.name), lower(?)) > 0 OR instr(lower(track.slug), lower(?)) > 0)
           UNION ALL
           SELECT resource.id, 'resource' AS kind, resource.title AS label,
-                 resource.status || CASE WHEN resource.category IS NULL THEN '' ELSE ' · ' || resource.category END AS description,
+                 replace(resource.status, '_', ' ') || CASE WHEN resource.category IS NULL THEN '' ELSE ' · ' || resource.category END AS description,
                  e.id AS eventId, e.name AS eventName
             FROM resource_pages resource
             JOIN events e ON e.id = resource.event_id AND e.organisation_id = ?
@@ -652,7 +652,7 @@ export class CommandPaletteService {
                    MIN(CASE WHEN connection.provider IS NULL THEN NULL ELSE connection.provider || ' integration run' END),
                    replace(operation.type, '.', ' ')
                  ) AS label,
-                 operation.status || ' · ' || operation.type AS description,
+                 replace(operation.status, '_', ' ') || ' · ' || replace(operation.type, '_', ' ') AS description,
                  e.id AS eventId, e.name AS eventName
             FROM operation_jobs operation
             JOIN events e ON e.id = operation.event_id AND e.organisation_id = ?

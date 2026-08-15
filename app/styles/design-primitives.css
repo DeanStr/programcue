@@ -1,25 +1,12 @@
-/* React design-system primitives preserve the established Program Cue visual language. */
-[cmdk-group-heading] {
-  font-size: var(--text-2xs);
-  color: var(--muted);
-  font-weight: var(--weight-extrabold);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  padding: var(--space-3);
-}
-.command-item {
-  grid-template-columns: 1fr 48px;
-  cursor: pointer;
-}
-.command-item > span:first-child,
+/* React design-system primitives preserve the established Program Cue visual language.
+   The command palette used to be split across this file and
+   interaction-surfaces.css, with the cascade order deciding which half won.
+   It now has one owner: interaction-surfaces.css. */
 .btn,
 .status {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-}
-.command-item[aria-selected="true"] {
-  background: var(--brand-50);
 }
 .nav-icon {
   display: grid;
@@ -225,7 +212,7 @@
   color: var(--state-good-text);
 }
 .pc-status-notice.is-warning {
-  border-color: #fde68a;
+  border-color: var(--state-warn-border);
   border-left-color: var(--amber);
   background: #fffdf5;
   color: var(--state-warn-text);
@@ -499,31 +486,19 @@
   }
 }
 
-/* --- Confirmation -------------------------------------------------------- */
+/* --- Confirmation --------------------------------------------------------
+   The tone glyph lives in the panel head; what is left here is the sentence
+   and the records the action will actually touch. */
 .pc-confirm {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-3);
+  gap: var(--space-4);
   align-items: start;
 }
 .pc-confirm p {
   margin: 0;
-}
-.pc-confirm-icon {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  background: #fef2f2;
-  color: var(--red);
-}
-.pc-confirm-icon[data-tone="primary"] {
-  background: var(--brand-50);
-  color: var(--brand-700);
+  line-height: var(--leading-normal);
 }
 .pc-confirm-count {
-  margin-top: var(--space-3);
   font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
   color: var(--text-secondary);

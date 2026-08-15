@@ -2,20 +2,56 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, type RefObject } from "react";
 
+/** Width class. The default stays at the historical 680px. */
+type DialogSize = "sm" | "md" | "lg";
+
+/**
+ * Where the panel sits on a pointer-width screen.
+ *
+ *   center      a decision that owns the screen: forms, confirmations.
+ *   top-start   a menu belonging to a control on the left of the top bar.
+ *   top-end     a menu belonging to a control on the right of the top bar.
+ *   top         a full-width instrument that opens from the top: the palette.
+ *
+ * Below 760px every placement becomes a sheet, because a phone has no room to
+ * anchor anything and a centred card leaves scrim on all four sides.
+ */
+type DialogPlacement = "center" | "top" | "top-start" | "top-end";
+
 export function Dialog({
   title,
+  description,
+  icon,
   children,
   footer,
   onClose,
   returnFocus,
+  size = "md",
+  placement = "center",
+  tone = "info",
+  titleHidden = false,
+  bare = false,
 }: {
   title: string;
+  /** One line of context under the title. Also becomes the accessible description. */
+  description?: React.ReactNode;
+  /** Head glyph. Gives a wall of same-shaped panels something to be told apart by. */
+  icon?: React.ReactNode;
+  /** Colours the head glyph. A destructive decision should look like one before it is read. */
+  tone?: "info" | "danger" | "warning";
   children: React.ReactNode;
   footer?: React.ReactNode;
   onClose: () => void;
   returnFocus?: RefObject<HTMLElement | null>;
+  size?: DialogSize;
+  placement?: DialogPlacement;
+  /** Keep the accessible name, drop the painted head: for panels that supply their own. */
+  titleHidden?: boolean;
+  /** Remove body padding, for lists and instruments that own their own gutters. */
+  bare?: boolean;
 }) {
   const titleId = useId();
+  const descriptionId = useId();
   const capturedReturnFocusRef = useRef<HTMLElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const returnFocusFrameRef = useRef<number | null>(null);
@@ -75,25 +111,65 @@ export function Dialog({
       }}
     >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="modal-overlay">
+        <DialogPrimitive.Overlay
+          className="modal-overlay"
+          data-placement={placement}
+        >
           <DialogPrimitive.Content
             ref={setContentRef}
             className="modal"
+            data-size={size}
+            data-placement={placement}
+            data-bare={bare ? "" : undefined}
             aria-labelledby={titleId}
+            // Radix warns when a dialog has no description; passing undefined
+            // is its documented way of saying "there deliberately is none".
+            aria-describedby={description ? descriptionId : undefined}
             onOpenAutoFocus={(event) => event.preventDefault()}
             onCloseAutoFocus={(event) => {
               event.preventDefault();
               restoreFocus();
             }}
           >
-            <div className="modal-head">
-              <DialogPrimitive.Title id={titleId} asChild>
-                <h2>{title}</h2>
+            {/* Deliberately no grabber. A sheet handle states that the panel
+                can be dragged away, and nothing here implements that gesture;
+                the head's close control and Escape are the real exits. */}
+            {titleHidden ? (
+              <DialogPrimitive.Title id={titleId} className="sr-only">
+                {title}
               </DialogPrimitive.Title>
-              <DialogPrimitive.Close className="icon-btn" aria-label="Close">
-                <X aria-hidden size={17} />
-              </DialogPrimitive.Close>
-            </div>
+            ) : (
+              <div className="modal-head">
+                {icon ? (
+                  <span
+                    className="modal-head-icon"
+                    data-tone={tone}
+                    aria-hidden
+                  >
+                    {icon}
+                  </span>
+                ) : null}
+                <div className="modal-head-copy">
+                  <DialogPrimitive.Title id={titleId} asChild>
+                    <h2>{title}</h2>
+                  </DialogPrimitive.Title>
+                  {description ? (
+                    <DialogPrimitive.Description
+                      id={descriptionId}
+                      className="modal-description"
+                    >
+                      {description}
+                    </DialogPrimitive.Description>
+                  ) : null}
+                </div>
+                <DialogPrimitive.Close
+                  className="icon-btn modal-close"
+                  aria-label="Close"
+                >
+                  <X aria-hidden size={17} />
+                </DialogPrimitive.Close>
+              </div>
+            )}
             <div className="modal-body">{children}</div>
             {footer ? <div className="modal-foot">{footer}</div> : null}
           </DialogPrimitive.Content>

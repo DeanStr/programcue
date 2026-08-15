@@ -413,7 +413,7 @@ a {
 }
 .btn.warning {
   color: var(--state-warn-text);
-  border-color: #fde68a;
+  border-color: var(--state-warn-border);
   background: var(--state-warn-surface-subtle);
 }
 .btn.ghost {
@@ -814,7 +814,7 @@ a {
 .metric.alert-amber {
   --metric-tone: var(--state-warn-text);
   --rail: var(--state-warn-solid);
-  border-color: #fde68a;
+  border-color: var(--state-warn-border);
 }
 .metric.alert-green {
   --metric-tone: var(--state-good-text);

@@ -230,7 +230,31 @@ async function captureLaptopViewport(page: Page, name: string) {
   await expectDocumentContained(page, `${name} at the laptop viewport`);
 }
 
+/**
+ * Panels arrive from the edge they belong to, so a box measured mid-flight is
+ * still partly off screen. Containment is a statement about where a panel
+ * comes to rest; wait for the arrival to finish before measuring it.
+ */
+async function settleOverlayMotion(overlay: Locator) {
+  await overlay.evaluate(async (node) => {
+    await Promise.all(
+      node
+        .getAnimations({ subtree: true })
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
+}
+
 async function expectMobileCommandOverlaysContained(page: Page) {
+  let releaseRecordSearch = () => {};
+  const recordSearchGate = new Promise<void>((resolve) => {
+    releaseRecordSearch = resolve;
+  });
+  await page.route("**/admin/search?**", async (route) => {
+    await recordSearchGate;
+    await route.fulfill({ json: { records: [] } });
+  });
+
   await page.getByRole("button", { name: /Search or run a command/i }).click();
   const commandDialog = page.getByRole("dialog", {
     name: "Search or run a command",
@@ -241,6 +265,22 @@ async function expectMobileCommandOverlaysContained(page: Page) {
   await expect(
     commandDialog.getByText("Settings", { exact: true }).first(),
   ).toBeVisible();
+  await expect(
+    commandDialog.getByText("Searching authorised records…"),
+  ).toBeVisible();
+  await expect(commandDialog.getByText(/Nothing matches/)).toHaveCount(0);
+  await expect(
+    commandDialog.getByText(/No authorised records match/),
+  ).toHaveCount(0);
+  releaseRecordSearch();
+  await expect(
+    commandDialog.getByText("No authorised records match “settings”."),
+  ).toBeVisible();
+  await expect(
+    commandDialog.getByText("Searching authorised records…"),
+  ).toHaveCount(0);
+  await expect(commandDialog.getByText(/Nothing matches/)).toHaveCount(0);
+  await settleOverlayMotion(commandDialog);
   const viewport = page.viewportSize();
   const commandBounds = await commandDialog.boundingBox();
   expect(viewport).not.toBeNull();
@@ -257,12 +297,13 @@ async function expectMobileCommandOverlaysContained(page: Page) {
 
   await page.getByRole("button", { name: "Switch event" }).click();
   const eventDialog = page.getByRole("dialog", { name: "Current event" });
-  const currentEvent = eventDialog
-    .locator("form")
-    .filter({ hasText: "Current" });
+  const currentEvent = eventDialog.locator(
+    "form.pc-event-option[aria-current='true']",
+  );
   const currentStatus = currentEvent.getByText("Current", { exact: true });
   await expect(currentEvent).toHaveCount(1);
   await expect(currentStatus).toBeVisible();
+  await settleOverlayMotion(eventDialog);
   const [eventDialogBounds, currentEventBounds, currentStatusBounds] =
     await Promise.all([
       eventDialog.boundingBox(),
@@ -284,6 +325,53 @@ async function expectMobileCommandOverlaysContained(page: Page) {
   expect(
     currentStatusBounds!.x + currentStatusBounds!.width,
   ).toBeLessThanOrEqual(currentEventBounds!.x + currentEventBounds!.width);
+
+  // The demo baseline has no pending invitation. Reuse its real event row to
+  // exercise the longest server-generated action without mutating fixture
+  // state: this is the copy that previously squeezed the event name away.
+  await currentEvent.evaluate((row) => {
+    const meta = row.querySelector<HTMLElement>(".pc-menu-meta");
+    if (!meta) throw new Error("Event row is missing its action area");
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "btn small primary";
+    action.textContent = "Accept committee chair invitation and switch event";
+    meta.replaceChildren(action);
+  });
+  const invitationAction = currentEvent.getByRole("button", {
+    name: "Accept committee chair invitation and switch event",
+  });
+  const eventCopy = currentEvent.locator(".pc-menu-copy");
+  await expect(invitationAction).toBeVisible();
+  const invitationLayout = await currentEvent.evaluate((row) => {
+    const copy = row.querySelector<HTMLElement>(".pc-menu-copy");
+    const action = row.querySelector<HTMLElement>(".pc-menu-meta .btn");
+    if (!copy || !action)
+      throw new Error("Synthetic invitation row is incomplete");
+    const copyBounds = copy.getBoundingClientRect();
+    const actionBounds = action.getBoundingClientRect();
+    const rowBounds = row.getBoundingClientRect();
+    return {
+      overflow: row.scrollWidth - row.clientWidth,
+      copyBottom: copyBounds.bottom,
+      actionLeft: actionBounds.left,
+      actionTop: actionBounds.top,
+      actionRight: actionBounds.right,
+      rowLeft: rowBounds.left,
+      rowRight: rowBounds.right,
+    };
+  });
+  expect(invitationLayout.overflow).toBeLessThanOrEqual(1);
+  expect(invitationLayout.actionTop).toBeGreaterThanOrEqual(
+    invitationLayout.copyBottom,
+  );
+  expect(invitationLayout.actionLeft).toBeGreaterThanOrEqual(
+    invitationLayout.rowLeft,
+  );
+  expect(invitationLayout.actionRight).toBeLessThanOrEqual(
+    invitationLayout.rowRight,
+  );
+  await expect(eventCopy).toBeVisible();
   await page.keyboard.press("Escape");
 }
 

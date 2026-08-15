@@ -172,11 +172,12 @@
 }
 
 /* These four footers sit inside .modal-body rather than beside it, so they
-   cancel its padding to reach the modal edge. The inline 18px they used to do
-   it with is not on the space scale and overhung the 16px it was cancelling by
-   two pixels on three sides. */
+   cancel its padding to reach the modal edge. --modal-gutter is published by
+   .modal-body for exactly this: the value differs between the panel and the
+   sheet, and a literal here overhung one of them by four pixels. */
 .event-setup-modal-foot {
-  margin: var(--space-4) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
+  margin: var(--space-4) calc(-1 * var(--modal-gutter))
+    calc(-1 * var(--modal-gutter));
 }
 
 .event-file-limits {

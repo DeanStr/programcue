@@ -39,6 +39,9 @@ export function ConfirmDialog({
   return (
     <Dialog
       title={title}
+      icon={<AlertTriangle aria-hidden size={17} />}
+      tone={tone === "danger" ? "danger" : "info"}
+      size="sm"
       onClose={onCancel}
       footer={
         <>
@@ -65,26 +68,27 @@ export function ConfirmDialog({
         </>
       }
     >
+      {/* The glyph moved into the panel head, where every other panel carries
+          one. It was indenting the sentence it sat beside by 46px and giving a
+          confirmation a second, competing left margin. */}
       <div className="pc-confirm">
-        <span className="pc-confirm-icon" data-tone={tone}>
-          <AlertTriangle aria-hidden size={18} />
-        </span>
-        <div>
-          <p>{description}</p>
-          {records && records.length > 0 ? (
-            <>
-              <p className="pc-confirm-count">
-                {records.length} {records.length === 1 ? "record" : "records"} affected
-              </p>
-              <ul className="pc-confirm-records">
-                {shown.map((record) => (
-                  <li key={record}>{record}</li>
-                ))}
-                {remaining > 0 ? <li className="subtle">and {remaining} more</li> : null}
-              </ul>
-            </>
-          ) : null}
-        </div>
+        <p>{description}</p>
+        {records && records.length > 0 ? (
+          <div>
+            <p className="pc-confirm-count">
+              {records.length} {records.length === 1 ? "record" : "records"}{" "}
+              affected
+            </p>
+            <ul className="pc-confirm-records">
+              {shown.map((record) => (
+                <li key={record}>{record}</li>
+              ))}
+              {remaining > 0 ? (
+                <li className="subtle">and {remaining} more</li>
+              ) : null}
+            </ul>
+          </div>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -102,7 +106,10 @@ export function useConfirm() {
 
   return {
     confirm: (
-      props: Omit<Parameters<typeof ConfirmDialog>[0], "onConfirm" | "onCancel">,
+      props: Omit<
+        Parameters<typeof ConfirmDialog>[0],
+        "onConfirm" | "onCancel"
+      >,
       run: () => void,
     ) => setPending({ props, run }),
     dialog: pending ? (

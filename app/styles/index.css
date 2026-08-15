@@ -10,9 +10,8 @@
  *   base.css                  tokens, document, app shell. Always first.
  *   <workspace-*.css>         one sheet per surface, owning that surface's classes.
  *   <responsive-*.css>        breakpoint refinements for the sheets above.
- *   interaction-surfaces.css  overlays and command palette.
- *   design-primitives.css     shared pc-* primitives. Deliberately late: it wins
- *                             .command-item over interaction-surfaces.css.
+ *   interaction-surfaces.css  overlays, panels and the command palette.
+ *   design-primitives.css     shared pc-* primitives.
  *   speaker-resources.css     participant resource surfaces.
  *   schedule-operations.css   planner internals.
  *   reviewer-responsive-tables.css  table collapse. Deliberately last.

@@ -152,22 +152,11 @@
   .app-admin .top-actions .btn span {
     display: inline;
   }
-
-  /* Primary navigation is a place, not a decision: it arrives from the edge it
-     lives on rather than as a centred card with 20px of scrim on every side. */
-  .modal-overlay:has(.pc-mobile-nav) {
-    place-items: stretch;
-    justify-items: start;
-    padding: 0;
-  }
-  .modal-overlay:has(.pc-mobile-nav) > .modal {
-    width: min(320px, 86vw);
-    height: 100dvh;
-    max-height: 100dvh;
-    border-radius: 0;
-    animation: pc-drawer-in var(--dur-base) var(--ease-out);
-  }
 }
+/* Primary navigation is a place, not a decision: it arrives from the edge it
+   lives on rather than as a centred card with scrim on every side. The overlay
+   half of that treatment lives with the other overlays, in
+   interaction-surfaces.css. */
 .pc-mobile-nav .nav-item {
   display: grid;
   gap: var(--space-1);
@@ -181,9 +170,4 @@
 .pc-mobile-nav a.pc-mobile-nav-child.active {
   color: var(--brand-700);
   font-weight: var(--weight-semibold);
-}
-@keyframes pc-drawer-in {
-  from {
-    transform: translateX(-100%);
-  }
 }

@@ -134,6 +134,73 @@ describe("command palette record search", () => {
     );
   });
 
+  it("humanises enum descriptions without rewriting record data", async () => {
+    const token = crypto.randomUUID();
+    const personId = `command-humanisation-person-${token}`;
+    const sessionId = `command-humanisation-session-${token}`;
+    const taskId = `command-humanisation-task-${token}`;
+    const email = `speaker_name_${token}@example.com`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO people (
+           id,email,display_name,email_verified,profile_status
+         ) VALUES (?,?,'Underscore Speaker',1,'published')`,
+      ).bind(personId, email),
+      env.DB.prepare(
+        `INSERT INTO memberships (
+           id,organisation_id,event_id,person_id,role,invited_at,accepted_at
+         ) VALUES (?,?,?,?, 'speaker',unixepoch(),unixepoch())`,
+      ).bind(
+        `command-humanisation-membership-${token}`,
+        viewer.organisationId,
+        viewer.eventId,
+        personId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO sessions (
+           id,event_id,title,slug,format,duration_minutes,status
+         ) VALUES (?,?,'Humanisation session',?,'fireside_chat',30,
+                   'unscheduled')`,
+      ).bind(sessionId, viewer.eventId, `humanisation_session_${token}`),
+      env.DB.prepare(
+        `INSERT INTO task_instances (
+           id,event_id,target_type,target_id,title,impact,status
+         ) VALUES (?,?,'event',?,'Humanisation task','medium','not_started')`,
+      ).bind(taskId, viewer.eventId, viewer.eventId),
+    ]);
+    const service = new CommandPaletteService(
+      env as unknown as CloudflareEnvironment,
+    );
+
+    await expect(
+      service.search(viewer, { query: "Underscore Speaker", scope: "event" }),
+    ).resolves.toContainEqual(
+      expect.objectContaining({
+        id: personId,
+        kind: "speaker",
+        description: email,
+      }),
+    );
+    await expect(
+      service.search(viewer, { query: "Humanisation session", scope: "event" }),
+    ).resolves.toContainEqual(
+      expect.objectContaining({
+        id: sessionId,
+        kind: "session",
+        description: "unscheduled · fireside chat",
+      }),
+    );
+    await expect(
+      service.search(viewer, { query: "Humanisation task", scope: "event" }),
+    ).resolves.toContainEqual(
+      expect.objectContaining({
+        id: taskId,
+        kind: "task",
+        description: "not started · medium",
+      }),
+    );
+  });
+
   it("returns one operation when several communications share it", async () => {
     const token = crypto.randomUUID();
     const operationId = `command-communication-operation-${token}`;

@@ -1,4 +1,9 @@
-import { isRouteErrorResponse, Link, Outlet, useRevalidator } from "react-router";
+import {
+  isRouteErrorResponse,
+  Link,
+  Outlet,
+  useRevalidator,
+} from "react-router";
 
 import type { Route } from "./+types/admin-layout";
 import { AdminShell } from "~/components/admin-shell";
@@ -92,18 +97,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
               count: shellContext.notificationCounts.overdueTasks,
               href: "/admin/tasks?state=overdue",
               severity: "danger" as const,
+              detail: "Past their due date and still open",
             },
             {
               label: "Blocking schedule conflicts",
               count: shellContext.notificationCounts.scheduleConflicts,
               href: "/admin/schedule?filter=conflicts",
               severity: "danger" as const,
+              detail: "Revalidated at publication, and blocking until resolved",
             },
             {
               label: "Failed operations",
               count: shellContext.notificationCounts.failedOperations,
               href: "/admin/operations?status=failed",
               severity: "warning" as const,
+              detail: "Inspect the recorded error, then retry",
             },
           ].filter((notification) => notification.count > 0),
   };
@@ -128,10 +136,7 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
  * any loader throw fell through to the root boundary, which discards the whole
  * document — navigation, event context and all — for a recoverable error.
  */
-export function ErrorBoundary({
-  error,
-  loaderData,
-}: Route.ErrorBoundaryProps) {
+export function ErrorBoundary({ error, loaderData }: Route.ErrorBoundaryProps) {
   const revalidator = useRevalidator();
 
   const routeError = isRouteErrorResponse(error) ? error : null;

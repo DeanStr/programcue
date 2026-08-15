@@ -4,17 +4,40 @@ body.portal-open {
 }
 .shortcut-list {
   display: grid;
-  gap: var(--space-2);
 }
+/* Keys on the right, meaning on the left: the reader is scanning for the
+   action, and only then wants the chord. A 110px key column on the left made
+   every row start at a ragged, meaningless offset. */
 .shortcut-list > div {
   display: grid;
-  grid-template-columns: 110px 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2);
-  border-bottom: 1px solid var(--line);
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
 }
-.sidebar-is-collapsed {
+.shortcut-list > div:last-child {
+  border-bottom: 0;
+}
+.shortcut-list dt {
+  order: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+.shortcut-list dd {
+  order: 1;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+/* A dialog portal is a child of <body>, not of the shell, so a panel anchored
+   beside the rail can only line up if the rail's current width is readable
+   from there too. */
+.sidebar-is-collapsed,
+body:has(.sidebar-is-collapsed) {
   --sidebar: 76px;
 }
 .sidebar-is-collapsed .brand > span:last-child,
@@ -60,107 +83,736 @@ body.portal-open {
   height: 28px;
   min-height: 28px;
 }
-.modal-overlay,
-.command-overlay {
+/* --- Overlay -------------------------------------------------------------
+   One panel primitive serves three jobs, and the job is stated by placement
+   rather than by a separate component: a centred decision, a menu anchored to
+   the control that owns it, and a top instrument. The scrim weight follows,
+   because how much of the page a panel suspends is information. */
+.modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(2, 6, 23, 0.58);
+  background: var(--scrim);
   display: grid;
   place-items: center;
-  padding: var(--space-5);
+  padding: var(--space-6);
   z-index: 110;
 }
-.command-overlay {
-  backdrop-filter: blur(4px);
-}
 .modal {
-  background: var(--surface);
-  border-radius: var(--radius);
-  box-shadow: 0 30px 80px rgba(2, 6, 23, 0.32);
-  width: min(680px, 100%);
-  max-height: calc(100dvh - 36px);
-  overflow: auto;
-}
-.modal-head,
-.modal-foot {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-4);
-  border-bottom: 1px solid var(--line);
+  flex-direction: column;
+  width: min(var(--modal-width), 100%);
+  max-height: calc(100dvh - var(--space-9));
+  background: var(--surface);
+  /* A hairline as well as a shadow. Shadow alone leaves a white panel floating
+     on a white card with no edge of its own, and the 20px radius made a 44px
+     head look inflated; 14px is the radius every other container here uses. */
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--elev-overlay);
+  /* The panel clips; the body scrolls. Scrolling the whole panel took the
+     title and the confirm button off screen exactly when a long dialog needed
+     them, which is the one case a dialog exists for. */
+  overflow: hidden;
+  --modal-width: 680px;
+}
+.modal[data-size="sm"] {
+  --modal-width: 440px;
+}
+.modal[data-size="lg"] {
+  --modal-width: 900px;
+}
+
+/* --- Head -----------------------------------------------------------------
+   Two densities. A centred decision keeps a full head, because the title is
+   most of what the operator is being asked to read. A menu anchored to its
+   trigger gets a compact one: the trigger already said what this is, and 82px
+   of chrome above two rows was most of what made these panels feel empty. */
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.modal-head-copy {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .modal-head h2 {
   margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-snug);
 }
-.modal-head .icon-btn {
-  margin-left: auto;
+.modal[data-placement="center"] > .modal-head {
+  padding: var(--space-5) var(--space-5) var(--space-4);
 }
+.modal[data-placement="center"] > .modal-head h2 {
+  font-size: var(--text-lg);
+}
+.modal-description {
+  margin: var(--space-1) 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  max-width: 62ch;
+}
+/* Same well as .pc-state-icon, so a panel head and an empty state read as the
+   same family rather than two unrelated ways of drawing a glyph. */
+.modal-head-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-xs);
+  background: var(--state-info-surface);
+  color: var(--state-info-text);
+}
+.modal[data-placement="center"] > .modal-head > .modal-head-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+}
+/* A menu's rows carry bare glyphs, so its head carries one too. A boxed mark
+   above a column of unboxed ones was the only tinted rectangle in the panel
+   and read as a badge rather than a title. */
+.modal[data-placement="top-start"] > .modal-head > .modal-head-icon,
+.modal[data-placement="top-end"] > .modal-head > .modal-head-icon {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  background: transparent;
+  color: var(--text-accent);
+}
+.modal-head-icon[data-tone="danger"] {
+  background: var(--state-bad-surface);
+  color: var(--state-bad-text);
+}
+.modal-head-icon[data-tone="warning"] {
+  background: var(--state-warn-surface);
+  color: var(--state-warn-text);
+}
+/* The close control is the least important thing in the head and stops
+   competing with the title for the eye. */
+.modal-close {
+  flex: none;
+  width: 32px;
+  min-height: 32px;
+  height: 32px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-tertiary);
+}
+.modal-close:hover {
+  background: var(--surface-sunken);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+/* --- Body and foot -------------------------------------------------------- */
 .modal-body {
-  padding: var(--space-4);
+  /* Published as a custom property because a footer rendered inside the body
+     has to cancel exactly this much to reach the panel edge, and the value
+     changes at the sheet breakpoint. */
+  --modal-gutter: var(--space-5);
+  padding: var(--modal-gutter);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  flex: 1 1 auto;
+}
+/* A list already carries its own row padding, so the body only owes it the
+   inset that keeps a hovered row from touching the panel edge. */
+.modal[data-placement="top-start"] > .modal-body,
+.modal[data-placement="top-end"] > .modal-body {
+  --modal-gutter: var(--space-2);
+}
+.modal[data-bare] > .modal-body {
+  padding: 0;
 }
 .modal-foot {
-  border-top: 1px solid var(--line);
-  border-bottom: 0;
-  justify-content: flex-end;
-}
-.command-box {
-  width: min(720px, 100%);
-  max-height: min(680px, calc(100dvh - 40px));
-  background: var(--surface);
-  border-radius: var(--radius);
-  box-shadow: 0 30px 80px rgba(2, 6, 23, 0.32);
-  overflow: hidden;
-}
-.command-input {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-4);
-  border-bottom: 1px solid var(--line);
+  justify-content: flex-end;
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+  flex: none;
 }
-.command-input input {
-  flex: 1;
+
+/* --- Placement ------------------------------------------------------------
+   A menu belongs to its trigger. Centring it broke the link between the
+   control pressed and the panel that answered, and dimmed the whole product
+   to show two links. */
+@media (min-width: 761px) {
+  .modal-overlay[data-placement="top-start"],
+  .modal-overlay[data-placement="top-end"] {
+    background: var(--scrim-soft);
+    align-items: start;
+    padding: calc(var(--topbar) + var(--space-2)) var(--space-4) var(--space-6);
+  }
+  /* The event switcher lives to the right of the navigation rail, so its panel
+     starts there too rather than at the window edge on top of the rail. */
+  .modal-overlay[data-placement="top-start"] {
+    justify-items: start;
+    padding-left: calc(var(--sidebar) + var(--space-4));
+  }
+  .modal-overlay[data-placement="top-end"] {
+    justify-items: end;
+  }
+  .modal-overlay[data-placement="top"] {
+    align-items: start;
+    padding-top: 12dvh;
+    backdrop-filter: blur(var(--scrim-blur));
+  }
+  .modal[data-placement="top-start"],
+  .modal[data-placement="top-end"] {
+    max-height: min(600px, calc(100dvh - var(--topbar) - var(--space-9)));
+  }
+  .modal[data-placement="top"] {
+    max-height: min(620px, calc(100dvh - 24dvh));
+  }
+}
+
+/* --- Sheet ----------------------------------------------------------------
+   A phone has no room to anchor anything, so every panel arrives from the
+   nearest edge and keeps full width. The top edge is for the palette, which
+   the software keyboard would otherwise cover. */
+@media (max-width: 760px) {
+  .modal-overlay {
+    padding: 0;
+    place-items: end stretch;
+  }
+  .modal-overlay[data-placement="top"] {
+    place-items: start stretch;
+  }
+  .modal {
+    --modal-width: 100%;
+    max-height: 90dvh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+  .modal[data-placement="top"] {
+    max-height: 82dvh;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  }
+  .modal-head {
+    padding: var(--space-4) var(--space-4) var(--space-3);
+  }
+  .modal-body {
+    --modal-gutter: var(--space-4);
+  }
+  .modal-foot {
+    padding: var(--space-3) var(--space-4);
+    /* A thumb reaches the bottom edge of a sheet, so the actions there are
+       given full width rather than huddling in the corner a mouse aimed at. */
+    padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
+  }
+  .modal-foot > .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+/* --- Motion ---------------------------------------------------------------
+   Durations collapse to 1ms under prefers-reduced-motion via the global rule
+   in tokens.css, which keeps the state change without the movement. */
+@keyframes pc-overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pc-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+@keyframes pc-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes pc-sheet-in-top {
+  from {
+    transform: translateY(-100%);
+  }
+}
+.modal-overlay[data-state="open"] {
+  animation: pc-overlay-in var(--dur-fast) var(--ease-out);
+}
+.modal[data-state="open"] {
+  animation: pc-panel-in var(--dur-base) var(--ease-out);
+  transform-origin: top center;
+}
+@media (max-width: 760px) {
+  .modal[data-state="open"] {
+    animation: pc-sheet-in var(--dur-base) var(--ease-out);
+  }
+  .modal[data-placement="top"][data-state="open"] {
+    animation: pc-sheet-in-top var(--dur-base) var(--ease-out);
+  }
+}
+
+/* --- Menu ----------------------------------------------------------------
+   Shared by every panel that is a list of destinations: create, notifications,
+   the account menu and the event switcher. These were four different card
+   grids that each answered "what can I click" differently. */
+.pc-menu {
+  display: grid;
+  gap: 2px;
+}
+/* Sentence case at body weight. The tracked-out caps label is the treatment
+   tokens.css retired for exactly this reason: it shouts a word the reader did
+   not need shouted, and costs a full row of height to do it. */
+.pc-menu-label {
+  padding: var(--space-3) var(--space-2) var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+}
+/* Flex, not a three-column grid: a row without a trailing chip should not keep
+   paying for the gutter the chip would have used. */
+.pc-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  font: inherit;
+  /* The rail is painted as an inset shadow rather than a border so that
+     arriving on hover costs no layout and shifts no text. */
+  box-shadow: inset 0 0 0 0 transparent;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.pc-menu-item:hover {
+  background: var(--brand-50);
+  box-shadow: inset 2px 0 0 var(--brand-600);
+}
+/* Rows sit a hairline apart, so a focus ring has to be raised above the row
+   below it or the halo is painted over by its neighbour's background. */
+.pc-menu-item:focus-visible,
+.command-item:focus-visible {
+  position: relative;
+  z-index: 1;
+}
+.pc-menu-item[aria-current="true"] {
+  background: var(--state-info-surface);
+  box-shadow: inset 2px 0 0 var(--brand-600);
+}
+/* A bare glyph, not a boxed one. Thirty-four pixels of bordered chrome around
+   a 17px icon set the height of every row in the product's menus, and said
+   nothing the icon was not already saying. */
+.pc-menu-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: var(--muted-2);
+}
+.pc-menu-item:hover .pc-menu-icon,
+.pc-menu-item[aria-current="true"] .pc-menu-icon {
+  color: var(--text-accent);
+}
+/* Severity is the one case that keeps a well: a tinted mark is how an alert
+   row is told from a destination row at a glance. */
+.pc-menu-icon[data-tone] {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-xs);
+}
+.pc-menu-icon[data-tone="danger"] {
+  background: var(--state-bad-surface);
+  color: var(--state-bad-text);
+}
+.pc-menu-icon[data-tone="warning"] {
+  background: var(--state-warn-surface);
+  color: var(--state-warn-text);
+}
+.pc-menu-item:hover .pc-menu-icon[data-tone],
+.pc-menu-item[aria-current="true"] .pc-menu-icon[data-tone] {
+  color: inherit;
+}
+/* A stack, not a run of inline elements. The label and its description shared
+   a line with no separator anywhere this pattern appeared. */
+.pc-menu-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.pc-menu-copy strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+}
+/* A description that wraps to two lines must not push the row's action out of
+   reach, so the copy column is the one that gives. */
+.pc-menu-copy small {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
+}
+.pc-menu-meta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted-2);
+  font-size: var(--text-2xs);
+}
+/* Full bleed. A rule inset from the panel edge by the body gutter reads as a
+   line inside a list; a rule that touches both edges divides the panel, which
+   is what it is for. */
+.pc-menu-divider {
+  height: 1px;
+  margin: var(--space-2) calc(-1 * var(--modal-gutter));
+  background: var(--border);
+}
+/* A count, not a status: the dot .status paints before every pill is noise on
+   a numeral whose whole job is to be read as a number. */
+.pc-count {
+  min-width: 22px;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.pc-count[data-tone="danger"] {
+  background: var(--state-bad-surface);
+  color: var(--state-bad-text);
+}
+.pc-count[data-tone="warning"] {
+  background: var(--state-warn-surface);
+  color: var(--state-warn-text);
+}
+/* An identity block rather than a menu row: the account panel opens on who
+   you are, and that is a statement, not a destination. */
+.pc-identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  /* Full bleed, flush under the head: who you are is part of the panel's
+     chrome, not the first item in its menu. Inset, it read as a card that had
+     lost its list. */
+  margin: calc(-1 * var(--modal-gutter)) calc(-1 * var(--modal-gutter))
+    var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+.pc-identity-note {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-2);
+}
+.pc-identity-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  background: var(--brand-50);
+  border: 1px solid var(--brand-200);
+  color: var(--brand-700);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+}
+.pc-identity-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.pc-identity-copy strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-snug);
+}
+.pc-identity-copy span {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+.pc-identity-copy .status {
+  justify-self: start;
+  margin-top: var(--space-1);
+}
+/* Sign out is a menu row like the others, not a bordered button floating in
+   the panel, and it says what it will do rather than only what it is. */
+.pc-menu-signout {
+  cursor: pointer;
+}
+.pc-menu-signout:hover {
+  background: var(--state-bad-surface);
+  box-shadow: inset 2px 0 0 var(--red);
+}
+.pc-menu-signout:hover .pc-menu-icon {
+  background: var(--surface);
+  color: var(--state-bad-text);
+}
+/* The event's own two letters, the same mark the top bar shows, so switching
+   is recognised rather than read. */
+.pc-event-thumb {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-xs);
+  background: var(--nav);
+  color: var(--nav-control-text);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-normal);
+}
+.pc-event-option {
+  cursor: default;
+  flex-wrap: wrap;
+}
+/* The invitation buttons carry a whole sentence — "Accept committee chair
+   invitation and switch event" — and .pc-menu-meta does not shrink, which is
+   correct for a count chip and wrong for this. Here the action gives way
+   first, and below the sheet breakpoint it takes its own row rather than
+   squeezing the event name to nothing. */
+.pc-event-option .pc-menu-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.pc-event-option .pc-menu-meta .btn {
+  white-space: normal;
+  text-align: center;
+}
+@media (max-width: 760px) {
+  .pc-event-option .pc-menu-meta {
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    /* Aligned to where the event name starts, not to the panel edge. */
+    padding-left: calc(30px + var(--space-3));
+  }
+}
+.pc-saved-view {
+  cursor: default;
+}
+.pc-menu-delete {
+  width: 32px;
+  min-height: 32px;
+  height: 32px;
+  color: var(--muted-2);
+}
+.pc-menu-delete:hover {
+  border-color: var(--state-bad-border);
+  background: var(--state-bad-surface);
+  color: var(--state-bad-text);
+}
+
+/* --- Command palette ------------------------------------------------------
+   Input first. The palette used to open with a modal title bar and a form
+   label above the field, which spent the top third of an instrument restating
+   what the placeholder already said. */
+.pc-palette-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+}
+.pc-palette-input {
+  flex: 1 1 auto;
+  min-width: 0;
   border: 0;
   background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
   font-size: var(--text-base);
+  line-height: var(--leading-snug);
+}
+.pc-palette-input::placeholder {
+  color: var(--muted-2);
+}
+.pc-palette-input:focus {
+  outline: none;
+}
+.pc-palette-scope {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4) 0;
+  border: 0;
+  margin: 0;
+}
+.pc-segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.pc-segmented > button {
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+}
+.pc-segmented > button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: var(--elev-1);
 }
 .command-results {
-  max-height: 520px;
-  overflow: auto;
   padding: var(--space-2);
 }
-.command-group-title {
+/* Sentence case, and separated by air rather than by a rule. A rule above
+   every group turned a nine-group list into nine boxes. */
+[cmdk-group-heading] {
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  color: var(--text-tertiary);
   font-size: var(--text-2xs);
-  color: var(--muted);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  padding: var(--space-3);
+  font-weight: var(--weight-semibold);
+}
+[cmdk-group] + [cmdk-group] [cmdk-group-heading] {
+  margin-top: var(--space-3);
 }
 .command-item {
   display: grid;
-  grid-template-columns: 110px 1fr 30px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-sm);
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  scroll-margin: var(--space-3);
+  cursor: pointer;
 }
-.command-item:hover,
-.command-item.selected {
-  background: var(--brand-50);
+.command-icon {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: var(--muted-2);
+}
+.command-item[aria-selected="true"] .command-icon {
+  color: var(--text-accent);
 }
 .command-item .meta {
-  margin-left: auto;
-  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted-2);
   text-align: right;
   font-size: var(--text-2xs);
 }
-.command-footer {
+.pc-palette-status {
   display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+.pc-palette-status .pc-spin {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--brand-600);
+  border-radius: var(--radius-full);
+}
+/* The palette's keyboard cursor is the only selection signal in it. Marking
+   the current page with the same tint gave two rows an identical highlight and
+   no way to tell which one Enter would open. */
+.command-item[aria-selected="true"] {
+  background: var(--brand-50);
+  box-shadow: inset 2px 0 0 var(--brand-600);
+}
+.command-item .pc-current-chip {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+}
+.pc-palette-foot {
+  display: flex;
+  align-items: center;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--soft);
-  border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: var(--text-2xs);
+  flex-wrap: wrap;
+}
+.pc-palette-foot > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.pc-palette-empty {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+/* One keycap treatment for the whole product. */
+.shortcut-list kbd,
+.pc-palette-foot kbd,
+.pc-palette-head kbd {
+  min-width: 20px;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+}
+
+/* --- Mobile navigation drawer ---------------------------------------------
+   Moved here from admin-chrome.css: the overlay has one cascade owner, and the
+   sheet rules above would otherwise decide what the drawer looks like. */
+@media (max-width: 760px) {
+  .modal-overlay:has(.pc-mobile-nav) {
+    place-items: stretch;
+    justify-items: start;
+    padding: 0;
+  }
+  .modal-overlay:has(.pc-mobile-nav) > .modal {
+    --modal-width: min(320px, 86vw);
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    animation: pc-drawer-in var(--dur-base) var(--ease-out);
+  }
+}
+@keyframes pc-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
 }

@@ -168,7 +168,7 @@
   background: var(--surface);
 }
 .pending-change {
-  border: 1px solid #fde68a;
+  border: 1px solid var(--state-warn-border);
   background: var(--state-warn-surface-subtle);
   border-radius: var(--radius-sm);
   padding: var(--space-3);

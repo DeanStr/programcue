@@ -1,4 +1,21 @@
-import { CheckCircle2, Save, UserRound } from "lucide-react";
+import {
+  Bell,
+  Building2,
+  CalendarCog,
+  CalendarPlus,
+  CheckCircle2,
+  CircleAlert,
+  CopyPlus,
+  Files,
+  Keyboard,
+  ListChecks,
+  LogOut,
+  Plus,
+  Save,
+  Trash2,
+  TriangleAlert,
+  UserRound,
+} from "lucide-react";
 import { Form, Link } from "react-router";
 
 import type { SavedViewArea } from "~/platform/operations/saved-view-service.server";
@@ -11,6 +28,30 @@ import type {
   AdminShellNotification,
   AdminShellViewer,
 } from "./admin-shell";
+
+/** Initials for an event or a person, from whatever the name actually is. */
+function initialsOf(name: string) {
+  return name
+    .split(/\s+/)
+    .filter((word) => /\p{L}|\p{N}/u.test(word[0] ?? ""))
+    .map((word) => word[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function readableRole(role: string) {
+  return role.replaceAll("_", " ");
+}
+
+const VIEW_AREA_LABELS: Record<SavedViewArea, string> = {
+  submissions: "Submissions",
+  evaluations: "Review",
+  speakers: "Speakers",
+  sessions: "Schedule",
+  tasks: "Tasks",
+  operations: "Operations",
+};
 
 export function AdminAuxiliaryDialogs({
   dialog,
@@ -38,17 +79,27 @@ export function AdminAuxiliaryDialogs({
   const firstSwitchableEventId = eventOptions.find(
     (option) => option.eventId !== event.id || option.pendingInvitationRole,
   )?.eventId;
+  /* Blocking work first. The bell reports a mixed severity list and the order
+     it arrived in is not the order it has to be dealt with. */
+  const rankedNotifications = [...notifications].sort((left, right) =>
+    left.severity === right.severity
+      ? right.count - left.count
+      : left.severity === "danger"
+        ? -1
+        : 1,
+  );
+  const areaViews = viewArea
+    ? commandPalette.savedViews.filter((view) => view.area === viewArea)
+    : [];
+
   return (
     <>
       {dialog === "views" && viewArea ? (
         <Dialog
           title="Saved views"
+          description={`Keep the current filters and sorting for ${VIEW_AREA_LABELS[viewArea]} as a view you can return to.`}
+          icon={<Save aria-hidden size={17} />}
           onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
         >
           <Form method="post" action="/admin/views" className="stack">
             <input type="hidden" name="intent" value="create" />
@@ -63,6 +114,7 @@ export function AdminAuxiliaryDialogs({
                 required
                 minLength={2}
                 maxLength={80}
+                placeholder="Unassigned, newest first"
                 autoFocus
               />
             </label>
@@ -78,58 +130,64 @@ export function AdminAuxiliaryDialogs({
               </select>
             </label>
             <p className="help">
-              This saves the current filters and sorting encoded in the page
-              URL.
+              A view stores what the page URL encodes: the filters, the sort and
+              the columns you are looking at now.
             </p>
-            <button className="btn primary" type="submit">
-              <Save aria-hidden size={14} /> Save view
-            </button>
+            <div className="page-actions">
+              <button className="btn primary" type="submit">
+                <Save aria-hidden size={14} /> Save view
+              </button>
+            </div>
           </Form>
-          {commandPalette.savedViews.filter((view) => view.area === viewArea)
-            .length ? (
+          {areaViews.length ? (
             <>
-              <div className="divider" />
-              <h3>{viewArea} views</h3>
-              <div className="stack">
-                {commandPalette.savedViews
-                  .filter((view) => view.area === viewArea)
-                  .map((view) => (
-                    <div className="card pad" key={view.id}>
+              <div className="pc-menu-divider" />
+              <span className="pc-menu-label">
+                {VIEW_AREA_LABELS[viewArea]} views
+              </span>
+              <div className="pc-menu">
+                {areaViews.map((view) => (
+                  <div className="pc-menu-item pc-saved-view" key={view.id}>
+                    <span className="pc-menu-icon">
+                      <Save aria-hidden size={16} />
+                    </span>
+                    <span className="pc-menu-copy">
                       <strong>{view.name}</strong>
-                      <p className="subtle">
+                      <small>
                         {view.visibility === "event"
-                          ? `Shared by ${view.ownerName}`
-                          : "Private"}
-                      </p>
-                      <div className="page-actions">
-                        <button
-                          type="button"
-                          className="btn small"
-                          onClick={() => selectCommand(view.href)}
-                        >
-                          Open
-                        </button>
-                        {view.canDelete ? (
-                          <Form method="post" action="/admin/views">
-                            <input type="hidden" name="intent" value="delete" />
-                            <input
-                              type="hidden"
-                              name="viewId"
-                              value={view.id}
-                            />
-                            <input
-                              type="hidden"
-                              name="returnTo"
-                              value={currentHref}
-                            />
-                            <button className="btn small danger" type="submit">
-                              Delete
-                            </button>
-                          </Form>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
+                          ? `Shared with event administrators by ${view.ownerName}`
+                          : "Private to you"}
+                      </small>
+                    </span>
+                    <span className="pc-menu-meta">
+                      <button
+                        type="button"
+                        className="btn small"
+                        onClick={() => selectCommand(view.href)}
+                      >
+                        Open
+                      </button>
+                      {view.canDelete ? (
+                        <Form method="post" action="/admin/views">
+                          <input type="hidden" name="intent" value="delete" />
+                          <input type="hidden" name="viewId" value={view.id} />
+                          <input
+                            type="hidden"
+                            name="returnTo"
+                            value={currentHref}
+                          />
+                          <button
+                            className="icon-btn pc-menu-delete"
+                            type="submit"
+                            aria-label={`Delete the ${view.name} view`}
+                          >
+                            <Trash2 aria-hidden size={15} />
+                          </button>
+                        </Form>
+                      ) : null}
+                    </span>
+                  </div>
+                ))}
               </div>
             </>
           ) : null}
@@ -139,17 +197,18 @@ export function AdminAuxiliaryDialogs({
       {dialog === "shortcuts" ? (
         <Dialog
           title="Keyboard shortcuts"
+          description="Everything in the administrator chrome is reachable without a pointer."
+          icon={<Keyboard aria-hidden size={17} />}
+          size="sm"
           onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
         >
           <dl className="shortcut-list">
             <div>
               <dt>
-                <kbd>⌘/Ctrl</kbd> + <kbd>K</kbd>
+                <kbd>⌘</kbd>
+                <span aria-hidden>/</span>
+                <kbd>Ctrl</kbd>
+                <kbd>K</kbd>
               </dt>
               <dd>Search records and run commands</dd>
             </div>
@@ -163,11 +222,12 @@ export function AdminAuxiliaryDialogs({
               <dt>
                 <kbd>Esc</kbd>
               </dt>
-              <dd>Close the active dialog or command palette</dd>
+              <dd>Close the active panel or palette</dd>
             </div>
             <div>
               <dt>
-                <kbd>Tab</kbd> / <kbd>↑</kbd> / <kbd>↓</kbd>
+                <kbd>↑</kbd>
+                <kbd>↓</kbd>
               </dt>
               <dd>Move through available commands</dd>
             </div>
@@ -177,6 +237,12 @@ export function AdminAuxiliaryDialogs({
               </dt>
               <dd>Open the highlighted command</dd>
             </div>
+            <div>
+              <dt>
+                <kbd>Tab</kbd>
+              </dt>
+              <dd>Move to the next control</dd>
+            </div>
           </dl>
         </Dialog>
       ) : null}
@@ -184,97 +250,116 @@ export function AdminAuxiliaryDialogs({
       {dialog === "event" ? (
         <Dialog
           title="Current event"
+          description="Every workspace is scoped to the event selected here."
+          icon={<CalendarCog aria-hidden size={16} />}
+          placement="top-start"
           onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
         >
-          <div className="stack">
-            {eventOptions.map((option) => (
-              <Form
-                method="post"
-                action="/events/select"
-                reloadDocument
-                className={`card pad event-switcher-option${
-                  option.eventId === event.id ? " is-current" : ""
-                }`}
-                key={option.eventId}
-              >
-                <input type="hidden" name="eventId" value={option.eventId} />
-                <input type="hidden" name="returnTo" value={currentHref} />
-                <div className="card-title">
-                  <div>
+          <div className="pc-menu">
+            {eventOptions.map((option) => {
+              const isCurrent = option.eventId === event.id;
+              const switchable = !isCurrent || option.pendingInvitationRole;
+              return (
+                <Form
+                  method="post"
+                  action="/events/select"
+                  reloadDocument
+                  className="pc-menu-item pc-event-option"
+                  aria-current={isCurrent ? "true" : undefined}
+                  key={option.eventId}
+                >
+                  <input type="hidden" name="eventId" value={option.eventId} />
+                  <input type="hidden" name="returnTo" value={currentHref} />
+                  <span className="pc-event-thumb" aria-hidden>
+                    {initialsOf(option.eventName)}
+                  </span>
+                  <span className="pc-menu-copy">
                     <strong>{option.eventName}</strong>
-                    <p className="subtle">
-                      {option.organisationName} ·{" "}
-                      {option.invitationPending
-                        ? `${option.role.replaceAll("_", " ")} invitation pending`
-                        : option.role.replaceAll("_", " ")}
+                    <small>
+                      <Building2 aria-hidden size={12} />{" "}
+                      {option.organisationName} · {readableRole(option.role)}
+                      {option.invitationPending ? " invitation pending" : ""}
                       {!option.invitationPending && option.pendingInvitationRole
-                        ? ` · ${option.pendingInvitationRole.replaceAll("_", " ")} invitation pending`
+                        ? ` · ${readableRole(option.pendingInvitationRole)} invitation pending`
                         : ""}
-                    </p>
-                  </div>
-                  {option.eventId === event.id ? (
-                    <span className="status success">Current</span>
-                  ) : null}
-                </div>
-                {option.eventId !== event.id || option.pendingInvitationRole ? (
-                  <button
-                    className="btn small"
-                    type="submit"
-                    /* Without a stated target every shell dialog opens with
-                       focus on Close — the one control that undoes opening
-                       it. */
-                    data-dialog-autofocus={
-                      option.eventId === firstSwitchableEventId ? "" : undefined
-                    }
-                  >
-                    {option.pendingInvitationRole
-                      ? `Accept ${option.pendingInvitationRole.replaceAll("_", " ")} invitation${option.eventId === event.id ? "" : " and switch event"}`
-                      : "Switch event"}
-                  </button>
-                ) : null}
-              </Form>
-            ))}
+                    </small>
+                  </span>
+                  <span className="pc-menu-meta">
+                    {isCurrent ? (
+                      <span className="status success">Current</span>
+                    ) : null}
+                    {switchable ? (
+                      <button
+                        className={`btn small${isCurrent ? "" : " primary"}`}
+                        type="submit"
+                        /* Without a stated target every shell dialog opens with
+                           focus on Close — the one control that undoes opening
+                           it. */
+                        data-dialog-autofocus={
+                          option.eventId === firstSwitchableEventId
+                            ? ""
+                            : undefined
+                        }
+                      >
+                        {option.pendingInvitationRole
+                          ? `Accept ${readableRole(option.pendingInvitationRole)} invitation${isCurrent ? "" : " and switch event"}`
+                          : "Switch event"}
+                      </button>
+                    ) : null}
+                  </span>
+                </Form>
+              );
+            })}
           </div>
           {viewer.role !== "committee_chair" ? (
             <>
-              <div className="divider" />
-              <div className="grid grid-2">
+              <div className="pc-menu-divider" />
+              <span className="pc-menu-label">Manage events</span>
+              <div className="pc-menu">
                 <Link
-                  className="card pad"
+                  className="pc-menu-item"
                   to="/admin/event"
                   onClick={closeDialog}
                 >
-                  <strong>Event Setup</strong>
-                  <p className="subtle">
-                    Edit the current event configuration.
-                  </p>
+                  <span className="pc-menu-icon">
+                    <CalendarCog aria-hidden size={16} />
+                  </span>
+                  <span className="pc-menu-copy">
+                    <strong>Event setup</strong>
+                    <small>Dates, venue, formats and publication.</small>
+                  </span>
                 </Link>
                 {viewer.canCreateEvents ? (
                   <>
                     <Link
-                      className="card pad"
+                      className="pc-menu-item"
                       to="/admin/events/new"
                       onClick={closeDialog}
                     >
-                      <strong>New event</strong>
-                      <p className="subtle">
-                        Start with Program Cue defaults and no templates.
-                      </p>
+                      <span className="pc-menu-icon">
+                        <CalendarPlus aria-hidden size={16} />
+                      </span>
+                      <span className="pc-menu-copy">
+                        <strong>New event</strong>
+                        <small>
+                          Program Cue defaults, no templates carried over.
+                        </small>
+                      </span>
                     </Link>
                     <Link
-                      className="card pad"
+                      className="pc-menu-item"
                       to="/admin/events/clone"
                       onClick={closeDialog}
                     >
-                      <strong>Clone current event</strong>
-                      <p className="subtle">
-                        Reuse this event’s configuration and templates.
-                      </p>
+                      <span className="pc-menu-icon">
+                        <CopyPlus aria-hidden size={16} />
+                      </span>
+                      <span className="pc-menu-copy">
+                        <strong>Clone this event</strong>
+                        <small>
+                          Reuse {event.name}’s configuration and templates.
+                        </small>
+                      </span>
                     </Link>
                   </>
                 ) : null}
@@ -284,29 +369,47 @@ export function AdminAuxiliaryDialogs({
         </Dialog>
       ) : null}
 
+      {/* No description line on this panel or the notifications one: "New work
+          in this event" restated the button just pressed, and cost a row to do
+          it. A description earns its place only when it carries something the
+          trigger did not. */}
       {dialog === "new" ? (
         <Dialog
           title="Create"
+          icon={<Plus aria-hidden size={16} />}
+          size="sm"
+          placement="top-end"
           onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
         >
-          <div className="grid grid-2">
+          <div className="pc-menu">
             <Link
-              className="card pad"
+              className="pc-menu-item"
               to="/admin/submissions"
               onClick={closeDialog}
               data-dialog-autofocus
             >
-              <strong>Submission</strong>
-              <p className="subtle">Add a direct programme proposal.</p>
+              <span className="pc-menu-icon">
+                <Files aria-hidden size={16} />
+              </span>
+              <span className="pc-menu-copy">
+                <strong>Submission</strong>
+                <small>
+                  Enter a programme proposal in the application queue.
+                </small>
+              </span>
             </Link>
-            <Link className="card pad" to="/admin/tasks" onClick={closeDialog}>
-              <strong>Task</strong>
-              <p className="subtle">Create readiness work.</p>
+            <Link
+              className="pc-menu-item"
+              to="/admin/tasks"
+              onClick={closeDialog}
+            >
+              <span className="pc-menu-icon">
+                <ListChecks aria-hidden size={16} />
+              </span>
+              <span className="pc-menu-copy">
+                <strong>Task</strong>
+                <small>Assign readiness work to a person or a session.</small>
+              </span>
             </Link>
           </div>
         </Dialog>
@@ -315,35 +418,45 @@ export function AdminAuxiliaryDialogs({
       {dialog === "notifications" ? (
         <Dialog
           title="Notifications"
+          icon={<Bell aria-hidden size={16} />}
+          size="sm"
+          placement="top-end"
           onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
         >
-          {notifications.length ? (
-            <div className="stack">
-              {notifications.map((notification, index) => (
+          {rankedNotifications.length ? (
+            <div className="pc-menu">
+              {rankedNotifications.map((notification, index) => (
                 <Link
-                  className="card pad"
+                  className="pc-menu-item"
                   to={notification.href}
                   onClick={closeDialog}
                   key={notification.label}
                   data-dialog-autofocus={index === 0 ? "" : undefined}
                 >
-                  <span className={`status ${notification.severity}`}>
+                  <span
+                    className="pc-menu-icon"
+                    data-tone={notification.severity}
+                  >
+                    {notification.severity === "danger" ? (
+                      <TriangleAlert aria-hidden size={15} />
+                    ) : (
+                      <CircleAlert aria-hidden size={15} />
+                    )}
+                  </span>
+                  <span className="pc-menu-copy">
+                    <strong>{notification.label}</strong>
+                    <small>{notification.detail}</small>
+                  </span>
+                  <span className="pc-count" data-tone={notification.severity}>
                     {notification.count}
                   </span>
-                  <strong className="mt">{notification.label}</strong>
-                  <p className="subtle">Open the exact affected records.</p>
                 </Link>
               ))}
             </div>
           ) : (
             <div className="pc-empty-state">
               <CheckCircle2 aria-hidden className="pc-state-icon" />
-              <h2>No operational alerts</h2>
+              <h2 className="pc-empty-state-title">No operational alerts</h2>
               <p>
                 There are no overdue tasks, blocking conflicts or failed
                 operations in the current event.
@@ -355,44 +468,61 @@ export function AdminAuxiliaryDialogs({
 
       {dialog === "viewer" ? (
         <Dialog
-          title={viewer.name}
+          title="Account"
+          icon={<UserRound aria-hidden size={16} />}
+          size="sm"
+          placement="top-end"
           onClose={closeDialog}
-          footer={
-            <button type="button" className="btn" onClick={closeDialog}>
-              Close
-            </button>
-          }
         >
-          <p>{viewer.email}</p>
-          <span className="status info">
-            <UserRound aria-hidden size={13} /> {viewer.role}
-          </span>
+          <div className="pc-identity">
+            <span className="pc-identity-avatar" aria-hidden>
+              {initialsOf(viewer.name)}
+            </span>
+            <span className="pc-identity-copy">
+              <strong>{viewer.name}</strong>
+              <span>{viewer.email}</span>
+              <span className="status info">
+                <UserRound aria-hidden size={13} /> {readableRole(viewer.role)}
+              </span>
+            </span>
+          </div>
           {viewer.demo ? (
-            <>
-              <p className="help">
-                Demo identities are enabled only by the demo Worker
-                configuration.
-              </p>
-              <Link className="btn mt" to="/demo" onClick={closeDialog}>
-                Evaluator guide and reset
+            <p className="help pc-identity-note">
+              Demo identities are enabled only by the demo Worker configuration.
+            </p>
+          ) : null}
+          <div className="pc-menu">
+            {viewer.demo ? (
+              <Link className="pc-menu-item" to="/demo" onClick={closeDialog}>
+                <span className="pc-menu-icon">
+                  <ListChecks aria-hidden size={16} />
+                </span>
+                <span className="pc-menu-copy">
+                  <strong>Evaluator guide and reset</strong>
+                  <small>
+                    Walk the demo, or return it to its starting records.
+                  </small>
+                </span>
               </Link>
-              <div className="divider" />
-              <Form method="post" action="/sign-out">
-                <button className="btn" type="submit">
-                  Browse anonymously
-                </button>
-              </Form>
-            </>
-          ) : (
-            <>
-              <div className="divider" />
-              <Form method="post" action="/sign-out">
-                <button className="btn" type="submit">
-                  Sign out
-                </button>
-              </Form>
-            </>
-          )}
+            ) : null}
+            <Form method="post" action="/sign-out">
+              <button className="pc-menu-item pc-menu-signout" type="submit">
+                <span className="pc-menu-icon">
+                  <LogOut aria-hidden size={16} />
+                </span>
+                <span className="pc-menu-copy">
+                  <strong>
+                    {viewer.demo ? "Browse anonymously" : "Sign out"}
+                  </strong>
+                  <small>
+                    {viewer.demo
+                      ? "Leave the demo identity and view public surfaces."
+                      : "End this session on this device."}
+                  </small>
+                </span>
+              </button>
+            </Form>
+          </div>
         </Dialog>
       ) : null}
     </>

@@ -5,9 +5,10 @@
   font-display: swap;
   font-weight: 100 900;
   src: url("/fonts/inter-latin-var.woff2") format("woff2-variations");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "Inter Variable";
@@ -15,9 +16,10 @@
   font-display: swap;
   font-weight: 100 900;
   src: url("/fonts/inter-latin-ext-var.woff2") format("woff2-variations");
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
-    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
-    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 :root {
@@ -114,6 +116,9 @@
   --state-warn-text: #92400e;
   --state-warn-surface: #fef3c7;
   --state-warn-surface-subtle: #fffbeb;
+  /* The counterpart to --state-bad-border, which already existed. Three files
+     were typing this value by hand. */
+  --state-warn-border: #fde68a;
   --state-bad-solid: #dc2626;
   --state-bad-text: #991b1b;
   --state-bad-surface: #fee2e2;
@@ -143,15 +148,27 @@
      A card on canvas = 1px border + --elev-1. A panel inside a card = sunken
      tint, no border, no shadow. A popover = --elev-3 and no border. */
   --elev-0: none;
-  --elev-1:
-    0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.04);
-  --elev-2:
-    0 2px 4px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(15, 23, 42, 0.05);
+  --elev-1: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.04);
+  --elev-2: 0 2px 4px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(15, 23, 42, 0.05);
   --elev-3:
     0 4px 8px rgba(15, 23, 42, 0.07), 0 12px 24px rgba(15, 23, 42, 0.08);
   --elev-4:
     0 8px 16px rgba(15, 23, 42, 0.08), 0 24px 48px rgba(15, 23, 42, 0.12);
   --shadow: var(--elev-3);
+  /* An overlay floats above the whole document, so it is one step beyond the
+     page scale rather than another --elev-4 surface. */
+  --elev-overlay:
+    0 2px 6px rgba(2, 6, 23, 0.12), 0 24px 48px rgba(2, 6, 23, 0.18),
+    0 48px 96px rgba(2, 6, 23, 0.16);
+
+  /* --- Scrim --------------------------------------------------------------
+     Two weights, because a scrim states how much of the page is suspended. A
+     decision suspends all of it; a menu belonging to one control suspends
+     almost none, and dimming the page to 58% for an account menu was the
+     single loudest thing the administrator chrome did. */
+  --scrim: rgba(2, 6, 23, 0.55);
+  --scrim-soft: rgba(2, 6, 23, 0.22);
+  --scrim-blur: 3px;
 
   /* --- Radius ------------------------------------------------------------- */
   --radius-xs: 6px;
@@ -261,7 +278,10 @@
   .field,
   .select,
   .textarea,
-  .table-wrap {
+  .table-wrap,
+  /* A panel is separated from the page by shadow alone, which the UA does not
+     repaint. Without this the overlay and the document become one surface. */
+  .modal {
     border: 1px solid CanvasText;
   }
   .status,
