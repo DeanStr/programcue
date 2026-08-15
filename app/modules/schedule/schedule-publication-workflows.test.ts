@@ -34,6 +34,13 @@ describe("schedule publication workflows", () => {
         `,
       ).bind(viewer.eventId, viewer.personId),
       env.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET content_status = 'approved', approved_by_person_id = ?,
+                approved_at = unixepoch(), approval_source = 'editorial'
+          WHERE schedule_version_id = 'schedule-test-published'
+            AND event_id = ? AND session_id = 'schedule-test-one'`,
+      ).bind(viewer.personId, viewer.eventId),
+      env.DB.prepare(
         `
           INSERT INTO schedule_entries (
             id, event_id, schedule_version_id, session_id, room_id, starts_at, ends_at, revision, created_at, updated_at
@@ -47,15 +54,6 @@ describe("schedule publication workflows", () => {
         "UPDATE events SET programme_published_at = unixepoch() WHERE id = ? AND organisation_id = ?",
       ).bind(viewer.eventId, viewer.organisationId),
     ]);
-    await env.DB.prepare(
-      `UPDATE schedule_session_contents
-          SET content_status = 'approved', approved_by_person_id = ?,
-              approved_at = unixepoch(), approval_source = 'editorial'
-        WHERE schedule_version_id = 'schedule-test-published'
-          AND event_id = ? AND session_id = 'schedule-test-one'`,
-    )
-      .bind(viewer.personId, viewer.eventId)
-      .run();
     const liveBefore = await publicProgramme.getPublished(
       "future-of-events-2027",
     );
@@ -165,7 +163,7 @@ describe("schedule publication workflows", () => {
     });
   });
 
-  it("publishes a conflict-free version while content review remains advisory", async () => {
+  it("blocks a conflict-free version until its public content is approved", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);
     let workspace = await service.getWorkspace(viewer);
@@ -187,6 +185,19 @@ describe("schedule publication workflows", () => {
       workspace.sessions.find((session) => session.id === "schedule-test-one")
         ?.contentStatus,
     ).toBe("draft");
+    await expect(
+      service.publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toThrow(/requires an Approved content snapshot.*draft/i);
+    await expect(
+      env.DB.prepare("SELECT status FROM schedule_versions WHERE id = ?")
+        .bind(versionId)
+        .first(),
+    ).resolves.toEqual({ status: "draft" });
+    await approveScheduledTestContent(versionId);
+    workspace = await service.getWorkspace(viewer);
     const publication = await service.publish(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,
@@ -217,6 +228,45 @@ describe("schedule publication workflows", () => {
       status: "queued",
       dispatchError: null,
     });
+  });
+
+  it("rejects an unapproved public snapshot at the database publication boundary", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    expect(
+      workspace.sessions.find((session) => session.id === "schedule-test-one")
+        ?.contentStatus,
+    ).toBe("draft");
+
+    await expect(
+      env.DB.prepare(
+        `UPDATE schedule_versions
+            SET status = 'published', published_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND status = 'draft'`,
+      )
+        .bind(versionId, viewer.eventId)
+        .run(),
+    ).rejects.toThrow(/public schedule content must be approved/i);
+    await expect(
+      env.DB.prepare("SELECT status FROM schedule_versions WHERE id = ?")
+        .bind(versionId)
+        .first(),
+    ).resolves.toEqual({ status: "draft" });
   });
 
   it("allows confirmed participation while the speaker portal invitation remains pending", async () => {
@@ -429,6 +479,71 @@ describe("schedule publication workflows", () => {
     ).resolves.toEqual({ status: "draft" });
   });
 
+  it("rechecks exact content approval in the atomic publication write", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await approveScheduledTestContent(versionId);
+    workspace = await service.getWorkspace(viewer);
+
+    let raced = false;
+    const racingDb = new Proxy(env.DB, {
+      get(target, property, receiver) {
+        if (property !== "batch")
+          return Reflect.get(target, property, receiver);
+        return async (statements: D1PreparedStatement[]) => {
+          raced = true;
+          await target
+            .prepare(
+              `UPDATE schedule_session_contents
+                  SET content_status = 'in_review',
+                      approved_by_person_id = NULL, approved_at = NULL,
+                      approval_source = NULL
+                WHERE schedule_version_id = ? AND event_id = ?
+                  AND session_id = 'schedule-test-one'`,
+            )
+            .bind(versionId, viewer.eventId)
+            .run();
+          return target.batch(statements);
+        };
+      },
+    });
+    const racingEnv = new Proxy(scheduleTestEnv, {
+      get(target, property, receiver) {
+        if (property === "DB") return racingDb;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    await expect(
+      new ScheduleService(racingEnv).publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toThrow(/requires an Approved content snapshot.*in review/i);
+    expect(raced).toBe(true);
+    await expect(
+      env.DB.prepare(
+        `SELECT status FROM schedule_versions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(versionId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ status: "draft" });
+  });
+
   it("rechecks public content visibility in the atomic publication write", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);
@@ -446,6 +561,7 @@ describe("schedule publication workflows", () => {
       startsAt,
       endsAt: startsAt + 3_600,
     });
+    await approveScheduledTestContent(versionId);
     workspace = await service.getWorkspace(viewer);
 
     let raced = false;

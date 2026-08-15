@@ -20,7 +20,6 @@ import {
 import {
   assertPublishedSpeakerGraphIntegrity,
   PublicProgrammeService,
-  PublishedProgrammeSnapshotInvariantError,
   PublishedProgrammeSpeakerInvariantError,
 } from "./public-programme-service.server";
 
@@ -43,7 +42,7 @@ describe("published programme and itinerary", () => {
     ).resolves.not.toBeNull();
   });
 
-  it("serves published public content while editorial review remains advisory", async () => {
+  it("serves the seeded published snapshot with explicit legacy approval provenance", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
     const service = new PublicProgrammeService(testEnv);
@@ -51,32 +50,42 @@ describe("published programme and itinerary", () => {
     expect(
       baseline?.sessions.some((session) => session.id === "demo-session-1"),
     ).toBe(true);
-    await testEnv.DB.prepare(
-      `UPDATE schedule_session_contents
-          SET content_status = 'in_review', approved_by_person_id = NULL,
-              approved_at = NULL, approval_source = NULL
-        WHERE schedule_version_id = 'demo-schedule-published'
-          AND event_id = 'evt-foe-2025' AND session_id = 'demo-session-1'`,
-    ).run();
-    try {
-      const programme = await service.getPublished("future-of-events-2027");
-      expect(
-        programme?.sessions.some((session) => session.id === "demo-session-1"),
-      ).toBe(true);
-      await expect(
-        service.getPublishedLandingSummary("future-of-events-2027", 8),
-      ).resolves.not.toBeNull();
-    } finally {
-      await testEnv.DB.prepare(
-        `UPDATE schedule_session_contents
-            SET content_status = 'approved',
-                approved_by_person_id = NULL,
-                approved_at = unixepoch(),
-                approval_source = 'legacy_publication'
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT content_status AS contentStatus,
+                approval_source AS approvalSource
+           FROM schedule_session_contents
           WHERE schedule_version_id = 'demo-schedule-published'
             AND event_id = 'evt-foe-2025' AND session_id = 'demo-session-1'`,
-      ).run();
-    }
+      ).first(),
+    ).resolves.toEqual({
+      contentStatus: "approved",
+      approvalSource: "legacy_publication",
+    });
+    await expect(
+      service.getPublishedLandingSummary("future-of-events-2027", 8),
+    ).resolves.not.toBeNull();
+  });
+
+  it("rejects published approval drift at the database boundary", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const service = new PublicProgrammeService(testEnv);
+    await expect(
+      testEnv.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET content_status = 'in_review', approved_by_person_id = NULL,
+                approved_at = NULL, approval_source = NULL
+          WHERE schedule_version_id = 'demo-schedule-published'
+            AND event_id = 'evt-foe-2025' AND session_id = 'demo-session-1'`,
+      ).run(),
+    ).rejects.toThrow(/cannot lose approval/i);
+    await expect(
+      service.getPublished("future-of-events-2027"),
+    ).resolves.not.toBeNull();
+    await expect(
+      service.getPublishedLandingSummary("future-of-events-2027", 8),
+    ).resolves.not.toBeNull();
   });
 
   it("exports the server-side personal itinerary without a session-ID URL", async () => {
@@ -861,30 +870,22 @@ describe("published programme and itinerary", () => {
     }
   });
 
-  it("fails closed when published session content is not public", async () => {
+  it("rejects hiding a scheduled public snapshot after publication", async () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
-    await env.DB.prepare(
-      `UPDATE schedule_session_contents
-          SET visibility = 'private'
-        WHERE schedule_version_id = 'demo-schedule-published'
-          AND event_id = 'evt-foe-2025'
-          AND session_id = 'demo-session-1'`,
-    ).run();
-    try {
-      await expect(
-        service.getPublished("future-of-events-2027"),
-      ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
-    } finally {
-      await env.DB.prepare(
+    await expect(
+      env.DB.prepare(
         `UPDATE schedule_session_contents
-            SET visibility = 'public'
+            SET visibility = 'private'
           WHERE schedule_version_id = 'demo-schedule-published'
             AND event_id = 'evt-foe-2025'
             AND session_id = 'demo-session-1'`,
-      ).run();
-    }
+      ).run(),
+    ).rejects.toThrow(/cannot lose approval/i);
+    await expect(
+      service.getPublished("future-of-events-2027"),
+    ).resolves.not.toBeNull();
   });
 
   it("returns a bounded CFP speaker preview without exposing programme internals", async () => {
@@ -958,7 +959,7 @@ describe("published programme and itinerary", () => {
     );
   });
 
-  it("fails fast instead of silently omitting published entries whose content snapshot is missing", async () => {
+  it("rejects deleting content for a published public entry", async () => {
     const service = new PublicProgrammeService(
       env as unknown as CloudflareEnvironment,
     );
@@ -971,36 +972,21 @@ describe("published programme and itinerary", () => {
         LIMIT 1`,
     ).first<{ sessionId: string }>();
     expect(entry).not.toBeNull();
-    await env.DB.prepare(
-      `DELETE FROM schedule_session_contents
-        WHERE schedule_version_id = 'demo-schedule-published'
-          AND event_id = 'evt-foe-2025' AND session_id = ?`,
-    )
-      .bind(entry!.sessionId)
-      .run();
-
-    try {
-      await expect(
-        service.getPublished("future-of-events-2027"),
-      ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
-      await expect(
-        service.getPublishedLandingSummary("future-of-events-2027", 8),
-      ).rejects.toBeInstanceOf(PublishedProgrammeSnapshotInvariantError);
-    } finally {
-      await env.DB.prepare(
-        `INSERT INTO schedule_session_contents (
-           schedule_version_id, event_id, session_id, title, slug,
-           description, track_id, format, duration_minutes,
-           required_resources_json, visibility, created_at, updated_at
-         )
-         SELECT 'demo-schedule-published', event_id, id, title, slug,
-                description, track_id, format, duration_minutes,
-                required_resources_json, visibility, unixepoch(), unixepoch()
-           FROM sessions WHERE id = ? AND event_id = 'evt-foe-2025'`,
+    await expect(
+      env.DB.prepare(
+        `DELETE FROM schedule_session_contents
+          WHERE schedule_version_id = 'demo-schedule-published'
+            AND event_id = 'evt-foe-2025' AND session_id = ?`,
       )
         .bind(entry!.sessionId)
-        .run();
-    }
+        .run(),
+    ).rejects.toThrow(/cannot be deleted/i);
+    await expect(
+      service.getPublished("future-of-events-2027"),
+    ).resolves.not.toBeNull();
+    await expect(
+      service.getPublishedLandingSummary("future-of-events-2027", 8),
+    ).resolves.not.toBeNull();
   });
 
   it("rejects duplicate event slugs across organisations and keeps public lookup stable", async () => {

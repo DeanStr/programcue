@@ -170,9 +170,9 @@ export default function AdminContentSession({
           {current.description || "No public description has been written."}
         </p>
         <p className="help">
-          Editorial status is advisory. Publishing uses the exact public
-          schedule snapshot without changing this status. Saving an edit
-          returns this status to Draft.
+          Public scheduled content must be Approved before its exact schedule
+          snapshot can be published. Saving an edit returns this status to Draft
+          without changing the currently published programme.
         </p>
         {current.contentStatus === "approved" ? (
           <p className="help">

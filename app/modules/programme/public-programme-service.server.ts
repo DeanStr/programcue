@@ -35,7 +35,7 @@ const encoder = new TextEncoder();
 export class PublishedProgrammeSnapshotInvariantError extends Error {
   constructor(versionId: string, missingContent: number) {
     super(
-      `Published schedule version ${versionId} is missing ${missingContent} public session-content snapshot${missingContent === 1 ? "" : "s"}.`,
+      `Published schedule version ${versionId} has ${missingContent} missing or unapproved public session-content snapshot${missingContent === 1 ? "" : "s"}.`,
     );
     this.name = "PublishedProgrammeSnapshotInvariantError";
   }
@@ -322,6 +322,7 @@ export class PublicProgrammeService {
                   AND content.event_id = entry.event_id
                   AND content.session_id = entry.session_id
                   AND content.visibility = 'public'
+                  AND content.content_status = 'approved'
                 WHERE entry.event_id = event.id
                   AND entry.schedule_version_id = version.id
                   AND content.session_id IS NULL
@@ -515,6 +516,7 @@ export class PublicProgrammeService {
           AND content.event_id = entry.event_id
           AND content.session_id = entry.session_id
           AND content.visibility = 'public'
+          AND content.content_status = 'approved'
         WHERE entry.event_id = ? AND entry.schedule_version_id = ?
           AND content.session_id IS NULL`,
     ).bind(event.id, version.id);

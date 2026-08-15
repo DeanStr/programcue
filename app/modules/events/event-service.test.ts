@@ -570,6 +570,24 @@ describe("Event Setup D1 service", () => {
         room.capacity,
       ),
       env.DB.prepare(
+        `INSERT INTO schedule_session_contents (
+           schedule_version_id, event_id, session_id, title, slug,
+           description, track_id, format, duration_minutes,
+           required_resources_json, visibility, content_status,
+           approved_by_person_id, approved_at, approval_source,
+           created_at, updated_at
+         )
+         SELECT ?, event_id, id, title, slug, description, track_id, format,
+                duration_minutes, required_resources_json, visibility,
+                'approved', ?, unixepoch(), 'editorial', unixepoch(), unixepoch()
+           FROM sessions WHERE id = ? AND event_id = ?`,
+      ).bind(
+        published.id,
+        viewer.personId,
+        `capacity-session-${suffix}`,
+        viewer.eventId,
+      ),
+      env.DB.prepare(
         `INSERT INTO schedule_entries (
           id, event_id, schedule_version_id, session_id, room_id,
           starts_at, ends_at, revision, created_at, updated_at

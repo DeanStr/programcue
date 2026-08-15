@@ -125,9 +125,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     const formStructure = page.locator("section").filter({
       has: page.getByRole("heading", { name: "Form structure" }),
     });
-    await formStructure
-      .getByRole("button", { name: /^\d+\s+Tracks/ })
-      .click();
+    await formStructure.getByRole("button", { name: /^\d+\s+Tracks/ }).click();
     const currentTracks = routing.getByRole("group", {
       name: "Current Event Setup tracks",
     });
@@ -445,6 +443,9 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     expect((await undoRequest).ok()).toBeTruthy();
     await expectStatus(page, "Schedule change undone");
     await expect(placement.getByLabel("Duration (minutes)")).toHaveValue("60");
+    await expect(
+      placement.getByRole("button", { name: "Move or resize session" }),
+    ).toBeEnabled();
 
     await placement.getByLabel("Duration (minutes)").fill("45");
     await expect(placement.locator('input[name="endsAt"]')).toHaveValue(
@@ -465,17 +466,32 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
 
     await waitForInterface(page, "/admin/schedule");
     await page.getByRole("button", { name: "Publish schedule" }).click();
-    const publication = page.getByRole("dialog", { name: "Publish schedule" });
+    let publication = page.getByRole("dialog", { name: "Publish schedule" });
+    await expect(publication).toContainText("not marked Approved");
+    await expect(publication).toContainText("Publication is blocked");
+    await expect(
+      publication.getByRole("button", { name: "Confirm publication" }),
+    ).toBeDisabled();
+    await publication.getByRole("link", { name: SUBMISSION_TITLE }).click();
+    await page.getByLabel("Next status").selectOption("approved");
+    await page
+      .getByLabel("Apply this exact status to the current content revision")
+      .check();
+    await page.getByRole("button", { name: "Change status" }).click();
+    await expectStatus(page, "Content status changed to approved");
+
+    await waitForInterface(page, "/admin/schedule");
+    await page.getByRole("button", { name: "Publish schedule" }).click();
+    publication = page.getByRole("dialog", { name: "Publish schedule" });
     await expect(publication).toContainText(
       "Every scheduled public session has a public content snapshot",
     );
-    await expect(publication).toContainText("not marked Approved");
-    await expect(publication).toContainText("Editorial status is advisory");
+    await expect(publication).not.toContainText("not marked Approved");
     await expect(
       publication.getByRole("button", { name: "Confirm publication" }),
     ).toBeEnabled();
     await expect(publication).toContainText(
-      "Confirming publication makes this exact schedule-version snapshot authoritative",
+      "currently published programme remains unchanged",
     );
     await expect(publication).toContainText("revalidated before publication");
     await publication

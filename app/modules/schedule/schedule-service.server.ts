@@ -463,12 +463,13 @@ export class ScheduleService {
     return missing?.missing === 1;
   }
 
-  private async findPrivatePublicScheduledContent(
+  private async findUnpublishablePublicScheduledContent(
     viewer: ScheduleEventScope,
     scheduleVersionId: string,
   ) {
     return this.env.DB.prepare(
-      `SELECT content.title, content.visibility
+      `SELECT content.title, content.visibility,
+              content.content_status AS contentStatus
          FROM schedule_entries entry
          JOIN sessions session
            ON session.id = entry.session_id
@@ -479,12 +480,30 @@ export class ScheduleService {
           AND content.event_id = entry.event_id
           AND content.session_id = entry.session_id
         WHERE entry.schedule_version_id = ? AND entry.event_id = ?
-          AND content.visibility <> 'public'
+          AND (
+            content.visibility <> 'public'
+            OR content.content_status <> 'approved'
+          )
         ORDER BY content.title COLLATE NOCASE, content.session_id
         LIMIT 1`,
     )
       .bind(scheduleVersionId, viewer.eventId)
-      .first<{ title: string; visibility: string }>();
+      .first<{
+        title: string;
+        visibility: string;
+        contentStatus: ScheduleSession["contentStatus"];
+      }>();
+  }
+
+  private publicationContentError(content: {
+    title: string;
+    visibility: string;
+    contentStatus: ScheduleSession["contentStatus"];
+  }) {
+    if (content.visibility !== "public") {
+      return `Every public session requires a public content snapshot before publishing. “${content.title}” is ${content.visibility}.`;
+    }
+    return `Every public session requires an Approved content snapshot before publishing. “${content.title}” is ${content.contentStatus.replaceAll("_", " ")}.`;
   }
 
   async getWorkspace(viewer: ScheduleEventScope): Promise<ScheduleWorkspace> {
@@ -1051,14 +1070,15 @@ export class ScheduleService {
         "Place at least one session before publishing.",
       );
 
-    const privatePublicContent = await this.findPrivatePublicScheduledContent(
-      viewer,
-      parsed.scheduleVersionId,
-    );
-    if (privatePublicContent) {
+    const unpublishableContent =
+      await this.findUnpublishablePublicScheduledContent(
+        viewer,
+        parsed.scheduleVersionId,
+      );
+    if (unpublishableContent) {
       throw new SchedulePublicationBlockedError(
         [],
-        `Every public session requires a public content snapshot before publishing. “${privatePublicContent.title}” is ${privatePublicContent.visibility}.`,
+        this.publicationContentError(unpublishableContent),
       );
     }
 
@@ -1167,15 +1187,15 @@ export class ScheduleService {
           "The active schedule version is missing one or more required frozen session-content snapshots.",
         );
       }
-      const newlyPrivatePublicContent =
-        await this.findPrivatePublicScheduledContent(
+      const newlyUnpublishableContent =
+        await this.findUnpublishablePublicScheduledContent(
           viewer,
           parsed.scheduleVersionId,
         );
-      if (newlyPrivatePublicContent) {
+      if (newlyUnpublishableContent) {
         throw new SchedulePublicationBlockedError(
           [],
-          `Every public session requires a public content snapshot before publishing. “${newlyPrivatePublicContent.title}” is ${newlyPrivatePublicContent.visibility}.`,
+          this.publicationContentError(newlyUnpublishableContent),
         );
       }
       const newlyUnconfirmedSpeaker =

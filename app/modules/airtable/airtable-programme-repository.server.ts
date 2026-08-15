@@ -526,6 +526,7 @@ export class AirtableProgrammeRepository {
           AND content.session_id = entry.session_id
           AND content.event_id = entry.event_id
           AND content.visibility = 'public'
+          AND content.content_status = 'approved'
         WHERE entry.event_id = ? AND entry.schedule_version_id = ?
           AND content.session_id IS NULL
         ORDER BY entry.session_id
@@ -535,7 +536,7 @@ export class AirtableProgrammeRepository {
       .first<{ sessionId: string }>();
     if (missingContent) {
       throw new AirtableRepositoryReconciliationError(
-        `Session ${missingContent.sessionId} is missing a public content snapshot.`,
+        `Session ${missingContent.sessionId} is missing an approved public content snapshot.`,
       );
     }
     const [sessionRows, speakerRows] = await Promise.all([
@@ -581,6 +582,7 @@ export class AirtableProgrammeRepository {
             AND track.is_public = 1
           WHERE entry.event_id = ? AND entry.schedule_version_id = ?
             AND content.visibility = 'public'
+            AND content.content_status = 'approved'
             AND session.status IN ('scheduled','published')
             AND session.visibility = 'public'
           ORDER BY entry.starts_at, entry.id`,
@@ -620,6 +622,7 @@ export class AirtableProgrammeRepository {
              ON session.id = relation.session_id AND session.event_id = relation.event_id
           WHERE content.event_id = ? AND entry.schedule_version_id = ?
             AND content.visibility = 'public'
+            AND content.content_status = 'approved'
             AND session.status IN ('scheduled','published')
             AND session.visibility = 'public'
             AND relation.visibility = 'public'

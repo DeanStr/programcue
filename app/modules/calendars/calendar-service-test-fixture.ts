@@ -95,6 +95,17 @@ export async function scheduledSpeakerEnvironment() {
       calendarTestViewer.personId,
     ),
     env.DB.prepare(
+      `UPDATE schedule_session_contents
+          SET content_status = 'approved', approved_by_person_id = ?,
+              approved_at = unixepoch(), approval_source = 'editorial'
+        WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+    ).bind(
+      calendarTestViewer.personId,
+      scheduleVersionId,
+      calendarTestViewer.eventId,
+      sessionId,
+    ),
+    env.DB.prepare(
       `INSERT INTO schedule_entries (
       id, event_id, schedule_version_id, session_id, room_id, starts_at, ends_at, created_at, updated_at
     ) VALUES (?, ?, ?, ?, 'main', ?, ?, unixepoch(), unixepoch())`,
@@ -108,17 +119,6 @@ export async function scheduledSpeakerEnvironment() {
     ),
   ]);
   await env.DB.batch([
-    env.DB.prepare(
-      `UPDATE schedule_session_contents
-          SET content_status = 'approved', approved_by_person_id = ?,
-              approved_at = unixepoch(), approval_source = 'editorial'
-        WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
-    ).bind(
-      calendarTestViewer.personId,
-      scheduleVersionId,
-      calendarTestViewer.eventId,
-      sessionId,
-    ),
     env.DB.prepare(
       `UPDATE session_content_revisions
           SET content_status = 'approved', created_by_person_id = ?

@@ -344,7 +344,7 @@ describe("content management", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it("keeps editorial status advisory while publishing the complete public snapshot", async () => {
+  it("keeps the live programme unchanged until every public draft revision is approved", async () => {
     const schedule = new ScheduleService(scheduleTestEnv);
     const content = new ContentManagementService(scheduleTestEnv);
     const versionId = await schedule.createDraft(viewer);
@@ -392,6 +392,45 @@ describe("content management", () => {
       workspace.sessions.find((session) => session.id === secondSession.id)
         ?.contentStatus,
     ).toBe("draft");
+    await expect(
+      schedule.publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toThrow(/requires an Approved content snapshot.*draft/i);
+    await expect(
+      env.DB.prepare("SELECT status FROM schedule_versions WHERE id = ?")
+        .bind(versionId)
+        .first(),
+    ).resolves.toEqual({ status: "draft" });
+
+    const secondDraft = workspace.sessions.find(
+      (session) => session.id === secondSession.id,
+    )!;
+    await schedule.updateSessionContent(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: secondDraft.id,
+      sessionRevision: secondDraft.revision,
+      idempotencyKey: crypto.randomUUID(),
+      title: secondDraft.title,
+      description: "This second public session is ready for approval.",
+      format: secondDraft.format,
+      durationMinutes: secondDraft.durationMinutes,
+      trackId: secondDraft.trackId,
+      visibility: "public",
+      requiredResources: secondDraft.requiredResources,
+    });
+    const secondDetail = await content.getSession(viewer, secondSession.id);
+    await content.changeStatus(viewer, {
+      scheduleVersionId: versionId,
+      sessionId: secondSession.id,
+      scheduleRevision: secondDetail.current.scheduleRevision,
+      contentRevision: secondDetail.current.contentRevision,
+      status: "approved",
+      confirmed: true,
+    });
+    workspace = await schedule.getWorkspace(viewer);
     await schedule.publish(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,
@@ -415,7 +454,7 @@ describe("content management", () => {
       )
         .bind(versionId, secondSession.id)
         .first(),
-    ).resolves.toEqual({ contentStatus: "draft" });
+    ).resolves.toEqual({ contentStatus: "approved" });
   });
 
   it("exports only the exact current released file versions after confirmation", async () => {

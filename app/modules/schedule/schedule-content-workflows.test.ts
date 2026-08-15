@@ -435,6 +435,13 @@ describe("schedule content and draft workflows", () => {
         `,
       ).bind(viewer.eventId, viewer.personId),
       env.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET content_status = 'approved', approved_by_person_id = ?,
+                approved_at = unixepoch(), approval_source = 'editorial'
+          WHERE schedule_version_id = 'schedule-concurrent-source'
+            AND event_id = ? AND session_id = 'schedule-test-one'`,
+      ).bind(viewer.personId, viewer.eventId),
+      env.DB.prepare(
         `
           INSERT INTO schedule_entries (
             id, event_id, schedule_version_id, session_id, room_id,
@@ -522,6 +529,13 @@ describe("schedule content and draft workflows", () => {
           )
         `,
       ).bind(viewer.eventId, viewer.personId),
+      env.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET content_status = 'approved', approved_by_person_id = ?,
+                approved_at = unixepoch(), approval_source = 'editorial'
+          WHERE schedule_version_id = 'schedule-warning-source'
+            AND event_id = ? AND session_id = 'schedule-test-one'`,
+      ).bind(viewer.personId, viewer.eventId),
       env.DB.prepare(
         `
           INSERT INTO schedule_entries (

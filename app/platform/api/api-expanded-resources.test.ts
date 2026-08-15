@@ -206,6 +206,32 @@ describe("expanded public API contract", () => {
     fullSnapshot.mockRestore();
   });
 
+  it("rejects unapproving a snapshot already exposed by the public collection", async () => {
+    await ensureDemoProgramme(testEnv);
+    await expect(
+      testEnv.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET content_status = 'in_review', approved_by_person_id = NULL,
+                approved_at = NULL, approval_source = NULL
+          WHERE schedule_version_id = 'demo-schedule-published'
+            AND event_id = 'evt-foe-2025' AND session_id = 'demo-session-1'`,
+      ).run(),
+    ).rejects.toThrow(/cannot lose approval/i);
+    const response = await publicSessionsLoader({
+      request: new Request(
+        "https://programcue.test/api/v1/public/events/future-of-events-2027/sessions",
+      ),
+      params: { slug: "future-of-events-2027" },
+      context: routeContext(),
+    } as never);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      sessions: expect.arrayContaining([
+        expect.objectContaining({ id: "demo-session-1" }),
+      ]),
+    });
+  });
+
   it("does not expose a speaker through a private-session filter", async () => {
     await ensureDemoProgramme(testEnv);
     const programme = await new PublicProgrammeService(testEnv).getPublished(

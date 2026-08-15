@@ -419,6 +419,14 @@ export async function ensureDemoProgramme(env: CloudflareEnvironment) {
       ) VALUES ('demo-schedule-published', ?, 1, 'Published demo programme', 'published', 1, ?, unixepoch(), unixepoch())
     `,
     ).bind(DEMO_EVENT_ID, DEMO_ADMIN_ID),
+    env.DB.prepare(
+      `UPDATE schedule_session_contents
+          SET content_status = 'approved', approved_by_person_id = NULL,
+              approved_at = COALESCE(approved_at, unixepoch()),
+              approval_source = 'legacy_publication', updated_at = unixepoch()
+        WHERE schedule_version_id = 'demo-schedule-published'
+          AND event_id = ? AND visibility = 'public'`,
+    ).bind(DEMO_EVENT_ID),
     ...entries.map(([id, sessionId, roomId, startsAt, endsAt]) =>
       env.DB.prepare(
         `

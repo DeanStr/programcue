@@ -111,6 +111,12 @@ async function createSecondPublishedEvent(personId: string) {
        ) VALUES (?, ?, 1, 'published', unixepoch(), unixepoch())`,
     ).bind(versionId, eventId),
     env.DB.prepare(
+      `UPDATE schedule_session_contents
+          SET content_status = 'approved', approved_by_person_id = NULL,
+              approved_at = unixepoch(), approval_source = 'legacy_publication'
+        WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+    ).bind(versionId, eventId, sessionId),
+    env.DB.prepare(
       `INSERT INTO schedule_entries (
          id, event_id, schedule_version_id, session_id, room_id,
          starts_at, ends_at, created_at, updated_at
@@ -129,14 +135,6 @@ async function createSecondPublishedEvent(personId: string) {
        ) VALUES (?, ?, ?, 0, 'confirmed', unixepoch(), 'public')`,
     ).bind(sessionId, eventId, personId),
   ]);
-  await env.DB.prepare(
-    `UPDATE schedule_session_contents
-        SET content_status = 'approved', approved_by_person_id = NULL,
-            approved_at = unixepoch(), approval_source = 'legacy_publication'
-      WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
-  )
-    .bind(versionId, eventId, sessionId)
-    .run();
   return { eventId, slug };
 }
 

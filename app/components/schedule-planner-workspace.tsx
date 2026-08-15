@@ -186,11 +186,15 @@ export function SchedulePlannerWorkspace({
     () => new Map(workspace.sessions.map((session) => [session.id, session])),
     [workspace.sessions],
   );
-  const contentReviewAdvisories = useMemo(
+  const contentApprovalBlockers = useMemo(
     () =>
       workspace.entries.flatMap((entry) => {
         const session = sessionById.get(entry.sessionId);
-        return session && session.contentStatus !== "approved" ? [session] : [];
+        return session &&
+          session.sourceVisibility === "public" &&
+          session.contentStatus !== "approved"
+          ? [session]
+          : [];
       }),
     [sessionById, workspace.entries],
   );
@@ -966,7 +970,7 @@ export function SchedulePlannerWorkspace({
         <SchedulePublicationDialog
           workspace={{ ...workspace, version: workspace.version }}
           fetcher={fetcher}
-          contentReviewAdvisories={contentReviewAdvisories}
+          contentApprovalBlockers={contentApprovalBlockers}
           publicContentVisibilityBlockers={publicContentVisibilityBlockers}
           close={() => setPublishOpen(false)}
         />

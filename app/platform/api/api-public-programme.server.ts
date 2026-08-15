@@ -462,6 +462,7 @@ async function publishedPageDescriptor(
                   AND content.event_id = entry.event_id
                   AND content.session_id = entry.session_id
                   AND content.visibility = 'public'
+                  AND content.content_status = 'approved'
                 WHERE entry.event_id = event.id
                   AND entry.schedule_version_id = version.id
                   AND content.session_id IS NULL

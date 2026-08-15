@@ -159,6 +159,28 @@ INSERT INTO schedule_versions (
   'recovery-schedule','recovery-event',1,'Published recovery schedule','published',2,
   'recovery-admin',1700000000,1700000100
 );
+UPDATE schedule_session_contents
+SET content_status = 'approved', content_revision = 2,
+    last_edited_by_person_id = 'recovery-admin',
+    approved_by_person_id = 'recovery-admin', approved_at = 1700000100,
+    approval_source = 'editorial', updated_at = 1700000100
+WHERE schedule_version_id = 'recovery-schedule'
+  AND event_id = 'recovery-event'
+  AND session_id = 'recovery-session';
+INSERT INTO session_content_revisions (
+  id,event_id,schedule_version_id,session_id,revision_number,title,slug,
+  description,track_id,format,duration_minutes,required_resources_json,
+  visibility,content_status,change_kind,created_by_person_id,created_at
+)
+SELECT
+  'recovery-content-approval',event_id,schedule_version_id,session_id,
+  content_revision,title,slug,description,track_id,format,duration_minutes,
+  required_resources_json,visibility,content_status,'status',
+  'recovery-admin',1700000100
+FROM schedule_session_contents
+WHERE schedule_version_id = 'recovery-schedule'
+  AND event_id = 'recovery-event'
+  AND session_id = 'recovery-session';
 INSERT INTO schedule_entries (
   id,event_id,schedule_version_id,session_id,room_id,starts_at,ends_at,revision,
   created_at,updated_at

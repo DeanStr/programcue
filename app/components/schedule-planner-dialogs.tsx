@@ -1,6 +1,7 @@
 import { Dialog } from "~/components/dialog";
 import type { AutoPlacementPreview } from "~/modules/schedule/schedule-auto-placement";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
+import { Link } from "react-router";
 import { scheduleDateTimeLabel } from "./schedule-planner-workspace-helpers";
 import type {
   ScheduleFetcher,
@@ -160,7 +161,7 @@ export function AutoPlacementPreviewDialog({
 export function SchedulePublicationDialog({
   workspace,
   fetcher,
-  contentReviewAdvisories,
+  contentApprovalBlockers,
   publicContentVisibilityBlockers,
   close,
 }: {
@@ -168,7 +169,7 @@ export function SchedulePublicationDialog({
     version: NonNullable<SchedulePlannerWorkspaceData["version"]>;
   };
   fetcher: ScheduleFetcher;
-  contentReviewAdvisories: ScheduleSession[];
+  contentApprovalBlockers: ScheduleSession[];
   publicContentVisibilityBlockers: ScheduleSession[];
   close: () => void;
 }) {
@@ -195,7 +196,10 @@ export function SchedulePublicationDialog({
             />
             <button
               className="btn primary"
-              disabled={publicContentVisibilityBlockers.length > 0}
+              disabled={
+                publicContentVisibilityBlockers.length > 0 ||
+                contentApprovalBlockers.length > 0
+              }
             >
               Confirm publication
             </button>
@@ -209,14 +213,17 @@ export function SchedulePublicationDialog({
       </p>
       <p className="help">
         Confirming publication makes this exact schedule-version snapshot
-        authoritative. Editorial statuses stay unchanged.
+        authoritative. If this draft is blocked, the currently published
+        programme remains unchanged.
       </p>
       {publicContentVisibilityBlockers.length ? (
         <div className="validation-item error">
           <strong>
             {publicContentVisibilityBlockers.length} scheduled public content
             record
-            {publicContentVisibilityBlockers.length === 1 ? " is" : "s are"}{" "}
+            {publicContentVisibilityBlockers.length === 1
+              ? " is"
+              : "s are"}{" "}
             private or hidden.
           </strong>{" "}
           Public sessions require public content snapshots. Correct each listed
@@ -237,29 +244,35 @@ export function SchedulePublicationDialog({
           Every scheduled public session has a public content snapshot.
         </div>
       )}
-      {contentReviewAdvisories.length ? (
-        <div className="validation-item warn">
+      {contentApprovalBlockers.length ? (
+        <div className="validation-item error">
           <strong>
-            {contentReviewAdvisories.length} scheduled content record
-            {contentReviewAdvisories.length === 1 ? " is" : "s are"} not
-            marked Approved.
+            {contentApprovalBlockers.length} scheduled public content record
+            {contentApprovalBlockers.length === 1 ? " is" : "s are"} not marked
+            Approved.
           </strong>{" "}
-          Editorial status is advisory. Publication uses the exact public
-          snapshot and leaves these statuses unchanged.
+          Publication is blocked until each exact content revision is approved
+          or the session is removed from the public schedule.
           <ul>
-            {contentReviewAdvisories.slice(0, 5).map((session) => (
+            {contentApprovalBlockers.slice(0, 5).map((session) => (
               <li key={session.id}>
-                {session.title} · {session.contentStatus.replaceAll("_", " ")}
+                <Link
+                  to={`/admin/content/sessions/${encodeURIComponent(session.id)}`}
+                  onClick={close}
+                >
+                  {session.title}
+                </Link>{" "}
+                · {session.contentStatus.replaceAll("_", " ")}
               </li>
             ))}
-            {contentReviewAdvisories.length > 5 ? (
-              <li>{contentReviewAdvisories.length - 5} more</li>
+            {contentApprovalBlockers.length > 5 ? (
+              <li>{contentApprovalBlockers.length - 5} more</li>
             ) : null}
           </ul>
         </div>
       ) : (
         <div className="validation-item ok">
-          Every scheduled content record is marked Approved.
+          Every scheduled public content record is marked Approved.
         </div>
       )}
       <div
