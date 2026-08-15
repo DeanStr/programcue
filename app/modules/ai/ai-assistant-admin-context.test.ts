@@ -236,9 +236,11 @@ describe("contextual administrator actions", () => {
     const request = JSON.parse(String(fetcher.mock.calls[0]![1]?.body)) as {
       tools?: unknown;
       input: string;
+      max_output_tokens: number;
     };
     expect(request.tools).toBeUndefined();
     expect(request.input).toContain('"readiness"');
+    expect(request.max_output_tokens).toBe(4_000);
   });
 
   it("drafts a cohort reminder without exposing send tools or claiming delivery", async () => {
