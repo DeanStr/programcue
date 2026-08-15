@@ -16,10 +16,7 @@ import {
   type FetcherWithComponents,
 } from "react-router";
 
-import {
-  calculateRubricWeightedScore,
-  rubricContributions,
-} from "~/modules/evaluations/evaluation-rules";
+import { calculateRubricWeightedScore } from "~/modules/evaluations/evaluation-rules";
 import {
   clearDraftRecoveryScope,
   useDraftRecovery,
@@ -85,10 +82,6 @@ export type ReviewWorkbenchModel = {
   completedCriterionCount: number;
   weightedScore: number | null;
   conflictChoice: ReviewConflictChoice;
-  contributions: {
-    perCriterion: Map<string, number>;
-    weightScored: number;
-  };
   readOnly: boolean;
   revision: number;
   committedWarning: boolean;
@@ -300,12 +293,6 @@ export function useReviewWorkbenchState({
       return null;
     }
   }, [scaledCriteria, recoveryPayload.scores]);
-  /* Per-criterion contributions are exact the moment a criterion is scored, so
-     they do not wait on the rubric being complete the way the total does. */
-  const contributions = useMemo(
-    () => rubricContributions(scaledCriteria, recoveryPayload.scores),
-    [scaledCriteria, recoveryPayload.scores],
-  );
   const conflictChoice: ReviewConflictChoice =
     recoveryPayload.conflictAffirmed === "affirmed"
       ? "affirmed"
@@ -690,7 +677,6 @@ export function useReviewWorkbenchState({
     completedCriterionCount,
     weightedScore,
     conflictChoice,
-    contributions,
     readOnly,
     revision,
     committedWarning,

@@ -158,7 +158,6 @@
   font-size: var(--text-2xs);
   margin: var(--space-2) 0 0;
 }
-/* The account of how the score is produced is read, not hovered. */
 .command-score-caveat {
   font-size: var(--text-2xs);
   line-height: var(--leading-snug);
@@ -303,12 +302,6 @@
   display: grid;
   gap: 1px;
   text-align: right;
-}
-/* Capacity is the second fact about a room and reads under it, not beside it:
-   in one line the two numbers competed with the time on the left. */
-.command-session-capacity {
-  font-size: var(--text-2xs);
-  color: var(--muted-2);
 }
 .command-session-row .status {
   flex: none;

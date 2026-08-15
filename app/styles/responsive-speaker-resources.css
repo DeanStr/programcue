@@ -38,8 +38,6 @@
   background: var(--surface);
 }
 @media (max-width: 1080px) {
-  /* The rail becomes a second row rather than a squeezed column: the tasks in
-     it are the point of the page and must not be the narrowest thing on it. */
   .speaker-dashboard-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -70,8 +68,6 @@
   .speaker-rail {
     grid-template-columns: minmax(0, 1fr);
   }
-  /* Stacked, the stepper becomes a list and the connector runs down the
-     markers rather than between them. */
   .speaker-stepper {
     grid-template-columns: minmax(0, 1fr);
   }

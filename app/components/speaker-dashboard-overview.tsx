@@ -4,7 +4,6 @@ import { Form, Link } from "react-router";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import {
-  speakerDueLabel,
   speakerStatusClass,
   type SpeakerPortal,
   type SpeakerTask,
@@ -18,10 +17,6 @@ export type SpeakerMilestone = {
   href: string;
 };
 
-/* A count says how far; named stages say where, and what is expected next. The
-   three stages are the speaker's whole obligation to the event, not just their
-   task list — which is why publishing a profile and confirming a session, both
-   previously discoverable only by reading the index below, appear here. */
 export function speakerMilestones({
   portal,
   completedCount,
@@ -121,9 +116,6 @@ export function SpeakerDashboardOverview({
           </p>
         </div>
       </div>
-      {/* The bar the stepper replaced measured tasks alone and was the only
-          progress statement on the page, which made the other two obligations
-          invisible until a speaker went looking for them. */}
       <section
         className="card pad speaker-stepper-card mt"
         aria-labelledby="speaker-stepper-heading"
@@ -207,20 +199,13 @@ export function SpeakerDashboardOverview({
   );
 }
 
-/* The dashboard used to be a directory: five rows that each said how many of
-   something existed and linked elsewhere. A speaker arriving here needs the
-   work itself, so the outstanding items and anything the team has said about
-   them are on the page rather than two navigations away. */
-export function SpeakerWorkRail({
+export function SpeakerUpdatesRail({
   tasks,
   timezone,
 }: {
   tasks: SpeakerTask[];
   timezone: string;
 }) {
-  const outstanding = tasks.filter(
-    (task) => !["completed", "waived"].includes(task.status),
-  );
   const updates = tasks
     .flatMap((task) =>
       task.comments.map((comment) => ({
@@ -230,74 +215,34 @@ export function SpeakerWorkRail({
     )
     .sort((left, right) => right.createdAt - left.createdAt)
     .slice(0, 4);
+  if (!updates.length) return null;
   return (
     <div className="speaker-rail">
-      <section className="card pad" aria-labelledby="speaker-rail-tasks">
-        <div className="card-title">
-          <h2 id="speaker-rail-tasks">My tasks</h2>
-          <Link className="btn small right" to="/participant/tasks">
-            View all
-          </Link>
-        </div>
-        {outstanding.length ? (
-          <ul className="speaker-rail-list">
-            {outstanding.slice(0, 5).map((task) => (
-              <li key={task.id}>
-                <Link
-                  className="speaker-rail-task"
-                  to={`/participant/tasks#task-${task.id}`}
-                >
-                  <span className="speaker-rail-task-copy">
-                    <strong>{task.title}</strong>
-                    <small className="subtle">
-                      {speakerDueLabel(task.dueAt, timezone)}
-                    </small>
-                  </span>
-                  <span className={`status ${speakerStatusClass(task.status)}`}>
-                    {task.status.replaceAll("_", " ")}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="subtle">
-            Nothing outstanding. The event team will let you know if that
-            changes.
-          </p>
-        )}
-      </section>
       <section className="card pad" aria-labelledby="speaker-rail-updates">
         <div className="card-title">
           <h2 id="speaker-rail-updates">Recent updates</h2>
         </div>
-        {updates.length ? (
-          <ul className="speaker-rail-list">
-            {updates.map((update) => (
-              <li key={update.id}>
-                <div className="speaker-rail-update">
-                  <Megaphone aria-hidden size={15} className="subtle" />
-                  <div>
-                    <strong>{update.taskTitle}</strong>
-                    <p>{update.body}</p>
-                    <small className="subtle">
-                      {update.authorName}
-                      {" · "}
-                      <EventDateTime
-                        epochSeconds={update.createdAt}
-                        timeZone={timezone}
-                      />
-                    </small>
-                  </div>
+        <ul className="speaker-rail-list">
+          {updates.map((update) => (
+            <li key={update.id}>
+              <div className="speaker-rail-update">
+                <Megaphone aria-hidden size={15} className="subtle" />
+                <div>
+                  <strong>{update.taskTitle}</strong>
+                  <p>{update.body}</p>
+                  <small className="subtle">
+                    {update.authorName}
+                    {" · "}
+                    <EventDateTime
+                      epochSeconds={update.createdAt}
+                      timeZone={timezone}
+                    />
+                  </small>
                 </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="subtle">
-            Comments about your requirements appear here.
-          </p>
-        )}
+              </div>
+            </li>
+          ))}
+        </ul>
       </section>
     </div>
   );

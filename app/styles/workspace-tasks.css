@@ -9,8 +9,6 @@
   grid-template-columns: minmax(760px, 1fr) 300px;
   gap: var(--space-3);
 }
-/* The rail carries the account of the score first and the plan editor after
-   it, so the explanation sits beside the rows it explains. */
 .tasks-rail {
   display: grid;
   align-content: start;
@@ -56,8 +54,6 @@
   font-size: var(--text-2xs);
   line-height: var(--leading-normal);
 }
-/* Readiness reads as a bar first and a numeral second: the column is scanned
-   for the short bars, not read row by row. */
 .task-readiness-cell {
   min-width: 84px;
   gap: var(--space-1);

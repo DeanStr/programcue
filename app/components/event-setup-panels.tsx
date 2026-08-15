@@ -140,9 +140,6 @@ export function EventIdentityPanels({
             />
           </label>
         </div>
-        {/* The published programme prints the venue name and offers a map
-            link; neither had a field, so every programme showed the name
-            alone. */}
         <div className="form-row mt">
           <label className="label">
             Venue address

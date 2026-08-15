@@ -37,11 +37,10 @@ test("speaker profile, sessions and D1 task state render through the production 
       stepper.getByRole("link", { name: new RegExp(stage) }),
     ).toBeVisible();
   }
-  // The rail carries the outstanding work itself rather than a link to it.
-  await expect(page.getByRole("heading", { name: "My tasks" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "My tasks" })).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "Recent updates" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Overview" })).toHaveAttribute(
     "aria-current",
     "page",

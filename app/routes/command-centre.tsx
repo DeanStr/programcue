@@ -544,9 +544,6 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                             that still need work while there is time to do it. */}
                         <small className="command-session-room">
                           {session.room}
-                          <span className="command-session-capacity pc-num">
-                            {session.roomCapacity.toLocaleString()} seats
-                          </span>
                         </small>
                         {session.status === "attention_required" ? (
                           <span className="command-session-readiness">

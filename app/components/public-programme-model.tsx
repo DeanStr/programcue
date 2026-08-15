@@ -9,7 +9,6 @@ import {
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import type {
   PublishedProgramme,
-  PublishedSession,
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
 
@@ -83,30 +82,6 @@ export function eventHeroImagePath(event: PublishedProgramme["event"]) {
   } catch {
     throw new Error("Published programme hero image URL is invalid.");
   }
-}
-
-export function speakersWithMultipleSessions(programme: {
-  speakers: readonly PublishedSpeaker[];
-  sessions: ReadonlyArray<Pick<PublishedSession, "speakerIds">>;
-}) {
-  if (programme.speakers.length <= 6) return [];
-  const counts = new Map<string, number>();
-  for (const session of programme.sessions)
-    for (const speakerId of session.speakerIds)
-      counts.set(speakerId, (counts.get(speakerId) ?? 0) + 1);
-  return programme.speakers
-    .map((speaker, index) => ({
-      speaker,
-      index,
-      sessions: counts.get(speaker.id) ?? 0,
-    }))
-    .filter((entry) => entry.sessions > 1)
-    .sort(
-      (left, right) =>
-        right.sessions - left.sessions || left.index - right.index,
-    )
-    .slice(0, 6)
-    .map(({ speaker, sessions }) => ({ speaker, sessions }));
 }
 
 export function initials(name: string) {

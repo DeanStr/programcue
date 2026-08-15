@@ -18,7 +18,6 @@ import {
 import {
   eventHeroImagePath,
   sessionSpeakerDetails,
-  speakersWithMultipleSessions,
   speakerAffiliation,
   type PublicProgrammeModel,
 } from "./public-programme-model";
@@ -102,32 +101,6 @@ describe("public programme speaker surfaces", () => {
     expect(() => eventHeroImagePath(invalidWithLegacyField)).toThrow(
       /hero image URL is invalid/iu,
     );
-  });
-
-  it("summarises only speakers who objectively appear in multiple sessions", () => {
-    const speakers = Array.from({ length: 7 }, (_, index) => ({
-      ...speaker,
-      id: `speaker-${index}`,
-      displayName: `Speaker ${index}`,
-    }));
-    const selected = speakersWithMultipleSessions({
-      speakers,
-      sessions: [
-        { speakerIds: [speakers[0]!.id, speakers[1]!.id] },
-        { speakerIds: [speakers[0]!.id, speakers[2]!.id] },
-        { speakerIds: [speakers[1]!.id] },
-      ],
-    });
-    expect(selected).toEqual([
-      { speaker: speakers[0], sessions: 2 },
-      { speaker: speakers[1], sessions: 2 },
-    ]);
-    expect(
-      speakersWithMultipleSessions({
-        speakers: speakers.slice(0, 6),
-        sessions: [],
-      }),
-    ).toEqual([]);
   });
 
   it("exposes an explicit agenda detail close action", () => {

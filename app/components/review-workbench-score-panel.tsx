@@ -111,7 +111,6 @@ export function ReviewScorePanel() {
     completedCriterionCount,
     weightedScore,
     conflictChoice,
-    contributions,
     recoveryPayload,
     readOnly,
     revision,
@@ -290,7 +289,6 @@ export function ReviewScorePanel() {
                     : "no"
                   : String(currentValue);
               const scale = scaleOptions(criterion.inputType);
-              const contribution = contributions.perCriterion.get(criterion.id);
               return (
                 <div className="review-rubric-row" key={criterion.id}>
                   <div className="review-criterion">
@@ -324,20 +322,6 @@ export function ReviewScorePanel() {
                         : "Optional"}
                     {criterion.weightPercent > 0 ? (
                       <span className="sr-only"> weight</span>
-                    ) : null}
-                    {contribution !== undefined ? (
-                      <small className="review-contribution">
-                        +{contribution.toFixed(2)}
-                        <span className="sr-only">
-                          {" "}
-                          contributed to the score
-                        </span>
-                      </small>
-                    ) : criterion.weightPercent > 0 ? (
-                      <small className="review-contribution is-pending">
-                        <span aria-hidden="true">—</span>
-                        <span className="sr-only">No contribution yet</span>
-                      </small>
                     ) : null}
                   </span>
                   {scale ? (
@@ -426,18 +410,6 @@ export function ReviewScorePanel() {
                     ? "Appears once every scored criterion has a value."
                     : "Weighted by the criterion percentages in this round."}
                 </small>
-                {weightedScore === null ? (
-                  <div className="score-summary-progress">
-                    <div className="progress" aria-hidden>
-                      <span
-                        style={{ width: `${contributions.weightScored}%` }}
-                      />
-                    </div>
-                    <small className="subtle pc-num">
-                      {contributions.weightScored}% of the rubric weight scored
-                    </small>
-                  </div>
-                ) : null}
               </div>
               <strong
                 className={`score-summary-value pc-num${weightedScore === null ? " is-pending" : ""}`}

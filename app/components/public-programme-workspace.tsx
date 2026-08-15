@@ -30,7 +30,6 @@ import {
   groupSessionsByDay,
   initials,
   normaliseDescription,
-  speakersWithMultipleSessions,
   speakerAffiliation,
   type PublicProgrammeLoaderData,
   type PublicProgrammeModel,
@@ -574,66 +573,6 @@ function ProgrammeSessionList({ model }: { model: PublicProgrammeModel }) {
         </section>
       ))}
     </div>
-  );
-}
-
-/* The rail answers "what is on" and then stops, so an attendee looking for the
-   two next questions — who is speaking and where the building is — had to
-   scroll the roster or leave the page. Both panels render only when the
-   programme actually carries the data. */
-function MultipleSessionSpeakersPanel({
-  model,
-}: {
-  model: PublicProgrammeModel;
-}) {
-  const { programme } = model;
-  const multipleSessionSpeakers = speakersWithMultipleSessions(programme);
-  if (!multipleSessionSpeakers.length) return null;
-  return (
-    <section
-      className="card public-featured"
-      aria-labelledby="multiple-session-speakers-heading"
-    >
-      <div className="card-title">
-        <h2 id="multiple-session-speakers-heading">
-          Speakers in multiple sessions
-        </h2>
-        <a className="public-featured-all" href="#speakers">
-          View all speakers
-        </a>
-      </div>
-      <ul className="public-featured-list">
-        {multipleSessionSpeakers.map(({ speaker, sessions }) => (
-          <li key={speaker.id}>
-            <a
-              className="public-featured-person"
-              href={`#speaker-${speaker.id}`}
-            >
-              {speaker.imageUrl ? (
-                <img
-                  src={speaker.imageUrl}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  width={44}
-                  height={44}
-                />
-              ) : (
-                <span className="public-featured-initials" aria-hidden>
-                  {initials(speaker.displayName)}
-                </span>
-              )}
-              <span className="public-featured-name">
-                {speaker.displayName}
-                <small className="subtle">
-                  {sessions} {sessions === 1 ? "session" : "sessions"}
-                </small>
-              </span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </section>
   );
 }
 
@@ -1232,12 +1171,7 @@ export function PublicProgrammeWorkspace({
             <aside id="itinerary">
               {!embedded ? <ItineraryPanel model={model} /> : null}
               <SessionDetailPanel model={model} />
-              {!embedded ? (
-                <>
-                  <MultipleSessionSpeakersPanel model={model} />
-                  <VenuePanel model={model} />
-                </>
-              ) : null}
+              {!embedded ? <VenuePanel model={model} /> : null}
             </aside>
             <OverviewSpeakers model={model} />
           </>

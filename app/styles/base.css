@@ -804,7 +804,6 @@ a {
   font-size: var(--text-2xs);
   color: var(--muted);
 }
-/* A tile that states a derived number links to how it was derived. */
 .metric-note {
   font-size: var(--text-2xs);
   color: var(--text-tertiary);

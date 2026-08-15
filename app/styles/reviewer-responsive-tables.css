@@ -343,9 +343,6 @@
   grid-column: 1/-1;
   margin-top: var(--space-1);
 }
-/* The conflict question is asked before the rubric, so it is a quiet enquiry
-   at rest and only takes the danger treatment once a conflict is claimed. It
-   is not an alert until there is something to be alarmed about. */
 .reviewer-shell .review-conflict-gate {
   display: grid;
   gap: var(--space-2);
@@ -370,8 +367,6 @@
   padding: 0;
   font-weight: var(--weight-bold);
 }
-/* The step number is the ordinal of a required question, not decoration, so it
-   reads as a marker rather than as part of the sentence. */
 .review-step-index {
   display: inline-grid;
   place-items: center;
@@ -437,8 +432,6 @@
   font-size: var(--text-2xs);
   line-height: var(--leading-snug);
 }
-/* Locked scoring stays readable — the reviewer is recusing themselves from
-   something they still need to see. */
 .reviewer-shell .review-rubric[data-scoring-locked] {
   opacity: 0.55;
 }
@@ -460,9 +453,6 @@
 .reviewer-shell .review-notes .textarea {
   min-height: 100px;
 }
-/* Two boxes that look the same do different things. The scope chip is what
-   distinguishes them at a glance; the help line states the consequence, and a
-   left rail carries it for anyone who reads neither. */
 .reviewer-shell .review-note {
   display: grid;
   gap: var(--space-1);
@@ -516,24 +506,6 @@
   margin: var(--space-1) 0 0;
   font-size: var(--text-2xs);
   line-height: var(--leading-snug);
-}
-/* What this criterion is currently putting into the total, under the weight
-   that produced it. */
-.review-contribution {
-  display: block;
-  margin-top: 2px;
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-semibold);
-  color: var(--state-info-text);
-}
-.review-contribution.is-pending {
-  color: var(--text-tertiary);
-  font-weight: var(--weight-normal);
-}
-.score-summary-progress {
-  display: grid;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
 }
 .reviewer-shell .review-actions {
   flex-wrap: wrap;

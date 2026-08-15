@@ -71,7 +71,6 @@ export type CommandCentreSnapshot = {
     title: string;
     startsAt: number;
     room: string;
-    roomCapacity: number;
     /* Published is not the same as ready. Attention here means an unresolved
        blocking conflict or outstanding high-impact work on the session, both
        of which are still fixable while the session is still upcoming. */
@@ -219,7 +218,6 @@ async function loadCommandCentreRecords(
     env.DB.prepare(
       `
         SELECT s.id, s.title, e.starts_at AS startsAt, r.name AS room,
-               r.capacity AS roomCapacity,
                -- A session on the published schedule is not automatically
                -- clear: an unresolved blocking conflict on it is exactly the
                -- thing this panel exists to surface before the day arrives.
@@ -267,7 +265,6 @@ async function loadCommandCentreRecords(
         title: string;
         startsAt: number;
         room: string;
-        roomCapacity: number;
         blockingConflicts: number;
         openCriticalTasks: number;
       }>(),
@@ -696,7 +693,6 @@ export class ReadinessService {
           title: session.title,
           startsAt: session.startsAt,
           room: session.room,
-          roomCapacity: session.roomCapacity,
           status:
             conflicts > 0 || openWork > 0
               ? "attention_required"

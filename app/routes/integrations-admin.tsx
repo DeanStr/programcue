@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   CheckCircle2,
-  Database,
   ExternalLink,
   PlugZap,
   RefreshCw,
@@ -61,24 +60,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     selected?.status === "connected"
       ? await service.preview(viewer, selected.id)
       : null;
-  /* Which system holds the authoritative records decides what everything on
-     this page means, and the page never said which one this event uses. */
-  const repository = await env.DB.prepare(
-    `SELECT repository_provider AS repositoryProvider
-       FROM events
-      WHERE id = ? AND organisation_id = ?`,
-  )
-    .bind(viewer.eventId, viewer.organisationId)
-    .first<{ repositoryProvider: "d1" | "airtable" }>();
-  if (!repository)
-    throw new Response("Event not found in the authorised organisation", {
-      status: 404,
-    });
   return {
     ...workspace,
     selected,
     preview,
-    repositoryProvider: repository.repositoryProvider,
     nextRunKey: crypto.randomUUID(),
   };
 }
@@ -214,72 +199,6 @@ export default function IntegrationsAdmin({
           </Link>
         </div>
       </div>
-
-      {/* The recommendation is stated before the connection forms because it is
-          a choice about where the truth lives, and it is cheapest to make
-          before an external system has been wired in. The card reports the
-          setting this event actually has rather than assuming the default. */}
-      <section
-        className="card pad mb integration-authority"
-        data-provider={loaderData.repositoryProvider}
-        aria-labelledby="integration-authority-heading"
-      >
-        <div className="integration-authority-lead">
-          <Database aria-hidden className="integration-authority-icon" />
-          <div>
-            <div className="card-title">
-              <h2 id="integration-authority-heading">
-                Program Cue native records
-              </h2>
-              {loaderData.repositoryProvider === "d1" ? (
-                <span className="status success">
-                  <ShieldCheck aria-hidden size={13} /> In use
-                </span>
-              ) : (
-                <span className="status warning">
-                  <AlertTriangle aria-hidden size={13} /> Airtable is
-                  authoritative
-                </span>
-              )}
-            </div>
-            <p className="subtle">
-              {loaderData.repositoryProvider === "d1"
-                ? "This event's speakers, sessions, schedule and tasks are held in Program Cue. Integrations below export from those records; none of them owns your data."
-                : "This event reads its authoritative records from Airtable, so Program Cue availability depends on that connection staying synchronised. Program Cue's native model is the recommended source of truth."}
-            </p>
-          </div>
-        </div>
-        <ul className="integration-authority-points">
-          <li>
-            <CheckCircle2 aria-hidden size={15} /> Built for events: speakers,
-            sessions, tracks, rooms and programme content
-          </li>
-          <li>
-            <CheckCircle2 aria-hidden size={15} /> Role-based access and event
-            isolation enforced on the server
-          </li>
-          <li>
-            <CheckCircle2 aria-hidden size={15} /> Conflict detection and
-            readiness read the live records
-          </li>
-          {loaderData.repositoryProvider === "d1" ? (
-            <li>
-              <CheckCircle2 aria-hidden size={15} /> No external data provider
-              in the path of a publish
-            </li>
-          ) : (
-            <li className="is-warning">
-              <AlertTriangle aria-hidden size={15} /> Publishing depends on the
-              Airtable authority remaining synchronised
-            </li>
-          )}
-        </ul>
-        <p className="integration-authority-note subtle">
-          Which system owns your event data is set in{" "}
-          <Link to="/admin/event">Event Setup</Link>. Every integration below is
-          optional.
-        </p>
-      </section>
 
       {actionData ? (
         <div

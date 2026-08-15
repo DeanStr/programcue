@@ -1,9 +1,5 @@
 import { IMPACT_WEIGHTS } from "~/modules/readiness/readiness-rules";
 
-/* Readiness is impact-weighted everywhere it is shown, and until now the
-   weights lived only in readiness-rules.ts. A score nobody can reconstruct is
-   a score nobody acts on, so the multipliers are stated on the surface that
-   reports them rather than hidden in a title attribute. */
 const IMPACT_ORDER = ["critical", "high", "medium", "low"] as const;
 
 const IMPACT_LABELS: Record<(typeof IMPACT_ORDER)[number], string> = {
@@ -25,17 +21,11 @@ export function ReadinessWeightingCard() {
         completing one critical requirement moves the score as far as four low
         ones.
       </p>
-      {/* Not .data-table: that class carries an 850px minimum for wide record
-          tables inside a scroll wrapper, and this is a four-row legend in a
-          300px rail. */}
       <table className="pc-weighting-table">
         <thead>
           <tr>
             <th scope="col">Impact</th>
             <th scope="col">Weight</th>
-            <th scope="col">
-              <abbr title="Share of one critical task">vs critical</abbr>
-            </th>
           </tr>
         </thead>
         <tbody>
@@ -47,12 +37,6 @@ export function ReadinessWeightingCard() {
                 </span>
               </th>
               <td className="pc-num">{IMPACT_WEIGHTS[impact]}×</td>
-              <td className="subtle pc-num">
-                {Math.round(
-                  (IMPACT_WEIGHTS[impact] / IMPACT_WEIGHTS.critical) * 100,
-                )}
-                %
-              </td>
             </tr>
           ))}
         </tbody>
@@ -66,10 +50,6 @@ export function ReadinessWeightingCard() {
   );
 }
 
-/* The Command Centre score is the average of the six workflow scores, and the
-   impact weighting above applies inside the workflows that measure tasks. The
-   two facts were previously compressed into one tooltip that stated only the
-   first. */
 export function ReadinessWeightingNote({
   workflowCount,
 }: {

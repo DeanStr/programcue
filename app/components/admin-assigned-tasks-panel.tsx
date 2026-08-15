@@ -17,9 +17,6 @@ function dateLabel(epoch: number | null, timezone: string) {
     : "No due date";
 }
 
-/* An absolute date answers "when"; only the distance to it answers "is this a
-   problem". The table printed the first and left the reader to compute the
-   second against today's date, once per row. */
 const DAY_MILLISECONDS = 86_400_000;
 
 function localDayNumber(epoch: number, timezone: string) {
@@ -51,8 +48,6 @@ export function dueDistanceLabel(dueAt: number, now: number, timezone: string) {
   return { text: `${days} days left`, tone: "neutral" as const };
 }
 
-/* The page reports a readiness percentage at the top and the rows that produce
-   it below, and there was no column connecting the two. */
 function readinessTone(percent: number) {
   if (percent >= 100) return "green";
   if (percent >= 50) return "";

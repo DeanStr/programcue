@@ -12,7 +12,7 @@ import { Link } from "react-router";
 import type { Route } from "./+types/speaker-dashboard";
 import {
   SpeakerDashboardOverview,
-  SpeakerWorkRail,
+  SpeakerUpdatesRail,
 } from "~/components/speaker-dashboard-overview";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
@@ -49,8 +49,6 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
           <p>{portal.event.participantWelcomeText}</p>
         </section>
       ) : null}
-      {/* The main column carries what the speaker has to do; the rail carries
-          the work itself and anything the team has said about it. */}
       <div className="speaker-dashboard-layout">
         <div className="speaker-dashboard-main">
           <SpeakerDashboardOverview
@@ -60,12 +58,6 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
             requirementCount={tasks.length}
           />
 
-          {/* These are navigation links, not cards. As a two-column card grid
-              the fifth one stranded an orphan beside 580x145px of empty
-              canvas, and each tile spent a whole card on a single figure that
-              rendered smaller and greyer than its own static label. As rows
-              the values land in one column, so they can actually be
-              compared. */}
           <section className="mt" aria-labelledby="speaker-workspaces-heading">
             <div className="card-title">
               <h2 id="speaker-workspaces-heading">Event preparation</h2>
@@ -164,7 +156,7 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
             </div>
           </section>
         </div>
-        <SpeakerWorkRail tasks={tasks} timezone={portal.event.timezone} />
+        <SpeakerUpdatesRail tasks={tasks} timezone={portal.event.timezone} />
       </div>
     </>
   );
