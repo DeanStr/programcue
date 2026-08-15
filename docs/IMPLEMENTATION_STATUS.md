@@ -309,7 +309,7 @@ failed operation and its error while removing only its active shell alert and
 readiness blocker; actionable failures cannot use this path. The failed view
 queries failure records directly, prioritises active alerts and exposes the
 complete type-filtered history in explicit 50-row pages, so an old alert is not
-hidden by newer successful work. Migration `0026` adds the acknowledgement
+hidden by newer successful work. Migration `0028` adds the acknowledgement
 fields, bounded alert index and triggers requiring timestamp and actor together;
 the read path also rejects inconsistent attribution instead of inventing an
 actor name. The same transaction persists an operation invalidation cursor and
