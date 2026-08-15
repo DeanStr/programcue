@@ -327,7 +327,7 @@ export class WorkersAiProvider implements AiModelProvider {
       messages: chatMessages(request),
       user: request.safetyIdentifier,
       n: 1,
-      ...(request.textFormat ? {} : { reasoning_effort: "medium" }),
+      reasoning_effort: request.textFormat ? null : "medium",
       max_completion_tokens: request.maxOutputTokens ?? 1_600,
       ...(request.textFormat
         ? {
