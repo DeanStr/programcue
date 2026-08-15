@@ -77,6 +77,9 @@ export const participantPredicateSql = `(
     WHERE candidate_workflow.event_id = ? AND candidate_workflow.person_id = person.id)
   OR EXISTS (SELECT 1 FROM event_participant_profiles candidate_profile
     WHERE candidate_profile.event_id = ? AND candidate_profile.person_id = person.id)
+  OR EXISTS (SELECT 1 FROM speaker_profile_revisions candidate_profile_revision
+    WHERE candidate_profile_revision.event_id = ?
+      AND candidate_profile_revision.person_id = person.id)
   OR EXISTS (SELECT 1 FROM task_instances candidate_task
     WHERE candidate_task.event_id = ? AND candidate_task.owner_person_id = person.id
       AND candidate_task.target_type = 'speaker')
@@ -109,7 +112,7 @@ export const participantPredicateSql = `(
 )`;
 
 export function participantIdBindings(eventId: string) {
-  return Array.from({ length: 16 }, () => eventId);
+  return Array.from({ length: 17 }, () => eventId);
 }
 
 export function candidateSql(suffix: string) {

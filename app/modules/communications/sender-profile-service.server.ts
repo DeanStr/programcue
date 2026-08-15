@@ -156,10 +156,10 @@ export class SenderProfileService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action, entity_type,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
            entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'communication.sender.saved', 'sender_profile', ?,
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'communication.sender.saved', 'sender_profile', ?,
                 json_object('fromEmail', ?, 'addressChanged', json(?), 'provider', ?), unixepoch()
           WHERE changes() = 1
             AND EXISTS (SELECT 1 FROM sender_profiles WHERE id = ? AND event_id = ?)`,
@@ -264,10 +264,10 @@ export class SenderProfileService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action, entity_type,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
            entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'communication.sender.verification.checked',
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'communication.sender.verification.checked',
                 'sender_profile', ?, json_object('domain', ?, 'providerStatus', ?), unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM sender_profiles
@@ -322,10 +322,10 @@ export class SenderProfileService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action, entity_type,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
            entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, ?, 'sender_profile', ?, '{}', unixepoch()
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'sender_profile', ?, '{}', unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM sender_profiles WHERE id = ? AND event_id = ? AND status = ?
           )`,

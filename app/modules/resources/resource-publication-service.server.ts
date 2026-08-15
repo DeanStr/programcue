@@ -632,8 +632,8 @@ export class ResourcePublicationService extends ResourceServiceBase {
       this.env.DB.prepare(
         `
         INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'resource.published', 'resource_page', ?, ?, ?, unixepoch()
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'resource.published', 'resource_page', ?, ?, ?, unixepoch()
           WHERE ${successfulResourcePublishAttemptSql}
       `,
       ).bind(

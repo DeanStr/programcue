@@ -2,14 +2,17 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   OperationReadService,
   parseJsonRecord,
-  type ActivityTimelineItem,
+  type ActivityActor,
+  type ActivityPage,
   type OperationDetail,
   type OperationFailurePage,
   type OperationListItem,
 } from "./operation-read-service.server";
 export { activityAreas } from "./operation-read-service.server";
 export type {
+  ActivityActor,
   ActivityArea,
+  ActivityPage,
   ActivityTimelineItem,
   OperationApiListItem,
   OperationAuditItem,
@@ -111,10 +114,16 @@ export class OperationService {
 
   activity(
     viewer: Viewer,
-    filters: { area?: string; actorPersonId?: string; query?: string } = {},
-    limit = 200,
-  ): Promise<ActivityTimelineItem[]> {
-    return this.readService().activity(viewer, filters, limit);
+    options: Parameters<OperationReadService["activity"]>[1] = {},
+  ): Promise<ActivityPage> {
+    return this.readService().activity(viewer, options);
+  }
+
+  activityActors(
+    viewer: Viewer,
+    options: Parameters<OperationReadService["activityActors"]>[1] = {},
+  ): Promise<ActivityActor[]> {
+    return this.readService().activityActors(viewer, options);
   }
 
   async acknowledgeFailure(
@@ -138,10 +147,10 @@ export class OperationService {
     const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, operation.organisation_id, operation.event_id, ?,
+         SELECT ?, 'person', 'admin_ui', 1, operation.organisation_id, operation.event_id, ?,
                 'operation.failure_acknowledged', 'operation', operation.id,
                 json_object('type', operation.type, 'status', operation.status),
                 unixepoch()
@@ -300,9 +309,9 @@ export class OperationService {
         ),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, metadata_json, created_at
-           ) SELECT ?, ?, ?, ?, ?, 'operation', ?, '{}', unixepoch()
+           ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'operation', ?, '{}', unixepoch()
               WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ? AND status = 'cancelled')`,
         ).bind(
           crypto.randomUUID(),
@@ -614,8 +623,8 @@ export class OperationService {
     await this.env.DB.prepare(
       `
       INSERT INTO audit_events (
-        id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-      ) VALUES (?, ?, ?, ?, 'operation.retried', 'operation', ?, '{}', unixepoch())
+        id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+      ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?, 'operation.retried', 'operation', ?, '{}', unixepoch())
     `,
     )
       .bind(

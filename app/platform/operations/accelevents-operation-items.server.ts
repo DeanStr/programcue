@@ -123,9 +123,9 @@ export class AcceleventsOperationItemService {
     }
     await this.env.DB.prepare(
       `INSERT INTO audit_events (
-         id, organisation_id, event_id, actor_person_id, action,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
          entity_type, entity_id, metadata_json, created_at
-       ) VALUES (?, ?, ?, ?, 'integration.run.item_retried',
+       ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?, 'integration.run.item_retried',
                  'integration_run_item', ?, ?, unixepoch())`,
     )
       .bind(
@@ -287,9 +287,9 @@ export class AcceleventsOperationItemService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'integration.run.item_skipped',
+         ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'integration.run.item_skipped',
                   'integration_run_item', ?, ?, unixepoch()
             WHERE EXISTS (SELECT 1 FROM operation_items
                            WHERE id = ? AND status = 'skipped')`,
@@ -492,9 +492,9 @@ export class AcceleventsOperationItemService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'integration.run.item_retry_queue_failed',
+         ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'integration.run.item_retry_queue_failed',
                   'integration_run_item', ?, ?, unixepoch()
             WHERE EXISTS (
               SELECT 1 FROM operation_jobs

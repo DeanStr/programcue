@@ -1122,10 +1122,10 @@ describe("activity timeline", () => {
     await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) VALUES (?, ?, ?, ?, 'decision.recorded', 'submission_decision',
-                   'decision-filter-target', '{"source":"test"}', unixepoch())`,
+         ) VALUES (?, 'person', 'internal', 1, ?, ?, ?, 'decision.recorded', 'submission_decision',
+                   'decision-filter-target', '{"outcome":"accepted"}', unixepoch())`,
       ).bind(
         decisionId,
         viewer.organisationId,
@@ -1134,15 +1134,29 @@ describe("activity timeline", () => {
       ),
       env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) VALUES (?, ?, ?, ?, 'schedule.published', 'schedule_version',
-                   'schedule-filter-target', '{}', unixepoch())`,
+         ) VALUES (?, 'person', 'internal', 1, ?, ?, ?, 'schedule.published', 'schedule_version',
+                   'schedule-filter-target', '{"entryCount":1}', unixepoch())`,
       ).bind(
         scheduleId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, actor_id, action, entity_type, entity_id,
+           metadata_json, created_at
+         ) VALUES (?, 'agent', 'admin_ui', 1, ?, ?, ?, 'program_cue_agent',
+                   'assistant.completed', 'assistant_run', ?, '{}', unixepoch())`,
+      ).bind(
+        crypto.randomUUID(),
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        crypto.randomUUID(),
       ),
     ]);
 
@@ -1150,17 +1164,108 @@ describe("activity timeline", () => {
       env as unknown as CloudflareEnvironment,
     ).activity(viewer, {
       area: "evaluation",
-      actorPersonId: viewer.personId,
+      actorKey: `person:${viewer.personId}`,
       query: "decision-filter-target",
     });
 
-    expect(activity).toHaveLength(1);
-    expect(activity[0]).toMatchObject({
+    expect(activity.items).toHaveLength(1);
+    expect(activity.nextCursor).toBeNull();
+    expect(activity.items[0]).toMatchObject({
       id: decisionId,
       area: "evaluation",
       actorName: viewer.name,
       entityId: "decision-filter-target",
-      metadata: { source: "test" },
+      summary: "Outcome: accepted",
+      actorKind: "person",
+      origin: "internal",
     });
+    await expect(
+      new OperationService(
+        env as unknown as CloudflareEnvironment,
+      ).activityActors(viewer),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        {
+          key: "agent:program_cue_agent",
+          name: "Agent · program_cue_agent",
+          kind: "agent",
+        },
+      ]),
+    );
+  });
+
+  it("uses a filter-bound keyset cursor without overlap", async () => {
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    const prefix = crypto.randomUUID();
+    await env.DB.prepare(
+      `WITH RECURSIVE sequence(value) AS (
+         VALUES (1) UNION ALL SELECT value + 1 FROM sequence WHERE value < 51
+       )
+       INSERT INTO audit_events (
+         id, actor_kind, origin, metadata_version, organisation_id, event_id,
+         actor_person_id, action, entity_type, entity_id, metadata_json,
+         created_at
+       )
+       SELECT ? || ':' || printf('%03d', value), 'person', 'internal', 1,
+              ?, ?, ?, 'schedule.published', 'schedule_version',
+              ? || ':' || value, json_object('entryCount', value),
+              2100000000 + value
+         FROM sequence`,
+    )
+      .bind(
+        prefix,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        prefix,
+      )
+      .run();
+    const service = new OperationService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const first = await service.activity(viewer, {
+      area: "schedule",
+      query: prefix,
+    });
+    expect(first.items).toHaveLength(50);
+    expect(first.nextCursor).not.toBeNull();
+    const second = await service.activity(viewer, {
+      area: "schedule",
+      query: prefix,
+      cursor: first.nextCursor!,
+    });
+    expect(second.items).toHaveLength(1);
+    expect(second.nextCursor).toBeNull();
+    expect(
+      new Set([...first.items, ...second.items].map((item) => item.id)).size,
+    ).toBe(51);
+    await expect(
+      service.activity(viewer, {
+        area: "evaluation",
+        query: prefix,
+        cursor: first.nextCursor!,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("rejects invalid or oversized filters instead of changing them", async () => {
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    const service = new OperationService(
+      env as unknown as CloudflareEnvironment,
+    );
+    await expect(
+      service.activity(viewer, { area: "not-an-area" }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      service.activity(viewer, { query: "x".repeat(121) }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      service.activityActors(viewer, { search: "x".repeat(81) }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      service.activity(viewer, {
+        scope: "invalid" as "event",
+      }),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });

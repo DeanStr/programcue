@@ -415,9 +415,9 @@ export class AirtableMigrationService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) VALUES (?, ?, ?, ?, 'airtable.repository.migration.previewed',
+         ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?, 'airtable.repository.migration.previewed',
                    'integration_run', ?, ?, ?, unixepoch())`,
       ).bind(
         crypto.randomUUID(),
@@ -618,9 +618,9 @@ export class AirtableMigrationService {
       ).bind(runId, viewer.eventId, viewer.organisationId, operationId),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'airtable.repository.migrated',
+         ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'airtable.repository.migrated',
                   'event', ?, ?, ?, unixepoch()
             WHERE EXISTS (
               SELECT 1 FROM events
@@ -796,9 +796,9 @@ export class AirtableMigrationService {
       ).bind(runId, viewer.eventId, viewer.organisationId, runId),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'airtable.repository.migrated',
+         ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'airtable.repository.migrated',
                   'event', ?, ?, ?, unixepoch()
             WHERE EXISTS (
               SELECT 1 FROM events

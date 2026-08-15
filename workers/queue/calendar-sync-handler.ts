@@ -423,8 +423,8 @@ export async function processCalendarSync(
       // this scalar subquery returns NULL and rolls the entire D1 batch back.
       env.DB.prepare(
         `INSERT INTO audit_events (
-        id, organisation_id, event_id, action, entity_type, entity_id, metadata_json, created_at
-      ) VALUES (?, ?, ?, (
+        id, actor_kind, origin, metadata_version, organisation_id, event_id, action, entity_type, entity_id, metadata_json, created_at
+      ) VALUES (?, 'system', 'queue', 1, ?, ?, (
         SELECT 'calendar.lifecycle.completed'
           FROM calendar_invitations ci
           JOIN calendar_sync_attempts csa ON csa.id = ? AND csa.invitation_id = ci.id

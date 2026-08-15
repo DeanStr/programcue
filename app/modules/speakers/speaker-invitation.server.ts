@@ -349,9 +349,11 @@ export async function prepareSpeakerInvitations(input: {
         ),
         input.env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, actor_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
              entity_type, entity_id, correlation_id, metadata_json, created_at
-           ) SELECT ?, ?, ?, ?, ?, 'membership.speaker.invitation.queued',
+           ) SELECT ?, CASE WHEN ? IS NULL THEN 'api_key' ELSE 'person' END,
+                    CASE WHEN ? IS NULL THEN 'api' ELSE 'admin_ui' END,
+                    1, ?, ?, ?, ?, 'membership.speaker.invitation.queued',
                     'membership', membership.id, ?, ?, unixepoch()
                FROM memberships membership
                JOIN people person ON person.id = membership.person_id
@@ -369,6 +371,8 @@ export async function prepareSpeakerInvitations(input: {
            ON CONFLICT(id) DO NOTHING`,
         ).bind(
           auditId,
+          input.actor.personId,
+          input.actor.personId,
           input.actor.organisationId,
           input.actor.eventId,
           input.actor.personId,

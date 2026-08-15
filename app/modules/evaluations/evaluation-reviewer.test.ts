@@ -436,6 +436,32 @@ describe("evaluation vertical slice", () => {
         revision: 2,
         conflictAffirmedAt: expect.any(Number),
       });
+      const revisionEvidence = await env.DB.prepare(
+        `SELECT scorecard_id AS scorecardId,
+                scorecard_version AS scorecardVersion,
+                criteria_snapshot_json AS criteriaSnapshotJson
+           FROM review_revisions
+          WHERE review_id = ? AND revision_number = 2`,
+      )
+        .bind(submitted.reviewId)
+        .first<{
+          scorecardId: string;
+          scorecardVersion: number;
+          criteriaSnapshotJson: string;
+        }>();
+      expect(revisionEvidence).toMatchObject({
+        scorecardId: "eval-test-round",
+        scorecardVersion: 1,
+      });
+      expect(JSON.parse(revisionEvidence!.criteriaSnapshotJson)).toEqual(
+        criteria.map((criterion, position) =>
+          expect.objectContaining({
+            id: criterion.id,
+            name: criterion.name,
+            position,
+          }),
+        ),
+      );
       const submittedWorkspace = await service.getReviewerWorkspace(evaluator);
       expect(submittedWorkspace.selected?.status).toBe("submitted");
       expect(submittedWorkspace.review?.status).toBe("submitted");

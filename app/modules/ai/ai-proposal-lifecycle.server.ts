@@ -152,6 +152,7 @@ export class AiProposalLifecycleService {
   private async audit(
     viewer: Viewer,
     input: {
+      actorKind: "person" | "agent";
       action: string;
       entityType: string;
       entityId?: string | null;
@@ -161,15 +162,19 @@ export class AiProposalLifecycleService {
   ) {
     await this.env.DB.prepare(
       `INSERT INTO audit_events (
-        id, organisation_id, event_id, actor_person_id, action,
+        id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
         entity_type, entity_id, correlation_id, metadata_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
+      ) VALUES (?, ?, 'admin_ui', 1, ?, ?, ?,
+                CASE WHEN ? = 'agent' THEN 'program_cue_agent' ELSE NULL END,
+                ?, ?, ?, ?, ?, unixepoch())`,
     )
       .bind(
         crypto.randomUUID(),
+        input.actorKind,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
+        input.actorKind,
         input.action,
         input.entityType,
         input.entityId ?? null,
@@ -232,10 +237,10 @@ export class AiProposalLifecycleService {
       ),
       this.env.DB.prepare(
         `INSERT OR IGNORE INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, execution.organisation_id, execution.event_id,
+         SELECT ?, 'person', 'admin_ui', 1, execution.organisation_id, execution.event_id,
                 execution.actor_person_id, 'assistant.approval.recorded',
                 'assistant_proposal', execution.proposal_id, ?, ?, ?
            FROM assistant_proposal_executions execution
@@ -369,11 +374,11 @@ export class AiProposalLifecycleService {
         ),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
              entity_type, entity_id, correlation_id, metadata_json, created_at
            )
-           SELECT ?, execution.organisation_id, execution.event_id,
-                  execution.actor_person_id, 'assistant.action.executed',
+           SELECT ?, 'agent', 'admin_ui', 1, execution.organisation_id, execution.event_id,
+                  execution.actor_person_id, 'program_cue_agent', 'assistant.action.executed',
                   ?, ?, ?, ?, ?
              FROM assistant_proposal_executions execution
             WHERE execution.proposal_id = ? AND execution.status = 'completed'
@@ -569,6 +574,7 @@ export class AiProposalLifecycleService {
       }
       try {
         await this.audit(viewer, {
+          actorKind: "agent",
           action: "assistant.action.failed",
           entityType: "assistant_proposal",
           entityId: proposalId,
@@ -667,6 +673,7 @@ export class AiProposalLifecycleService {
       },
     });
     await this.audit(viewer, {
+      actorKind: "person",
       action: "assistant.proposal.superseded",
       entityType: "assistant_proposal",
       entityId: proposalId,

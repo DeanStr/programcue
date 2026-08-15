@@ -322,11 +322,19 @@ describe("OpenAI Responses provider boundary", () => {
       ),
     ).toBe(true);
     const audit = await env.DB.prepare(
-      `SELECT action FROM audit_events
+      `SELECT action, actor_kind AS actorKind, origin,
+              actor_person_id AS actorPersonId, actor_id AS actorId
+         FROM audit_events
         WHERE event_id = ? AND entity_id = ? ORDER BY created_at, id`,
     )
       .bind(admin.eventId, result.runId)
-      .all<{ action: string }>();
+      .all<{
+        action: string;
+        actorKind: string;
+        origin: string;
+        actorPersonId: string | null;
+        actorId: string | null;
+      }>();
     expect(audit.results.map((row) => row.action)).toEqual(
       expect.arrayContaining([
         "assistant.requested",
@@ -334,6 +342,22 @@ describe("OpenAI Responses provider boundary", () => {
         "assistant.completed",
       ]),
     );
+    expect(
+      audit.results.find((row) => row.action === "assistant.requested"),
+    ).toMatchObject({
+      actorKind: "person",
+      origin: "admin_ui",
+      actorPersonId: admin.personId,
+      actorId: null,
+    });
+    for (const action of ["assistant.tool.completed", "assistant.completed"]) {
+      expect(audit.results.find((row) => row.action === action)).toMatchObject({
+        actorKind: "agent",
+        origin: "admin_ui",
+        actorPersonId: admin.personId,
+        actorId: "program_cue_agent",
+      });
+    }
     const operation = await env.DB.prepare(
       `SELECT type, status, payload_json AS payloadJson,
               result_json AS resultJson, progress_completed AS progressCompleted

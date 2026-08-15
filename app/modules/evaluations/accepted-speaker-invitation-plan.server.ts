@@ -346,9 +346,9 @@ export async function prepareAcceptedSpeakerInvitationPlans(input: {
         ),
         env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, correlation_id, metadata_json, created_at
-           ) SELECT ?, ?, ?, ?, 'membership.speaker.invitation.queued',
+           ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'membership.speaker.invitation.queued',
                     'membership', ?, ?, ?, unixepoch()
               WHERE EXISTS (
                 SELECT 1 FROM operation_jobs operation

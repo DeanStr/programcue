@@ -93,6 +93,20 @@ describe("event API key lifecycle", () => {
 
     await service.revoke(viewer, created.id);
     await expect(
+      env.DB.prepare(
+        `SELECT action, origin FROM audit_events
+          WHERE entity_id = ? AND action IN ('api_key.created', 'api_key.revoked')
+          ORDER BY action`,
+      )
+        .bind(created.id)
+        .all(),
+    ).resolves.toMatchObject({
+      results: [
+        { action: "api_key.created", origin: "admin_ui" },
+        { action: "api_key.revoked", origin: "admin_ui" },
+      ],
+    });
+    await expect(
       requireApiKey(
         new Request("https://example.test", {
           headers: { authorization: `Bearer ${created.token}` },

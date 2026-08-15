@@ -144,9 +144,9 @@ export class ApiKeyService {
         this.env.DB.prepare(
           `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, e.organisation_id, e.id, ?, 'api_key.created',
+        ) SELECT ?, 'person', 'admin_ui', 1, e.organisation_id, e.id, ?, 'api_key.created',
                  'api_key', ?, ?, unixepoch()
             FROM events e
            WHERE e.id = ? AND e.organisation_id = ?
@@ -227,10 +227,10 @@ export class ApiKeyService {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, api_key.organisation_id, api_key.event_id, ?, 'api_key.revoked',
+        SELECT ?, 'person', 'admin_ui', 1, api_key.organisation_id, api_key.event_id, ?, 'api_key.revoked',
                'api_key', api_key.id, '{}', unixepoch()
           FROM api_keys api_key
          WHERE api_key.id = ? AND api_key.organisation_id = ?

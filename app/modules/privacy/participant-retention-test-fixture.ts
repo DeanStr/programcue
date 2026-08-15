@@ -103,6 +103,29 @@ export async function seedExpiredRetentionEvent() {
       id("privacy-shared-other-event-profile"),
     ),
     testEnv.DB.prepare(
+      `INSERT INTO speaker_profile_revisions (
+         id, organisation_id, event_id, person_id, source, profile_revision,
+         display_name, biography, publication_status, recorded_by_person_id,
+         correlation_id
+       ) VALUES (?, ?, ?, ?, 'canonical_person', 1, 'Exclusive Person',
+                 'Private historical biography', 'published',
+                 'person-demo-owner', ?),
+                (?, ?, ?, ?, 'canonical_person', 1, 'Shared Person',
+                 'Other event historical biography', 'published',
+                 'person-demo-owner', ?)`,
+    ).bind(
+      id("privacy-profile-revision"),
+      organisationId,
+      eventId,
+      exclusiveId,
+      id("privacy-profile-correlation"),
+      id("privacy-other-profile-revision"),
+      organisationId,
+      otherEventId,
+      sharedId,
+      id("privacy-other-profile-correlation"),
+    ),
+    testEnv.DB.prepare(
       `INSERT INTO memberships (
          id, organisation_id, event_id, person_id, role, accepted_at
        ) VALUES (?, ?, ?, ?, 'submitter', unixepoch())`,
@@ -261,9 +284,9 @@ export async function seedExpiredRetentionEvent() {
     ),
     testEnv.DB.prepare(
       `INSERT INTO audit_events (
-         id, organisation_id, event_id, actor_person_id, action,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
          entity_type, entity_id, metadata_json
-       ) VALUES (?, ?, ?, 'person-demo-owner', 'file.erasure.completed',
+       ) VALUES (?, 'person', 'internal', 1, ?, ?, 'person-demo-owner', 'file.erasure.completed',
                  'file_asset', ?, '{}')`,
     ).bind(
       `file-erasure-complete:${fileAssetId}`,
@@ -423,9 +446,9 @@ export async function seedExpiredRetentionEvent() {
     ),
     testEnv.DB.prepare(
       `INSERT INTO audit_events (
-         id, organisation_id, event_id, actor_person_id, action,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
          entity_type, entity_id, metadata_json
-       ) VALUES (?, ?, ?, ?, 'submission.created', 'submission', ?, ?)`,
+       ) VALUES (?, 'person', 'internal', 1, ?, ?, ?, 'submission.created', 'submission', ?, ?)`,
     ).bind(
       id("privacy-audit-exclusive"),
       organisationId,
@@ -436,9 +459,9 @@ export async function seedExpiredRetentionEvent() {
     ),
     testEnv.DB.prepare(
       `INSERT INTO audit_events (
-         id, organisation_id, event_id, actor_person_id, action,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
          entity_type, entity_id, metadata_json
-       ) VALUES (?, ?, ?, ?, 'submission.created', 'submission', ?, ?)`,
+       ) VALUES (?, 'person', 'internal', 1, ?, ?, ?, 'submission.created', 'submission', ?, ?)`,
     ).bind(
       id("privacy-audit-shared"),
       organisationId,

@@ -299,10 +299,10 @@ export class EvaluationRoundDeleteWorkflow extends EvaluationServiceFoundation {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, 'evaluation.round.deleted',
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'evaluation.round.deleted',
                'evaluation_round', ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM evaluation_plans plan

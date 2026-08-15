@@ -57,6 +57,11 @@ const coreRuns = await Promise.all([
         label: "migration validation",
       },
       {
+        command: "node",
+        args: ["scripts/validate-audit-contract.mjs"],
+        label: "audit provenance contract",
+      },
+      {
         command: npmCommand,
         args: ["run", "recovery:drill"],
         label: "recovery drill",

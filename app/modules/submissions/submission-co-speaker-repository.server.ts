@@ -29,10 +29,10 @@ function buildAcceptedClaimPropagationAuditStatement(
   return env.DB.prepare(
     `${acceptanceTaskPlanCteSql}
      INSERT INTO audit_events (
-       id, organisation_id, event_id, actor_person_id, action,
+       id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
        entity_type, entity_id, correlation_id, metadata_json, created_at
      )
-     SELECT lower(hex(randomblob(16))), ?, scope.event_id, ?,
+     SELECT lower(hex(randomblob(16))), 'person', 'public_form', 1, ?, scope.event_id, ?,
             'submission.speaker.acceptance_propagated',
             'submission_speaker', ?, ?,
             json_object(
@@ -134,10 +134,10 @@ function buildAcceptedDirectClaimPropagationAuditStatement(
 ) {
   return env.DB.prepare(
     `INSERT INTO audit_events (
-       id, organisation_id, event_id, actor_person_id, action,
+       id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
        entity_type, entity_id, correlation_id, metadata_json, created_at
      )
-     SELECT lower(hex(randomblob(16))), ?, speaker.event_id, ?,
+     SELECT lower(hex(randomblob(16))), 'person', 'public_form', 1, ?, speaker.event_id, ?,
             'submission.speaker.acceptance_propagated',
             'submission_speaker', speaker.id, ?,
             json_object('sessionId', session.id, 'source', 'direct_session'),
@@ -462,10 +462,10 @@ export class SubmissionCoSpeakerRepository {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
           entity_id, correlation_id, metadata_json, created_at
         )
-        SELECT ?, event.organisation_id, speaker.event_id, ?,
+        SELECT ?, 'person', 'public_form', 1, event.organisation_id, speaker.event_id, ?,
                'submission.speaker.claimed', 'submission_speaker', ?, ?, '{}', unixepoch()
           FROM submission_speakers speaker
           JOIN events event ON event.id = speaker.event_id

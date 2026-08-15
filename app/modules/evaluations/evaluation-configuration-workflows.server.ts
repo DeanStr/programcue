@@ -10,6 +10,7 @@ import {
 } from "./evaluation-schema";
 import {
   roundReviewerCommandResultSchema,
+  evaluationAuditActor,
   EvaluationServiceFoundation,
   type EvaluationAdminActor,
   type EvaluationApiCommand,
@@ -155,10 +156,10 @@ export class EvaluationConfigurationWorkflows extends EvaluationServiceFoundatio
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, ?, 'evaluation_team', ?, ?, unixepoch()
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'evaluation_team', ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM evaluation_teams
             WHERE id = ? AND event_id = ? AND name = ? AND status = ?
@@ -364,10 +365,10 @@ export class EvaluationConfigurationWorkflows extends EvaluationServiceFoundatio
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, ?, 'evaluation_team', ?, ?, unixepoch()
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'evaluation_team', ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM evaluation_teams
             WHERE id = ? AND event_id = ? AND status = 'active'
@@ -455,6 +456,7 @@ export class EvaluationConfigurationWorkflows extends EvaluationServiceFoundatio
       roundReviewerCommandResultSchema,
     );
     if (commandState.replay) return commandState.replay;
+    const auditActor = evaluationAuditActor(viewer);
     const commandGuard = this.commandGuard(commandState.prepared);
     const parsed = evaluationRoundReviewerSchema.parse(input);
     const membership =
@@ -597,10 +599,10 @@ export class EvaluationConfigurationWorkflows extends EvaluationServiceFoundatio
     const audit = this.env.DB.prepare(
       `
       INSERT INTO audit_events (
-        id, organisation_id, event_id, actor_person_id, action,
+        id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
         entity_type, entity_id, metadata_json, created_at
       )
-      SELECT ?, ?, ?, ?, ?, 'evaluation_round', ?,
+      SELECT ?, ?, ?, 1, ?, ?, ?, ?, ?, 'evaluation_round', ?,
               json_object(
                 'personId', ?,
                 'cancelledAssignmentCount', (
@@ -624,9 +626,12 @@ export class EvaluationConfigurationWorkflows extends EvaluationServiceFoundatio
     `,
     ).bind(
       operationId,
+      auditActor.actorKind,
+      auditActor.origin,
       viewer.organisationId,
       viewer.eventId,
-      viewer.personId,
+      auditActor.personId,
+      auditActor.actorId,
       parsed.operation === "add"
         ? "evaluation.round.reviewer.added"
         : "evaluation.round.reviewer.removed",

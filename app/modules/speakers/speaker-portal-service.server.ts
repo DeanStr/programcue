@@ -1,6 +1,7 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
+import { readSpeakerProfileHistory } from "./speaker-profile-revision.server";
 
 export type ProfileRow = {
   id: string;
@@ -85,9 +86,10 @@ export class SpeakerPortalService {
   async getPortal(viewer: Viewer) {
     await this.airtable.assertReadable(viewer);
     await this.assertParticipant(viewer);
-    const [profile, event, sessions, files] = await Promise.all([
-      this.env.DB.prepare(
-        `
+    const [profile, event, sessions, files, profileHistory] = await Promise.all(
+      [
+        this.env.DB.prepare(
+          `
         SELECT id, email, display_name AS name, biography, pronunciation,
                organisation_name AS organisationName, job_title AS jobTitle,
                linkedin_url AS linkedinUrl, x_handle AS xHandle,
@@ -100,11 +102,11 @@ export class SpeakerPortalService {
            AND event_profile.person_id = person.id
          WHERE person.id = ?
       `,
-      )
-        .bind(viewer.eventId, viewer.organisationId, viewer.personId)
-        .first<ProfileRow>(),
-      this.env.DB.prepare(
-        `
+        )
+          .bind(viewer.eventId, viewer.organisationId, viewer.personId)
+          .first<ProfileRow>(),
+        this.env.DB.prepare(
+          `
         SELECT name, slug, timezone, starts_at AS startsAt, ends_at AS endsAt,
                venue_name AS venue, city, brand_accent AS brandAccent,
                CASE WHEN brand_logo_asset_id IS NOT NULL
@@ -116,23 +118,23 @@ export class SpeakerPortalService {
                file_policy_json AS filePolicyJson
           FROM events WHERE id = ? AND organisation_id = ?
       `,
-      )
-        .bind(viewer.eventId, viewer.organisationId)
-        .first<{
-          name: string;
-          timezone: string;
-          startsAt: number;
-          endsAt: number;
-          venue: string | null;
-          city: string | null;
-          brandAccent: string;
-          participantLogoUrl: string | null;
-          participantWelcomeText: string | null;
-          participantSupportUrl: string | null;
-          filePolicyJson: string;
-        }>(),
-      this.env.DB.prepare(
-        `
+        )
+          .bind(viewer.eventId, viewer.organisationId)
+          .first<{
+            name: string;
+            timezone: string;
+            startsAt: number;
+            endsAt: number;
+            venue: string | null;
+            city: string | null;
+            brandAccent: string;
+            participantLogoUrl: string | null;
+            participantWelcomeText: string | null;
+            participantSupportUrl: string | null;
+            filePolicyJson: string;
+          }>(),
+        this.env.DB.prepare(
+          `
         SELECT s.id, s.title, s.description, s.format, s.duration_minutes AS durationMinutes,
                s.status, ss.role_label AS roleLabel,
                ss.participation_status AS participationStatus,
@@ -147,11 +149,11 @@ export class SpeakerPortalService {
          WHERE ss.event_id = ? AND ss.person_id = ? AND s.status <> 'archived'
          ORDER BY se.starts_at IS NULL, se.starts_at, s.title
       `,
-      )
-        .bind(viewer.eventId, viewer.personId)
-        .all<SessionRow>(),
-      this.env.DB.prepare(
-        `
+        )
+          .bind(viewer.eventId, viewer.personId)
+          .all<SessionRow>(),
+        this.env.DB.prepare(
+          `
         SELECT fa.id, fa.asset_kind AS kind,
                fa.target_type AS targetType, fa.target_id AS targetId,
                fa.status,
@@ -179,10 +181,16 @@ export class SpeakerPortalService {
          WHERE fa.event_id = ? AND fa.owner_person_id = ? AND fa.status <> 'deleted'
          ORDER BY fa.updated_at DESC
       `,
-      )
-        .bind(viewer.eventId, viewer.personId)
-        .all<FileRow & { resolvedCurrentVersionId: string | null }>(),
-    ]);
+        )
+          .bind(viewer.eventId, viewer.personId)
+          .all<FileRow & { resolvedCurrentVersionId: string | null }>(),
+        readSpeakerProfileHistory(this.env, {
+          organisationId: viewer.organisationId,
+          eventId: viewer.eventId,
+          personId: viewer.personId,
+        }),
+      ],
+    );
     if (!profile || !event)
       throw new Response("Speaker workspace not found.", { status: 404 });
     const fileWithUnavailableCurrentVersion = files.results.find(
@@ -238,6 +246,7 @@ export class SpeakerPortalService {
     const { filePolicyJson, ...eventSummary } = event;
     return {
       profile,
+      profileHistory,
       event: {
         ...eventSummary,
         filePolicy: parseEventFilePolicy(filePolicyJson),

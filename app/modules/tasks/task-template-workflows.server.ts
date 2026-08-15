@@ -534,8 +534,8 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
         this.env.DB.prepare(
           `
           INSERT OR IGNORE INTO audit_events (
-            id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-          ) VALUES (?, ?, ?, ?, 'task_template.created', 'task_template', ?, ?, unixepoch())
+            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+          ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?, 'task_template.created', 'task_template', ?, ?, unixepoch())
         `,
         ).bind(
           `audit:${id}`,
@@ -1070,10 +1070,10 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
       statements.push(
         this.env.DB.prepare(
           `INSERT OR IGNORE INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, correlation_id, metadata_json, created_at
            )
-           SELECT ?, ?, ?, ?, 'task.assigned', 'task_instance', ?, ?, ?, unixepoch()
+           SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'task.assigned', 'task_instance', ?, ?, ?, unixepoch()
              FROM task_instances task
             WHERE task.id = ? AND task.event_id = ?
               AND task.last_operation_id = ?`,
@@ -1110,10 +1110,10 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
     statements.push(
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          ) VALUES (
-           ?, ?, ?, ?,
+           ?, 'person', 'admin_ui', 1, ?, ?, ?,
            CASE WHEN
              ${targetGuard.sql}
              AND EXISTS (

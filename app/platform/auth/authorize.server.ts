@@ -266,10 +266,10 @@ async function resolveEventRole(
         env.DB.prepare(
           `
           INSERT INTO audit_events (
-            id, organisation_id, event_id, actor_person_id, action,
+            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
             entity_type, entity_id, metadata_json, created_at
           )
-          SELECT ?, m.organisation_id, event.id, ?, 'membership.accepted',
+          SELECT ?, 'person', 'admin_ui', 1, m.organisation_id, event.id, ?, 'membership.accepted',
                  'membership', m.id, ?, unixepoch()
             FROM memberships m
             JOIN events event

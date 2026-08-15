@@ -451,10 +451,10 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, ?, submission.event_id, ?,
+         SELECT ?, 'person', 'public_form', 1, ?, submission.event_id, ?,
                 'submission.speaker.added_after_acceptance',
                 'submission_speaker', ?, ?, ?, unixepoch()
            FROM submissions submission
@@ -841,9 +841,9 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action, entity_type,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
            entity_id, metadata_json, created_at
-         ) SELECT ?, event.organisation_id, ?, ?, 'speaker.profile.updated',
+         ) SELECT ?, 'person', 'public_form', 1, event.organisation_id, ?, ?, 'speaker.profile.updated',
                   'person', ?, ?, unixepoch()
              FROM events event
             WHERE event.id = ?

@@ -128,10 +128,11 @@ export function EvaluationUnifiedResults() {
         </div>
       </div>
       <p className="help">
-        Showing {loaderData.results.length} of {loaderData.resultsTotal} matching
-        targets · page {loaderData.resultsPage} of {loaderData.resultsPageCount}.
-        Decision-ready means every active, non-recused assignment is complete,
-        at least one review exists and recommendations are not split.
+        Showing {loaderData.results.length} of {loaderData.resultsTotal}{" "}
+        matching targets · page {loaderData.resultsPage} of{" "}
+        {loaderData.resultsPageCount}. Decision-ready means every active,
+        non-recused assignment is complete, at least one review exists and
+        recommendations are not split.
       </p>
       {loaderData.results.length ? (
         <div
@@ -154,10 +155,13 @@ export function EvaluationUnifiedResults() {
             <tbody>
               {loaderData.results.map((result) => {
                 const recommendationEntries = recommendationOrder
-                  .map((recommendation) => [
-                    recommendation,
-                    result.recommendations[recommendation] ?? 0,
-                  ] as const)
+                  .map(
+                    (recommendation) =>
+                      [
+                        recommendation,
+                        result.recommendations[recommendation] ?? 0,
+                      ] as const,
+                  )
                   .filter(([, count]) => count > 0);
                 const focusName =
                   result.targetType === "proposal" ? "submission" : "session";
@@ -167,7 +171,8 @@ export function EvaluationUnifiedResults() {
                       <div className="pc-record-stack">
                         <strong>{result.title}</strong>
                         <small className="subtle">
-                          {result.reference} · {result.targetType} · {humanise(result.state)}
+                          {result.reference} · {result.targetType} ·{" "}
+                          {humanise(result.state)}
                         </small>
                       </div>
                     </td>
@@ -175,7 +180,8 @@ export function EvaluationUnifiedResults() {
                       {result.completedReviewCount} / {result.assignmentCount}
                       {result.recusedCount ? (
                         <small className="subtle">
-                          {result.recusedCount} recusal{result.recusedCount === 1 ? "" : "s"}
+                          {result.recusedCount} recusal
+                          {result.recusedCount === 1 ? "" : "s"}
                         </small>
                       ) : null}
                     </td>
@@ -185,16 +191,20 @@ export function EvaluationUnifiedResults() {
                           ? "—"
                           : Number(result.averageScore).toFixed(2)}
                       </strong>
-                      {result.minimumScore !== null && result.maximumScore !== null ? (
+                      {result.minimumScore !== null &&
+                      result.maximumScore !== null ? (
                         <small className="subtle">
-                          Range {Number(result.minimumScore).toFixed(2)}–{Number(result.maximumScore).toFixed(2)}
+                          Range {Number(result.minimumScore).toFixed(2)}–
+                          {Number(result.maximumScore).toFixed(2)}
                         </small>
                       ) : null}
                     </td>
                     <td data-label="Recommendations">
                       {recommendationEntries.length
                         ? recommendationEntries
-                            .map(([name, count]) => `${humanise(name)} ${count}`)
+                            .map(
+                              ([name, count]) => `${humanise(name)} ${count}`,
+                            )
                             .join(" · ")
                         : "—"}
                     </td>
@@ -207,10 +217,14 @@ export function EvaluationUnifiedResults() {
                           <span className="status warning">Incomplete</span>
                         ) : null}
                         {result.recusedCount ? (
-                          <span className="status warning">Recusal reduced coverage</span>
+                          <span className="status warning">
+                            Recusal reduced coverage
+                          </span>
                         ) : null}
                         {result.mixedRecommendations ? (
-                          <span className="status warning">Mixed recommendations</span>
+                          <span className="status warning">
+                            Mixed recommendations
+                          </span>
                         ) : null}
                         {result.decisionReady ? (
                           <span className="status success">Decision-ready</span>
@@ -233,7 +247,9 @@ export function EvaluationUnifiedResults() {
                             <button
                               className="btn small"
                               type="button"
-                              onClick={() => setModerationSubmissionId(result.id)}
+                              onClick={() =>
+                                setModerationSubmissionId(result.id)
+                              }
                             >
                               Moderate
                             </button>
@@ -255,7 +271,10 @@ export function EvaluationUnifiedResults() {
                         <div className="stack mt">
                           {result.reviews.length ? (
                             result.reviews.map((review) => (
-                              <article className="card pad" key={review.assignmentId}>
+                              <article
+                                className="card pad"
+                                key={review.assignmentId}
+                              >
                                 <strong>{review.evaluatorName}</strong>
                                 <p className="help">
                                   {review.weightedScore === null
@@ -267,16 +286,122 @@ export function EvaluationUnifiedResults() {
                                 </p>
                                 {Object.entries(review.scores).length ? (
                                   <dl>
-                                    {Object.entries(review.scores).map(([criterionId, value]) => (
-                                      <div key={criterionId}>
-                                        <dt>{loaderData.resultCriterionNames[criterionId] ?? criterionId}</dt>
-                                        <dd>{typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)}</dd>
-                                      </div>
-                                    ))}
+                                    {Object.entries(review.scores).map(
+                                      ([criterionId, value]) => (
+                                        <div key={criterionId}>
+                                          <dt>
+                                            {loaderData.resultCriterionNames[
+                                              criterionId
+                                            ] ?? criterionId}
+                                          </dt>
+                                          <dd>
+                                            {typeof value === "boolean"
+                                              ? value
+                                                ? "Yes"
+                                                : "No"
+                                              : String(value)}
+                                          </dd>
+                                        </div>
+                                      ),
+                                    )}
                                   </dl>
                                 ) : null}
-                                {review.privateNotes ? <p>Private notes: {review.privateNotes}</p> : null}
-                                {review.submitterFeedback ? <p>Applicant feedback: {review.submitterFeedback}</p> : null}
+                                {review.privateNotes ? (
+                                  <p>Private notes: {review.privateNotes}</p>
+                                ) : null}
+                                {review.submitterFeedback ? (
+                                  <p>
+                                    Applicant feedback:{" "}
+                                    {review.submitterFeedback}
+                                  </p>
+                                ) : null}
+                                <details className="pc-disclosure">
+                                  <summary>
+                                    {review.history.length} saved review
+                                    revisions
+                                  </summary>
+                                  <div className="stack mt">
+                                    {review.history.map((revision) => {
+                                      const criterionNames = new Map(
+                                        revision.criteria?.map((criterion) => [
+                                          criterion.id,
+                                          criterion.name,
+                                        ]) ?? [],
+                                      );
+                                      return (
+                                        <article
+                                          className="card pad"
+                                          key={revision.id}
+                                        >
+                                          <strong>
+                                            Revision {revision.revisionNumber} ·{" "}
+                                            {humanise(revision.saveKind)}
+                                          </strong>
+                                          <p className="help">
+                                            {revision.savedByName} ·{" "}
+                                            <EventDateTime
+                                              epochSeconds={revision.createdAt}
+                                              timeZone={
+                                                loaderData.eventTimezone
+                                              }
+                                            />
+                                            {revision.scorecardId &&
+                                            revision.scorecardVersion
+                                              ? ` · scorecard ${revision.scorecardId} v${revision.scorecardVersion}`
+                                              : " · pre-contract scorecard labels unavailable"}
+                                          </p>
+                                          {Object.entries(revision.scores)
+                                            .length ? (
+                                            <dl>
+                                              {Object.entries(
+                                                revision.scores,
+                                              ).map(([criterionId, value]) => (
+                                                <div key={criterionId}>
+                                                  <dt>
+                                                    {revision.criteria === null
+                                                      ? criterionId
+                                                      : criterionNames.get(
+                                                          criterionId,
+                                                        )!}
+                                                  </dt>
+                                                  <dd>
+                                                    {typeof value === "boolean"
+                                                      ? value
+                                                        ? "Yes"
+                                                        : "No"
+                                                      : String(value)}
+                                                  </dd>
+                                                </div>
+                                              ))}
+                                            </dl>
+                                          ) : null}
+                                          {revision.content.privateNotes ? (
+                                            <p>
+                                              Private notes:{" "}
+                                              {revision.content.privateNotes}
+                                            </p>
+                                          ) : null}
+                                          {revision.content
+                                            .submitterFeedback ? (
+                                            <p>
+                                              Applicant feedback:{" "}
+                                              {
+                                                revision.content
+                                                  .submitterFeedback
+                                              }
+                                            </p>
+                                          ) : null}
+                                          {revision.content.reopenReason ? (
+                                            <p>
+                                              Reopen reason:{" "}
+                                              {revision.content.reopenReason}
+                                            </p>
+                                          ) : null}
+                                        </article>
+                                      );
+                                    })}
+                                  </div>
+                                </details>
                               </article>
                             ))
                           ) : (
@@ -288,14 +413,24 @@ export function EvaluationUnifiedResults() {
                               <ul>
                                 {result.decisionHistory.map((decision) => (
                                   <li key={decision.id}>
-                                    Revision {decision.revisionNumber}: {humanise(decision.decision)} ({humanise(decision.status)}) by {decision.decidedByName} on{" "}
-                                    <EventDateTime epochSeconds={decision.decidedAt} timeZone={loaderData.eventTimezone} />
-                                    {decision.rationale ? ` · ${decision.rationale}` : ""}
+                                    Revision {decision.revisionNumber}:{" "}
+                                    {humanise(decision.decision)} (
+                                    {humanise(decision.status)}) by{" "}
+                                    {decision.decidedByName} on{" "}
+                                    <EventDateTime
+                                      epochSeconds={decision.decidedAt}
+                                      timeZone={loaderData.eventTimezone}
+                                    />
+                                    {decision.rationale
+                                      ? ` · ${decision.rationale}`
+                                      : ""}
                                   </li>
                                 ))}
                               </ul>
                             ) : (
-                              <p className="help">No decision history for this round.</p>
+                              <p className="help">
+                                No decision history for this round.
+                              </p>
                             )}
                           </div>
                         </div>
@@ -316,10 +451,20 @@ export function EvaluationUnifiedResults() {
       {loaderData.resultsPageCount > 1 ? (
         <nav className="page-actions mt" aria-label="Evaluation results pages">
           {loaderData.resultsPage > 1 ? (
-            <Link className="btn small" to={pageHref(loaderData.resultsPage - 1)}>Previous</Link>
+            <Link
+              className="btn small"
+              to={pageHref(loaderData.resultsPage - 1)}
+            >
+              Previous
+            </Link>
           ) : null}
           {loaderData.resultsPage < loaderData.resultsPageCount ? (
-            <Link className="btn small" to={pageHref(loaderData.resultsPage + 1)}>Next</Link>
+            <Link
+              className="btn small"
+              to={pageHref(loaderData.resultsPage + 1)}
+            >
+              Next
+            </Link>
           ) : null}
         </nav>
       ) : null}

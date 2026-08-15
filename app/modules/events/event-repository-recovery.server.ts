@@ -370,9 +370,9 @@ export class EventRepositoryRecoveryService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'event.repository.kept_on_d1',
+         ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'event.repository.kept_on_d1',
                   'event', ?, ?, ?, unixepoch()
             FROM operation_jobs
            WHERE id = ? AND organisation_id = ? AND event_id = ?
@@ -478,9 +478,9 @@ export class EventRepositoryRecoveryService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'event.incomplete.discarded',
+         ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'event.incomplete.discarded',
                   'event', ?, ?, ?, unixepoch()
             FROM operation_jobs
            WHERE id = ? AND organisation_id = ? AND event_id = ?

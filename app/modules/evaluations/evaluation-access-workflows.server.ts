@@ -261,10 +261,10 @@ export class EvaluationAccessWorkflows extends EvaluationServiceFoundation {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, ?,
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?,
                'membership', invited_membership.id, ?, unixepoch()
           FROM memberships invited_membership
          WHERE invited_membership.id = ?
@@ -578,10 +578,10 @@ export class EvaluationAccessWorkflows extends EvaluationServiceFoundation {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, ?, 'membership', ?, ?, unixepoch()
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'membership', ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM events
             WHERE id = ? AND organisation_id = ? AND last_operation_id = ?

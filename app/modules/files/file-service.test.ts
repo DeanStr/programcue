@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { headshotProfileRevisionGuardStatement } from "~/modules/speakers/speaker-profile-revision.server";
 import { loader as adminSpeakerFileDownload } from "~/routes/admin-speaker-file-download";
 import { loader as speakerFileDownload } from "~/routes/speaker-file-download";
 import { loader as speakerResourceDownload } from "~/routes/speaker-resource-download";
@@ -200,6 +201,24 @@ describe("private R2 file lifecycle", () => {
       callbackId: `callback-${uploaded.versionId}`,
       status: "clean",
       result: { verdict: "clean" },
+    });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT revision.headshot_file_version_id AS headshotFileVersionId,
+                audit.actor_kind AS actorKind, audit.origin
+           FROM speaker_profile_revisions revision
+           JOIN audit_events audit
+             ON audit.correlation_id = revision.correlation_id
+            AND audit.entity_type = 'file_version'
+          WHERE revision.person_id = ?
+            AND revision.correlation_id = ?`,
+      )
+        .bind(speaker.personId, `file-scan:${uploaded.versionId}:attempt:1`)
+        .first(),
+    ).resolves.toEqual({
+      headshotFileVersionId: uploaded.versionId,
+      actorKind: "provider",
+      origin: "provider_webhook",
     });
     const response = await service.participantDownload(
       speaker,
@@ -1631,5 +1650,92 @@ describe("private R2 file lifecycle", () => {
         .bind(upload.assetId)
         .first(),
     ).toEqual({ status: "pending", erasureRequests: 0 });
+  });
+
+  it("records removal when a released public headshot is erased", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new FileService(testEnv);
+    const uploaded = await completeTestDirectUpload(
+      testEnv,
+      speaker,
+      {
+        targetType: "person",
+        targetId: speaker.personId,
+        assetKind: "headshot",
+      },
+      new File(
+        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 52])],
+        "headshot-before-erasure.png",
+        { type: "image/png" },
+      ),
+    );
+    await service.recordScanResult({
+      ...(await acceptTestFileScanDispatch(
+        testEnv,
+        speaker.eventId,
+        uploaded.versionId,
+      )),
+      eventId: speaker.eventId,
+      versionId: uploaded.versionId,
+      provider: "test-scanner",
+      callbackId: `callback-${uploaded.versionId}`,
+      status: "clean",
+      result: { verdict: "clean" },
+    });
+
+    await service.eraseAsset(speaker, {
+      assetId: uploaded.assetId,
+      confirmed: true,
+    });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT headshot_file_version_id AS headshotFileVersionId
+           FROM speaker_profile_revisions
+          WHERE person_id = ? AND correlation_id = ?`,
+      )
+        .bind(speaker.personId, `file-erasure:${uploaded.assetId}`)
+        .first(),
+    ).resolves.toEqual({ headshotFileVersionId: null });
+  });
+
+  it("fails an atomic file batch when a required headshot revision is missing", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const uploaded = await completeTestDirectUpload(
+      testEnv,
+      speaker,
+      {
+        targetType: "person",
+        targetId: speaker.personId,
+        assetKind: "headshot",
+      },
+      new File(
+        [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+        "guard-headshot.png",
+        { type: "image/png" },
+      ),
+    );
+    const context = {
+      organisationId: speaker.organisationId,
+      eventId: speaker.eventId,
+      assetId: uploaded.assetId,
+      headshotFileVersionId: null,
+      recordedByPersonId: null,
+      correlationId: crypto.randomUUID(),
+    };
+    await expect(
+      testEnv.DB.batch([
+        headshotProfileRevisionGuardStatement(testEnv, context),
+      ]),
+    ).rejects.toThrow();
+    await expect(
+      testEnv.DB.batch([
+        headshotProfileRevisionGuardStatement(testEnv, {
+          ...context,
+          enabled: false,
+        }),
+      ]),
+    ).resolves.toHaveLength(1);
   });
 });

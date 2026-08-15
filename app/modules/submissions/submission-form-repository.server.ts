@@ -203,9 +203,9 @@ export class SubmissionFormRepository {
       this.env.DB.prepare(
         `
         INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, 'form.created', 'form_definition', ?, ?, unixepoch()
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'form.created', 'form_definition', ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM form_definitions
             WHERE id = ? AND event_id = ? AND public_slug = ?
@@ -348,8 +348,8 @@ export class SubmissionFormRepository {
       this.env.DB.prepare(
         `
         INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'form.draft.saved', 'form_version', ?, ?, unixepoch()
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'form.draft.saved', 'form_version', ?, ?, unixepoch()
            WHERE EXISTS (
              SELECT 1 FROM form_definitions f
              JOIN form_versions v ON v.form_id = f.id AND v.event_id = f.event_id
@@ -650,8 +650,8 @@ export class SubmissionFormRepository {
       this.env.DB.prepare(
         `
         INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'form.published', 'form_version', ?, ?, unixepoch()
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'form.published', 'form_version', ?, ?, unixepoch()
            WHERE EXISTS (
              SELECT 1 FROM form_versions published
              JOIN form_definitions f ON f.id = published.form_id AND f.event_id = published.event_id

@@ -225,10 +225,10 @@ INSERT INTO file_versions (
 UPDATE file_assets SET current_version_id = 'recovery-file-version'
 WHERE id = 'recovery-asset' AND event_id = 'recovery-event';
 INSERT INTO audit_events (
-  id,organisation_id,event_id,actor_person_id,action,entity_type,entity_id,
+  id, actor_kind, origin, metadata_version,organisation_id,event_id,actor_person_id,action,entity_type,entity_id,
   metadata_json,created_at
 ) VALUES (
-  'recovery-audit','recovery-org','recovery-event','recovery-admin','recovery.sentinel',
+  'recovery-audit', 'person', 'internal', 1,'recovery-org','recovery-event','recovery-admin','recovery.sentinel',
   'event','recovery-event','{"drill":true}',1700000040
 );
 `;

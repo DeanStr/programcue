@@ -202,9 +202,9 @@ export class CrmImportService {
     statements.push(
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, metadata_json, created_at
-         ) VALUES (?, ?, NULL, ?, 'crm.contacts.imported', 'crm_import', ?, unixepoch())`,
+         ) VALUES (?, 'person', 'admin_ui', 1, ?, NULL, ?, 'crm.contacts.imported', 'crm_import', ?, unixepoch())`,
       ).bind(
         crypto.randomUUID(),
         viewer.organisationId,

@@ -650,8 +650,8 @@ export async function processCommunicationSend(
       ),
       env.DB.prepare(
         `INSERT INTO audit_events (
-      id, organisation_id, event_id, action, entity_type, entity_id, metadata_json, created_at
-    ) SELECT ?, ?, ?, 'communication.delivery.finished', 'communication', ?, ?, unixepoch()
+      id, actor_kind, origin, metadata_version, organisation_id, event_id, action, entity_type, entity_id, metadata_json, created_at
+    ) SELECT ?, 'system', 'queue', 1, ?, ?, 'communication.delivery.finished', 'communication', ?, ?, unixepoch()
        WHERE EXISTS (
          SELECT 1 FROM operation_jobs completed_operation
          WHERE completed_operation.id = ? AND completed_operation.event_id = ?

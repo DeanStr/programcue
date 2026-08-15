@@ -205,9 +205,9 @@ export class AirtableProjectionRecoveryService {
     try {
       await this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) VALUES (?, ?, ?, ?, 'airtable.event_data.recovery_requested',
+         ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?, 'airtable.event_data.recovery_requested',
                    'integration_run', ?, ?, '{}', unixepoch())`,
       )
         .bind(

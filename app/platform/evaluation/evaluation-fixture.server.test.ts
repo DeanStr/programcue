@@ -239,9 +239,9 @@ describe("production evaluation fixture", () => {
       ),
       environment.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) VALUES ('evaluation-extra-event-audit', 'org-future-events',
+         ) VALUES ('evaluation-extra-event-audit', 'person', 'internal', 1, 'org-future-events',
                    'evaluation-extra-event', ?, 'event.created', 'event',
                    'evaluation-extra-event', '{}', unixepoch())`,
       ).bind(SBEK_FIXTURE_PEOPLE.organizer.personId),

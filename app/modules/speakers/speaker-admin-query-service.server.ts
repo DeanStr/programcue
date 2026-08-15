@@ -16,6 +16,7 @@ import {
   type SessionRow,
 } from "./speaker-portal-service.server";
 import { SpeakerAdminIntegrityError } from "./speaker-service-errors";
+import { readSpeakerProfileHistory } from "./speaker-profile-revision.server";
 
 export class SpeakerAdminQueryService {
   constructor(
@@ -76,15 +77,16 @@ export class SpeakerAdminQueryService {
       >();
     if (!profile)
       throw new Response("Speaker not found in this event.", { status: 404 });
-    const [event, sessions, files, tasks, profileShared] = await Promise.all([
-      this.env.DB.prepare(
-        `SELECT name, timezone, file_policy_json AS filePolicyJson
+    const [event, sessions, files, tasks, profileShared, profileHistory] =
+      await Promise.all([
+        this.env.DB.prepare(
+          `SELECT name, timezone, file_policy_json AS filePolicyJson
            FROM events WHERE id = ? AND organisation_id = ?`,
-      )
-        .bind(viewer.eventId, viewer.organisationId)
-        .first<{ name: string; timezone: string; filePolicyJson: string }>(),
-      this.env.DB.prepare(
-        `
+        )
+          .bind(viewer.eventId, viewer.organisationId)
+          .first<{ name: string; timezone: string; filePolicyJson: string }>(),
+        this.env.DB.prepare(
+          `
         SELECT s.id, s.title, s.description, s.format,
                s.duration_minutes AS durationMinutes, s.status,
                ss.role_label AS roleLabel,
@@ -102,11 +104,11 @@ export class SpeakerAdminQueryService {
          WHERE ss.event_id = ? AND ss.person_id = ? AND s.status <> 'archived'
          ORDER BY se.starts_at IS NULL, se.starts_at, s.title
       `,
-      )
-        .bind(viewer.eventId, personId)
-        .all<SessionRow>(),
-      this.env.DB.prepare(
-        `
+        )
+          .bind(viewer.eventId, personId)
+          .all<SessionRow>(),
+        this.env.DB.prepare(
+          `
         SELECT fa.id, fa.asset_kind AS kind,
                fa.target_type AS targetType, fa.target_id AS targetId,
                fa.status,
@@ -135,11 +137,11 @@ export class SpeakerAdminQueryService {
          WHERE fa.event_id = ? AND fa.owner_person_id = ? AND fa.status <> 'deleted'
          ORDER BY fa.updated_at DESC
       `,
-      )
-        .bind(viewer.eventId, personId)
-        .all<FileRow>(),
-      this.env.DB.prepare(
-        `
+        )
+          .bind(viewer.eventId, personId)
+          .all<FileRow>(),
+        this.env.DB.prepare(
+          `
         SELECT
           SUM(CASE WHEN task.status NOT IN ('completed','waived') THEN 1 ELSE 0 END) AS outstanding,
           SUM(CASE WHEN task.status IN ('completed','waived') THEN 1 ELSE 0 END) AS completed
@@ -150,11 +152,16 @@ export class SpeakerAdminQueryService {
              OR task.owner_person_id = ?
            )
       `,
-      )
-        .bind(viewer.eventId, personId, personId)
-        .first<{ outstanding: number; completed: number }>(),
-      adminProfileIsShared(this.env, viewer, personId),
-    ]);
+        )
+          .bind(viewer.eventId, personId, personId)
+          .first<{ outstanding: number; completed: number }>(),
+        adminProfileIsShared(this.env, viewer, personId),
+        readSpeakerProfileHistory(this.env, {
+          organisationId: viewer.organisationId,
+          eventId: viewer.eventId,
+          personId,
+        }),
+      ]);
     const assetIds = files.results.map((file) => file.id);
     const brokenCurrentVersion = files.results.find(
       (file) => file.currentVersionId && file.downloadFilename === null,
@@ -198,6 +205,7 @@ export class SpeakerAdminQueryService {
       throw new Response("This event could not be found.", { status: 404 });
     return {
       profile,
+      profileHistory,
       profileShared,
       profileScoped: profileShared || Boolean(profile.hasOrganisationProfile),
       event: {

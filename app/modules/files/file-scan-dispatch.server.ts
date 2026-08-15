@@ -418,10 +418,10 @@ export async function processFileScanDispatch(
       const results = await env.DB.batch([
         env.DB.prepare(
           `INSERT OR IGNORE INTO audit_events (
-             id, organisation_id, event_id, action, entity_type, entity_id,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, action, entity_type, entity_id,
              correlation_id, metadata_json, created_at
            )
-           SELECT ?, ?, ?, 'file.scan.dispatch_skipped', 'file_version', ?, ?, ?, unixepoch()
+           SELECT ?, 'system', 'queue', 1, ?, ?, 'file.scan.dispatch_skipped', 'file_version', ?, ?, ?, unixepoch()
             WHERE EXISTS (
               SELECT 1 FROM operation_jobs
                WHERE id = ? AND event_id = ? AND organisation_id = ?
@@ -630,10 +630,10 @@ export async function processFileScanDispatch(
     const results = await env.DB.batch([
       env.DB.prepare(
         `INSERT OR IGNORE INTO audit_events (
-           id, organisation_id, event_id, action, entity_type, entity_id,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, action, entity_type, entity_id,
            correlation_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, 'file.scan.dispatched', 'file_version', ?, ?, ?, unixepoch()
+         SELECT ?, 'system', 'queue', 1, ?, ?, 'file.scan.dispatched', 'file_version', ?, ?, ?, unixepoch()
            WHERE EXISTS (
             SELECT 1 FROM operation_jobs
              WHERE id = ? AND event_id = ? AND organisation_id = ?

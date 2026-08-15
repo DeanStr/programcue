@@ -52,7 +52,8 @@ export class ResourceAuthoringService extends ResourceServiceBase {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ name: string; brandAccent: string; filePolicyJson: string }>();
-    if (!previewEvent) throw new Response("This event could not be found.", { status: 404 });
+    if (!previewEvent)
+      throw new Response("This event could not be found.", { status: 404 });
     const { filePolicyJson, ...previewEventSummary } = previewEvent;
     const pages = await this.env.DB.prepare(
       `${this.pageSelect()} WHERE rp.event_id = ? ORDER BY rp.status = 'archived', rv.category, rv.title`,
@@ -332,8 +333,8 @@ export class ResourceAuthoringService extends ResourceServiceBase {
         this.env.DB.prepare(
           `
           INSERT OR IGNORE INTO audit_events (
-            id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-          ) SELECT ?, ?, page.event_id, ?, 'resource.created', 'resource_page', page.id, '{}', unixepoch()
+            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+          ) SELECT ?, 'person', 'admin_ui', 1, ?, page.event_id, ?, 'resource.created', 'resource_page', page.id, '{}', unixepoch()
               FROM resource_pages page
              WHERE page.id = ? AND page.event_id = ?
         `,
@@ -550,8 +551,8 @@ export class ResourceAuthoringService extends ResourceServiceBase {
       this.env.DB.prepare(
         `
         INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'resource.draft.saved', 'resource_page', ?, ?, unixepoch()
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'resource.draft.saved', 'resource_page', ?, ?, unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM resource_pages
              WHERE id = ? AND event_id = ? AND last_operation_id = ?

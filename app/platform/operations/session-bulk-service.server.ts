@@ -499,9 +499,9 @@ export class SessionBulkService {
       ).bind(operationId, JSON.stringify(items), operationId),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'session_bulk.previewed', 'operation', ?, ?, ?, unixepoch()
+         ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'session_bulk.previewed', 'operation', ?, ?, ?, unixepoch()
             WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)`,
       ).bind(
         crypto.randomUUID(),
@@ -532,12 +532,7 @@ export class SessionBulkService {
         WHERE id = ? AND event_id = ? AND organisation_id = ?
           AND requested_by_person_id = ? AND type = 'session.bulk'`,
     )
-      .bind(
-        commandId,
-        viewer.eventId,
-        viewer.organisationId,
-        viewer.personId,
-      )
+      .bind(commandId, viewer.eventId, viewer.organisationId, viewer.personId)
       .first<{ status: string; resultJson: string }>();
     if (existing) {
       const summary = storedSummarySchema.parse(
@@ -874,10 +869,10 @@ export class SessionBulkService {
       ).bind(operationId, operationId),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT lower(hex(randomblob(16))), ?, ?, ?, 'session_bulk.record_updated',
+         SELECT lower(hex(randomblob(16))), 'system', 'queue', 1, ?, ?, ?, 'session_bulk.record_updated',
                 'session', json_extract(value, '$.sessionId'), o.correlation_id,
                 json_object(
                   'operationId', ?, 'action', ?,
@@ -918,9 +913,9 @@ export class SessionBulkService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'session_bulk.completed', 'operation', ?,
+         ) SELECT ?, 'system', 'queue', 1, ?, ?, ?, 'session_bulk.completed', 'operation', ?,
                   correlation_id, ?, unixepoch()
              FROM operation_jobs WHERE id = ? AND status = 'completed'`,
       ).bind(
@@ -1058,9 +1053,9 @@ export class SessionBulkService {
       ).bind(operationId, operationId),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'session_bulk.cancelled', 'operation', ?, '{}', unixepoch()
+         ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'session_bulk.cancelled', 'operation', ?, '{}', unixepoch()
             WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ? AND status = 'cancelled')`,
       ).bind(
         crypto.randomUUID(),

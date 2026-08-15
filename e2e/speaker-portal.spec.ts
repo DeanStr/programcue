@@ -285,6 +285,12 @@ test("organiser speaker detail edits organisation and event fields without rewri
   await expect(page.getByLabel("Travel and logistics preferences")).toHaveValue(
     "Arrival May 11, aisle seat; dietary: Vegetarian",
   );
+  const profileHistory = page.getByRole("region", {
+    name: "Public profile history",
+  });
+  await expect(profileHistory).toContainText(`${name} · Program team`);
+  await expect(profileHistory).toContainText("Head of Experience Design");
+  await expect(profileHistory).not.toContainText("Arrival May 11");
   await expect(notice).toHaveCount(0);
 
   // A second organiser holding the previous revision is refused rather than

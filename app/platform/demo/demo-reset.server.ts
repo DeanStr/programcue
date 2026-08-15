@@ -124,6 +124,7 @@ export const DEMO_RESET_EVENT_TABLES = [
   "session_content_revisions",
   "schedule_session_contents",
   "schedule_versions",
+  "speaker_profile_revisions",
   "event_participant_profiles",
   "event_speaker_workflows",
   "session_tags",
@@ -248,10 +249,10 @@ async function supersedeDemoAssistantFixtureProposals(
 ) {
   const result = await env.DB.prepare(
     `INSERT INTO audit_events (
-       id, organisation_id, event_id, actor_person_id, action,
+       id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
        entity_type, entity_id, correlation_id, metadata_json, created_at
      )
-     SELECT 'demo-reset-assistant-superseded:' || proposal.entity_id,
+     SELECT 'demo-reset-assistant-superseded:' || proposal.entity_id, 'person', 'internal', 1,
             proposal.organisation_id, proposal.event_id,
             proposal.actor_person_id, 'assistant.proposal.superseded',
             'assistant_proposal', proposal.entity_id,
@@ -995,12 +996,13 @@ export async function resetDemoEvent(
   await assertDestructiveWorkAllowed?.();
   await env.DB.prepare(
     `INSERT INTO audit_events (
-       id, organisation_id, event_id, actor_person_id, actor_id, action,
+       id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
        entity_type, entity_id, metadata_json, created_at
-     ) VALUES (?, ?, ?, ?, ?, 'demo.reset', 'event', ?, ?, unixepoch())`,
+     ) VALUES (?, CASE WHEN ? IS NULL THEN 'system' ELSE 'person' END, 'internal', 1, ?, ?, ?, ?, 'demo.reset', 'event', ?, ?, unixepoch())`,
   )
     .bind(
       crypto.randomUUID(),
+      actorPersonId,
       DEMO_ORGANISATION_ID,
       DEMO_EVENT_ID,
       actorPersonId,

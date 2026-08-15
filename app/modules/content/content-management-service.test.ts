@@ -227,6 +227,20 @@ describe("content management", () => {
       changeKind: "status",
       editorName: expect.any(String),
     });
+    expect(detail.revisions[0]?.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Title",
+          before: "Approved session title",
+          after: "Edited after approval",
+        }),
+        expect.objectContaining({
+          label: "Content status",
+          before: "approved",
+          after: "draft",
+        }),
+      ]),
+    );
 
     await content.restoreRevision(viewer, {
       scheduleVersionId: detail.current.scheduleVersionId,

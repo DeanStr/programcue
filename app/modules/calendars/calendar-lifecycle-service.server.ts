@@ -377,11 +377,15 @@ async function claimCalendarLifecycle(input: {
       env.DB.prepare(
         `
           INSERT INTO audit_events (
-            id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-          ) VALUES (?, ?, ?, ?, 'calendar.lifecycle.queued', 'calendar_invitation', ?, ?, unixepoch())
+            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+          ) VALUES (?, CASE WHEN ? IS NULL THEN 'system' ELSE 'person' END,
+                    CASE WHEN ? IS NULL THEN 'queue' ELSE 'admin_ui' END,
+                    1, ?, ?, ?, 'calendar.lifecycle.queued', 'calendar_invitation', ?, ?, unixepoch())
         `,
       ).bind(
         crypto.randomUUID(),
+        viewer.personId,
+        viewer.personId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,

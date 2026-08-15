@@ -143,6 +143,19 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         viewer.organisationId,
         operationId,
       ),
+      this.env.DB.prepare(
+        `DELETE FROM speaker_profile_revisions
+          WHERE event_id = ? AND organisation_id = ?
+            AND person_id IN (${mappings.map(() => "?").join(",")})
+            AND ${eventClaimGuard()}`,
+      ).bind(
+        viewer.eventId,
+        viewer.organisationId,
+        ...mappings.map((mapping) => mapping.id),
+        viewer.eventId,
+        viewer.organisationId,
+        operationId,
+      ),
       ...mappings.map((mapping) =>
         this.env.DB.prepare(
           `INSERT INTO people (
@@ -412,10 +425,10 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
       ...mappings.map((mapping) =>
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, metadata_json, created_at
            )
-           SELECT ?, ?, ?, ?, 'participant.retention.subject_anonymised',
+           SELECT ?, 'person', 'participant_ui', 1, ?, ?, ?, 'participant.retention.subject_anonymised',
                   'person', ?, ?, unixepoch()
             WHERE ${eventClaimGuard()}
               AND EXISTS (SELECT 1 FROM people WHERE id = ?)`,

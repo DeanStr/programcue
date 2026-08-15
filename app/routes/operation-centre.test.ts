@@ -24,7 +24,11 @@ function context() {
   return value;
 }
 
-function request(values?: Record<string, string>, search = "") {
+function request(
+  values?: Record<string, string>,
+  search = "",
+  identity: "administrator" | "owner" = "administrator",
+) {
   const selectedEventCookie = currentEventCookie(eventId, workerEnv).split(
     ";",
     1,
@@ -32,7 +36,7 @@ function request(values?: Record<string, string>, search = "") {
   return new Request(`http://localhost/admin/operations${search}`, {
     method: values ? "POST" : "GET",
     headers: {
-      cookie: `program_cue_demo_identity=administrator; ${selectedEventCookie}`,
+      cookie: `program_cue_demo_identity=${identity}; ${selectedEventCookie}`,
       origin: "http://localhost",
     },
     ...(values ? { body: new URLSearchParams(values) } : {}),
@@ -148,6 +152,33 @@ describe("Operation Centre Airtable recovery", () => {
 });
 
 describe("Operation Centre import presentation", () => {
+  it("limits organisation activity to organisation-wide administrators", async () => {
+    await expect(
+      loader({
+        request: request(
+          undefined,
+          "?panel=activity&activityScope=organisation",
+        ),
+        params: {},
+        context: context(),
+      } as never),
+    ).rejects.toMatchObject({ status: 403 });
+
+    const ownerResult = await loader({
+      request: request(
+        undefined,
+        "?panel=activity&activityScope=organisation",
+        "owner",
+      ),
+      params: {},
+      context: context(),
+    } as never);
+    expect(ownerResult).toMatchObject({
+      activityScope: "organisation",
+      canViewOrganisationActivity: true,
+    });
+  });
+
   it("paginates the complete type-filtered failure history without overlap", async () => {
     const prefix = crypto.randomUUID();
     const operationType = `test.pagination.${prefix}`;

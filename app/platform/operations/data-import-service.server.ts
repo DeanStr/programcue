@@ -202,9 +202,9 @@ export class DataImportService {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'data_import.previewed', 'operation', ?, ?, ?, unixepoch()
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'data_import.previewed', 'operation', ?, ?, ?, unixepoch()
            WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)
       `,
       ).bind(
@@ -351,10 +351,10 @@ export class DataImportService {
       ).bind(operationId, operationId),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT lower(hex(randomblob(16))), ?, ?, ?, 'data_import.record_upserted',
+         SELECT lower(hex(randomblob(16))), 'system', 'queue', 1, ?, ?, ?, 'data_import.record_upserted',
                 item.entity_type, item.entity_id, operation.correlation_id,
                 json_object(
                   'operationId', ?,
@@ -394,9 +394,9 @@ export class DataImportService {
       ).bind(operationId, viewer.eventId, viewer.organisationId),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'data_import.completed', 'operation', ?, ?, unixepoch()
+         ) SELECT ?, 'system', 'queue', 1, ?, ?, ?, 'data_import.completed', 'operation', ?, ?, unixepoch()
           WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ? AND status = 'completed')`,
       ).bind(
         completionAuditEventId,

@@ -295,8 +295,8 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'task.file.submitted', 'task_instance', ?, ?, unixepoch()
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+        ) SELECT ?, 'person', 'participant_ui', 1, ?, ?, ?, 'task.file.submitted', 'task_instance', ?, ?, unixepoch()
            WHERE EXISTS (
              SELECT 1 FROM task_evidence WHERE id = ? AND event_id = ? AND task_id = ?
            )

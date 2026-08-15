@@ -232,10 +232,10 @@ export class AiReviewAssessmentOperationStore {
       ),
       this.env.DB.prepare(
         `INSERT OR IGNORE INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, operation.organisation_id, operation.event_id, ?,
+         SELECT ?, 'agent', 'admin_ui', 1, operation.organisation_id, operation.event_id, ?, 'program_cue_agent',
                 'ai.review_assessment.failed', 'submission', ?, operation.id,
                 ?, ?
            FROM operation_jobs operation
@@ -449,10 +449,10 @@ export class AiReviewAssessmentOperationStore {
         ),
         this.env.DB.prepare(
           `INSERT OR IGNORE INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
              entity_type, entity_id, correlation_id, metadata_json, created_at
            )
-           SELECT ?, operation.organisation_id, operation.event_id, ?,
+           SELECT ?, 'agent', 'admin_ui', 1, operation.organisation_id, operation.event_id, ?, 'program_cue_agent',
                   'ai.review_assessment.generated', 'ai_review_assessment',
                   assessment.id, operation.id, ?, ?
              FROM operation_jobs operation

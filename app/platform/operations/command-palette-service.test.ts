@@ -518,9 +518,9 @@ describe("command palette record search", () => {
       ),
       env.DB.prepare(
         `INSERT INTO audit_events (
-           id,organisation_id,event_id,actor_person_id,action,entity_type,
+           id, actor_kind, origin, metadata_version,organisation_id,event_id,actor_person_id,action,entity_type,
            entity_id,created_at
-         ) VALUES (?,?,?,?,'evaluation.assignment.created',
+         ) VALUES (?, 'person', 'internal', 1,?,?,?,'evaluation.assignment.created',
                    'evaluator_assignment',?,2000000102)`,
       ).bind(
         archivedAuditId,
@@ -531,9 +531,9 @@ describe("command palette record search", () => {
       ),
       env.DB.prepare(
         `INSERT INTO audit_events (
-           id,organisation_id,event_id,actor_person_id,action,entity_type,
+           id, actor_kind, origin, metadata_version,organisation_id,event_id,actor_person_id,action,entity_type,
            entity_id,created_at
-         ) VALUES (?,?,?,?,'evaluation.assignment.created',
+         ) VALUES (?, 'person', 'internal', 1,?,?,?,'evaluation.assignment.created',
                    'evaluator_assignment','demo-evaluation-assignment-1',
                    2000000101)`,
       ).bind(

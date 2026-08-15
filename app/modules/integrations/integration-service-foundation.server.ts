@@ -349,8 +349,18 @@ export abstract class IntegrationServiceFoundation {
 
   protected auditActor(viewer: IntegrationAdminActor) {
     return "kind" in viewer
-      ? { personId: null, actorId: viewer.actorId }
-      : { personId: viewer.personId, actorId: null };
+      ? {
+          personId: null,
+          actorId: viewer.actorId,
+          actorKind: "api_key" as const,
+          origin: "api" as const,
+        }
+      : {
+          personId: viewer.personId,
+          actorId: null,
+          actorKind: "person" as const,
+          origin: "admin_ui" as const,
+        };
   }
 
   protected accelevents(

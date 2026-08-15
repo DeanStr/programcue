@@ -113,20 +113,25 @@ export class SavedViewService {
         updatedAt: number;
       }>();
 
-    return rows.results.map(({ queryJson, ...row }) => {
-      const query = z
-        .object({ href: adminPathSchema })
-        .strict()
-        .safeParse(JSON.parse(queryJson));
-      if (!query.success) {
-        throw new Error(`Saved view ${row.id} contains invalid query data.`);
-      }
-      return {
-        ...row,
-        href: query.data.href,
-        canDelete: row.ownerPersonId === viewer.personId,
-      };
-    }).filter((view) => viewer.role !== "committee_chair" || view.area === "evaluations");
+    return rows.results
+      .map(({ queryJson, ...row }) => {
+        const query = z
+          .object({ href: adminPathSchema })
+          .strict()
+          .safeParse(JSON.parse(queryJson));
+        if (!query.success) {
+          throw new Error(`Saved view ${row.id} contains invalid query data.`);
+        }
+        return {
+          ...row,
+          href: query.data.href,
+          canDelete: row.ownerPersonId === viewer.personId,
+        };
+      })
+      .filter(
+        (view) =>
+          viewer.role !== "committee_chair" || view.area === "evaluations",
+      );
   }
 
   async create(viewer: Viewer, rawInput: unknown) {
@@ -157,10 +162,10 @@ export class SavedViewService {
         this.env.DB.prepare(
           `
           INSERT INTO audit_events (
-            id, organisation_id, event_id, actor_person_id, action,
+            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
             entity_type, entity_id, metadata_json, created_at
           )
-          SELECT ?, ?, ?, ?, 'saved_view.created', 'saved_view', ?, ?, unixepoch()
+          SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'saved_view.created', 'saved_view', ?, ?, unixepoch()
            WHERE EXISTS (SELECT 1 FROM saved_views WHERE id = ?)
         `,
         ).bind(
@@ -201,10 +206,10 @@ export class SavedViewService {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, 'saved_view.deleted', 'saved_view', sv.id,
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'saved_view.deleted', 'saved_view', sv.id,
                json_object('area', sv.area, 'name', sv.name), unixepoch()
           FROM saved_views sv
           JOIN events e ON e.id = sv.event_id AND e.organisation_id = ?
@@ -229,12 +234,7 @@ export class SavedViewService {
               WHERE e.id = saved_views.event_id AND e.organisation_id = ?
            )
       `,
-      ).bind(
-        id,
-        viewer.eventId,
-        viewer.personId,
-        viewer.organisationId,
-      ),
+      ).bind(id, viewer.eventId, viewer.personId, viewer.organisationId),
     ]);
     if ((removed.meta.changes ?? 0) !== 1) {
       throw new Response("Saved view not found", { status: 404 });

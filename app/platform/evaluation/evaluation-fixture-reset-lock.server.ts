@@ -179,10 +179,10 @@ export async function completeEvaluationFixtureReset(
   const [audit, operation] = await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO audit_events (
-         id, organisation_id, event_id, actor_id, action,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action,
          entity_type, entity_id, metadata_json, created_at
        )
-       SELECT ?, ?, ?, ?,
+       SELECT ?, 'system', 'internal', 1, ?, ?, ?,
               'evaluation.fixture.reset', 'event', ?, ?, unixepoch()
          FROM operation_jobs
         WHERE id = ? AND type = ? AND status = 'running'

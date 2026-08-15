@@ -627,10 +627,10 @@ describe("Airtable authoritative room repository", () => {
         ).bind(owner.eventId),
         testEnv.DB.prepare(
           `INSERT OR IGNORE INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, metadata_json, created_at
            )
-           SELECT 'file-erasure-complete:' || asset.id, event.organisation_id,
+           SELECT 'file-erasure-complete:' || asset.id, 'person', 'internal', 1, event.organisation_id,
                   asset.event_id, ?, 'file.erasure.completed', 'file_asset',
                   asset.id, '{}', unixepoch()
              FROM file_assets asset JOIN events event ON event.id = asset.event_id

@@ -868,10 +868,10 @@ async function resetProductionEvaluationFixtureWithAuthority(
         await assertEvaluationFixtureResetOwner(env, fixtureAttemptId);
         const started = await env.DB.prepare(
           `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'evaluation.fixture.reset.started', 'event', ?, ?,
+         SELECT ?, 'system', 'internal', 1, ?, ?, ?, 'evaluation.fixture.reset.started', 'event', ?, ?,
                 unixepoch()
            FROM operation_jobs
           WHERE id = ? AND type = ? AND status = 'running'

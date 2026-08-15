@@ -15,6 +15,10 @@ import { WebhookService } from "~/platform/operations/webhook-service.server";
 import type { SpeakerWorkflowStatus } from "./speaker-roster-import.server";
 import { ParticipantProfileConflictError } from "./participant-profile-service.server";
 import { SpeakerAdminStateError } from "./speaker-service-errors";
+import {
+  canonicalProfileRevisionStatement,
+  organisationProfileRevisionStatement,
+} from "./speaker-profile-revision.server";
 
 import {
   adminScopedSpeakerProfileSchema,
@@ -207,10 +211,10 @@ export class SpeakerProfileAdministration {
         ),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'speaker.admin.scoped_profile.updated',
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'speaker.admin.scoped_profile.updated',
                 'person', person.id, ?, ?, unixepoch()
            FROM people person
            JOIN organisation_contact_profiles profile
@@ -236,6 +240,13 @@ export class SpeakerProfileAdministration {
           personId,
           input.profileRevision,
         ),
+        organisationProfileRevisionStatement(this.env, {
+          organisationId: viewer.organisationId,
+          eventId: viewer.eventId,
+          personId,
+          recordedByPersonId: viewer.personId,
+          correlationId: operationId,
+        }),
         ...webhook.statements,
         this.env.DB.prepare(
           `INSERT INTO people (id, email, display_name)
@@ -246,13 +257,24 @@ export class SpeakerProfileAdministration {
                AND audit.event_id = ? AND audit.actor_person_id = ?
                AND audit.action = 'speaker.admin.scoped_profile.updated'
                AND audit.entity_id = ? AND audit.correlation_id = ?
-          )`,
+          )
+             OR NOT EXISTS (
+               SELECT 1 FROM speaker_profile_revisions revision
+                WHERE revision.organisation_id = ? AND revision.event_id = ?
+                  AND revision.person_id = ?
+                  AND revision.source = 'organisation_profile'
+                  AND revision.correlation_id = ?
+             )`,
         ).bind(
           `scoped-profile-guard-${operationId}`,
           auditEventId,
           viewer.organisationId,
           viewer.eventId,
           viewer.personId,
+          personId,
+          operationId,
+          viewer.organisationId,
+          viewer.eventId,
           personId,
           operationId,
         ),
@@ -381,12 +403,19 @@ export class SpeakerProfileAdministration {
         input.revision + 1,
         operationId,
       ),
+      canonicalProfileRevisionStatement(this.env, {
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        personId,
+        recordedByPersonId: viewer.personId,
+        correlationId: operationId,
+      }),
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'speaker.admin.profile.updated', 'person', ?, ?, ?, unixepoch()
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'speaker.admin.profile.updated', 'person', ?, ?, ?, unixepoch()
            WHERE EXISTS (
              SELECT 1 FROM people
               WHERE id = ? AND profile_revision = ? AND last_operation_id = ?
@@ -438,7 +467,10 @@ export class SpeakerProfileAdministration {
         "The event-scoped travel preferences were not committed with the speaker profile.",
       );
     }
-    const change = results[3]?.results[0] as { sequence: number } | undefined;
+    if ((results[2]?.meta.changes ?? 0) !== 1) {
+      throw new Error("The public profile revision was not recorded.");
+    }
+    const change = results[4]?.results[0] as { sequence: number } | undefined;
     if (!change) {
       throw new Error(
         "The committed speaker profile change cursor was not recorded.",
@@ -506,10 +538,10 @@ export class SpeakerProfileAdministration {
             ),
             this.env.DB.prepare(
               `INSERT INTO audit_events (
-                 id, organisation_id, event_id, actor_person_id, action,
+                 id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
                  entity_type, entity_id, correlation_id, metadata_json, created_at
                )
-               SELECT ?, ?, ?, ?, 'speaker.workflow.updated', 'person', ?, ?,
+               SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'speaker.workflow.updated', 'person', ?, ?,
                       json_object('status', ?), unixepoch()
                  FROM event_speaker_workflows workflow
                 WHERE workflow.event_id = ? AND workflow.person_id = ?

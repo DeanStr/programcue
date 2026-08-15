@@ -6,6 +6,7 @@ import {
   speakerProfileSchema,
   type SpeakerProfileInput,
 } from "./speaker-schema";
+import { canonicalProfileRevisionStatement } from "./speaker-profile-revision.server";
 
 export class ParticipantProfileConflictError extends Error {
   constructor(
@@ -196,11 +197,18 @@ export class ParticipantProfileService {
         merged.revision + 1,
         operationId,
       ),
+      canonicalProfileRevisionStatement(this.env, {
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        personId: viewer.personId,
+        recordedByPersonId: viewer.personId,
+        correlationId: operationId,
+      }),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'participant.profile.updated', 'person', ?, ?, ?,
+         ) SELECT ?, 'person', 'participant_ui', 1, ?, ?, ?, 'participant.profile.updated', 'person', ?, ?, ?,
                   unixepoch()
             WHERE EXISTS (
               SELECT 1 FROM people
@@ -250,7 +258,10 @@ export class ParticipantProfileService {
         "The event-scoped travel preferences were not committed with the profile.",
       );
     }
-    const change = results[4]?.results?.[0] as { sequence: number } | undefined;
+    if ((results[3]?.meta.changes ?? 0) !== 1) {
+      throw new Error("The public profile revision was not recorded.");
+    }
+    const change = results[5]?.results?.[0] as { sequence: number } | undefined;
     if (!change) {
       throw new Error("The committed profile change cursor was not recorded.");
     }

@@ -298,6 +298,69 @@ export function SubmissionAdminDetailPanel({
           </section>
         </aside>
       </div>
+      <div className="grid grid-2 mt">
+        <section className="card pad">
+          <div className="card-title">
+            <h2>Status history</h2>
+            <span className="subtle right">Immutable audit evidence</span>
+          </div>
+          {submission.statusTimeline.length ? (
+            <ol className="timeline">
+              {submission.statusTimeline.map((entry) => (
+                <li key={entry.id}>
+                  <strong>{entry.action.replaceAll(".", " · ")}</strong>
+                  <span>
+                    {entry.actorName} · {entry.origin.replaceAll("_", " ")} ·{" "}
+                    <EventDateTime
+                      epochSeconds={entry.createdAt}
+                      timeZone={submission.eventTimezone}
+                      showTimeZone
+                    />
+                  </span>
+                  {entry.summary ? (
+                    <small className="subtle">{entry.summary}</small>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="subtle">No linked status events were recorded.</p>
+          )}
+        </section>
+        <section className="card pad">
+          <div className="card-title">
+            <h2>Saved application revisions</h2>
+            <span className="pill right">{submission.savedRevisions.length}</span>
+          </div>
+          {submission.savedRevisions.length ? (
+            <ol className="timeline">
+              {submission.savedRevisions.map((revision) => (
+                <li key={revision.revisionNumber}>
+                  <strong>
+                    Revision {revision.revisionNumber} ·{" "}
+                    {revision.saveKind.replaceAll("_", " ")}
+                  </strong>
+                  <span>
+                    {revision.savedByName} ·{" "}
+                    <EventDateTime
+                      epochSeconds={revision.createdAt}
+                      timeZone={submission.eventTimezone}
+                      showTimeZone
+                    />
+                  </span>
+                  <small className="subtle">
+                    {revision.formName} v{revision.formVersionNumber} ·{" "}
+                    {revision.answerCount} answers · {revision.speakerCount}{" "}
+                    speakers
+                  </small>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="subtle">No manual or submitted revisions yet.</p>
+          )}
+        </section>
+      </div>
     </>
   );
 }

@@ -387,15 +387,17 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, actor_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
           entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, ?, 'session.direct.created', 'session', ?, ?, ?, unixepoch()
+        ) SELECT ?, ?, ?, 1, ?, ?, ?, ?, 'session.direct.created', 'session', ?, ?, ?, unixepoch()
             WHERE EXISTS (
               SELECT 1 FROM sessions WHERE id = ? AND event_id = ?
             )
       `,
       ).bind(
         auditEventId,
+        isSubmissionApiActor(actor) ? "api_key" : "person",
+        isSubmissionApiActor(actor) ? "api" : "admin_ui",
         actor.organisationId,
         actor.eventId,
         isSubmissionApiActor(actor) ? null : actor.personId,

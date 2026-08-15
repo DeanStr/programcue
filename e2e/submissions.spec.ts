@@ -523,6 +523,15 @@ test.describe.serial("submissions vertical slice", () => {
     await page.getByRole("link", { name: title }).click();
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
     await expect(page.locator("body")).toContainText(revisionSentence);
+    await expect(
+      page.getByRole("heading", { name: "Status history" }),
+    ).toBeVisible();
+    const savedRevisions = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Saved application revisions" }),
+    });
+    await expect(
+      savedRevisions.getByText(/Revision \d+ · submitted/).first(),
+    ).toBeVisible();
     const routing = page.locator("section").filter({
       has: page.getByRole("heading", { name: "Routing", exact: true }),
     });
@@ -644,16 +653,15 @@ test.describe.serial("submissions vertical slice", () => {
 
     await page.goto("/apply/form");
     await expect(page.getByText("Key takeaway", { exact: true })).toBeVisible();
-    await expect(page.getByText("Audience level", { exact: true })).toBeVisible();
     await expect(
-      page.getByText(
-        "Shown when Audience level is “Advanced”.",
-        { exact: true },
-      ),
+      page.getByText("Audience level", { exact: true }),
     ).toBeVisible();
-    await page
-      .getByRole("link", { name: "Continue to application" })
-      .click();
+    await expect(
+      page.getByText("Shown when Audience level is “Advanced”.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.getByRole("link", { name: "Continue to application" }).click();
 
     await page
       .getByLabel("Email address")

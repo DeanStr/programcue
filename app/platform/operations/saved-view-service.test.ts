@@ -139,16 +139,18 @@ describe("saved views", () => {
     await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO audit_events (
-           id,organisation_id,event_id,actor_person_id,action,entity_type,
-           entity_id,created_at
-         ) VALUES ('chair-visible-audit',?,?,?,'review.conflict.declared',
-                   'evaluator_assignment','demo-evaluation-assignment-1',2000000001)`,
+           id, actor_kind, origin, metadata_version,organisation_id,event_id,actor_person_id,action,entity_type,
+           entity_id,metadata_json,created_at
+         ) VALUES ('chair-visible-audit', 'person', 'internal', 1,?,?,?,'review.conflict.declared',
+                   'evaluator_assignment','demo-evaluation-assignment-1',
+                   '{"roundId":"demo-evaluation-round-1","targetType":"submission","targetId":"demo-evaluation-submission-calm"}',
+                   2000000001)`,
       ).bind(viewer.organisationId, viewer.eventId, viewer.personId),
       env.DB.prepare(
         `INSERT INTO audit_events (
-           id,organisation_id,event_id,actor_person_id,action,entity_type,
+           id, actor_kind, origin, metadata_version,organisation_id,event_id,actor_person_id,action,entity_type,
            entity_id,created_at
-         ) VALUES ('chair-hidden-audit',?,?,?,'task.completed',
+         ) VALUES ('chair-hidden-audit', 'person', 'internal', 1,?,?,?,'task.completed',
                    'task_instance','task-private-to-admins',2000000002)`,
       ).bind(viewer.organisationId, viewer.eventId, viewer.personId),
     ]);

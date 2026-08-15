@@ -132,6 +132,24 @@ describe("participant retention", () => {
       },
     ]);
     expect(
+      (
+        await seeded.testEnv.DB.prepare(
+          `SELECT event_id AS eventId, person_id AS personId, biography
+             FROM speaker_profile_revisions
+            WHERE person_id IN (?, ?)
+            ORDER BY event_id`,
+        )
+          .bind(seeded.exclusiveId, seeded.sharedId)
+          .all()
+      ).results,
+    ).toEqual([
+      {
+        eventId: seeded.otherEventId,
+        personId: seeded.sharedId,
+        biography: "Other event historical biography",
+      },
+    ]);
+    expect(
       await seeded.testEnv.DB.prepare(
         `SELECT person.email, membership.revoked_at AS revokedAt
            FROM people person
@@ -622,6 +640,23 @@ describe("participant retention", () => {
     ).rejects.toThrow(lockMessage);
     await expect(
       seeded.testEnv.DB.prepare(
+        `INSERT INTO speaker_profile_revisions (
+           id, organisation_id, event_id, person_id, source, profile_revision,
+           display_name, biography, publication_status, correlation_id
+         ) VALUES (?, ?, ?, ?, 'canonical_person', 2, 'Restored participant',
+                   'Restored private biography', 'published', ?)`,
+      )
+        .bind(
+          id("post-retention-profile-revision"),
+          organisationId,
+          seeded.eventId,
+          retained!.personId,
+          id("post-retention-profile-correlation"),
+        )
+        .run(),
+    ).rejects.toThrow(lockMessage);
+    await expect(
+      seeded.testEnv.DB.prepare(
         `UPDATE people SET display_name = 'Restored participant'
           WHERE id = ?`,
       )
@@ -685,9 +720,9 @@ describe("participant retention", () => {
       seeded.testEnv.DB.batch([
         seeded.testEnv.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, metadata_json
-           ) VALUES (?, ?, ?, 'person-demo-owner', 'retention.follow_up',
+           ) VALUES (?, 'person', 'internal', 1, ?, ?, 'person-demo-owner', 'retention.follow_up',
                      'event', ?, '{}')`,
         ).bind(
           id("post-retention-audit"),
@@ -785,9 +820,9 @@ describe("participant retention", () => {
     const auditOnlyService = new ParticipantRetentionService(auditOnly.testEnv);
     await auditOnly.testEnv.DB.prepare(
       `INSERT INTO audit_events (
-         id, organisation_id, event_id, actor_person_id, action, entity_type,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
          entity_id, metadata_json
-       ) VALUES (?, ?, ?, 'person-demo-owner',
+       ) VALUES (?, 'person', 'internal', 1, ?, ?, 'person-demo-owner',
                  'participant.retention.completed', 'event', ?, ?)`,
     )
       .bind(

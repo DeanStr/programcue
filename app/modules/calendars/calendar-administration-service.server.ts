@@ -183,9 +183,9 @@ export class CalendarAdministrationService {
     );
     await this.env.DB.prepare(
       `INSERT INTO audit_events (
-         id, organisation_id, event_id, actor_person_id, action, entity_type,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
          entity_id, metadata_json, created_at
-       ) VALUES (?, ?, ?, ?, 'calendar.connection.refreshed',
+       ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?, 'calendar.connection.refreshed',
                  'calendar_connection', ?, '{}', unixepoch())`,
     )
       .bind(
@@ -253,10 +253,10 @@ export class CalendarAdministrationService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action, entity_type,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
            entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'calendar.connection.disconnected',
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'calendar.connection.disconnected',
                 'calendar_connection', ?, '{}', unixepoch()
           WHERE changes() = 1
             AND EXISTS (
@@ -409,10 +409,10 @@ export class CalendarAdministrationService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action, entity_type,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
            entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'calendar.rsvp.reconciled',
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'calendar.rsvp.reconciled',
                 'calendar_invitation', ?, ?, unixepoch()
           WHERE changes() = 1
             AND EXISTS (

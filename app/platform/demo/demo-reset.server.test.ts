@@ -145,9 +145,9 @@ describe("complete evaluator demo reset", () => {
       ).bind(DEMO_ORGANISATION_ID, SBEK_FIXTURE_PEOPLE.organizer.personId),
       testEnvironment.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) VALUES ('demo-reset-preserved-audit', ?, ?, 'person-demo-admin',
+         ) VALUES ('demo-reset-preserved-audit', 'person', 'internal', 1, ?, ?, 'person-demo-admin',
                    'test.sentinel', 'event', ?, '{}', unixepoch())
          ON CONFLICT(id) DO NOTHING`,
       ).bind(DEMO_ORGANISATION_ID, DEMO_EVENT_ID, DEMO_EVENT_ID),
@@ -589,9 +589,9 @@ describe("complete evaluator demo reset", () => {
     await testEnvironment.DB.batch([
       testEnvironment.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) VALUES (?, ?, ?, ?, 'assistant.proposal.previewed',
+         ) VALUES (?, 'person', 'internal', 1, ?, ?, ?, 'assistant.proposal.previewed',
                    'assistant_proposal', ?, ?, ?, unixepoch())`,
       ).bind(
         crypto.randomUUID(),
@@ -606,9 +606,9 @@ describe("complete evaluator demo reset", () => {
       ),
       testEnvironment.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) VALUES (?, ?, ?, ?, 'assistant.proposal.previewed',
+         ) VALUES (?, 'person', 'internal', 1, ?, ?, ?, 'assistant.proposal.previewed',
                    'assistant_proposal', ?, ?, ?, unixepoch())`,
       ).bind(
         crypto.randomUUID(),

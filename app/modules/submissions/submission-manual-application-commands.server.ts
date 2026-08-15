@@ -389,9 +389,9 @@ export class SubmissionManualApplicationCommands extends SubmissionAdministratio
     statements.push(
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action, entity_type,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
            entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'submission.manual.created', 'submission', ?, ?, ?, unixepoch()
+         ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'submission.manual.created', 'submission', ?, ?, ?, unixepoch()
             WHERE EXISTS (
               SELECT 1 FROM submissions
                WHERE id = ? AND event_id = ? AND last_operation_id = ?

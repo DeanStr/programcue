@@ -434,13 +434,48 @@ placements atomically in D1 with durable idempotency, reports honest unplaced
 reasons and leaves the schedule unpublished. Focused unit, Worker and Chromium
 schedule tests verify this AIA-08 production slice.
 
+## Audit and revision evidence
+
+- **Production slice; local repository evidence; not deployed:** Audit writes
+  now require explicit actor kind, ingress origin and metadata contract version
+  across every runtime writer. Pre-contract rows remain readable as version 0
+  but are labelled historical and cannot produce version-1 display summaries.
+  Audit evidence is append-only and no longer cascades
+  with organisation, event or person deletion; the documented normal lifecycle
+  is archival until an explicit contractual purge workflow and retention period
+  are approved. Activity uses `(created_at, id)` keyset pagination, an
+  independently queried actor selector and filter/scope-bound cursors. Event
+  administrators remain event-scoped; only accepted organisation-wide owners
+  and administrators can select organisation scope. The UI receives only
+  versioned, action-schema-validated display summaries rather than generic
+  metadata values; known display actions with missing or malformed version-1
+  facts are rejected at the database write boundary. Invalid filter lengths,
+  filter values and internal reader bounds fail instead of being clamped,
+  truncated or ignored. Migration, authorization, cursor and focused Worker tests
+  are repository evidence; no deployment or retention-policy acceptance is
+  claimed.
+- **Production slice; local repository evidence; not deployed:** Submission
+  administration shows an inline status timeline and retained submitted-save
+  revisions. Chair review results show private saved-review history using the
+  exact scorecard ID, version and criterion snapshot stored with each new
+  revision; partial, duplicate or score/criterion-mismatched modern evidence
+  fails the read, while legacy revisions remain explicitly without that
+  evidence. Session
+  content history computes compact adjacent-revision changes at read time.
+  Speaker and organiser profile pages show read-only public-field revision
+  evidence, including atomic released-headshot replacement and removal, while email,
+  travel preferences and provider payloads are excluded. Restoration remains
+  deliberately unavailable for public speaker profiles.
+
 ## Content management workstream evidence
 
 - **Production slice (CNT-11/12):** Schedule-version content now has an
   attributed, append-only revision history. Every edit and status transition
   records the exact title, description, track, format, duration, visibility
-  and resources. An administrator can inspect prior values and restore any
-  retained revision as a new Draft without deleting later history.
+  and resources. The reader computes compact changes against the adjacent
+  retained revision without persisting a second diff representation. An
+  administrator can inspect prior values and restore any retained revision as
+  a new Draft without deleting later history.
 - **Publication boundary (CNT-13):** Draft, In review, Approved and Changes
   requested remain explicit revision-checked editorial states. Editing or
   restoring returns only the draft content to Draft. Publication requires each

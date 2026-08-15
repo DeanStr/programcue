@@ -49,7 +49,10 @@ export class ProgrammeEmbedStateError extends Error {
 
 export class ProgrammeEmbedRevisionConflictError extends ProgrammeEmbedStateError {
   constructor() {
-    super("This managed embed changed since the page loaded. Refresh and try again.", 409);
+    super(
+      "This managed embed changed since the page loaded. Refresh and try again.",
+      409,
+    );
     this.name = "ProgrammeEmbedRevisionConflictError";
   }
 }
@@ -138,8 +141,16 @@ function parseRow(row: EmbedRow): ManagedProgrammeEmbed {
   };
 }
 
-function auditMetadata(before: unknown, after: unknown) {
-  return JSON.stringify({ before, after });
+function auditMetadata<T extends { status: string; revision: number }>(
+  before: unknown,
+  after: T,
+) {
+  return JSON.stringify({
+    before,
+    after,
+    status: after.status,
+    revision: after.revision,
+  });
 }
 
 function auditSnapshot(embed: ManagedProgrammeEmbed) {
@@ -203,10 +214,12 @@ export class ProgrammeEmbedService {
       [audited, created] = await this.env.DB.batch([
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, event.organisation_id, event.id, ?, 'programme_embed.created',
+         SELECT ?, 'person', 'admin_ui', 1, event.organisation_id, event.id, ?,
+                'programme_embed.created',
                 'programme_embed', ?, ?, unixepoch()
            FROM events event
           WHERE event.id = ? AND event.organisation_id = ?`,
@@ -304,7 +317,8 @@ export class ProgrammeEmbedService {
         409,
       );
     }
-    if (current.revision !== revision) throw new ProgrammeEmbedRevisionConflictError();
+    if (current.revision !== revision)
+      throw new ProgrammeEmbedRevisionConflictError();
     const name = requiredText(input.name, "Embed name", 120);
     const installationNote = optionalNote(input.installationNote);
     const configuration = parseConfigurationJson(input.configurationJson);
@@ -328,10 +342,12 @@ export class ProgrammeEmbedService {
     const [audited, updated] = await this.env.DB.batch([
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, embed.organisation_id, embed.event_id, ?,
+         SELECT ?, 'person', 'admin_ui', 1, embed.organisation_id,
+                embed.event_id, ?,
                 'programme_embed.updated', 'programme_embed', embed.id, ?, unixepoch()
            FROM programme_embeds embed
            JOIN events event
@@ -404,7 +420,8 @@ export class ProgrammeEmbedService {
     }
     const nextStatus = input.nextStatus as ProgrammeEmbedStatus;
     const current = await this.current(viewer, id);
-    if (current.revision !== revision) throw new ProgrammeEmbedRevisionConflictError();
+    if (current.revision !== revision)
+      throw new ProgrammeEmbedRevisionConflictError();
     const allowed: Record<ProgrammeEmbedStatus, ProgrammeEmbedStatus[]> = {
       draft: ["active", "revoked"],
       active: ["paused", "revoked"],
@@ -444,10 +461,12 @@ export class ProgrammeEmbedService {
     const [audited, updated] = await this.env.DB.batch([
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, embed.organisation_id, embed.event_id, ?, ?,
+         SELECT ?, 'person', 'admin_ui', 1, embed.organisation_id,
+                embed.event_id, ?, ?,
                 'programme_embed', embed.id, ?, unixepoch()
            FROM programme_embeds embed
            JOIN events event
@@ -556,7 +575,8 @@ export class ProgrammeEmbedService {
     )
       .bind(viewer.organisationId, id, viewer.eventId)
       .first<EmbedRow>();
-    if (!row) throw new ProgrammeEmbedStateError("Managed embed not found.", 404);
+    if (!row)
+      throw new ProgrammeEmbedStateError("Managed embed not found.", 404);
     return parseRow(row);
   }
 
@@ -636,9 +656,7 @@ export class ProgrammeEmbedService {
     }
     if (
       configuration.room &&
-      !programme.sessions.some(
-        (session) => session.room === configuration.room,
-      )
+      !programme.sessions.some((session) => session.room === configuration.room)
     ) {
       throw new ProgrammeEmbedStateError(
         "Embed room must identify a published room.",

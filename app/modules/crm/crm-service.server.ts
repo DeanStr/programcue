@@ -576,9 +576,9 @@ export class CrmService {
         ),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, metadata_json, created_at
-           ) SELECT ?, ?, NULL, ?, 'crm.contact.created', 'person', person.id,
+           ) SELECT ?, 'person', 'admin_ui', 1, ?, NULL, ?, 'crm.contact.created', 'person', person.id,
                     json_object('email', person.email), unixepoch()
                FROM people person WHERE person.email = ? COLLATE NOCASE
                  AND EXISTS (

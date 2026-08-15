@@ -142,23 +142,53 @@ export const auditEvents = sqliteTable(
   "audit_events",
   {
     id: text("id").primaryKey(),
-    organisationId: text("organisation_id").references(() => organisations.id, {
-      onDelete: "cascade",
-    }),
-    eventId: text("event_id").references(() => events.id, {
-      onDelete: "cascade",
-    }),
-    actorPersonId: text("actor_person_id").references(() => people.id),
+    organisationId: text("organisation_id"),
+    eventId: text("event_id"),
+    actorPersonId: text("actor_person_id"),
     actorId: text("actor_id"),
+    actorKind: text("actor_kind")
+      .notNull()
+      .$type<
+        "historical" | "person" | "api_key" | "agent" | "provider" | "system"
+      >(),
+    origin: text("origin")
+      .notNull()
+      .$type<
+        | "historical"
+        | "admin_ui"
+        | "participant_ui"
+        | "public_form"
+        | "api"
+        | "provider_webhook"
+        | "queue"
+        | "scheduled"
+        | "internal"
+      >(),
     action: text("action").notNull(),
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id"),
     correlationId: text("correlation_id"),
+    metadataVersion: integer("metadata_version").notNull(),
     metadataJson: text("metadata_json").notNull().default("{}"),
     createdAt: integer("created_at").notNull().default(epochNow),
   },
   (table) => [
-    index("idx_audit_event_created").on(table.eventId, table.createdAt),
+    index("idx_audit_events_event_created_id").on(
+      table.eventId,
+      table.createdAt,
+      table.id,
+    ),
+    index("idx_audit_events_organisation_created_id").on(
+      table.organisationId,
+      table.createdAt,
+      table.id,
+    ),
+    index("idx_audit_events_event_actor_created_id").on(
+      table.eventId,
+      table.actorPersonId,
+      table.createdAt,
+      table.id,
+    ),
   ],
 );
 

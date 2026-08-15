@@ -156,9 +156,9 @@ export abstract class AiOperationsProposalWorkflows extends AiScheduleProposalWo
     });
     await this.env.DB.prepare(
       `INSERT INTO audit_events (
-        id, organisation_id, event_id, actor_person_id, action,
+        id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
         entity_type, entity_id, correlation_id, metadata_json, created_at
-      ) VALUES (?, ?, ?, ?, 'assistant.proposal.previewed',
+      ) VALUES (?, 'agent', 'admin_ui', 1, ?, ?, ?, 'program_cue_agent', 'assistant.proposal.previewed',
                 'assistant_proposal', ?, ?, ?, unixepoch())`,
     )
       .bind(

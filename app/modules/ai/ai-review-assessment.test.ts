@@ -267,7 +267,9 @@ describe("persisted AI first-pass review assessments", () => {
     });
 
     const actions = await env.DB.prepare(
-      `SELECT action FROM audit_events
+      `SELECT action, actor_kind AS actorKind, origin,
+              actor_person_id AS actorPersonId, actor_id AS actorId
+         FROM audit_events
         WHERE event_id = ? AND correlation_id = (
           SELECT correlation_id FROM operation_jobs
            WHERE id = (SELECT last_operation_id
@@ -275,11 +277,37 @@ describe("persisted AI first-pass review assessments", () => {
         ) ORDER BY action`,
     )
       .bind(admin.eventId, assessment.id)
-      .all<{ action: string }>();
+      .all<{
+        action: string;
+        actorKind: string;
+        origin: string;
+        actorPersonId: string | null;
+        actorId: string | null;
+      }>();
     expect(actions.results.map(({ action }) => action)).toEqual([
       "ai.review_assessment.generated",
       "ai.review_assessment.requested",
     ]);
+    expect(
+      actions.results.find(
+        ({ action }) => action === "ai.review_assessment.requested",
+      ),
+    ).toMatchObject({
+      actorKind: "person",
+      origin: "admin_ui",
+      actorPersonId: admin.personId,
+      actorId: null,
+    });
+    expect(
+      actions.results.find(
+        ({ action }) => action === "ai.review_assessment.generated",
+      ),
+    ).toMatchObject({
+      actorKind: "agent",
+      origin: "admin_ui",
+      actorPersonId: admin.personId,
+      actorId: "program_cue_agent",
+    });
   });
 
   it("rejects invalid provider output without storing a fallback score", async () => {

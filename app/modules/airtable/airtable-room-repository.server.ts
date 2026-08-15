@@ -588,9 +588,9 @@ export class AirtableRoomRepository {
       connectionStatement,
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'airtable.repository.configured',
+         ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'airtable.repository.configured',
                   'integration_connection', ?, ?, ?, unixepoch()
             WHERE EXISTS (
               SELECT 1 FROM integration_connections
@@ -964,9 +964,9 @@ export class AirtableRoomRepository {
     if ((result.meta.changes ?? 0) === 1) {
       await this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, action, entity_type, entity_id,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, action, entity_type, entity_id,
            metadata_json, created_at
-         ) SELECT ?, organisation_id, event_id,
+         ) SELECT ?, 'system', 'internal', 1, organisation_id, event_id,
                   'airtable.repository.needs_attention',
                   'integration_connection', id, ?, unixepoch()
              FROM integration_connections

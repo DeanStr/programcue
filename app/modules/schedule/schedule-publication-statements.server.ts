@@ -238,13 +238,15 @@ export function buildSchedulePublicationStatements(input: {
     env.DB.prepare(
       `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, actor_id, action, entity_type, entity_id, metadata_json, created_at
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action, entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, ?, 'schedule.published', 'schedule_version', ?, ?, unixepoch()
+        SELECT ?, ?, ?, 1, ?, ?, ?, ?, 'schedule.published', 'schedule_version', ?, ?, unixepoch()
          WHERE EXISTS (SELECT 1 FROM schedule_versions WHERE id = ? AND publication_operation_id = ?)
       `,
     ).bind(
       auditEventId,
+      actor.personId ? "person" : "api_key",
+      actor.personId ? "admin_ui" : "api",
       viewer.organisationId,
       viewer.eventId,
       actor.personId ?? null,

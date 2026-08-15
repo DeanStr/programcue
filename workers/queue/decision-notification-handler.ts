@@ -405,8 +405,8 @@ export async function processDecisionNotification(
     env.DB.prepare(
       `
     INSERT INTO audit_events (
-      id, organisation_id, event_id, action, entity_type, entity_id, metadata_json, created_at
-    ) SELECT ?, ?, ?, ?, 'communication', ?, ?, unixepoch()
+      id, actor_kind, origin, metadata_version, organisation_id, event_id, action, entity_type, entity_id, metadata_json, created_at
+    ) SELECT ?, 'system', 'queue', 1, ?, ?, ?, 'communication', ?, ?, unixepoch()
         FROM operation_jobs trigger_operation
        WHERE trigger_operation.id = ? AND trigger_operation.event_id = ?
          AND trigger_operation.organisation_id = ?

@@ -1,5 +1,10 @@
 from pathlib import Path
 
+from .forward_audit_contract import validate_audit_contract_forward_migration
+from .forward_contextual_revision_evidence import (
+    validate_contextual_revision_evidence_forward_migration,
+)
+
 from .forward_advisory_content_and_itinerary_privacy import (
     validate_advisory_content_and_itinerary_privacy_forward_migration,
 )
@@ -27,3 +32,5 @@ def validate_forward_migrations(root: Path) -> None:
     validate_speaker_profile_depth_forward_migration(root)
     validate_canonical_demo_dates_forward_migration(root)
     validate_workers_ai_deepseek_forward_migration(root)
+    validate_audit_contract_forward_migration(root)
+    validate_contextual_revision_evidence_forward_migration(root)

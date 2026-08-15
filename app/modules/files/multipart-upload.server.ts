@@ -89,6 +89,21 @@ export const multipartAbortSchema = z.object({
   versionId: z.string().min(1).max(160),
 });
 
+function multipartAuditProvenance(actor: MultipartActor) {
+  if (isApplicantActor(actor)) {
+    return {
+      actorKind: actor.personId ? ("person" as const) : ("system" as const),
+      origin: "public_form" as const,
+    };
+  }
+  return {
+    actorKind: "person" as const,
+    origin: ["owner", "administrator"].includes(actor.role)
+      ? ("admin_ui" as const)
+      : ("participant_ui" as const),
+  };
+}
+
 export {
   FileMultipartConflictError,
   FileMultipartIncompleteError,
@@ -308,6 +323,7 @@ export class MultipartUploadService {
     authorisedAssetId: string | null,
   ) {
     const target = input.target;
+    const auditProvenance = multipartAuditProvenance(actor);
     const reusable = !["task", "resource"].includes(target.targetType);
     const ownerPersonId =
       target.targetType === "resource"
@@ -439,16 +455,18 @@ export class MultipartUploadService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'file.multipart.requested', 'file_version', ?, ?, unixepoch()
+         SELECT ?, ?, ?, 1, ?, ?, ?, 'file.multipart.requested', 'file_version', ?, ?, unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM file_multipart_uploads
              WHERE version_id = ? AND event_id = ? AND asset_id = ?
           )`,
       ).bind(
         crypto.randomUUID(),
+        auditProvenance.actorKind,
+        auditProvenance.origin,
         actor.organisationId,
         actor.eventId,
         actor.personId,
@@ -1169,6 +1187,7 @@ export class MultipartUploadService {
     object: R2Object,
     detected: string | null,
   ) {
+    const auditProvenance = multipartAuditProvenance(actor);
     const [versionCommitted, uploadCommitted] = await this.env.DB.batch([
       this.env.DB.prepare(
         `UPDATE file_versions
@@ -1258,10 +1277,10 @@ export class MultipartUploadService {
       ).bind(row.assetId, actor.eventId),
       this.env.DB.prepare(
         `INSERT OR IGNORE INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'file.upload.quarantined', 'file_version', ?, ?, unixepoch()
+         SELECT ?, ?, ?, 1, ?, ?, ?, 'file.upload.quarantined', 'file_version', ?, ?, unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM file_versions version
              WHERE version.id = ? AND version.event_id = ?
@@ -1282,6 +1301,8 @@ export class MultipartUploadService {
           )`,
       ).bind(
         `file-multipart-complete:${row.versionId}`,
+        auditProvenance.actorKind,
+        auditProvenance.origin,
         actor.organisationId,
         actor.eventId,
         actor.personId,
@@ -1359,6 +1380,7 @@ export class MultipartUploadService {
   }
 
   async abort(actor: MultipartActor, rawInput: unknown) {
+    const auditProvenance = multipartAuditProvenance(actor);
     const input = multipartAbortSchema.parse(rawInput);
     let row = await this.access.loadByVersion(actor, input.versionId);
     if (row.status === "completed" || row.status === "completing")
@@ -1425,12 +1447,14 @@ export class MultipartUploadService {
     }
     await this.env.DB.prepare(
       `INSERT OR IGNORE INTO audit_events (
-         id, organisation_id, event_id, actor_person_id, action,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
          entity_type, entity_id, metadata_json, created_at
-       ) VALUES (?, ?, ?, ?, 'file.multipart.aborted', 'file_version', ?, ?, unixepoch())`,
+       ) VALUES (?, ?, ?, 1, ?, ?, ?, 'file.multipart.aborted', 'file_version', ?, ?, unixepoch())`,
     )
       .bind(
         `file-multipart-abort:${row.versionId}`,
+        auditProvenance.actorKind,
+        auditProvenance.origin,
         actor.organisationId,
         actor.eventId,
         actor.personId,

@@ -770,10 +770,10 @@ async function processClaimedAcceleventsExport(
     ),
     env.DB.prepare(
       `INSERT INTO audit_events (
-         id, organisation_id, event_id, action, entity_type, entity_id,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, action, entity_type, entity_id,
          correlation_id, metadata_json, created_at
        )
-       SELECT ?, ?, ?, 'integration.run.completed', 'integration_run', ?,
+       SELECT ?, 'system', 'queue', 1, ?, ?, 'integration.run.completed', 'integration_run', ?,
               correlation_id, ?, unixepoch()
          FROM operation_jobs WHERE id = ? AND status = ?`,
     ).bind(

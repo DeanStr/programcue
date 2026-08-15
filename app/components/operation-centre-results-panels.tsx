@@ -11,7 +11,6 @@ import { EmptyState } from "~/components/ui/states";
 import { fieldLabel } from "~/lib/record-labels";
 import { shortReference } from "~/lib/short-reference";
 import {
-  metadataOperationId,
   OperationDateTime,
   operationItemLink as itemLink,
   operationMetadataSummary as metadataSummary,
@@ -25,16 +24,43 @@ export function ActivityTimelinePanel({
 }: {
   loaderData: OperationCentreData;
 }) {
+  const location = useLocation();
+  const olderActivityHref = loaderData.activityNextCursor
+    ? (() => {
+        const search = new URLSearchParams(location.search);
+        search.set("activityCursor", loaderData.activityNextCursor);
+        return `${location.pathname}?${search}`;
+      })()
+    : null;
   return loaderData.panel === "activity" ? (
     <section className="card pad mb" aria-labelledby="activity-heading">
       <div className="card-title">
-        <h2 id="activity-heading">Event activity timeline</h2>
+        <h2 id="activity-heading">
+          {loaderData.activityScope === "organisation"
+            ? "Organisation activity timeline"
+            : "Event activity timeline"}
+        </h2>
         <span className="help right">
           Immutable audit events · newest first
         </span>
       </div>
       <Form method="get" className="grid grid-3 mb">
         <input type="hidden" name="panel" value="activity" />
+        {loaderData.canViewOrganisationActivity ? (
+          <label className="label">
+            Scope
+            <select
+              className="select"
+              name="activityScope"
+              defaultValue={loaderData.activityScope}
+            >
+              <option value="event">Current event</option>
+              <option value="organisation">All organisation events</option>
+            </select>
+          </label>
+        ) : (
+          <input type="hidden" name="activityScope" value="event" />
+        )}
         <label className="label">
           Area
           <select
@@ -51,16 +77,26 @@ export function ActivityTimelinePanel({
           </select>
         </label>
         <label className="label">
-          Actor
+          Find actors
+          <input
+            className="field"
+            name="activityActorQuery"
+            defaultValue={loaderData.activityFilters.actorSearch}
+            maxLength={80}
+            placeholder="Name or role…"
+          />
+        </label>
+        <label className="label">
+          Actor result
           <select
             className="select"
             name="activityActor"
-            defaultValue={loaderData.activityFilters.actorPersonId}
+            defaultValue={loaderData.activityFilters.actorKey}
           >
             <option value="">All actors</option>
             {loaderData.activityActors.map((actor) => (
-              <option value={actor.id} key={actor.id}>
-                {actor.name}
+              <option value={actor.key} key={actor.key}>
+                {actor.name} · {fieldLabel(actor.kind)}
               </option>
             ))}
           </select>
@@ -81,7 +117,7 @@ export function ActivityTimelinePanel({
           </button>
         </div>
       </Form>
-      {loaderData.canExportData ? (
+      {loaderData.canExportData && loaderData.activityScope === "event" ? (
         <Form
           method="post"
           action="/admin/exports/audit.csv"
@@ -102,7 +138,6 @@ export function ActivityTimelinePanel({
         <ol className="timeline">
           {loaderData.activity.map((item) => {
             const entityHref = itemLink(item.entityType, item.entityId);
-            const operationId = metadataOperationId(item.metadata);
             return (
               <li key={item.id}>
                 <strong>{fieldLabel(item.action.replaceAll(".", " "))}</strong>
@@ -112,9 +147,18 @@ export function ActivityTimelinePanel({
                     epoch={item.createdAt}
                     timeZone={loaderData.eventTimezone}
                   />{" "}
-                  · {item.area}
+                  · {item.area} · {fieldLabel(item.origin)}
                 </span>
                 <small className="subtle">
+                  {loaderData.activityScope === "organisation" ? (
+                    <>
+                      {item.eventName ?? "Removed event"}
+                      {item.eventId
+                        ? ` ${shortReference(item.eventId)}`
+                        : ""}{" "}
+                      ·{" "}
+                    </>
+                  ) : null}
                   {entityHref ? (
                     <Link to={entityHref}>
                       {fieldLabel(item.entityType)}
@@ -123,22 +167,20 @@ export function ActivityTimelinePanel({
                   ) : (
                     `${fieldLabel(item.entityType)}${item.entityId ? ` ${shortReference(item.entityId)}` : ""}`
                   )}
-                  {operationId ? (
+                  {item.operationId ? (
                     <>
                       {" "}
                       ·{" "}
                       <Link
-                        to={`/admin/operations?operation=${encodeURIComponent(operationId)}`}
+                        to={`/admin/operations?operation=${encodeURIComponent(item.operationId)}`}
                       >
                         View operation
                       </Link>
                     </>
                   ) : null}
                 </small>
-                {metadataSummary(item.metadata) ? (
-                  <small className="subtle">
-                    {metadataSummary(item.metadata)}
-                  </small>
+                {item.summary ? (
+                  <small className="subtle">{item.summary}</small>
                 ) : null}
               </li>
             );
@@ -147,9 +189,16 @@ export function ActivityTimelinePanel({
       ) : (
         <EmptyState
           title="No matching activity"
-          description="Adjust the activity filters or start work in this event."
+          description={`Adjust the activity filters or start work in this ${loaderData.activityScope}.`}
         />
       )}
+      {olderActivityHref ? (
+        <div className="page-actions mt">
+          <Link className="btn" to={olderActivityHref}>
+            Older activity
+          </Link>
+        </div>
+      ) : null}
     </section>
   ) : null;
 }
@@ -677,10 +726,8 @@ export function OperationDetailPanel({
                     timeZone={loaderData.eventTimezone}
                   />
                 </span>
-                {metadataSummary(audit.metadata) ? (
-                  <small className="subtle">
-                    {metadataSummary(audit.metadata)}
-                  </small>
+                {audit.summary ? (
+                  <small className="subtle">{audit.summary}</small>
                 ) : null}
               </li>
             ))}

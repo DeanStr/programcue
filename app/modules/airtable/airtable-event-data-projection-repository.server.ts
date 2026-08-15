@@ -812,9 +812,9 @@ export class AirtableEventDataProjectionRepository {
         ).bind(runId),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, correlation_id, metadata_json, created_at
-           ) VALUES (?, ?, ?, ?, 'airtable.event_data.synchronized',
+           ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?, 'airtable.event_data.synchronized',
                      'event', ?, ?, ?, unixepoch())`,
         ).bind(
           crypto.randomUUID(),

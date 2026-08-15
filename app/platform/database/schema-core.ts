@@ -52,6 +52,52 @@ export const people = sqliteTable(
   (table) => [uniqueIndex("people_email_unique").on(table.email)],
 );
 
+export const speakerProfileRevisions = sqliteTable(
+  "speaker_profile_revisions",
+  {
+    id: text("id").primaryKey(),
+    organisationId: text("organisation_id").notNull(),
+    eventId: text("event_id").notNull(),
+    personId: text("person_id").notNull(),
+    source: text("source")
+      .notNull()
+      .$type<"canonical_person" | "organisation_profile">(),
+    profileRevision: integer("profile_revision").notNull(),
+    displayName: text("display_name").notNull(),
+    biography: text("biography"),
+    pronunciation: text("pronunciation"),
+    organisationName: text("organisation_name"),
+    jobTitle: text("job_title"),
+    publicationStatus: text("publication_status")
+      .notNull()
+      .$type<"draft" | "published" | "archived">(),
+    headshotFileVersionId: text("headshot_file_version_id"),
+    recordedByPersonId: text("recorded_by_person_id"),
+    correlationId: text("correlation_id").notNull(),
+    createdAt: integer("created_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("speaker_profile_revisions_source_operation_unique").on(
+      table.source,
+      table.organisationId,
+      table.eventId,
+      table.personId,
+      table.correlationId,
+    ),
+    index("idx_speaker_profile_revisions_person_created").on(
+      table.personId,
+      desc(table.createdAt),
+      table.id,
+    ),
+    index("idx_speaker_profile_revisions_event_person_created").on(
+      table.eventId,
+      table.personId,
+      desc(table.createdAt),
+      table.id,
+    ),
+  ],
+);
+
 export const organisationAiSettings = sqliteTable(
   "organisation_ai_settings",
   {

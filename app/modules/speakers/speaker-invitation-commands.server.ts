@@ -235,10 +235,10 @@ export class SpeakerInvitationCommands {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, event.organisation_id, event.id, ?,
+         SELECT ?, 'person', 'admin_ui', 1, event.organisation_id, event.id, ?,
                 CASE WHEN membership.accepted_at IS NULL
                      THEN 'speaker.admin.invited'
                      ELSE 'speaker.admin.reused' END,

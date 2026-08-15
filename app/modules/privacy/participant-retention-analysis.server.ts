@@ -77,6 +77,8 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
                             WHERE token.identifier = person.email COLLATE NOCASE)))
           + (SELECT COUNT(*) FROM event_participant_profiles profile
               WHERE profile.event_id IN locked)
+          + (SELECT COUNT(*) FROM speaker_profile_revisions revision
+              WHERE revision.event_id IN locked)
           AS total`,
       },
       {
@@ -383,6 +385,10 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
               WHERE person_id = ? AND event_id <> ?
            )
            OR EXISTS (
+             SELECT 1 FROM speaker_profile_revisions
+              WHERE person_id = ? AND event_id <> ?
+           )
+           OR EXISTS (
              SELECT 1 FROM audit_events
               WHERE actor_person_id = ? AND (event_id IS NULL OR event_id <> ?)
            )
@@ -402,7 +408,7 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
          ) AS immutableAuditRows`,
     )
       .bind(
-        ...Array.from({ length: 15 }, () => [
+        ...Array.from({ length: 16 }, () => [
           candidate.id,
           viewer.eventId,
         ]).flat(),

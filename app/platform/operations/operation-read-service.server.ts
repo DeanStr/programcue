@@ -1,4 +1,15 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { AuditReader } from "~/platform/audit/audit-reader.server";
+import {
+  AUDIT_ACTIVITY_PAGE_SIZE,
+  auditDisplaySummary,
+  auditOperationId,
+  decodeAuditActivityCursor,
+  encodeAuditActivityCursor,
+  type AuditActorKind,
+  type AuditOrigin,
+  type AuditScope,
+} from "~/platform/audit/audit-contract";
 import {
   canAcknowledgeOperationFailure,
   genericRetryableOperationTypesSql,
@@ -105,7 +116,7 @@ export type OperationAuditItem = {
   id: string;
   action: string;
   actorName: string;
-  metadata: unknown;
+  summary: string | null;
   createdAt: number;
 };
 
@@ -132,13 +143,95 @@ export type ActivityTimelineItem = {
   action: string;
   area: ActivityArea;
   actorName: string;
-  actorPersonId: string | null;
+  actorKey: string;
+  actorKind: AuditActorKind;
+  origin: AuditOrigin;
+  eventId: string | null;
+  eventName: string | null;
   entityType: string;
   entityId: string | null;
   correlationId: string | null;
-  metadata: unknown;
+  operationId: string | null;
+  summary: string | null;
   createdAt: number;
 };
+
+export type ActivityPage = {
+  items: ActivityTimelineItem[];
+  nextCursor: string | null;
+};
+
+function activityScope(value: AuditScope | undefined): AuditScope {
+  const scope = value ?? "event";
+  if (scope !== "event" && scope !== "organisation") {
+    throw new Response("Activity scope is invalid.", { status: 400 });
+  }
+  return scope;
+}
+
+function activityFilter(
+  value: string | undefined,
+  name: string,
+  maximumLength: number,
+) {
+  const normalized = value?.trim() ?? "";
+  if (normalized.length > maximumLength) {
+    throw new Response(
+      `${name} must be ${maximumLength} characters or fewer.`,
+      { status: 400 },
+    );
+  }
+  return normalized;
+}
+
+export type ActivityActor = {
+  key: string;
+  name: string;
+  kind: AuditActorKind;
+};
+
+const activityAreaSql = `CASE
+  WHEN a.action LIKE 'decision%' OR a.action LIKE 'review%'
+    OR a.action LIKE 'evaluation%' OR a.action LIKE 'assignment%'
+    THEN 'evaluation'
+  WHEN a.action LIKE 'schedule%' OR a.action LIKE 'programme%'
+    OR a.entity_type IN ('schedule_version','schedule_entry','schedule_conflict')
+    THEN 'schedule'
+  WHEN a.action LIKE 'integration%' OR a.action LIKE 'airtable%'
+    OR a.action LIKE 'accelevents%' OR a.action LIKE 'calendar%'
+    OR a.action LIKE 'webhook%'
+    OR a.entity_type IN ('integration','integration_run','webhook_endpoint','webhook_delivery')
+    THEN 'integration'
+  WHEN a.action LIKE 'membership%' OR a.action LIKE 'permission%'
+    OR a.action LIKE 'api_key%' OR a.entity_type IN ('membership','api_key')
+    THEN 'permission'
+  WHEN a.action LIKE 'communication%' OR a.action LIKE 'email%'
+    OR a.entity_type IN ('communication','communication_delivery','communication_template')
+    THEN 'communication'
+  WHEN a.action LIKE 'session%' OR a.entity_type IN ('session','session_tag')
+    THEN 'session'
+  WHEN a.action LIKE 'data_%' OR a.action LIKE 'event_clone%'
+    OR a.entity_type IN ('import_row','export','event')
+    THEN 'data'
+  ELSE 'other'
+END`;
+
+const activityActorKeySql = `CASE
+  WHEN a.actor_kind = 'person' AND a.actor_person_id IS NOT NULL
+    THEN 'person:' || a.actor_person_id
+  WHEN a.actor_id IS NOT NULL THEN a.actor_kind || ':' || a.actor_id
+  ELSE 'kind:' || a.actor_kind
+END`;
+
+const activityActorNameSql = `CASE a.actor_kind
+  WHEN 'person' THEN COALESCE(p.display_name, 'Former participant')
+  WHEN 'api_key' THEN 'API key · ' || substr(a.actor_id, 1, 80)
+  WHEN 'agent' THEN 'Agent · ' || substr(a.actor_id, 1, 80)
+  WHEN 'provider' THEN 'Provider · ' || substr(a.actor_id, 1, 80)
+  WHEN 'historical' THEN COALESCE(a.actor_id, 'Historical actor')
+  ELSE CASE WHEN a.actor_id IS NULL THEN 'System'
+            ELSE 'System · ' || substr(a.actor_id, 1, 80) END
+END`;
 
 export function parseJsonRecord(value: string | null, context: string) {
   if (value === null) return null;
@@ -153,6 +246,26 @@ export function parseJsonRecord(value: string | null, context: string) {
 
 export class OperationReadService {
   constructor(private readonly env: CloudflareEnvironment) {}
+
+  private async assertActivityScope(viewer: Viewer, scope: AuditScope) {
+    if (scope === "event") return;
+    const authorised = await this.env.DB.prepare(
+      `SELECT 1
+         FROM memberships
+        WHERE organisation_id = ? AND event_id IS NULL AND person_id = ?
+          AND role IN ('owner','administrator')
+          AND accepted_at IS NOT NULL AND revoked_at IS NULL
+        LIMIT 1`,
+    )
+      .bind(viewer.organisationId, viewer.personId)
+      .first();
+    if (!authorised) {
+      throw new Response(
+        "Organisation-wide owner or administrator access is required for organisation activity.",
+        { status: 403, statusText: "Forbidden" },
+      );
+    }
+  }
 
   async eventTimezone(viewer: Viewer) {
     const event = await this.env.DB.prepare(
@@ -484,29 +597,18 @@ export class OperationReadService {
           completedAt: number | null;
           updatedAt: number;
         }>(),
-      this.env.DB.prepare(
-        `
-        SELECT a.id, a.action, COALESCE(p.display_name, a.actor_id, 'System') AS actorName,
-               a.metadata_json AS metadataJson, a.created_at AS createdAt
-          FROM audit_events a
-          LEFT JOIN people p ON p.id = a.actor_person_id
-         WHERE a.event_id = ?
-           AND (
-             (a.entity_type = 'operation' AND a.entity_id = ?)
-             OR json_extract(a.metadata_json, '$.operationId') = ?
-           )
-         ORDER BY a.created_at DESC, a.id DESC
-         LIMIT 50
-      `,
-      )
-        .bind(viewer.eventId, operationId, operationId)
-        .all<{
-          id: string;
-          action: string;
-          actorName: string;
-          metadataJson: string;
-          createdAt: number;
-        }>(),
+      new AuditReader(this.env).eventEntityHistory(
+        {
+          organisationId: viewer.organisationId,
+          eventId: viewer.eventId,
+        },
+        {
+          entityType: "operation",
+          entityId: operationId,
+          relatedMetadataKey: "operationId",
+          limit: 50,
+        },
+      ),
     ]);
 
     return {
@@ -514,101 +616,192 @@ export class OperationReadService {
         ...item,
         result: parseJsonRecord(resultJson, `Operation item ${item.id}`),
       })),
-      audit: audit.results.map(({ metadataJson, ...item }) => ({
-        ...item,
-        metadata: parseJsonRecord(metadataJson, `Audit event ${item.id}`),
+      audit: audit.map(({ id, action, actorName, summary, createdAt }) => ({
+        id,
+        action,
+        actorName,
+        summary,
+        createdAt,
       })),
     };
   }
 
   async activity(
     viewer: Viewer,
-    filters: { area?: string; actorPersonId?: string; query?: string } = {},
-    limit = 200,
-  ): Promise<ActivityTimelineItem[]> {
-    const area = activityAreas.includes(filters.area as ActivityArea)
-      ? (filters.area as ActivityArea)
-      : null;
-    const actorPersonId = filters.actorPersonId?.trim() || null;
-    const query = filters.query?.trim().slice(0, 120) || null;
-    const safeLimit = Math.max(1, Math.min(200, Math.trunc(limit)));
+    options: {
+      scope?: AuditScope;
+      area?: string;
+      actorKey?: string;
+      query?: string;
+      cursor?: string;
+    } = {},
+  ): Promise<ActivityPage> {
+    const scope = activityScope(options.scope);
+    await this.assertActivityScope(viewer, scope);
+    const requestedArea = options.area?.trim() ?? "";
+    if (
+      requestedArea &&
+      !activityAreas.includes(requestedArea as ActivityArea)
+    ) {
+      throw new Response("Activity area is invalid.", { status: 400 });
+    }
+    const area = requestedArea ? (requestedArea as ActivityArea) : null;
+    const actorKey = activityFilter(options.actorKey, "Actor key", 420);
+    const query = activityFilter(options.query, "Activity search", 120);
+    const binding = {
+      scope,
+      organisationId: viewer.organisationId,
+      eventId: scope === "event" ? viewer.eventId : null,
+      area: area ?? "",
+      actorKey,
+      query,
+    };
+    const cursor = decodeAuditActivityCursor(options.cursor, binding);
+    const eventPredicate = scope === "event" ? "AND a.event_id = ?" : "";
     const rows = await this.env.DB.prepare(
       `WITH scoped AS (
-         SELECT a.id, a.action, a.actor_person_id AS actorPersonId,
-                COALESCE(p.display_name, a.actor_id, 'System') AS actorName,
+         SELECT a.id, a.action, a.actor_kind AS actorKind,
+                a.origin, ${activityActorKeySql} AS actorKey,
+                ${activityActorNameSql} AS actorName,
+                a.event_id AS eventId, e.name AS eventName,
                 a.entity_type AS entityType, a.entity_id AS entityId,
                 a.correlation_id AS correlationId,
+                a.metadata_version AS metadataVersion,
                 a.metadata_json AS metadataJson, a.created_at AS createdAt,
-                CASE
-                  WHEN a.action LIKE 'decision%' OR a.action LIKE 'review%'
-                    OR a.action LIKE 'evaluation%' OR a.action LIKE 'assignment%'
-                    THEN 'evaluation'
-                  WHEN a.action LIKE 'schedule%' OR a.action LIKE 'programme%'
-                    OR a.entity_type IN ('schedule_version','schedule_entry','schedule_conflict')
-                    THEN 'schedule'
-                  WHEN a.action LIKE 'integration%' OR a.action LIKE 'airtable%'
-                    OR a.action LIKE 'accelevents%' OR a.action LIKE 'calendar%'
-                    OR a.action LIKE 'webhook%' OR a.entity_type IN ('integration','integration_run','webhook_endpoint','webhook_delivery')
-                    THEN 'integration'
-                  WHEN a.action LIKE 'membership%' OR a.action LIKE 'permission%'
-                    OR a.action LIKE 'api_key%' OR a.entity_type IN ('membership','api_key')
-                    THEN 'permission'
-                  WHEN a.action LIKE 'communication%' OR a.action LIKE 'email%'
-                    OR a.entity_type IN ('communication','communication_delivery','communication_template')
-                    THEN 'communication'
-                  WHEN a.action LIKE 'session%' OR a.entity_type IN ('session','session_tag')
-                    THEN 'session'
-                  WHEN a.action LIKE 'data_%' OR a.action LIKE 'event_clone%'
-                    OR a.entity_type IN ('import_row','export','event')
-                    THEN 'data'
-                  ELSE 'other'
-                END AS area
+                ${activityAreaSql} AS area
            FROM audit_events a
-           JOIN events e ON e.id = a.event_id AND e.organisation_id = ?
+           LEFT JOIN events e ON e.id = a.event_id
+                             AND e.organisation_id = a.organisation_id
            LEFT JOIN people p ON p.id = a.actor_person_id
-          WHERE a.event_id = ?
+          WHERE a.organisation_id = ? ${eventPredicate}
        )
-       SELECT id, action, actorPersonId, actorName, entityType, entityId,
-              correlationId, metadataJson, createdAt, area
+       SELECT id, action, actorKind, origin, actorKey, actorName, eventId,
+              eventName, entityType, entityId, correlationId, metadataVersion,
+              metadataJson, createdAt, area
          FROM scoped
         WHERE (? IS NULL OR area = ?)
-          AND (? IS NULL OR actorPersonId = ?)
+          AND (? = '' OR actorKey = ?)
           AND (
-            ? IS NULL OR lower(action) LIKE '%' || lower(?) || '%'
+            ? = '' OR lower(action) LIKE '%' || lower(?) || '%'
             OR lower(COALESCE(entityId, '')) LIKE '%' || lower(?) || '%'
             OR lower(actorName) LIKE '%' || lower(?) || '%'
+          )
+          AND (
+            ? IS NULL OR createdAt < ?
+            OR (createdAt = ? AND id < ?)
           )
         ORDER BY createdAt DESC, id DESC
         LIMIT ?`,
     )
       .bind(
         viewer.organisationId,
-        viewer.eventId,
+        ...(scope === "event" ? [viewer.eventId] : []),
         area,
         area,
-        actorPersonId,
-        actorPersonId,
+        actorKey,
+        actorKey,
         query,
         query,
         query,
         query,
-        safeLimit,
+        cursor?.createdAt ?? null,
+        cursor?.createdAt ?? null,
+        cursor?.createdAt ?? null,
+        cursor?.id ?? null,
+        AUDIT_ACTIVITY_PAGE_SIZE + 1,
       )
       .all<{
         id: string;
         action: string;
-        actorPersonId: string | null;
+        actorKind: AuditActorKind;
+        origin: AuditOrigin;
+        actorKey: string;
         actorName: string;
+        eventId: string | null;
+        eventName: string | null;
         entityType: string;
         entityId: string | null;
         correlationId: string | null;
         metadataJson: string;
+        metadataVersion: number;
         createdAt: number;
         area: ActivityArea;
       }>();
-    return rows.results.map(({ metadataJson, ...row }) => ({
-      ...row,
-      metadata: parseJsonRecord(metadataJson, `Audit event ${row.id}`),
+    const page = rows.results.slice(0, AUDIT_ACTIVITY_PAGE_SIZE);
+    const items = page.map(({ metadataJson, metadataVersion, ...row }) => {
+      const metadata = parseJsonRecord(metadataJson, `Audit event ${row.id}`);
+      return {
+        ...row,
+        operationId: auditOperationId(row.action, metadataVersion, metadata),
+        summary: auditDisplaySummary(row.action, metadataVersion, metadata),
+      };
+    });
+    const oldest = items.at(-1);
+    return {
+      items,
+      nextCursor:
+        rows.results.length > AUDIT_ACTIVITY_PAGE_SIZE && oldest
+          ? encodeAuditActivityCursor(binding, {
+              createdAt: oldest.createdAt,
+              id: oldest.id,
+            })
+          : null,
+    };
+  }
+
+  async activityActors(
+    viewer: Viewer,
+    options: {
+      scope?: AuditScope;
+      search?: string;
+      selectedKey?: string;
+    } = {},
+  ): Promise<ActivityActor[]> {
+    const scope = activityScope(options.scope);
+    await this.assertActivityScope(viewer, scope);
+    const search = activityFilter(options.search, "Actor search", 80);
+    const selectedKey = activityFilter(
+      options.selectedKey,
+      "Selected actor key",
+      420,
+    );
+    const eventPredicate = scope === "event" ? "AND a.event_id = ?" : "";
+    const actors = await this.env.DB.prepare(
+      `WITH scoped AS (
+         SELECT ${activityActorKeySql} AS actorKey,
+                ${activityActorNameSql} AS actorName,
+                a.actor_kind AS actorKind,
+                MAX(a.created_at) AS lastSeenAt
+           FROM audit_events a
+           LEFT JOIN people p ON p.id = a.actor_person_id
+          WHERE a.organisation_id = ? ${eventPredicate}
+          GROUP BY actorKey, actorName, actorKind
+       )
+       SELECT actorKey, actorName, actorKind
+         FROM scoped
+        WHERE ? = '' OR lower(actorName) LIKE '%' || lower(?) || '%'
+           OR actorKey = ?
+        ORDER BY CASE WHEN actorKey = ? THEN 0 ELSE 1 END,
+                 actorName, lastSeenAt DESC
+        LIMIT 100`,
+    )
+      .bind(
+        viewer.organisationId,
+        ...(scope === "event" ? [viewer.eventId] : []),
+        search,
+        search,
+        selectedKey,
+        selectedKey,
+      )
+      .all<{
+        actorKey: string;
+        actorName: string;
+        actorKind: AuditActorKind;
+      }>();
+    return actors.results.map((actor) => ({
+      key: actor.actorKey,
+      name: actor.actorName,
+      kind: actor.actorKind,
     }));
   }
 }

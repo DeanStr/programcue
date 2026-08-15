@@ -5,6 +5,10 @@ import {
   FileScanStateError,
   FileVersionNotFoundError,
 } from "./file-service-errors";
+import {
+  headshotProfileRevisionGuardStatement,
+  headshotProfileRevisionStatement,
+} from "~/modules/speakers/speaker-profile-revision.server";
 
 export const scanResultSchema = z
   .object({
@@ -54,6 +58,8 @@ type ScanRow = {
   id: string;
   assetId: string;
   assetStatus: string;
+  targetType: string;
+  assetKind: string;
   uploadStatus: string;
   signatureStatus: string;
   scanStatus: string;
@@ -107,7 +113,8 @@ export class FileScanResultService {
              fv.scan_result_json AS scanResultJson,
              fv.object_key AS objectKey, fv.object_etag AS objectEtag,
              fv.size_bytes AS sizeBytes,
-             fv.deleted_at AS deletedAt, fa.status AS assetStatus
+             fv.deleted_at AS deletedAt, fa.status AS assetStatus,
+             fa.target_type AS targetType, fa.asset_kind AS assetKind
         FROM file_versions fv JOIN file_assets fa ON fa.id = fv.asset_id AND fa.event_id = fv.event_id
        WHERE fv.id = ? AND fv.event_id = ?
     `,
@@ -122,14 +129,18 @@ export class FileScanResultService {
     scanResultJson: string,
   ) {
     const scanOperationId = `file-scan:${row.id}:attempt:${input.attempt}`;
+    const requiresHeadshotRevision =
+      input.status === "clean" &&
+      row.targetType === "person" &&
+      row.assetKind === "headshot";
     const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `
         INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action,
           entity_type, entity_id, correlation_id, metadata_json, created_at
         )
-        SELECT ?, event.organisation_id, version.event_id, ?, ?,
+        SELECT ?, 'provider', 'provider_webhook', 1, event.organisation_id, version.event_id, ?, ?,
                'file_version', version.id, ?, ?, unixepoch()
           FROM file_versions version
           JOIN events event
@@ -403,10 +414,10 @@ export class FileScanResultService {
       this.env.DB.prepare(
         `
         INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action,
           entity_type, entity_id, correlation_id, metadata_json, created_at
         )
-        SELECT ? || ':' || task.id, event.organisation_id, task.event_id, ?, 'task.file.rejected',
+        SELECT ? || ':' || task.id, 'provider', 'provider_webhook', 1, event.organisation_id, task.event_id, ?, 'task.file.rejected',
                'task_instance', task.id, ?, ?, unixepoch()
           FROM task_instances task
           JOIN events event ON event.id = task.event_id
@@ -485,6 +496,24 @@ export class FileScanResultService {
         input.status,
         input.status,
       ),
+      headshotProfileRevisionStatement(this.env, {
+        organisationId: input.organisationId,
+        eventId: input.eventId,
+        assetId: row.assetId,
+        headshotFileVersionId: input.status === "clean" ? row.id : null,
+        recordedByPersonId: null,
+        correlationId: scanOperationId,
+        enabled: requiresHeadshotRevision,
+      }),
+      headshotProfileRevisionGuardStatement(this.env, {
+        organisationId: input.organisationId,
+        eventId: input.eventId,
+        assetId: row.assetId,
+        headshotFileVersionId: input.status === "clean" ? row.id : null,
+        recordedByPersonId: null,
+        correlationId: scanOperationId,
+        enabled: requiresHeadshotRevision,
+      }),
     ]);
     if (
       (results[0]?.meta.changes ?? 0) === 1 &&

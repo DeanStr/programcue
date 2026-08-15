@@ -310,10 +310,10 @@ export class SpeakerRosterRecordCommands {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'speaker.admin.added', 'person', person.id, ?,
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'speaker.admin.added', 'person', person.id, ?,
                 json_object(
                   'enteredEmail', ?,
                   'routedEmail', ?,
@@ -627,10 +627,10 @@ export class SpeakerRosterRecordCommands {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, event.organisation_id, event.id, ?,
+         SELECT ?, 'person', 'admin_ui', 1, event.organisation_id, event.id, ?,
                 'speaker.admin.prospect_added', 'person', person.id, ?,
                 json_object(
                   'source', 'speaker_network',

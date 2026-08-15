@@ -163,9 +163,9 @@ export class EventAdministratorRepository {
       this.env.DB.prepare(
         `
         INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, 'membership.administrator.invited',
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'membership.administrator.invited',
                'membership', ?, ?, ?, unixepoch()
          WHERE changes() = 1
       `,
@@ -254,10 +254,10 @@ export class EventAdministratorRepository {
       this.env.DB.prepare(
         `
         INSERT OR IGNORE INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, correlation_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, 'membership.administrator.revoked',
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'membership.administrator.revoked',
                'membership', ?, ?, ?, unixepoch()
          WHERE changes() = 1
       `,

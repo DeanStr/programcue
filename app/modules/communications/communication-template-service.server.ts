@@ -498,8 +498,8 @@ export class CommunicationTemplateService {
         this.env.DB.prepare(
           `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, ?, version.event_id, ?, 'communication.template.version.created',
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, version.event_id, ?, 'communication.template.version.created',
                  'communication_template', version.template_id,
                  json_object(
                    'versionId', version.id,
@@ -606,8 +606,8 @@ export class CommunicationTemplateService {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'communication.template.published', 'communication_template_version', ?, ?, unixepoch()
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'communication.template.published', 'communication_template_version', ?, ?, unixepoch()
            WHERE EXISTS (
              SELECT 1
                FROM communication_templates publish_template

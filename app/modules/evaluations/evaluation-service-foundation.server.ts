@@ -115,8 +115,18 @@ export const advancementCommandResultSchema = z.object({
 
 export function evaluationAuditActor(actor: EvaluationAdminActor) {
   return "kind" in actor
-    ? { personId: null, actorId: actor.actorId }
-    : { personId: actor.personId, actorId: null };
+    ? {
+        personId: null,
+        actorId: actor.actorId,
+        actorKind: "api_key" as const,
+        origin: "api" as const,
+      }
+    : {
+        personId: actor.personId,
+        actorId: null,
+        actorKind: "person" as const,
+        origin: "admin_ui" as const,
+      };
 }
 
 export type Criterion = {

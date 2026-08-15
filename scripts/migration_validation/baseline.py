@@ -18,7 +18,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "submission_email_verifications", "submission_speakers",
         "evaluation_plans", "evaluation_teams", "evaluation_team_members", "evaluation_rounds",
         "evaluation_criteria", "evaluation_round_reviewers", "evaluator_conflicts", "evaluator_assignments", "reviews", "evaluation_discussion_messages", "ai_review_assessments",
-        "review_revisions", "review_moderations", "submission_decisions",
+        "review_revisions", "review_moderations", "submission_decisions", "speaker_profile_revisions",
         "tracks", "rooms", "schedule_policies", "sessions", "session_speakers", "event_speaker_workflows",
         "tags", "session_tags", "session_archives",
         "schedule_versions", "schedule_session_contents", "session_content_revisions", "schedule_entries", "schedule_conflicts",
@@ -82,6 +82,8 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "evaluator_conflicts": {"round_id", "submission_id", "session_id", "evaluator_person_id"},
         "evaluator_assignments": {"round_id", "submission_id", "session_id", "session_snapshot_json", "team_id", "revision", "cancellation_reason", "due_at"},
         "reviews": {"status", "scores_json", "revision", "locked_at"},
+        "review_revisions": {"scorecard_id", "scorecard_version", "criteria_snapshot_json"},
+        "speaker_profile_revisions": {"organisation_id", "event_id", "person_id", "source", "profile_revision", "display_name", "publication_status", "headshot_file_version_id", "recorded_by_person_id", "correlation_id"},
         "evaluation_discussion_messages": {"event_id", "round_id", "submission_id", "session_id", "author_person_id", "body", "idempotency_key"},
         "ai_review_assessments": {"round_id", "submission_id", "scorecard_id", "scorecard_version", "round_revision", "score", "rationale", "provider", "model", "provider_response_id", "override_score", "override_rationale", "override_by_person_id", "override_at", "revision", "last_operation_id"},
         "file_versions": {"object_key", "upload_status", "signature_status", "scan_status", "released_at"},
@@ -135,7 +137,8 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "idx_deliveries_communication_status", "idx_calendar_invitation_status",
         "idx_operation_jobs_event_status", "idx_operation_items_status",
         "idx_event_changes_cursor", "idx_webhook_deliveries_status",
-        "idx_audit_event_created",
+        "idx_audit_events_event_created_id", "idx_audit_events_organisation_created_id", "idx_audit_events_event_actor_created_id",
+        "idx_speaker_profile_revisions_person_created", "idx_speaker_profile_revisions_event_person_created",
         "idx_evaluation_rounds_schedule", "idx_evaluation_round_reviewers_round", "idx_evaluation_round_reviewers_person", "evaluation_criteria_position_unique", "idx_ai_review_assessments_round", "idx_ai_review_assessments_submission",
         "idx_organisation_contacts_status", "idx_organisation_contact_tags_tag",
         "idx_crm_pipeline_stage", "idx_crm_pipeline_activity_entry",
@@ -305,8 +308,8 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
     )
 
     connection.execute(
-        "INSERT INTO audit_events (id,event_id,action,entity_type,metadata_json) "
-        "VALUES ('audit-a','event-a','test','event','{}')"
+        "INSERT INTO audit_events (id,organisation_id,event_id,actor_person_id,actor_kind,origin,action,entity_type,metadata_version,metadata_json) "
+        "VALUES ('audit-a','org-a','event-a','person-a','person','internal','test','event',1,'{}')"
     )
     must_fail("UPDATE audit_events SET action='changed' WHERE id='audit-a'", "Audit update was accepted")
     must_fail("DELETE FROM audit_events WHERE id='audit-a'", "Audit delete was accepted")
@@ -328,6 +331,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "event_participant_profiles_retention_no_pii_insert",
         "event_participant_profiles_retention_no_pii_update",
         "event_participant_profiles_retention_no_pii_delete",
+        "speaker_profile_revisions_participant_retention_no_pii_insert",
         "submission_revisions_participant_retention_no_pii_update",
         "review_revisions_participant_retention_no_pii_update",
         "evaluation_discussion_messages_participant_retention_no_pii_insert",

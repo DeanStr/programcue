@@ -266,6 +266,20 @@ export default function AdminContentSession({
                     status={revision.contentStatus}
                   />
                 </div>
+                {revision.changes.length ? (
+                  <ul className="help mt">
+                    {revision.changes.map((change) => (
+                      <li key={change.label}>
+                        <strong>{change.label}:</strong>{" "}
+                        {change.label === "Required resources"
+                          ? "changed"
+                          : `${change.before} → ${change.after}`}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="help mt">Initial recorded content snapshot.</p>
+                )}
                 <details>
                   <summary>Inspect exact revision</summary>
                   <dl className="stack mt">

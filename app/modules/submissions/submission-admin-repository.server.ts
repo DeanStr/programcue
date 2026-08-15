@@ -7,6 +7,7 @@ import {
   type SubmittedSnapshot,
 } from "./submission-schema";
 import { z } from "zod";
+import { AuditReader } from "~/platform/audit/audit-reader.server";
 import {
   parseJson,
   type AdminSubmission,
@@ -391,9 +392,10 @@ export class SubmissionAdminRepository {
         `Submission ${row.id} is missing its immutable routing snapshot.`,
       );
     }
-    const [speakers, selectedTracks] = await Promise.all([
-      this.env.DB.prepare(
-        `
+    const [speakers, selectedTracks, savedRevisions, statusTimeline] =
+      await Promise.all([
+        this.env.DB.prepare(
+          `
       SELECT ss.id, ss.person_id AS personId, ss.display_name AS name,
              ss.email, ss.position, ss.invitation_status AS invitationStatus,
              ss.is_primary AS isPrimary, ss.role_label AS roleLabel,
@@ -403,28 +405,81 @@ export class SubmissionAdminRepository {
        WHERE ss.submission_id = ? AND ss.event_id = ?
        ORDER BY ss.position
     `,
-      )
-        .bind(submissionId, eventId)
-        .all<{
-          id: string;
-          personId: string | null;
-          name: string;
-          email: string;
-          position: number;
-          invitationStatus: string;
-          isPrimary: number;
-          roleLabel: string | null;
-          currentBiography: string;
-        }>(),
-      this.env.DB.prepare(
-        `SELECT track_id AS trackId, track_name_snapshot AS trackName
+        )
+          .bind(submissionId, eventId)
+          .all<{
+            id: string;
+            personId: string | null;
+            name: string;
+            email: string;
+            position: number;
+            invitationStatus: string;
+            isPrimary: number;
+            roleLabel: string | null;
+            currentBiography: string;
+          }>(),
+        this.env.DB.prepare(
+          `SELECT track_id AS trackId, track_name_snapshot AS trackName
            FROM submission_track_selections
           WHERE submission_id = ? AND event_id = ?
           ORDER BY position`,
-      )
-        .bind(submissionId, eventId)
-        .all<{ trackId: string; trackName: string }>(),
-    ]);
+        )
+          .bind(submissionId, eventId)
+          .all<{ trackId: string; trackName: string }>(),
+        this.env.DB.prepare(
+          `SELECT revision.revision_number AS revisionNumber,
+                revision.save_kind AS saveKind,
+                revision.created_at AS createdAt,
+                COALESCE(person.display_name, 'System') AS savedByName,
+                version.version_number AS formVersionNumber,
+                COALESCE(json_extract(version.settings_snapshot_json, '$.name'),
+                         'Application form') AS formName,
+                (SELECT COUNT(*) FROM json_each(revision.answers_json)) AS answerCount,
+                json_array_length(revision.speaker_snapshot_json) AS speakerCount
+           FROM submission_revisions revision
+           JOIN submissions submission
+             ON submission.id = revision.submission_id
+            AND submission.event_id = revision.event_id
+           JOIN events event
+             ON event.id = submission.event_id AND event.organisation_id = ?
+           JOIN form_versions version
+             ON version.id = revision.form_version_id
+            AND version.event_id = revision.event_id
+           LEFT JOIN people person ON person.id = revision.saved_by_person_id
+          WHERE revision.event_id = ? AND revision.submission_id = ?
+            AND revision.save_kind <> 'autosave'
+          ORDER BY revision.revision_number DESC
+          LIMIT 50`,
+        )
+          .bind(organisationId, eventId, submissionId)
+          .all<{
+            revisionNumber: number;
+            saveKind: "manual" | "submitted" | "withdrawn";
+            createdAt: number;
+            savedByName: string;
+            formVersionNumber: number;
+            formName: string;
+            answerCount: number;
+            speakerCount: number;
+          }>(),
+        new AuditReader(this.env).eventEntityHistory(
+          { organisationId, eventId },
+          {
+            entityType: "submission",
+            entityId: submissionId,
+            relatedMetadataKey: "submissionId",
+            actions: [
+              "submission.draft.created",
+              "submission.manual.created",
+              "submission.submitted",
+              "submission.revised",
+              "submission.updated",
+              "submission.withdrawn",
+            ],
+            limit: 50,
+          },
+        ),
+      ]);
     const snapshot =
       row.status === "draft"
         ? null
@@ -494,6 +549,8 @@ export class SubmissionAdminRepository {
       routedTeamIds,
       routedTo: requireRoutedTeamSummary(row.id, routedTeamIds, routing),
       routingExplanation,
+      savedRevisions: savedRevisions.results,
+      statusTimeline,
       uploads: snapshot ? snapshot.uploads : {},
       speakers: speakers.results.map(({ currentBiography, ...speaker }) => {
         const submittedBiography =

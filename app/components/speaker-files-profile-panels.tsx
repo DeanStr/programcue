@@ -8,6 +8,7 @@ import {
 import { Form, Link, useSubmit } from "react-router";
 
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
+import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
 import type { SpeakerPortal } from "~/components/speaker-dashboard-panel-shared";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
@@ -326,6 +327,10 @@ export function SpeakerProfilePanel({
           Save profile
         </button>
       </Form>
+      <SpeakerProfileHistory
+        revisions={portal.profileHistory}
+        timeZone={portal.event.timezone}
+      />
     </section>
   );
 }

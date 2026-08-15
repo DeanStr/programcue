@@ -31,7 +31,8 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
       `
         SELECT a.id, a.status, a.revision,
              a.submission_id AS submissionId, a.session_id AS sessionId,
-             a.round_id AS roundId
+             a.round_id AS roundId, r.scorecard_id AS scorecardId,
+             r.scorecard_version AS scorecardVersion
         FROM evaluator_assignments a
         JOIN evaluation_rounds r ON r.id = a.round_id AND r.event_id = a.event_id
         JOIN evaluation_plans plan
@@ -74,15 +75,19 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         submissionId: string | null;
         sessionId: string | null;
         roundId: string;
+        scorecardId: string;
+        scorecardVersion: number;
       }>();
     if (!assignment)
       throw new EvaluationStateError(
         "This assignment is unavailable or already submitted.",
       );
     const criteria = await this.env.DB.prepare(
-      `SELECT criterion.id, criterion.input_type AS inputType,
+      `SELECT criterion.id, criterion.name, criterion.description,
+              criterion.input_type AS inputType,
               criterion.options_json AS optionsJson,
-              criterion.weight_percent AS weightPercent, criterion.required
+              criterion.weight_percent AS weightPercent, criterion.required,
+              criterion.position
          FROM evaluation_criteria criterion
          JOIN evaluation_rounds round
            ON round.id = criterion.round_id AND round.event_id = criterion.event_id
@@ -94,11 +99,26 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
       .bind(viewer.organisationId, viewer.eventId, assignment.roundId)
       .all<{
         id: string;
+        name: string;
+        description: string | null;
         inputType: "scale_5" | "scale_10" | "yes_no" | "free_text" | "dropdown";
         optionsJson: string;
         weightPercent: number;
         required: number | boolean;
+        position: number;
       }>();
+    const criteriaSnapshotJson = JSON.stringify(
+      criteria.results.map((criterion) => ({
+        id: criterion.id,
+        name: criterion.name,
+        description: criterion.description,
+        inputType: criterion.inputType,
+        options: JSON.parse(criterion.optionsJson) as unknown,
+        weightPercent: criterion.weightPercent,
+        required: Boolean(criterion.required),
+        position: criterion.position,
+      })),
+    );
     const criterionIds = new Set(
       criteria.results.map((criterion) => criterion.id),
     );
@@ -437,8 +457,12 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
       ),
       this.env.DB.prepare(
         `
-        INSERT INTO review_revisions (id, event_id, review_id, revision_number, scores_json, content_json, save_kind, saved_by_person_id, idempotency_key, created_at)
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()
+        INSERT INTO review_revisions (
+          id, event_id, review_id, revision_number, scores_json, content_json,
+          save_kind, saved_by_person_id, idempotency_key, scorecard_id,
+          scorecard_version, criteria_snapshot_json, created_at
+        )
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM reviews review
             JOIN events event
@@ -462,9 +486,12 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         parsed.intent === "submit" ? "submitted" : "manual",
         viewer.personId,
         operationId,
+        assignment.scorecardId,
+        assignment.scorecardVersion,
+        criteriaSnapshotJson,
+        viewer.organisationId,
         reviewId,
         operationId,
-        viewer.organisationId,
         assignment.id,
         operationId,
       ),
@@ -489,8 +516,8 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         operationId,
       ),
       this.env.DB.prepare(
-        `INSERT INTO audit_events (id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at)
-         SELECT ?, ?, ?, ?, ?, 'review', ?, ?, unixepoch()
+        `INSERT INTO audit_events (id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at)
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'review', ?, ?, unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM reviews review
              JOIN events event
@@ -734,13 +761,18 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         operationId,
       ),
       this.env.DB.prepare(
-        `INSERT INTO audit_events (id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at) SELECT ?, ?, ?, ?, 'review.conflict.declared', 'evaluator_assignment', ?, '{}', unixepoch() WHERE EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND event_id = ? AND last_operation_id = ?)`,
+        `INSERT INTO audit_events (id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'review.conflict.declared', 'evaluator_assignment', ?, ?, unixepoch() WHERE EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND event_id = ? AND last_operation_id = ?)`,
       ).bind(
         crypto.randomUUID(),
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
         assignment.id,
+        JSON.stringify({
+          roundId: assignment.roundId,
+          targetType: assignment.submissionId ? "submission" : "session",
+          targetId: conflictTargetId,
+        }),
         assignment.id,
         viewer.eventId,
         operationId,

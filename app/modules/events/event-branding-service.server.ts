@@ -275,10 +275,12 @@ export class EventBrandingService {
     const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'event.branding.draft_saved', 'event', ?, ?, ?, unixepoch()
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?,
+                'event.branding.draft_saved', 'event', ?, ?, ?, unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM events WHERE id = ? AND organisation_id = ?
               AND brand_draft_revision = ?
@@ -393,10 +395,12 @@ export class EventBrandingService {
       const results = await this.env.DB.batch([
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id,
+             actor_person_id, action,
              entity_type, entity_id, correlation_id, metadata_json, created_at
            )
-           SELECT ?, ?, ?, ?, 'event.branding.asset_uploaded',
+           SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?,
+                  'event.branding.asset_uploaded',
                   'event_brand_asset', ?, ?, ?, unixepoch()
             WHERE EXISTS (
               SELECT 1 FROM events WHERE id = ? AND organisation_id = ?
@@ -534,10 +538,12 @@ export class EventBrandingService {
       results = await this.env.DB.batch([
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'event.branding.published', 'event', ?, ?, ?, unixepoch()
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?,
+                'event.branding.published', 'event', ?, ?, ?, unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM events WHERE id = ? AND organisation_id = ?
               AND brand_draft_revision = ?

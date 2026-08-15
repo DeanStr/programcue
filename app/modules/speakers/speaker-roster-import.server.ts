@@ -543,9 +543,9 @@ export class SpeakerRosterImportService {
     statements.push(
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) VALUES (?, ?, ?, ?,
+         ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?,
                    CASE WHEN (
                      SELECT COUNT(*) FROM event_speaker_workflows workflow
                       WHERE workflow.event_id = ?

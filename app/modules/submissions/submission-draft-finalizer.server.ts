@@ -404,10 +404,10 @@ export class SubmissionDraftFinalizer {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
           entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, 'submission.submitted', 'submission', ?, ?, unixepoch()
+        SELECT ?, 'person', 'public_form', 1, ?, ?, ?, 'submission.submitted', 'submission', ?, ?, unixepoch()
          WHERE EXISTS (SELECT 1 FROM submissions WHERE id = ? AND last_operation_id = ? AND status <> 'draft')
       `,
       ).bind(
@@ -644,9 +644,9 @@ export class SubmissionDraftFinalizer {
         ),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action, entity_type,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
              entity_id, correlation_id, metadata_json, created_at
-           ) SELECT ?, ?, ?, ?, 'session.direct.public_materialized', 'session',
+           ) SELECT ?, 'person', 'public_form', 1, ?, ?, ?, 'session.direct.public_materialized', 'session',
                     ?, ?, ?, unixepoch()
                WHERE EXISTS (
                  SELECT 1 FROM sessions

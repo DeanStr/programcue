@@ -503,10 +503,10 @@ export class CalendarOAuthService {
           ),
           this.env.DB.prepare(
             `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action, entity_type,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
            entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'calendar.connection.connected',
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'calendar.connection.connected',
                 'calendar_connection', ?, ?, unixepoch()
           WHERE changes() = 1`,
           ).bind(

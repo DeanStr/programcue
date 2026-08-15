@@ -269,6 +269,7 @@ export class AiAssistantCoreService {
   private async audit(
     viewer: Viewer,
     input: {
+      actorKind: "person" | "agent";
       action: string;
       entityType: string;
       entityId?: string | null;
@@ -278,15 +279,19 @@ export class AiAssistantCoreService {
   ) {
     await this.env.DB.prepare(
       `INSERT INTO audit_events (
-        id, organisation_id, event_id, actor_person_id, action,
+        id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
         entity_type, entity_id, correlation_id, metadata_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
+      ) VALUES (?, ?, 'admin_ui', 1, ?, ?, ?,
+                CASE WHEN ? = 'agent' THEN 'program_cue_agent' ELSE NULL END,
+                ?, ?, ?, ?, ?, unixepoch())`,
     )
       .bind(
         crypto.randomUUID(),
+        input.actorKind,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
+        input.actorKind,
         input.action,
         input.entityType,
         input.entityId ?? null,
@@ -408,6 +413,7 @@ export class AiAssistantCoreService {
       payload: { instructionHash },
     });
     await this.audit(viewer, {
+      actorKind: "person",
       action: "assistant.requested",
       entityType: "assistant_run",
       entityId: runId,
@@ -464,6 +470,7 @@ Lead with the answer, include material uncertainty, and end with the safest conc
             );
           }
           await this.audit(viewer, {
+            actorKind: "agent",
             action: "assistant.completed",
             entityType: "assistant_run",
             entityId: runId,
@@ -524,6 +531,7 @@ Lead with the answer, include material uncertainty, and end with the safest conc
           evidence.push(...execution.evidence);
           proposals.push(...execution.proposals);
           await this.audit(viewer, {
+            actorKind: "agent",
             action: "assistant.tool.completed",
             entityType: "assistant_run",
             entityId: runId,
@@ -545,6 +553,7 @@ Lead with the answer, include material uncertainty, and end with the safest conc
           });
         } catch (error) {
           await this.audit(viewer, {
+            actorKind: "agent",
             action: "assistant.tool.failed",
             entityType: "assistant_run",
             entityId: runId,
@@ -565,6 +574,7 @@ Lead with the answer, include material uncertainty, and end with the safest conc
     } catch (error) {
       await this.failAiOperation(runId, error);
       await this.audit(viewer, {
+        actorKind: "agent",
         action: "assistant.failed",
         entityType: "assistant_run",
         entityId: runId,
@@ -627,6 +637,7 @@ Lead with the answer, include material uncertainty, and end with the safest conc
       },
     });
     await this.audit(viewer, {
+      actorKind: "person",
       action: "assistant.context.requested",
       entityType: input.entityType,
       entityId: input.entityId,
@@ -773,6 +784,7 @@ Lead with the answer, include material uncertainty, and end with the safest conc
       }
       const model = response.model ?? provider.model;
       await this.audit(viewer, {
+        actorKind: "agent",
         action: "assistant.context.completed",
         entityType: input.entityType,
         entityId: input.entityId,
@@ -812,6 +824,7 @@ Lead with the answer, include material uncertainty, and end with the safest conc
     } catch (error) {
       await this.failAiOperation(correlationId, error);
       await this.audit(viewer, {
+        actorKind: "agent",
         action: "assistant.context.failed",
         entityType: input.entityType,
         entityId: input.entityId,

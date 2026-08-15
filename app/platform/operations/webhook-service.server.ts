@@ -215,6 +215,11 @@ export class WebhookService {
     auditEventId: string | null,
   ): Promise<PreparedWebhookEvent> {
     const input = queueEventSchema.parse(rawInput);
+    const auditActor = viewer.personId
+      ? { kind: "person" as const, origin: "admin_ui" as const }
+      : viewer.actorId
+        ? { kind: "api_key" as const, origin: "api" as const }
+        : { kind: "system" as const, origin: "queue" as const };
     const requestHash = await webhookRequestHash(input);
     const endpoints = await this.env.DB.prepare(
       `
@@ -413,13 +418,15 @@ export class WebhookService {
         this.env.DB.prepare(
           `
           INSERT INTO audit_events (
-            id, organisation_id, event_id, actor_person_id, actor_id, action,
+            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
             entity_type, entity_id, correlation_id, metadata_json, created_at
-          ) SELECT ?, ?, ?, ?, ?, 'webhook.queued', 'webhook_delivery', ?, ?, ?, unixepoch()
+          ) SELECT ?, ?, ?, 1, ?, ?, ?, ?, 'webhook.queued', 'webhook_delivery', ?, ?, ?, unixepoch()
              WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)
         `,
         ).bind(
           crypto.randomUUID(),
+          auditActor.kind,
+          auditActor.origin,
           viewer.organisationId,
           viewer.eventId,
           viewer.personId,
@@ -625,10 +632,7 @@ export class WebhookService {
       if (row.requestHash !== requestHash) {
         throw new WebhookEventIdempotencyConflictError(row.operationId);
       }
-      if (
-        webhookReplayStatus(row.status) === "queued" &&
-        !row.dispatchedAt
-      ) {
+      if (webhookReplayStatus(row.status) === "queued" && !row.dispatchedAt) {
         candidates.push({
           endpointId: row.endpointId,
           endpointIdempotencyKey: row.endpointIdempotencyKey,
@@ -841,9 +845,9 @@ export class WebhookService {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'webhook.test_queued', 'webhook_delivery', ?,
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'webhook.test_queued', 'webhook_delivery', ?,
                  ?, ?, unixepoch()
            WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)
       `,

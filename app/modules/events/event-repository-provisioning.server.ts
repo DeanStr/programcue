@@ -164,9 +164,9 @@ export class EventRepositoryProvisioningService {
   ) {
     return this.env.DB.prepare(
       `INSERT INTO audit_events (
-         id, organisation_id, event_id, actor_person_id, action,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
          entity_type, entity_id, correlation_id, metadata_json, created_at
-       ) SELECT ?, ?, ?, ?, 'airtable.repository.configured',
+       ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'airtable.repository.configured',
                   'integration_connection', ?, ?, ?, unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM integration_connections
@@ -335,9 +335,9 @@ export class EventRepositoryProvisioningService {
         ),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, correlation_id, metadata_json, created_at
-           ) SELECT ?, ?, ?, ?, 'event.repository.selected',
+           ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'event.repository.selected',
                     'event', ?, ?, ?, unixepoch()
               WHERE EXISTS (
                 SELECT 1
@@ -446,9 +446,9 @@ export class EventRepositoryProvisioningService {
         ),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, correlation_id, metadata_json, created_at
-           ) SELECT ?, ?, ?, ?, 'event.repository.provisioning_failed',
+           ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'event.repository.provisioning_failed',
                     'event', ?, ?, ?, unixepoch()
               WHERE EXISTS (
                 SELECT 1
@@ -505,7 +505,9 @@ export class EventRepositoryProvisioningService {
           eventId,
         )
         .first<{ leaseExpired: number | null }>();
-      const terminalFailureKind = terminal?.leaseExpired ? "internal" : failureKind;
+      const terminalFailureKind = terminal?.leaseExpired
+        ? "internal"
+        : failureKind;
       throw new EventRepositoryProvisioningError(
         terminal?.leaseExpired
           ? EVENT_CREATION_STALLED_MESSAGE

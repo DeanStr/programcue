@@ -375,12 +375,13 @@ export class SubmissionApplicantRepository {
         ),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'submission.draft.created', 'submission', ?, ?, unixepoch()
+         ) SELECT ?, CASE WHEN ? IS NULL THEN 'system' ELSE 'person' END, 'public_form', 1, ?, ?, ?, 'submission.draft.created', 'submission', ?, ?, unixepoch()
             WHERE EXISTS (SELECT 1 FROM submissions WHERE id = ? AND event_id = ?)`,
         ).bind(
           event.auditEventId,
+          applicant.personId,
           event.organisationId,
           form.eventId,
           applicant.personId,
@@ -601,10 +602,10 @@ export class SubmissionApplicantRepository {
       this.env.DB.prepare(
         `
       INSERT INTO audit_events (
-        id, organisation_id, event_id, actor_person_id, action, entity_type,
+        id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
         entity_id, metadata_json, created_at
       )
-      SELECT ?, event.organisation_id, ?, ?, 'submission.draft.saved',
+      SELECT ?, CASE WHEN ? IS NULL THEN 'system' ELSE 'person' END, 'public_form', 1, event.organisation_id, ?, ?, 'submission.draft.saved',
              'submission', ?, ?, unixepoch()
         FROM events event
        WHERE event.id = ?
@@ -612,6 +613,7 @@ export class SubmissionApplicantRepository {
     `,
       ).bind(
         crypto.randomUUID(),
+        applicant.personId,
         form.eventId,
         applicant.personId,
         payload.submissionId,
@@ -717,10 +719,10 @@ export class SubmissionApplicantRepository {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, event.organisation_id, submission.event_id, ?,
+         SELECT ?, 'person', 'public_form', 1, event.organisation_id, submission.event_id, ?,
                 'evaluation.assignments.cancelled_by_withdrawal',
                 'submission', submission.id, ?,
                 json_object('assignmentCount', (
@@ -783,10 +785,10 @@ export class SubmissionApplicantRepository {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, event.organisation_id, submission.event_id, ?,
+         SELECT ?, 'person', 'public_form', 1, event.organisation_id, submission.event_id, ?,
                 'submission.withdrawn', 'submission', submission.id, ?, ?,
                 unixepoch()
            FROM submissions submission

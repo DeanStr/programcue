@@ -433,6 +433,28 @@ describe("Submissions D1 vertical slice", () => {
         submissionId,
       );
       expect(adminDetail?.answers.description).toContain(appended);
+      expect(adminDetail?.savedRevisions.slice(0, 2)).toEqual([
+        expect.objectContaining({
+          revisionNumber: revised.revision,
+          saveKind: "submitted",
+          savedByName: expect.any(String),
+        }),
+        expect.objectContaining({
+          revisionNumber: submitted.revision,
+          saveKind: "submitted",
+        }),
+      ]);
+      expect(adminDetail?.statusTimeline).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ action: "submission.submitted" }),
+          expect.objectContaining({ action: "submission.revised" }),
+        ]),
+      );
+      expect(adminDetail?.statusTimeline).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ action: "submission.draft.saved" }),
+        ]),
+      );
       const revisions = await testEnv.DB.prepare(
         `SELECT revision_number AS revisionNumber, answers_json AS answersJson,
                 save_kind AS saveKind

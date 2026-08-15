@@ -13,6 +13,7 @@ import { ZodError } from "zod";
 import type { Route } from "./+types/admin-speaker-detail";
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
+import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
 import {
   DomainStatusBadge,
   statusPresentation,
@@ -569,6 +570,10 @@ export default function AdminSpeakerDetail({
             </fieldset>
           </Form>
         )}
+        <SpeakerProfileHistory
+          revisions={detail.profileHistory}
+          timeZone={event.timezone}
+        />
       </section>
       <section className="card pad mt" id="sessions">
         <div className="card-title">

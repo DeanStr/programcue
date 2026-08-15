@@ -194,10 +194,10 @@ async function finishFailure(input: {
     env.DB.prepare(
       `
       INSERT INTO audit_events (
-        id, organisation_id, event_id, action, entity_type, entity_id,
+        id, actor_kind, origin, metadata_version, organisation_id, event_id, action, entity_type, entity_id,
         metadata_json, created_at
       )
-      SELECT ?, ?, ?, 'webhook.delivery_failed', 'webhook_delivery', ?, ?, unixepoch()
+      SELECT ?, 'system', 'queue', 1, ?, ?, 'webhook.delivery_failed', 'webhook_delivery', ?, ?, unixepoch()
        WHERE EXISTS (
          SELECT 1 FROM operation_jobs o
           WHERE o.id = ? AND o.event_id = ? AND o.status = 'failed'
@@ -603,10 +603,10 @@ export async function processWebhookDelivery(
     env.DB.prepare(
       `
       INSERT INTO audit_events (
-        id, organisation_id, event_id, action, entity_type, entity_id,
+        id, actor_kind, origin, metadata_version, organisation_id, event_id, action, entity_type, entity_id,
         metadata_json, created_at
       )
-      SELECT ?, ?, ?, 'webhook.delivered', 'webhook_delivery', ?, ?, unixepoch()
+      SELECT ?, 'system', 'queue', 1, ?, ?, 'webhook.delivered', 'webhook_delivery', ?, ?, unixepoch()
        WHERE EXISTS (
          SELECT 1 FROM operation_jobs o
           WHERE o.id = ? AND o.event_id = ? AND o.status = 'completed'

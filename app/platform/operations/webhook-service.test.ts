@@ -646,9 +646,9 @@ describe("outbound webhooks", () => {
     await testEnv.DB.batch([
       testEnv.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) VALUES (?, ?, ?, ?, 'speaker.profile.updated', 'person', ?, '{}', unixepoch())`,
+         ) VALUES (?, 'person', 'internal', 1, ?, ?, ?, 'speaker.profile.updated', 'person', ?, '{}', unixepoch())`,
       ).bind(
         auditEventId,
         viewer.organisationId,

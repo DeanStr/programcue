@@ -105,6 +105,14 @@ test("mobile administration sections reveal linked content without overflow", as
   await expectNoHorizontalPageOverflow(page);
   await expectNoContrastViolations(page, "Command Centre");
 
+  await waitForInterface(page, "/admin/operations?panel=activity");
+  await expect(
+    page.getByRole("heading", { name: "Event activity timeline" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Scope")).toHaveCount(0);
+  await expect(page.getByLabel("Find actors")).toBeVisible();
+  await expectNoHorizontalPageOverflow(page);
+
   // Sender profiles, automation and calendar accounts are configured once and
   // then left alone, so they sit behind Delivery settings rather than on the
   // page an operator opens to send something today.

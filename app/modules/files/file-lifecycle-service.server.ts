@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  headshotProfileRevisionGuardStatement,
+  headshotProfileRevisionStatement,
+} from "~/modules/speakers/speaker-profile-revision.server";
+import {
   FileAccessError,
   FileErasureConfirmationError,
   FileErasureIncompleteError,
@@ -18,6 +22,10 @@ export type FileErasureInput = {
 
 type FileErasurePreview = {
   id: string;
+  targetType: string;
+  targetId: string;
+  assetKind: string;
+  releasedHeadshotVersionId: string | null;
   versionCount: number;
   resourceAttachmentCount: number;
   taskEvidenceCount: number;
@@ -44,6 +52,19 @@ export class FileLifecycleService {
       SELECT asset.id, asset.target_type AS targetType,
              asset.target_id AS targetId, asset.asset_kind AS assetKind,
              asset.owner_person_id AS ownerPersonId, asset.status,
+             (
+               SELECT version.id FROM file_versions version
+                WHERE asset.target_type = 'person'
+                  AND asset.asset_kind = 'headshot'
+                  AND version.id = asset.current_version_id
+                  AND version.event_id = asset.event_id
+                  AND version.asset_id = asset.id
+                  AND version.upload_status = 'uploaded'
+                  AND version.signature_status = 'valid'
+                  AND version.scan_status = 'clean'
+                  AND version.released_at IS NOT NULL
+                  AND version.deleted_at IS NULL
+             ) AS releasedHeadshotVersionId,
              (
                SELECT version.original_filename FROM file_versions version
                 WHERE version.asset_id = asset.id AND version.event_id = asset.event_id
@@ -79,6 +100,7 @@ export class FileLifecycleService {
         targetType: string;
         targetId: string;
         assetKind: string;
+        releasedHeadshotVersionId: string | null;
         ownerPersonId: string | null;
         status: string;
         latestFilename: string | null;
@@ -208,10 +230,10 @@ export class FileLifecycleService {
       ).bind(viewer.personId, viewer.eventId, preview.id, ...retentionBindings),
       this.env.DB.prepare(
         `INSERT OR IGNORE INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'file.erasure.requested',
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'file.erasure.requested',
                 'file_asset', ?, ?, ?, unixepoch()
           WHERE 1 = 1
             ${retentionGuard}`,
@@ -303,7 +325,7 @@ export class FileLifecycleService {
 
   private async eraseAssetProviderState(
     viewer: Viewer,
-    assetId: string,
+    preview: FileErasurePreview,
     operationId: string,
     versions: { results: ErasureVersion[] },
   ) {
@@ -343,28 +365,49 @@ export class FileLifecycleService {
               SET deleted_at = COALESCE(deleted_at, unixepoch()),
                   released_at = NULL
             WHERE asset_id = ? AND event_id = ?`,
-        ).bind(assetId, viewer.eventId),
+        ).bind(preview.id, viewer.eventId),
         this.env.DB.prepare(
           `UPDATE file_assets
               SET status = 'deleted', current_version_id = NULL,
                   updated_at = unixepoch()
             WHERE id = ? AND event_id = ?`,
-        ).bind(assetId, viewer.eventId),
+        ).bind(preview.id, viewer.eventId),
         this.env.DB.prepare(
           `INSERT OR IGNORE INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, correlation_id, metadata_json, created_at
-           ) VALUES (?, ?, ?, ?, 'file.erasure.completed',
+           ) VALUES (?, 'person', ?, 1, ?, ?, ?, 'file.erasure.completed',
                      'file_asset', ?, ?, ?, unixepoch())`,
         ).bind(
-          `file-erasure-complete:${assetId}`,
+          `file-erasure-complete:${preview.id}`,
+          ["owner", "administrator"].includes(viewer.role)
+            ? "admin_ui"
+            : "participant_ui",
           viewer.organisationId,
           viewer.eventId,
           viewer.personId,
-          assetId,
+          preview.id,
           operationId,
           JSON.stringify({ erasedVersions: versions.results.length }),
         ),
+        headshotProfileRevisionStatement(this.env, {
+          organisationId: viewer.organisationId,
+          eventId: viewer.eventId,
+          assetId: preview.id,
+          headshotFileVersionId: null,
+          recordedByPersonId: viewer.personId,
+          correlationId: operationId,
+          enabled: preview.releasedHeadshotVersionId !== null,
+        }),
+        headshotProfileRevisionGuardStatement(this.env, {
+          organisationId: viewer.organisationId,
+          eventId: viewer.eventId,
+          assetId: preview.id,
+          headshotFileVersionId: null,
+          recordedByPersonId: viewer.personId,
+          correlationId: operationId,
+          enabled: preview.releasedHeadshotVersionId !== null,
+        }),
       ]);
     } catch (error) {
       throw new FileErasureIncompleteError(operationId, { cause: error });
@@ -403,12 +446,7 @@ export class FileLifecycleService {
     )
       .bind(preview.id, viewer.eventId)
       .all<ErasureVersion>();
-    await this.eraseAssetProviderState(
-      viewer,
-      preview.id,
-      operationId,
-      versions,
-    );
+    await this.eraseAssetProviderState(viewer, preview, operationId, versions);
     return {
       operationId,
       duplicate: false,
@@ -515,10 +553,10 @@ export class FileLifecycleService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, ?, 'event', ?, ?, unixepoch()
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'event', ?, ?, unixepoch()
           WHERE changes() = 1`,
       ).bind(
         crypto.randomUUID(),

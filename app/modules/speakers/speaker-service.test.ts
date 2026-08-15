@@ -608,6 +608,49 @@ describe("speaker profile service", () => {
       travelPreferences: "Vegetarian meals and step-free ground transport.",
     });
     expect(saved.profile.revision).toBe(portal.profile.revision + 1);
+    expect(saved.profileHistory[0]).toMatchObject({
+      source: "canonical_person",
+      profileRevision: saved.profile.revision,
+      displayName: saved.profile.name,
+      jobTitle: "Director",
+      publicationStatus: "published",
+      recordedByName: speaker.name,
+    });
+    expect(saved.profileHistory[0]).not.toHaveProperty("travelPreferences");
+    expect(saved.profileHistory[0]).not.toHaveProperty("email");
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO speaker_profile_revisions (
+           id, organisation_id, event_id, person_id, source, profile_revision,
+           display_name, publication_status, correlation_id, created_at
+         ) VALUES (?, 'other-organisation', ?, ?, 'canonical_person', 999,
+                   'Cross-organisation leak', 'published', ?, unixepoch() + 10)`,
+      ).bind(
+        crypto.randomUUID(),
+        speaker.eventId,
+        speaker.personId,
+        crypto.randomUUID(),
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO speaker_profile_revisions (
+           id, organisation_id, event_id, person_id, source, profile_revision,
+           display_name, publication_status, correlation_id, created_at
+         ) VALUES (?, ?, 'other-event', ?, 'canonical_person', 998,
+                   'Cross-event leak', 'published', ?, unixepoch() + 10)`,
+      ).bind(
+        crypto.randomUUID(),
+        speaker.organisationId,
+        speaker.personId,
+        crypto.randomUUID(),
+      ),
+    ]);
+    expect(
+      (await service.getPortal(speaker)).profileHistory.map(
+        ({ displayName }) => displayName,
+      ),
+    ).not.toEqual(
+      expect.arrayContaining(["Cross-organisation leak", "Cross-event leak"]),
+    );
 
     await expect(
       service.updateProfile(speaker, {

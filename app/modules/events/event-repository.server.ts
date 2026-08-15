@@ -847,9 +847,9 @@ export class D1EventRepository implements EventRepository {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, 'event.settings.updated', 'event', ?, ?, unixepoch()
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'event.settings.updated', 'event', ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM events WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
          )

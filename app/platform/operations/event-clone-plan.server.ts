@@ -641,9 +641,9 @@ export function buildEventClonePlan(
     ),
     env.DB.prepare(
       `INSERT INTO audit_events (
-         id,organisation_id,event_id,actor_person_id,action,entity_type,
+         id, actor_kind, origin, metadata_version,organisation_id,event_id,actor_person_id,action,entity_type,
          entity_id,correlation_id,metadata_json,created_at
-       ) VALUES (?,?,?,?, 'event.cloned','event',?,?,?,unixepoch())`,
+       ) VALUES (?, 'person', 'admin_ui', 1,?,?,?, 'event.cloned','event',?,?,?,unixepoch())`,
     ).bind(
       crypto.randomUUID(),
       viewer.organisationId,
@@ -663,9 +663,9 @@ export function buildEventClonePlan(
     ),
     env.DB.prepare(
       `INSERT INTO audit_events (
-         id,organisation_id,event_id,actor_person_id,action,entity_type,
+         id, actor_kind, origin, metadata_version,organisation_id,event_id,actor_person_id,action,entity_type,
          entity_id,correlation_id,metadata_json,created_at
-       ) VALUES (?,?,?,?, 'event.created_from_template','event',?,?,?,unixepoch())`,
+       ) VALUES (?, 'person', 'admin_ui', 1,?,?,?, 'event.created_from_template','event',?,?,?,unixepoch())`,
     ).bind(
       crypto.randomUUID(),
       viewer.organisationId,

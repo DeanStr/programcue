@@ -282,9 +282,9 @@ export class WebhookEndpointService {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, 'webhook_endpoint.created', 'webhook_endpoint',
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'webhook_endpoint.created', 'webhook_endpoint',
                  ?, ?, unixepoch()
            WHERE EXISTS (SELECT 1 FROM webhook_endpoints WHERE id = ?)
       `,
@@ -350,9 +350,9 @@ export class WebhookEndpointService {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, ?, 'webhook_endpoint', ?, ?, '{}', unixepoch()
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'webhook_endpoint', ?, ?, '{}', unixepoch()
            WHERE changes() = 1
       `,
       ).bind(
@@ -416,9 +416,9 @@ export class WebhookEndpointService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, ?, ?, ?, 'webhook_endpoint.secret_rotated',
+         ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'webhook_endpoint.secret_rotated',
                   'webhook_endpoint', ?, ?, '{}', unixepoch()
              FROM webhook_endpoints
             WHERE id = ? AND event_id = ? AND organisation_id = ?

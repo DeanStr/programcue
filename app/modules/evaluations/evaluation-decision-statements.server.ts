@@ -236,10 +236,10 @@ export function buildAcceptanceTaskPlanStatements(input: {
       `
       ${acceptanceTaskPlanCteSql}
       INSERT INTO audit_events (
-        id, organisation_id, event_id, actor_person_id, action,
+        id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
         entity_type, entity_id, metadata_json, created_at
       )
-      SELECT lower(hex(randomblob(16))), ?, scope.event_id, ?,
+      SELECT lower(hex(randomblob(16))), 'person', 'admin_ui', 1, ?, scope.event_id, ?,
              'task.assigned', 'task_instance', task.id,
              json_object(
                'templateId', task.template_id,
@@ -627,10 +627,10 @@ export function buildDecisionStatements(input: {
             env.DB.prepare(
               `
               INSERT INTO audit_events (
-                id, organisation_id, event_id, actor_person_id, action,
+                id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
                 entity_type, entity_id, metadata_json, created_at
               )
-              SELECT ?, ?, ?, ?, 'membership.speaker.invited',
+              SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'membership.speaker.invited',
                      'membership', membership.id, ?, unixepoch()
                 FROM memberships membership
                WHERE membership.event_id = ? AND membership.person_id = ?
@@ -703,10 +703,10 @@ export function buildDecisionStatements(input: {
     env.DB.prepare(
       `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, ?, 'submission_decision', ?, ?, unixepoch()
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'submission_decision', ?, ?, unixepoch()
          WHERE EXISTS (SELECT 1 FROM submission_decisions WHERE id = ? AND event_id = ?)
       `,
     ).bind(

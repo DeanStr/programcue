@@ -378,8 +378,8 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, ?, ?, 'task_instance', ?, ?, ?, unixepoch()
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at
+        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'task_instance', ?, ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM task_instances
             WHERE id = ? AND event_id = ? AND revision = ? AND last_operation_id = ?

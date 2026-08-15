@@ -660,9 +660,9 @@ export class ApiTaskService {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, actor_id,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id,
           action, entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) SELECT ?, ?, ?, NULL, ?, 'task.created', 'task_instance', ?, ?, ?, unixepoch()
+        ) SELECT ?, 'api_key', 'api', 1, ?, ?, NULL, ?, 'task.created', 'task_instance', ?, ?, ?, unixepoch()
            WHERE EXISTS (
              SELECT 1 FROM task_instances
               WHERE id = ? AND event_id = ? AND idempotency_key = ?

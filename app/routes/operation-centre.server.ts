@@ -74,6 +74,31 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const type = search.get("type") ?? "";
   const operationId = search.get("operation") ?? "";
   const panel = search.get("panel") ?? "";
+  const requestedActivityScope = search.get("activityScope") ?? "event";
+  if (
+    requestedActivityScope !== "event" &&
+    requestedActivityScope !== "organisation"
+  ) {
+    throw new Response("Activity scope is invalid.", { status: 400 });
+  }
+  const organisationActivityMembership = await env.DB.prepare(
+    `SELECT 1
+       FROM memberships
+      WHERE organisation_id = ? AND event_id IS NULL AND person_id = ?
+        AND role IN ('owner','administrator')
+        AND accepted_at IS NOT NULL AND revoked_at IS NULL
+      LIMIT 1`,
+  )
+    .bind(viewer.organisationId, viewer.personId)
+    .first();
+  const canViewOrganisationActivity = Boolean(organisationActivityMembership);
+  const activityScope = requestedActivityScope;
+  if (activityScope === "organisation" && !canViewOrganisationActivity) {
+    throw new Response(
+      "Organisation-wide owner or administrator access is required for organisation activity.",
+      { status: 403, statusText: "Forbidden" },
+    );
+  }
   const failurePage = failurePageFromSearch(search, status);
   const operationRead =
     status === "failed"
@@ -105,11 +130,27 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     : operationResult.items;
   const activityFilters = {
     area: search.get("activityArea") ?? "",
-    actorPersonId: search.get("activityActor") ?? "",
+    actorKey: search.get("activityActor") ?? "",
+    actorSearch: search.get("activityActorQuery") ?? "",
     query: search.get("activityQuery") ?? "",
   };
-  const activity =
-    panel === "activity" ? await service.activity(viewer, activityFilters) : [];
+  const [activityPage, activityActors] =
+    panel === "activity"
+      ? await Promise.all([
+          service.activity(viewer, {
+            scope: activityScope,
+            area: activityFilters.area,
+            actorKey: activityFilters.actorKey,
+            query: activityFilters.query,
+            cursor: search.get("activityCursor") ?? undefined,
+          }),
+          service.activityActors(viewer, {
+            scope: activityScope,
+            search: activityFilters.actorSearch,
+            selectedKey: activityFilters.actorKey,
+          }),
+        ])
+      : [{ items: [], nextCursor: null }, []];
   const listedSelection = operations.find(
     (operation) => operation.id === operationId,
   );
@@ -151,19 +192,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     filters: { status, type },
     failurePagination,
     panel,
-    activity,
+    activity: activityPage.items,
+    activityNextCursor: activityPage.nextCursor,
+    activityScope,
     activityAreas,
-    activityActors: [
-      ...new Map(
-        activity
-          .filter((item) => item.actorPersonId)
-          .map((item) => [
-            item.actorPersonId!,
-            { id: item.actorPersonId!, name: item.actorName },
-          ]),
-      ).values(),
-    ].sort((left, right) => left.name.localeCompare(right.name)),
+    activityActors,
     activityFilters,
+    canViewOrganisationActivity,
     filterActive: Boolean(status || type || operationId),
     eventId: viewer.eventId,
     eventTimezone,

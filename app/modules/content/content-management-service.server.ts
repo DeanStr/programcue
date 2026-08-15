@@ -45,6 +45,52 @@ type ContentRevisionRow = {
   createdAt: number;
 };
 
+function contentRevisionChanges(
+  revision: ContentRevisionRow,
+  previous: ContentRevisionRow | undefined,
+) {
+  if (!previous) return [];
+  const fields: Array<{
+    label: string;
+    before: string;
+    after: string;
+  }> = [
+    { label: "Title", before: previous.title, after: revision.title },
+    {
+      label: "Description",
+      before: previous.description ?? "No description",
+      after: revision.description ?? "No description",
+    },
+    {
+      label: "Track",
+      before: previous.trackName ?? "No track",
+      after: revision.trackName ?? "No track",
+    },
+    { label: "Format", before: previous.format, after: revision.format },
+    {
+      label: "Duration",
+      before: `${previous.durationMinutes} minutes`,
+      after: `${revision.durationMinutes} minutes`,
+    },
+    {
+      label: "Visibility",
+      before: previous.visibility,
+      after: revision.visibility,
+    },
+    {
+      label: "Content status",
+      before: previous.contentStatus.replaceAll("_", " "),
+      after: revision.contentStatus.replaceAll("_", " "),
+    },
+    {
+      label: "Required resources",
+      before: previous.requiredResourcesJson,
+      after: revision.requiredResourcesJson,
+    },
+  ];
+  return fields.filter((field) => field.before !== field.after);
+}
+
 type ContentApprovalProvenance = {
   sessionId: string;
   contentStatus: ContentStatus;
@@ -675,7 +721,13 @@ export class ContentManagementService {
     const last = page.at(-1);
     return {
       current,
-      revisions: page,
+      revisions: page.map((revision, index) => ({
+        ...revision,
+        changes: contentRevisionChanges(
+          revision,
+          revisions.results[index + 1],
+        ),
+      })),
       nextHistoryCursor:
         revisions.results.length > CONTENT_HISTORY_PAGE_SIZE && last
           ? `${last.scheduleVersionNumber}:${last.revisionNumber}`
@@ -843,10 +895,10 @@ export class ContentManagementService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'session.content.status_changed', 'session', ?, ?,
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'session.content.status_changed', 'session', ?, ?,
                 unixepoch()
           WHERE EXISTS (SELECT 1 FROM session_content_revisions WHERE id = ?)`,
       ).bind(

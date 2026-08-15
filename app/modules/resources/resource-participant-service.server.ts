@@ -205,9 +205,9 @@ export class ResourceParticipantService extends ResourceServiceBase {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, 'resource.acknowledged', 'resource_page', ?, ?, unixepoch()
+        SELECT ?, 'person', 'participant_ui', 1, ?, ?, ?, 'resource.acknowledged', 'resource_page', ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM resource_acknowledgements
             WHERE id = ? AND event_id = ? AND resource_page_id = ?

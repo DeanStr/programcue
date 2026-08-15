@@ -254,10 +254,10 @@ export class CommunicationAutomationService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action, entity_type,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
            entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'communication.trigger.saved',
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'communication.trigger.saved',
                 'communication_trigger', ?, ?, unixepoch()
           WHERE changes() = 1
             AND EXISTS (SELECT 1 FROM communication_triggers WHERE id = ? AND event_id = ?)`,
@@ -342,10 +342,10 @@ export class CommunicationAutomationService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action, entity_type,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type,
            entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, ?, 'communication_trigger', ?, '{}', unixepoch()
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'communication_trigger', ?, '{}', unixepoch()
           WHERE changes() = 1`,
       ).bind(
         crypto.randomUUID(),
@@ -436,10 +436,10 @@ export class CommunicationAutomationService {
         ).bind(operationId, now, scheduled.id, scheduled.eventId, operationId),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
-             id, organisation_id, event_id, actor_person_id, action,
+             id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
              entity_type, entity_id, metadata_json, created_at
            )
-           SELECT ?, ?, ?, ?, 'communication.schedule.released',
+           SELECT ?, 'system', 'scheduled', 1, ?, ?, ?, 'communication.schedule.released',
                   'communication', ?, json_object('operationId', ?), ?
             WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)`,
         ).bind(
@@ -643,10 +643,10 @@ export class CommunicationAutomationService {
         const results = await this.env.DB.batch([
           this.env.DB.prepare(
             `INSERT INTO audit_events (
-                 id, organisation_id, event_id, action, entity_type, entity_id,
+                 id, actor_kind, origin, metadata_version, organisation_id, event_id, action, entity_type, entity_id,
                  metadata_json, created_at
                )
-               SELECT lower(hex(randomblob(16))), event.organisation_id,
+               SELECT lower(hex(randomblob(16))), 'system', 'scheduled', 1, event.organisation_id,
                       task.event_id, 'task.overdue.automatic',
                       'task_instance', task.id,
                       json_object('dueAt', task.due_at), ?

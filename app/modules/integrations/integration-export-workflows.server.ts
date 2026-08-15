@@ -424,11 +424,13 @@ export abstract class IntegrationExportWorkflows extends IntegrationMappingWorkf
       }),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, actor_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, 'integration.run.created', 'integration_run', ?, ?, ?, unixepoch())`,
+         ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, 'integration.run.created', 'integration_run', ?, ?, ?, unixepoch())`,
       ).bind(
         crypto.randomUUID(),
+        auditActor.actorKind,
+        auditActor.origin,
         viewer.organisationId,
         viewer.eventId,
         auditActor.personId,

@@ -150,10 +150,10 @@ INSERT INTO memberships (
 );
 
 INSERT INTO audit_events (
-  id, organisation_id, event_id, actor_person_id, action,
+  id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
   entity_type, entity_id, metadata_json, created_at
 ) VALUES (
-  ${sqlString(auditId)}, ${sqlString(organisationId)}, ${sqlString(input.eventId)},
+  ${sqlString(auditId)}, 'person', 'internal', 1, ${sqlString(organisationId)}, ${sqlString(input.eventId)},
   ${sqlString(personId)}, 'production.bootstrap.completed', 'event', ${sqlString(input.eventId)},
   ${sqlString(JSON.stringify({ ownerEmail: input.ownerEmail }))}, unixepoch()
 );

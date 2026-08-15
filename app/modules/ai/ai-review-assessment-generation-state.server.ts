@@ -134,10 +134,10 @@ export class AiReviewAssessmentGenerationState extends AiReviewAssessmentFoundat
       ),
       this.env.DB.prepare(
         `INSERT OR IGNORE INTO audit_events (
-         id, organisation_id, event_id, actor_person_id, action,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
          entity_type, entity_id, correlation_id, metadata_json, created_at
        )
-       SELECT ?, operation.organisation_id, operation.event_id,
+       SELECT ?, 'person', 'admin_ui', 1, operation.organisation_id, operation.event_id,
               operation.requested_by_person_id,
               'ai.review_assessment.requested', 'submission', ?,
               operation.id, ?, ?

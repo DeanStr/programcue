@@ -573,6 +573,9 @@ export const reviewRevisions = sqliteTable(
       .notNull()
       .references(() => people.id),
     idempotencyKey: text("idempotency_key"),
+    scorecardId: text("scorecard_id"),
+    scorecardVersion: integer("scorecard_version"),
+    criteriaSnapshotJson: text("criteria_snapshot_json"),
     createdAt: integer("created_at").notNull().default(epochNow),
   },
   (table) => [

@@ -544,9 +544,9 @@ describe("Submissions D1 vertical slice", () => {
       const fixtureGeneration = crypto.randomUUID();
       await evaluationEnvironment.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) VALUES (?, 'org-future-events', 'evt-foe-2025', 'test-operator',
+         ) VALUES (?, 'system', 'internal', 1, 'org-future-events', 'evt-foe-2025', 'test-operator',
                    'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
                    unixepoch())`,
       )
@@ -601,9 +601,9 @@ describe("Submissions D1 vertical slice", () => {
       } as CloudflareEnvironment;
       await evaluationEnvironment.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) VALUES (?, 'org-future-events', 'evt-foe-2025', 'test-operator',
+         ) VALUES (?, 'system', 'internal', 1, 'org-future-events', 'evt-foe-2025', 'test-operator',
                    'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
                    unixepoch())`,
       )
@@ -636,9 +636,9 @@ describe("Submissions D1 vertical slice", () => {
       } as CloudflareEnvironment;
       await evaluationEnvironment.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action,
            entity_type, entity_id, metadata_json, created_at
-         ) VALUES (?, 'org-future-events', 'evt-foe-2025', 'test-operator',
+         ) VALUES (?, 'system', 'internal', 1, 'org-future-events', 'evt-foe-2025', 'test-operator',
                    'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
                    unixepoch())`,
       )

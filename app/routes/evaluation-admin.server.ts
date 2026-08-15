@@ -1,4 +1,5 @@
 import { type LoaderFunctionArgs } from "react-router";
+import { z } from "zod";
 import { AiReviewAssessmentService } from "~/modules/ai/ai-review-assessment.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
@@ -12,6 +13,119 @@ import { EventService } from "~/modules/events/event-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { canReleaseEvaluationDecisions } from "./evaluation-admin-outcomes";
+
+const historicalEvidenceIdSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .refine((value) => value.trim() === value, "must not have outer whitespace");
+const historicalReviewScoresSchema = z.record(
+  historicalEvidenceIdSchema,
+  z.union([z.string(), z.number(), z.boolean()]),
+);
+const historicalReviewContentSchema = z.object({
+  recommendation: z.string().nullable().optional(),
+  confidence: z.number().nullable().optional(),
+  submitterFeedback: z.string().optional(),
+  privateNotes: z.string().optional(),
+  reopenReason: z.string().optional(),
+});
+const historicalCriteriaSchema = z
+  .array(
+    z.object({
+      id: historicalEvidenceIdSchema,
+      name: z
+        .string()
+        .min(1)
+        .max(500)
+        .refine(
+          (value) => value.trim() === value,
+          "must not have outer whitespace",
+        ),
+    }),
+  )
+  .min(1);
+
+function parseRevisionEvidence<T>(
+  revisionId: string,
+  field: string,
+  raw: string,
+  schema: z.ZodType<T>,
+) {
+  try {
+    return schema.parse(JSON.parse(raw));
+  } catch {
+    throw new Error(
+      `Review revision ${revisionId} contains invalid ${field} evidence.`,
+    );
+  }
+}
+
+export function parseHistoricalReviewRevision(input: {
+  id: string;
+  scoresJson: string;
+  contentJson: string;
+  scorecardId: string | null;
+  scorecardVersion: number | null;
+  criteriaSnapshotJson: string | null;
+}) {
+  const scores = parseRevisionEvidence(
+    input.id,
+    "scores",
+    input.scoresJson,
+    historicalReviewScoresSchema,
+  );
+  const content = parseRevisionEvidence(
+    input.id,
+    "content",
+    input.contentJson,
+    historicalReviewContentSchema,
+  );
+  const evidencePresence = [
+    input.scorecardId !== null,
+    input.scorecardVersion !== null,
+    input.criteriaSnapshotJson !== null,
+  ];
+  if (evidencePresence.some(Boolean) && !evidencePresence.every(Boolean)) {
+    throw new Error(
+      `Review revision ${input.id} contains incomplete scorecard evidence.`,
+    );
+  }
+  if (!evidencePresence.some(Boolean)) {
+    return { scores, content, criteria: null };
+  }
+  if (
+    !historicalEvidenceIdSchema.safeParse(input.scorecardId).success ||
+    !Number.isInteger(input.scorecardVersion) ||
+    input.scorecardVersion! < 1
+  ) {
+    throw new Error(
+      `Review revision ${input.id} contains invalid scorecard identity evidence.`,
+    );
+  }
+  const criteria = parseRevisionEvidence(
+    input.id,
+    "criteria",
+    input.criteriaSnapshotJson!,
+    historicalCriteriaSchema,
+  );
+  const criterionIds = criteria.map((criterion) => criterion.id);
+  if (new Set(criterionIds).size !== criterionIds.length) {
+    throw new Error(
+      `Review revision ${input.id} contains duplicate criterion evidence.`,
+    );
+  }
+  const knownCriteria = new Set(criterionIds);
+  const missingCriterion = Object.keys(scores).find(
+    (criterionId) => !knownCriteria.has(criterionId),
+  );
+  if (missingCriterion) {
+    throw new Error(
+      `Review revision ${input.id} contains a score without matching criterion evidence.`,
+    );
+  }
+  return { scores, content, criteria };
+}
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env } = getCloudflareContext(context);
@@ -186,6 +300,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       recusedCount: number;
       recommendations: Record<string, number>;
       reviews: Array<{
+        reviewId: string;
         assignmentId: string;
         evaluatorName: string;
         weightedScore: number | null;
@@ -208,6 +323,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       recusedCount: number;
       recommendations: Record<string, number>;
       reviews: Array<{
+        reviewId: string;
         assignmentId: string;
         evaluatorName: string;
         weightedScore: number | null;
@@ -292,6 +408,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           scores = parsed as Record<string, string | number | boolean>;
         }
         aggregate.reviews.push({
+          reviewId: assignment.reviewId!,
           assignmentId: assignment.id,
           evaluatorName: assignment.evaluatorName,
           weightedScore: assignment.weightedScore,
@@ -519,14 +636,79 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     })
     .sort(compareResults);
   const resultsTotal = allResults.length;
-  const resultsPageCount = Math.max(1, Math.ceil(resultsTotal / resultsPageSize));
+  const resultsPageCount = Math.max(
+    1,
+    Math.ceil(resultsTotal / resultsPageSize),
+  );
   if (resultsPage > resultsPageCount) {
     throw new Response("Evaluation results page not found", { status: 404 });
   }
-  const results = allResults.slice(
+  const pagedResults = allResults.slice(
     (resultsPage - 1) * resultsPageSize,
     resultsPage * resultsPageSize,
   );
+  const pageReviewIds = pagedResults.flatMap((result) =>
+    result.reviews.map((review) => review.reviewId),
+  );
+  const reviewRevisionRows = pageReviewIds.length
+    ? await env.DB.prepare(
+        `SELECT revision.id, revision.review_id AS reviewId,
+                revision.revision_number AS revisionNumber,
+                revision.save_kind AS saveKind,
+                revision.scores_json AS scoresJson,
+                revision.content_json AS contentJson,
+                revision.scorecard_id AS scorecardId,
+                revision.scorecard_version AS scorecardVersion,
+                revision.criteria_snapshot_json AS criteriaSnapshotJson,
+                revision.created_at AS createdAt,
+                person.display_name AS savedByName
+           FROM review_revisions revision
+           JOIN reviews review
+             ON review.id = revision.review_id
+            AND review.event_id = revision.event_id
+           JOIN events event
+             ON event.id = review.event_id AND event.organisation_id = ?
+           JOIN people person ON person.id = revision.saved_by_person_id
+          WHERE revision.event_id = ?
+            AND revision.review_id IN (${pageReviewIds.map(() => "?").join(",")})
+          ORDER BY revision.review_id, revision.revision_number DESC`,
+      )
+        .bind(viewer.organisationId, viewer.eventId, ...pageReviewIds)
+        .all<{
+          id: string;
+          reviewId: string;
+          revisionNumber: number;
+          saveKind: "autosave" | "manual" | "submitted" | "reopened";
+          scoresJson: string;
+          contentJson: string;
+          scorecardId: string | null;
+          scorecardVersion: number | null;
+          criteriaSnapshotJson: string | null;
+          createdAt: number;
+          savedByName: string;
+        }>()
+    : { results: [] };
+  const results = pagedResults.map((result) => ({
+    ...result,
+    reviews: result.reviews.map((review) => ({
+      ...review,
+      history: reviewRevisionRows.results
+        .filter((revision) => revision.reviewId === review.reviewId)
+        .map(
+          ({ scoresJson, contentJson, criteriaSnapshotJson, ...revision }) => ({
+            ...revision,
+            ...parseHistoricalReviewRevision({
+              id: revision.id,
+              scoresJson,
+              contentJson,
+              scorecardId: revision.scorecardId,
+              scorecardVersion: revision.scorecardVersion,
+              criteriaSnapshotJson,
+            }),
+          }),
+        ),
+    })),
+  }));
   const discussionTarget = focusedSubmissionId
     ? ({ targetType: "submission", targetId: focusedSubmissionId } as const)
     : focusedSessionId

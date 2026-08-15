@@ -315,6 +315,15 @@ describe("speaker profile service", () => {
       profileStatus: "published",
     });
     expect(after.profile.revision).toBe(before.profile.revision + 1);
+    expect(after.profileHistory[0]).toMatchObject({
+      source: "canonical_person",
+      profileRevision: after.profile.revision,
+      displayName: "Priya Shah",
+      jobTitle: "Head of Experience Design",
+      publicationStatus: "published",
+      recordedByName: expect.any(String),
+    });
+    expect(after.profileHistory[0]).not.toHaveProperty("travelPreferences");
 
     const audits = await testEnv.DB.prepare(
       `SELECT COUNT(*) AS count FROM audit_events

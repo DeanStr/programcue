@@ -238,8 +238,8 @@ export abstract class CommunicationDeliveryActions extends CommunicationDelivery
       ).bind(communicationId, viewer.eventId, viewer.eventId),
       this.env.DB.prepare(
         `
-        INSERT INTO audit_events (id, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at)
-        SELECT ?, ?, ?, ?, 'communication.cancelled', 'communication', ?, '{}', unixepoch()
+        INSERT INTO audit_events (id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at)
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'communication.cancelled', 'communication', ?, '{}', unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM communications cancelled_communication
             WHERE cancelled_communication.id = ? AND cancelled_communication.event_id = ?

@@ -293,6 +293,9 @@ test.describe("mutable schedule authoring", () => {
     });
     await editor.getByRole("link", { name: "Review history" }).click();
     await expect(page.getByLabel("Draft status").first()).toBeVisible();
+    await expect(
+      page.getByText("Title:", { exact: true }).first(),
+    ).toBeVisible();
 
     const approvedRevision = page
       .locator("li.card", { hasText: approvedTitle })

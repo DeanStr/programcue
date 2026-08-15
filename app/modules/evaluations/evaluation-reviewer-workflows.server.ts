@@ -182,10 +182,10 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, ?, 'review_moderation', ?, ?, unixepoch()
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'review_moderation', ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM review_moderations WHERE id = ? AND event_id = ?
          )
@@ -294,6 +294,45 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         "Only a submitted review for an eligible target in the current active round can be reopened.",
       );
     }
+    const scorecard = await this.env.DB.prepare(
+      `SELECT round.scorecard_id AS scorecardId,
+              round.scorecard_version AS scorecardVersion,
+              COALESCE((
+                SELECT json_group_array(json(ordered.snapshot))
+                  FROM (
+                    SELECT json_object(
+                             'id', criterion.id,
+                             'name', criterion.name,
+                             'description', criterion.description,
+                             'inputType', criterion.input_type,
+                             'options', json(criterion.options_json),
+                             'weightPercent', criterion.weight_percent,
+                             'required', json(CASE WHEN criterion.required = 1
+                                                  THEN 'true' ELSE 'false' END),
+                             'position', criterion.position
+                           ) AS snapshot
+                      FROM evaluation_criteria criterion
+                     WHERE criterion.event_id = round.event_id
+                       AND criterion.round_id = round.id
+                     ORDER BY criterion.position
+                  ) ordered
+              ), '[]') AS criteriaSnapshotJson
+         FROM evaluation_rounds round
+         JOIN events event
+           ON event.id = round.event_id AND event.organisation_id = ?
+        WHERE round.id = ? AND round.event_id = ?`,
+    )
+      .bind(viewer.organisationId, state.roundId, viewer.eventId)
+      .first<{
+        scorecardId: string;
+        scorecardVersion: number;
+        criteriaSnapshotJson: string;
+      }>();
+    if (!scorecard) {
+      throw new EvaluationStateError(
+        "The review scorecard is no longer available.",
+      );
+    }
     const operationId = crypto.randomUUID();
     const nextRevision = state.reviewRevision + 1;
     const auditEventId = crypto.randomUUID();
@@ -382,9 +421,9 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         INSERT INTO review_revisions (
           id, event_id, review_id, revision_number, scores_json,
           content_json, save_kind, saved_by_person_id, idempotency_key,
-          created_at
+          scorecard_id, scorecard_version, criteria_snapshot_json, created_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, 'reopened', ?, ?, unixepoch()
+        SELECT ?, ?, ?, ?, ?, ?, 'reopened', ?, ?, ?, ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM reviews
             WHERE id = ? AND event_id = ? AND status = 'reopened'
@@ -407,6 +446,9 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         }),
         viewer.personId,
         operationId,
+        scorecard.scorecardId,
+        scorecard.scorecardVersion,
+        scorecard.criteriaSnapshotJson,
         state.reviewId,
         viewer.eventId,
         nextRevision,
@@ -453,10 +495,10 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
-          id, organisation_id, event_id, actor_person_id, action,
+          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, ?, ?, ?, 'review.reopened', 'review', ?, ?, unixepoch()
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'review.reopened', 'review', ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM reviews
             WHERE id = ? AND event_id = ? AND status = 'reopened'

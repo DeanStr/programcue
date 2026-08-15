@@ -227,9 +227,9 @@ describe("file scan queue dispatch", () => {
     await persistQueuedScan(message);
     await env.DB.prepare(
       `INSERT INTO audit_events (
-         id, organisation_id, event_id, action, entity_type, entity_id,
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, action, entity_type, entity_id,
          created_at
-       ) VALUES (?, ?, ?, 'file.erasure.requested', 'file_asset', ?, unixepoch())`,
+       ) VALUES (?, 'system', 'internal', 1, ?, ?, 'file.erasure.requested', 'file_asset', ?, unixepoch())`,
     )
       .bind(
         `file-erasure:${assetId}`,

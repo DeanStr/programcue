@@ -243,7 +243,8 @@ export class TaskBulkService {
         .bind(viewer.organisationId, viewer.eventId, selectionLimit)
         .all<TaskRow>(),
     ]);
-    if (!event) throw new Response("This event could not be found.", { status: 404 });
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
     return {
       templates: templates.results,
       speakers: speakers.results,
@@ -681,10 +682,10 @@ export class TaskBulkService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'task_bulk.previewed', 'operation', ?, correlation_id, ?, unixepoch()
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'task_bulk.previewed', 'operation', ?, correlation_id, ?, unixepoch()
            FROM operation_jobs WHERE id = ? AND status = 'received'`,
       ).bind(
         crypto.randomUUID(),
@@ -1009,10 +1010,10 @@ export class TaskBulkService {
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, ?, 'operation', operation.id, operation.correlation_id, ?, unixepoch()
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'operation', operation.id, operation.correlation_id, ?, unixepoch()
            FROM operation_jobs operation WHERE operation.id = ? AND operation.status = ?`,
       ).bind(
         crypto.randomUUID(),
@@ -1067,10 +1068,10 @@ export class TaskBulkService {
       ).bind(operationId, viewer.eventId, viewer.organisationId),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
-           id, organisation_id, event_id, actor_person_id, action,
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, ?, ?, ?, 'task_bulk.cancelled', 'operation', ?, '{}', unixepoch()
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'task_bulk.cancelled', 'operation', ?, '{}', unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM operation_jobs WHERE id = ? AND status = 'cancelled'
           )`,

@@ -254,9 +254,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (!accountActivation?.replayed) {
     await env.DB.prepare(
       `INSERT INTO audit_events (
-       id, organisation_id, event_id, actor_id, action, entity_type,
+       id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action, entity_type,
        entity_id, metadata_json, created_at
-     ) VALUES (?, ?, ?, 'production-evaluation-access',
+     ) VALUES (?, 'system', 'internal', 1, ?, ?, 'production-evaluation-access',
                ?, 'person', ?, ?, unixepoch())`,
     )
       .bind(
