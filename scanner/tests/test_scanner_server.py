@@ -50,17 +50,17 @@ class ScannerServerContractTests(unittest.TestCase):
             "/tmp/scan: OK\n",
             1024,
             20,
-            "ClamAV 1.4.5/27720/Mon Aug 11 08:00:00 2026\n",
+            "ClamAV 1.4.6/28087/Sun Aug  9 06:24:56 2026\n",
         )
         self.assertEqual(clean["verdict"], "clean")
-        self.assertEqual(clean["engineVersion"], "1.4.5")
+        self.assertEqual(clean["engineVersion"], "1.4.6")
 
         infected = scanner.parse_clamdscan_output(
             1,
             "/tmp/scan: Win.Test.EICAR_HDB-1 FOUND\n",
             1024,
             20,
-            "ClamAV 1.4.5/27720/Mon Aug 11 08:00:00 2026\n",
+            "ClamAV 1.4.6/28087/Sun Aug  9 06:24:56 2026\n",
         )
         self.assertEqual(infected["verdict"], "infected")
         self.assertEqual(infected["threats"], ["Win.Test.EICAR_HDB-1"])
@@ -72,7 +72,7 @@ class ScannerServerContractTests(unittest.TestCase):
                 "scan failed",
                 1024,
                 20,
-                "ClamAV 1.4.5/27720/Mon Aug 11 08:00:00 2026\n",
+                "ClamAV 1.4.6/28087/Sun Aug  9 06:24:56 2026\n",
             )
 
     def test_clamav_readiness_requires_marker_and_socket(self):

@@ -1,4 +1,4 @@
-FROM clamav/clamav:1.4.5-debian13-slim@sha256:c730bead5fe766dc0edbac5e389b71fc1403a5d3a35c6af9397ad79a52fdc27a
+FROM clamav/clamav:1.4.6-debian13-slim@sha256:5ec6dcef8e7cd8a019fb388639628139bb7d358c6ab07b90ea344613bf446353
 
 USER root
 
