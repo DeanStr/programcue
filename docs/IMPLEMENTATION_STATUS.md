@@ -595,26 +595,41 @@ source `0eac9fb` renumbers the operation-acknowledgement migration to `0028`,
 after which migration validation passed at 97 application tables, 114 indexes
 and 99 triggers. The full browser gate was not rerun; focused production role
 smokes exercised every materially changed surface after deployment.
+Application candidate `fb38329` passed the complete core gate: 61 unit files
+with 345 tests, 168 Worker files with 1,327 tests, the Agents Durable Object
+test, production builds, 55 configuration tests, migration parity at 98
+application tables, 115 indexes and 99 triggers, a 153,130-byte clean-room
+recovery drill, synchronized OpenAPI at 33 paths and 459 internal references,
+and the scanner's 10 tests. Its focused desktop-Chromium branding workflow
+passed draft editing, private logo/banner upload, representative preview,
+confirmed publication and application, participant and programme projection.
+The full browser gate was not rerun because this release used the focused
+observable workflow plus the complete cross-cutting core gate.
 
 ## Deployment evidence
 
-Application source `0eac9fb` is deployed at `app.programcue.com` as Worker
-version `ac14c001-d2a0-40e3-97fe-bc130586ba30`, and scanner source `c9e1287`
-is deployed at `scanner.programcue.com`; release-stamp commits `b6eb630` and
+Application source `fb38329` is deployed at `app.programcue.com` as Worker
+version `a3aff8cb-ce04-47af-8895-fabd39f43933`, and scanner source `c9e1287`
+is deployed at `scanner.programcue.com`; release-stamp commits `90697a4` and
 `a5e1bab` record those sources. The current application version is at 100%
 traffic. Migrations `0026_review_conflict_attestation.sql`,
 `0027_programme_venue_presentation.sql` and
-`0028_operation_failure_alert_acknowledgements.sql` applied successfully. The
-WNAM D1 ledger retains 28 migrations, `quick_check=ok`, and foreign-key
-inspection returns no rows. The review attestation, venue presentation and
-operation alert-attribution columns, bounded failure-alert index and both
-attribution triggers are present.
+`0028_operation_failure_alert_acknowledgements.sql` remain applied, and
+`0029_event_branding_publication.sql` applied successfully before this Worker
+cutover. The WNAM D1 ledger retains 29 migrations, `quick_check=ok`, and
+foreign-key inspection returns no rows. The event-brand-assets table and
+bounded event/kind index are present, all ten event branding publication
+columns exist, and every migrated event retains a consistent draft backfill.
+The earlier review attestation, venue presentation and operation
+alert-attribution schema also remains present.
 The separately deployed public website remains live at `programcue.com` and
-`www.programcue.com`. Health returned source `0eac9fb`; sign-in, evaluation
+`www.programcue.com`. Health returned source `fb38329`; sign-in, evaluation
 access, the canonical published programme and the public programme API returned
-HTTP 200. Fresh production evaluation identity selections rendered organiser
-Command Centre, event setup, Operation Centre and tasks, the reviewer workbench
-and speaker dashboard with HTTP 200. Earlier
+HTTP 200. A fresh production evaluation organiser selection returned the
+expected 303 boundaries; Branding and Programme rendered their identifying
+content and Event Setup returned HTTP 200. Earlier production evaluation
+identity selections rendered organiser Command Centre, Operation Centre and
+tasks, the reviewer workbench and speaker dashboard with HTTP 200. Earlier
 production Chromium acceptance of the same fixture rendered
 the native Call for Speakers Form Builder with ten authored fields and all six
 palette controls, while anonymous Chromium rendered and hydrated the published
