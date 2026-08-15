@@ -269,6 +269,22 @@ describe("frontend route fail-fast boundaries", () => {
     expect(results.map(responseStatus)).toEqual([400, 400, 400]);
   });
 
+  it("rejects a form save before the browser editor is ready", async () => {
+    const save = vi.spyOn(SubmissionService.prototype, "saveForm");
+    const result = await formBuilderAction({
+      request: formRequest("http://localhost/admin/submissions/form", {
+        _intent: "save",
+        schema: "{}",
+        routing: "{}",
+      }),
+      params: {},
+      context: context(),
+    } as never);
+
+    expect(responseStatus(result)).toBe(400);
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it("rethrows unexpected service failures instead of labelling them validation errors", async () => {
     const formFailure = new Error("synthetic form database failure");
     vi.spyOn(SubmissionService.prototype, "saveForm").mockRejectedValueOnce(
@@ -278,6 +294,7 @@ describe("frontend route fail-fast boundaries", () => {
       formBuilderAction({
         request: formRequest("http://localhost/admin/submissions/form", {
           _intent: "save",
+          _clientReady: "1",
           schema: "{}",
           routing: "{}",
         }),

@@ -17,12 +17,10 @@ import {
 } from "react-hook-form";
 import { useNavigation, useSubmit } from "react-router";
 
-import type { FormJsEditorStatus } from "./form-js-visual-editor";
 import {
   saveFormSchema,
   type FormField,
   type SaveFormInput,
-  type SubmissionFormSchema,
 } from "~/modules/submissions/submission-schema";
 import {
   clearDraftRecoveryScope,
@@ -48,22 +46,22 @@ type RecoveryPayload = Omit<SaveFormInput, "accessPassword">;
 export type FormBuilderController = {
   categoryField: FormField | undefined;
   change(next: SaveFormInput): void;
-  changeVisualSchema(schema: SubmissionFormSchema): void;
+  clientValidationLocation: "canvas" | "structure" | null;
   clientValidationMessage: string | null;
   dirty: boolean;
-  editorReady: boolean;
-  editorStatus: FormJsEditorStatus;
   formRef: RefObject<HTMLFormElement | null>;
   input: SaveFormInput;
-  moveField(direction: -1 | 1): void;
   navigationState: "idle" | "loading" | "submitting";
   patchField(patch: Partial<FormField>): void;
   pendingIntent: FormDataEntryValue | null | undefined;
   publishOpen: boolean;
   recovery: DraftRecoveryController<RecoveryPayload>;
   recoveryPayload: RecoveryPayload;
+  reportClientValidation(
+    message: string,
+    location?: "canvas" | "structure",
+  ): void;
   selected: FormField | undefined;
-  setEditorStatus: Dispatch<SetStateAction<FormJsEditorStatus>>;
   setPublishOpen: Dispatch<SetStateAction<boolean>>;
   setSelectedId: Dispatch<SetStateAction<string>>;
   submitBuilder(event?: BaseSyntheticEvent): Promise<void>;
@@ -114,10 +112,9 @@ export function useFormBuilderController(
   const [clientValidationMessage, setClientValidationMessage] = useState<
     string | null
   >(null);
-  const [editorStatus, setEditorStatus] = useState<FormJsEditorStatus>({
-    state: "loading",
-    message: "Loading the visual form editor…",
-  });
+  const [clientValidationLocation, setClientValidationLocation] = useState<
+    "canvas" | "structure" | null
+  >(null);
   const recoveryPayload = useMemo(() => {
     const { accessPassword: _sensitivePassword, ...recoverable } = input;
     return recoverable;
@@ -152,12 +149,14 @@ export function useFormBuilderController(
     reset(loaderData.input);
     setSelectedId(loaderData.input.schema.fields[0]?.id ?? "");
     setClientValidationMessage(null);
+    setClientValidationLocation(null);
   }, [loaderData.input, reset]);
   useEffect(() => {
     if (actionData?.ok) {
       reset(getValues());
       setPublishOpen(false);
       setClientValidationMessage(null);
+      setClientValidationLocation(null);
       void recovery.markServerSaved();
     }
   }, [actionData, getValues, recovery.markServerSaved, reset]);
@@ -171,8 +170,6 @@ export function useFormBuilderController(
   }, [loaderData.createdFromLocalDraft, loaderData.recoveryScope]);
 
   const pendingIntent = navigation.formData?.get("_intent");
-  const editorReady = editorStatus.state === "ready";
-
   function change(next: SaveFormInput) {
     const options = { shouldDirty: true, shouldValidate: false } as const;
     if (next.id !== input.id) setValue("id", next.id, options);
@@ -200,28 +197,22 @@ export function useFormBuilderController(
     if (next.routing !== input.routing)
       setValue("routing", next.routing, options);
     setClientValidationMessage(null);
+    setClientValidationLocation(null);
   }
 
-  function changeVisualSchema(schema: SubmissionFormSchema) {
-    change({ ...input, schema });
-    if (!schema.fields.some((field) => field.id === selectedId)) {
-      setSelectedId(schema.fields[0]?.id ?? "");
-    }
+  function reportClientValidation(
+    message: string,
+    location: "canvas" | "structure" | null = null,
+  ) {
+    setClientValidationMessage(message);
+    setClientValidationLocation(location);
   }
 
   const submitBuilder = handleSubmit(
     (_values, event) => {
-      if (!editorReady) {
-        setClientValidationMessage(
-          "The visual editor must be ready and valid before this draft can be saved or published.",
-        );
-        return;
-      }
       const form = formRef.current;
       if (!form) {
-        setClientValidationMessage(
-          "The form submission target is unavailable.",
-        );
+        reportClientValidation("The form submission target is unavailable.");
         return;
       }
       const formData = new FormData(form);
@@ -238,7 +229,7 @@ export function useFormBuilderController(
     },
     () => {
       const parsed = saveFormSchema.safeParse(input);
-      setClientValidationMessage(
+      reportClientValidation(
         parsed.success
           ? "Review the form settings before continuing."
           : (parsed.error.issues[0]?.message ??
@@ -260,37 +251,22 @@ export function useFormBuilderController(
     });
   }
 
-  function moveField(direction: -1 | 1) {
-    if (!selected) return;
-    const index = input.schema.fields.findIndex(
-      (field) => field.id === selected.id,
-    );
-    const target = index + direction;
-    if (target < 0 || target >= input.schema.fields.length) return;
-    const fields = [...input.schema.fields];
-    [fields[index], fields[target]] = [fields[target], fields[index]];
-    change({ ...input, schema: { ...input.schema, fields } });
-  }
-
   return {
     categoryField,
     change,
-    changeVisualSchema,
+    clientValidationLocation,
     clientValidationMessage,
     dirty,
-    editorReady,
-    editorStatus,
     formRef,
     input,
-    moveField,
     navigationState: navigation.state,
     patchField,
     pendingIntent,
     publishOpen,
     recovery,
     recoveryPayload,
+    reportClientValidation,
     selected,
-    setEditorStatus,
     setPublishOpen,
     setSelectedId,
     submitBuilder,

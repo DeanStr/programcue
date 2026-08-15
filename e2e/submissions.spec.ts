@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import {
   applicationTurnstileAppearances,
@@ -7,6 +7,65 @@ import {
   waitForApplicationTurnstileActions,
 } from "./support/mock-turnstile";
 import { resetDemoSubmissions } from "./support/reset-demo-submissions";
+
+async function dragWithPointer(page: Page, source: Locator, target: Locator) {
+  await expect(target).toBeVisible();
+  await target.scrollIntoViewIfNeeded();
+  const sourceStartsInCanvas = await source.evaluate((element) =>
+    Boolean(element.closest(".fb-canvas-page")),
+  );
+  const canvas = page.locator(".fb-canvas-page");
+  const canvasBox = await canvas.boundingBox();
+  const visibleSourceBox = await source.boundingBox();
+  if (sourceStartsInCanvas && canvasBox && visibleSourceBox) {
+    const topMargin = canvasBox.y + 24;
+    if (visibleSourceBox.y < topMargin) {
+      await canvas.evaluate(
+        (element, distance) => element.scrollBy({ top: distance }),
+        visibleSourceBox.y - topMargin,
+      );
+    }
+  } else {
+    await target.evaluate((element) => {
+      const scrollport = element.closest(".fb-canvas-page");
+      if (!(scrollport instanceof HTMLElement)) return;
+      const targetRect = element.getBoundingClientRect();
+      const scrollportRect = scrollport.getBoundingClientRect();
+      if (
+        targetRect.top + targetRect.height / 2 >
+        scrollportRect.top + scrollportRect.height * 0.75
+      ) {
+        scrollport.scrollBy({ top: scrollportRect.height * 0.2 });
+      }
+    });
+  }
+  await expect(source).toBeVisible();
+  const sourceBox = await source.boundingBox();
+  const targetBox = await target.boundingBox();
+  if (!sourceBox || !targetBox) {
+    throw new Error("Drag source and insertion target need visible bounds.");
+  }
+
+  await page.mouse.move(
+    sourceBox.x + sourceBox.width / 2,
+    sourceBox.y + sourceBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    sourceBox.x + sourceBox.width / 2 + 8,
+    sourceBox.y + sourceBox.height / 2 + 8,
+    { steps: 2 },
+  );
+  await page.mouse.move(
+    targetBox.x + targetBox.width / 2,
+    targetBox.y + targetBox.height / 2,
+    { steps: 12 },
+  );
+  if ((await target.getAttribute("data-drop-index")) !== null) {
+    await expect(target).toHaveClass(/is-over/);
+  }
+  await page.mouse.up();
+}
 
 test.describe.serial("submissions vertical slice", () => {
   test.beforeEach(async ({ page }) => {
@@ -44,8 +103,8 @@ test.describe.serial("submissions vertical slice", () => {
         "Bring a practical idea, evidence from real delivery, and a clear attendee takeaway.",
       );
     await page
-      .locator(".field-library")
-      .getByRole("button", { name: /^＋\s*URL$/u })
+      .getByRole("region", { name: "Visual call-for-speakers form editor" })
+      .getByRole("button", { name: "Add URL" })
       .click();
     await page.getByLabel("Stable field ID").fill(`takeaway_url_${unique}`);
     await page
@@ -110,7 +169,7 @@ test.describe.serial("submissions vertical slice", () => {
     await expect(page.getByText(invitationText)).toBeVisible();
   });
 
-  test("visual form authoring maps through the Program Cue adapter before saving", async ({
+  test("native visual form authoring supports drag creation and reordering", async ({
     page,
   }) => {
     const visualLabel = `Session title visual ${Date.now()}`;
@@ -118,17 +177,81 @@ test.describe.serial("submissions vertical slice", () => {
 
     const editor = page.getByLabel("Visual call-for-speakers form editor");
     await expect(editor).toBeVisible();
-    await expect(editor.getByTitle("Powered by bpmn.io")).toBeVisible();
-    await editor
-      .locator('.fjs-element[data-id="ProgramCue_Field_title"]')
-      .click();
-    await editor.getByText("General", { exact: true }).click();
-    await expect(editor.getByLabel("Field label")).toBeVisible();
-    await editor.getByLabel("Field label").fill(visualLabel);
+    const fields = editor.locator(".fb-canvas-field");
+    const initialFieldCount = await fields.count();
+    await expect(editor.locator('[data-field-id="materials"]')).toContainText(
+      "Shown when Format = Workshop",
+    );
 
+    await editor
+      .getByRole("button", { name: "Add Video upload or URL" })
+      .click();
+    await expect(fields).toHaveCount(initialFieldCount);
     await expect(
-      editor.getByRole("textbox", { name: visualLabel }),
-    ).toBeVisible({ timeout: 10_000 });
+      page.getByRole("alert").filter({
+        hasText: "A form can contain at most one native video upload field.",
+      }),
+    ).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(1);
+    await expect(page.getByText("Canvas action blocked")).toBeVisible();
+
+    await page.getByRole("button", { name: "Move Format down" }).press("Enter");
+    await expect(fields.nth(3)).toHaveAttribute("data-field-id", "format");
+    await expect(fields.nth(4)).toHaveAttribute("data-field-id", "materials");
+    await expect(
+      page.getByRole("alert").filter({
+        hasText:
+          "Materials and room setup” must remain after “Format” because its condition depends on that field.",
+      }),
+    ).toBeVisible();
+    await expect(page.getByText("Reorder blocked")).toBeVisible();
+
+    await page
+      .getByRole("button", { name: "Move Session description up" })
+      .press("Enter");
+    await expect(fields.first()).toHaveAttribute(
+      "data-field-id",
+      "description",
+    );
+    await page
+      .getByRole("button", { name: "Move Session description down" })
+      .press("Enter");
+    await expect(fields.first()).toHaveAttribute("data-field-id", "title");
+
+    await dragWithPointer(
+      page,
+      editor.getByRole("button", { name: "Add URL" }),
+      editor.locator('[data-drop-index="0"]'),
+    );
+    await expect(fields).toHaveCount(initialFieldCount + 1);
+
+    const created = fields.first();
+    await expect(created).toHaveAttribute("data-field-id", /^field_/);
+    await page.getByLabel("Label", { exact: true }).fill(visualLabel);
+    await expect(created).toContainText(visualLabel);
+
+    await dragWithPointer(
+      page,
+      created.locator(`[title="Drag to reorder ${visualLabel}"]`),
+      editor.locator('[data-drop-index="2"]'),
+    );
+    await expect(fields.nth(1)).toContainText(visualLabel);
+
+    await dragWithPointer(
+      page,
+      fields.nth(1).locator(`[title="Drag to reorder ${visualLabel}"]`),
+      editor.getByRole("button", { name: "Add Long text" }),
+    );
+    await expect(fields.nth(1)).toContainText(visualLabel);
+
+    await dragWithPointer(
+      page,
+      editor.getByRole("button", { name: "Add Short text" }),
+      editor.locator(`[data-drop-index="${initialFieldCount + 1}"]`),
+    );
+    await expect(fields).toHaveCount(initialFieldCount + 2);
+    await expect(fields.last()).toContainText("Short text");
+
     await expect(
       page.getByRole("button", { name: "Save draft" }),
     ).toBeEnabled();
@@ -140,14 +263,64 @@ test.describe.serial("submissions vertical slice", () => {
     ).toBeVisible();
 
     await page.reload();
+    const reloadedEditor = page.getByLabel(
+      "Visual call-for-speakers form editor",
+    );
+    await expect(reloadedEditor).toBeVisible();
     await expect(
-      page.getByLabel("Visual call-for-speakers form editor"),
-    ).toBeVisible();
-    await expect(
-      page
-        .getByLabel("Visual call-for-speakers form editor")
-        .getByRole("textbox", { name: visualLabel }),
-    ).toBeVisible({ timeout: 10_000 });
+      reloadedEditor.locator(".fb-canvas-field").nth(1),
+    ).toContainText(visualLabel);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await reloadedEditor
+      .locator(".fb-canvas-field")
+      .nth(1)
+      .getByRole("button")
+      .click();
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await expect(page.locator("#form-builder-field-settings")).toBeHidden();
+    await page.getByRole("button", { name: "Close preview" }).click();
+    await reloadedEditor
+      .getByRole("link", { name: `Edit ${visualLabel} settings` })
+      .click();
+    const fieldSettings = page.locator("#form-builder-field-settings");
+    await expect(fieldSettings).toBeInViewport();
+    await expect(fieldSettings).toBeFocused();
+  });
+
+  test("form builder fails closed before JavaScript is available", async ({
+    baseURL,
+    browser,
+    page,
+  }) => {
+    if (!baseURL) throw new Error("The browser test base URL is required.");
+    const context = await browser.newContext({
+      baseURL,
+      javaScriptEnabled: false,
+      storageState: await page.context().storageState(),
+    });
+    try {
+      const noScriptPage = await context.newPage();
+      await noScriptPage.goto("/admin/submissions/form");
+      await expect(
+        noScriptPage.getByRole("heading", {
+          name: "Call for Speakers Form Builder",
+        }),
+      ).toBeVisible();
+      await expect(
+        noScriptPage.getByRole("button", { name: "Save draft" }),
+      ).toBeDisabled();
+      await expect(
+        noScriptPage.getByRole("button", { name: "Publish version" }),
+      ).toBeDisabled();
+      await expect(
+        noScriptPage.getByText(
+          "JavaScript is required to edit or save this form.",
+        ),
+      ).toBeVisible();
+    } finally {
+      await context.close();
+    }
   });
 
   test("application entry waits for an interaction-only security token", async ({

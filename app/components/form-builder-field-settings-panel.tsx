@@ -30,7 +30,12 @@ export function FieldSettingsPanel({
   hidden?: boolean;
 }) {
   return (
-    <section className="fb-dock-panel fb-inspector" hidden={hidden}>
+    <section
+      className="fb-dock-panel fb-inspector"
+      hidden={hidden}
+      id="form-builder-field-settings"
+      tabIndex={-1}
+    >
       <div className="fb-pane-head">
         {/* The outline row already names the selected field's type, so the pane
             title carries no pill: at dock width it wrapped the switch onto a

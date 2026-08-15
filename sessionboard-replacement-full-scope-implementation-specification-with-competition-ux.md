@@ -463,7 +463,7 @@ These standards apply to the administrator, reviewer, applicant, speaker and pub
 | Application | TypeScript, React Router v8 framework mode, React, Vite, Cloudflare Vite plugin | Full-stack SSR application on Workers with route loaders/actions and resource routes. |
 | Hosting | Cloudflare Workers and Workers Builds | Single deployable application with preview and production environments. |
 | UI system | Tailwind CSS, shadcn/ui, Base UI/Radix primitives, Lucide icons | Open component code and accessible interaction primitives with a coherent design system. |
-| Forms and validation | React Hook Form, Zod, @bpmn-io/form-js plus custom conference field extensions | Visual form authoring and conditional schemas; retain required bpmn.io watermark and keep an abstraction seam. |
+| Forms and validation           | React Hook Form, Zod and a Program Cue-native visual editor using dnd-kit                | The product schema directly drives visual authoring, conditional schemas, applicant preview and server validation without a second form-schema runtime.                         |
 | Data grids | TanStack Table and TanStack Virtual where required | Filtering, sorting, selection, grouping and large-list rendering without a heavy proprietary grid. |
 | Default database | Cloudflare D1 with Drizzle ORM and migrations | Recommended relational event store and control plane. |
 | Optional database | Airtable Web API adapter with schema provisioning, batching, cache/backoff and migration | Authoritative event-data provider for selected events; D1 remains control plane. |
@@ -519,12 +519,11 @@ The goal is to reuse mature building blocks for generic interaction problems whi
 | shadcn/ui + Base UI/Radix | Admin and portal components | Use immediately | Accessible primitives and owned component source; enforce one product design system. |
 | TanStack Table / Virtual | Operational data grids | Use immediately | Headless sorting/filtering/grouping/selection; virtualise only demonstrably large lists. |
 | React Hook Form + Zod | Forms and validation | Use immediately | Shared client/server schemas; do not rely on client validation for authorisation or state changes. |
-| @bpmn-io/form-js | Visual form editor and renderer | Use with constraint | Accelerates schema authoring and conditions. The bpmn.io watermark must remain visible; wrap it behind a product schema adapter so it can be replaced later. |
 | Drizzle ORM | D1 schema, typed queries and migrations | Use immediately | Keep critical complex queries explicit and indexed; avoid leaking ORM records across domain boundaries. |
 | Better Auth | Authentication and sessions | Use immediately | Use application tables for event permissions; track upstream security releases. |
 | Uppy | Large and resumable uploads | Use immediately | Connect directly to R2/S3-compatible signed endpoints; retain server-side completion validation. |
 | FullCalendar standard | List/day/week schedule views | Use immediately | Standard edition supplies drag/resize and calendar views. Resource timeline is premium, so room/track view is product-owned with dnd-kit. |
-| dnd-kit | Custom room/track scheduling and ordering | Use immediately | Use keyboard sensors and server-side conflict validation. |
+| dnd-kit                           | Custom scheduling and form ordering               | Use immediately                   | Use it for pointer drag-and-drop while retaining explicit keyboard and form alternatives; keep business validation in the relevant domain service. |
 | Tiptap OSS | Resource/wiki editor | Use immediately | MIT open-source core; allow-list nodes and sanitise rendered embeds. |
 | React Email | Transactional and reminder templates | Use immediately | Preview and test templates in-repo; store versioned rendered inputs and provider metadata. |
 | ical-generator | ICS invitations and feeds | Use immediately | Use REQUEST/CANCEL methods, stable UIDs, sequence increments and event timezone components. |
@@ -720,7 +719,6 @@ Within Gate 4, implement in this order: actionable command centre; split-pane re
 | --- | --- | --- |
 | Full-scope deadline | The committed scope is much larger than the original weekend framing. | Use release gates, one modular monolith, seeded demo fixtures and vertical golden paths. Do not build parallel architectures or polish bonus screens before Gate 1 passes. |
 | Airtable limits and consistency | Rate limits, weaker transactions and schema drift can make it a poor universal default. | Selectable provider, batches/upserts, queue/backoff, short cache, schema validator, reconciliation and D1 default. No dual-write illusion. |
-| form-js licence/watermark | The watermark must stay visible and may be undesirable in a long-term commercial product. | Use it for speed with visible attribution; keep a normalised form schema and renderer adapter so a later custom editor can replace it. |
 | Scheduling component licence | FullCalendar resource timeline is premium. | Use MIT standard views and a custom dnd-kit room/track grid; do not accidentally import premium packages. |
 | Direct calendar OAuth | Google/Microsoft consent, token refresh and update/cancel semantics add external failure modes. | Keep ICS as universal baseline; isolate provider adapters, use least scopes, encrypted tokens, stable local/external IDs and reconciliation UI. |
 | Accelevents access | API credentials, sandbox behaviour or object mappings may differ by account. | Build against official API, support dry-run/diff, keep mapping configurable and show clear blocked status when credentials are unavailable. |
@@ -746,8 +744,6 @@ These official or primary references support the implementation choices. They ar
 | Cloudflare Agents SDK | [https://developers.cloudflare.com/agents/runtime/agents-api/](https://developers.cloudflare.com/agents/runtime/agents-api/) |
 | Better Auth D1 support | [https://better-auth.com/blog/1-5](https://better-auth.com/blog/1-5) |
 | Drizzle ORM with Cloudflare D1 | [https://orm.drizzle.team/docs/sqlite/connect-cloudflare-d1](https://orm.drizzle.team/docs/sqlite/connect-cloudflare-d1) |
-| bpmn.io form-js | [https://github.com/bpmn-io/form-js](https://github.com/bpmn-io/form-js) |
-| bpmn.io licence and watermark condition | [https://bpmn.io/license/](https://bpmn.io/license/) |
 | FullCalendar documentation | [https://fullcalendar.io/docs](https://fullcalendar.io/docs) |
 | FullCalendar resource timeline premium status | [https://fullcalendar.io/docs/timeline-view](https://fullcalendar.io/docs/timeline-view) |
 | Uppy open-source uploader | [https://uppy.io/](https://uppy.io/) |

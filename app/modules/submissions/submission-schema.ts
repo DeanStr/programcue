@@ -111,6 +111,8 @@ export const formPresentationSchema = z
 
 export type FormPresentation = z.infer<typeof formPresentationSchema>;
 
+export const MAX_FORM_FIELDS = 50;
+
 export const DEFAULT_FORM_PRESENTATION: FormPresentation = {
   heroImagePath: "",
   invitationHeading: "",
@@ -126,7 +128,7 @@ export const formSchemaSchema = z
   .object({
     introduction: z.string().trim().max(2_000).default(""),
     presentation: formPresentationSchema.default(DEFAULT_FORM_PRESENTATION),
-    fields: z.array(formFieldSchema).min(1).max(50),
+    fields: z.array(formFieldSchema).min(1).max(MAX_FORM_FIELDS),
   })
   .superRefine((schema, context) => {
     const ids = new Set<string>();

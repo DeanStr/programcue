@@ -232,7 +232,9 @@ for (const path of ["/admin/submissions/form", "/design/system"] as const) {
   test(`${path} exposes a name for every form control`, async ({ page }) => {
     await waitForInterface(page, path);
     if (path === "/admin/submissions/form") {
-      await page.locator(".fjs-palette-search").waitFor();
+      await page
+        .getByRole("region", { name: "Visual call-for-speakers form editor" })
+        .waitFor();
     }
     const unnamedControls = await page
       .locator("input:not([type='hidden']), select, textarea")

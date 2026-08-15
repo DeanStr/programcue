@@ -325,15 +325,6 @@
   .builder-layout > .preview-panel {
     grid-column: auto;
   }
-  .program-cue-form-js {
-    box-shadow: inset -14px 0 12px -14px rgba(15, 23, 42, 0.7);
-  }
-  .program-cue-form-js > .fjs-container,
-  .program-cue-form-js .fjs-editor-container {
-    width: 960px;
-    min-width: 960px;
-  }
-  .form-js-scroll-hint,
   .schedule-standard-scroll-hint {
     display: block;
     margin: var(--space-2) 0;

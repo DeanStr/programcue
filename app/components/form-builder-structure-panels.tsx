@@ -1,48 +1,15 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 
-import type {
-  FormField,
-  SaveFormInput,
-} from "~/modules/submissions/submission-schema";
-
-const FIELD_TYPES: Array<{ value: FormField["type"]; label: string }> = [
-  { value: "short_text", label: "Short text" },
-  { value: "long_text", label: "Long text" },
-  { value: "select", label: "Dropdown" },
-  { value: "multi_select", label: "Multiple choice" },
-  { value: "url", label: "URL" },
-  { value: "video", label: "Video upload or URL" },
-];
-
-function newField(type: FormField["type"], index: number): FormField {
-  return {
-    id: `field_${index + 1}`,
-    label: FIELD_TYPES.find((item) => item.value === type)?.label ?? "Question",
-    type,
-    required: false,
-    help: "",
-    example: "",
-    options:
-      type === "select" || type === "multi_select"
-        ? ["Option 1", "Option 2"]
-        : [],
-    reviewVisibility: "administrators_only",
-    blindReviewVisibility: "identity",
-    condition: null,
-  };
-}
-
-function nextFieldIndex(fields: FormField[]) {
-  const ids = new Set(fields.map((field) => field.id));
-  let index = fields.length + 1;
-  while (ids.has(`field_${index}`)) index += 1;
-  return index - 1;
-}
+import {
+  conditionalFieldOrderIssue,
+  formConditionSourceLabel,
+  formFieldTypeLabel,
+} from "~/modules/submissions/form-builder-fields";
+import type { SaveFormInput } from "~/modules/submissions/submission-schema";
 
 /**
- * The form's outline: what questions exist, in what order. The palette is a
- * collapsible strip at the foot of this pane rather than a column of its own —
- * adding a field is a one-second act that was costing a permanent 220px column.
+ * The form's keyboard-reorderable outline: what questions exist, and in what
+ * order, beside the visual canvas.
  */
 export function FormStructurePanel({
   input,
@@ -50,23 +17,18 @@ export function FormStructurePanel({
   draftVersionNumber,
   change,
   onSelect,
+  operationMessage,
+  onOperationBlocked,
 }: {
   input: SaveFormInput;
   selectedId: string | undefined;
   draftVersionNumber: number;
   change: (next: SaveFormInput) => void;
   onSelect: (fieldId: string) => void;
+  operationMessage: string | null;
+  onOperationBlocked: (message: string) => void;
 }) {
   const fields = input.schema.fields;
-
-  function addField(type: FormField["type"]) {
-    const field = newField(type, nextFieldIndex(fields));
-    change({
-      ...input,
-      schema: { ...input.schema, fields: [...fields, field] },
-    });
-    onSelect(field.id);
-  }
 
   /* Reordering has to act on the row it is drawn on, not on whatever happens
      to be selected, or the two panes disagree about what "this field" means. */
@@ -75,6 +37,11 @@ export function FormStructurePanel({
     if (target < 0 || target >= fields.length) return;
     const next = [...fields];
     [next[index], next[target]] = [next[target]!, next[index]!];
+    const issue = conditionalFieldOrderIssue(next);
+    if (issue) {
+      onOperationBlocked(issue);
+      return;
+    }
     change({ ...input, schema: { ...input.schema, fields: next } });
   }
 
@@ -98,6 +65,12 @@ export function FormStructurePanel({
             }
           />
         </label>
+        {operationMessage ? (
+          <div className="validation-item error mb" role="alert">
+            <strong>Reorder blocked</strong>
+            <span>{operationMessage}</span>
+          </div>
+        ) : null}
         <ul className="fb-field-list">
           {fields.map((field, index) => (
             <li
@@ -119,15 +92,16 @@ export function FormStructurePanel({
                     {field.required ? "\u00a0*" : ""}
                   </span>
                   <span className="fb-field-kind">
-                    {
-                      FIELD_TYPES.find((type) => type.value === field.type)
-                        ?.label
-                    }
+                    {formFieldTypeLabel(field.type)}
                   </span>
                   {field.condition ? (
                     <span className="fb-field-condition">
-                      Shown when {field.condition.fieldId} ={" "}
-                      {field.condition.equals}
+                      Shown when{" "}
+                      {formConditionSourceLabel(
+                        fields,
+                        field.condition.fieldId,
+                      )}{" "}
+                      = {field.condition.equals}
                     </span>
                   ) : null}
                 </span>
@@ -135,7 +109,7 @@ export function FormStructurePanel({
               <span className="fb-field-move">
                 <button
                   type="button"
-                  aria-label="Move up"
+                  aria-label={`Move ${field.label} up`}
                   disabled={index === 0}
                   onClick={() => moveFieldAt(index, -1)}
                 >
@@ -143,7 +117,7 @@ export function FormStructurePanel({
                 </button>
                 <button
                   type="button"
-                  aria-label="Move down"
+                  aria-label={`Move ${field.label} down`}
                   disabled={index === fields.length - 1}
                   onClick={() => moveFieldAt(index, 1)}
                 >
@@ -153,21 +127,6 @@ export function FormStructurePanel({
             </li>
           ))}
         </ul>
-        <details className="fb-add-field" open>
-          <summary>Add field</summary>
-          <div className="field-library">
-            {FIELD_TYPES.map((fieldType) => (
-              <button
-                type="button"
-                key={fieldType.value}
-                onClick={() => addField(fieldType.value)}
-              >
-                <span>＋</span>
-                {fieldType.label}
-              </button>
-            ))}
-          </div>
-        </details>
       </div>
     </section>
   );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { data, Form, Link, redirect, useActionData } from "react-router";
 import { ZodError } from "zod";
 
@@ -8,11 +8,11 @@ import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
-import FormJsVisualEditor from "~/components/form-js-visual-editor";
 import {
   useFormBuilderController,
   type FormBuilderActionResult,
 } from "~/components/form-builder-controller";
+import { FormBuilderVisualCanvas } from "~/components/form-builder-visual-canvas";
 import {
   ApplicantPreviewPanel,
   FieldSettingsPanel,
@@ -141,6 +141,15 @@ export async function action({ request, context }: Route.ActionArgs) {
       { status: 400 },
     );
   }
+  if (formData.get("_clientReady") !== "1") {
+    return data<FormBuilderActionResult>(
+      {
+        ok: false,
+        message: "The form builder requires JavaScript before it can save.",
+      },
+      { status: 400 },
+    );
+  }
   try {
     if (intent === "publish") {
       const id = String(formData.get("id") ?? "");
@@ -225,11 +234,9 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
   const {
     categoryField,
     change,
-    changeVisualSchema,
+    clientValidationLocation,
     clientValidationMessage,
     dirty,
-    editorReady,
-    editorStatus,
     formRef,
     input,
     navigationState,
@@ -238,8 +245,8 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
     publishOpen,
     recovery,
     recoveryPayload,
+    reportClientValidation,
     selected,
-    setEditorStatus,
     setPublishOpen,
     setSelectedId,
     submitBuilder,
@@ -250,6 +257,8 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
     message: string;
   } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [clientReady, setClientReady] = useState(false);
+  useEffect(() => setClientReady(true), []);
   /* The dock carries one of two panes. Rendering the switch inside each pane's
      own header keeps the pane title and the control that replaces it on the
      same line, instead of stacking two rows of chrome above the content. */
@@ -290,6 +299,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
       onSubmit={submitBuilder}
     >
       <input type="hidden" name="id" value={input.id ?? ""} />
+      <input type="hidden" name="_clientReady" value={clientReady ? "1" : ""} />
       <input type="hidden" name="revision" value={input.revision ?? ""} />
       <input
         type="hidden"
@@ -314,7 +324,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             type="submit"
             name="_intent"
             value="save"
-            disabled={navigationState !== "idle" || !editorReady}
+            disabled={!clientReady || navigationState !== "idle"}
           >
             {pendingIntent === "save" ? "Saving…" : "Save draft"}
           </button>
@@ -323,11 +333,11 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             type="button"
             onClick={() => setPublishOpen(true)}
             disabled={
+              !clientReady ||
               !input.id ||
               dirty ||
               loaderData.eventChoicesChanged ||
-              navigationState !== "idle" ||
-              !editorReady
+              navigationState !== "idle"
             }
           >
             {pendingIntent === "publish" ? "Publishing…" : "Publish version"}
@@ -354,7 +364,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
                 form="form-builder"
                 name="_intent"
                 value="publish"
-                disabled={navigationState !== "idle" || !editorReady}
+                disabled={navigationState !== "idle"}
               >
                 {pendingIntent === "publish"
                   ? "Publishing…"
@@ -392,9 +402,9 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
 
       <DraftRecoveryFeedback recovery={recovery} />
 
-      {clientValidationMessage ? (
+      {clientValidationMessage && !clientValidationLocation ? (
         <div className="validation-item error card pad mb" role="alert">
-          <strong>Form not ready</strong>
+          <strong>Form needs attention</strong>
           <span>{clientValidationMessage}</span>
         </div>
       ) : null}
@@ -571,47 +581,49 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           }
           change={change}
           onSelect={setSelectedId}
+          operationMessage={
+            clientValidationLocation === "structure"
+              ? clientValidationMessage
+              : null
+          }
+          onOperationBlocked={(message) =>
+            reportClientValidation(message, "structure")
+          }
         />
 
         <section className="card fb-pane fb-canvas">
           <div className="fb-pane-head">
             <h2>Form canvas</h2>
-            {editorStatus.state === "error" ? null : (
-              <span className="help right" aria-live="polite">
-                {editorStatus.message}
-              </span>
-            )}
+            <span className="help right">
+              Changes update the draft immediately.
+            </span>
           </div>
           <div className="fb-pane-body">
-            {editorStatus.state === "error" ? (
-              <div className="validation-item error mb" role="alert">
-                <strong>Visual adapter blocked</strong>
-                <span>{editorStatus.message}</span>
-              </div>
-            ) : null}
-            <FormJsVisualEditor
-              schema={input.schema}
-              onChange={changeVisualSchema}
-              onStatus={setEditorStatus}
-              ariaDescribedBy="visual-form-editor-scroll-help"
+            <FormBuilderVisualCanvas
+              input={input}
+              selectedId={selected?.id}
+              change={change}
+              onSelect={setSelectedId}
+              onOpenSettings={() => setPreviewOpen(false)}
+              operationMessage={
+                clientValidationLocation === "canvas"
+                  ? clientValidationMessage
+                  : null
+              }
+              onOperationBlocked={(message) =>
+                reportClientValidation(message, "canvas")
+              }
             />
             <p className="fb-pane-note mt">
-              Draw short text, long text, single or multiple choice, conference
-              URL and conference video. Conditions use the equality form in
-              Field settings; anything else blocks saving rather than being
-              discarded.
+              Drag fields from the palette into the form or drag existing fields
+              to reorder them. Select a field to edit its settings; keyboard
+              users can add from the palette and reorder in Form structure.
             </p>
-            <p
-              className="help form-js-scroll-hint"
-              id="visual-form-editor-scroll-help"
-            >
-              On a narrow screen, swipe horizontally within the editor to reach
-              the form canvas and field settings.
-            </p>
-            <noscript>
-              The visual form editor requires JavaScript. Saving is unavailable
-              until the adapter can validate the visual schema.
-            </noscript>
+            {!clientReady ? (
+              <p className="fb-pane-note mt">
+                JavaScript is required to edit or save this form.
+              </p>
+            ) : null}
 
             <h3 className="fb-subhead">Form settings</h3>
             <div className="fb-form-settings mb">

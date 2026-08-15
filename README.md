@@ -9,14 +9,12 @@ The repository contains connected server-backed slices for event setup, submissi
 Requirements: Node.js 22.18+ on the Node 22 line, or Node.js 24.11+, Python 3.9+ for migration validation, Chromium for the primary browser suite, and Playwright Firefox/WebKit for the full cross-browser smoke gate.
 
 ```bash
-IBM_TELEMETRY_DISABLED=true npm install
+npm install
 cp .dev.vars.example .dev.vars
 node -e "const { randomBytes } = require('node:crypto'); console.log('BETTER_AUTH_SECRET=' + randomBytes(48).toString('base64url')); console.log('ANONYMOUS_ITINERARY_SECRET=' + randomBytes(48).toString('base64url'))"
 # Paste both independently generated values into .dev.vars.
 npm run dev
 ```
-
-The install command disables optional IBM Carbon package telemetry inherited through form-js.
 
 The ignored `.dev.vars` file contains secrets and optional remote-provider
 credentials only; runtime mode, URLs and local binding names stay canonical in

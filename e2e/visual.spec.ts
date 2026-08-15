@@ -159,11 +159,9 @@ async function waitForSurfaceReady(page: Page, name: string) {
     const editor = page.getByRole("region", {
       name: "Visual call-for-speakers form editor",
     });
-    await expect(editor.locator(".fjs-editor-container")).toBeVisible();
+    await expect(editor.locator(".fb-canvas-page")).toBeVisible();
     await expect(
-      page.getByText(
-        /Visual editor ready|Visual form and Program Cue draft are synchronized/,
-      ),
+      page.getByText("Changes update the draft immediately."),
     ).toBeVisible();
   } else if (name === "communications") {
     await expect(
@@ -387,7 +385,9 @@ test.describe.serial(
       await resetDemoEvent(request);
     });
 
-    test("Form Builder keeps the visual editor visible", async ({ page }) => {
+    test("Form Builder keeps the native visual editor visible", async ({
+      page,
+    }) => {
       await openHydrated(page, "/admin/submissions/form");
       await waitForSurfaceReady(page, "form-builder");
       await expect(
