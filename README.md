@@ -361,9 +361,9 @@ workers/d1-backup-workflow.ts
 scanner/                    Authenticated Workflow + ClamAV Container companion
 site/                       Public website Worker for programcue.com (static, no data bindings)
 migrations/                 Pre-release D1 baseline schema and constraints
-public/styles.css           Program Cue design tokens and component styles
+app/styles/                 Program Cue design tokens and bundled component styles
 e2e/                        Browser behavior, accessibility and visual tests
-docs/                       Decisions, security, design system, API and verified status
+docs/                       Decisions, runbooks, API contract and verified status
 ```
 
 The canonical product scope is [the full implementation specification](sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md). The competition build also includes Speaker Network, a deliberately bounded extra-credit surface for cross-event speaker relationships and sourcing. General-purpose CRM, broad marketing automation, payments, multilingual expansion and a general-purpose CMS remain excluded.
