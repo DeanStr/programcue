@@ -370,7 +370,6 @@ describe("organisation AI provider boundary", () => {
       ],
       user: "pc_test",
       n: 1,
-      reasoning_effort: "medium",
       max_completion_tokens: 1_600,
       parallel_tool_calls: false,
       tool_choice: "auto",
