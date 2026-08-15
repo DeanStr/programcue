@@ -87,7 +87,7 @@
     "DEMO_MODE": "false",
     "EVALUATION_MODE": "true",
     "MAINTENANCE_MODE": "false",
-    "SOURCE_REVISION": "4355e4e",
+    "SOURCE_REVISION": "14b61ab",
     "BETTER_AUTH_URL": "https://app.programcue.com",
     "AUTH_EMAIL_FROM": "Program Cue <auth@programcue.com>",
     "EMAIL_PROVIDER": "resend",
