@@ -1,5 +1,6 @@
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { reactRouter } from "@react-router/dev/vite";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 export default defineConfig(({ command, mode, isPreview }) => {
@@ -22,6 +23,9 @@ export default defineConfig(({ command, mode, isPreview }) => {
       }),
       reactRouter(),
     ],
-    resolve: { tsconfigPaths: true },
+    resolve: {
+      alias: { "~": fileURLToPath(new URL("./app", import.meta.url)) },
+      tsconfigPaths: true,
+    },
   };
 });
