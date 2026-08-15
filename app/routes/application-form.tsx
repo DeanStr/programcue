@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { Plus } from "lucide-react";
 import {
   Form,
@@ -14,7 +14,10 @@ import { claimApplicantVideoUploadOperation } from "~/components/applicant-video
 import { BrandMark } from "~/components/brand-mark";
 import { DraftEditor } from "~/components/application-draft-editor";
 import { PublicApplicationLanding } from "~/components/application-public-landing";
-import { TurnstileWidget } from "~/components/turnstile-widget";
+import {
+  TurnstileWidget,
+  type TurnstileStatus,
+} from "~/components/turnstile-widget";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 
 export { action, loader } from "./application-form.server";
@@ -73,6 +76,20 @@ function AccessPanel({
   const navigation = useNavigation();
   const pending = navigation.state !== "idle";
   const accepting = loaderData.availability.accepting;
+  const initialTurnstileStatus: TurnstileStatus =
+    loaderData.turnstileSiteKey === null ? "not-required" : "loading";
+  const [startSecurityStatus, setStartSecurityStatus] =
+    useState<TurnstileStatus>(initialTurnstileStatus);
+  const [requestSecurityStatus, setRequestSecurityStatus] =
+    useState<TurnstileStatus>(initialTurnstileStatus);
+  const [verifySecurityStatus, setVerifySecurityStatus] =
+    useState<TurnstileStatus>(initialTurnstileStatus);
+  const startSecurityReady =
+    loaderData.turnstileSiteKey === null || startSecurityStatus === "ready";
+  const requestSecurityReady =
+    loaderData.turnstileSiteKey === null || requestSecurityStatus === "ready";
+  const verifySecurityReady =
+    loaderData.turnstileSiteKey === null || verifySecurityStatus === "ready";
   if (form.accessMode === "account_required") {
     const returnTo = `/apply/${encodeURIComponent(form.publicSlug)}`;
     return (
@@ -138,9 +155,21 @@ function AccessPanel({
           <TurnstileWidget
             siteKey={loaderData.turnstileSiteKey}
             action="application_verify_code"
+            appearance="interaction-only"
+            onStatusChange={setVerifySecurityStatus}
           />
-          <button className="btn primary" type="submit" disabled={pending}>
-            {pending ? "Verifying…" : "Verify and open drafts"}
+          <button
+            className="btn primary"
+            type="submit"
+            disabled={pending || !verifySecurityReady}
+          >
+            {pending
+              ? "Verifying…"
+              : !verifySecurityReady
+                ? verifySecurityStatus === "error"
+                  ? "Security check unavailable"
+                  : "Security check in progress…"
+                : "Verify and open drafts"}
           </button>
         </Form>
       </section>
@@ -195,17 +224,23 @@ function AccessPanel({
           <TurnstileWidget
             siteKey={loaderData.turnstileSiteKey}
             action="application_start_anonymous"
+            appearance="interaction-only"
+            onStatusChange={setStartSecurityStatus}
           />
           <button
             className="btn primary"
             type="submit"
-            disabled={pending || !accepting}
+            disabled={pending || !accepting || !startSecurityReady}
           >
             {pending
               ? "Starting…"
-              : accepting
-                ? "Start application"
-                : "Applications unavailable"}
+              : !accepting
+                ? "Applications unavailable"
+                : !startSecurityReady
+                  ? startSecurityStatus === "error"
+                    ? "Security check unavailable"
+                    : "Security check in progress…"
+                  : "Start application"}
           </button>
         </Form>
       ) : null}
@@ -244,13 +279,21 @@ function AccessPanel({
           <TurnstileWidget
             siteKey={loaderData.turnstileSiteKey}
             action="application_request_code"
+            appearance="interaction-only"
+            onStatusChange={setRequestSecurityStatus}
           />
           <button
             className={`btn${form.allowAnonymousDrafts ? "" : " primary"}`}
             type="submit"
-            disabled={pending}
+            disabled={pending || !requestSecurityReady}
           >
-            {pending ? "Requesting code…" : "Send verification code"}
+            {pending
+              ? "Requesting code…"
+              : !requestSecurityReady
+                ? requestSecurityStatus === "error"
+                  ? "Security check unavailable"
+                  : "Security check in progress…"
+                : "Send verification code"}
           </button>
         </Form>
       </div>
@@ -269,6 +312,16 @@ function AnonymousVerificationPanel({
 }) {
   const navigation = useNavigation();
   const pending = navigation.state !== "idle";
+  const initialTurnstileStatus: TurnstileStatus =
+    turnstileSiteKey === null ? "not-required" : "loading";
+  const [requestSecurityStatus, setRequestSecurityStatus] =
+    useState<TurnstileStatus>(initialTurnstileStatus);
+  const [verifySecurityStatus, setVerifySecurityStatus] =
+    useState<TurnstileStatus>(initialTurnstileStatus);
+  const requestSecurityReady =
+    turnstileSiteKey === null || requestSecurityStatus === "ready";
+  const verifySecurityReady =
+    turnstileSiteKey === null || verifySecurityStatus === "ready";
   return (
     <section className="card pad mb">
       <div className="card-title">
@@ -314,9 +367,21 @@ function AnonymousVerificationPanel({
           <TurnstileWidget
             siteKey={turnstileSiteKey}
             action="application_verify_code"
+            appearance="interaction-only"
+            onStatusChange={setVerifySecurityStatus}
           />
-          <button className="btn primary" type="submit" disabled={pending}>
-            {pending ? "Verifying…" : "Verify email"}
+          <button
+            className="btn primary"
+            type="submit"
+            disabled={pending || !verifySecurityReady}
+          >
+            {pending
+              ? "Verifying…"
+              : !verifySecurityReady
+                ? verifySecurityStatus === "error"
+                  ? "Security check unavailable"
+                  : "Security check in progress…"
+                : "Verify email"}
           </button>
         </Form>
       ) : (
@@ -335,14 +400,22 @@ function AnonymousVerificationPanel({
           <TurnstileWidget
             siteKey={turnstileSiteKey}
             action="application_request_code"
+            appearance="interaction-only"
+            onStatusChange={setRequestSecurityStatus}
           />
           <button
             className="btn primary"
             style={{ alignSelf: "end" }}
             type="submit"
-            disabled={pending}
+            disabled={pending || !requestSecurityReady}
           >
-            {pending ? "Sending…" : "Send verification code"}
+            {pending
+              ? "Sending…"
+              : !requestSecurityReady
+                ? requestSecurityStatus === "error"
+                  ? "Security check unavailable"
+                  : "Security check in progress…"
+                : "Send verification code"}
           </button>
         </Form>
       )}

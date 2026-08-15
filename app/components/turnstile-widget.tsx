@@ -5,6 +5,7 @@ const SCRIPT_ID = "program-cue-turnstile-script";
 const SCRIPT_STATE_ATTRIBUTE = "data-program-cue-turnstile-state";
 const ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,63}$/u;
 type TurnstileAppearance = "always" | "execute" | "interaction-only";
+export type TurnstileStatus = "not-required" | "loading" | "ready" | "error";
 
 function boundedErrorName(error: unknown) {
   if (!(error instanceof Error)) return "UnknownError";
@@ -96,6 +97,7 @@ export function TurnstileWidget({
   siteKey,
   action,
   onTokenChange,
+  onStatusChange,
   resetKey = 0,
   appearance = "always",
 }: {
@@ -109,6 +111,7 @@ export function TurnstileWidget({
     | "application_file_upload"
     | "public_itinerary_create";
   onTokenChange?: (token: string) => void;
+  onStatusChange?: (status: TurnstileStatus) => void;
   resetKey?: number;
   appearance?: TurnstileAppearance;
 }) {
@@ -117,6 +120,7 @@ export function TurnstileWidget({
   const submitted = useRef(false);
   const previousResetKey = useRef(resetKey);
   const onTokenChangeRef = useRef(onTokenChange);
+  const onStatusChangeRef = useRef(onStatusChange);
   const [token, setToken] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -124,13 +128,23 @@ export function TurnstileWidget({
 
   useEffect(() => {
     onTokenChangeRef.current = onTokenChange;
-  }, [onTokenChange]);
+    onStatusChangeRef.current = onStatusChange;
+  }, [onStatusChange, onTokenChange]);
 
   useEffect(() => {
-    if (!siteKey || !container.current) return;
+    if (!siteKey) {
+      onStatusChangeRef.current?.("not-required");
+      return;
+    }
+    if (!container.current) {
+      setLoadFailed(true);
+      onStatusChangeRef.current?.("error");
+      return;
+    }
     let active = true;
     setToken("");
     onTokenChangeRef.current?.("");
+    onStatusChangeRef.current?.("loading");
     setLoadFailed(false);
     void loadTurnstile()
       .then((turnstile) => {
@@ -141,22 +155,28 @@ export function TurnstileWidget({
           appearance,
           "response-field": false,
           callback: (value) => {
+            setLoadFailed(false);
             setToken(value);
             onTokenChangeRef.current?.(value);
+            onStatusChangeRef.current?.("ready");
           },
           "expired-callback": () => {
             setToken("");
             onTokenChangeRef.current?.("");
+            onStatusChangeRef.current?.("loading");
           },
           "error-callback": () => {
             setToken("");
             onTokenChangeRef.current?.("");
+            onStatusChangeRef.current?.("error");
+            setLoadFailed(true);
           },
         });
       })
       .catch((error) => {
         if (!active) return;
         setLoadFailed(true);
+        onStatusChangeRef.current?.("error");
         console.error(
           JSON.stringify({
             level: "error",
@@ -190,6 +210,7 @@ export function TurnstileWidget({
       submitted.current = false;
       setToken("");
       onTokenChangeRef.current?.("");
+      onStatusChangeRef.current?.("loading");
       window.turnstile.reset(widgetId.current);
     }
   }, [navigation.state]);
@@ -199,6 +220,7 @@ export function TurnstileWidget({
     previousResetKey.current = resetKey;
     setToken("");
     onTokenChangeRef.current?.("");
+    onStatusChangeRef.current?.("loading");
     if (widgetId.current && window.turnstile)
       window.turnstile.reset(widgetId.current);
   }, [resetKey]);

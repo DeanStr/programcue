@@ -37,5 +37,8 @@ describe("public application landing", () => {
     expect(markup).toContain("May 20, 2025 – May 22, 2025");
     expect(markup).not.toContain("May 19, 2025");
     expect(markup).toContain("Welcome from the event team.");
+    expect(markup).toContain('href="#apply"');
+    expect(markup).toContain("Continue to application");
+    expect(markup).not.toContain(">Start application</a>");
   });
 });

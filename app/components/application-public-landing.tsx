@@ -140,7 +140,9 @@ export function PublicApplicationLanding({
           </dl>
           <div className="cfp-hero-actions">
             <a className="btn primary" href="#apply">
-              {accepting ? "Start application" : "View application status"}
+              {accepting
+                ? "Continue to application"
+                : "View application status"}
             </a>
             {programmeUrl ? (
               <Link className="btn cfp-on-dark" to={programmeUrl}>

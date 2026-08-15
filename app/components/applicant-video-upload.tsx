@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { TurnstileWidget } from "~/components/turnstile-widget";
+import {
+  TurnstileWidget,
+  type TurnstileStatus,
+} from "~/components/turnstile-widget";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import {
   createProgramCueMultipartSession,
@@ -95,6 +98,9 @@ export function ApplicantVideoUpload({
   const cancellationOperation = useRef<symbol | null>(null);
   const [cancellationInFlight, setCancellationInFlight] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileStatus, setTurnstileStatus] = useState<TurnstileStatus>(
+    siteKey === null ? "not-required" : "loading",
+  );
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [progress, setProgress] = useState(0);
   const [state, setState] = useState<{
@@ -355,6 +361,7 @@ export function ApplicantVideoUpload({
     cancellationInFlight ||
     Boolean(uploadSession.current) ||
     Boolean(uploadOperation.current);
+  const turnstileReady = siteKey === null || turnstileStatus === "ready";
   return (
     <div className="card pad mt stack">
       <div>
@@ -376,7 +383,9 @@ export function ApplicantVideoUpload({
       <TurnstileWidget
         siteKey={siteKey}
         action="application_file_upload"
+        appearance="interaction-only"
         onTokenChange={setTurnstileToken}
+        onStatusChange={setTurnstileStatus}
         resetKey={turnstileResetKey}
       />
       {transferActive ? (
@@ -388,10 +397,16 @@ export function ApplicantVideoUpload({
         <button
           className="btn"
           type="button"
-          disabled={uploadBlocked}
+          disabled={uploadBlocked || !turnstileReady}
           onClick={upload}
         >
-          {current ? "Upload replacement" : "Upload video"}
+          {!turnstileReady
+            ? turnstileStatus === "error"
+              ? "Security check unavailable"
+              : "Security check in progress…"
+            : current
+              ? "Upload replacement"
+              : "Upload video"}
         </button>
         {transferActive ? (
           <button

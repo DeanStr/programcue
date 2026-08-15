@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
 
+import {
+  applicationTurnstileAppearances,
+  completeApplicationTurnstile,
+  installApplicationTurnstileMock,
+  waitForApplicationTurnstileActions,
+} from "./support/mock-turnstile";
 import { resetDemoSubmissions } from "./support/reset-demo-submissions";
 
 test.describe.serial("submissions vertical slice", () => {
@@ -144,6 +150,70 @@ test.describe.serial("submissions vertical slice", () => {
     ).toBeVisible({ timeout: 10_000 });
   });
 
+  test("application entry waits for an interaction-only security token", async ({
+    page,
+  }) => {
+    await installApplicationTurnstileMock(page);
+
+    await page.goto("/apply/form");
+    const checking = page
+      .getByRole("button", { name: "Security check in progress…" })
+      .first();
+    await expect(checking).toBeDisabled();
+    await waitForApplicationTurnstileActions(page, [
+      "application_request_code",
+      "application_start_anonymous",
+    ]);
+    expect(await applicationTurnstileAppearances(page)).toEqual({
+      application_request_code: "interaction-only",
+      application_start_anonymous: "interaction-only",
+    });
+
+    await completeApplicationTurnstile(
+      page,
+      "application_start_anonymous",
+      "test-start-token",
+    );
+    const start = page.getByRole("button", { name: "Start application" });
+    await expect(start).toBeEnabled();
+    await expect(
+      start
+        .locator("xpath=ancestor::form")
+        .locator('input[name="turnstile-token"]'),
+    ).toHaveValue("test-start-token");
+
+    await completeApplicationTurnstile(
+      page,
+      "application_request_code",
+      "test-request-token",
+    );
+    await page
+      .getByLabel("Email address")
+      .fill(`turnstile-transition-${Date.now()}@example.com`);
+    const requestCode = page.getByRole("button", {
+      name: "Send verification code",
+    });
+    await expect(requestCode).toBeEnabled();
+    await requestCode.click();
+
+    await expect(
+      page.getByRole("heading", { name: "Enter your verification code" }),
+    ).toBeVisible();
+    const verify = page.getByRole("button", {
+      name: "Security check in progress…",
+    });
+    await expect(verify).toBeDisabled();
+    await waitForApplicationTurnstileActions(page, ["application_verify_code"]);
+    await completeApplicationTurnstile(
+      page,
+      "application_verify_code",
+      "test-verify-token",
+    );
+    await expect(
+      page.getByRole("button", { name: "Verify and open drafts" }),
+    ).toBeEnabled();
+  });
+
   test("applicant verifies email, saves a multi-speaker draft, submits it and appears in the admin queue", async ({
     page,
   }) => {
@@ -158,8 +228,14 @@ test.describe.serial("submissions vertical slice", () => {
     await expect(page.getByText("Preview the application")).toBeVisible();
     await expect(page.getByText(/Up to \d+ proposal questions/)).toBeVisible();
     await expect(page.getByText("about 12 minutes")).toBeVisible();
+    const applicationEntry = page.getByRole("link", {
+      name: "Continue to application",
+    });
+    await expect(applicationEntry).toBeVisible();
+    await applicationEntry.click();
+    await expect(page).toHaveURL(/#apply$/u);
     await expect(
-      page.getByRole("link", { name: "Start application" }),
+      page.getByRole("button", { name: "Start application" }),
     ).toBeVisible();
     await page.getByLabel("Email address").fill(email);
     await page.getByRole("button", { name: "Send verification code" }).click();
