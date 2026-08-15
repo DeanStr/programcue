@@ -17,6 +17,39 @@ import {
 beforeEach(prepareScheduleServiceTest);
 
 describe("schedule content and draft workflows", () => {
+  it("preserves speaker names containing the former aggregate delimiter", async () => {
+    const original = await env.DB.prepare(
+      "SELECT display_name AS displayName FROM people WHERE id = 'person-demo-speaker'",
+    ).first<{ displayName: string }>();
+    if (!original) throw new Error("The schedule test speaker is missing.");
+
+    const displayName = 'Priya || "Operations"';
+    try {
+      await env.DB.prepare(
+        "UPDATE people SET display_name = ? WHERE id = 'person-demo-speaker'",
+      )
+        .bind(displayName)
+        .run();
+
+      const workspace = await new ScheduleService(scheduleTestEnv).getWorkspace(
+        viewer,
+      );
+      const session = workspace.sessions.find(
+        (candidate) => candidate.id === "schedule-test-one",
+      );
+      expect(session).toMatchObject({
+        speakerIds: ["person-demo-speaker"],
+        speakerNames: [displayName],
+      });
+    } finally {
+      await env.DB.prepare(
+        "UPDATE people SET display_name = ? WHERE id = 'person-demo-speaker'",
+      )
+        .bind(original.displayName)
+        .run();
+    }
+  });
+
   it("rejects an active draft with any missing content snapshot", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);

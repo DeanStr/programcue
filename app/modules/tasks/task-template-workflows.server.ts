@@ -90,6 +90,34 @@ function requirePreparedTaskWebhook(
   return prepared;
 }
 
+const matchingActiveTaskDefinitionSql = `
+  duplicate.template_id <> ?
+  AND duplicate.status NOT IN ('completed','waived')
+  AND lower(trim(duplicate.title)) = lower(trim(?))
+  AND duplicate.description IS ?
+  AND duplicate.task_type = ?
+  AND duplicate.impact = ?
+  AND duplicate.due_at IS ?
+  AND duplicate_template.evidence_mode = ?
+  AND duplicate_template.configuration_json = ?
+`;
+
+function matchingActiveTaskDefinitionBindings(
+  template: TemplateRow,
+  dueAt: number | null,
+) {
+  return [
+    template.id,
+    template.name,
+    template.description,
+    template.taskType,
+    template.impact,
+    dueAt,
+    template.evidenceMode,
+    template.configurationJson,
+  ];
+}
+
 async function dependencyAssignmentOperationId(
   intentId: string,
   templateId: string,
@@ -746,9 +774,6 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
           .bind(templateId)
           .all<{ id: string }>(),
       ]);
-      for (const dependency of dependencyRows.results) {
-        await visit(dependency.id);
-      }
       const dueAt = existing
         ? null
         : await this.dueAtFor(template, viewer.eventId, targetId);
@@ -756,6 +781,34 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
         throw new TaskStateError(
           `The ${template.dueAnchor.replace("_", " ")} due anchor cannot be resolved for this ${template.targetType}.`,
         );
+      }
+      if (!existing) {
+        const matchingTask = await this.env.DB.prepare(
+          `SELECT duplicate.id
+             FROM task_instances duplicate
+             JOIN task_templates duplicate_template
+               ON duplicate_template.id = duplicate.template_id
+              AND duplicate_template.event_id = duplicate.event_id
+            WHERE duplicate.event_id = ?
+              AND duplicate.target_type = ? AND duplicate.target_id = ?
+              AND ${matchingActiveTaskDefinitionSql}
+            LIMIT 1`,
+        )
+          .bind(
+            viewer.eventId,
+            template.targetType,
+            targetId,
+            ...matchingActiveTaskDefinitionBindings(template, dueAt),
+          )
+          .first<{ id: string }>();
+        if (matchingTask) {
+          throw new TaskStateError(
+            `“${template.name}” with the same instructions, type, evidence, impact and due date is already assigned to this ${template.targetType}. Use the existing task instead of creating a duplicate.`,
+          );
+        }
+      }
+      for (const dependency of dependencyRows.results) {
+        await visit(dependency.id);
       }
       const operationId = assignmentIntentId
         ? templateId === rootTemplateId
@@ -946,7 +999,17 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
             WHERE current_template.id = ? AND current_template.event_id = ?
               AND current_template.status = 'active'
               AND current_template.target_type = ?
-              AND ${targetGuard.sql}`,
+              AND ${targetGuard.sql}
+              AND NOT EXISTS (
+                SELECT 1 FROM task_instances duplicate
+                JOIN task_templates duplicate_template
+                  ON duplicate_template.id = duplicate.template_id
+                 AND duplicate_template.event_id = duplicate.event_id
+                WHERE duplicate.event_id = ?
+                   AND duplicate.target_type = ?
+                   AND duplicate.target_id = ?
+                   AND ${matchingActiveTaskDefinitionSql}
+              )`,
         ).bind(
           node.taskId,
           viewer.eventId,
@@ -965,6 +1028,10 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
           viewer.eventId,
           node.template.targetType,
           ...targetGuard.bindings,
+          viewer.eventId,
+          node.template.targetType,
+          targetId,
+          ...matchingActiveTaskDefinitionBindings(node.template, node.dueAt),
         ),
       );
     }
@@ -1163,6 +1230,31 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
       const staleOrLoserSentinel = message.includes("audit_events.action");
       const exactIntentCollision = message.includes("audit_events.id");
       if (!staleOrLoserSentinel && !exactIntentCollision) throw error;
+      for (const node of missing) {
+        const duplicate = await this.env.DB.prepare(
+          `SELECT duplicate.id
+             FROM task_instances duplicate
+             JOIN task_templates duplicate_template
+               ON duplicate_template.id = duplicate.template_id
+              AND duplicate_template.event_id = duplicate.event_id
+            WHERE duplicate.event_id = ?
+              AND duplicate.target_type = ? AND duplicate.target_id = ?
+              AND ${matchingActiveTaskDefinitionSql}
+            LIMIT 1`,
+        )
+          .bind(
+            viewer.eventId,
+            node.template.targetType,
+            targetId,
+            ...matchingActiveTaskDefinitionBindings(node.template, node.dueAt),
+          )
+          .first<{ id: string }>();
+        if (duplicate) {
+          throw new TaskStateError(
+            `“${node.template.name}” with the same instructions, type, evidence, impact and due date was assigned concurrently. Use the existing task instead of creating a duplicate.`,
+          );
+        }
+      }
       const winner = await this.env.DB.prepare(
         `SELECT id, title, status, last_operation_id AS lastOperationId
            FROM task_instances
@@ -1281,5 +1373,4 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
       webhookWarning: [...new Set(webhookWarnings)].join(" ") || null,
     };
   }
-
 }

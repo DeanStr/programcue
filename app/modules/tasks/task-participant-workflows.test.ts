@@ -209,6 +209,8 @@ describe("onboarding task service", () => {
           submitter,
           taskId,
           "This task belongs to another participant.",
+          "participant",
+          `comment-intent:${crypto.randomUUID()}`,
         ),
       ).rejects.toThrow("not accessible to this participant");
       await expect(
@@ -218,6 +220,54 @@ describe("onboarding task service", () => {
           .bind(taskId, submitter.personId)
           .first(),
       ).resolves.toEqual({ count: 0 });
+    });
+
+    it("stores one comment for an exact browser-intent retry and rejects changed content", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const taskId = await createChecklistTask(
+        testEnv,
+        `Idempotent comment ${crypto.randomUUID()}`,
+      );
+      const service = new TaskService(testEnv);
+      const intentId = `comment-intent:${crypto.randomUUID()}`;
+
+      await service.addComment(
+        speaker,
+        taskId,
+        "Please review this evidence.",
+        "participant",
+        intentId,
+      );
+      await service.addComment(
+        speaker,
+        taskId,
+        "Please review this evidence.",
+        "participant",
+        intentId,
+      );
+      await expect(
+        service.addComment(
+          speaker,
+          taskId,
+          "This is different content.",
+          "participant",
+          intentId,
+        ),
+      ).rejects.toThrow("already used with different content");
+
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT
+             (SELECT COUNT(*) FROM task_comments
+               WHERE task_id = ? AND author_person_id = ?) AS comments,
+             (SELECT COUNT(*) FROM audit_events
+               WHERE event_id = ? AND entity_id = ?
+                 AND action = 'task.comment.added') AS audits`,
+        )
+          .bind(taskId, speaker.personId, speaker.eventId, taskId)
+          .first(),
+      ).resolves.toEqual({ comments: 1, audits: 1 });
     });
 
     it("labels session-scoped deliverables with their session title", async () => {

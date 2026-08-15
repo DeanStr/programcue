@@ -139,6 +139,7 @@ export function EvaluationAdminPage() {
                 { id: "evaluation-overview", label: "Overview" },
                 { id: "evaluation-access", label: "Access" },
                 { id: "evaluation-rounds", label: "Rounds" },
+                { id: "evaluation-results", label: "Review results" },
                 { id: "evaluation-proposals", label: "Proposals" },
                 { id: "evaluation-sessions", label: "Sessions" },
                 { id: "evaluation-moderation", label: "Moderation" },

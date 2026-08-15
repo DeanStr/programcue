@@ -76,6 +76,7 @@ export abstract class AiScheduleProposalWorkflows extends AiEvaluationProposalWo
         trackId: scheduledSession.trackId,
         trackExclusive: scheduledSession.trackExclusive,
         speakerIds: scheduledSession.speakerIds,
+        speakerNames: scheduledSession.speakerNames,
         requiredResources: scheduledSession.requiredResources,
         expectedAttendance: scheduledSession.expectedAttendance,
         title: scheduledSession.title,
@@ -84,12 +85,14 @@ export abstract class AiScheduleProposalWorkflows extends AiEvaluationProposalWo
     const conflicts = detectScheduleConflicts({
       candidate: {
         sessionId: session.id,
+        title: session.title,
         roomId: room.id,
         startsAt: args.startsAt,
         endsAt: args.endsAt,
         trackId: session.trackId,
         trackExclusive: session.trackExclusive,
         speakerIds: session.speakerIds,
+        speakerNames: session.speakerNames,
         requiredResources: session.requiredResources,
         expectedAttendance: session.expectedAttendance,
       },

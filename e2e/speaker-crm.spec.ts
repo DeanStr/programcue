@@ -173,7 +173,9 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
     focusedSpeaker.getByLabel("Workflow status for Marcus Okafor"),
   ).toHaveValue("prospect");
   await expect(
-    focusedSpeaker.getByText("Invite to speaker portal", { exact: true }),
+    focusedSpeaker.getByRole("button", {
+      name: "Send portal invitation",
+    }),
   ).toBeVisible();
   const pendingMarcusInvitation = page
     .locator("section")
@@ -244,7 +246,28 @@ test("event roster previews CSV speakers and exposes explicit workflow status", 
     },
   ]);
   await page.goto("/admin/speakers");
-  await page.getByText("Import event speakers from CSV").click();
+  await page
+    .locator("details")
+    .filter({ hasText: "Add speaker record" })
+    .locator("summary")
+    .click();
+  await page
+    .locator("details")
+    .filter({ hasText: "Import event speakers from CSV" })
+    .locator("summary")
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Add speaker record" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Preview speaker import" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Speaker readiness" })
+      .locator("thead th")
+      .first(),
+  ).toHaveCSS("position", "static");
   await page.getByLabel("Event speaker CSV").setInputFiles({
     name: "event-speakers.csv",
     mimeType: "text/csv",

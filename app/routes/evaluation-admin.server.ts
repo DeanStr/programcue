@@ -128,17 +128,32 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       scoreTotal: number;
     }
   >();
+  const sessionResults = new Map<
+    string,
+    {
+      assignmentCount: number;
+      completedReviewCount: number;
+      scoredReviewCount: number;
+      scoreTotal: number;
+    }
+  >();
   if (resultsRoundId) {
     for (const assignment of workspace.assignments) {
       if (
         assignment.roundId !== resultsRoundId ||
-        assignment.submissionId === null ||
         assignment.status === "recused" ||
         assignment.status === "cancelled"
       ) {
         continue;
       }
-      const aggregate = submissionResults.get(assignment.submissionId) ?? {
+      const targetResults = assignment.submissionId
+        ? submissionResults
+        : sessionResults;
+      const targetId = assignment.submissionId ?? assignment.sessionId;
+      if (!targetId) {
+        throw new Error("An evaluation assignment has no review target.");
+      }
+      const aggregate = targetResults.get(targetId) ?? {
         assignmentCount: 0,
         completedReviewCount: 0,
         scoredReviewCount: 0,
@@ -155,7 +170,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           aggregate.scoreTotal += assignment.weightedScore;
         }
       }
-      submissionResults.set(assignment.submissionId, aggregate);
+      targetResults.set(targetId, aggregate);
     }
   }
   const roundScopedSubmissions = workspace.submissions.map((submission) => {
@@ -175,7 +190,34 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         (submission) => submission.assignmentCount === 0,
       )
     : roundScopedSubmissions;
-  const sortedSubmissions = [...visibleSubmissions].sort((left, right) => {
+  const roundScopedSessions = workspace.sessions.map((session) => {
+    const aggregate = sessionResults.get(session.id);
+    return {
+      ...session,
+      assignmentCount: aggregate?.assignmentCount ?? 0,
+      completedReviewCount: aggregate?.completedReviewCount ?? 0,
+      averageScore:
+        aggregate && aggregate.scoredReviewCount > 0
+          ? aggregate.scoreTotal / aggregate.scoredReviewCount
+          : null,
+    };
+  });
+  const compareResults = (
+    left: {
+      id: string;
+      title: string;
+      assignmentCount: number;
+      completedReviewCount: number;
+      averageScore: number | null;
+    },
+    right: {
+      id: string;
+      title: string;
+      assignmentCount: number;
+      completedReviewCount: number;
+      averageScore: number | null;
+    },
+  ) => {
     if (resultSort === "title_asc") {
       return (
         left.title.localeCompare(right.title, undefined, {
@@ -219,7 +261,30 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       }) ||
       left.id.localeCompare(right.id)
     );
-  });
+  };
+  const sortedSubmissions = [...visibleSubmissions].sort(compareResults);
+  const results = [
+    ...roundScopedSubmissions.map((submission) => ({
+      targetType: "proposal" as const,
+      id: submission.id,
+      reference: submission.reference,
+      title: submission.title,
+      state: submission.status,
+      assignmentCount: submission.assignmentCount,
+      completedReviewCount: submission.completedReviewCount,
+      averageScore: submission.averageScore,
+    })),
+    ...roundScopedSessions.map((session) => ({
+      targetType: "session" as const,
+      id: session.id,
+      reference: session.reference,
+      title: session.title,
+      state: session.status,
+      assignmentCount: session.assignmentCount,
+      completedReviewCount: session.completedReviewCount,
+      averageScore: session.averageScore,
+    })),
+  ].sort(compareResults);
   return {
     ...workspace,
     demoMode: viewer.demo,
@@ -239,6 +304,8 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       ...submission,
       aiAssessmentGenerationIntent: crypto.randomUUID(),
     })),
+    sessions: roundScopedSessions,
+    results,
     unassignedOnly,
     focusedSubmissionId: focusedSubmissionId || null,
     resultSort,

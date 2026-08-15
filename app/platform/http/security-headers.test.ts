@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { applySecurityHeaders } from "./security-headers";
+import {
+  applyPrivateWorkspaceCachePolicy,
+  applySecurityHeaders,
+} from "./security-headers";
 
 describe("Worker security headers", () => {
   it("enforces transport security in production and for invalid environment values", () => {
@@ -58,5 +61,32 @@ describe("Worker security headers", () => {
       "frame-src 'self' https://challenges.cloudflare.com;",
     );
     expect(headers.get("content-security-policy")).not.toContain("example.com");
+  });
+
+  it("prevents private workspace documents and route data from being cached", () => {
+    for (const pathname of [
+      "/admin",
+      "/admin.data",
+      "/admin/command",
+      "/admin/command.data",
+      "/review",
+      "/review.data",
+      "/review/workbench",
+      "/review/workbench.data",
+      "/ai/context",
+      "/ai/context.data",
+    ]) {
+      const headers = new Headers({ "cache-control": "public, max-age=300" });
+      applyPrivateWorkspaceCachePolicy(headers, pathname);
+      expect(headers.get("cache-control"), pathname).toBe("private, no-store");
+    }
+
+    for (const pathname of ["/administrator", "/reviewer", "/programme"]) {
+      const headers = new Headers({ "cache-control": "public, max-age=300" });
+      applyPrivateWorkspaceCachePolicy(headers, pathname);
+      expect(headers.get("cache-control"), pathname).toBe(
+        "public, max-age=300",
+      );
+    }
   });
 });

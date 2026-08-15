@@ -279,6 +279,7 @@ export class SchedulePlacementWorkflow {
         trackId: item.trackId,
         trackExclusive: item.trackExclusive,
         speakerIds: item.speakerIds,
+        speakerNames: item.speakerNames,
         requiredResources: item.requiredResources,
         expectedAttendance: item.expectedAttendance,
         title: item.title,
@@ -287,12 +288,14 @@ export class SchedulePlacementWorkflow {
     const conflicts = detectScheduleConflicts({
       candidate: {
         sessionId: session.id,
+        title: session.title,
         roomId: parsed.roomId,
         startsAt: parsed.startsAt,
         endsAt: parsed.endsAt,
         trackId: session.trackId,
         trackExclusive: session.trackExclusive,
         speakerIds: session.speakerIds,
+        speakerNames: session.speakerNames,
         requiredResources: session.requiredResources,
         expectedAttendance: session.expectedAttendance,
       },

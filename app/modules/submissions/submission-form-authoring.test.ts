@@ -70,7 +70,7 @@ async function publishedForm(overrides: Record<string, unknown> = {}) {
   const service = new SubmissionService(testEnv);
   const token = crypto.randomUUID().slice(0, 8);
   const defaults = await service.getDefaultFormInput(viewer);
-  const input = {
+  let input = {
     ...defaults,
     publicSlug: `test-${token}`,
     name: `Test form ${token}`,
@@ -80,6 +80,11 @@ async function publishedForm(overrides: Record<string, unknown> = {}) {
       ...((overrides.routing as Record<string, unknown> | undefined) ?? {}),
     },
   };
+  input = SubmissionService.synchronizeFormEventChoices(
+    input,
+    await service.listRoutingTracks(viewer),
+    await service.getConfiguredSessionFormats(viewer),
+  );
   if (input.kind === "direct_session") {
     const trackField = input.schema.fields.find(
       (field) => field.id === "category",
@@ -779,7 +784,104 @@ describe("Submissions D1 vertical slice", () => {
       ).toBe("Detailed proposal");
     });
 
-    it("rejects a direct-session publication when its event formats changed", async () => {
+    it("publishes a new form version with the current event tracks and formats", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const trackId = `track-form-sync-${crypto.randomUUID()}`;
+      const event = await testEnv.DB.prepare(
+        "SELECT session_formats_json AS sessionFormatsJson FROM events WHERE id = ?",
+      )
+        .bind(viewer.eventId)
+        .first<{ sessionFormatsJson: string }>();
+      expect(event).not.toBeNull();
+      const originalFormats = JSON.parse(event!.sessionFormatsJson) as Array<{
+        key: string;
+        label: string;
+        defaultDurationMinutes: number;
+        position: number;
+      }>;
+      const newFormat = {
+        key: "fireside",
+        label: "Fireside chat",
+        defaultDurationMinutes: 30,
+        position: originalFormats.length,
+      };
+      const renamedFormats = originalFormats.map((format) =>
+        format.key === "workshop"
+          ? { ...format, label: "Hands-on lab" }
+          : format,
+      );
+
+      try {
+        await testEnv.DB.batch([
+          testEnv.DB.prepare(
+            `INSERT INTO tracks (id, event_id, name, slug, position)
+             VALUES (?, ?, 'Emerging technology', ?, 99)`,
+          ).bind(trackId, viewer.eventId, `emerging-${trackId}`),
+          testEnv.DB.prepare(
+            `UPDATE events SET session_formats_json = ?
+              WHERE id = ? AND organisation_id = ?`,
+          ).bind(
+            JSON.stringify([...renamedFormats, newFormat]),
+            viewer.eventId,
+            viewer.organisationId,
+          ),
+        ]);
+        const workspace = await service.getAdminWorkspace(viewer, id);
+        const synchronized = SubmissionService.synchronizeFormEventChoices(
+          SubmissionService.workspaceToInput(workspace!),
+          await service.listRoutingTracks(viewer),
+          await service.getConfiguredSessionFormats(viewer),
+        );
+        expect(
+          synchronized.schema.fields.find((field) => field.id === "category")
+            ?.options,
+        ).toContain("Emerging technology");
+        expect(
+          synchronized.schema.fields.find((field) => field.id === "format")
+            ?.options,
+        ).toContain("Fireside chat");
+        expect(
+          synchronized.schema.fields.find((field) => field.id === "materials")
+            ?.condition,
+        ).toEqual({ fieldId: "format", equals: "Hands-on lab" });
+
+        await service.saveForm(viewer, synchronized);
+        const saved = await service.getAdminWorkspace(viewer, id);
+        await service.publishForm(
+          viewer,
+          id,
+          saved!.revision,
+          saved!.draftVersion.revision,
+        );
+        const published = await service.getPublicForm(slug);
+        expect(
+          published.version.schema.fields.find(
+            (field) => field.id === "category",
+          )?.options,
+        ).toContain("Emerging technology");
+        expect(
+          published.version.schema.fields.find((field) => field.id === "format")
+            ?.options,
+        ).toContain("Fireside chat");
+        expect(published.version.versionNumber).toBe(2);
+      } finally {
+        await testEnv.DB.batch([
+          testEnv.DB.prepare(
+            "DELETE FROM tracks WHERE id = ? AND event_id = ?",
+          ).bind(trackId, viewer.eventId),
+          testEnv.DB.prepare(
+            `UPDATE events SET session_formats_json = ?
+              WHERE id = ? AND organisation_id = ?`,
+          ).bind(
+            event!.sessionFormatsJson,
+            viewer.eventId,
+            viewer.organisationId,
+          ),
+        ]);
+      }
+    });
+
+    it("rejects publication when its event formats changed", async () => {
       const { service, id, testEnv } = await publishedForm({
         kind: "direct_session",
       });
@@ -908,8 +1010,24 @@ describe("Submissions D1 vertical slice", () => {
     });
 
     it("keeps one live version when the same form draft is published concurrently", async () => {
-      const { service, id, slug } = await publishedForm();
+      const { service, id, slug, testEnv } = await publishedForm();
       const workspace = await service.getAdminWorkspace(viewer, id);
+      const eventConfiguration = await testEnv.DB.prepare(
+        `SELECT event.session_formats_json AS sessionFormatsJson,
+                (SELECT json_group_array(
+                          json_object('id', configured_track.id, 'name', configured_track.name)
+                        )
+                   FROM (
+                     SELECT track.id, track.name, track.event_id
+                       FROM tracks track
+                      ORDER BY track.position, track.name, track.id
+                   ) configured_track
+                  WHERE configured_track.event_id = event.id) AS tracksJson
+           FROM events event WHERE event.id = ? AND event.organisation_id = ?`,
+      )
+        .bind(viewer.eventId, viewer.organisationId)
+        .first<{ sessionFormatsJson: string; tracksJson: string }>();
+      expect(eventConfiguration).not.toBeNull();
       const attempts = await Promise.allSettled([
         service.repository.publishForm(
           viewer.organisationId,
@@ -918,6 +1036,9 @@ describe("Submissions D1 vertical slice", () => {
           id,
           workspace!.revision,
           workspace!.draftVersion.revision,
+          undefined,
+          eventConfiguration!.sessionFormatsJson,
+          eventConfiguration!.tracksJson,
         ),
         service.repository.publishForm(
           viewer.organisationId,
@@ -926,6 +1047,9 @@ describe("Submissions D1 vertical slice", () => {
           id,
           workspace!.revision,
           workspace!.draftVersion.revision,
+          undefined,
+          eventConfiguration!.sessionFormatsJson,
+          eventConfiguration!.tracksJson,
         ),
       ]);
       expect(
@@ -952,6 +1076,64 @@ describe("Submissions D1 vertical slice", () => {
         publicSlug: slug,
         version: { status: "published" },
       });
+    });
+
+    it("rejects publication when event tracks are reordered at the write boundary", async () => {
+      const { service, id, testEnv } = await publishedForm();
+      const workspace = await service.getAdminWorkspace(viewer, id);
+      const tracks = await testEnv.DB.prepare(
+        `SELECT id, position FROM tracks
+          WHERE event_id = ?
+          ORDER BY position, name, id`,
+      )
+        .bind(viewer.eventId)
+        .all<{ id: string; position: number }>();
+      expect(tracks.results.length).toBeGreaterThan(1);
+      const reordered = tracks.results.at(-1)!;
+      const racingEnv = withNthBatchRace(testEnv, 1, async () => {
+        await testEnv.DB.prepare(
+          "UPDATE tracks SET position = -1 WHERE id = ? AND event_id = ?",
+        )
+          .bind(reordered.id, viewer.eventId)
+          .run();
+      });
+
+      try {
+        await expect(
+          new SubmissionService(racingEnv).publishForm(
+            viewer,
+            id,
+            workspace!.revision,
+            workspace!.draftVersion.revision,
+          ),
+        ).rejects.toThrow(/configuration changed before publication/i);
+        await expect(
+          testEnv.DB.prepare(
+            `SELECT form.status,
+                    (SELECT COUNT(*) FROM form_versions version
+                      WHERE version.form_id = form.id
+                        AND version.status = 'published') AS publishedCount
+               FROM form_definitions form
+              WHERE form.id = ? AND form.event_id = ?`,
+          )
+            .bind(id, viewer.eventId)
+            .first(),
+        ).resolves.toEqual({ status: "published", publishedCount: 1 });
+        await expect(
+          testEnv.DB.prepare(
+            `SELECT revision FROM form_versions
+              WHERE id = ? AND form_id = ? AND status = 'draft'`,
+          )
+            .bind(workspace!.draftVersion.id, id)
+            .first(),
+        ).resolves.toEqual({ revision: workspace!.draftVersion.revision });
+      } finally {
+        await testEnv.DB.prepare(
+          "UPDATE tracks SET position = ? WHERE id = ? AND event_id = ?",
+        )
+          .bind(reordered.position, reordered.id, viewer.eventId)
+          .run();
+      }
     });
 
     it("does not publish a required tracks field with no selectable tracks", async () => {

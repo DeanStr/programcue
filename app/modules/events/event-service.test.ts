@@ -70,6 +70,70 @@ function inputFrom(event: Awaited<ReturnType<EventService["getSetup"]>>) {
 }
 
 describe("Event Setup D1 service", () => {
+  it("rejects ambiguous session-format identities before persistence", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const current = await new EventService(testEnv).getSetup(viewer);
+    const input = inputFrom(current);
+
+    expect(
+      eventSetupInputSchema.safeParse({
+        ...input,
+        sessionFormats: [
+          ...input.sessionFormats,
+          {
+            key: "duplicate-label",
+            label: input.sessionFormats[0]!.label.toLowerCase(),
+            defaultDurationMinutes: 30,
+            position: input.sessionFormats.length,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      eventSetupInputSchema.safeParse({
+        ...input,
+        sessionFormats: [
+          {
+            key: "lab",
+            label: "Workshop",
+            defaultDurationMinutes: 45,
+            position: 0,
+          },
+          {
+            key: "workshop",
+            label: "Lab",
+            defaultDurationMinutes: 90,
+            position: 1,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects duplicate track names before persistence", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const current = await new EventService(testEnv).getSetup(viewer);
+    const input = inputFrom(current);
+    expect(input.tracks.length).toBeGreaterThan(0);
+
+    expect(
+      eventSetupInputSchema.safeParse({
+        ...input,
+        tracks: [
+          ...input.tracks,
+          {
+            ...input.tracks[0]!,
+            id: `duplicate-name-${crypto.randomUUID()}`,
+            slug: `duplicate-name-${crypto.randomUUID()}`,
+            name: input.tracks[0]!.name.toLowerCase(),
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts arbitrary runtime-supported IANA timezones", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);

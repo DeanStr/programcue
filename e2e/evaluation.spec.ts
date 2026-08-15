@@ -123,6 +123,16 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await expect(
     page.getByRole("heading", { name: "Session queue" }),
   ).toBeVisible();
+  const unifiedResults = page.getByRole("region", {
+    name: "Unified evaluation results",
+  });
+  await expect(
+    page.getByRole("heading", { name: "All review targets" }),
+  ).toBeVisible();
+  await expect(unifiedResults).toBeVisible();
+  await expect(
+    unifiedResults.getByRole("columnheader", { name: "Type" }),
+  ).toBeVisible();
 
   const bulkAssignButton = page.getByRole("button", { name: "Bulk assign" });
   await bulkAssignButton.click();

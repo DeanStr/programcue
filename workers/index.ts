@@ -7,7 +7,10 @@ import {
   apiPreflightResponse,
   isVersionedApiPath,
 } from "../app/platform/http/api-cors";
-import { applySecurityHeaders } from "../app/platform/http/security-headers";
+import {
+  applyPrivateWorkspaceCachePolicy,
+  applySecurityHeaders,
+} from "../app/platform/http/security-headers";
 import {
   rejectCrossOriginBrowserMutation,
   rejectUnsupportedRequestMethod,
@@ -92,15 +95,17 @@ function secure(
   appEnvironment: unknown = env.APP_ENV,
 ) {
   const headers = new Headers(response.headers);
+  const pathname = new URL(request.url).pathname;
   applySecurityHeaders(
     headers,
     typeof appEnvironment === "string" ? appEnvironment : undefined,
     env.RESOURCE_EMBED_ORIGINS,
   );
+  applyPrivateWorkspaceCachePolicy(headers, pathname);
   for (const [name, value] of apiCorsHeaders(request, env))
     headers.set(name, value);
 
-  if (new URL(request.url).pathname.startsWith("/embed/")) {
+  if (pathname.startsWith("/embed/")) {
     const ancestors = env.EMBED_FRAME_ANCESTORS;
     if (!ancestors)
       return new Response("EMBED_FRAME_ANCESTORS is required", {

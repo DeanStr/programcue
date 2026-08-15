@@ -19,7 +19,7 @@ export const formFieldSchema = z
     required: z.boolean().default(false),
     help: z.string().trim().max(300).default(""),
     example: z.string().trim().max(300).default(""),
-    options: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+    options: z.array(z.string().trim().min(1).max(80)).max(100).default([]),
     reviewVisibility: z.enum(["reviewers", "administrators_only"]).optional(),
     /**
      * Blind review is fail-closed: a field must be explicitly classified as
@@ -204,6 +204,7 @@ export const routingSchema = z.object({
     .default({}),
   trackIds: z.record(z.string(), z.string().trim().min(1).max(100)),
   trackNames: z.record(z.string(), z.string().trim().min(1).max(120)),
+  formatKeys: z.record(z.string(), z.string().trim().min(1).max(80)).optional(),
   teamNames: z
     .record(z.string(), z.string().trim().min(1).max(120))
     .default({}),
@@ -359,23 +360,21 @@ export const saveFormSchema = z
         }
       }
     }
-    if (input.kind === "direct_session") {
-      const formatField = input.schema.fields.find(
-        (field) => field.id === "format",
-      );
-      if (
-        formatField?.type !== "select" ||
-        !formatField.required ||
-        formatField.condition !== null ||
-        formatField.options.length === 0
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["schema", "fields"],
-          message:
-            "Direct-session formats must be an always-visible required select with at least one option",
-        });
-      }
+    const formatField = input.schema.fields.find(
+      (field) => field.id === "format",
+    );
+    if (
+      formatField?.type !== "select" ||
+      !formatField.required ||
+      formatField.condition !== null ||
+      formatField.options.length === 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["schema", "fields"],
+        message:
+          "Session formats must be an always-visible required select with at least one option",
+      });
     }
   });
 

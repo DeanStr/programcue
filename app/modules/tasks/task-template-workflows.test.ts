@@ -771,6 +771,217 @@ describe("onboarding task service", () => {
       expect(stored).toEqual({ taskCount: 1, auditCount: 1 });
     });
 
+    it("rolls back concurrent assignments from matching task definitions", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const service = new TaskService(testEnv);
+      const name = `One visible requirement ${crypto.randomUUID()}`;
+      const templateInput = {
+        name,
+        description: "The same participant-visible requirement.",
+        targetType: "speaker" as const,
+        taskType: "checklist" as const,
+        impact: "high" as const,
+        evidenceMode: "checkbox" as const,
+        dueAnchor: "none" as const,
+        dueOffsetDays: null,
+        fixedDueDate: null,
+        autoAssignOnAcceptance: false,
+        dependencyIds: [],
+      };
+      const firstTemplateId = await service.createTemplate(
+        admin,
+        templateInput,
+      );
+      const secondTemplateId = await service.createTemplate(
+        admin,
+        templateInput,
+      );
+      const racingService = new TaskService(withBatchBarrier(testEnv));
+      const results = await Promise.allSettled([
+        racingService.assignTemplate(admin, firstTemplateId, speaker.personId),
+        racingService.assignTemplate(admin, secondTemplateId, speaker.personId),
+      ]);
+
+      expect(
+        results.filter((result) => result.status === "fulfilled"),
+      ).toHaveLength(1);
+      const rejected = results.find((result) => result.status === "rejected");
+      expect(rejected).toMatchObject({
+        status: "rejected",
+        reason: expect.objectContaining({
+          message: expect.stringMatching(/creating a duplicate/i),
+        }),
+      });
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT COUNT(*) AS count
+             FROM task_instances
+            WHERE event_id = ? AND target_type = 'speaker' AND target_id = ?
+              AND lower(trim(title)) = lower(trim(?))`,
+        )
+          .bind(admin.eventId, speaker.personId, name)
+          .first(),
+      ).resolves.toEqual({ count: 1 });
+    });
+
+    it("allows the same title when participant-facing task material differs", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const service = new TaskService(testEnv);
+      const name = `Reusable task title ${crypto.randomUUID()}`;
+      const base = {
+        name,
+        description: "Confirm the original requirement.",
+        targetType: "speaker" as const,
+        taskType: "checklist" as const,
+        impact: "high" as const,
+        evidenceMode: "checkbox" as const,
+        dueAnchor: "none" as const,
+        dueOffsetDays: null,
+        fixedDueDate: null,
+        autoAssignOnAcceptance: false,
+        dependencyIds: [],
+      };
+      const definitions = [
+        base,
+        {
+          ...base,
+          description: "Confirm a materially different requirement.",
+        },
+        {
+          ...base,
+          taskType: "file_upload" as const,
+          evidenceMode: "file" as const,
+        },
+        {
+          ...base,
+          evidenceMode: "admin_approval" as const,
+        },
+        {
+          ...base,
+          impact: "medium" as const,
+        },
+        {
+          ...base,
+          dueAnchor: "fixed" as const,
+          fixedDueDate: "2027-06-01",
+        },
+        {
+          ...base,
+          taskType: "short_form" as const,
+          evidenceMode: "text" as const,
+          configuration: {
+            form: {
+              fields: [
+                {
+                  id: "first_response",
+                  label: "First response",
+                  type: "short_text" as const,
+                  required: true,
+                },
+              ],
+            },
+          },
+        },
+        {
+          ...base,
+          taskType: "short_form" as const,
+          evidenceMode: "text" as const,
+          configuration: {
+            form: {
+              fields: [
+                {
+                  id: "second_response",
+                  label: "Second response",
+                  type: "short_text" as const,
+                  required: true,
+                },
+              ],
+            },
+          },
+        },
+      ];
+
+      for (const definition of definitions) {
+        const templateId = await service.createTemplate(admin, definition);
+        await service.assignTemplate(admin, templateId, speaker.personId);
+      }
+
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT COUNT(*) AS count
+             FROM task_instances
+            WHERE event_id = ? AND target_type = 'speaker' AND target_id = ?
+              AND lower(trim(title)) = lower(trim(?))`,
+        )
+          .bind(admin.eventId, speaker.personId, name)
+          .first(),
+      ).resolves.toEqual({ count: definitions.length });
+    });
+
+    it("allows a new template with the same title after earlier work is terminal", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const service = new TaskService(testEnv);
+
+      for (const terminalStatus of ["completed", "waived"] as const) {
+        const name = `Recurring visible requirement ${terminalStatus} ${crypto.randomUUID()}`;
+        const templateInput = {
+          name,
+          description: "A requirement that can recur after terminal work.",
+          targetType: "speaker" as const,
+          taskType: "checklist" as const,
+          impact: "high" as const,
+          evidenceMode: "checkbox" as const,
+          dueAnchor: "none" as const,
+          dueOffsetDays: null,
+          fixedDueDate: null,
+          autoAssignOnAcceptance: false,
+          dependencyIds: [],
+        };
+        const firstTemplateId = await service.createTemplate(
+          admin,
+          templateInput,
+        );
+        const secondTemplateId = await service.createTemplate(
+          admin,
+          templateInput,
+        );
+        const first = await service.assignTemplate(
+          admin,
+          firstTemplateId,
+          speaker.personId,
+        );
+        await testEnv.DB.prepare(
+          `UPDATE task_instances
+              SET status = ?, readiness_percent = 100, revision = revision + 1,
+                  completed_at = unixepoch(), completed_by_person_id = ?,
+                  updated_at = unixepoch()
+            WHERE id = ? AND event_id = ?`,
+        )
+          .bind(terminalStatus, admin.personId, first.taskId, admin.eventId)
+          .run();
+
+        const second = await service.assignTemplate(
+          admin,
+          secondTemplateId,
+          speaker.personId,
+        );
+        expect(second.taskId).not.toBe(first.taskId);
+        await expect(
+          testEnv.DB.prepare(
+            `SELECT COUNT(*) AS count
+               FROM task_instances
+              WHERE event_id = ? AND target_type = 'speaker' AND target_id = ?
+                AND lower(trim(title)) = lower(trim(?))`,
+          )
+            .bind(admin.eventId, speaker.personId, name)
+            .first(),
+        ).resolves.toEqual({ count: 2 });
+      }
+    });
+
     it("propagates an unrelated assignment batch failure when a concurrent task exists", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);

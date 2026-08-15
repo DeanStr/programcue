@@ -8,6 +8,7 @@ import {
   EvaluationProgressionPanel,
   EvaluationSessionQueue,
   EvaluationSubmissionQueue,
+  EvaluationUnifiedResults,
 } from "~/components/evaluation-admin-queue-panels";
 
 import { EvaluationMetrics } from "~/components/evaluation-metrics";
@@ -63,88 +64,91 @@ export function EvaluationPlanState() {
       defaultExpandedOnMobile
     >
       <section className="card pad">
-      <h2>Create the evaluation plan</h2>
-      <p className="subtle">
-        Configure the first review round and its weighted rubric. Active round
-        rubrics become protected once assignments exist.
-      </p>
-      <Form method="post" className="stack">
-        <input type="hidden" name="intent" value="create-plan" />
-        <label className="label">
-          Plan name
-          <input
-            className="input"
-            name="planName"
-            defaultValue="Programme committee review"
-            required
-          />
-        </label>
-        <label className="label">
-          First round name
-          <input
-            className="input"
-            name="roundName"
-            defaultValue="Initial review"
-            required
-          />
-        </label>
-        <div className="grid grid-2">
+        <h2>Create the evaluation plan</h2>
+        <p className="subtle">
+          Configure the first review round and its weighted rubric. Active round
+          rubrics become protected once assignments exist.
+        </p>
+        <Form method="post" className="stack">
+          <input type="hidden" name="intent" value="create-plan" />
           <label className="label">
-            Opens ({loaderData.eventTimezone})
+            Plan name
             <input
               className="input"
-              type="datetime-local"
-              name="roundOpensAt"
+              name="planName"
+              defaultValue="Programme committee review"
+              required
             />
           </label>
           <label className="label">
-            Closes ({loaderData.eventTimezone})
+            First round name
             <input
               className="input"
-              type="datetime-local"
-              name="roundClosesAt"
+              name="roundName"
+              defaultValue="Initial review"
+              required
             />
           </label>
-        </div>
-        <label className="validation-item">
-          <input type="checkbox" name="anonymous" value="true" />
-          <span>
-            <strong>Hide author and co-author identity</strong>
-            Speaker names and email addresses are omitted from reviewer
-            workspaces for this round. Administrator-only form answers are
-            always excluded, whether identity blinding is on or off.
-          </span>
-        </label>
-        {loaderData.canManageEvaluationAccess ? (
-          <label className="label">
-            Final decision authority
-            <select className="select" name="decisionRole">
-              <option value="administrator">Owners and administrators</option>
-              <option value="committee_chair">
-                Owners, administrators and committee chairs
-              </option>
-            </select>
-          </label>
-        ) : (
-          <div className="validation-item">
-            <input type="hidden" name="decisionRole" value="administrator" />
-            <strong>Final decisions remain administrator-only</strong>
-            <span>
-              An owner or administrator must explicitly grant final decision
-              authority to committee chairs.
-            </span>
+          <div className="grid grid-2">
+            <label className="label">
+              Opens ({loaderData.eventTimezone})
+              <input
+                className="input"
+                type="datetime-local"
+                name="roundOpensAt"
+              />
+            </label>
+            <label className="label">
+              Closes ({loaderData.eventTimezone})
+              <input
+                className="input"
+                type="datetime-local"
+                name="roundClosesAt"
+              />
+            </label>
           </div>
-        )}
-        <RubricFields
-          criteria={defaultRubric.map((criterion) => ({
-            ...criterion,
-            description: criterion.description,
-          }))}
-        />
-        <button className="btn primary" disabled={navigation.state !== "idle"}>
-          Create review plan
-        </button>
-      </Form>
+          <label className="validation-item">
+            <input type="checkbox" name="anonymous" value="true" />
+            <span>
+              <strong>Hide author and co-author identity</strong>
+              Speaker names and email addresses are omitted from reviewer
+              workspaces for this round. Administrator-only form answers are
+              always excluded, whether identity blinding is on or off.
+            </span>
+          </label>
+          {loaderData.canManageEvaluationAccess ? (
+            <label className="label">
+              Final decision authority
+              <select className="select" name="decisionRole">
+                <option value="administrator">Owners and administrators</option>
+                <option value="committee_chair">
+                  Owners, administrators and committee chairs
+                </option>
+              </select>
+            </label>
+          ) : (
+            <div className="validation-item">
+              <input type="hidden" name="decisionRole" value="administrator" />
+              <strong>Final decisions remain administrator-only</strong>
+              <span>
+                An owner or administrator must explicitly grant final decision
+                authority to committee chairs.
+              </span>
+            </div>
+          )}
+          <RubricFields
+            criteria={defaultRubric.map((criterion) => ({
+              ...criterion,
+              description: criterion.description,
+            }))}
+          />
+          <button
+            className="btn primary"
+            disabled={navigation.state !== "idle"}
+          >
+            Create review plan
+          </button>
+        </Form>
       </section>
     </AdminPageSection>
   ) : (
@@ -172,6 +176,13 @@ export function EvaluationPlanState() {
       >
         <EvaluationRoundsPanel />
         <EvaluationProgressionPanel />
+      </AdminPageSection>
+      <AdminPageSection
+        id="evaluation-results"
+        label="Review results"
+        description="One score-ranked view across proposals and sessions"
+      >
+        <EvaluationUnifiedResults />
       </AdminPageSection>
       <AdminPageSection
         id="evaluation-proposals"

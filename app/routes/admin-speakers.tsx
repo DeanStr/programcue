@@ -139,6 +139,16 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           <span>{actionData.message}</span>
         </div>
       ) : null}
+      <div className="pc-status-notice is-info mb">
+        <UserRound aria-hidden size={18} />
+        <div className="pc-status-notice-copy">
+          <strong>Speaker records and portal access are separate</strong>
+          <div>
+            Add or import roster records without sending email. When a speaker
+            is ready, use the portal-invitation action in their roster row.
+          </div>
+        </div>
+      </div>
       <details className="card pad mb pc-disclosure">
         <summary>
           <strong>Import event speakers from CSV</strong>{" "}
@@ -482,7 +492,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           </div>
         </form>
       </section>
-      <section className="card pad">
+      <section className="card pad" id="speaker-readiness">
         <div className="card-title">
           <h2>Speaker readiness</h2>
           <span className="help right">
@@ -490,7 +500,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           </span>
         </div>
         <div
-          className="table-wrap pc-responsive-table-wrap"
+          className="table-wrap pc-responsive-table-wrap admin-speaker-roster-table"
           role="region"
           aria-label="Speaker readiness"
           tabIndex={0}
@@ -505,6 +515,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                 <th scope="col">Tasks</th>
                 <th scope="col">File security</th>
                 <th scope="col">Readiness</th>
+                <th scope="col">Portal access</th>
               </tr>
             </thead>
             <tbody>
@@ -545,56 +556,6 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                             {speaker.organisationName ??
                               "Organisation not provided"}
                           </small>
-                          {!speaker.portalAccessAccepted &&
-                          speaker.workflowStatus !== "declined" &&
-                          speaker.workflowStatus !== "withdrawn" ? (
-                            <details className="pc-disclosure mt">
-                              <summary>
-                                {speaker.portalInvitationPending
-                                  ? "Resend portal invitation"
-                                  : "Invite to speaker portal"}
-                              </summary>
-                              <Form method="post" className="stack mt">
-                                <input
-                                  type="hidden"
-                                  name="_intent"
-                                  value="send_speaker_invitation"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="personId"
-                                  value={speaker.id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="idempotencyKey"
-                                  value={
-                                    loaderData.invitationIdempotencyKeys[
-                                      speaker.id
-                                    ]
-                                  }
-                                />
-                                <label className="help">
-                                  <input
-                                    type="checkbox"
-                                    name="confirmation"
-                                    value="send"
-                                    required
-                                  />{" "}
-                                  Send a sign-in email to {speaker.email}
-                                </label>
-                                <button
-                                  className="btn small"
-                                  type="submit"
-                                  disabled={navigation.state !== "idle"}
-                                >
-                                  {speaker.portalInvitationPending
-                                    ? "Resend invitation"
-                                    : "Send invitation"}
-                                </button>
-                              </Form>
-                            </details>
-                          ) : null}
                         </div>
                       </div>
                     </td>
@@ -676,11 +637,62 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                         <span className="status warning">Needs attention</span>
                       )}
                     </td>
+                    <td
+                      data-label="Portal access"
+                      className="pc-record-action-cell"
+                    >
+                      {speaker.portalAccessAccepted ? (
+                        <span className="status success">Access accepted</span>
+                      ) : speaker.workflowStatus === "declined" ||
+                        speaker.workflowStatus === "withdrawn" ? (
+                        <span className="help">
+                          Unavailable while {speaker.workflowStatus}
+                        </span>
+                      ) : (
+                        <Form method="post" className="stack">
+                          <input
+                            type="hidden"
+                            name="_intent"
+                            value="send_speaker_invitation"
+                          />
+                          <input
+                            type="hidden"
+                            name="personId"
+                            value={speaker.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="idempotencyKey"
+                            value={
+                              loaderData.invitationIdempotencyKeys[speaker.id]
+                            }
+                          />
+                          <label className="help">
+                            <input
+                              type="checkbox"
+                              name="confirmation"
+                              value="send"
+                              required
+                            />{" "}
+                            Confirm email to {speaker.email}
+                          </label>
+                          <button
+                            className="btn small primary"
+                            type="submit"
+                            disabled={navigation.state !== "idle"}
+                          >
+                            {speaker.portalInvitationPending
+                              ? "Resend portal invitation"
+                              : "Send portal invitation"}
+                          </button>
+                        </Form>
+                      )}
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr className="pc-table-empty-row">
-                  <td className="pc-table-empty-cell" colSpan={7}>
+                  <td className="pc-table-empty-cell" colSpan={8}>
                     <div className="pc-empty-state">
                       <UserRound aria-hidden className="pc-state-icon" />
                       <h2>No speaker identities</h2>

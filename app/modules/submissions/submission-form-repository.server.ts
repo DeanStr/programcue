@@ -140,7 +140,8 @@ export class SubmissionFormRepository {
     )
       .bind(eventId, organisationId)
       .first<{ id: string; timezone: string }>();
-    if (!eventExists) throw new Response("This event could not be found.", { status: 404 });
+    if (!eventExists)
+      throw new Response("This event could not be found.", { status: 404 });
 
     const [created, versionCreated] = await this.env.DB.batch([
       this.env.DB.prepare(
@@ -408,12 +409,15 @@ export class SubmissionFormRepository {
     formId: string,
     formRevision: number,
     draftRevision: number,
-    operation?: {
-      operationId: string;
-      nextVersionId: string;
-      auditId: string;
-    },
-    expectedSessionFormatsJson: string | null = null,
+    operation:
+      | {
+          operationId: string;
+          nextVersionId: string;
+          auditId: string;
+        }
+      | undefined,
+    expectedSessionFormatsJson: string,
+    expectedTracksJson: string,
   ) {
     if (operation) {
       const recovered = await this.env.DB.prepare(
@@ -529,13 +533,24 @@ export class SubmissionFormRepository {
               WHERE slug_owner.public_slug = ? AND slug_owner.id <> ?
            )
            AND (
-             ? IS NULL OR EXISTS (
+             EXISTS (
                SELECT 1 FROM events configured_event
                 WHERE configured_event.id = form_definitions.event_id
                   AND configured_event.organisation_id = ?
                   AND configured_event.session_formats_json = ?
              )
            )
+           AND (
+             SELECT json_group_array(
+                      json_object('id', configured_track.id, 'name', configured_track.name)
+                    )
+               FROM (
+                 SELECT track.id, track.name, track.event_id
+                   FROM tracks track
+                  ORDER BY track.position, track.name, track.id
+               ) configured_track
+              WHERE configured_track.event_id = form_definitions.event_id
+           ) = ?
            ${routedTeamPredicates}
            ${routedTrackPredicates}
       `,
@@ -558,9 +573,9 @@ export class SubmissionFormRepository {
         draftRevision,
         workspace.publicSlug,
         formId,
-        expectedSessionFormatsJson,
         organisationId,
         expectedSessionFormatsJson,
+        expectedTracksJson,
         ...routedTeamBindings,
         ...routedTrackBindings,
       ),
@@ -701,22 +716,30 @@ export class SubmissionFormRepository {
           "That public form URL is already in use. Choose a different slug.",
         );
       }
-      if (expectedSessionFormatsJson !== null) {
-        const currentFormatConfiguration = await this.env.DB.prepare(
-          `SELECT session_formats_json AS sessionFormatsJson
-             FROM events WHERE id = ? AND organisation_id = ?`,
-        )
-          .bind(eventId, organisationId)
-          .first<{ sessionFormatsJson: string }>();
-        if (
-          !currentFormatConfiguration ||
-          currentFormatConfiguration.sessionFormatsJson !==
-            expectedSessionFormatsJson
-        ) {
-          throw new SubmissionStateError(
-            "The event session-format configuration changed before publication. Refresh the form before publishing it.",
-          );
-        }
+      const currentConfiguration = await this.env.DB.prepare(
+        `SELECT event.session_formats_json AS sessionFormatsJson,
+                (SELECT json_group_array(
+                          json_object('id', configured_track.id, 'name', configured_track.name)
+                        )
+                   FROM (
+                     SELECT track.id, track.name, track.event_id
+                       FROM tracks track
+                      ORDER BY track.position, track.name, track.id
+                   ) configured_track
+                  WHERE configured_track.event_id = event.id) AS tracksJson
+           FROM events event WHERE event.id = ? AND event.organisation_id = ?`,
+      )
+        .bind(eventId, organisationId)
+        .first<{ sessionFormatsJson: string; tracksJson: string }>();
+      if (
+        !currentConfiguration ||
+        currentConfiguration.sessionFormatsJson !==
+          expectedSessionFormatsJson ||
+        currentConfiguration.tracksJson !== expectedTracksJson
+      ) {
+        throw new SubmissionStateError(
+          "The event track or session-format configuration changed before publication. Refresh the form before publishing it.",
+        );
       }
       throw new SubmissionRevisionConflictError();
     }

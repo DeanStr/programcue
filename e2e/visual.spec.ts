@@ -177,7 +177,7 @@ async function waitForSurfaceReady(page: Page, name: string) {
     ).toBeVisible();
     await expect(
       page.getByRole("heading", {
-        name: "Submission results and assignments",
+        name: "Proposal assignments and decisions",
       }),
     ).toBeVisible();
   } else if (name === "tasks-readiness") {

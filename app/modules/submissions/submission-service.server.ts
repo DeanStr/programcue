@@ -20,12 +20,12 @@ export class SubmissionService {
     return SubmissionAdministrationWorkflows.workspaceToInput(...args);
   }
 
-  static synchronizeFormTrackChoices(
+  static synchronizeFormEventChoices(
     ...args: Parameters<
-      typeof SubmissionAdministrationWorkflows.synchronizeFormTrackChoices
+      typeof SubmissionAdministrationWorkflows.synchronizeFormEventChoices
     >
   ) {
-    return SubmissionAdministrationWorkflows.synchronizeFormTrackChoices(
+    return SubmissionAdministrationWorkflows.synchronizeFormEventChoices(
       ...args,
     );
   }
@@ -42,8 +42,7 @@ export class SubmissionService {
     env: CloudflareEnvironment,
     dependencies: { airtable?: AirtableProviderBoundary } = {},
   ) {
-    const airtable =
-      dependencies.airtable ?? new AirtableProviderBoundary(env);
+    const airtable = dependencies.airtable ?? new AirtableProviderBoundary(env);
     const collaborators = { airtable };
     this.shared = new SubmissionServiceFoundation(env, collaborators);
     this.forms = new SubmissionFormWorkflows(env, collaborators);
@@ -66,23 +65,33 @@ export class SubmissionService {
     return this.shared.getApplicationEventScope(...args);
   }
   getConfiguredSessionFormats(
-    ...args: Parameters<SubmissionServiceFoundation["getConfiguredSessionFormats"]>
+    ...args: Parameters<
+      SubmissionServiceFoundation["getConfiguredSessionFormats"]
+    >
   ) {
     return this.shared.getConfiguredSessionFormats(...args);
   }
-  getPublicForm(...args: Parameters<SubmissionServiceFoundation["getPublicForm"]>) {
+  getPublicForm(
+    ...args: Parameters<SubmissionServiceFoundation["getPublicForm"]>
+  ) {
     return this.shared.getPublicForm(...args);
   }
   requireClaimedCoSpeakerContext(
-    ...args: Parameters<SubmissionServiceFoundation["requireClaimedCoSpeakerContext"]>
+    ...args: Parameters<
+      SubmissionServiceFoundation["requireClaimedCoSpeakerContext"]
+    >
   ) {
     return this.shared.requireClaimedCoSpeakerContext(...args);
   }
 
-  getAdminWorkspace(...args: Parameters<SubmissionFormWorkflows["getAdminWorkspace"]>) {
+  getAdminWorkspace(
+    ...args: Parameters<SubmissionFormWorkflows["getAdminWorkspace"]>
+  ) {
     return this.forms.getAdminWorkspace(...args);
   }
-  listAdminForms(...args: Parameters<SubmissionFormWorkflows["listAdminForms"]>) {
+  listAdminForms(
+    ...args: Parameters<SubmissionFormWorkflows["listAdminForms"]>
+  ) {
     return this.forms.listAdminForms(...args);
   }
   getLatestPublishedFormSlug(
@@ -90,7 +99,9 @@ export class SubmissionService {
   ) {
     return this.forms.getLatestPublishedFormSlug(...args);
   }
-  defaultFormInput(...args: Parameters<SubmissionFormWorkflows["defaultFormInput"]>) {
+  defaultFormInput(
+    ...args: Parameters<SubmissionFormWorkflows["defaultFormInput"]>
+  ) {
     return this.forms.defaultFormInput(...args);
   }
   getDefaultFormInput(
@@ -121,21 +132,29 @@ export class SubmissionService {
     return this.coSpeakers.inviteAcceptedCoSpeaker(...args);
   }
   recoverAcceptedCoSpeakerInvitation(
-    ...args: Parameters<SubmissionCoSpeakerWorkflows["recoverAcceptedCoSpeakerInvitation"]>
+    ...args: Parameters<
+      SubmissionCoSpeakerWorkflows["recoverAcceptedCoSpeakerInvitation"]
+    >
   ) {
     return this.coSpeakers.recoverAcceptedCoSpeakerInvitation(...args);
   }
   updateClaimedSpeakerProfile(
-    ...args: Parameters<SubmissionCoSpeakerWorkflows["updateClaimedSpeakerProfile"]>
+    ...args: Parameters<
+      SubmissionCoSpeakerWorkflows["updateClaimedSpeakerProfile"]
+    >
   ) {
     return this.coSpeakers.updateClaimedSpeakerProfile(...args);
   }
   updateClaimedCoSpeakerProfile(
-    ...args: Parameters<SubmissionCoSpeakerWorkflows["updateClaimedCoSpeakerProfile"]>
+    ...args: Parameters<
+      SubmissionCoSpeakerWorkflows["updateClaimedCoSpeakerProfile"]
+    >
   ) {
     return this.coSpeakers.updateClaimedCoSpeakerProfile(...args);
   }
-  claimCoSpeaker(...args: Parameters<SubmissionCoSpeakerWorkflows["claimCoSpeaker"]>) {
+  claimCoSpeaker(
+    ...args: Parameters<SubmissionCoSpeakerWorkflows["claimCoSpeaker"]>
+  ) {
     return this.coSpeakers.claimCoSpeaker(...args);
   }
   getCoSpeakerClaim(
@@ -149,18 +168,24 @@ export class SubmissionService {
     return this.coSpeakers.claimCoSpeakerToken(...args);
   }
   resendCoSpeakerInvitation(
-    ...args: Parameters<SubmissionCoSpeakerWorkflows["resendCoSpeakerInvitation"]>
+    ...args: Parameters<
+      SubmissionCoSpeakerWorkflows["resendCoSpeakerInvitation"]
+    >
   ) {
     return this.coSpeakers.resendCoSpeakerInvitation(...args);
   }
 
   authorizeApplicantProfileImport(
-    ...args: Parameters<SubmissionApplicantWorkflows["authorizeApplicantProfileImport"]>
+    ...args: Parameters<
+      SubmissionApplicantWorkflows["authorizeApplicantProfileImport"]
+    >
   ) {
     return this.applicantWorkflows.authorizeApplicantProfileImport(...args);
   }
   authorizeApplicantMultipartUpload(
-    ...args: Parameters<SubmissionApplicantWorkflows["authorizeApplicantMultipartUpload"]>
+    ...args: Parameters<
+      SubmissionApplicantWorkflows["authorizeApplicantMultipartUpload"]
+    >
   ) {
     return this.applicantWorkflows.authorizeApplicantMultipartUpload(...args);
   }
@@ -169,7 +194,9 @@ export class SubmissionService {
   ) {
     return this.applicantWorkflows.getApplicantPortal(...args);
   }
-  createDraft(...args: Parameters<SubmissionApplicantWorkflows["createDraft"]>) {
+  createDraft(
+    ...args: Parameters<SubmissionApplicantWorkflows["createDraft"]>
+  ) {
     return this.applicantWorkflows.createDraft(...args);
   }
   startAnonymousDraft(
@@ -180,11 +207,15 @@ export class SubmissionService {
   saveDraft(...args: Parameters<SubmissionApplicantWorkflows["saveDraft"]>) {
     return this.applicantWorkflows.saveDraft(...args);
   }
-  submitDraft(...args: Parameters<SubmissionApplicantWorkflows["submitDraft"]>) {
+  submitDraft(
+    ...args: Parameters<SubmissionApplicantWorkflows["submitDraft"]>
+  ) {
     return this.applicantWorkflows.submitDraft(...args);
   }
   submitDraftForParticipantApi(
-    ...args: Parameters<SubmissionApplicantWorkflows["submitDraftForParticipantApi"]>
+    ...args: Parameters<
+      SubmissionApplicantWorkflows["submitDraftForParticipantApi"]
+    >
   ) {
     return this.applicantWorkflows.submitDraftForParticipantApi(...args);
   }
@@ -199,23 +230,31 @@ export class SubmissionService {
     return this.applicantWorkflows.withdrawSubmission(...args);
   }
   withdrawSubmissionForParticipantApi(
-    ...args: Parameters<SubmissionApplicantWorkflows["withdrawSubmissionForParticipantApi"]>
+    ...args: Parameters<
+      SubmissionApplicantWorkflows["withdrawSubmissionForParticipantApi"]
+    >
   ) {
     return this.applicantWorkflows.withdrawSubmissionForParticipantApi(...args);
   }
 
   listAdminSubmissions(
-    ...args: Parameters<SubmissionAdministrationWorkflows["listAdminSubmissions"]>
+    ...args: Parameters<
+      SubmissionAdministrationWorkflows["listAdminSubmissions"]
+    >
   ) {
     return this.administration.listAdminSubmissions(...args);
   }
   listAdminSubmissionPage(
-    ...args: Parameters<SubmissionAdministrationWorkflows["listAdminSubmissionPage"]>
+    ...args: Parameters<
+      SubmissionAdministrationWorkflows["listAdminSubmissionPage"]
+    >
   ) {
     return this.administration.listAdminSubmissionPage(...args);
   }
   getAdminSubmissionQueueContext(
-    ...args: Parameters<SubmissionAdministrationWorkflows["getAdminSubmissionQueueContext"]>
+    ...args: Parameters<
+      SubmissionAdministrationWorkflows["getAdminSubmissionQueueContext"]
+    >
   ) {
     return this.administration.getAdminSubmissionQueueContext(...args);
   }
@@ -225,17 +264,23 @@ export class SubmissionService {
     return this.administration.getAdminSubmission(...args);
   }
   createDirectSession(
-    ...args: Parameters<SubmissionAdministrationWorkflows["createDirectSession"]>
+    ...args: Parameters<
+      SubmissionAdministrationWorkflows["createDirectSession"]
+    >
   ) {
     return this.administration.createDirectSession(...args);
   }
   createDirectSessionForApi(
-    ...args: Parameters<SubmissionAdministrationWorkflows["createDirectSessionForApi"]>
+    ...args: Parameters<
+      SubmissionAdministrationWorkflows["createDirectSessionForApi"]
+    >
   ) {
     return this.administration.createDirectSessionForApi(...args);
   }
   createManualApplication(
-    ...args: Parameters<SubmissionAdministrationWorkflows["createManualApplication"]>
+    ...args: Parameters<
+      SubmissionAdministrationWorkflows["createManualApplication"]
+    >
   ) {
     return this.administration.createManualApplication(...args);
   }

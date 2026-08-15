@@ -759,6 +759,7 @@ describe("Airtable authoritative room repository", () => {
         tasks.tasks[0]!.id,
         "Airtable-backed golden-path reconciliation",
         "administrator",
+        `comment-intent:${crypto.randomUUID()}`,
       );
       const synchronized = await eventData.assertSynchronized(
         viewer.organisationId,

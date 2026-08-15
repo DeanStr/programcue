@@ -1,4 +1,8 @@
-import { sessionFormatInputSchema } from "./event-schema";
+import {
+  hasCrossCollidingSessionFormatReference,
+  normalizeSessionFormatReference,
+  sessionFormatInputSchema,
+} from "./event-schema";
 
 export const INITIAL_EVENT_SESSION_FORMATS = [
   {
@@ -72,7 +76,11 @@ export function parseSessionFormatsConfiguration(value: string) {
     .safeParse(decoded);
   if (
     !parsed.success ||
-    new Set(parsed.data.map((format) => format.key)).size !== parsed.data.length
+    new Set(parsed.data.map((format) => format.key)).size !==
+      parsed.data.length ||
+    new Set(parsed.data.map((format) => format.label.toLowerCase())).size !==
+      parsed.data.length ||
+    hasCrossCollidingSessionFormatReference(parsed.data)
   ) {
     throw new EventConfigurationDataError(
       "The event has invalid or duplicate session-format configuration.",
@@ -93,7 +101,7 @@ export function findSessionFormatConfiguration(
   reference: string,
 ) {
   const label = reference.trim().toLowerCase();
-  const key = label.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const key = normalizeSessionFormatReference(reference);
   const matches = formats.filter(
     (format) =>
       format.key === key || format.label.trim().toLowerCase() === label,

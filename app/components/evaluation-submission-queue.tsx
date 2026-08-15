@@ -38,10 +38,9 @@ export function EvaluationSubmissionQueue() {
       {dialog}
       <div className="card-title">
         <div>
-          <h2>Submission results and assignments</h2>
+          <h2>Proposal assignments and decisions</h2>
           <p className="subtle">
-            Sort the aggregate review results or download the round-by-round
-            review record.
+            Assign proposal reviews, inspect evidence and release decisions.
           </p>
           {!loaderData.aiReviewAssessmentsSupported ? (
             <p className="help">
@@ -51,64 +50,6 @@ export function EvaluationSubmissionQueue() {
           ) : null}
         </div>
         <div className="page-actions right">
-          <Form method="get" className="inline-form">
-            {loaderData.unassignedOnly ? (
-              <input type="hidden" name="filter" value="unassigned" />
-            ) : null}
-            <label className="label">
-              Results round
-              <select
-                className="select"
-                name="resultsRound"
-                defaultValue={loaderData.resultsRoundId ?? ""}
-              >
-                {loaderData.plan?.rounds.map((round) => (
-                  <option key={round.id} value={round.id}>
-                    {round.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="label">
-              Sort results
-              <select
-                className="select"
-                name="sort"
-                defaultValue={loaderData.resultSort}
-              >
-                <option value="score_desc">Score, high to low</option>
-                <option value="score_asc">Score, low to high</option>
-                <option value="completion_desc">Review completion</option>
-                <option value="title_asc">Submission title</option>
-              </select>
-            </label>
-            <button className="btn small">Apply</button>
-          </Form>
-          {loaderData.resultsRoundId ? (
-            <Form
-              method="post"
-              action={`/admin/review/results.csv?round=${encodeURIComponent(loaderData.resultsRoundId)}`}
-              reloadDocument
-              onSubmit={(event) => {
-                const intent =
-                  event.currentTarget.elements.namedItem("idempotencyKey");
-                if (!(intent instanceof HTMLInputElement)) {
-                  event.preventDefault();
-                  throw new Error(
-                    "The Abstract results export intent control is missing.",
-                  );
-                }
-                intent.value = crypto.randomUUID();
-              }}
-            >
-              <input
-                type="hidden"
-                name="idempotencyKey"
-                defaultValue={loaderData.resultsExportIntent}
-              />
-              <button className="btn small">Download results CSV</button>
-            </Form>
-          ) : null}
           {activeRound &&
           assignmentTargets.length > 0 &&
           bulkAssignableSubmissions.length > 0 ? (

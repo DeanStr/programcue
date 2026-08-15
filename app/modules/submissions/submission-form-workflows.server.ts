@@ -71,10 +71,13 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
   defaultFormInput(
     accessMode: SaveFormInput["accessMode"],
     tracks: Array<{ id: string; name: string }>,
+    formats: Array<{ key: string; label: string }>,
   ): SaveFormInput {
     const schema = structuredClone(DEFAULT_FORM_SCHEMA);
     const trackField = schema.fields.find((field) => field.id === "category")!;
     trackField.options = tracks.map((track) => track.name);
+    const formatField = schema.fields.find((field) => field.id === "format")!;
+    formatField.options = formats.map((format) => format.label);
     return {
       name: "Call for Speakers",
       kind: "submission",
@@ -94,6 +97,9 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
         trackNames: Object.fromEntries(
           tracks.map((track) => [track.id, track.name]),
         ),
+        formatKeys: Object.fromEntries(
+          formats.map((format) => [format.label, format.key]),
+        ),
         teamNames: {},
         directSessionDurationMinutes: null,
         passwordHash: null,
@@ -103,7 +109,7 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
 
   async getDefaultFormInput(viewer: Viewer) {
     await this.airtable.assertReadable(viewer);
-    const [event, tracks] = await Promise.all([
+    const [event, tracks, formats] = await Promise.all([
       this.env.DB.prepare(
         `SELECT submission_access_mode AS accessMode
            FROM events
@@ -112,10 +118,11 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
         .bind(viewer.eventId, viewer.organisationId)
         .first<{ accessMode: SaveFormInput["accessMode"] }>(),
       this.listRoutingTracks(viewer),
+      this.getConfiguredSessionFormats(viewer),
     ]);
     if (!event)
       throw new Response("This event could not be found.", { status: 404 });
-    return this.defaultFormInput(event.accessMode, tracks);
+    return this.defaultFormInput(event.accessMode, tracks, formats);
   }
 
   async saveForm(
@@ -197,39 +204,57 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
       }
       return matches[0]!;
     });
-    if (input.kind === "direct_session") {
-      const { formats: configuredFormats } =
-        await this.getConfiguredSessionFormatSnapshotD1(viewer);
-      const formatField = input.schema.fields.find(
-        (field) => field.id === "format",
-      )!;
-      let resolvedKeys: string[];
-      try {
-        resolvedKeys = formatField.options.map((option) => {
-          const configured = findSessionFormatConfiguration(
-            configuredFormats,
-            option,
+    if (
+      selectedTracks.length !== configuredTracks.length ||
+      selectedTracks.some(
+        (track, index) => track.id !== configuredTracks[index]?.id,
+      )
+    ) {
+      throw new SubmissionStateError(
+        "The form track choices must match the current Event Setup tracks. Refresh the form before saving.",
+      );
+    }
+    const { formats: configuredFormats } =
+      await this.getConfiguredSessionFormatSnapshotD1(viewer);
+    const formatField = input.schema.fields.find(
+      (field) => field.id === "format",
+    )!;
+    let resolvedKeys: string[];
+    try {
+      resolvedKeys = formatField.options.map((option) => {
+        const configured = findSessionFormatConfiguration(
+          configuredFormats,
+          option,
+        );
+        if (!configured) {
+          throw new SubmissionStateError(
+            `Session format “${option}” is not configured for this event.`,
           );
-          if (!configured) {
-            throw new SubmissionStateError(
-              `Direct-session format “${option}” is not configured for this event.`,
-            );
-          }
-          return configured.key;
-        });
-      } catch (error) {
-        if (error instanceof SubmissionStateError) throw error;
-        throw new SubmissionStateError(
-          error instanceof Error
-            ? error.message
-            : "The direct-session form has invalid format configuration.",
-        );
-      }
-      if (new Set(resolvedKeys).size !== resolvedKeys.length) {
-        throw new SubmissionStateError(
-          "Direct-session format options must map to distinct event formats.",
-        );
-      }
+        }
+        return configured.key;
+      });
+    } catch (error) {
+      if (error instanceof SubmissionStateError) throw error;
+      throw new SubmissionStateError(
+        error instanceof Error
+          ? error.message
+          : "The form has invalid session-format configuration.",
+      );
+    }
+    if (new Set(resolvedKeys).size !== resolvedKeys.length) {
+      throw new SubmissionStateError(
+        "Session-format options must map to distinct event formats.",
+      );
+    }
+    if (
+      resolvedKeys.length !== configuredFormats.length ||
+      resolvedKeys.some(
+        (formatKey, index) => formatKey !== configuredFormats[index]?.key,
+      )
+    ) {
+      throw new SubmissionStateError(
+        "The form format choices must match the current Event Setup formats. Refresh the form before saving.",
+      );
     }
     let passwordHash: string | null = null;
     if (input.accessMode === "password_protected") {
@@ -285,6 +310,9 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
       ),
       trackNames: Object.fromEntries(
         selectedTracks.map((track) => [track.id, track.name]),
+      ),
+      formatKeys: Object.fromEntries(
+        formatField.options.map((label, index) => [label, resolvedKeys[index]]),
       ),
       teamNames,
       passwordHash,
@@ -433,55 +461,76 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
          JOIN events event
            ON event.id = track.event_id AND event.organisation_id = ?
         WHERE track.event_id = ?
-          AND track.id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
+        ORDER BY track.position, track.name, track.id`,
     )
-      .bind(
-        viewer.organisationId,
-        viewer.eventId,
-        JSON.stringify(mappedTrackIds),
-      )
+      .bind(viewer.organisationId, viewer.eventId)
       .all<{ id: string; name: string }>();
-    const currentTrackNames = new Map(
-      currentTracks.results.map((track) => [track.id, track.name]),
-    );
     if (
       currentTracks.results.length !== mappedTrackIds.length ||
-      mappedTrackIds.some(
-        (trackId) =>
-          currentTrackNames.get(trackId) !==
-          workspace.draftVersion.routing.trackNames[trackId],
+      currentTracks.results.some(
+        (track, index) =>
+          mappedTrackIds[index] !== track.id ||
+          workspace.draftVersion.routing.trackNames[track.id] !== track.name,
       )
     ) {
       throw new SubmissionStateError(
         "An event track changed after this form draft was saved. Save the form again before publishing.",
       );
     }
-    let expectedSessionFormatsJson: string | null = null;
-    if (workspace.kind === "direct_session") {
-      const formatSnapshot =
-        await this.getConfiguredSessionFormatSnapshotD1(viewer);
-      const formatField = workspace.draftVersion.schema.fields.find(
-        (field) => field.id === "format",
-      )!;
-      const resolvedKeys = formatField.options.map((option) => {
-        const configured = findSessionFormatConfiguration(
-          formatSnapshot.formats,
-          option,
-        );
-        if (!configured) {
-          throw new SubmissionStateError(
-            `Direct-session format “${option}” is not configured for this event.`,
-          );
-        }
-        return configured.key;
-      });
-      if (new Set(resolvedKeys).size !== resolvedKeys.length) {
+    const formatSnapshot =
+      await this.getConfiguredSessionFormatSnapshotD1(viewer);
+    const formatField = workspace.draftVersion.schema.fields.find(
+      (field) => field.id === "format",
+    );
+    if (!formatField) {
+      throw new SubmissionStateError(
+        "This form draft is missing its protected session-format field.",
+      );
+    }
+    const resolvedKeys = formatField.options.map((option) => {
+      const key = workspace.draftVersion.routing.formatKeys?.[option];
+      if (!key) {
         throw new SubmissionStateError(
-          "Direct-session format options must map to distinct event formats.",
+          "The form's session-format identities are incomplete. Save the form again before publishing.",
         );
       }
-      expectedSessionFormatsJson = formatSnapshot.serialized;
+      const configured = formatSnapshot.formats.find(
+        (format) => format.key === key,
+      );
+      if (!configured) {
+        throw new SubmissionStateError(
+          `Session format “${option}” is not configured for this event.`,
+        );
+      }
+      if (configured.label !== option) {
+        throw new SubmissionStateError(
+          `Session format “${option}” changed after this form draft was saved. Save the synchronized form before publishing.`,
+        );
+      }
+      return key;
+    });
+    if (new Set(resolvedKeys).size !== resolvedKeys.length) {
+      throw new SubmissionStateError(
+        "Session-format options must map to distinct event formats.",
+      );
     }
+    if (
+      resolvedKeys.length !== formatSnapshot.formats.length ||
+      resolvedKeys.some(
+        (formatKey, index) => formatKey !== formatSnapshot.formats[index]?.key,
+      )
+    ) {
+      throw new SubmissionStateError(
+        "The form format choices no longer match Event Setup. Save the synchronized form before publishing.",
+      );
+    }
+    const expectedSessionFormatsJson = formatSnapshot.serialized;
+    const expectedTracksJson = JSON.stringify(
+      currentTracks.results.map((track) => ({
+        id: track.id,
+        name: track.name,
+      })),
+    );
     const configuredTeamIds = [
       ...new Set(Object.values(workspace.draftVersion.routing.categories)),
     ];
@@ -518,6 +567,7 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
       parsedDraftRevision,
       operation,
       expectedSessionFormatsJson,
+      expectedTracksJson,
     );
   }
 
@@ -548,5 +598,4 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
       .all<{ id: string; name: string }>();
     return tracks.results;
   }
-
 }

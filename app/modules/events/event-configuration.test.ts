@@ -53,6 +53,42 @@ describe("event configuration", () => {
         ]),
       ),
     ).toThrow(EventConfigurationDataError);
+    expect(() =>
+      parseSessionFormatsConfiguration(
+        JSON.stringify([
+          {
+            key: "talk",
+            label: "Talk",
+            defaultDurationMinutes: 45,
+            position: 0,
+          },
+          {
+            key: "short-talk",
+            label: "talk",
+            defaultDurationMinutes: 20,
+            position: 1,
+          },
+        ]),
+      ),
+    ).toThrow(EventConfigurationDataError);
+    expect(() =>
+      parseSessionFormatsConfiguration(
+        JSON.stringify([
+          {
+            key: "lab",
+            label: "Workshop",
+            defaultDurationMinutes: 45,
+            position: 0,
+          },
+          {
+            key: "workshop",
+            label: "Lab",
+            defaultDurationMinutes: 90,
+            position: 1,
+          },
+        ]),
+      ),
+    ).toThrow(EventConfigurationDataError);
   });
 
   it("resolves configured keys and human labels without guessing ambiguity", () => {

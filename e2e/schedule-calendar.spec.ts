@@ -134,10 +134,11 @@ test("schedule and programme render the event calendar date and timezone", async
   await expect(
     page.getByText(/May 20, 2027.*9:00 AM.*(?:EDT|GMT-4)/).first(),
   ).toBeVisible();
-  await expect(page.getByLabel("Iframe code")).toHaveValue(
+  const iframeCode = page.getByRole("textbox", { name: "Iframe code" });
+  await expect(iframeCode).toHaveValue(
     new RegExp(`<iframe src="${e2eOrigin}/embed/future-of-events-2027`),
   );
-  await expect(page.getByLabel("Iframe code")).not.toHaveValue(/accent=/);
+  await expect(iframeCode).not.toHaveValue(/accent=/);
   await expect(page.getByRole("link", { name: "Static JSON" })).toHaveAttribute(
     "href",
     /format=json$/,

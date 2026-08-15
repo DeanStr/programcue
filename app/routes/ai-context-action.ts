@@ -23,13 +23,14 @@ import { getCloudflareContext } from "~/platform/cloudflare-context";
 const headers = { "cache-control": "no-store" };
 
 export function loader(_args: LoaderFunctionArgs) {
-  return data(
-    {
-      ok: false,
-      error: "Contextual AI actions require POST.",
-    },
-    { status: 405, headers: { ...headers, allow: "POST" } },
-  );
+  throw new Response("Contextual AI actions require POST.", {
+    status: 405,
+    headers: { ...headers, allow: "POST" },
+  });
+}
+
+export default function ContextualAiActionRoute() {
+  return null;
 }
 
 function failure(error: unknown) {

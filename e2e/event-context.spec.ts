@@ -2,7 +2,10 @@ import { expect, test } from "@playwright/test";
 import { acceptConfirm } from "./support/confirm-dialog";
 import { e2eOrigin } from "./support/e2e-origin";
 
-test("home recovers from a stale event selection", async ({ context, page }) => {
+test("home recovers from a stale event selection", async ({
+  context,
+  page,
+}) => {
   await context.addCookies([
     {
       name: "program_cue_event",
@@ -157,9 +160,8 @@ test("an invited speaker can explicitly choose the created event and see its tas
   const priya = page.getByRole("row").filter({
     has: page.getByRole("link", { name: "Priya Shah" }),
   });
-  await priya.getByText("Invite to speaker portal", { exact: true }).click();
-  await priya.getByLabel(/Send a sign-in email/).check();
-  await priya.getByRole("button", { name: "Send invitation" }).click();
+  await priya.getByLabel(/Confirm email to/).check();
+  await priya.getByRole("button", { name: "Send portal invitation" }).click();
   await expect(
     page.getByText(/Demonstration mode does not send its sign-in email/i),
   ).toBeVisible();

@@ -432,7 +432,7 @@ export function SpeakerTasksPanel({
                         maxLength={2_000}
                       />
                     </label>
-                    <button className="btn" type="submit">
+                    <button className="btn" type="submit" disabled={busy}>
                       Send
                     </button>
                   </Form>

@@ -8,6 +8,28 @@ export const SECURITY_HEADERS = {
   "cross-origin-opener-policy": "same-origin",
 } as const;
 
+function isPrivateWorkspacePath(pathname: string) {
+  return (
+    pathname === "/admin" ||
+    pathname === "/admin.data" ||
+    pathname.startsWith("/admin/") ||
+    pathname === "/review" ||
+    pathname === "/review.data" ||
+    pathname.startsWith("/review/") ||
+    pathname === "/ai/context" ||
+    pathname === "/ai/context.data"
+  );
+}
+
+export function applyPrivateWorkspaceCachePolicy(
+  headers: Headers,
+  pathname: string,
+) {
+  if (isPrivateWorkspacePath(pathname)) {
+    headers.set("cache-control", "private, no-store");
+  }
+}
+
 function contentSecurityPolicy(resourceEmbedOrigins: unknown) {
   let origins: string[] = [];
   try {

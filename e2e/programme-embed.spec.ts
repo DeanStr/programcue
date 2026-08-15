@@ -65,11 +65,15 @@ test("configures, previews and copies a constrained programme embed", async ({
   await expect(previewFrame.locator(".public-filters select")).toHaveCount(0);
   await expect(previewFrame.locator("#speakers")).toBeHidden();
 
-  await expect(page.getByLabel("Iframe code")).toHaveValue(
-    /controls=search.*density=compact.*directory=hide/,
-  );
-  await page.getByRole("button", { name: "Widget", exact: true }).click();
-  await expect(page.getByLabel("Auto-resizing widget code")).toHaveValue(
+  await expect(
+    page.getByRole("textbox", { name: "Iframe code", exact: true }),
+  ).toHaveValue(/controls=search.*density=compact.*directory=hide/);
+  await page.getByLabel("Installation format").selectOption("widget");
+  const widgetCode = page.getByRole("textbox", {
+    name: "Auto-resizing widget code",
+    exact: true,
+  });
+  await expect(widgetCode).toHaveValue(
     /programcue-widget\.js.*data-surface="sessions".*data-day="2027-05-21".*data-track="AI &amp; Innovation".*data-format="breakout".*data-room="Room 303".*data-query="Building".*data-controls="search".*data-density="compact".*data-directory="hide"/s,
   );
 
@@ -89,7 +93,7 @@ test("configures, previews and copies a constrained programme embed", async ({
       .getByRole("alert")
       .filter({ hasText: "Embed height must be an integer from 160 to 20000" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Auto-resizing widget code")).toHaveValue("");
+  await expect(widgetCode).toHaveValue("");
   await expect(page.getByRole("button", { name: "Copy code" })).toBeDisabled();
 
   await page.getByLabel("Initial height").fill("640");
@@ -97,9 +101,7 @@ test("configures, previews and copies a constrained programme embed", async ({
     "aria-invalid",
     "true",
   );
-  await expect(page.getByLabel("Auto-resizing widget code")).toHaveValue(
-    /data-height="640"/,
-  );
+  await expect(widgetCode).toHaveValue(/data-height="640"/);
   await expect(page.getByRole("button", { name: "Copy code" })).toBeEnabled();
 });
 
@@ -149,10 +151,13 @@ test("previews every public widget type and applies granular field selection", a
   await expect(agendaFrame.locator(".session-place")).toHaveCount(0);
   await expect(agendaFrame.locator(".agenda-card-description")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Widget", exact: true }).click();
-  await expect(page.getByLabel("Auto-resizing widget code")).toHaveValue(
-    /data-surface="agenda".*data-fields=/s,
-  );
+  await page.getByLabel("Installation format").selectOption("widget");
+  await expect(
+    page.getByRole("textbox", {
+      name: "Auto-resizing widget code",
+      exact: true,
+    }),
+  ).toHaveValue(/data-surface="agenda".*data-fields=/s);
 
   await page.getByLabel("Speaker detail blocks and profile links").uncheck();
 

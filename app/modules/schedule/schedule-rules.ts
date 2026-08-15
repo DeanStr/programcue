@@ -4,19 +4,20 @@ export type ConflictPolicy = "ignore" | "warn" | "block";
 
 export type ScheduleCandidate = {
   sessionId: string;
+  title: string;
   roomId: string;
   startsAt: number;
   endsAt: number;
   trackId: string | null;
   trackExclusive: boolean;
   speakerIds: ReadonlyArray<string>;
+  speakerNames: ReadonlyArray<string>;
   requiredResources: ReadonlyArray<string>;
   expectedAttendance: number | null;
 };
 
 export type ScheduledItem = ScheduleCandidate & {
   entryId: string;
-  title: string;
 };
 
 export type ScheduleRoom = {
@@ -86,6 +87,18 @@ export function detectScheduleConflicts({
 }): ScheduleConflict[] {
   if (candidate.endsAt <= candidate.startsAt)
     throw new Error("A schedule entry must end after it starts.");
+  const assertSpeakerLabels = (item: ScheduleCandidate) => {
+    if (
+      item.speakerNames.length !== item.speakerIds.length ||
+      item.speakerNames.some((name) => !name.trim())
+    ) {
+      throw new Error(
+        `Session ${item.sessionId} has incomplete speaker conflict labels.`,
+      );
+    }
+  };
+  assertSpeakerLabels(candidate);
+  for (const item of existing) assertSpeakerLabels(item);
   const conflicts: ScheduleConflict[] = [];
   // Event Setup stores inclusive calendar-date markers in UTC. Scheduling uses
   // real instants, so compare against those dates in the event timezone rather
@@ -166,6 +179,19 @@ export function detectScheduleConflicts({
     const sharedSpeaker = candidate.speakerIds.find((personId) =>
       item.speakerIds.includes(personId),
     );
+    let sharedSpeakerName: string | null = null;
+    if (sharedSpeaker) {
+      const candidateName =
+        candidate.speakerNames[candidate.speakerIds.indexOf(sharedSpeaker)];
+      const existingName =
+        item.speakerNames[item.speakerIds.indexOf(sharedSpeaker)];
+      if (!candidateName || !existingName || candidateName !== existingName) {
+        throw new Error(
+          `Speaker ${sharedSpeaker} has inconsistent schedule conflict labels.`,
+        );
+      }
+      sharedSpeakerName = candidateName;
+    }
     if (!overlaps) {
       const gapSeconds =
         candidate.startsAt >= item.endsAt
@@ -181,7 +207,7 @@ export function detectScheduleConflicts({
           conflicts.push({
             type: "turnaround",
             severity: level,
-            message: `A speaker has less than ${policies.minimumTurnaroundMinutes} minutes between this session and “${item.title}”.`,
+            message: `${sharedSpeakerName} has less than ${policies.minimumTurnaroundMinutes} minutes between “${candidate.title}” and “${item.title}”.`,
             conflictingEntryId: item.entryId,
           });
       }
@@ -204,7 +230,7 @@ export function detectScheduleConflicts({
         conflicts.push({
           type: "speaker",
           severity: level,
-          message: `A speaker also appears in “${item.title}”.`,
+          message: `${sharedSpeakerName} appears in both “${candidate.title}” and “${item.title}”.`,
           conflictingEntryId: item.entryId,
         });
     }

@@ -66,6 +66,15 @@ beforeEach(async () => {
           'demo-evaluation-assignment-1', 'demo-evaluation-assignment-2'
         )`,
     ),
+    workerEnv.DB.prepare(
+      "DELETE FROM reviews WHERE id = 'evaluation-admin-session-review'",
+    ),
+    workerEnv.DB.prepare(
+      "DELETE FROM evaluator_assignments WHERE id = 'evaluation-admin-session-assignment'",
+    ),
+    workerEnv.DB.prepare(
+      "DELETE FROM sessions WHERE id = 'evaluation-admin-session-target' AND event_id = 'evt-foe-2025'",
+    ),
   ]);
 });
 
@@ -118,17 +127,92 @@ describe("evaluation administration results", () => {
     });
   });
 
-  it("accepts an event-scoped submission focus and rejects an unknown one", async () => {
-    const focused = await loader({
-      request: loaderRequest(
-        "?submission=demo-evaluation-submission-calm",
+  it("sorts proposals and sessions together within the selected results round", async () => {
+    await workerEnv.DB.batch([
+      workerEnv.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, description, format, duration_minutes,
+           status, visibility, revision, created_at, updated_at
+         ) VALUES (
+           'evaluation-admin-session-target', 'evt-foe-2025',
+           'AI in Event Operations', 'evaluation-admin-session-target', '',
+           'presentation', 45, 'unscheduled', 'public', 1,
+           unixepoch(), unixepoch()
+         )`,
       ),
+      workerEnv.DB.prepare(
+        `UPDATE evaluator_assignments
+            SET status = 'submitted', submitted_at = unixepoch()
+          WHERE id = 'demo-evaluation-assignment-1'`,
+      ),
+      workerEnv.DB.prepare(
+        `INSERT INTO reviews (
+           id, event_id, assignment_id, status, scores_json, weighted_score,
+           recommendation, revision, created_at, updated_at, submitted_at
+         ) VALUES (
+           'evaluation-admin-loader-review', 'evt-foe-2025',
+           'demo-evaluation-assignment-1', 'submitted', '{}', 3.5, 'accept',
+           1, unixepoch(), unixepoch(), unixepoch()
+         )`,
+      ),
+      workerEnv.DB.prepare(
+        `INSERT INTO evaluator_assignments (
+           id, event_id, round_id, session_id, session_snapshot_json,
+           evaluator_person_id, status, revision, assigned_at, submitted_at
+         ) VALUES (
+           'evaluation-admin-session-assignment', 'evt-foe-2025',
+           'demo-evaluation-round', 'evaluation-admin-session-target', '{}',
+           'person-demo-evaluator', 'submitted', 1, unixepoch(), unixepoch()
+         )`,
+      ),
+      workerEnv.DB.prepare(
+        `INSERT INTO reviews (
+           id, event_id, assignment_id, status, scores_json, weighted_score,
+           recommendation, revision, created_at, updated_at, submitted_at
+         ) VALUES (
+           'evaluation-admin-session-review', 'evt-foe-2025',
+           'evaluation-admin-session-assignment', 'submitted', '{}', 4.75,
+           'accept', 1, unixepoch(), unixepoch(), unixepoch()
+         )`,
+      ),
+    ]);
+
+    const result = await loader({
+      request: loaderRequest("?sort=score_desc"),
       params: {},
       context: context(),
     } as never);
-    expect(focused.focusedSubmissionId).toBe(
-      "demo-evaluation-submission-calm",
-    );
+
+    expect(result.results.slice(0, 2)).toMatchObject([
+      {
+        targetType: "session",
+        title: "AI in Event Operations",
+        averageScore: 4.75,
+      },
+      {
+        targetType: "proposal",
+        id: "demo-evaluation-submission-calm",
+        averageScore: 3.5,
+      },
+    ]);
+    expect(
+      result.sessions.find(
+        (candidate) => candidate.id === "evaluation-admin-session-target",
+      ),
+    ).toMatchObject({
+      assignmentCount: 1,
+      completedReviewCount: 1,
+      averageScore: 4.75,
+    });
+  });
+
+  it("accepts an event-scoped submission focus and rejects an unknown one", async () => {
+    const focused = await loader({
+      request: loaderRequest("?submission=demo-evaluation-submission-calm"),
+      params: {},
+      context: context(),
+    } as never);
+    expect(focused.focusedSubmissionId).toBe("demo-evaluation-submission-calm");
 
     await expect(
       loader({
@@ -151,9 +235,7 @@ describe("evaluation administration results", () => {
     try {
       await expect(
         loader({
-          request: loaderRequest(
-            "?submission=demo-evaluation-submission-calm",
-          ),
+          request: loaderRequest("?submission=demo-evaluation-submission-calm"),
           params: {},
           context: context(),
         } as never),

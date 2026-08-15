@@ -126,12 +126,20 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       has: page.getByRole("heading", { name: "Form structure" }),
     });
     await formStructure.getByRole("button", { name: /Tracks/ }).click();
+    const currentTracks = routing.getByRole("group", {
+      name: "Current Event Setup tracks",
+    });
     await expect(
-      routing.getByRole("checkbox", { name: "Event Operations" }),
-    ).toBeChecked();
+      currentTracks.getByRole("listitem").filter({
+        hasText: "Event Operations",
+      }),
+    ).toBeVisible();
     await expect(
-      routing.getByRole("checkbox", { name: "Leadership" }),
-    ).toBeChecked();
+      currentTracks.getByRole("listitem").filter({ hasText: "Leadership" }),
+    ).toBeVisible();
+    await expect(
+      currentTracks.getByRole("link", { name: "Event Setup" }),
+    ).toHaveAttribute("href", "/admin/event");
     await routing
       .getByRole("combobox", { name: "Event Operations" })
       .selectOption({
@@ -201,7 +209,9 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
 
     await switchDemoRole(page, "administrator");
     await waitForInterface(page, "/admin/review");
-    const row = page.getByRole("row", { name: new RegExp(SUBMISSION_TITLE) });
+    const row = page
+      .getByRole("region", { name: "Proposal queue" })
+      .getByRole("row", { name: new RegExp(SUBMISSION_TITLE) });
     await expect(row).toContainText(`Routed to ${TEAM_NAME}`);
     await expect(row).toContainText("submitted");
     await expect(row).toContainText("0 / 0");
@@ -285,9 +295,9 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
 
     await switchDemoRole(page, "administrator");
     await waitForInterface(page, "/admin/review");
-    const decisionRow = page.getByRole("row", {
-      name: new RegExp(SUBMISSION_TITLE),
-    });
+    const decisionRow = page
+      .getByRole("region", { name: "Proposal queue" })
+      .getByRole("row", { name: new RegExp(SUBMISSION_TITLE) });
     await decisionRow.getByRole("button", { name: "Decide" }).click();
     const decision = page.getByRole("dialog", {
       name: `Decision · ${SUBMISSION_TITLE}`,
@@ -370,7 +380,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       .locator('.validation-item.warn[role="status"]')
       .filter({ hasText: "Session placed with 1 warning" });
     await expect(warningNotice).toContainText(
-      "speaker: A speaker also appears in “Community and Connection”",
+      "speaker: Alex Morgan appears in both “AI in Event Operations” and “Community and Connection”",
     );
     await page.getByRole("button", { name: "List", pressed: false }).click();
     await expect(

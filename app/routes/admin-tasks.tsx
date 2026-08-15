@@ -118,10 +118,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       );
     })
     .map((task) => ({ ...task, isOverdue: isOverdue(task) }));
+  const filterSignature = JSON.stringify(filters);
   return {
     ...workspace,
     tasks,
     filters,
+    filterSignature,
     focusedTaskId: requestedTaskId || null,
     totalTaskCount: workspace.tasks.length,
     intentId: crypto.randomUUID(),

@@ -37,6 +37,7 @@ function taskData(overrides: Partial<AdminTasksData> = {}) {
     ],
     sessions: [],
     filters: { task: "", state: "", impact: "", target: "", type: "" },
+    filterSignature: "all",
     focusedTaskId: null,
     totalTaskCount: 0,
     intentId: "intent-1",
@@ -80,6 +81,7 @@ describe("administrator task discoverability", () => {
     );
     expect(markup).toContain('<option value="critical" selected="">Critical');
     expect(markup).toContain("Showing 0 of 0 tasks");
+    expect(markup).toContain("No assigned work matches these filters");
   });
 
   it("keeps task-template creation visible when templates already exist", () => {

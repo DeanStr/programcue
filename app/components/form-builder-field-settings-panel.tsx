@@ -29,38 +29,6 @@ export function FieldSettingsPanel({
   paneSwitch?: ReactNode;
   hidden?: boolean;
 }) {
-  const selectedTrackNames = new Set(categoryField?.options ?? []);
-  function updateTrackChoices(trackId: string, selected: boolean) {
-    const nextTracks = routingTracks.filter((track) =>
-      track.id === trackId ? selected : selectedTrackNames.has(track.name),
-    );
-    const nextTrackNames = new Set(nextTracks.map((track) => track.name));
-    change({
-      ...input,
-      schema: {
-        ...input.schema,
-        fields: input.schema.fields.map((field) =>
-          field.id === "category"
-            ? { ...field, options: nextTracks.map((track) => track.name) }
-            : field,
-        ),
-      },
-      routing: {
-        ...input.routing,
-        categories: Object.fromEntries(
-          Object.entries(input.routing.categories).filter(([trackName]) =>
-            nextTrackNames.has(trackName),
-          ),
-        ),
-        trackIds: Object.fromEntries(
-          nextTracks.map((track) => [track.name, track.id]),
-        ),
-        trackNames: Object.fromEntries(
-          nextTracks.map((track) => [track.id, track.name]),
-        ),
-      },
-    });
-  }
   return (
     <section className="fb-dock-panel fb-inspector" hidden={hidden}>
       <div className="fb-pane-head">
@@ -136,7 +104,7 @@ export function FieldSettingsPanel({
               </span>
             </label>
             {(selected.type === "select" || selected.type === "multi_select") &&
-            selected.id !== "category" ? (
+            !["category", "format"].includes(selected.id) ? (
               <label className="label mt">
                 Options, one per line
                 <textarea
@@ -153,28 +121,25 @@ export function FieldSettingsPanel({
                   }
                 />
               </label>
-            ) : selected.id === "category" ? (
+            ) : selected.id === "category" || selected.id === "format" ? (
               <fieldset className="stack mt">
-                <legend className="label">Available event tracks</legend>
+                <legend className="label">
+                  Current Event Setup{" "}
+                  {selected.id === "category" ? "tracks" : "formats"}
+                </legend>
                 <p className="help">
-                  Track choices come from Event Setup so submissions and
-                  schedule records use the same track identities.
+                  These protected choices follow Event Setup and are captured in
+                  each published form version. Change them in{" "}
+                  <Link to="/admin/event">Event Setup</Link>.
                 </p>
-                {routingTracks.map((track) => (
-                  <label className="toggle" key={track.id}>
-                    <input
-                      type="checkbox"
-                      checked={selectedTrackNames.has(track.name)}
-                      onChange={(event) =>
-                        updateTrackChoices(track.id, event.target.checked)
-                      }
-                    />{" "}
-                    {track.name}
-                  </label>
-                ))}
-                {!routingTracks.length ? (
+                <ul className="help">
+                  {selected.options.map((option) => (
+                    <li key={option}>{option}</li>
+                  ))}
+                </ul>
+                {!selected.options.length ? (
                   <p className="help">
-                    Configure at least one event track in Event Setup.
+                    Configure at least one choice in Event Setup.
                   </p>
                 ) : null}
               </fieldset>

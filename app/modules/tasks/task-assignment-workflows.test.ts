@@ -247,12 +247,15 @@ describe("onboarding task service", () => {
         speaker,
         second.id,
         "Please review the submitted requirements.",
+        "participant",
+        `comment-intent:${crypto.randomUUID()}`,
       );
       await service.addComment(
         admin,
         second.id,
         "Check this against the event brief.",
         "administrator",
+        `comment-intent:${crypto.randomUUID()}`,
       );
       const adminTask = (await service.getAdminWorkspace(admin)).tasks.find(
         (task) => task.id === second.id,

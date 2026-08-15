@@ -131,6 +131,7 @@ describe("deterministic auto-placement", () => {
         session("fixed", "Fixed session", {
           status: "scheduled",
           speakerIds: ["speaker-fixed"],
+          speakerNames: ["Fixed Speaker"],
         }),
         session("beta", "Beta session"),
         session("alpha", "Alpha session"),
@@ -177,8 +178,12 @@ describe("deterministic auto-placement", () => {
         session("fixed", "Fixed session", {
           status: "scheduled",
           speakerIds: ["speaker-1"],
+          speakerNames: ["Shared Speaker"],
         }),
-        session("new", "New session", { speakerIds: ["speaker-1"] }),
+        session("new", "New session", {
+          speakerIds: ["speaker-1"],
+          speakerNames: ["Shared Speaker"],
+        }),
       ],
       {
         entries: [

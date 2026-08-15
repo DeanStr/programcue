@@ -28,6 +28,14 @@ The old static browser application, legacy JavaScript Worker delegation and `src
 
 Pre-release hardening on 14 August 2026 replaced scanner URL-shape/bearer authority with a five-minute application-signed envelope that is verified before Workflow creation and bound through the signed callback. D1 public session, schedule and speaker pages now use SQL filtering, `limit + 1` reads, deterministic ordered JSON relations and keyset cursors instead of loading and hashing the complete programme. Queue batches use bounded concurrency of four; API-key `last_used_at` writes are limited to one per five minutes; event-channel D1/socket I/O no longer holds a global Durable Object block; and invitation/API-key audit-required mutations are conditional on their exact audit evidence. Release `9d1e276` is deployed, and the scanner HMAC, multipart, Queue, private-R2 proxy and callback path has live production evidence recorded below.
 
+Private administration, review and contextual-AI document/data responses now
+receive `Cache-Control: private, no-store` at the Worker response boundary. The
+contextual action remains POST-only, while an accidental document GET renders
+the standard application 405 boundary instead of exposing route-protocol data.
+Focused browser coverage reloads Command Centre before asserting the actual
+POST action request and the private cache policy; no deployed acceptance is
+claimed.
+
 ## Public website
 
 **Production foundation; deployed acceptance:** A separate
@@ -79,11 +87,28 @@ compare-and-set mutation with shared validation, audit, webhook, realtime and
 Airtable-authority behavior. Focused Worker and browser coverage verifies these
 boundaries.
 
+The speaker roster keeps expanded manual-entry and CSV-import controls above a
+non-sticky roster header so those actions remain operable at the supported
+desktop viewport. Every eligible roster row exposes its portal-access state and
+an explicit Send or Resend portal invitation action; creating a prospect
+remains provider-honest and sends nothing until that separate action is
+confirmed.
+
 The forms and submissions production slice also exposes the canonical
 published-form URL for opening or copying, derives routing-attention states
 from immutable submission evidence, preserves filtered queue context across
 Previous/Next navigation, and links eligible submitted records to their
 event-scoped Review row and immutable activity history.
+
+The protected Track and Format questions project the complete ordered Event
+Setup choices instead of retaining an independently editable option list.
+Opening a stale builder draft synchronises those choices for explicit review
+and save, while publication revalidates the exact ordered track identity/name
+snapshot plus the exact session-format configuration at its compare-and-set
+boundary. Focused Worker coverage changes both event configurations after a
+published version, saves and publishes a new version, and verifies that the
+public form receives the current choices while the older version remains
+immutable.
 
 The verified primary submitter can explicitly submit a newer proposal revision
 while the original published form remains open and no review or decision work
@@ -110,6 +135,27 @@ visible alert before focusing the first missing required field. Evaluation
 administration projects the ordered submitted participant list with persisted
 role labels, so co-presenter evidence is visible in the results queue rather
 than only on the separate submission detail.
+
+Evaluation administration also presents one round-scoped review-results table
+containing proposal and session targets, with explicit type labels and one
+aggregate-score sort. The target-specific queues remain focused on assignment
+and decision work, and the current download is labelled as a proposal-results
+CSV rather than claiming to export the combined table.
+
+Task assignment rejects a second active task for the same target only when its
+normalised title, description, task/evidence type, evidence configuration,
+impact and resolved due date all match, including at the concurrent mutation
+boundary. Differently defined work may reuse a title. Participant comments
+require a stable browser intent whose exact replay converges on one comment,
+audit and prepared webhook; changed content under the same intent fails.
+Task-filter forms remount from their authoritative URL signature after
+navigation, including truthful empty Overdue results.
+
+Schedule placement errors identify the affected speaker and both clashing
+session titles instead of reducing a rejected overlap to a transient conflict
+count. The programme embed builder uses one labelled native output-format
+selector for iframe and auto-resizing widget snippets, so its selected state
+and generated code cannot diverge.
 
 ### Production evaluation release-candidate evidence
 

@@ -293,9 +293,9 @@ export function AdminAssignedTasksPanel({
                 <td className="pc-table-empty-cell" colSpan={6}>
                   <div className="pc-empty-state">
                     <ListChecks aria-hidden className="pc-state-icon" />
-                    <h2>No matching tasks</h2>
+                    <h3>No assigned work matches these filters</h3>
                     <p className="subtle">
-                      Clear the filters or assign a task plan.
+                      Clear or change the filters to see other event tasks.
                     </p>
                   </div>
                 </td>

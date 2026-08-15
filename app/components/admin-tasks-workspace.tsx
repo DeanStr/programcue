@@ -63,7 +63,7 @@ export function AdminTasksWorkspace({
             <ListFilter aria-hidden size={14} /> Shareable URL filters
           </span>
         </div>
-        <Form method="get" className="grid grid-5">
+        <Form method="get" className="grid grid-5" key={data.filterSignature}>
           <label className="label">
             Status
             <select

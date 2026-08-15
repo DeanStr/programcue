@@ -27,6 +27,11 @@
   box-shadow: inset 0 -1px 0 var(--line);
   z-index: 1;
 }
+/* The speaker roster follows expandable creation/import forms. Its header
+   stays inside the table instead of pinning over controls above it. */
+.admin-speaker-roster-table thead th {
+  position: static;
+}
 .data-table tbody th[scope="row"] {
   padding: var(--space-3);
   border-bottom: 1px solid #edf1f6;

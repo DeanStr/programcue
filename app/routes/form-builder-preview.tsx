@@ -56,14 +56,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const requestedFormId = url.searchParams.get("form");
   const creating = url.searchParams.get("new") === "1";
-  const [workspace, forms, routingTeams, routingTracks] = await Promise.all([
-    creating
-      ? Promise.resolve(null)
-      : service.getAdminWorkspace(viewer, requestedFormId ?? undefined),
-    service.listAdminForms(viewer),
-    service.listRoutingTeams(viewer),
-    service.listRoutingTracks(viewer),
-  ]);
+  const [workspace, forms, routingTeams, routingTracks, sessionFormats] =
+    await Promise.all([
+      creating
+        ? Promise.resolve(null)
+        : service.getAdminWorkspace(viewer, requestedFormId ?? undefined),
+      service.listAdminForms(viewer),
+      service.listRoutingTeams(viewer),
+      service.listRoutingTracks(viewer),
+      service.getConfiguredSessionFormats(viewer),
+    ]);
   if (requestedFormId !== null && !workspace) {
     throw new Response("Form not found", { status: 404 });
   }
@@ -88,10 +90,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           : null,
       }
     : null;
-  const input = workspace
-    ? SubmissionService.synchronizeFormTrackChoices(
-        SubmissionService.workspaceToInput(workspace),
+  const storedInput = workspace
+    ? SubmissionService.workspaceToInput(workspace)
+    : null;
+  const input = storedInput
+    ? SubmissionService.synchronizeFormEventChoices(
+        storedInput,
         routingTracks,
+        sessionFormats,
       )
     : await service.getDefaultFormInput(viewer);
   return {
@@ -106,6 +112,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     },
     createdFromLocalDraft: url.searchParams.get("created") === "1",
     input,
+    eventChoicesChanged:
+      storedInput !== null &&
+      JSON.stringify(storedInput) !== JSON.stringify(input),
   };
 }
 
@@ -314,7 +323,11 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             type="button"
             onClick={() => setPublishOpen(true)}
             disabled={
-              !input.id || dirty || navigationState !== "idle" || !editorReady
+              !input.id ||
+              dirty ||
+              loaderData.eventChoicesChanged ||
+              navigationState !== "idle" ||
+              !editorReady
             }
           >
             {pendingIntent === "publish" ? "Publishing…" : "Publish version"}
@@ -383,6 +396,18 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
         <div className="validation-item error card pad mb" role="alert">
           <strong>Form not ready</strong>
           <span>{clientValidationMessage}</span>
+        </div>
+      ) : null}
+
+      {loaderData.eventChoicesChanged ? (
+        <div className="validation-item warn card pad mb" role="status">
+          <strong>Event tracks or formats changed</strong>
+          <span>
+            This draft now shows the current event choices. Save the draft
+            before publishing so the next immutable version carries them. If a
+            condition used a removed choice, select that field and choose a
+            current value or make it always visible before saving.
+          </span>
         </div>
       ) : null}
 
@@ -537,9 +562,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
         ) : null}
       </div>
 
-      <div
-        className={`fb-workbench${previewOpen ? " is-previewing" : ""}`}
-      >
+      <div className={`fb-workbench${previewOpen ? " is-previewing" : ""}`}>
         <FormStructurePanel
           input={input}
           selectedId={selected?.id}

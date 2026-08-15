@@ -181,14 +181,31 @@ test("assistant reminder preview can be edited and queues exactly once only afte
 test("contextual AI actions stay inside the readiness and review workflows", async ({
   page,
 }) => {
-  await page.goto("/admin/command");
+  const commandResponse = await page.goto("/admin/command");
+  expect(commandResponse?.headers()["cache-control"]).toBe("private, no-store");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const reloadResponse = await page.reload();
+  expect(reloadResponse?.headers()["cache-control"]).toBe("private, no-store");
   await page.locator("body[data-hydrated='true']").waitFor();
   const readinessAction = page.getByRole("button", {
     name: "Summarise readiness blockers",
   });
   await expect(readinessAction).toBeVisible();
+  const actionRequest = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === "/ai/context.data",
+  );
+  const actionResponse = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/ai/context.data",
+  );
   await readinessAction.click();
-  await expect(page.getByRole("alert")).toContainText(
+  expect((await actionRequest).method()).toBe("POST");
+  expect((await actionResponse).headers()["cache-control"]).toBe(
+    "private, no-store",
+  );
+  const readinessAdvisor = page.locator("section.card").filter({
+    has: page.getByRole("heading", { name: "AI readiness advisor" }),
+  });
+  await expect(readinessAdvisor.getByRole("alert")).toContainText(
     "OpenAI credentials are not configured for this installation.",
   );
 
@@ -202,12 +219,28 @@ test("contextual AI actions stay inside the readiness and review workflows", asy
       sameSite: "Lax",
     },
   ]);
-  await page.goto("/review/workbench");
+  const reviewResponse = await page.goto("/review/workbench");
+  expect(reviewResponse?.headers()["cache-control"]).toBe("private, no-store");
   await page.locator("body[data-hydrated='true']").waitFor();
   await expect(
     page.getByRole("button", { name: "Generate advisory review aid" }),
   ).toBeVisible();
   await expect(
     page.getByText(/cannot score, submit or change your review/i),
+  ).toBeVisible();
+});
+
+test("an accidental contextual AI document GET renders the application error page", async ({
+  page,
+}) => {
+  const response = await page.goto("/ai/context");
+  expect(response?.status()).toBe(405);
+  expect(response?.headers()["content-type"]).toContain("text/html");
+  expect(response?.headers()["cache-control"]).toBe("private, no-store");
+  await expect(
+    page.getByRole("heading", { name: "That request could not be completed" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Contextual AI actions require POST.", { exact: true }),
   ).toBeVisible();
 });

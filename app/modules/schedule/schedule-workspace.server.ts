@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import { parseSessionFormatsConfiguration } from "~/modules/events/event-configuration";
 import { eventResourceSchema } from "~/modules/events/event-schema";
 import { ScheduleConfigurationError } from "./schedule-errors";
@@ -13,6 +15,17 @@ import type {
   ScheduleWorkspace,
   WorkspaceEvent,
 } from "./schedule-service.server";
+
+const scheduleSpeakerProjectionSchema = z
+  .array(
+    z
+      .object({
+        id: z.string().trim().min(1),
+        name: z.string().trim().min(1),
+      })
+      .strict(),
+  )
+  .max(50);
 
 export function detectWorkspaceConflicts(workspace: ScheduleWorkspace) {
   const sessionById = new Map(
@@ -31,6 +44,7 @@ export function detectWorkspaceConflicts(workspace: ScheduleWorkspace) {
       trackId: session.trackId,
       trackExclusive: session.trackExclusive,
       speakerIds: session.speakerIds,
+      speakerNames: session.speakerNames,
       expectedAttendance: session.expectedAttendance,
       requiredResources: session.requiredResources,
       title: session.title,
@@ -143,8 +157,20 @@ export async function loadScheduleWorkspaceD1(
                COALESCE(content.content_revision, 1) AS contentRevision,
                content.session_id AS snapshotSessionId, s.status,
                s.revision,
-               GROUP_CONCAT(ss.person_id, '||') AS speakerIds,
-               GROUP_CONCAT(p.display_name, '||') AS speakerNames
+               COALESCE((
+                 SELECT json_group_array(json(ordered.speaker))
+                   FROM (
+                     SELECT json_object(
+                              'id', session_speaker.person_id,
+                              'name', person.display_name
+                            ) AS speaker
+                       FROM session_speakers session_speaker
+                       LEFT JOIN people person ON person.id = session_speaker.person_id
+                      WHERE session_speaker.session_id = s.id
+                        AND session_speaker.event_id = s.event_id
+                      ORDER BY session_speaker.position, session_speaker.person_id
+                   ) ordered
+               ), '[]') AS speakersJson
           FROM sessions s
           LEFT JOIN schedule_session_contents content
             ON content.event_id = s.event_id AND content.session_id = s.id
@@ -160,10 +186,7 @@ export async function loadScheduleWorkspaceD1(
           LEFT JOIN tracks t
             ON t.id = COALESCE(content.track_id, s.track_id)
            AND t.event_id = s.event_id
-          LEFT JOIN session_speakers ss ON ss.session_id = s.id AND ss.event_id = s.event_id
-          LEFT JOIN people p ON p.id = ss.person_id
          WHERE s.event_id = ? AND s.status IN ('unscheduled','scheduled','published')
-         GROUP BY s.id, t.id
          ORDER BY s.title
       `,
     )
@@ -176,8 +199,7 @@ export async function loadScheduleWorkspaceD1(
           trackExclusive: number;
           requiredResourcesJson: string;
           snapshotSessionId: string | null;
-          speakerIds: string | null;
-          speakerNames: string | null;
+          speakersJson: string;
         }
       >(),
     env.DB.prepare(
@@ -293,7 +315,7 @@ export async function loadScheduleWorkspaceD1(
     return { ...room, resources: parsed.data };
   });
   const configuredSessions = sessions.results.map(
-    ({ snapshotSessionId: _snapshotSessionId, ...session }) => {
+    ({ snapshotSessionId: _snapshotSessionId, speakersJson, ...session }) => {
       let resources: unknown;
       try {
         resources = JSON.parse(session.requiredResourcesJson);
@@ -308,14 +330,30 @@ export async function loadScheduleWorkspaceD1(
           `Session ${session.id} has invalid or duplicate required resources.`,
         );
       }
+      let rawSpeakers: unknown;
+      try {
+        rawSpeakers = JSON.parse(speakersJson);
+      } catch {
+        throw new ScheduleConfigurationError(
+          `Session ${session.id} has invalid speaker projection JSON.`,
+        );
+      }
+      const speakers = scheduleSpeakerProjectionSchema.safeParse(rawSpeakers);
+      if (
+        !speakers.success ||
+        new Set(speakers.data.map((speaker) => speaker.id)).size !==
+          speakers.data.length
+      ) {
+        throw new ScheduleConfigurationError(
+          `Session ${session.id} has invalid or duplicate speaker projections.`,
+        );
+      }
       return {
         ...session,
         requiredResources: parsed.data,
         trackExclusive: Boolean(session.trackExclusive),
-        speakerIds: session.speakerIds ? session.speakerIds.split("||") : [],
-        speakerNames: session.speakerNames
-          ? session.speakerNames.split("||")
-          : [],
+        speakerIds: speakers.data.map((speaker) => speaker.id),
+        speakerNames: speakers.data.map((speaker) => speaker.name),
       };
     },
   );

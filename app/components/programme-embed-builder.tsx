@@ -451,34 +451,20 @@ export function ProgrammeEmbedBuilder({
                   The script widget adds safe automatic height updates.
                 </p>
               </div>
-              <div
-                className="segmented"
-                role="group"
-                aria-label="Installation type"
-              >
-                <button
-                  type="button"
-                  className={`btn small${output === "iframe" ? " active" : ""}`}
-                  aria-pressed={output === "iframe"}
-                  onClick={() => {
-                    setOutput("iframe");
+              <label className="label">
+                Installation format
+                <select
+                  className="select"
+                  value={output}
+                  onChange={(event) => {
+                    setOutput(event.currentTarget.value as typeof output);
                     setCopyState("idle");
                   }}
                 >
-                  Iframe
-                </button>
-                <button
-                  type="button"
-                  className={`btn small${output === "widget" ? " active" : ""}`}
-                  aria-pressed={output === "widget"}
-                  onClick={() => {
-                    setOutput("widget");
-                    setCopyState("idle");
-                  }}
-                >
-                  Widget
-                </button>
-              </div>
+                  <option value="iframe">Iframe code</option>
+                  <option value="widget">Auto-resizing script widget</option>
+                </select>
+              </label>
             </div>
             <label className="label">
               {output === "iframe"

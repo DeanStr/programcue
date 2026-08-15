@@ -6497,7 +6497,7 @@
                     },
                     "options": {
                       "default": [],
-                      "maxItems": 30,
+                      "maxItems": 100,
                       "type": "array",
                       "items": {
                         "type": "string",
@@ -6584,6 +6584,17 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 120
+                }
+              },
+              "formatKeys": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
                 }
               },
               "teamNames": {

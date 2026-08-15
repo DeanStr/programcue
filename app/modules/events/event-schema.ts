@@ -52,6 +52,24 @@ export const sessionFormatInputSchema = z.object({
   position: z.coerce.number().int().min(0),
 });
 
+export function normalizeSessionFormatReference(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+export function hasCrossCollidingSessionFormatReference(
+  formats: ReadonlyArray<{ key: string; label: string }>,
+) {
+  const keys = new Set(formats.map((format) => format.key));
+  return formats.some((format) => {
+    const labelKey = normalizeSessionFormatReference(format.label);
+    return labelKey !== format.key && keys.has(labelKey);
+  });
+}
+
 export const trackInputSchema = z.object({
   id: z
     .string()
@@ -186,24 +204,42 @@ export const eventSetupInputSchema = z
     }
     const trackIds = new Set(value.tracks.map((track) => track.id));
     const trackSlugs = new Set(value.tracks.map((track) => track.slug));
+    const trackNames = new Set(
+      value.tracks.map((track) => track.name.toLowerCase()),
+    );
     if (
       trackIds.size !== value.tracks.length ||
-      trackSlugs.size !== value.tracks.length
+      trackSlugs.size !== value.tracks.length ||
+      trackNames.size !== value.tracks.length
     ) {
       context.addIssue({
         code: "custom",
         path: ["tracks"],
-        message: "Track identifiers and slugs must be unique.",
+        message: "Track identifiers, slugs and names must be unique.",
       });
     }
     const formatKeys = new Set(
       value.sessionFormats.map((format) => format.key),
     );
-    if (formatKeys.size !== value.sessionFormats.length) {
+    const formatLabels = new Set(
+      value.sessionFormats.map((format) => format.label.toLowerCase()),
+    );
+    if (
+      formatKeys.size !== value.sessionFormats.length ||
+      formatLabels.size !== value.sessionFormats.length
+    ) {
       context.addIssue({
         code: "custom",
         path: ["sessionFormats"],
-        message: "Session format keys must be unique.",
+        message: "Session format keys and labels must be unique.",
+      });
+    }
+    if (hasCrossCollidingSessionFormatReference(value.sessionFormats)) {
+      context.addIssue({
+        code: "custom",
+        path: ["sessionFormats"],
+        message:
+          "A session format label cannot resolve to another format's key.",
       });
     }
   });

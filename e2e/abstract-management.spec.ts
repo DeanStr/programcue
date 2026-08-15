@@ -269,6 +269,7 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
     await switchDemoRole(page, "administrator", "/admin/review");
     await waitForInterface(page, "/admin/review");
     const submissionRow = page
+      .getByRole("region", { name: "Evaluation proposal queue" })
       .locator("tr")
       .filter({ hasText: SUBMISSION_TITLE });
     await expect(submissionRow).toBeVisible();
@@ -326,7 +327,9 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
     });
     for (let downloadIndex = 0; downloadIndex < 2; downloadIndex += 1) {
       const downloadPromise = page.waitForEvent("download");
-      await page.getByRole("button", { name: "Download results CSV" }).click();
+      await page
+        .getByRole("button", { name: "Download proposal results CSV" })
+        .click();
       const download = await downloadPromise;
       expect(download.suggestedFilename()).toBe(
         "program-cue-abstract-review-results.csv",
@@ -365,6 +368,7 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
 
     await waitForInterface(page, "/admin/review");
     const decisionRow = page
+      .getByRole("region", { name: "Evaluation proposal queue" })
       .locator("tr")
       .filter({ hasText: SUBMISSION_TITLE });
     await decisionRow.getByRole("button", { name: "Decide" }).click();
@@ -414,8 +418,6 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
     });
     await expect(marcusRelationship).toContainText("Co-speaker");
     await expect(marcusRelationship).toContainText(MARCUS_EMAIL);
-    await expect(marcusRelationship).toContainText(
-      "Claim invitation prepared",
-    );
+    await expect(marcusRelationship).toContainText("Claim invitation prepared");
   });
 });

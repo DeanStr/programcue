@@ -54,7 +54,7 @@ async function publishedForm(overrides: Record<string, unknown> = {}) {
   const service = new SubmissionService(testEnv);
   const token = crypto.randomUUID().slice(0, 8);
   const defaults = await service.getDefaultFormInput(viewer);
-  const input = {
+  let input = {
     ...defaults,
     publicSlug: `test-${token}`,
     name: `Test form ${token}`,
@@ -64,6 +64,11 @@ async function publishedForm(overrides: Record<string, unknown> = {}) {
       ...((overrides.routing as Record<string, unknown> | undefined) ?? {}),
     },
   };
+  input = SubmissionService.synchronizeFormEventChoices(
+    input,
+    await service.listRoutingTracks(viewer),
+    await service.getConfiguredSessionFormats(viewer),
+  );
   if (input.kind === "direct_session") {
     const trackField = input.schema.fields.find(
       (field) => field.id === "category",

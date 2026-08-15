@@ -26,12 +26,14 @@ describe("authoritative schedule rules", () => {
     const conflicts = detectScheduleConflicts({
       candidate: {
         sessionId: "new",
+        title: "New session",
         roomId: "main",
         startsAt: 150,
         endsAt: 250,
         trackId: "track-a",
         trackExclusive: true,
         speakerIds: ["speaker-a"],
+        speakerNames: ["Priya Raman"],
         requiredResources: ["av-kit"],
         expectedAttendance: 120,
       },
@@ -45,6 +47,7 @@ describe("authoritative schedule rules", () => {
           trackId: "track-a",
           trackExclusive: true,
           speakerIds: ["speaker-a"],
+          speakerNames: ["Priya Raman"],
           requiredResources: ["av-kit"],
           expectedAttendance: 40,
           title: "Existing session",
@@ -63,6 +66,13 @@ describe("authoritative schedule rules", () => {
       "required_resource",
       "track",
     ]);
+    expect(conflicts).toContainEqual(
+      expect.objectContaining({
+        type: "speaker",
+        message:
+          "Priya Raman appears in both “New session” and “Existing session”.",
+      }),
+    );
     expect(() => assertPublishable(conflicts)).toThrow(/3 blocking/);
   });
 
@@ -70,12 +80,14 @@ describe("authoritative schedule rules", () => {
     const conflicts = detectScheduleConflicts({
       candidate: {
         sessionId: "new",
+        title: "New session",
         roomId: "main",
         startsAt: -1,
         endsAt: 30,
         trackId: null,
         trackExclusive: false,
         speakerIds: [],
+        speakerNames: [],
         requiredResources: [],
         expectedAttendance: null,
       },
@@ -106,12 +118,14 @@ describe("authoritative schedule rules", () => {
       detectScheduleConflicts({
         candidate: {
           sessionId: "new",
+          title: "New session",
           roomId: "main",
           startsAt,
           endsAt,
           trackId: null,
           trackExclusive: false,
           speakerIds: [],
+          speakerNames: [],
           requiredResources: [],
           expectedAttendance: null,
         },
@@ -158,12 +172,14 @@ describe("authoritative schedule rules", () => {
     const conflicts = detectScheduleConflicts({
       candidate: {
         sessionId: "new",
+        title: "New session",
         roomId: "second",
         startsAt: 150,
         endsAt: 250,
         trackId: "track-a",
         trackExclusive: false,
         speakerIds: [],
+        speakerNames: [],
         requiredResources: [],
         expectedAttendance: null,
       },
@@ -177,6 +193,7 @@ describe("authoritative schedule rules", () => {
           trackId: "track-a",
           trackExclusive: false,
           speakerIds: [],
+          speakerNames: [],
           requiredResources: [],
           expectedAttendance: null,
           title: "Existing session",
@@ -201,12 +218,14 @@ describe("authoritative schedule rules", () => {
     const conflicts = detectScheduleConflicts({
       candidate: {
         sessionId: "new",
+        title: "New session",
         roomId: "second",
         startsAt: 215,
         endsAt: 300,
         trackId: null,
         trackExclusive: false,
         speakerIds: ["speaker-a"],
+        speakerNames: ["Priya Raman"],
         requiredResources: [],
         expectedAttendance: null,
       },
@@ -220,6 +239,7 @@ describe("authoritative schedule rules", () => {
           trackId: null,
           trackExclusive: false,
           speakerIds: ["speaker-a"],
+          speakerNames: ["Priya Raman"],
           requiredResources: [],
           expectedAttendance: null,
           title: "Existing session",
@@ -244,12 +264,14 @@ describe("authoritative schedule rules", () => {
     const base = {
       candidate: {
         sessionId: "new",
+        title: "New session",
         roomId: "second",
         startsAt: 100,
         endsAt: 200,
         trackId: null,
         trackExclusive: false,
         speakerIds: [] as string[],
+        speakerNames: [] as string[],
         expectedAttendance: null,
       },
       existing: [],
