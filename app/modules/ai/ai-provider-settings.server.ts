@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { WORKERS_AI_MODEL } from "./workers-ai-provider.server";
 
 export const aiProviderKeys = ["workers_ai", "openai", "anthropic"] as const;
 export type AiProviderKey = (typeof aiProviderKeys)[number];
@@ -17,7 +18,16 @@ const settingsInputSchema = z
     model: z.string().trim().min(1).max(100),
     revision: z.coerce.number().int().min(0),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.provider === "workers_ai" && value.model !== WORKERS_AI_MODEL) {
+      context.addIssue({
+        code: "custom",
+        path: ["model"],
+        message: `Workers AI requires the model ${WORKERS_AI_MODEL}.`,
+      });
+    }
+  });
 
 const endpointSchema = z.url().refine((value) => value.startsWith("https://"), {
   message: "Provider endpoints must use HTTPS.",
@@ -72,11 +82,10 @@ function configurationProblem(
         missing: ["AI Workers binding"],
         problem: credentialsUnavailable,
       };
-    if (!/^@cf\/openai\/gpt-oss-(?:20b|120b)$/u.test(selection.model)) {
+    if (selection.model !== WORKERS_AI_MODEL) {
       return {
         missing: [],
-        problem:
-          "Workers AI currently requires the model @cf/openai/gpt-oss-20b or @cf/openai/gpt-oss-120b. Choose one of those models for this organisation.",
+        problem: `Workers AI requires the model ${WORKERS_AI_MODEL}. Choose that model for this organisation.`,
       };
     }
     return { missing: [], problem: null };

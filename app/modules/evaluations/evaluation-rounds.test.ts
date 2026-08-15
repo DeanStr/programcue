@@ -252,7 +252,7 @@ async function insertAiAssessmentOperation(input: {
         roundId: input.roundId,
         submissionId: "eval-test-submission",
         provider: "workers_ai",
-        model: "@cf/openai/gpt-oss-120b",
+        model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
         roundRevision: 1,
         scorecardId: input.roundId,
         scorecardVersion: 1,
@@ -568,7 +568,7 @@ describe("evaluation vertical slice", () => {
              last_operation_id
            ) VALUES (?, ?, ?, 'eval-test-submission', ?, 1, 1, 4,
                      'This persisted AI assessment must survive a concurrent plan replacement attempt.',
-                     'workers_ai', '@cf/openai/gpt-oss-120b', ?, ?, ?)`,
+                     'workers_ai', '@cf/deepseek-ai/deepseek-v4-flash-0731', ?, ?, ?)`,
         )
           .bind(
             assessmentId,

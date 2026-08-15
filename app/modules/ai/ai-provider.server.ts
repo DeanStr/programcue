@@ -20,12 +20,15 @@ import {
 
 import { AiProviderSettingsService } from "./ai-provider-settings.server";
 import {
-  WorkersAiResponsesProvider,
+  WorkersAiProvider,
   type WorkersAiBinding,
-} from "./workers-ai-responses-provider.server";
+} from "./workers-ai-provider.server";
 
 export * from "./ai-provider-settings.server";
-export { WorkersAiResponsesProvider } from "./workers-ai-responses-provider.server";
+export {
+  WORKERS_AI_MODEL,
+  WorkersAiProvider,
+} from "./workers-ai-provider.server";
 
 type AnthropicBlock =
   | { type: "text"; text: string }
@@ -500,10 +503,7 @@ export async function resolveAiProvider(
   }
   const { provider, model } = readiness.selection;
   if (provider === "workers_ai") {
-    return new WorkersAiResponsesProvider(
-      env.AI as unknown as WorkersAiBinding,
-      model,
-    );
+    return new WorkersAiProvider(env.AI as unknown as WorkersAiBinding, model);
   }
   if (provider === "openai") {
     return new OpenAiResponsesProvider(

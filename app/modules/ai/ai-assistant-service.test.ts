@@ -14,7 +14,8 @@ import {
   AiProviderSettingsConflictError,
   AiProviderSettingsService,
   AnthropicMessagesProvider,
-  WorkersAiResponsesProvider,
+  WORKERS_AI_MODEL,
+  WorkersAiProvider,
 } from "./ai-provider.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
@@ -243,10 +244,39 @@ describe("organisation AI provider boundary", () => {
     await expect(
       settings.save(owner, {
         provider: "workers_ai",
-        model: "@cf/openai/gpt-oss-120b",
+        model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
         revision: 1,
       }),
     ).rejects.toBeInstanceOf(AiProviderSettingsConflictError);
+  });
+
+  it("accepts only DeepSeek V4 Flash for Workers AI", async () => {
+    const settings = new AiProviderSettingsService(
+      env as unknown as CloudflareEnvironment,
+    );
+    await expect(
+      settings.save(owner, {
+        provider: "workers_ai",
+        model: WORKERS_AI_MODEL,
+        revision: 1,
+      }),
+    ).resolves.toEqual({
+      provider: "workers_ai",
+      model: WORKERS_AI_MODEL,
+      revision: 2,
+    });
+    await expect(
+      settings.save(owner, {
+        provider: "workers_ai",
+        model: "@cf/openai/gpt-oss-120b",
+        revision: 2,
+      }),
+    ).rejects.toThrow(`Workers AI requires the model ${WORKERS_AI_MODEL}.`);
+    await expect(settings.getSelection(owner.organisationId)).resolves.toEqual({
+      provider: "workers_ai",
+      model: WORKERS_AI_MODEL,
+      revision: 2,
+    });
   });
 
   it("rolls back the provider CAS when its audit cannot commit", async () => {
@@ -281,20 +311,24 @@ describe("organisation AI provider boundary", () => {
     }
   });
 
-  it("maps Workers AI Responses calls without provider fallback", async () => {
+  it("maps DeepSeek Chat Completions calls without provider fallback", async () => {
     const run = vi.fn().mockResolvedValue({
-      status: "completed",
-      output: [
+      id: "workers-ai-chat-1",
+      model: WORKERS_AI_MODEL,
+      choices: [
         {
-          type: "message",
-          role: "assistant",
-          content: [{ type: "output_text", text: "Workers result" }],
+          index: 0,
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: '{"summary":"Workers result"}',
+          },
         },
       ],
     });
-    const provider = new WorkersAiResponsesProvider(
+    const provider = new WorkersAiProvider(
       { aiGatewayLogId: "workers-ai-log-1", run },
-      "@cf/openai/gpt-oss-120b",
+      WORKERS_AI_MODEL,
     );
     const result = await provider.create({
       instructions: "Use the tool only when needed.",
@@ -325,52 +359,227 @@ describe("organisation AI provider boundary", () => {
       ],
     });
     expect(result).toMatchObject({
-      id: "workers-ai-log-1",
-      model: "@cf/openai/gpt-oss-120b",
+      id: "workers-ai-chat-1",
+      model: WORKERS_AI_MODEL,
+      output_text: '{"summary":"Workers result"}',
     });
-    expect(run).toHaveBeenCalledWith(
-      "@cf/openai/gpt-oss-120b",
-      expect.objectContaining({
-        parallel_tool_calls: false,
-        tool_choice: "auto",
-        text: {
-          format: {
-            type: "json_schema",
-            name: "program_cue_readiness_advisory",
-            description: "A structured readiness advisory.",
-            strict: true,
-            schema: {
+    expect(run).toHaveBeenCalledWith(WORKERS_AI_MODEL, {
+      messages: [
+        { role: "system", content: "Use the tool only when needed." },
+        { role: "user", content: "Inspect readiness" },
+      ],
+      user: "pc_test",
+      n: 1,
+      reasoning_effort: "medium",
+      max_completion_tokens: 1_600,
+      parallel_tool_calls: false,
+      tool_choice: "auto",
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "program_cue_readiness_advisory",
+          description: "A structured readiness advisory.",
+          schema: {
+            type: "object",
+            properties: { summary: { type: "string" } },
+            required: ["summary"],
+            additionalProperties: false,
+          },
+          strict: true,
+        },
+      },
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "get_event_readiness",
+            description: "Read readiness",
+            parameters: {
               type: "object",
-              properties: { summary: { type: "string" } },
-              required: ["summary"],
+              properties: {},
               additionalProperties: false,
             },
+            strict: true,
           },
         },
+      ],
+    });
+  });
+
+  it("rejects obsolete Workers AI models before calling the binding", () => {
+    const run = vi.fn();
+    expect(
+      () =>
+        new WorkersAiProvider(
+          { aiGatewayLogId: null, run },
+          "@cf/openai/gpt-oss-120b",
+        ),
+    ).toThrow(`Workers AI requires the model ${WORKERS_AI_MODEL}.`);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("rejects a Workers AI result attributed to another model", async () => {
+    const run = vi.fn().mockResolvedValue({
+      id: "workers-wrong-model",
+      model: "@cf/another/model",
+      choices: [
+        {
+          index: 0,
+          finish_reason: "stop",
+          message: { role: "assistant", content: "Unexpected model result" },
+        },
+      ],
+    });
+    const provider = new WorkersAiProvider(
+      { aiGatewayLogId: "workers-wrong-model-log", run },
+      WORKERS_AI_MODEL,
+    );
+
+    await expect(
+      provider.create({
+        instructions: "Answer concisely.",
+        input: "Inspect readiness",
+        safetyIdentifier: "pc_test",
+      }),
+    ).rejects.toMatchObject({
+      name: "AiProviderError",
+      providerRequestId: "workers-wrong-model",
+      message: `Workers AI returned model @cf/another/model after ${WORKERS_AI_MODEL} was requested; no result was accepted.`,
+    });
+  });
+
+  it("maps DeepSeek tool calls and their results through the shared transcript", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: "workers-tool-1",
+        model: WORKERS_AI_MODEL,
+        choices: [
+          {
+            index: 0,
+            finish_reason: "tool_calls",
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: "call-readiness-1",
+                  type: "function",
+                  function: {
+                    name: "get_event_readiness",
+                    arguments: "{}",
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        id: "workers-text-2",
+        model: WORKERS_AI_MODEL,
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: { role: "assistant", content: "Readiness is at risk." },
+          },
+        ],
+      });
+    const provider = new WorkersAiProvider(
+      { aiGatewayLogId: "workers-tool-log", run },
+      WORKERS_AI_MODEL,
+    );
+    const request = {
+      instructions: "Use Program Cue evidence.",
+      input: [{ role: "user", content: "Inspect readiness" }] as unknown[],
+      safetyIdentifier: "pc_test",
+      tools: [
+        {
+          type: "function" as const,
+          name: "get_event_readiness",
+          description: "Read readiness",
+          strict: true as const,
+          parameters: {
+            type: "object",
+            properties: {},
+            additionalProperties: false,
+          },
+        },
+      ],
+    };
+
+    const toolResponse = await provider.create(request);
+    expect(toolResponse.output).toContainEqual({
+      type: "function_call",
+      call_id: "call-readiness-1",
+      name: "get_event_readiness",
+      arguments: "{}",
+    });
+    const final = await provider.create({
+      ...request,
+      input: [
+        ...request.input,
+        ...toolResponse.output,
+        {
+          type: "function_call_output",
+          call_id: "call-readiness-1",
+          output: '{"percentage":73,"status":"at_risk"}',
+        },
+      ],
+    });
+    expect(final.output_text).toBe("Readiness is at risk.");
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      WORKERS_AI_MODEL,
+      expect.objectContaining({
+        messages: [
+          { role: "system", content: "Use Program Cue evidence." },
+          { role: "user", content: "Inspect readiness" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "call-readiness-1",
+                type: "function",
+                function: {
+                  name: "get_event_readiness",
+                  arguments: "{}",
+                },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            tool_call_id: "call-readiness-1",
+            content: '{"percentage":73,"status":"at_risk"}',
+          },
+        ],
       }),
     );
   });
 
-  it("returns a Workers AI Responses result to streaming callers without requesting the incompatible binding stream", async () => {
+  it("returns a buffered DeepSeek result to streaming callers without requesting a binding stream", async () => {
     const raw = {
       id: "workers-buffered-1",
-      model: "@cf/openai/gpt-oss-120b",
-      status: "completed",
-      output: [
+      model: WORKERS_AI_MODEL,
+      choices: [
         {
-          type: "message",
-          content: [{ type: "output_text", text: "Workers result" }],
+          index: 0,
+          finish_reason: "stop",
+          message: { role: "assistant", content: "Workers result" },
         },
       ],
     };
     const deltas: string[] = [];
     const run = vi.fn().mockResolvedValue(raw);
-    const provider = new WorkersAiResponsesProvider(
+    const provider = new WorkersAiProvider(
       {
         aiGatewayLogId: "workers-log-buffered",
         run,
       },
-      "@cf/openai/gpt-oss-120b",
+      WORKERS_AI_MODEL,
     );
     const result = await provider.create({
       instructions: "Answer concisely.",
@@ -381,26 +590,26 @@ describe("organisation AI provider boundary", () => {
     expect(deltas).toEqual(["Workers result"]);
     expect(result.id).toBe("workers-buffered-1");
     expect(run).toHaveBeenCalledWith(
-      "@cf/openai/gpt-oss-120b",
+      WORKERS_AI_MODEL,
       expect.not.objectContaining({ stream: true }),
     );
   });
 
-  it("fails fast when Workers AI exhausts the response budget", async () => {
+  it("fails fast when DeepSeek exhausts the response budget", async () => {
     const run = vi.fn().mockResolvedValue({
       id: "workers-incomplete-1",
-      status: "incomplete",
-      incomplete_details: { reason: "max_output_tokens" },
-      output: [
+      model: WORKERS_AI_MODEL,
+      choices: [
         {
-          type: "message",
-          content: [{ type: "output_text", text: '{"score":4' }],
+          index: 0,
+          finish_reason: "length",
+          message: { role: "assistant", content: '{"score":4' },
         },
       ],
     });
-    const provider = new WorkersAiResponsesProvider(
+    const provider = new WorkersAiProvider(
       { aiGatewayLogId: "workers-log-incomplete", run },
-      "@cf/openai/gpt-oss-120b",
+      WORKERS_AI_MODEL,
     );
 
     await expect(
@@ -411,9 +620,55 @@ describe("organisation AI provider boundary", () => {
       }),
     ).rejects.toMatchObject({
       name: "AiProviderError",
-      providerRequestId: "workers-log-incomplete",
+      providerRequestId: "workers-incomplete-1",
       message:
-        "Workers AI response status was incomplete (max_output_tokens); no result was accepted.",
+        "Workers AI exhausted the DeepSeek completion-token budget; no result was accepted.",
+    });
+  });
+
+  it("rejects DeepSeek tool calls with an inconsistent stop reason", async () => {
+    const provider = new WorkersAiProvider(
+      {
+        aiGatewayLogId: "workers-log-inconsistent",
+        run: vi.fn().mockResolvedValue({
+          id: "workers-inconsistent-1",
+          model: WORKERS_AI_MODEL,
+          choices: [
+            {
+              index: 0,
+              finish_reason: "stop",
+              message: {
+                role: "assistant",
+                content: null,
+                tool_calls: [
+                  {
+                    id: "call-inconsistent-1",
+                    type: "function",
+                    function: {
+                      name: "get_event_readiness",
+                      arguments: "{}",
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      },
+      WORKERS_AI_MODEL,
+    );
+
+    await expect(
+      provider.create({
+        instructions: "Use Program Cue evidence.",
+        input: "Inspect readiness.",
+        safetyIdentifier: "pc_test",
+      }),
+    ).rejects.toMatchObject({
+      name: "AiProviderError",
+      providerRequestId: "workers-inconsistent-1",
+      message:
+        "Workers AI returned tool calls with an inconsistent stop reason; no result was accepted.",
     });
   });
 

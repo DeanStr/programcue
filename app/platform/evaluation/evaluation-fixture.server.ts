@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { WORKERS_AI_MODEL } from "~/modules/ai/workers-ai-provider.server";
 import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
 import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
 import { ResendDomainProvider } from "~/modules/communications/resend-domain.server";
@@ -34,8 +35,6 @@ const EVALUATION_ORGANISATION_SLUG = "future-events-association";
 const EVALUATION_EVENT_SLUG = "future-of-events-2027";
 const EVALUATION_ORGANIZER_MEMBERSHIP_ID =
   "membership-production-evaluation-organizer-org";
-const WORKERS_AI_MODEL = "@cf/openai/gpt-oss-120b";
-
 const deliverableEmailSchema = z
   .email()
   .transform((value) => value.trim().toLowerCase())

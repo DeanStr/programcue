@@ -42,7 +42,7 @@ const failedAttempt = {
   scorecardVersion: round.scorecardVersion,
   provider: "workers_ai",
   providerLabel: "Workers AI",
-  model: "@cf/openai/gpt-oss-120b",
+  model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
   retryOfOperationId: null,
   lastError: "The provider request failed.",
   providerRequestId: "provider-failure",

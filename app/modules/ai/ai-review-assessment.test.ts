@@ -54,7 +54,7 @@ function structuredResponse(
 ): OpenAiResponse {
   return {
     id,
-    model: "@cf/openai/gpt-oss-120b",
+    model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
     status: "completed",
     output: [
       {
@@ -76,7 +76,7 @@ function workersAiProvider(
 ): AiModelProvider {
   return {
     providerName: "Workers AI",
-    model: "@cf/openai/gpt-oss-120b",
+    model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
     create,
   };
 }
@@ -206,7 +206,7 @@ describe("persisted AI first-pass review assessments", () => {
       overridden: false,
       provider: "workers_ai",
       providerLabel: "Workers AI",
-      model: "@cf/openai/gpt-oss-120b",
+      model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
       providerResponseId: "response-1",
       revision: 1,
     });
@@ -245,7 +245,7 @@ describe("persisted AI first-pass review assessments", () => {
       score: 4.25,
       rationale: validAssessment().rationale,
       provider: "workers_ai",
-      model: "@cf/openai/gpt-oss-120b",
+      model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
       responseId: "response-1",
       overrideScore: null,
       revision: 1,

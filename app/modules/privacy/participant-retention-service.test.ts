@@ -516,7 +516,7 @@ describe("participant retention", () => {
            last_operation_id
          ) VALUES (?, ?, ?, ?, ?, 1, 1, 4,
                    'Private generated rationale that must be deleted when participant retention completes.',
-                   'workers_ai', '@cf/openai/gpt-oss-120b', ?,
+                   'workers_ai', '@cf/deepseek-ai/deepseek-v4-flash-0731', ?,
                    'person-demo-owner', ?)`,
       ).bind(
         assessmentId,
@@ -553,7 +553,7 @@ describe("participant retention", () => {
            last_operation_id
          ) VALUES (?, ?, ?, ?, ?, 1, 1, 4,
                    'A new private rationale must not be written after participant retention has completed.',
-                   'workers_ai', '@cf/openai/gpt-oss-120b', ?,
+                   'workers_ai', '@cf/deepseek-ai/deepseek-v4-flash-0731', ?,
                    'person-demo-owner', ?)`,
       )
         .bind(

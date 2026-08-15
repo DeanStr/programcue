@@ -14,7 +14,7 @@ import {
   AiProviderSettingsConflictError,
   AiProviderSettingsService,
   AnthropicMessagesProvider,
-  WorkersAiResponsesProvider,
+  WorkersAiProvider,
 } from "./ai-provider.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";

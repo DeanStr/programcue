@@ -14,6 +14,7 @@ import {
 import { ZodError } from "zod";
 
 import type { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
+import { WORKERS_AI_MODEL } from "~/modules/ai/ai-provider.server";
 import { getProgramCueEventAgent } from "~/modules/ai/program-cue-agent-client.server";
 import {
   AssistantResultPanel,
@@ -50,6 +51,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   return {
     eventName: workspace.eventName,
     provider,
+    workersAiModel: WORKERS_AI_MODEL,
     canConfigureProvider: workspace.canConfigureProvider,
     prompt:
       new URL(request.url).searchParams.get("prompt")?.slice(0, 4_000) ?? "",
@@ -496,7 +498,7 @@ export default function AssistantRoute() {
                 className="select"
                 name="provider"
                 defaultValue={
-                  loaderData.provider.selection?.provider ?? "openai"
+                  loaderData.provider.selection?.provider ?? "workers_ai"
                 }
                 required
               >
@@ -515,9 +517,14 @@ export default function AssistantRoute() {
                 maxLength={100}
                 required
                 defaultValue={
-                  loaderData.provider.selection?.model ?? "gpt-5.6-terra"
+                  loaderData.provider.selection?.model ??
+                  loaderData.workersAiModel
                 }
               />
+              <span className="help">
+                Workers AI uses {loaderData.workersAiModel}. Enter the exact
+                provider model only when selecting OpenAI or Anthropic.
+              </span>
             </label>
             <div className="label">
               Apply selection

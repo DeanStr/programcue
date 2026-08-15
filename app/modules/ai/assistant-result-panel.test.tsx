@@ -7,7 +7,7 @@ import type { ContextualAiResult } from "./ai-types";
 
 const attribution = {
   provider: "Workers AI" as const,
-  model: "@cf/openai/gpt-oss-120b",
+  model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
   responseId: "response-readiness-test",
   generatedAt: "2026-08-15T10:42:00.000Z",
   advisory: true as const,

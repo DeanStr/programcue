@@ -292,7 +292,11 @@ unaffected. Coordinate any required rotation with removal of the unreachable
 anonymous rows; do not retain a previous-key compatibility fallback.
 `CALENDAR_CREDENTIALS_KEY`, `INTEGRATION_CREDENTIALS_KEY` and
 `WEBHOOK_CREDENTIALS_KEY` must each be an independently generated,
-base64-encoded 32-byte AES-GCM key. Workers AI is the provisioned default;
+base64-encoded 32-byte AES-GCM key. Workers AI is the provisioned default and
+uses the Cloudflare-hosted `@cf/deepseek-ai/deepseek-v4-flash-0731` model;
+that model requires a Workers Paid plan. Runtime readiness verifies the binding
+and exact model selection, while a real request after deployment proves billing
+access and provider acceptance.
 `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is an additional Cloudflare secret only
 when that provider is deliberately selected. `npm run deploy:secrets` queries
 the configured Worker and fails if the complete required secret inventory is

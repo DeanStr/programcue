@@ -678,7 +678,7 @@ describe("abstract management round depth", () => {
          last_operation_id
        ) VALUES (?, ?, ?, ?, ?, ?, ?, 4,
                  'A sufficiently detailed persisted AI assessment rationale for this test.',
-                 'workers_ai', '@cf/openai/gpt-oss-120b', ?, ?, ?)`,
+                 'workers_ai', '@cf/deepseek-ai/deepseek-v4-flash-0731', ?, ?, ?)`,
     )
       .bind(
         "abstract-round-edit-ai-assessment",
