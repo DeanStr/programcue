@@ -125,7 +125,9 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     const formStructure = page.locator("section").filter({
       has: page.getByRole("heading", { name: "Form structure" }),
     });
-    await formStructure.getByRole("button", { name: /Tracks/ }).click();
+    await formStructure
+      .getByRole("button", { name: /^\d+\s+Tracks/ })
+      .click();
     const currentTracks = routing.getByRole("group", {
       name: "Current Event Setup tracks",
     });

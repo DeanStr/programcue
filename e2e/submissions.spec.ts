@@ -596,4 +596,80 @@ test.describe.serial("submissions vertical slice", () => {
       }),
     ).toBeVisible();
   });
+
+  test("authored conditional fields survive publication and toggle on the public form", async ({
+    page,
+  }) => {
+    const unique = Date.now();
+    await page.goto("/admin/submissions/form");
+
+    const editor = page.getByLabel("Visual call-for-speakers form editor");
+    await editor.getByRole("button", { name: "Add Long text" }).click();
+    await page.getByLabel("Stable field ID").fill(`key_takeaway_${unique}`);
+    await page.getByLabel("Label", { exact: true }).fill("Key takeaway");
+    await page.getByLabel("Required when visible").check();
+
+    await editor.getByRole("button", { name: "Add Dropdown" }).click();
+    await page.getByLabel("Stable field ID").fill(`audience_level_${unique}`);
+    await page.getByLabel("Label", { exact: true }).fill("Audience level");
+    await page
+      .getByLabel("Options, one per line")
+      .fill("Beginner\nIntermediate\nAdvanced");
+
+    await editor.getByRole("button", { name: "Add Long text" }).click();
+    await page
+      .getByLabel("Stable field ID")
+      .fill(`workshop_prerequisites_${unique}`);
+    await page
+      .getByLabel("Label", { exact: true })
+      .fill("Workshop prerequisites");
+    await page
+      .getByLabel("Show this field when")
+      .selectOption(`audience_level_${unique}`);
+    await page.getByLabel("Equals").selectOption("Advanced");
+
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(
+      page.locator(".validation-item.ok[role='status']").filter({
+        hasText: "Draft form saved.",
+      }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Publish version" }).click();
+    await page.getByRole("button", { name: "Confirm publication" }).click();
+    await expect(
+      page.locator(".validation-item.ok[role='status']").filter({
+        hasText: "Published a new immutable form version",
+      }),
+    ).toBeVisible();
+
+    await page.goto("/apply/form");
+    await expect(page.getByText("Key takeaway", { exact: true })).toBeVisible();
+    await expect(page.getByText("Audience level", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(
+        "Shown when Audience level is “Advanced”.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await page
+      .getByRole("link", { name: "Continue to application" })
+      .click();
+
+    await page
+      .getByLabel("Email address")
+      .fill(`conditional-form-${unique}@example.com`);
+    await page.getByRole("button", { name: "Send verification code" }).click();
+    await page.getByLabel("Six-digit code").fill("424242");
+    await page.getByRole("button", { name: "Verify and open drafts" }).click();
+    await page.getByRole("button", { name: "Start application" }).click();
+
+    await expect(page.getByLabel("Key takeaway *")).toBeVisible();
+    const audienceLevel = page.getByLabel("Audience level");
+    await expect(audienceLevel).toBeVisible();
+    await expect(page.getByLabel("Workshop prerequisites")).toBeHidden();
+    await audienceLevel.selectOption("Advanced");
+    await expect(page.getByLabel("Workshop prerequisites")).toBeVisible();
+    await audienceLevel.selectOption("Beginner");
+    await expect(page.getByLabel("Workshop prerequisites")).toBeHidden();
+  });
 });
