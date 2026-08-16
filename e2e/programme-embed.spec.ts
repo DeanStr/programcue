@@ -49,6 +49,7 @@ test("configures, previews and copies a constrained programme embed", async ({
   await page.getByLabel("Include the speaker directory").uncheck();
 
   const preview = page.locator(".programme-embed-preview iframe");
+  await expect(preview).not.toHaveAttribute("sandbox");
   await expect(preview).toHaveAttribute(
     "src",
     /\/embed\/future-of-events-2027\/sessions\?day=2027-05-21.*track=AI\+%26\+Innovation.*format=breakout.*room=Room\+303.*query=Building.*controls=search.*density=compact.*directory=hide/,
@@ -65,9 +66,16 @@ test("configures, previews and copies a constrained programme embed", async ({
   await expect(previewFrame.locator(".public-filters select")).toHaveCount(0);
   await expect(previewFrame.locator("#speakers")).toBeHidden();
 
-  await expect(
-    page.getByRole("textbox", { name: "Iframe code", exact: true }),
-  ).toHaveValue(/controls=search.*density=compact.*directory=hide/);
+  const iframeCode = page.getByRole("textbox", {
+    name: "Iframe code",
+    exact: true,
+  });
+  await expect(iframeCode).toHaveValue(
+    /controls=search.*density=compact.*directory=hide/,
+  );
+  await expect(iframeCode).toHaveValue(
+    /sandbox="allow-scripts allow-same-origin"/,
+  );
   await page.getByLabel("Installation format").selectOption("widget");
   const widgetCode = page.getByRole("textbox", {
     name: "Auto-resizing widget code",

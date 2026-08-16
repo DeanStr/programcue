@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { action, loader } from "./admin-file-retention";
+import { action, assetCountLabel, loader } from "./admin-file-retention";
 
 function context() {
   const value = new RouterContextProvider();
@@ -36,6 +36,12 @@ beforeEach(async () => {
 });
 
 describe("owner file-retention route", () => {
+  it("uses singular and plural asset copy", () => {
+    expect(assetCountLabel(0)).toBe("0 assets");
+    expect(assetCountLabel(1)).toBe("1 asset");
+    expect(assetCountLabel(2)).toBe("2 assets");
+  });
+
   it("renders current retention impact for an owner and rejects an administrator", async () => {
     const result = await loader({
       request: request("owner"),

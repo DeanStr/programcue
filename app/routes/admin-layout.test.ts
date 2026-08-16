@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { adminLayoutAllowedRoles } from "./admin-layout";
+import { adminErrorReturn, adminLayoutAllowedRoles } from "./admin-layout";
 
 describe("admin layout role routing", () => {
   it.each([
@@ -19,5 +19,34 @@ describe("admin layout role routing", () => {
     "/admin/schedule",
   ])("does not broaden committee-chair access to %s", (pathname) => {
     expect(adminLayoutAllowedRoles(pathname)).not.toContain("committee_chair");
+  });
+
+  it("returns access and event-context errors to event selection", () => {
+    for (const status of [400, 403, 428]) {
+      expect(adminErrorReturn(status, false)).toEqual({
+        href: "/events/select",
+        label: "Choose an event",
+      });
+    }
+  });
+
+  it("keeps child-route errors inside the loaded administrator context", () => {
+    for (const status of [400, 403, 428]) {
+      expect(adminErrorReturn(status, true)).toEqual({
+        href: "/admin/command",
+        label: "Go to Command Centre",
+      });
+    }
+  });
+
+  it("returns unexpected failures to the administrator home", () => {
+    expect(adminErrorReturn(500, false)).toEqual({
+      href: "/admin/command",
+      label: "Go to Command Centre",
+    });
+    expect(adminErrorReturn(null, false)).toEqual({
+      href: "/admin/command",
+      label: "Go to Command Centre",
+    });
   });
 });

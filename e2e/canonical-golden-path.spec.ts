@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 import { e2eOrigin } from "./support/e2e-origin";
@@ -98,6 +99,15 @@ async function completeSelectedReview(page: Page) {
   await expect(
     form.getByText("This review is submitted and locked."),
   ).toBeVisible();
+  const contrast = await new AxeBuilder({ page })
+    .withRules(["color-contrast"])
+    .analyze();
+  expect(
+    contrast.violations,
+    `submitted review contrast violations: ${contrast.violations
+      .flatMap((violation) => violation.nodes.map((node) => node.target))
+      .join(", ")}`,
+  ).toEqual([]);
 }
 
 test.describe.serial("canonical D1-backed judged workflow", () => {

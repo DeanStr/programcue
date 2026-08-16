@@ -49,6 +49,17 @@ export function adminLayoutAllowedRoles(pathname: string) {
     : (["owner", "administrator"] as const);
 }
 
+export function adminErrorReturn(
+  status: number | null,
+  adminContextLoaded: boolean,
+) {
+  return !adminContextLoaded &&
+    status !== null &&
+    [400, 403, 428].includes(status)
+    ? { href: "/events/select", label: "Choose an event" }
+    : { href: "/admin/command", label: "Go to Command Centre" };
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   const pathname = new URL(request.url).pathname.replace(/\/$/, "");
@@ -149,6 +160,10 @@ export function ErrorBoundary({ error, loaderData }: Route.ErrorBoundaryProps) {
   const message = routeError
     ? routeErrorMessage(routeError.status, routeError.data)
     : "The page failed to load. Check your latest changes before trying again.";
+  const errorReturn = adminErrorReturn(
+    routeError?.status ?? null,
+    Boolean(loaderData),
+  );
 
   const errorContent = (
     <section className="card pad" style={{ maxWidth: 620 }}>
@@ -163,8 +178,8 @@ export function ErrorBoundary({ error, loaderData }: Route.ErrorBoundaryProps) {
         >
           {revalidator.state === "loading" ? "Retrying…" : "Try again"}
         </button>
-        <Link className="btn" to="/admin/command">
-          Go to Command Centre
+        <Link className="btn" to={errorReturn.href}>
+          {errorReturn.label}
         </Link>
       </div>
     </section>

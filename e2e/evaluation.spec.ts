@@ -5,6 +5,39 @@ test.beforeEach(async ({ request }) => {
   expect((await request.get("/admin/command")).ok()).toBeTruthy();
 });
 
+test("a reviewer denied an administrator page receives a usable recovery path", async ({
+  page,
+}) => {
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+    {
+      name: "program_cue_demo_identity",
+      value: "evaluator",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+
+  const response = await page.goto("/admin/review");
+  expect(response?.status()).toBe(403);
+  const recovery = page.getByRole("link", { name: "Choose an event" });
+  await expect(recovery).toHaveAttribute("href", "/events/select");
+  await recovery.click();
+  await expect(page).toHaveURL(/\/events\/select$/u);
+  await expect(
+    page.getByRole("heading", { name: "Choose an event" }),
+  ).toBeVisible();
+});
+
 test("reviewer queue navigation and submission confirmation preserve context", async ({
   page,
 }) => {

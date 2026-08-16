@@ -19,6 +19,10 @@ import { getCloudflareContext } from "~/platform/cloudflare-context";
 
 export const meta = () => [{ title: "Data retention · Program Cue" }];
 
+export function assetCountLabel(count: number) {
+  return `${count} asset${count === 1 ? "" : "s"}`;
+}
+
 async function owner(request: Request, context: Route.LoaderArgs["context"]) {
   const { env } = getCloudflareContext(context);
   const viewer = await requireCurrentEventRole(request, env, ["owner"]);
@@ -245,7 +249,7 @@ export default function AdminFileRetention({
           <p>
             This permanently removes up to 50 assets per confirmed batch,
             including every stored version. It currently affects{" "}
-            <strong>{state.pendingAssetCount} assets</strong>.
+            <strong>{assetCountLabel(state.pendingAssetCount)}</strong>.
           </p>
           <Form method="post" className="stack">
             <input type="hidden" name="intent" value="erase-expired" />

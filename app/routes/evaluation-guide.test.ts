@@ -7,6 +7,7 @@ import { requireAuthenticatedPerson } from "~/platform/auth/authorize.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { resetProductionEvaluationFixture } from "~/platform/evaluation/evaluation-fixture.server";
+import { requireEvaluationGuideCount } from "~/platform/evaluation/evaluation-guide-state.server";
 import {
   acquireEvaluationFixtureReset,
   completeEvaluationFixtureReset,
@@ -151,6 +152,17 @@ function withActivationBatchRace(
 }
 
 describe("production evaluation guide", () => {
+  it("fails instead of treating invalid guide counters as a clean baseline", () => {
+    for (const value of [undefined, null, Number.NaN, -1, 1.5, "0"]) {
+      expect(() =>
+        requireEvaluationGuideCount(value, "applicant membership"),
+      ).toThrow(
+        "The evaluation guide received an invalid applicant membership count.",
+      );
+    }
+    expect(requireEvaluationGuideCount(0, "applicant membership")).toBe(0);
+  });
+
   it("is absent outside the exact production evaluation mode", async () => {
     await expect(
       loader({
@@ -622,6 +634,261 @@ describe("production evaluation guide", () => {
       personId: "person-sbek-speaker",
       evaluation: true,
     });
+  });
+
+  it("advances Priya from clean through activation, draft and submission", async () => {
+    const environment = productionEnvironment();
+    await provisionEvaluationFixture(environment);
+    const unlocked = await action({
+      request: request(
+        {
+          _intent: "unlock",
+          accessCode: "evaluation-access-code-2026",
+        },
+        { ip: "203.0.113.181" },
+      ),
+      params: {},
+      context: context(environment),
+    } as never);
+    const cookie = responseCookieHeader(unlocked as Response);
+    const readApplicant = async () => {
+      const guide = await loader({
+        request: new Request("https://app.programcue.com/evaluate", {
+          headers: { cookie },
+        }),
+        params: {},
+        context: context(environment),
+      } as never);
+      return guide.identities.find(
+        (identity) => identity.key === "sbek_applicant",
+      );
+    };
+
+    await expect(readApplicant()).resolves.toMatchObject({
+      label: "Clean applicant",
+      destination: "/apply/form",
+      primaryActionLabel: "Create evaluator submitter account",
+      progress: { clean: true, title: "Clean applicant baseline" },
+    });
+
+    await action({
+      request: request(
+        { _intent: "activate_account", identity: "sbek_applicant" },
+        { cookie },
+      ),
+      params: {},
+      context: context(environment),
+    } as never);
+    await expect(readApplicant()).resolves.toMatchObject({
+      label: "Activated applicant",
+      destination: "/apply/form",
+      primaryActionLabel: "Start an application as Priya",
+      progress: { clean: false, title: "Applicant account activated" },
+    });
+
+    await environment.DB.prepare(
+      `INSERT INTO submissions (
+         id, event_id, submitter_person_id, submitter_email,
+         public_reference, title, status, answers_json, revision,
+         created_at, updated_at
+       ) VALUES (
+         'evaluation-guide-priya-application', 'evt-foe-2025',
+         'person-sbek-speaker', 'eval-speaker@programcue.com',
+         'GUIDE-PRIYA', 'State-aware guide proposal', 'draft', '{}', 1,
+         unixepoch(), unixepoch()
+       )`,
+    ).run();
+    await expect(readApplicant()).resolves.toMatchObject({
+      label: "Applicant with draft",
+      destination: "/participant/applications",
+      primaryActionLabel: "Continue Priya's application",
+      progress: { clean: false, title: "Application draft in progress" },
+    });
+
+    await environment.DB.prepare(
+      `UPDATE submissions
+          SET status = 'submitted', submitted_snapshot_json = '{}',
+              submitted_at = unixepoch(), updated_at = unixepoch()
+        WHERE id = 'evaluation-guide-priya-application'`,
+    ).run();
+    await expect(readApplicant()).resolves.toMatchObject({
+      label: "Submitted applicant",
+      destination: "/participant/applications",
+      primaryActionLabel: "Open Priya's applications",
+      progress: { clean: false, title: "Application submitted" },
+    });
+
+    const selected = await action({
+      request: request(
+        { _intent: "activate_account", identity: "sbek_applicant" },
+        { cookie },
+      ),
+      params: {},
+      context: context(environment),
+    } as never);
+    expect(selected).toBeInstanceOf(Response);
+    expect((selected as Response).headers.get("location")).toBe(
+      "/participant/applications",
+    );
+  });
+
+  it("advances Sam through invitation, acceptance, assignment and review", async () => {
+    const environment = productionEnvironment();
+    await provisionEvaluationFixture(environment);
+    const unlocked = await action({
+      request: request(
+        {
+          _intent: "unlock",
+          accessCode: "evaluation-access-code-2026",
+        },
+        { ip: "203.0.113.182" },
+      ),
+      params: {},
+      context: context(environment),
+    } as never);
+    const cookie = responseCookieHeader(unlocked as Response);
+    const readReviewer = async () => {
+      const guide = await loader({
+        request: new Request("https://app.programcue.com/evaluate", {
+          headers: { cookie },
+        }),
+        params: {},
+        context: context(environment),
+      } as never);
+      return guide.identities.find(
+        (identity) => identity.key === "sbek_reviewer",
+      );
+    };
+
+    await expect(readReviewer()).resolves.toMatchObject({
+      label: "Clean reviewer",
+      destination: "/events/select",
+      primaryActionLabel: "Open as clean reviewer",
+      progress: { clean: true, title: "Clean reviewer baseline" },
+    });
+
+    await environment.DB.prepare(
+      `INSERT INTO memberships (
+         id, organisation_id, event_id, person_id, role,
+         invited_at, invitation_expires_at, accepted_at, revoked_at, created_at
+       ) VALUES (
+         'evaluation-guide-sam-membership', 'org-future-events',
+         'evt-foe-2025', 'person-sbek-reviewer', 'evaluator',
+         unixepoch(), unixepoch() + 604800, NULL, NULL, unixepoch()
+       )`,
+    ).run();
+    await expect(readReviewer()).resolves.toMatchObject({
+      label: "Invited reviewer",
+      destination: "/events/select",
+      primaryActionLabel: "Review invitation as Sam",
+      progress: { clean: false, title: "Reviewer invitation pending" },
+    });
+
+    await environment.DB.prepare(
+      `UPDATE memberships SET invitation_expires_at = unixepoch() - 1
+        WHERE id = 'evaluation-guide-sam-membership'`,
+    ).run();
+    await expect(readReviewer()).resolves.toMatchObject({
+      label: "Reviewer invitation expired",
+      destination: "/events/select",
+      primaryActionLabel: "Open Sam's event access",
+      progress: { clean: false, title: "Reviewer invitation expired" },
+    });
+
+    await environment.DB.prepare(
+      `UPDATE memberships
+          SET invitation_expires_at = NULL, accepted_at = unixepoch()
+        WHERE id = 'evaluation-guide-sam-membership'`,
+    ).run();
+    await expect(readReviewer()).resolves.toMatchObject({
+      label: "Reviewer with event access",
+      destination: "/review/workbench",
+      primaryActionLabel: "Open Sam's reviewer workspace",
+      progress: { clean: false, title: "Reviewer access accepted" },
+    });
+
+    await environment.DB.prepare(
+      `INSERT INTO evaluator_assignments (
+         id, event_id, round_id, submission_id, evaluator_person_id,
+         status, revision, assigned_at
+       ) VALUES (
+         'evaluation-guide-sam-assignment', 'evt-foe-2025',
+         'demo-evaluation-round', 'demo-evaluation-submission-calm',
+         'person-sbek-reviewer', 'assigned', 1, unixepoch()
+       )`,
+    ).run();
+    await expect(readReviewer()).resolves.toMatchObject({
+      label: "Assigned reviewer",
+      destination: "/review/workbench",
+      primaryActionLabel: "Open Sam's assigned review",
+      progress: { clean: false, title: "Review assigned" },
+    });
+
+    await environment.DB.batch([
+      environment.DB.prepare(
+        `UPDATE evaluator_assignments SET status = 'in_progress'
+          WHERE id = 'evaluation-guide-sam-assignment'`,
+      ),
+      environment.DB.prepare(
+        `INSERT INTO reviews (
+           id, event_id, assignment_id, status, scores_json,
+           revision, created_at, updated_at
+         ) VALUES (
+           'evaluation-guide-sam-review', 'evt-foe-2025',
+           'evaluation-guide-sam-assignment', 'draft', '{}', 1,
+           unixepoch(), unixepoch()
+         )`,
+      ),
+    ]);
+    await expect(readReviewer()).resolves.toMatchObject({
+      label: "Reviewer with draft review",
+      destination: "/review/workbench",
+      primaryActionLabel: "Continue Sam's review",
+      progress: { clean: false, title: "Review draft in progress" },
+    });
+
+    await environment.DB.prepare(
+      `UPDATE evaluator_assignments SET status = 'recused'
+        WHERE id = 'evaluation-guide-sam-assignment'`,
+    ).run();
+    await expect(readReviewer()).resolves.toMatchObject({
+      label: "Reviewer with event access",
+      destination: "/review/workbench",
+      primaryActionLabel: "Open Sam's reviewer workspace",
+      progress: { clean: false, title: "Reviewer access accepted" },
+    });
+
+    await environment.DB.batch([
+      environment.DB.prepare(
+        `UPDATE evaluator_assignments
+            SET status = 'submitted', submitted_at = unixepoch()
+          WHERE id = 'evaluation-guide-sam-assignment'`,
+      ),
+      environment.DB.prepare(
+        `UPDATE reviews SET status = 'submitted', submitted_at = unixepoch(),
+                            updated_at = unixepoch()
+          WHERE id = 'evaluation-guide-sam-review'`,
+      ),
+    ]);
+    await expect(readReviewer()).resolves.toMatchObject({
+      label: "Reviewer with submitted review",
+      destination: "/review/workbench",
+      primaryActionLabel: "Inspect Sam's submitted review",
+      progress: { clean: false, title: "Review submitted" },
+    });
+
+    const selected = await action({
+      request: request(
+        { _intent: "select_identity", identity: "sbek_reviewer" },
+        { cookie },
+      ),
+      params: {},
+      context: context(environment),
+    } as never);
+    expect(selected).toBeInstanceOf(Response);
+    expect((selected as Response).headers.get("location")).toBe(
+      "/review/workbench",
+    );
   });
 
   it("replays the exact evaluator account activation without another write or audit", async () => {

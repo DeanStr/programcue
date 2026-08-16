@@ -42,6 +42,14 @@ export type EvaluationPersonaCard = {
   whatToTry: string;
   group: "showcase" | "scenario";
   requiresAccountActivation: boolean;
+  primaryActionLabel?: string;
+  primaryActionHelp?: string;
+  secondaryActionLabel?: string;
+  progress?: {
+    clean: boolean;
+    title: string;
+    detail: string;
+  };
 };
 
 export type EvaluationSelection = {
@@ -229,15 +237,18 @@ function PersonaCard({
         <span>What to try</span>
         <p>{identity.whatToTry}</p>
       </div>
-      {identity.key === "sbek_reviewer" ? (
-        <div className="pc-status-notice is-warning">
-          <TriangleAlert aria-hidden size={16} />
+      {identity.progress ? (
+        <div
+          className={`pc-status-notice ${identity.progress.clean ? "is-success" : "is-warning"}`}
+        >
+          {identity.progress.clean ? (
+            <ShieldCheck aria-hidden size={16} />
+          ) : (
+            <TriangleAlert aria-hidden size={16} />
+          )}
           <div className="pc-status-notice-copy">
-            <strong>No event access yet, by design.</strong>
-            <div>
-              The organiser has to invite this reviewer and the reviewer has to
-              accept before any workbench opens.
-            </div>
+            <strong>{identity.progress.title}</strong>
+            <div>{identity.progress.detail}</div>
           </div>
         </div>
       ) : null}
@@ -257,17 +268,18 @@ function PersonaCard({
           />
           <input type="hidden" name="identity" value={identity.key} />
           <button className="btn primary" disabled={busy} type="submit">
-            {identity.requiresAccountActivation
-              ? "Create evaluator submitter account"
-              : `Open as ${identity.label}`}{" "}
+            {identity.primaryActionLabel ??
+              (identity.requiresAccountActivation
+                ? "Create evaluator submitter account"
+                : `Open as ${identity.label}`)}{" "}
             <ArrowRight aria-hidden size={15} />
           </button>
         </Form>
         {identity.requiresAccountActivation ? (
           <>
             <p className="help">
-              Activates only this fixed fixture identity. No verification email
-              or external-provider delivery is claimed.
+              {identity.primaryActionHelp ??
+                "Activates only this fixed fixture identity. No verification email or external-provider delivery is claimed."}
             </p>
             <Form method="post">
               <input
@@ -277,7 +289,8 @@ function PersonaCard({
               />
               <input type="hidden" name="identity" value={identity.key} />
               <button className="btn" disabled={busy} type="submit">
-                Activate account and choose event
+                {identity.secondaryActionLabel ??
+                  "Activate account and choose event"}
               </button>
             </Form>
             <p className="help">
@@ -361,9 +374,10 @@ function AccessGate({
             <li>
               <CalendarDays aria-hidden size={18} />
               <span>
-                <strong>Seeded examples, clean scenarios</strong>
-                Populated showcase roles open on {eventName} data. Clean
-                scenario identities start before access or work is created.
+                <strong>Seeded examples, resettable scenarios</strong>
+                Populated showcase roles open on {eventName} data. Scenario
+                identities report their current shared-fixture state after the
+                gate is unlocked.
               </span>
             </li>
             <li>
@@ -470,6 +484,11 @@ export function EvaluationAccessSurface({
     if (actionData?.ok) setResetConfirmation("");
   }, [actionData]);
 
+  const fixtureProgressed = identities.some(
+    (identity) =>
+      identity.group === "scenario" && identity.progress?.clean === false,
+  );
+
   if (!unlocked) {
     return (
       <AccessGate actionData={actionData} busy={busy} eventName={eventName} />
@@ -489,7 +508,7 @@ export function EvaluationAccessSurface({
               Each persona opens the real production application with real
               server-side permissions and the seeded data for its role.
               Switching between showcase personas never creates an account and
-              never needs a magic link; the clean applicant has one explicit,
+              never needs a magic link; the scenario applicant has one explicit,
               audited activation step.
             </p>
             <ul className="pc-eval-hero-chips">
@@ -568,6 +587,24 @@ export function EvaluationAccessSurface({
         </div>
       ) : null}
 
+      {fixtureProgressed ? (
+        <aside
+          aria-label="Evaluation fixture progress"
+          className="pc-status-notice is-warning mb"
+        >
+          <TriangleAlert aria-hidden size={18} />
+          <div className="pc-status-notice-copy">
+            <strong>Fixture has progressed.</strong>
+            <div>
+              Continue the current coordinated run with the states shown below.
+              Before a separate run, confirm nobody else is evaluating and use{" "}
+              <a href="#evaluation-reset">Reset evaluation data</a>. Never reset
+              during a chained or overlapping evaluation.
+            </div>
+          </div>
+        </aside>
+      ) : null}
+
       <ol aria-label="How evaluation access works" className="pc-eval-steps mb">
         <li className="is-done">
           <div>
@@ -630,9 +667,9 @@ export function EvaluationAccessSurface({
               Automated scenario starting identities
             </h2>
             <p>
-              Clean fixture state for a chained human or automated run. These
-              two start before any assignment exists so a scenario can create
-              it.
+              {fixtureProgressed
+                ? "Current state in the shared chained scenario. Labels and actions advance with the fixture."
+                : "Clean fixture state for a chained human or automated run. These identities have no application, invitation, assignment or review work yet."}
             </p>
           </div>
         </div>
@@ -687,7 +724,10 @@ export function EvaluationAccessSurface({
         </div>
       </aside>
 
-      <details className="card pad mb pc-disclosure pc-eval-danger">
+      <details
+        className="card pad mb pc-disclosure pc-eval-danger"
+        id="evaluation-reset"
+      >
         <summary>
           <RotateCcw aria-hidden size={15} />
           <strong>Reset evaluation data</strong>

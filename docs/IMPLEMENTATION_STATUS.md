@@ -247,6 +247,22 @@ operation. Bulk confirmation claims only its unchanged stored preview and
 carries the same snapshots into each target batch. Targets remain independently
 atomic, so a multi-target run may honestly finish `partially_failed`.
 
+The current worktree keeps the intentionally shared evaluation fixture and
+closes five evaluator-audit defects. Its guide now derives Priya's
+activation/draft/submission state and Sam's valid-or-expired invitation/
+acceptance/assignment/review state from canonical D1 records, uses “Clean” only for an exact baseline,
+updates each action destination and warns that a separate run should reset only
+after confirming no overlapping evaluator is active. Submitted rubric content
+retains full contrast while its controls remain disabled, administrator
+layout-level access/context errors offer event selection as a usable recovery path, the
+trusted same-origin admin embed preview no longer applies an ineffective
+script-plus-same-origin sandbox while generated customer iframe code remains
+sandboxed, and retention impact copy pluralises its asset count. The production
+build, focused route tests and 17 affected Chromium workflows pass locally,
+including an axe colour-contrast assertion on each submitted canonical review.
+The added state-aware guide coverage exercises every requested phase. These
+changes have not been deployed or independently re-evaluated.
+
 Bundled Priya Raman and Marcus Okafor portraits are presentation assets exposed
 only through the canonical event's published programme projection and optional
 application featured-speaker preview, under exact demo/evaluation runtime,

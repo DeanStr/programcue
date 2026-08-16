@@ -433,9 +433,10 @@
   font-size: var(--text-2xs);
   line-height: var(--leading-snug);
 }
-.reviewer-shell .review-rubric[data-scoring-locked] {
-  opacity: 0.55;
-}
+/* Disabled score controls and the explicit locked/conflict message communicate
+   that scoring is unavailable. Dimming the complete rubric also dimmed its
+   labels, descriptions and weights below WCAG AA contrast, even though that
+   explanatory content remains essential when reading a submitted review. */
 .reviewer-shell .review-overall-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

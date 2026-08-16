@@ -194,6 +194,17 @@ reset-required unavailability rather than an anonymous session. Sam remains
 unauthorised until the organiser performs and the reviewer accepts the real
 invitation workflow.
 
+Once unlocked, the guide reads the shared canonical state rather than assuming
+that both scenario identities are still pristine. Priya's card advances through
+activation, draft and submitted/progressed application phases; Sam's advances
+through valid or expired invitation, acceptance, assignment, draft review and
+submitted review.
+Only an identity with none of its corresponding work is labelled `Clean`. If
+either identity has progressed, the guide tells evaluators to continue the
+coordinated run or, before a separate run, confirm nobody else is evaluating and
+use the fixture reset. Concurrent or overlapping evaluation runs are not
+supported.
+
 After initial operator provisioning, an unlocked evaluator can expand
 `Reset evaluation data` on `/evaluate`, type `Future of Events 2027` and reset
 the dedicated fixture before a separate LLM or human run. This routine action
@@ -292,7 +303,7 @@ current kit:
   (Priya Raman) for the canonical chained scenario. `Activate account and choose
 event` is only for inspecting real same-organisation memberships created by a
   prior optional journey.
-- `reviewer`: choose `Clean invited reviewer` (Sam Whitfield). The fixed
+- `reviewer`: choose `Clean reviewer` (Sam Whitfield). The fixed
   identity exists, but event access remains unavailable until Jordan performs
   the invitation step.
 

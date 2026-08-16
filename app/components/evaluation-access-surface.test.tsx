@@ -28,16 +28,27 @@ const identities: EvaluationPersonaCard[] = [
     whatToTry: "Start an application and submit it.",
     group: "scenario",
     requiresAccountActivation: true,
+    progress: {
+      clean: true,
+      title: "Clean applicant baseline",
+      detail: "No account activation or application work exists yet.",
+    },
   },
   {
     key: "sbek_reviewer",
-    label: "Clean invited reviewer",
+    label: "Clean reviewer",
     name: "Sam Whitfield",
     description: "The fixed reviewer identity before any assignment.",
     destination: "/events/select",
     whatToTry: "Accept access after the organiser invites this reviewer.",
     group: "scenario",
     requiresAccountActivation: false,
+    progress: {
+      clean: true,
+      title: "Clean reviewer baseline",
+      detail:
+        "No event access yet. The organiser must invite Sam before work can begin.",
+    },
   },
 ];
 
@@ -92,12 +103,12 @@ describe("evaluation access gate", () => {
     }
   });
 
-  it("distinguishes populated showcases from clean scenario identities", () => {
+  it("describes scenario state only after the access gate is unlocked", () => {
     const markup = render({ unlocked: false });
 
     expect(markup).toContain("Populated showcase roles open on");
     expect(markup).toContain(
-      "Clean scenario identities start before access or work is created",
+      "Scenario identities report their current shared-fixture state after the gate is unlocked",
     );
   });
 
@@ -124,7 +135,7 @@ describe("evaluation persona board", () => {
     expect(markup).toContain("Open as Event organiser");
     expect(markup).toContain("Create evaluator submitter account");
     expect(markup).toContain("Activate account and choose event");
-    expect(markup).toContain("Clean invited reviewer");
+    expect(markup).toContain("Clean reviewer");
     expect(markup).toContain("Lock evaluation");
     expect(markup).toContain("Reset evaluation data");
   });
@@ -148,12 +159,12 @@ describe("evaluation persona board", () => {
     expect(markup).toContain('value="sbek_applicant"');
   });
 
-  it("states that the clean reviewer has no event access yet", () => {
+  it("states why the genuinely clean reviewer has no event access yet", () => {
     const markup = render();
 
-    expect(markup).toContain("No event access yet, by design.");
+    expect(markup).toContain("Clean reviewer baseline");
     expect(markup).toContain(
-      "The organiser has to invite this reviewer and the reviewer has to accept",
+      "No event access yet. The organiser must invite Sam before work can begin.",
     );
   });
 
@@ -191,7 +202,54 @@ describe("evaluation persona board", () => {
     expect(markup).toContain(
       "Switching between showcase personas never creates an account",
     );
-    expect(markup).toContain("the clean applicant has one explicit, audited");
+    expect(markup).toContain(
+      "the scenario applicant has one explicit, audited",
+    );
+  });
+
+  it("warns when the shared fixture has progressed and updates persona actions", () => {
+    const progressed = identities.map((identity) => {
+      if (identity.key === "sbek_applicant") {
+        return {
+          ...identity,
+          label: "Submitted applicant",
+          destination: "/participant/applications",
+          primaryActionLabel: "Open Priya's applications",
+          progress: {
+            clean: false,
+            title: "Application submitted",
+            detail: "1 application has moved beyond draft.",
+          },
+        };
+      }
+      if (identity.key === "sbek_reviewer") {
+        return {
+          ...identity,
+          label: "Reviewer with submitted review",
+          destination: "/review/workbench",
+          primaryActionLabel: "Inspect Sam's submitted review",
+          progress: {
+            clean: false,
+            title: "Review submitted",
+            detail: "1 saved review is recorded for Sam.",
+          },
+        };
+      }
+      return identity;
+    });
+    const markup = render({ identities: progressed });
+
+    expect(markup).toContain("Fixture has progressed.");
+    expect(markup).toContain(
+      "Before a separate run, confirm nobody else is evaluating",
+    );
+    expect(markup).toContain('href="#evaluation-reset"');
+    expect(markup).toContain("Never reset during a chained or overlapping");
+    expect(markup).toContain("Submitted applicant");
+    expect(markup).toContain("Open Priya&#x27;s applications");
+    expect(markup).toContain("Reviewer with submitted review");
+    expect(markup).toContain("Inspect Sam&#x27;s submitted review");
+    expect(markup).not.toContain("Clean invited reviewer");
   });
 
   it("does not claim that an outbound message was delivered", () => {

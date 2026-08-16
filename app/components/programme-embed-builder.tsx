@@ -503,11 +503,14 @@ export function ProgrammeEmbedBuilder({
             className={`programme-embed-preview ${previewWidth}`}
             data-preview-width={previewWidth}
           >
+            {/* This is trusted Program Cue code on the parent application's
+                own origin. Combining scripts and same-origin in a sandbox is
+                ineffective here and produces a browser escape warning. The
+                generated customer iframe remains sandboxed. */}
             <iframe
               key={previewUrl}
               src={previewUrl}
               title={`${eventName} embed preview`}
-              sandbox="allow-scripts allow-same-origin"
               referrerPolicy="strict-origin-when-cross-origin"
             />
           </div>

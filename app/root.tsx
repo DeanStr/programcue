@@ -26,6 +26,11 @@ import {
   EVALUATION_IDENTITIES,
   readEvaluationSession,
 } from "~/platform/evaluation/evaluation-session.server";
+import {
+  evaluationApplicantGuideLabel,
+  evaluationReviewerGuideLabel,
+  readEvaluationScenarioGuideState,
+} from "~/platform/evaluation/evaluation-guide-state.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 import "./styles/index.css";
 
@@ -58,13 +63,28 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   if (!requireRuntimeMode(env).evaluation) return { evaluation: null };
   const session = await readEvaluationSession(request, env);
-  const identity = session?.identityKey
-    ? EVALUATION_IDENTITIES[session.identityKey]
-    : null;
+  if (!session?.identityKey) return { evaluation: null };
+  const identity = EVALUATION_IDENTITIES[session.identityKey];
+  let label: string = identity.label;
+  if (
+    session.identityKey === "sbek_applicant" ||
+    session.identityKey === "sbek_reviewer"
+  ) {
+    const scenarioState = await readEvaluationScenarioGuideState(
+      env,
+      session.fixtureGeneration,
+    );
+    label =
+      session.identityKey === "sbek_applicant"
+        ? evaluationApplicantGuideLabel(scenarioState.applicant.phase)
+        : evaluationReviewerGuideLabel(scenarioState.reviewer.phase);
+  } else if (identity.group === "scenario") {
+    throw new Error(
+      `Evaluation identity ${session.identityKey} has no scenario banner mapping.`,
+    );
+  }
   return {
-    evaluation: identity
-      ? { name: identity.name, label: identity.label }
-      : null,
+    evaluation: { name: identity.name, label },
   };
 }
 

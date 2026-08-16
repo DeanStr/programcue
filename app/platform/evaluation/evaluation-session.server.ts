@@ -13,7 +13,7 @@ import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 export const EVALUATION_SESSION_COOKIE = "__Host-program_cue_evaluation";
 const SESSION_SECONDS = 60 * 60 * 8;
-const EVALUATION_APPLICANT_MEMBERSHIP_ID =
+export const EVALUATION_APPLICANT_MEMBERSHIP_ID =
   "membership-production-evaluation-applicant-event";
 
 export const EVALUATION_IDENTITIES = {
@@ -80,7 +80,7 @@ export const EVALUATION_IDENTITIES = {
   sbek_reviewer: {
     ...DEMO_IDENTITIES.sbek_reviewer,
     destination: "/events/select",
-    label: "Clean invited reviewer",
+    label: "Clean reviewer",
     description:
       "The fixed reviewer identity before the scenario creates an assignment.",
     whatToTry:
