@@ -186,6 +186,7 @@ export function useResourceAdminState(
     onRestore: restoreDraft,
     isPayloadCompatible: isResourceRecoveryPayload,
   });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Reset only when the selected resource or its authoritative version changes; routine loader object replacement must preserve local edits.
   useEffect(() => {
     setDocument(selected?.document ?? emptyResourceDocument);
     setCreating(!selected);

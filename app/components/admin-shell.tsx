@@ -471,7 +471,7 @@ export function AdminShell({
       void recordSearch.load(`/admin/search?${search}`);
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [commandQuery, commandScope, currentRecordSearchKey]);
+  }, [commandQuery, commandScope, currentRecordSearchKey, recordSearch.load]);
 
   useEffect(() => {
     const key = requestedRecordSearchKey.current;
@@ -479,6 +479,7 @@ export function AdminShell({
     setRecordSearchResult({ key, records: recordSearch.data.records });
   }, [recordSearch.data, recordSearch.state]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The current URL is the deliberate reset trigger for transient copy feedback.
   useEffect(() => setCopyState("idle"), [currentHref]);
 
   // Switching event reloads the document, so component state alone threw the

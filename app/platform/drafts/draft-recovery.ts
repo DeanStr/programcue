@@ -72,13 +72,7 @@ export function useDraftRecovery<T>({
 }: UseDraftRecoveryOptions<T>): DraftRecoveryController<T> {
   const key = useMemo(
     () => (scope && enabled ? draftRecoveryKey(scope) : null),
-    [
-      enabled,
-      scope?.eventId,
-      scope?.personId,
-      scope?.recordId,
-      scope?.recordType,
-    ],
+    [enabled, scope],
   );
   const revision = String(serverRevision);
   const operationGuardRef = useRef<DraftRecoveryOperationGuard | null>(null);

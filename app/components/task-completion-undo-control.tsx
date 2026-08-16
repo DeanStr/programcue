@@ -76,6 +76,8 @@ export function TaskCompletionUndoControl({
   const toastId = undo
     ? `task-completion:${undo.taskId}:${undo.expiresAt}`
     : null;
+  const undoExpiresAt = undo?.expiresAt ?? null;
+  const undoToken = undo?.token ?? null;
 
   useEffect(() => {
     if (toastId) ownedToastIds.current.add(toastId);
@@ -118,12 +120,12 @@ export function TaskCompletionUndoControl({
   }, [notice.committed, notice.message, notice.ok, toastId]);
 
   useEffect(() => {
-    if (!undo || !toastId) {
+    if (undoExpiresAt === null || !toastId) {
       setRemainingMilliseconds(null);
       return;
     }
 
-    const expiresAt = undo.expiresAt;
+    const expiresAt = undoExpiresAt;
     const initialRemaining = undoRemainingMilliseconds(expiresAt, Date.now());
     setRemainingMilliseconds(initialRemaining);
     if (initialRemaining === 0) {
@@ -140,12 +142,12 @@ export function TaskCompletionUndoControl({
       }
     }, 1_000);
     return () => window.clearInterval(interval);
-  }, [toastId, undo?.expiresAt]);
+  }, [toastId, undoExpiresAt]);
 
   useEffect(() => {
-    if (!undo || !toastId) return;
+    if (undoExpiresAt === null || undoToken === null || !toastId) return;
 
-    const duration = undoRemainingMilliseconds(undo.expiresAt, Date.now());
+    const duration = undoRemainingMilliseconds(undoExpiresAt, Date.now());
     if (duration === 0) return;
 
     const description =
@@ -167,7 +169,7 @@ export function TaskCompletionUndoControl({
           fetcherRef.current.submit(
             {
               intent: "undo-task-completion",
-              undoToken: undo.token,
+              undoToken,
             },
             { method: "post" },
           );
@@ -180,7 +182,7 @@ export function TaskCompletionUndoControl({
     } else {
       toast.success("Task completed", options);
     }
-  }, [notice.message, notice.ok, toastId, undo?.expiresAt, undo?.token]);
+  }, [notice.message, notice.ok, toastId, undoExpiresAt, undoToken]);
 
   const undoResult = fetcherToastId === toastId ? fetcher.data : undefined;
 

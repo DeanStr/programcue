@@ -474,6 +474,7 @@ export default function CommunicationComposer({
   const pendingIntent = navigation.formData?.get("intent");
   const [configurationDirty, setConfigurationDirty] = useState(false);
   const { draft } = loaderData;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Draft identity and revision are deliberate reset triggers for transient dirty state.
   useEffect(() => {
     setConfigurationDirty(false);
   }, [draft?.id, draft?.revision]);

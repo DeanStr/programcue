@@ -324,7 +324,7 @@ export function TemplatePreview({ draft }: { draft: TemplateDraftFields }) {
       paragraphs: fillMergeFields(draft.body).split(/\n{2,}/u),
       unresolvable: unresolvableMergeFields(draft),
     }),
-    [draft.subject, draft.body],
+    [draft],
   );
   return (
     <aside

@@ -16,6 +16,7 @@ export function useScheduleAutoPlacement(result: unknown) {
   );
   const [error, setError] = useState<string | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A confirmation consumes the preview from the render in which the new server result arrived; preview updates must not replay that result.
   useEffect(() => {
     if (result === undefined) return;
     if (!isRecord(result)) {

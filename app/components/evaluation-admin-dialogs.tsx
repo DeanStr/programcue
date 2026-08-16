@@ -541,6 +541,7 @@ export function DecisionDialog() {
   const selectedSessionFormat = loaderData.sessionFormats.find(
     (format) => format.key === sessionFormatKey,
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Selection identity and saved-draft revision deliberately reset the dialog even when the next values happen to match.
   useEffect(() => {
     const draft = selected?.decisionDraft;
     setDecision(draft?.decision ?? "accepted");

@@ -119,6 +119,7 @@ export function ApplicantPreviewPanel({
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [validated, setValidated] = useState(false);
   const [viewport, setViewport] = useState<"mobile" | "desktop">("mobile");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Form identity and schema changes intentionally reset this interactive preview, including when the minimum speaker count is unchanged.
   useEffect(() => {
     setAnswers({});
     setSpeakerCount(input.minSpeakers);

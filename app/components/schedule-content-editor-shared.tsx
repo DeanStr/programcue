@@ -96,6 +96,7 @@ export function useScheduleAutosave(input: {
     changeToken,
     submit,
   } = input;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The change token deliberately restarts the autosave debounce after each edit.
   useEffect(() => {
     if (
       !enabled ||

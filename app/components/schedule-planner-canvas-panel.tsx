@@ -200,6 +200,7 @@ export function ScheduleCanvasPanel({
      validation rail leaves behind, so the hint is measured rather than
      guessed at a breakpoint. */
   const [roomsOverflow, setRoomsOverflow] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: View and room-count changes deliberately trigger a new overflow measurement after layout.
   useEffect(() => {
     const scroll = roomScrollRef.current;
     if (!scroll) return;

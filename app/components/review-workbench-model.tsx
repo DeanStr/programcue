@@ -430,17 +430,45 @@ export function useReviewWorkbenchState({
     isPayloadCompatible: isReviewRecoveryPayload,
     enabled: Boolean(workspace.selected && !readOnly),
   });
+  const selectedAssignmentId = workspace.selected?.id ?? null;
+  const clearAutosaveTimer = useCallback(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+  }, []);
+  const cancelAutosave = useCallback(() => {
+    clearAutosaveTimer();
+    setDirty(false);
+  }, [clearAutosaveTimer]);
+  const flushAutosave = useCallback(() => {
+    if (!dirty || saveFailed || fetcher.state !== "idle" || !formRef.current)
+      return false;
+    const values = new FormData(formRef.current);
+    values.set("intent", "save");
+    values.set("revision", String(revision));
+    inFlightSaveGeneration.current = editGeneration.current;
+    cancelAutosave();
+    void fetcher.submit(values, { method: "post" });
+    return true;
+  }, [
+    cancelAutosave,
+    dirty,
+    fetcher.state,
+    fetcher.submit,
+    revision,
+    saveFailed,
+  ]);
   useEffect(() => {
-    if (!readOnly || !workspace.selected) return;
+    if (!readOnly || !selectedAssignmentId) return;
     void clearDraftRecoveryScope({
       eventId: viewer.eventId,
       personId: viewer.personId,
       recordType: "review",
-      recordId: workspace.selected.id,
+      recordId: selectedAssignmentId,
     });
-  }, [readOnly, viewer.eventId, viewer.personId, workspace.selected?.id]);
+  }, [readOnly, selectedAssignmentId, viewer.eventId, viewer.personId]);
   const handledSavedRevision = useRef<number | null>(null);
   const handledConflict = useRef<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Each edit generation deliberately restarts the autosave timer even though the generation value is not submitted.
   useEffect(() => {
     if (
       readOnly ||
@@ -506,7 +534,14 @@ export function useReviewWorkbenchState({
     const href = pendingNavigation.href;
     setPendingNavigation(null);
     void navigate(href);
-  }, [dirty, fetcher.state, navigate, pendingNavigation, saveFailed]);
+  }, [
+    dirty,
+    fetcher.state,
+    flushAutosave,
+    navigate,
+    pendingNavigation,
+    saveFailed,
+  ]);
   useEffect(() => {
     if (
       fetcher.state !== "idle" ||
@@ -554,7 +589,13 @@ export function useReviewWorkbenchState({
         importedCriterionIds: workspace.review?.importedCriterionIds ?? [],
       });
     }
-  }, [assignmentKey, serverRecoveryPayload]);
+  }, [
+    assignmentKey,
+    serverRecoveryPayload,
+    workspace.review?.aiSuggestionId,
+    workspace.review?.confirmedAiCriterionIds,
+    workspace.review?.importedCriterionIds,
+  ]);
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
     if (
@@ -599,25 +640,6 @@ export function useReviewWorkbenchState({
     saveFailed,
     workspace.selected?.id,
   ]);
-  function clearAutosaveTimer() {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = null;
-  }
-  function cancelAutosave() {
-    clearAutosaveTimer();
-    setDirty(false);
-  }
-  function flushAutosave() {
-    if (!dirty || saveFailed || fetcher.state !== "idle" || !formRef.current)
-      return false;
-    const values = new FormData(formRef.current);
-    values.set("intent", "save");
-    values.set("revision", String(revision));
-    inFlightSaveGeneration.current = editGeneration.current;
-    cancelAutosave();
-    void fetcher.submit(values, { method: "post" });
-    return true;
-  }
   function markDirty(criterionId?: string) {
     if (saveFailed) fetcher.reset();
     if (criterionId) {

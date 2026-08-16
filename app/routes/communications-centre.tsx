@@ -581,23 +581,37 @@ export default function CommunicationsCentre({
   const working = navigation.state !== "idle";
   const pendingIntent = navigation.formData?.get("intent");
   const [templateDirty, setTemplateDirty] = useState(false);
+  const templateName = selected?.name ?? "";
+  const templateCategory = selected?.category ?? "ad_hoc";
+  const templateSubject =
+    selected?.subject ??
+    "Hi {{recipient.firstName}} — an update from {{event.name}}";
+  const templateBody =
+    selected?.content.body ??
+    "Hi {{recipient.firstName}},\n\nHere is an update from {{event.name}}.";
+  const templatePhysicalAddress =
+    selected?.content.physicalAddress ?? loaderData.organisationPhysicalAddress;
+  const templateButtonText = selected?.content.buttonText ?? "";
+  const templateButtonUrl = selected?.content.buttonUrl ?? "";
   const templateFromServer = useMemo<TemplateDraftFields>(
     () => ({
-      name: selected?.name ?? "",
-      category: selected?.category ?? "ad_hoc",
-      subject:
-        selected?.subject ??
-        "Hi {{recipient.firstName}} — an update from {{event.name}}",
-      body:
-        selected?.content.body ??
-        "Hi {{recipient.firstName}},\n\nHere is an update from {{event.name}}.",
-      physicalAddress:
-        selected?.content.physicalAddress ??
-        loaderData.organisationPhysicalAddress,
-      buttonText: selected?.content.buttonText ?? "",
-      buttonUrl: selected?.content.buttonUrl ?? "",
+      name: templateName,
+      category: templateCategory,
+      subject: templateSubject,
+      body: templateBody,
+      physicalAddress: templatePhysicalAddress,
+      buttonText: templateButtonText,
+      buttonUrl: templateButtonUrl,
     }),
-    [loaderData.organisationPhysicalAddress, selected?.id],
+    [
+      templateBody,
+      templateButtonText,
+      templateButtonUrl,
+      templateCategory,
+      templateName,
+      templatePhysicalAddress,
+      templateSubject,
+    ],
   );
   const [templateDraft, setTemplateDraft] = useState(templateFromServer);
   const restoreTemplate = useCallback((draft: TemplateDraftFields) => {
@@ -615,6 +629,7 @@ export default function CommunicationsCentre({
     dirty: templateDirty,
     onRestore: restoreTemplate,
   });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Template identity deliberately resets the editor even when two saved versions have identical content.
   useEffect(() => {
     setTemplateDraft(templateFromServer);
     setTemplateDirty(false);

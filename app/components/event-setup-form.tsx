@@ -160,6 +160,7 @@ export function EventSetupForm({
   // Invitation fetchers revalidate this route without changing the persisted
   // event revision. Preserve local room edits across that revalidation and only
   // replace them after Event Setup itself commits a newer revision.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The persisted revision is the authoritative reset boundary; unrelated loader revalidation must preserve local record edits.
   useEffect(() => {
     setRooms(event.rooms);
     setTracks(event.tracks);
@@ -220,6 +221,7 @@ export function EventSetupForm({
   // them silently. The named fields are uncontrolled, so each form-level input
   // event compares their current values with the exact loaded baseline.
   const [namedFieldChangeCount, setNamedFieldChangeCount] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Keep the saved baseline stable until Event Setup commits a new persisted revision.
   const savedRecords = useMemo(
     () => [event.rooms, event.tracks, event.sessionFormats] as const,
     [event.revision],
@@ -262,6 +264,7 @@ export function EventSetupForm({
     [],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A committed revision deliberately replaces the uncontrolled form baseline.
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;

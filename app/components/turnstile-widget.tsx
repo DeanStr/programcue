@@ -131,6 +131,7 @@ export function TurnstileWidget({
     onStatusChangeRef.current = onStatusChange;
   }, [onStatusChange, onTokenChange]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Incrementing the retry counter deliberately recreates the external widget.
   useEffect(() => {
     if (!siteKey) {
       onStatusChangeRef.current?.("not-required");

@@ -48,10 +48,6 @@
         "noImportantStyles": "off",
         "noStaticOnlyClass": "off",
       },
-      "correctness": {
-        "useExhaustiveDependencies": "off",
-        "useHookAtTopLevel": "off",
-      },
       "style": {
         "noDescendingSpecificity": "off",
         "noNonNullAssertion": "off",

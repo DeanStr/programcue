@@ -47,12 +47,12 @@ function cookieValue(request: Request, name: string) {
   return null;
 }
 
-function useLocalCookie(env: CloudflareEnvironment) {
+function shouldUseLocalCookie(env: CloudflareEnvironment) {
   return requireRuntimeMode(env).appEnvironment !== "production";
 }
 
 function currentEventCookieName(env: CloudflareEnvironment) {
-  return useLocalCookie(env)
+  return shouldUseLocalCookie(env)
     ? LOCAL_CURRENT_EVENT_COOKIE
     : CURRENT_EVENT_COOKIE;
 }
@@ -63,12 +63,12 @@ export function currentEventCookie(
 ) {
   if (!EVENT_ID_PATTERN.test(eventId))
     throw new Error("Cannot store an invalid current event identifier.");
-  const secure = useLocalCookie(env) ? "" : "; Secure";
+  const secure = shouldUseLocalCookie(env) ? "" : "; Secure";
   return `${currentEventCookieName(env)}=${encodeURIComponent(eventId)}; Max-Age=${COOKIE_MAX_AGE_SECONDS}; Path=/; HttpOnly; SameSite=Lax${secure}`;
 }
 
 export function clearCurrentEventCookie(env: CloudflareEnvironment) {
-  const secure = useLocalCookie(env) ? "" : "; Secure";
+  const secure = shouldUseLocalCookie(env) ? "" : "; Secure";
   return `${currentEventCookieName(env)}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure}`;
 }
 

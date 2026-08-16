@@ -278,6 +278,13 @@ export function useSchedulePlannerController(
   const quickEntry = workspace.entries.find(
     (entry) => entry.sessionId === quickSessionId,
   );
+  const quickEntryStartsAt = quickEntry?.startsAt;
+  const quickEntryRoomId = quickEntry?.roomId;
+  const quickDurationMinutesForSelection = quickSession
+    ? quickEntry
+      ? (quickEntry.endsAt - quickEntry.startsAt) / 60
+      : quickSession.durationMinutes
+    : null;
 
   const defaultQuickRoomId = workspace.rooms[0]?.id ?? "";
 
@@ -299,22 +306,17 @@ export function useSchedulePlannerController(
   }, [workspace.focusedSessionId]);
 
   useEffect(() => {
-    if (!quickSession) return;
-    setQuickStartsAt(quickEntry?.startsAt ?? defaultQuickStart);
-    setQuickRoomId(quickEntry?.roomId ?? defaultQuickRoomId);
-    setQuickDurationMinutes(
-      quickEntry
-        ? (quickEntry.endsAt - quickEntry.startsAt) / 60
-        : quickSession.durationMinutes,
-    );
+    if (!quickSessionId || quickDurationMinutesForSelection === null) return;
+    setQuickStartsAt(quickEntryStartsAt ?? defaultQuickStart);
+    setQuickRoomId(quickEntryRoomId ?? defaultQuickRoomId);
+    setQuickDurationMinutes(quickDurationMinutesForSelection);
   }, [
     defaultQuickRoomId,
     defaultQuickStart,
-    quickEntry?.endsAt,
-    quickEntry?.roomId,
-    quickEntry?.startsAt,
-    quickSession?.durationMinutes,
-    quickSession?.id,
+    quickDurationMinutesForSelection,
+    quickEntryRoomId,
+    quickEntryStartsAt,
+    quickSessionId,
   ]);
 
   const trackGroups: Array<{ id: string | null; name: string }> = [
@@ -405,6 +407,7 @@ export function useSchedulePlannerController(
     return () => window.clearTimeout(clear);
   }, [revealedEntryIds]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Day and entry changes deliberately retry focus after the target session is rendered in the board.
   useEffect(() => {
     if (!workspace.focusedSessionId) return;
     const target = document.getElementById(

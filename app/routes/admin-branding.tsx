@@ -424,6 +424,7 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
   const [logoAssetId, setLogoAssetId] = useState(draft.logoAssetId ?? "");
   const [bannerAssetId, setBannerAssetId] = useState(draft.bannerAssetId ?? "");
   const [mobilePreview, setMobilePreview] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Event identity and persisted revision deliberately reset local branding edits even when the saved field values match.
   useEffect(() => {
     setAccent(draft.accent);
     setWelcomeText(draft.welcomeText ?? "");

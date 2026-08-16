@@ -238,6 +238,7 @@ export function DraftEditor({
     onRestore: restoreDraft,
     enabled: !readOnly,
   });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only a new authoritative draft identity or revision may replace unsaved editor state during route revalidation.
   useEffect(() => {
     setAnswers(draft.answers);
     setSpeakers(

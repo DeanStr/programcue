@@ -44,6 +44,7 @@ export function PublicSpeakerShareActions({
   useEffect(() => {
     setCanUseWebShare(typeof navigator.share === "function");
   }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A different speaker is the deliberate reset trigger for transient share feedback.
   useEffect(() => setStatus("idle"), [share?.speakerId]);
   if (!share) return null;
   const resolvedShare = share;

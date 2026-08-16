@@ -628,6 +628,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     if (selectedSpeakerId) speakerProfileRef.current?.focus();
   }, [selectedSpeakerId]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Speaker selection is the deliberate reset trigger for expanded biography state.
   useEffect(() => {
     setExpandedSpeakerBiography(false);
   }, [selectedSpeakerId]);

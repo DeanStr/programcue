@@ -37,6 +37,7 @@ export function useEvaluationDiscussionHistory(
   }));
   const appliedResponse = useRef<DiscussionPage | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The content-derived key deliberately resets history when a server page changes without changing thread identity.
   useEffect(() => {
     setHistory({
       messages: discussion?.messages ?? [],
