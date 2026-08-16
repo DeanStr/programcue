@@ -16,8 +16,11 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
 
   await openAnonymous(page, "/public/programme/future-of-events-2027");
   await expect(page.locator(".public-nav a")).toHaveText([
-    "Programme",
+    "All sessions",
     "Speakers",
+    "Day agenda",
+    "Full schedule",
+    "Speaker Gallery",
   ]);
   await expect(
     page.getByRole("navigation", { name: "Programme views" }).getByRole("link"),

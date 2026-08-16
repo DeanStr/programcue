@@ -239,7 +239,7 @@ test.describe
             "Materials and room setup” must remain after “Format” because its condition depends on that field.",
         }),
       ).toBeVisible();
-      await expect(page.getByText("Reorder blocked")).toBeVisible();
+      await expect(page.getByText("Change blocked")).toBeVisible();
 
       await page
         .getByRole("button", { name: "Move Session description up" })

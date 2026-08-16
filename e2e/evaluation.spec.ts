@@ -421,7 +421,7 @@ test("a committee chair can save and resume an accepted decision draft", async (
   await decision.getByRole("button", { name: "Save draft" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Evaluation", exact: true }),
+    page.getByRole("heading", { name: "Review & selection", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("status").filter({ hasText: "Decision draft saved" }),

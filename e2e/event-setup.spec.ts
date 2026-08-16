@@ -288,8 +288,8 @@ test("the command palette uses path-based React Router navigation", async ({
   await expect(page.getByRole("dialog")).toBeVisible();
   await page
     .getByRole("combobox", { name: "Program Cue commands" })
-    .fill("Command Centre");
-  await page.getByRole("option", { name: /Command Centre/ }).click();
+    .fill("Home");
+  await page.getByRole("option", { name: /^Home\b/ }).click();
   await expect(page).toHaveURL(/\/admin\/command$/);
   await expect(
     page.getByRole("heading", { name: "Command Centre" }),

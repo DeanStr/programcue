@@ -268,7 +268,7 @@ async function expectMobileCommandOverlaysContained(page: Page) {
     .getByRole("combobox", { name: "Program Cue commands" })
     .fill("settings");
   await expect(
-    commandDialog.getByText("Settings", { exact: true }).first(),
+    commandDialog.getByText("Event settings", { exact: true }).first(),
   ).toBeVisible();
   await expect(
     commandDialog.getByText("Searching authorised records…"),

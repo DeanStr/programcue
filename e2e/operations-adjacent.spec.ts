@@ -347,8 +347,10 @@ test("session tags and archive state use preview, confirmation and real undo", a
   const unique = Date.now();
   const title = `Sponsor briefing bulk ${unique}`;
   try {
-    await waitForInterface(page, "/admin/submissions");
-    await page.getByText("Create a guaranteed direct session").click();
+    await waitForInterface(page, "/admin/schedule");
+    await page
+      .getByRole("link", { name: "Create direct session", exact: true })
+      .click();
     const directSessionForm = page.locator("form").filter({
       has: page.getByRole("button", { name: "Create unscheduled session" }),
     });

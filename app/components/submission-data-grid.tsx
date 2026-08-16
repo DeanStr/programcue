@@ -192,6 +192,14 @@ export function SubmissionDataGrid({
   const [searchParams, setSearchParams] = useSearchParams();
   const [clipboardFeedback, setClipboardFeedback] =
     useState<ClipboardFeedback | null>(null);
+  const [columnVisibility, setColumnVisibility] = useState(() =>
+    Object.fromEntries(
+      ADMIN_SUBMISSION_OPTIONAL_COLUMNS.map((column) => [
+        column,
+        visibleOptionalColumns.includes(column),
+      ]),
+    ),
+  );
   const columns = useMemo(
     () => submissionColumns(detailSearchParams),
     [detailSearchParams],
@@ -201,14 +209,7 @@ export function SubmissionDataGrid({
     columns,
     data: submissions,
     getRowId: (submission) => submission.id,
-    initialState: {
-      columnVisibility: Object.fromEntries(
-        ADMIN_SUBMISSION_OPTIONAL_COLUMNS.map((column) => [
-          column,
-          visibleOptionalColumns.includes(column),
-        ]),
-      ),
-    },
+    state: { columnVisibility },
   });
 
   function setViewParameter(name: string, value: string, defaultValue: string) {
@@ -222,6 +223,7 @@ export function SubmissionDataGrid({
     column: AdminSubmissionOptionalColumn,
     visible: boolean,
   ) {
+    setColumnVisibility((current) => ({ ...current, [column]: visible }));
     const nextColumns = visible
       ? ADMIN_SUBMISSION_OPTIONAL_COLUMNS.filter(
           (candidate) =>
@@ -336,12 +338,12 @@ export function SubmissionDataGrid({
                   <input
                     type="checkbox"
                     checked={column.getIsVisible()}
-                    onChange={(event) =>
+                    onChange={(event) => {
                       setColumnVisible(
                         column.id as AdminSubmissionOptionalColumn,
                         event.target.checked,
-                      )
-                    }
+                      );
+                    }}
                   />
                   <span>{columnLabel(column.id)}</span>
                 </label>

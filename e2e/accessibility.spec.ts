@@ -184,7 +184,7 @@ test("route announcements describe page changes but ignore same-page actions", a
   );
   await expect(announcement).toBeEmpty();
 
-  await page.getByRole("link", { name: "Command Centre", exact: true }).click();
+  await page.getByRole("link", { name: "Home", exact: true }).click();
   // The save was rejected, so the edited end date is still unsaved and Event
   // Setup asks before discarding it.
   await page.getByRole("button", { name: "Leave and discard" }).click();
