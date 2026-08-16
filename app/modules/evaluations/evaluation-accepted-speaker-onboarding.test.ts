@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { processCommunicationSend } from "../../../workers/queue/communication-send";
@@ -847,7 +848,7 @@ describe("evaluation vertical slice", () => {
       };
       expect(invitationSnapshot).toMatchObject({
         category: "accepted_speaker_invitation",
-        event: { brandAccent: "#4f46e5" },
+        event: { brandAccent: DEFAULT_EVENT_BRAND_ACCENT },
       });
       const invitationUrl = new URL(invitationSnapshot.content.buttonUrl);
       const callbackUrl = new URL(

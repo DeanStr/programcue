@@ -1,4 +1,5 @@
 import type { Route } from "./+types/api-public-programme";
+import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 import {
   PublicProgrammeService,
   type PublishedProgramme,
@@ -33,6 +34,7 @@ function escapeHtml(value: string) {
 }
 
 export function staticProgrammeHtml(programme: PublishedProgramme) {
+  const accent = programmeAccentPalette(programme.event.brandAccent).accent;
   const dateTime = new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -67,7 +69,7 @@ export function staticProgrammeHtml(programme: PublishedProgramme) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${escapeHtml(programme.event.name)} programme</title>
-  <style>body{font:16px/1.5 system-ui,sans-serif;max-width:72rem;margin:auto;padding:2rem;color:#0f172a}header{border-bottom:3px solid #4f46e5;margin-bottom:2rem}article{padding:1rem 0;border-bottom:1px solid #e2e8f0}h1,h2{line-height:1.2}small{color:#64748b}@media(max-width:40rem){body{padding:1rem}}</style>
+  <style>body{font:16px/1.5 system-ui,sans-serif;max-width:72rem;margin:auto;padding:2rem;color:#182522}header{border-bottom:3px solid ${accent};margin-bottom:2rem}article{padding:1rem 0;border-bottom:1px solid #e0e1d8}h1,h2{line-height:1.2}small{color:#61716c}@media(max-width:40rem){body{padding:1rem}}</style>
 </head>
 <body>
   <header><h1>${escapeHtml(programme.event.name)}</h1><p>${escapeHtml(programme.event.startDate)}–${escapeHtml(programme.event.endDate)} · ${escapeHtml(programme.event.timezone)}</p></header>

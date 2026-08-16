@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import {
   AIRTABLE_ROOMS_TABLE,
   airtableConnectionInputSchema,
@@ -697,12 +698,13 @@ export class EventCreationService {
         ? this.env.DB.prepare(
             `INSERT INTO events (
                id, organisation_id, name, slug, timezone, starts_at, ends_at,
+               brand_accent, brand_draft_accent,
                session_formats_json, repository_provider, activation_status,
                file_policy_json,
                revision, last_operation_id, last_updated_by_person_id,
                created_at, updated_at
              )
-             SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'd1', 'active', ?, 1, ?, ?,
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'd1', 'active', ?, 1, ?, ?,
                     unixepoch(), unixepoch()
                FROM sender_profiles sender
                JOIN events source_event ON source_event.id = sender.event_id
@@ -721,6 +723,8 @@ export class EventCreationService {
             input.timezone,
             startEpoch(input.startDate),
             endEpoch(input.endDate),
+            DEFAULT_EVENT_BRAND_ACCENT,
+            DEFAULT_EVENT_BRAND_ACCENT,
             INITIAL_EVENT_SESSION_FORMATS_JSON,
             CANONICAL_EVENT_FILE_POLICY_JSON,
             operationId,
@@ -738,11 +742,12 @@ export class EventCreationService {
         : this.env.DB.prepare(
             `INSERT INTO events (
                id, organisation_id, name, slug, timezone, starts_at, ends_at,
+               brand_accent, brand_draft_accent,
                session_formats_json, repository_provider, activation_status,
                file_policy_json,
                revision, last_operation_id, last_updated_by_person_id,
                created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?,
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?,
                        unixepoch(), unixepoch())`,
           ).bind(
             eventId,
@@ -752,6 +757,8 @@ export class EventCreationService {
             input.timezone,
             startEpoch(input.startDate),
             endEpoch(input.endDate),
+            DEFAULT_EVENT_BRAND_ACCENT,
+            DEFAULT_EVENT_BRAND_ACCENT,
             INITIAL_EVENT_SESSION_FORMATS_JSON,
             input.repositoryProvider,
             pendingAirtable ? "provisioning" : "active",

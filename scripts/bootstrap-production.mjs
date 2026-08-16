@@ -7,6 +7,8 @@ import { randomUUID } from "node:crypto";
 
 import { unstable_readConfig } from "wrangler";
 
+import { DEFAULT_EVENT_BRAND_ACCENT } from "../app/lib/brand.ts";
+
 const PREFLIGHT_TIMEOUT_MS = 30_000;
 const REMOTE_BOOTSTRAP_TIMEOUT_MS = 5 * 60_000;
 
@@ -135,10 +137,12 @@ INSERT INTO people (
 
 INSERT INTO events (
   id, organisation_id, name, slug, timezone, starts_at, ends_at,
-  session_formats_json, file_policy_json, last_updated_by_person_id, created_at, updated_at
+  brand_accent, brand_draft_accent, session_formats_json, file_policy_json,
+  last_updated_by_person_id, created_at, updated_at
 ) VALUES (
   ${sqlString(input.eventId)}, ${sqlString(organisationId)}, ${sqlString(input.eventName)},
   ${sqlString(input.eventSlug)}, ${sqlString(input.timezone)}, ${input.startsAt}, ${input.endsAt},
+  ${sqlString(DEFAULT_EVENT_BRAND_ACCENT)}, ${sqlString(DEFAULT_EVENT_BRAND_ACCENT)},
   ${sqlString(sessionFormatsJson)}, ${sqlString(filePolicyJson)}, ${sqlString(personId)}, unixepoch(), unixepoch()
 );
 

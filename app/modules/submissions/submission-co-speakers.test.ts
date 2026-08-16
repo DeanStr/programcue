@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { MultipartUploadService } from "~/modules/files/multipart-upload.server";
@@ -1336,7 +1337,7 @@ describe("Submissions D1 vertical slice", () => {
       expect(invitation?.tokenHash).toHaveLength(64);
       expect(invitation?.operationId).toBeTruthy();
       expect(JSON.parse(invitation!.contentSnapshotJson)).toMatchObject({
-        event: { brandAccent: "#4f46e5" },
+        event: { brandAccent: DEFAULT_EVENT_BRAND_ACCENT },
       });
       const firstClaimUrl = new URL(
         String(JSON.parse(invitation!.sourceValuesJson)["claim.url"]),

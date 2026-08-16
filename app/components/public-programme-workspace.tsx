@@ -998,7 +998,7 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
     >
       {/* A section is named by its heading. The eyebrow above this one said
           "Meet the programme", which is the heading again in smaller caps and
-          in the platform's violet rather than the event's accent. */}
+          in the platform accent rather than the event's accent. */}
       <div className="public-section-head">
         <h2 id="speakers-title">Speakers</h2>
         <p className="public-section-count">

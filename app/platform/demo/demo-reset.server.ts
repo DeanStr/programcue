@@ -1,4 +1,5 @@
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
+import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
@@ -339,10 +340,10 @@ async function resetMutableIdentity(env: CloudflareEnvironment) {
               venue_address = NULL, venue_map_url = NULL,
               programme_hero_image_url = NULL,
               description = 'The conference for modern event professionals.',
-              brand_accent = '#4f46e5', participant_logo_url = NULL,
+              brand_accent = ?, participant_logo_url = NULL,
               participant_welcome_text = NULL, participant_support_url = NULL,
               brand_logo_asset_id = NULL, brand_banner_asset_id = NULL,
-              brand_draft_accent = '#4f46e5',
+              brand_draft_accent = ?,
               brand_draft_logo_asset_id = NULL,
               brand_draft_banner_asset_id = NULL,
               brand_draft_welcome_text = NULL,
@@ -361,6 +362,8 @@ async function resetMutableIdentity(env: CloudflareEnvironment) {
               updated_at = unixepoch()
         WHERE id = ? AND organisation_id = ?`,
     ).bind(
+      DEFAULT_EVENT_BRAND_ACCENT,
+      DEFAULT_EVENT_BRAND_ACCENT,
       INITIAL_EVENT_SESSION_FORMATS_JSON,
       CANONICAL_EVENT_FILE_POLICY_JSON,
       DEMO_IDENTITIES.administrator.personId,
@@ -636,7 +639,8 @@ async function baselineEvidence(env: CloudflareEnvironment) {
            AND programme_hero_image_url IS NULL
            AND brand_logo_asset_id IS NULL
            AND brand_banner_asset_id IS NULL
-           AND brand_draft_accent = '#4f46e5'
+           AND brand_accent = ?
+           AND brand_draft_accent = ?
            AND brand_draft_logo_asset_id IS NULL
            AND brand_draft_banner_asset_id IS NULL
            AND brand_draft_welcome_text IS NULL
@@ -759,6 +763,8 @@ async function baselineEvidence(env: CloudflareEnvironment) {
       DEMO_EVENT_ID,
       DEMO_EVENT_ID,
       DEMO_ORGANISATION_ID,
+      DEFAULT_EVENT_BRAND_ACCENT,
+      DEFAULT_EVENT_BRAND_ACCENT,
       INITIAL_EVENT_SESSION_FORMATS_JSON,
       CANONICAL_EVENT_FILE_POLICY_JSON,
       DEMO_ORGANISATION_ID,

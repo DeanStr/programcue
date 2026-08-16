@@ -4,6 +4,7 @@ import {
   type LoaderFunctionArgs,
 } from "react-router";
 
+import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import {
@@ -290,15 +291,18 @@ async function seedEventRepositoryRecovery(env: CloudflareEnvironment) {
     env.DB.prepare(
       `INSERT INTO events (
          id, organisation_id, name, slug, timezone, starts_at, ends_at,
+         brand_accent, brand_draft_accent,
          repository_provider, activation_status, file_policy_json,
          last_operation_id, last_updated_by_person_id
        ) VALUES (?, ?, 'Airtable recovery browser fixture',
                  'airtable-recovery-browser-fixture', 'America/Toronto',
-                 1800000000, 1800086400, 'airtable',
+                 1800000000, 1800086400, ?, ?, 'airtable',
                  'provisioning_failed', ?, ?, ?)`,
     ).bind(
       REPOSITORY_RECOVERY_EVENT_ID,
       DEMO_ORGANISATION_ID,
+      DEFAULT_EVENT_BRAND_ACCENT,
+      DEFAULT_EVENT_BRAND_ACCENT,
       CANONICAL_EVENT_FILE_POLICY_JSON,
       REPOSITORY_RECOVERY_OPERATION_ID,
       DEMO_IDENTITIES.administrator.personId,

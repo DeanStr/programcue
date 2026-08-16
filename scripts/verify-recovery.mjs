@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { DEFAULT_EVENT_BRAND_ACCENT } from "../app/lib/brand.ts";
 import { resolvePackageExecutable } from "./package-executable.mjs";
 
 const projectRoot = process.cwd();
@@ -118,10 +119,12 @@ VALUES
   ('recovery-speaker','recovery-speaker@example.invalid','Recovery Speaker',1,'published',1700000000,1700000000);
 INSERT INTO events (
   id,organisation_id,name,slug,timezone,starts_at,ends_at,venue_name,city,
-  session_formats_json,file_policy_json,last_updated_by_person_id,programme_published_at,created_at,updated_at
+  brand_accent,brand_draft_accent,session_formats_json,file_policy_json,
+  last_updated_by_person_id,programme_published_at,created_at,updated_at
 ) VALUES (
   'recovery-event','recovery-org','Recovery Conference','recovery-conference','UTC',
   1800000000,1800086400,'Recovery Hall','Test City',
+  '${DEFAULT_EVENT_BRAND_ACCENT}','${DEFAULT_EVENT_BRAND_ACCENT}',
   '[{"key":"keynote","label":"Keynote","defaultDurationMinutes":60,"position":0},{"key":"presentation","label":"Presentation","defaultDurationMinutes":45,"position":1},{"key":"panel","label":"Panel","defaultDurationMinutes":60,"position":2},{"key":"workshop","label":"Workshop","defaultDurationMinutes":90,"position":3},{"key":"breakout","label":"Breakout","defaultDurationMinutes":45,"position":4},{"key":"break","label":"Break","defaultDurationMinutes":30,"position":5},{"key":"other","label":"Other","defaultDurationMinutes":30,"position":6}]',
   '{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}',
   'recovery-admin',1700000100,1700000000,1700000000

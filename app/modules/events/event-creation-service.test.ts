@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
@@ -128,6 +129,8 @@ describe("blank event creation", () => {
     const event = await env.DB.prepare(
       `SELECT name, slug, timezone, repository_provider AS repositoryProvider,
               activation_status AS activationStatus,
+              brand_accent AS brandAccent,
+              brand_draft_accent AS brandDraftAccent,
               session_formats_json AS sessionFormatsJson,
               file_policy_json AS filePolicyJson
          FROM events WHERE id = ? AND organisation_id = ?`,
@@ -139,6 +142,8 @@ describe("blank event creation", () => {
         timezone: string;
         repositoryProvider: string;
         activationStatus: string;
+        brandAccent: string;
+        brandDraftAccent: string;
         sessionFormatsJson: string;
         filePolicyJson: string;
       }>();
@@ -148,6 +153,8 @@ describe("blank event creation", () => {
       timezone: "Australia/Sydney",
       repositoryProvider: "d1",
       activationStatus: "active",
+      brandAccent: DEFAULT_EVENT_BRAND_ACCENT,
+      brandDraftAccent: DEFAULT_EVENT_BRAND_ACCENT,
     });
     expect(
       parseSessionFormatsConfiguration(event!.sessionFormatsJson),
@@ -424,9 +431,7 @@ describe("blank event creation", () => {
           tableName: "Program Cue Rooms",
         },
       ),
-    ).rejects.toThrow(
-      /reused when Program Cue holds the new event's data/i,
-    );
+    ).rejects.toThrow(/reused when Program Cue holds the new event's data/i);
     await expect(
       env.DB.prepare("SELECT 1 FROM events WHERE slug = ?").bind(slug).first(),
     ).resolves.toBeNull();

@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { assistantProposalMetadataSchema } from "~/modules/ai/ai-tools.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
@@ -277,7 +278,7 @@ describe("complete evaluator demo reset", () => {
       }>();
     expect(event).toEqual({
       name: "Future of Events 2027",
-      accent: "#4f46e5",
+      accent: DEFAULT_EVENT_BRAND_ACCENT,
       provider: "d1",
       activationStatus: "active",
       participantLogoUrl: null,

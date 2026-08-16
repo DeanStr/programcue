@@ -5,6 +5,7 @@ import {
   DEMO_ORGANISATION_ID,
   SBEK_SECOND_SPEAKER,
 } from "./demo-identities";
+import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 
@@ -84,7 +85,8 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
       `
       INSERT OR IGNORE INTO events (
         id, organisation_id, name, slug, timezone, starts_at, ends_at,
-        venue_name, city, description, brand_accent, repository_provider,
+        venue_name, city, description, brand_accent, brand_draft_accent,
+        repository_provider,
         session_formats_json,
         retention_months, submission_access_mode, allow_anonymous_drafts,
         duplicate_person_warnings, file_policy_json, revision, last_updated_by_person_id,
@@ -93,13 +95,15 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
         ?, ?, 'Future of Events 2027', 'future-of-events-2027', 'America/Toronto',
         unixepoch('2027-05-20T00:00:00Z'), unixepoch('2027-05-22T23:59:59Z'),
         'Metro Toronto Convention Centre', 'Toronto',
-        'The conference for modern event professionals.', '#4f46e5', 'd1',
+        'The conference for modern event professionals.', ?, ?, 'd1',
         ?, 24, 'email_verified', 1, 1, ?, 1, ?, unixepoch(), unixepoch()
       )
     `,
     ).bind(
       DEMO_EVENT_ID,
       DEMO_ORGANISATION_ID,
+      DEFAULT_EVENT_BRAND_ACCENT,
+      DEFAULT_EVENT_BRAND_ACCENT,
       INITIAL_EVENT_SESSION_FORMATS_JSON,
       CANONICAL_EVENT_FILE_POLICY_JSON,
       DEMO_ADMIN_ID,

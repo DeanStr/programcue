@@ -50,6 +50,7 @@ describe("static programme HTML", () => {
 
     expect(html).toContain('<article id="speaker-speaker-1">');
     expect(html).toContain("<p>A biography.</p>");
+    expect(html).toContain("border-bottom:3px solid #4f46e5");
     expect(html).not.toContain("<p></p>");
     expect(html).not.toContain("not provided");
   });

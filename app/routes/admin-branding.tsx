@@ -19,6 +19,7 @@ import { ZodError } from "zod";
 import type { Route } from "./+types/admin-branding";
 import { BrandMark } from "~/components/brand-mark";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import {
   EVENT_BRAND_ASSET_DIMENSION_POLICY,
   EVENT_BRAND_ASSET_MAXIMUM_BYTES,
@@ -532,7 +533,11 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
                 <input
                   type="color"
                   aria-label="Brand accent colour picker"
-                  value={/^#[0-9a-f]{6}$/i.test(accent) ? accent : "#4f46e5"}
+                  value={
+                    /^#[0-9a-f]{6}$/i.test(accent)
+                      ? accent
+                      : DEFAULT_EVENT_BRAND_ACCENT
+                  }
                   onChange={(event) => setAccent(event.target.value)}
                 />
                 <input

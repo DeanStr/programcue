@@ -101,8 +101,8 @@ export default function DesignSystem() {
               <h2>Colour and hierarchy</h2>
             </div>
             <p>
-              Indigo carries product actions. Violet is reserved for clearly
-              labelled AI assistance.
+              Copper carries product actions. Event identity and semantic states
+              remain independent.
             </p>
           </div>
           <div className="pc-swatch-grid">
@@ -207,7 +207,7 @@ export default function DesignSystem() {
             </button>
             <span className="pc-focus-dark">
               <button className="btn primary" type="button">
-                and on indigo
+                and on a dark ground
               </button>
             </span>
           </div>
