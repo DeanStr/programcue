@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Form } from "react-router";
 
 import type { PublicSiteSponsor } from "~/modules/public-site/public-site";
@@ -80,6 +81,13 @@ export function AdminPublicSiteSponsors({
   busy: boolean;
   onDelete: (sponsor: PublicSiteSponsor) => void;
 }) {
+  const commandIds = useMemo(() => {
+    const ids = new Map(
+      sponsors.map((sponsor) => [sponsor.id, crypto.randomUUID()] as const),
+    );
+    ids.set("", crypto.randomUUID());
+    return ids;
+  }, [sponsors]);
   return (
     <section className="card pad">
       <div className="card-title">
@@ -97,6 +105,11 @@ export function AdminPublicSiteSponsors({
           key={sponsor.id}
         >
           <input type="hidden" name="intent" value="save-sponsor" />
+          <input
+            type="hidden"
+            name="commandId"
+            value={commandIds.get(sponsor.id)}
+          />
           <input type="hidden" name="id" value={sponsor.id} />
           <input type="hidden" name="revision" value={sponsor.revision} />
           <SponsorFields sponsor={sponsor} />
@@ -121,6 +134,7 @@ export function AdminPublicSiteSponsors({
       ))}
       <Form method="post" className="public-site-record-editor">
         <input type="hidden" name="intent" value="save-sponsor" />
+        <input type="hidden" name="commandId" value={commandIds.get("")} />
         <input type="hidden" name="id" value="" />
         <input type="hidden" name="revision" value="0" />
         <SponsorFields />

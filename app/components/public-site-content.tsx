@@ -5,15 +5,27 @@ import {
   Play,
   UsersRound,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
+import {
+  PublicEventFooter,
+  PublicEventHeader,
+} from "~/components/public-event-chrome";
+import { eventHeroImagePath } from "~/components/public-programme-model";
 import { RestrictedMarkdown } from "~/components/restricted-markdown";
-import { publicSpeakerProfilePath } from "~/modules/programme/programme-presentation";
+import {
+  formatProgrammeEventDay,
+  programmeAccentPalette,
+  publicSpeakerProfilePath,
+} from "~/modules/programme/programme-presentation";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import type { PublishedPublicSiteSnapshot } from "~/modules/public-site/public-site";
 import { PublishedPublicSiteInvariantError } from "~/modules/public-site/public-site-errors";
 import { resolvePublicSitePresentation } from "~/modules/public-site/public-site-presentation";
-import type { PublishedPublicSite } from "~/modules/public-site/public-site-service.server";
+import type {
+  PublicSiteEvent,
+  PublishedPublicSite,
+} from "~/modules/public-site/public-site-service.server";
 
 function dayCount(start: string, end: string) {
   return (
@@ -64,11 +76,13 @@ function PreviewSafeLink({
 }
 
 export function PublicSiteHome({
+  event,
   programme,
   site,
   preview = false,
 }: {
-  programme: PublishedProgramme;
+  event: PublicSiteEvent;
+  programme: PublishedProgramme | null;
   site:
     | PublishedPublicSite
     | {
@@ -80,7 +94,11 @@ export function PublicSiteHome({
   const { configuration } = site;
   let presentation: ReturnType<typeof resolvePublicSitePresentation>;
   try {
-    presentation = resolvePublicSitePresentation(configuration, programme);
+    presentation = resolvePublicSitePresentation(
+      configuration,
+      event,
+      programme,
+    );
   } catch (error) {
     if (preview && error instanceof PublishedPublicSiteInvariantError) {
       return (
@@ -93,23 +111,23 @@ export function PublicSiteHome({
   }
   const { featuredSpeakers, featuredSessions, venueLabel } = presentation;
   const tracks = new Set(
-    programme.sessions.flatMap((session) =>
+    (programme?.sessions ?? []).flatMap((session) =>
       session.track ? [session.track] : [],
     ),
   );
   const statistics = [
     configuration.statisticVisibility.sessions
-      ? { value: programme.sessions.length, label: "sessions" }
+      ? { value: programme?.sessions.length ?? 0, label: "sessions" }
       : null,
     configuration.statisticVisibility.speakers
-      ? { value: programme.speakers.length, label: "speakers" }
+      ? { value: programme?.speakers.length ?? 0, label: "speakers" }
       : null,
     configuration.statisticVisibility.tracks
       ? { value: tracks.size, label: "tracks" }
       : null,
     configuration.statisticVisibility.days
       ? {
-          value: dayCount(programme.event.startDate, programme.event.endDate),
+          value: dayCount(event.startDate, event.endDate),
           label: "event days",
         }
       : null,
@@ -121,28 +139,30 @@ export function PublicSiteHome({
   > = {
     introduction: (
       <HomeSection title={configuration.introductionHeading}>
-        <p className="public-site-lede">{programme.event.description}</p>
+        <p className="public-site-lede">{event.description}</p>
         <div className="public-site-actions">
-          {programme.event.applicationUrl ? (
+          {event.applicationUrl ? (
             <PreviewSafeLink
               className="btn primary"
-              href={programme.event.applicationUrl}
+              href={event.applicationUrl}
               preview={preview}
             >
               Apply to speak
             </PreviewSafeLink>
           ) : null}
-          <PreviewSafeLink
-            className="btn"
-            href={`/public/programme/${encodeURIComponent(programme.event.slug)}/sessions`}
-            preview={preview}
-          >
-            Explore the programme
-          </PreviewSafeLink>
-          {programme.event.supportUrl ? (
+          {programme ? (
             <PreviewSafeLink
               className="btn"
-              href={programme.event.supportUrl}
+              href={`/public/programme/${encodeURIComponent(event.slug)}/sessions`}
+              preview={preview}
+            >
+              Explore the programme
+            </PreviewSafeLink>
+          ) : null}
+          {event.supportUrl ? (
+            <PreviewSafeLink
+              className="btn"
+              href={event.supportUrl}
               preview={preview}
             >
               Event help <ExternalLink aria-hidden size={13} />
@@ -157,7 +177,7 @@ export function PublicSiteHome({
           {featuredSpeakers.map((speaker) => (
             <PreviewSafeLink
               className="public-site-feature-card"
-              href={publicSpeakerProfilePath(programme.event.slug, speaker.id)}
+              href={publicSpeakerProfilePath(event.slug, speaker.id)}
               key={speaker.id}
               preview={preview}
             >
@@ -215,17 +235,14 @@ export function PublicSiteHome({
         <div className="public-site-venue">
           <MapPin aria-hidden />
           <div>
-            {venueLabel !== programme.event.venueAddress?.trim() ? (
+            {venueLabel !== event.venueAddress?.trim() ? (
               <strong>{venueLabel}</strong>
             ) : null}
-            {programme.event.venueAddress ? (
-              <address>{programme.event.venueAddress}</address>
+            {event.venueAddress ? (
+              <address>{event.venueAddress}</address>
             ) : null}
-            {programme.event.venueMapUrl ? (
-              <PreviewSafeLink
-                href={programme.event.venueMapUrl}
-                preview={preview}
-              >
+            {event.venueMapUrl ? (
+              <PreviewSafeLink href={event.venueMapUrl} preview={preview}>
                 Open map <ExternalLink aria-hidden size={13} />
               </PreviewSafeLink>
             ) : null}
@@ -261,7 +278,7 @@ export function PublicSiteHome({
               <PreviewSafeLink
                 href={
                   sponsor.websiteUrl ??
-                  `/public/programme/${programme.event.slug}/pages/sponsors`
+                  `/public/programme/${event.slug}/pages/sponsors`
                 }
                 key={sponsor.id}
                 preview={preview}
@@ -320,6 +337,70 @@ export function PublicSiteHome({
           </div>
         </HomeSection>
       ) : null}
+    </div>
+  );
+}
+
+export function PublicEventSiteWorkspace({
+  site,
+}: {
+  site: PublishedPublicSite;
+}) {
+  const { event, configuration } = site;
+  const palette = programmeAccentPalette(event.brandAccent);
+  const heroImage = eventHeroImagePath(event);
+  const place = [event.venue, event.city].filter(Boolean).join(", ");
+  return (
+    <div
+      className="public-shell event-branded"
+      data-public-theme={configuration.theme}
+      style={
+        {
+          "--event-accent": palette.accent,
+          "--event-accent-light-ink": palette.ink,
+          "--event-accent-on-solid": palette.onAccent,
+        } as CSSProperties
+      }
+    >
+      <PublicEventHeader event={event} programme={null} site={configuration} />
+      <section
+        className={`hero${heroImage ? " has-image" : ""}`}
+        style={
+          heroImage
+            ? ({
+                "--hero-image": `url(${JSON.stringify(heroImage)})`,
+              } as CSSProperties)
+            : undefined
+        }
+      >
+        <div className="hero-body">
+          <h1>{event.name}</h1>
+          {configuration.tagline ? (
+            <p className="public-site-tagline">{configuration.tagline}</p>
+          ) : null}
+          <p className="hero-meta">
+            <span>
+              <CalendarDays aria-hidden size={15} />
+              <span>
+                {formatProgrammeEventDay(event.startDate)}–
+                {formatProgrammeEventDay(event.endDate)}
+              </span>
+            </span>
+            {place ? (
+              <span>
+                <MapPin aria-hidden size={15} />
+                <span>{place}</span>
+              </span>
+            ) : null}
+          </p>
+        </div>
+      </section>
+      <main id="main" className="public-main">
+        <div className="public-content">
+          <PublicSiteHome event={event} programme={null} site={site} />
+        </div>
+      </main>
+      <PublicEventFooter event={event} programme={null} />
     </div>
   );
 }

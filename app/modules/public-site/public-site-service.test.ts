@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test";
+import { RouterContextProvider } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import {
@@ -8,9 +9,12 @@ import {
   scheduleTestViewer as viewer,
 } from "~/modules/schedule/schedule-service-test-fixture";
 import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
+import { cloudflareContext } from "~/platform/cloudflare-context";
+import { loader as publicProgrammePageLoader } from "~/routes/public-programme";
 import { PublicRecordingService } from "./public-recording-service.server";
 import { defaultPublicSiteDraft } from "./public-site";
 import {
+  PublicSiteCommandConflictError,
   PublicSiteRevisionConflictError,
   PublicSiteService,
   PublicSiteValidationError,
@@ -52,11 +56,7 @@ function publishableSite() {
 }
 
 beforeEach(async () => {
-  await prepareScheduleServiceTest();
   await env.DB.batch([
-    env.DB.prepare(
-      "UPDATE sessions SET visibility = 'public' WHERE event_id = ?",
-    ).bind(viewer.eventId),
     env.DB.prepare(
       "DELETE FROM event_session_recordings WHERE event_id = ?",
     ).bind(viewer.eventId),
@@ -67,19 +67,188 @@ beforeEach(async () => {
       viewer.eventId,
     ),
   ]);
+  await prepareScheduleServiceTest();
+  await env.DB.prepare(
+    "UPDATE sessions SET visibility = 'public' WHERE event_id = ?",
+  )
+    .bind(viewer.eventId)
+    .run();
 });
 
 describe("public event site publication", () => {
+  it("converges exact command replays and rejects changed payload reuse", async () => {
+    const service = new PublicSiteService(publicSiteEnv);
+    const configuration = publishableSite();
+    const commandId = crypto.randomUUID();
+    const input = {
+      commandId,
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    };
+
+    const first = await service.saveDraft(viewer, input);
+    const replay = await service.saveDraft(viewer, input);
+    expect(replay).toEqual(first);
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM audit_events
+          WHERE event_id = ? AND action = 'public_site.draft_saved'`,
+      )
+        .bind(viewer.eventId)
+        .first(),
+    ).toEqual({ count: 1 });
+
+    configuration.tagline = "Different details";
+    await expect(
+      service.saveDraft(viewer, {
+        ...input,
+        configurationJson: JSON.stringify(configuration),
+      }),
+    ).rejects.toBeInstanceOf(PublicSiteCommandConflictError);
+  });
+
+  it("deduplicates sponsor and recording creation commands", async () => {
+    const service = new PublicSiteService(publicSiteEnv);
+    await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(publishableSite()),
+    });
+    const sponsorInput = {
+      commandId: crypto.randomUUID(),
+      id: "",
+      revision: 0,
+      name: "Replay-safe partner",
+      tier: "Community",
+      websiteUrl: "",
+      logoUrl: "",
+      description: "",
+      position: 0,
+    };
+    const firstSponsor = await service.saveSponsor(viewer, sponsorInput);
+    expect(await service.saveSponsor(viewer, sponsorInput)).toEqual(
+      firstSponsor,
+    );
+
+    const recordings = new PublicRecordingService(publicSiteEnv);
+    const recordingInput = {
+      commandId: crypto.randomUUID(),
+      id: "",
+      sessionId: "schedule-test-one",
+      revision: 0,
+      title: "Replay-safe recording",
+      recordingUrl: "https://video.example.test/replay",
+      captionsUrl: "",
+      transcriptUrl: "",
+    };
+    const firstRecording = await recordings.saveDraft(viewer, recordingInput);
+    expect(await recordings.saveDraft(viewer, recordingInput)).toEqual(
+      firstRecording,
+    );
+
+    const counts = await env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM event_site_sponsors WHERE event_id = ?) AS sponsors,
+         (SELECT COUNT(*) FROM event_session_recordings WHERE event_id = ?) AS recordings`,
+    )
+      .bind(viewer.eventId, viewer.eventId)
+      .first();
+    expect(counts).toEqual({ sponsors: 1, recordings: 1 });
+  });
+
+  it("publishes an event site before its programme when programme sections are hidden", async () => {
+    const preProgrammeEnv = new Proxy(publicSiteEnv, {
+      get(target, property, receiver) {
+        if (property === "DEMO_MODE") return "false";
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const service = new PublicSiteService(preProgrammeEnv);
+    const configuration = publishableSite();
+    configuration.sectionVisibility.statistics = false;
+    configuration.tagline = "Applications are open";
+    const saved = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    });
+    await service.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: saved.revision,
+      confirmed: "true",
+    });
+
+    const workspace = await service.getWorkspace(viewer);
+    expect(workspace.programme).toBeNull();
+    const published = await service.getPublished("future-of-events-2027");
+    expect(published).toMatchObject({
+      configuration: { tagline: "Applications are open" },
+      event: { slug: "future-of-events-2027" },
+    });
+
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: preProgrammeEnv,
+      ctx: {} as ExecutionContext,
+    });
+    const routeResult = await publicProgrammePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2027",
+      ),
+      params: { slug: "future-of-events-2027" },
+      context,
+    } as never);
+    if (routeResult instanceof Response)
+      throw new Error("Pre-programme event site returned a raw response.");
+    expect(routeResult.data).toMatchObject({
+      eventSiteOnly: true,
+      site: { configuration: { tagline: "Applications are open" } },
+    });
+    expect(routeResult.init?.headers).toMatchObject({
+      "cache-control": expect.stringContaining("public"),
+    });
+  });
+
+  it("converges an exact site-publication replay without advancing event state", async () => {
+    await publishProgramme();
+    const service = new PublicSiteService(publicSiteEnv);
+    const saved = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(publishableSite()),
+    });
+    const commandId = crypto.randomUUID();
+    const input = {
+      commandId,
+      revision: saved.revision,
+      confirmed: "true" as const,
+    };
+    const first = await service.publish(viewer, input);
+    const eventAfterFirst = await env.DB.prepare(
+      "SELECT revision FROM events WHERE id = ?",
+    )
+      .bind(viewer.eventId)
+      .first();
+    expect(await service.publish(viewer, input)).toEqual(first);
+    expect(
+      await env.DB.prepare("SELECT revision FROM events WHERE id = ?")
+        .bind(viewer.eventId)
+        .first(),
+    ).toEqual(eventAfterFirst);
+  });
+
   it("keeps the published snapshot immutable while a newer site draft is edited", async () => {
     await publishProgramme();
     const service = new PublicSiteService(publicSiteEnv);
     const first = publishableSite();
     first.tagline = "Published destination";
     const saved = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       revision: 0,
       configurationJson: JSON.stringify(first),
     });
     await service.publish(viewer, {
+      commandId: crypto.randomUUID(),
       revision: saved.revision,
       confirmed: "true",
     });
@@ -87,6 +256,7 @@ describe("public event site publication", () => {
     const second = structuredClone(first);
     second.tagline = "Unpublished replacement";
     await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       revision: saved.revision,
       configurationJson: JSON.stringify(second),
     });
@@ -108,10 +278,12 @@ describe("public event site publication", () => {
     const configuration = publishableSite();
     configuration.pages.sponsors.enabled = true;
     const saved = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       revision: 0,
       configurationJson: JSON.stringify(configuration),
     });
     const sponsor = await service.saveSponsor(viewer, {
+      commandId: crypto.randomUUID(),
       id: "",
       revision: 0,
       name: "Example partner",
@@ -124,12 +296,14 @@ describe("public event site publication", () => {
     const withSponsor = await service.getWorkspace(viewer);
     expect(withSponsor.draft.revision).toBe(saved.revision + 1);
     await service.publish(viewer, {
+      commandId: crypto.randomUUID(),
       revision: withSponsor.draft.revision,
       confirmed: "true",
     });
 
     await expect(
       service.deleteSponsor(viewer, {
+        commandId: crypto.randomUUID(),
         id: sponsor.id,
         revision: 99,
         confirmed: "true",
@@ -150,10 +324,12 @@ describe("public event site publication", () => {
     await publishProgramme();
     const service = new PublicSiteService(publicSiteEnv);
     const saved = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       revision: 0,
       configurationJson: JSON.stringify(publishableSite()),
     });
     const sponsor = await service.saveSponsor(viewer, {
+      commandId: crypto.randomUUID(),
       id: "",
       revision: 0,
       name: "Original partner",
@@ -165,11 +341,13 @@ describe("public event site publication", () => {
     });
     const beforePublish = await service.getWorkspace(viewer);
     await service.publish(viewer, {
+      commandId: crypto.randomUUID(),
       revision: beforePublish.draft.revision,
       confirmed: "true",
     });
 
     await service.saveSponsor(viewer, {
+      commandId: crypto.randomUUID(),
       id: sponsor.id,
       revision: 1,
       name: "Updated partner",
@@ -213,10 +391,12 @@ describe("public event site publication", () => {
     configuration.sectionVisibility.featured_sessions = true;
     configuration.featuredSessionIds = ["schedule-test-one"];
     const saved = await site.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       revision: 0,
       configurationJson: JSON.stringify(configuration),
     });
     await site.publish(viewer, {
+      commandId: crypto.randomUUID(),
       revision: saved.revision,
       confirmed: "true",
     });
@@ -251,6 +431,39 @@ describe("public event site publication", () => {
     ).rejects.toThrow(/public event home features session/i);
   });
 
+  it("blocks a referenced published session from being cancelled directly", async () => {
+    await publishProgramme();
+    const site = new PublicSiteService(publicSiteEnv);
+    const configuration = publishableSite();
+    configuration.sectionVisibility.featured_sessions = true;
+    configuration.featuredSessionIds = ["schedule-test-one"];
+    const saved = await site.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    });
+    await site.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: saved.revision,
+      confirmed: "true",
+    });
+
+    await expect(
+      env.DB.prepare(
+        "UPDATE sessions SET status = 'cancelled' WHERE id = ? AND event_id = ?",
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .run(),
+    ).rejects.toThrow(/withdraw public-site references/i);
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM sessions WHERE id = ? AND event_id = ?",
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .first(),
+    ).toEqual({ status: "published" });
+  });
+
   it("rejects enabled sections that would publish empty content", async () => {
     await publishProgramme();
     const service = new PublicSiteService(publicSiteEnv);
@@ -262,11 +475,13 @@ describe("public event site publication", () => {
       days: false,
     };
     const emptyStatistics = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       revision: 0,
       configurationJson: JSON.stringify(configuration),
     });
     await expect(
       service.publish(viewer, {
+        commandId: crypto.randomUUID(),
         revision: emptyStatistics.revision,
         confirmed: "true",
       }),
@@ -276,11 +491,13 @@ describe("public event site publication", () => {
     configuration.postEvent.enabled = true;
     configuration.postEvent.heading = "";
     const emptyPostEvent = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       revision: emptyStatistics.revision,
       configurationJson: JSON.stringify(configuration),
     });
     await expect(
       service.publish(viewer, {
+        commandId: crypto.randomUUID(),
         revision: emptyPostEvent.revision,
         confirmed: "true",
       }),
@@ -293,14 +510,17 @@ describe("public event site publication", () => {
     const recordings = new PublicRecordingService(publicSiteEnv);
     const configuration = publishableSite();
     const savedSite = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       revision: 0,
       configurationJson: JSON.stringify(configuration),
     });
     await service.publish(viewer, {
+      commandId: crypto.randomUUID(),
       revision: savedSite.revision,
       confirmed: "true",
     });
     const recording = await recordings.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       id: "",
       sessionId: "schedule-test-one",
       revision: 0,
@@ -310,6 +530,7 @@ describe("public event site publication", () => {
       transcriptUrl: "",
     });
     await recordings.publish(viewer, {
+      commandId: crypto.randomUUID(),
       id: recording.id,
       revision: 1,
       confirmed: "true",
@@ -332,10 +553,12 @@ describe("public event site publication", () => {
 
     configuration.postEvent.enabled = true;
     const postEventDraft = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       revision: savedSite.revision,
       configurationJson: JSON.stringify(configuration),
     });
     await service.publish(viewer, {
+      commandId: crypto.randomUUID(),
       revision: postEventDraft.revision,
       confirmed: "true",
     });
@@ -351,6 +574,7 @@ describe("public event site publication", () => {
     ]);
 
     await recordings.unpublish(viewer, {
+      commandId: crypto.randomUUID(),
       id: recording.id,
       revision: 1,
       confirmed: "true",
@@ -365,6 +589,7 @@ describe("public event site publication", () => {
     await publishProgramme();
     const recordings = new PublicRecordingService(publicSiteEnv);
     const recording = await recordings.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       id: "",
       sessionId: "schedule-test-one",
       revision: 0,
@@ -381,6 +606,36 @@ describe("public event site publication", () => {
 
     await expect(
       recordings.publish(viewer, {
+        commandId: crypto.randomUUID(),
+        id: recording.id,
+        revision: 1,
+        confirmed: "true",
+      }),
+    ).rejects.toBeInstanceOf(PublicSiteValidationError);
+  });
+
+  it("rejects recording publication when the session is no longer published", async () => {
+    await publishProgramme();
+    const recordings = new PublicRecordingService(publicSiteEnv);
+    const recording = await recordings.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      id: "",
+      sessionId: "schedule-test-one",
+      revision: 0,
+      title: "Cancelled session recording",
+      recordingUrl: "https://video.example.test/cancelled",
+      captionsUrl: "",
+      transcriptUrl: "",
+    });
+    await env.DB.prepare(
+      "UPDATE sessions SET status = 'cancelled' WHERE id = ? AND event_id = ?",
+    )
+      .bind("schedule-test-one", viewer.eventId)
+      .run();
+
+    await expect(
+      recordings.publish(viewer, {
+        commandId: crypto.randomUUID(),
         id: recording.id,
         revision: 1,
         confirmed: "true",
@@ -392,6 +647,7 @@ describe("public event site publication", () => {
     const { schedule } = await publishProgramme();
     const recordings = new PublicRecordingService(publicSiteEnv);
     const recording = await recordings.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
       id: "",
       sessionId: "schedule-test-one",
       revision: 0,
@@ -401,6 +657,7 @@ describe("public event site publication", () => {
       transcriptUrl: "",
     });
     await recordings.publish(viewer, {
+      commandId: crypto.randomUUID(),
       id: recording.id,
       revision: 1,
       confirmed: "true",

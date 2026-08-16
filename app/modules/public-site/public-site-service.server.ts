@@ -1,5 +1,8 @@
+import { z } from "zod";
+import { publicEventBrandAssetPath } from "~/modules/events/event-branding";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
+import { eventBoundaryCalendarDate } from "~/modules/schedule/schedule-time";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   PublicRecordingService,
@@ -13,11 +16,20 @@ import {
   parsePublicSiteDraft,
   parsePublishedPublicSiteSnapshot,
   publishedPublicSiteSnapshotSchema,
+  publishedPublicSiteSponsorSchema,
   revisionInputSchema,
   sitePublishInputSchema,
   siteSaveInputSchema,
   sponsorInputSchema,
 } from "./public-site";
+import {
+  parsePublicSiteCommandReplay,
+  preparePublicSiteCommand,
+  publicSiteCommandClaimStatements,
+  publicSiteCommandCompletionStatement,
+  publicSiteCommandGuard,
+  resolvePublicSiteCommandRace,
+} from "./public-site-command.server";
 import {
   PublicSiteNotFoundError,
   PublicSiteRevisionConflictError,
@@ -31,10 +43,27 @@ import {
 import { resolvePublicSitePresentation } from "./public-site-presentation";
 
 export {
+  PublicSiteCommandConflictError,
   PublicSiteNotFoundError,
   PublicSiteRevisionConflictError,
   PublicSiteValidationError,
 } from "./public-site-errors";
+
+const revisionCommandResponseSchema = z.object({
+  revision: z.number().int().positive(),
+});
+const entityCommandResponseSchema = z.object({ id: z.string().min(1) });
+const emptyCommandResponseSchema = z.object({});
+
+async function publicSiteContentRevision(event: PublicSiteEvent) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify(event)),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
 
 type SiteRow = {
   draftJson: string;
@@ -43,6 +72,10 @@ type SiteRow = {
   publishedRevision: number | null;
   publishedAt: number | null;
 };
+
+const sponsorSnapshotRowSchema = publishedPublicSiteSponsorSchema.extend({
+  revision: z.number().int().positive(),
+});
 
 type EventRow = {
   id: string;
@@ -55,13 +88,25 @@ type EventRow = {
   city: string | null;
   startsAt: number;
   endsAt: number;
+  timezone: string;
+  brandAccent: string;
+  heroImageUrl: string | null;
+  logoAssetId: string | null;
+  bannerAssetId: string | null;
+  legacyLogoUrl: string | null;
+  supportUrl: string | null;
+  applicationUrl: string | null;
   brandDraftRevision: number;
   brandPublishedRevision: number;
   brandPublishedAt: number | null;
   programmePublishedAt: number | null;
 };
 
+export type PublicSiteEvent = PublishedProgramme["event"];
+
 export type PublishedPublicSite = {
+  event: PublicSiteEvent;
+  contentRevision: string;
   configuration: PublishedPublicSiteSnapshot;
   revision: number;
   publishedAt: number;
@@ -76,6 +121,26 @@ export class PublicSiteService {
       `SELECT id, name, slug, description, venue_name AS venue,
               venue_address AS venueAddress, venue_map_url AS venueMapUrl, city,
               starts_at AS startsAt, ends_at AS endsAt,
+              timezone, brand_accent AS brandAccent,
+              programme_hero_image_url AS heroImageUrl,
+              brand_logo_asset_id AS logoAssetId,
+              brand_banner_asset_id AS bannerAssetId,
+              participant_logo_url AS legacyLogoUrl,
+              participant_support_url AS supportUrl,
+              (
+                SELECT '/apply/' || form.public_slug
+                  FROM form_definitions form
+                 WHERE form.event_id = events.id
+                   AND form.kind = 'submission' AND form.status = 'published'
+                   AND EXISTS (
+                     SELECT 1 FROM form_versions version
+                      WHERE version.form_id = form.id
+                        AND version.event_id = form.event_id
+                        AND version.status = 'published'
+                   )
+                 ORDER BY form.updated_at DESC, form.id
+                 LIMIT 1
+              ) AS applicationUrl,
               brand_draft_revision AS brandDraftRevision,
               brand_published_revision AS brandPublishedRevision,
               brand_published_at AS brandPublishedAt,
@@ -87,6 +152,32 @@ export class PublicSiteService {
       .first<EventRow>();
     if (!row) throw new PublicSiteNotFoundError();
     return row;
+  }
+
+  private publicEvent(row: EventRow): PublicSiteEvent {
+    return {
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      timezone: row.timezone,
+      startDate: eventBoundaryCalendarDate(row.startsAt),
+      endDate: eventBoundaryCalendarDate(row.endsAt),
+      venue: row.venue,
+      venueAddress: row.venueAddress,
+      venueMapUrl: row.venueMapUrl,
+      city: row.city,
+      description: row.description,
+      brandAccent: row.brandAccent,
+      heroImageUrl: row.heroImageUrl,
+      logoUrl: row.logoAssetId
+        ? publicEventBrandAssetPath(row.slug, "logo")
+        : row.legacyLogoUrl,
+      bannerUrl: row.bannerAssetId
+        ? publicEventBrandAssetPath(row.slug, "banner")
+        : null,
+      supportUrl: row.supportUrl,
+      applicationUrl: row.applicationUrl,
+    };
   }
 
   private async site(viewer: Pick<Viewer, "eventId" | "organisationId">) {
@@ -117,6 +208,48 @@ export class PublicSiteService {
     return rows.results;
   }
 
+  private async siteAndSponsors(
+    viewer: Pick<Viewer, "eventId" | "organisationId">,
+  ) {
+    const row = await this.env.DB.prepare(
+      `SELECT site.draft_json AS draftJson,
+              site.draft_revision AS draftRevision,
+              site.published_json AS publishedJson,
+              site.published_revision AS publishedRevision,
+              site.published_at AS publishedAt,
+              COALESCE((
+                SELECT json_group_array(json_object(
+                         'id', sponsor.id,
+                         'name', sponsor.name,
+                         'tier', sponsor.tier,
+                         'websiteUrl', sponsor.website_url,
+                         'logoUrl', sponsor.logo_url,
+                         'description', sponsor.description,
+                         'position', sponsor.position,
+                         'revision', sponsor.revision
+                       ))
+                  FROM (
+                    SELECT * FROM event_site_sponsors
+                     WHERE event_id = site.event_id
+                       AND organisation_id = site.organisation_id
+                     ORDER BY tier COLLATE NOCASE, position,
+                              name COLLATE NOCASE, id
+                  ) sponsor
+              ), '[]') AS sponsorsJson
+         FROM event_public_sites site
+        WHERE site.event_id = ? AND site.organisation_id = ?`,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .first<SiteRow & { sponsorsJson: string }>();
+    if (!row) return null;
+    return {
+      site: row,
+      sponsors: z
+        .array(sponsorSnapshotRowSchema)
+        .parse(JSON.parse(row.sponsorsJson)) satisfies PublicSiteSponsor[],
+    };
+  }
+
   async getWorkspace(viewer: Viewer) {
     const event = await this.event(viewer);
     const [site, sponsors, recordings, programme] = await Promise.all([
@@ -125,11 +258,14 @@ export class PublicSiteService {
       new PublicRecordingService(this.env).list(viewer),
       new PublicProgrammeService(this.env).getPublished(event.slug),
     ]);
+    const publicEvent = this.publicEvent(event);
     const draft = site
       ? parsePublicSiteDraft(site.draftJson)
       : defaultPublicSiteDraft();
     return {
       event,
+      publicEvent,
+      publicEventContentRevision: await publicSiteContentRevision(publicEvent),
       draft: { configuration: draft, revision: site?.draftRevision ?? 0 },
       published: site?.publishedJson
         ? {
@@ -174,8 +310,22 @@ export class PublicSiteService {
   async saveDraft(viewer: Viewer, input: unknown) {
     const parsed = siteSaveInputSchema.parse(input);
     const configuration = parsed.configurationJson;
-    const operationId = crypto.randomUUID();
     const nextRevision = parsed.revision + 1;
+    const prepared = await preparePublicSiteCommand(
+      this.env,
+      viewer,
+      "public_site.draft.save",
+      parsed.commandId,
+      { revision: parsed.revision, configuration },
+    );
+    if (prepared.replay)
+      return parsePublicSiteCommandReplay(
+        prepared.replay,
+        revisionCommandResponseSchema,
+      );
+    const command = prepared.command;
+    const operationId = command.id;
+    const commandGuard = publicSiteCommandGuard(viewer, command);
     const mutation =
       parsed.revision === 0
         ? this.env.DB.prepare(
@@ -189,7 +339,8 @@ export class PublicSiteService {
                 )
                   AND NOT EXISTS (
                     SELECT 1 FROM event_public_sites WHERE event_id = ?
-                  )`,
+                  )
+                  AND EXISTS (${commandGuard.sql})`,
           ).bind(
             viewer.eventId,
             viewer.organisationId,
@@ -199,13 +350,15 @@ export class PublicSiteService {
             viewer.eventId,
             viewer.organisationId,
             viewer.eventId,
+            ...commandGuard.bindings,
           )
         : this.env.DB.prepare(
             `UPDATE event_public_sites
                 SET draft_json = ?, draft_revision = draft_revision + 1,
                     last_updated_by_person_id = ?, last_operation_id = ?,
                     updated_at = unixepoch()
-              WHERE event_id = ? AND organisation_id = ? AND draft_revision = ?`,
+              WHERE event_id = ? AND organisation_id = ? AND draft_revision = ?
+                AND EXISTS (${commandGuard.sql})`,
           ).bind(
             JSON.stringify(configuration),
             viewer.personId,
@@ -213,6 +366,7 @@ export class PublicSiteService {
             viewer.eventId,
             viewer.organisationId,
             parsed.revision,
+            ...commandGuard.bindings,
           );
     const evidence = publicSiteMutationEvidence(
       this.env,
@@ -235,21 +389,47 @@ export class PublicSiteService {
         ],
       },
     );
-    const results = await this.env.DB.batch([mutation, ...evidence]);
-    if ((results[0]?.meta.changes ?? 0) !== 1)
+    const results = await this.env.DB.batch([
+      ...publicSiteCommandClaimStatements(this.env, viewer, command),
+      mutation,
+      ...evidence,
+      publicSiteCommandCompletionStatement(this.env, viewer, command, {
+        revision: nextRevision,
+      }),
+    ]);
+    if ((results[2]?.meta.changes ?? 0) !== 1) {
+      const replay = await resolvePublicSiteCommandRace(
+        this.env,
+        viewer,
+        command,
+      );
+      if (replay)
+        return parsePublicSiteCommandReplay(
+          replay,
+          revisionCommandResponseSchema,
+        );
       throw new PublicSiteRevisionConflictError();
+    }
+    if ((results[5]?.meta.changes ?? 0) !== 1)
+      throw new Error(
+        "The public-site draft committed without durable command completion.",
+      );
     return {
       revision: nextRevision,
-      changeSequence: publicSiteChangeSequence(results[2]),
+      changeSequence: publicSiteChangeSequence(results[4]),
     };
   }
 
   private validateConfiguration(
     configuration: PublicSiteDraft,
-    programme: PublishedProgramme,
+    event: Pick<
+      PublicSiteEvent,
+      "description" | "venue" | "city" | "venueAddress"
+    >,
+    programme: PublishedProgramme | null,
   ) {
     try {
-      resolvePublicSitePresentation(configuration, programme);
+      resolvePublicSitePresentation(configuration, event, programme);
     } catch (error) {
       if (error instanceof PublishedPublicSiteInvariantError)
         throw new PublicSiteValidationError(error.message);
@@ -259,20 +439,30 @@ export class PublicSiteService {
 
   async publish(viewer: Viewer, input: unknown) {
     const parsed = sitePublishInputSchema.parse(input);
+    const prepared = await preparePublicSiteCommand(
+      this.env,
+      viewer,
+      "public_site.publish",
+      parsed.commandId,
+      { revision: parsed.revision, confirmed: parsed.confirmed },
+    );
+    if (prepared.replay)
+      return parsePublicSiteCommandReplay(
+        prepared.replay,
+        revisionCommandResponseSchema,
+      );
+    const command = prepared.command;
     const event = await this.event(viewer);
-    const [site, sponsors, programme] = await Promise.all([
-      this.site(viewer),
-      this.sponsors(viewer),
+    const [siteSnapshot, programme] = await Promise.all([
+      this.siteAndSponsors(viewer),
       new PublicProgrammeService(this.env).getPublished(event.slug),
     ]);
+    const site = siteSnapshot?.site ?? null;
+    const sponsors = siteSnapshot?.sponsors ?? [];
     if (!site || site.draftRevision !== parsed.revision)
       throw new PublicSiteRevisionConflictError();
-    if (!programme)
-      throw new PublicSiteValidationError(
-        "Publish the programme before publishing the public event site.",
-      );
     const configuration = parsePublicSiteDraft(site.draftJson);
-    this.validateConfiguration(configuration, programme);
+    this.validateConfiguration(configuration, event, programme);
     if (configuration.pages.sponsors.enabled && sponsors.length === 0)
       throw new PublicSiteValidationError(
         "The enabled Sponsors page requires at least one sponsor record.",
@@ -300,7 +490,8 @@ export class PublicSiteService {
         recordId,
       })),
     ];
-    const operationId = crypto.randomUUID();
+    const operationId = command.id;
+    const commandGuard = publicSiteCommandGuard(viewer, command);
     const statements: D1PreparedStatement[] = [
       this.env.DB.prepare(
         `UPDATE event_public_sites
@@ -347,6 +538,7 @@ export class PublicSiteService {
                   WHERE version.event_id = event_public_sites.event_id
                     AND version.status = 'published'
                     AND entry.session_id = selected.value
+                    AND session.status = 'published'
                     AND session.visibility = 'public'
                     AND content.visibility = 'public'
                     AND content.content_status = 'approved'
@@ -374,6 +566,7 @@ export class PublicSiteService {
                   WHERE version.event_id = event_public_sites.event_id
                     AND version.status = 'published'
                     AND relation.person_id = selected.value
+                    AND session.status = 'published'
                     AND session.visibility = 'public'
                     AND content.visibility = 'public'
                     AND content.content_status = 'approved'
@@ -381,7 +574,8 @@ export class PublicSiteService {
                     AND relation.participation_status = 'confirmed'
                     AND person.profile_status = 'published'
                )
-            )`,
+            )
+            AND EXISTS (${commandGuard.sql})`,
       ).bind(
         JSON.stringify(snapshot),
         viewer.personId,
@@ -399,6 +593,7 @@ export class PublicSiteService {
           : 0,
         JSON.stringify(featuredSessionIds),
         JSON.stringify(featuredSpeakerIds),
+        ...commandGuard.bindings,
       ),
       this.env.DB.prepare(
         `DELETE FROM event_public_site_references
@@ -487,25 +682,69 @@ export class PublicSiteService {
         ],
       },
     );
-    const results = await this.env.DB.batch([...statements, ...evidence]);
-    if ((results[0]?.meta.changes ?? 0) !== 1)
+    const results = await this.env.DB.batch([
+      ...publicSiteCommandClaimStatements(this.env, viewer, command),
+      ...statements,
+      ...evidence,
+      publicSiteCommandCompletionStatement(this.env, viewer, command, {
+        revision: parsed.revision,
+      }),
+    ]);
+    if ((results[2]?.meta.changes ?? 0) !== 1) {
+      const replay = await resolvePublicSiteCommandRace(
+        this.env,
+        viewer,
+        command,
+      );
+      if (replay)
+        return parsePublicSiteCommandReplay(
+          replay,
+          revisionCommandResponseSchema,
+        );
       throw new PublicSiteRevisionConflictError();
-    const changeResult = results.at(-1);
+    }
+    if ((results.at(-1)?.meta.changes ?? 0) !== 1)
+      throw new Error(
+        "The site publication committed without durable command completion.",
+      );
     return {
       revision: parsed.revision,
-      changeSequence: publicSiteChangeSequence(changeResult),
+      changeSequence: publicSiteChangeSequence(results.at(-2)),
     };
   }
 
   async saveSponsor(viewer: Viewer, input: unknown) {
     const parsed = sponsorInputSchema.parse(input);
+    const prepared = await preparePublicSiteCommand(
+      this.env,
+      viewer,
+      "public_site.sponsor.save",
+      parsed.commandId,
+      {
+        id: parsed.id,
+        revision: parsed.revision,
+        name: parsed.name,
+        tier: parsed.tier,
+        websiteUrl: parsed.websiteUrl,
+        logoUrl: parsed.logoUrl,
+        description: parsed.description,
+        position: parsed.position,
+      },
+    );
+    if (prepared.replay)
+      return parsePublicSiteCommandReplay(
+        prepared.replay,
+        entityCommandResponseSchema,
+      );
+    const command = prepared.command;
     const site = await this.site(viewer);
     if (!site)
       throw new PublicSiteValidationError(
         "Save the public-site draft before adding sponsors.",
       );
     const id = parsed.id ?? crypto.randomUUID();
-    const operationId = crypto.randomUUID();
+    const operationId = command.id;
+    const commandGuard = publicSiteCommandGuard(viewer, command);
     const mutation = parsed.id
       ? this.env.DB.prepare(
           `UPDATE event_site_sponsors
@@ -513,7 +752,8 @@ export class PublicSiteService {
                   description = ?, position = ?, revision = revision + 1,
                   last_updated_by_person_id = ?, last_operation_id = ?,
                   updated_at = unixepoch()
-            WHERE id = ? AND event_id = ? AND organisation_id = ? AND revision = ?`,
+            WHERE id = ? AND event_id = ? AND organisation_id = ? AND revision = ?
+              AND EXISTS (${commandGuard.sql})`,
         ).bind(
           parsed.name,
           parsed.tier,
@@ -527,13 +767,15 @@ export class PublicSiteService {
           viewer.eventId,
           viewer.organisationId,
           parsed.revision,
+          ...commandGuard.bindings,
         )
       : this.env.DB.prepare(
           `INSERT INTO event_site_sponsors (
              id, organisation_id, event_id, name, tier, website_url, logo_url,
              description, position, revision, last_updated_by_person_id,
              last_operation_id, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, unixepoch(), unixepoch())`,
+           ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, unixepoch(), unixepoch()
+              WHERE EXISTS (${commandGuard.sql})`,
         ).bind(
           id,
           viewer.organisationId,
@@ -546,6 +788,7 @@ export class PublicSiteService {
           parsed.position,
           viewer.personId,
           operationId,
+          ...commandGuard.bindings,
         );
     const evidence = publicSiteMutationEvidence(
       this.env,
@@ -564,6 +807,7 @@ export class PublicSiteService {
       },
     );
     const results = await this.env.DB.batch([
+      ...publicSiteCommandClaimStatements(this.env, viewer, command),
       mutation,
       this.env.DB.prepare(
         `UPDATE event_public_sites
@@ -585,15 +829,45 @@ export class PublicSiteService {
         operationId,
       ),
       ...evidence,
+      publicSiteCommandCompletionStatement(this.env, viewer, command, { id }),
     ]);
-    if ((results[0]?.meta.changes ?? 0) !== 1)
+    if ((results[2]?.meta.changes ?? 0) !== 1) {
+      const replay = await resolvePublicSiteCommandRace(
+        this.env,
+        viewer,
+        command,
+      );
+      if (replay)
+        return parsePublicSiteCommandReplay(
+          replay,
+          entityCommandResponseSchema,
+        );
       throw new PublicSiteRevisionConflictError();
-    return { id, changeSequence: publicSiteChangeSequence(results[3]) };
+    }
+    if ((results[6]?.meta.changes ?? 0) !== 1)
+      throw new Error(
+        "The sponsor mutation committed without durable command completion.",
+      );
+    return { id, changeSequence: publicSiteChangeSequence(results[5]) };
   }
 
   async deleteSponsor(viewer: Viewer, input: unknown) {
     const parsed = revisionInputSchema.parse(input);
-    const operationId = crypto.randomUUID();
+    const prepared = await preparePublicSiteCommand(
+      this.env,
+      viewer,
+      "public_site.sponsor.delete",
+      parsed.commandId,
+      { id: parsed.id, revision: parsed.revision, confirmed: parsed.confirmed },
+    );
+    if (prepared.replay)
+      return parsePublicSiteCommandReplay(
+        prepared.replay,
+        emptyCommandResponseSchema,
+      );
+    const command = prepared.command;
+    const operationId = command.id;
+    const commandGuard = publicSiteCommandGuard(viewer, command);
     const evidence = publicSiteMutationEvidence(
       this.env,
       viewer,
@@ -611,12 +885,14 @@ export class PublicSiteService {
       },
     );
     const results = await this.env.DB.batch([
+      ...publicSiteCommandClaimStatements(this.env, viewer, command),
       this.env.DB.prepare(
         `UPDATE event_public_sites
             SET draft_revision = draft_revision + 1,
                 last_updated_by_person_id = ?, last_operation_id = ?,
                 updated_at = unixepoch()
           WHERE event_id = ? AND organisation_id = ?
+            AND EXISTS (${commandGuard.sql})
             AND EXISTS (
               SELECT 1 FROM event_site_sponsors
                WHERE id = ? AND event_id = ? AND organisation_id = ?
@@ -627,6 +903,7 @@ export class PublicSiteService {
         operationId,
         viewer.eventId,
         viewer.organisationId,
+        ...commandGuard.bindings,
         parsed.id,
         viewer.eventId,
         viewer.organisationId,
@@ -650,13 +927,26 @@ export class PublicSiteService {
         operationId,
       ),
       ...evidence,
+      publicSiteCommandCompletionStatement(this.env, viewer, command, {}),
     ]);
     if (
-      (results[0]?.meta.changes ?? 0) !== 1 ||
-      (results[1]?.meta.changes ?? 0) !== 1
-    )
+      (results[2]?.meta.changes ?? 0) !== 1 ||
+      (results[3]?.meta.changes ?? 0) !== 1
+    ) {
+      const replay = await resolvePublicSiteCommandRace(
+        this.env,
+        viewer,
+        command,
+      );
+      if (replay)
+        return parsePublicSiteCommandReplay(replay, emptyCommandResponseSchema);
       throw new PublicSiteRevisionConflictError();
-    return { changeSequence: publicSiteChangeSequence(results[3]) };
+    }
+    if ((results[6]?.meta.changes ?? 0) !== 1)
+      throw new Error(
+        "The sponsor deletion committed without durable command completion.",
+      );
+    return { changeSequence: publicSiteChangeSequence(results[5]) };
   }
 
   async getPublished(slug: string, now = Math.floor(Date.now() / 1_000)) {
@@ -664,33 +954,63 @@ export class PublicSiteService {
       `SELECT site.published_json AS publishedJson,
               site.published_revision AS publishedRevision,
               site.published_at AS publishedAt,
-              event.id AS eventId, event.organisation_id AS organisationId,
-              event.ends_at AS eventEndsAt
+              event.id, event.name, event.slug, event.description,
+              event.venue_name AS venue,
+              event.venue_address AS venueAddress,
+              event.venue_map_url AS venueMapUrl, event.city,
+              event.starts_at AS startsAt, event.ends_at AS endsAt,
+              event.timezone, event.brand_accent AS brandAccent,
+              event.programme_hero_image_url AS heroImageUrl,
+              event.brand_logo_asset_id AS logoAssetId,
+              event.brand_banner_asset_id AS bannerAssetId,
+              event.participant_logo_url AS legacyLogoUrl,
+              event.participant_support_url AS supportUrl,
+              event.brand_draft_revision AS brandDraftRevision,
+              event.brand_published_revision AS brandPublishedRevision,
+              event.brand_published_at AS brandPublishedAt,
+              event.programme_published_at AS programmePublishedAt,
+              event.organisation_id AS organisationId,
+              (
+                SELECT '/apply/' || form.public_slug
+                  FROM form_definitions form
+                 WHERE form.event_id = event.id
+                   AND form.kind = 'submission' AND form.status = 'published'
+                   AND EXISTS (
+                     SELECT 1 FROM form_versions version
+                      WHERE version.form_id = form.id
+                        AND version.event_id = form.event_id
+                        AND version.status = 'published'
+                   )
+                 ORDER BY form.updated_at DESC, form.id
+                 LIMIT 1
+              ) AS applicationUrl
          FROM event_public_sites site
          JOIN events event
            ON event.id = site.event_id AND event.organisation_id = site.organisation_id
         WHERE event.slug = ? AND event.activation_status = 'active'
-          AND event.programme_published_at IS NOT NULL
           AND site.published_json IS NOT NULL`,
     )
       .bind(slug)
-      .first<{
-        publishedJson: string;
-        publishedRevision: number;
-        publishedAt: number;
-        eventId: string;
-        organisationId: string;
-        eventEndsAt: number;
-      }>();
+      .first<
+        EventRow & {
+          publishedJson: string;
+          publishedRevision: number;
+          publishedAt: number;
+          organisationId: string;
+        }
+      >();
     if (!row) return null;
     const configuration = parsePublishedPublicSiteSnapshot(row.publishedJson);
+    const event = this.publicEvent(row);
     let recordings: PublishedPublicRecording[] = [];
-    if (configuration.postEvent.enabled && now >= row.eventEndsAt) {
+    if (configuration.postEvent.enabled && now >= row.endsAt) {
       recordings = await new PublicRecordingService(
         this.env,
-      ).getPublishedForEvent(row.eventId, row.organisationId, now);
+      ).getPublishedForEvent(row.id, row.organisationId, now);
     }
     return {
+      event,
+      contentRevision: await publicSiteContentRevision(event),
       configuration,
       revision: row.publishedRevision,
       publishedAt: row.publishedAt,

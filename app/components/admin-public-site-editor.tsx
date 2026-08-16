@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
-import type { Dispatch, SetStateAction } from "react";
+import { type Dispatch, type SetStateAction, useMemo } from "react";
 import { Form, Link } from "react-router";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import {
@@ -14,9 +14,11 @@ import {
 function SiteSectionControls({
   configuration,
   setConfiguration,
+  programmeAvailable,
 }: {
   configuration: PublicSiteDraft;
   setConfiguration: Dispatch<SetStateAction<PublicSiteDraft>>;
+  programmeAvailable: boolean;
 }) {
   function move(index: number, direction: -1 | 1) {
     setConfiguration((current) => {
@@ -35,6 +37,15 @@ function SiteSectionControls({
             <input
               type="checkbox"
               checked={configuration.sectionVisibility[section]}
+              disabled={
+                !programmeAvailable &&
+                !configuration.sectionVisibility[section] &&
+                [
+                  "featured_speakers",
+                  "featured_sessions",
+                  "statistics",
+                ].includes(section)
+              }
               onChange={(event) =>
                 setConfiguration((current) => ({
                   ...current,
@@ -95,9 +106,14 @@ export function AdminPublicSiteEditor({
   busy: boolean;
   saving: boolean;
 }) {
+  const commandId = useMemo(
+    () => ({ revision: draftRevision, id: crypto.randomUUID() }),
+    [draftRevision],
+  ).id;
   return (
     <Form method="post" className="card pad">
       <input type="hidden" name="intent" value="save-site" />
+      <input type="hidden" name="commandId" value={commandId} />
       <input type="hidden" name="revision" value={draftRevision} />
       <input
         type="hidden"
@@ -153,6 +169,7 @@ export function AdminPublicSiteEditor({
       <SiteSectionControls
         configuration={configuration}
         setConfiguration={setConfiguration}
+        programmeAvailable={programme !== null}
       />
 
       <label className="label mt">
@@ -443,6 +460,7 @@ export function AdminPublicSiteEditor({
           <input
             type="checkbox"
             checked={configuration.postEvent.enabled}
+            disabled={!programme && !configuration.postEvent.enabled}
             onChange={(event) =>
               setConfiguration((current) => ({
                 ...current,

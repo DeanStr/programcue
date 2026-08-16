@@ -1077,6 +1077,7 @@ export function PublicProgrammeWorkspace({
     >
       {!embedded ? (
         <PublicEventHeader
+          event={programme.event}
           programme={programme}
           site={loaderData.site?.configuration ?? null}
           activeSurface={loaderData.surface}
@@ -1105,7 +1106,11 @@ export function PublicProgrammeWorkspace({
             <>
               <div className="public-content" id="programme">
                 {homeSurface && loaderData.site ? (
-                  <PublicSiteHome programme={programme} site={loaderData.site} />
+                  <PublicSiteHome
+                    event={programme.event}
+                    programme={programme}
+                    site={loaderData.site}
+                  />
                 ) : null}
                 {fetcher.data && "error" in fetcher.data ? (
                   <div className="validation-item error mb" role="alert">
@@ -1140,7 +1145,9 @@ export function PublicProgrammeWorkspace({
           )}
         </div>
       </main>
-      {!embedded ? <PublicEventFooter programme={programme} /> : null}
+      {!embedded ? (
+        <PublicEventFooter event={programme.event} programme={programme} />
+      ) : null}
     </div>
   );
 }

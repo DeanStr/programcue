@@ -762,26 +762,43 @@ the same link restriction as defense in depth rather than silently repairing
 published copy.
 
 The saved site draft and immutable published site snapshot have an independent
-compare-and-set revision. Publication snapshots editorial configuration and the
+compare-and-set revision and lifecycle. An event site may publish before its
+programme for CFP promotion, but featured speakers, featured sessions,
+statistics and post-event recordings must remain disabled until a published
+programme exists. Publication snapshots editorial configuration and the
 ordered sponsor records, but never copies sessions, speakers, event description,
 venue, map or branding data. Visible featured record IDs are materialized as
 published-site references and must resolve to eligible records in the current
 published programme. Site publication and schedule publication both recheck
 that invariant inside their D1 compare-and-set boundary; an incompatible
 schedule remains a draft and the previous public programme remains live. Hidden
-selections are not hard references. The organizer sees branding, site and
-programme publication state together even though their publication boundaries
-remain independent.
+selections are not hard references. Published-session status is part of the
+same eligibility contract used by the canonical programme. A database guard
+prevents a referenced session, the last eligible session for a featured
+speaker, or a session with a published recording from leaving published status
+until the public dependency is withdrawn. The organizer sees branding, site
+and programme publication state together even though their publication
+boundaries remain independent.
 
-The final site-and-sponsor snapshot is schema-validated and written directly by
-the guarded publication statement; publication does not first copy and then
-replace the draft JSON. That statement atomically rechecks the canonical event
+The site draft and ordered sponsor rows are read in one D1 statement so they
+belong to one database snapshot. The final site-and-sponsor snapshot is
+schema-validated and written directly by the guarded publication statement;
+publication does not first copy and then replace the draft JSON. That statement
+atomically rechecks the canonical event
 description and venue dependencies as well as visible programme references.
 Public routes repeat those checks before rendering. Event Setup refuses to
 remove description or venue data still required by a published site. Persisted
 snapshot corruption, missing visible references and invalid published branding
 fail with a non-cacheable error rather than dropping content or substituting
 Program Cue presentation defaults.
+
+Every site, sponsor and recording mutation carries a browser-created UUID into
+the existing durable idempotency ledger. The ledger binds that command identity
+to the exact validated payload and committed result: an exact replay returns
+the original entity or revision and event-change cursor without another
+mutation or audit row, while reuse with changed details returns a conflict. The
+command claim, domain mutation, audit/change evidence and durable response
+complete in one D1 batch.
 
 Sponsors are event-scoped structured draft records and enter the public surface
 only through the site snapshot. Recordings accept external credential-free
@@ -800,10 +817,12 @@ subsystem or separate runtime.
 
 Generated event and speaker social cards require Cloudflare Images to render a
 server-generated SVG as WebP. Missing or failed rendering returns an explicit
-non-cacheable 503. Card URLs include the complete programme content identity and site
-publication revision, so branding, programme and editorial changes cannot reuse
-the wrong cached unfurl. Promotion tools reuse the existing speaker share URL
-instead of introducing a second speaker-landing concept.
+non-cacheable 503. Card URLs include the complete programme content identity and
+site publication revision when a programme exists, or the canonical
+event-content identity and site revision before programme publication, so
+branding, programme and editorial changes cannot reuse the wrong cached
+unfurl. Promotion tools reuse the existing speaker share URL instead of
+introducing a second speaker-landing concept.
 
 Fixed editorial pages are public-cacheable. Their conditional response identity
 combines the request resource, complete programme/branding content revision and
@@ -811,7 +830,9 @@ site publication revision, so canonical event, programme, branding, sponsor and
 editorial changes invalidate the representation together.
 
 The programme and fixed event pages share one event header, navigation and
-footer contract. The administrator route retains one loader/action and splits
+footer contract. The publication confirmation reports added and removed
+sections, fixed pages, featured records and sponsors, plus ordering, theme and
+editorial changes. The administrator route retains one loader/action and splits
 only its concrete editor, sponsor, recording and preview panels; no generic CMS
 component or block framework is introduced.
 

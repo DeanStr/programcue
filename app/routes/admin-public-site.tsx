@@ -16,8 +16,14 @@ import { AdminPublicSiteSponsors } from "~/components/admin-public-site-sponsors
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import type { PublicRecordingWorkspaceItem } from "~/modules/public-site/public-recording-service.server";
 import { PublicRecordingService } from "~/modules/public-site/public-recording-service.server";
-import { PUBLIC_SITE_PAGE_TYPES } from "~/modules/public-site/public-site";
 import {
+  PUBLIC_SITE_PAGE_TYPES,
+  type PublicSiteDraft,
+  type PublicSiteSponsor,
+  type PublishedPublicSiteSnapshot,
+} from "~/modules/public-site/public-site";
+import {
+  PublicSiteCommandConflictError,
   PublicSiteNotFoundError,
   PublicSiteRevisionConflictError,
   PublicSiteService,
@@ -39,6 +45,90 @@ type ActionResponse = {
   committed?: boolean;
   draftRevision?: number;
 };
+
+function changedList(label: string, before: string[], after: string[]) {
+  const beforeSet = new Set(before);
+  const afterSet = new Set(after);
+  const added = after.filter((value) => !beforeSet.has(value));
+  const removed = before.filter((value) => !afterSet.has(value));
+  return [
+    ...(added.length ? [`${label} added: ${added.join(", ")}`] : []),
+    ...(removed.length ? [`${label} removed: ${removed.join(", ")}`] : []),
+  ];
+}
+
+function publicationChangeSummary(input: {
+  draft: PublicSiteDraft;
+  sponsors: PublicSiteSponsor[];
+  published: { configuration: PublishedPublicSiteSnapshot } | null;
+  speakerNames: Map<string, string>;
+  sessionNames: Map<string, string>;
+}) {
+  const enabledSections = (configuration: PublicSiteDraft) =>
+    configuration.sectionOrder
+      .filter((section) => configuration.sectionVisibility[section])
+      .map((section) => publicSiteSectionLabels[section]);
+  const enabledPages = (configuration: PublicSiteDraft) =>
+    PUBLIC_SITE_PAGE_TYPES.filter(
+      (page) => configuration.pages[page].enabled,
+    ).map((page) => configuration.pages[page].title);
+  const names = (ids: string[], labels: Map<string, string>) =>
+    ids.map((id) => labels.get(id) ?? id);
+  const nextSponsors = input.sponsors.map((sponsor) => sponsor.name);
+  if (!input.published) {
+    return [
+      `Sections to publish: ${enabledSections(input.draft).join(", ") || "none"}`,
+      `Pages to publish: ${enabledPages(input.draft).join(", ") || "none"}`,
+      `Sponsors to publish: ${nextSponsors.join(", ") || "none"}`,
+    ];
+  }
+
+  const before = input.published.configuration;
+  const changes = [
+    ...changedList(
+      "Sections",
+      enabledSections(before),
+      enabledSections(input.draft),
+    ),
+    ...changedList("Pages", enabledPages(before), enabledPages(input.draft)),
+    ...changedList(
+      "Featured speakers",
+      names(before.featuredSpeakerIds, input.speakerNames),
+      names(input.draft.featuredSpeakerIds, input.speakerNames),
+    ),
+    ...changedList(
+      "Featured sessions",
+      names(before.featuredSessionIds, input.sessionNames),
+      names(input.draft.featuredSessionIds, input.sessionNames),
+    ),
+    ...changedList(
+      "Sponsors",
+      before.sponsors.map((sponsor) => sponsor.name),
+      nextSponsors,
+    ),
+  ];
+  if (before.theme !== input.draft.theme)
+    changes.push(`Theme: ${before.theme} → ${input.draft.theme}`);
+  if (before.sectionOrder.join("\n") !== input.draft.sectionOrder.join("\n"))
+    changes.push("Homepage section order changed.");
+  const { sponsors: _sponsors, ...beforeEditorial } = before;
+  if (JSON.stringify(beforeEditorial) !== JSON.stringify(input.draft))
+    changes.push("Homepage or fixed-page editorial content changed.");
+  const beforeSponsors = new Map(
+    before.sponsors.map((sponsor) => [sponsor.id, sponsor]),
+  );
+  const updatedSponsors = input.sponsors
+    .filter((sponsor) => {
+      const prior = beforeSponsors.get(sponsor.id);
+      if (!prior) return false;
+      const { revision: _revision, ...next } = sponsor;
+      return JSON.stringify(prior) !== JSON.stringify(next);
+    })
+    .map((sponsor) => sponsor.name);
+  if (updatedSponsors.length)
+    changes.push(`Sponsors updated: ${updatedSponsors.join(", ")}`);
+  return changes.length ? changes : ["No public content changes detected."];
+}
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
@@ -71,16 +161,19 @@ export async function action({ request, context }: Route.ActionArgs) {
     const result =
       intent === "save-site"
         ? await service.saveDraft(viewer, {
+            commandId: values.get("commandId"),
             revision: values.get("revision"),
             configurationJson: values.get("configurationJson"),
           })
         : intent === "publish-site"
           ? await service.publish(viewer, {
+              commandId: values.get("commandId"),
               revision: values.get("revision"),
               confirmed: values.get("confirmed"),
             })
           : intent === "save-sponsor"
             ? await service.saveSponsor(viewer, {
+                commandId: values.get("commandId"),
                 id: values.get("id"),
                 revision: values.get("revision"),
                 name: values.get("name"),
@@ -92,12 +185,14 @@ export async function action({ request, context }: Route.ActionArgs) {
               })
             : intent === "delete-sponsor"
               ? await service.deleteSponsor(viewer, {
+                  commandId: values.get("commandId"),
                   id: values.get("id"),
                   revision: values.get("revision"),
                   confirmed: values.get("confirmed"),
                 })
               : intent === "save-recording"
                 ? await recordingService.saveDraft(viewer, {
+                    commandId: values.get("commandId"),
                     id: values.get("id"),
                     sessionId: values.get("sessionId"),
                     revision: values.get("revision"),
@@ -108,12 +203,14 @@ export async function action({ request, context }: Route.ActionArgs) {
                   })
                 : intent === "publish-recording"
                   ? await recordingService.publish(viewer, {
+                      commandId: values.get("commandId"),
                       id: values.get("id"),
                       revision: values.get("revision"),
                       confirmed: values.get("confirmed"),
                     })
                   : intent === "unpublish-recording"
                     ? await recordingService.unpublish(viewer, {
+                        commandId: values.get("commandId"),
                         id: values.get("id"),
                         revision: values.get("revision"),
                         confirmed: values.get("confirmed"),
@@ -166,7 +263,10 @@ export async function action({ request, context }: Route.ActionArgs) {
         },
         { status: 422 },
       );
-    if (error instanceof PublicSiteRevisionConflictError)
+    if (
+      error instanceof PublicSiteRevisionConflictError ||
+      error instanceof PublicSiteCommandConflictError
+    )
       return data<ActionResponse>(
         { ok: false, message: error.message },
         { status: 409 },
@@ -266,20 +366,29 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
   }
 
   function publishSite() {
+    const records = publicationChangeSummary({
+      draft: configuration,
+      sponsors: loaderData.sponsors,
+      published: loaderData.published,
+      speakerNames: new Map(
+        loaderData.programme?.speakers.map((speaker) => [
+          speaker.id,
+          speaker.displayName,
+        ]) ?? [],
+      ),
+      sessionNames: new Map(
+        loaderData.programme?.sessions.map((session) => [
+          session.id,
+          session.title,
+        ]) ?? [],
+      ),
+    });
     confirm(
       {
         title: "Publish the public event site?",
         description:
           "The saved homepage, navigation, pages and sponsor snapshot will replace the current public site.",
-        records: [
-          ...configuration.sectionOrder
-            .filter((section) => configuration.sectionVisibility[section])
-            .map((section) => publicSiteSectionLabels[section]),
-          ...PUBLIC_SITE_PAGE_TYPES.filter(
-            (page) => configuration.pages[page].enabled,
-          ).map((page) => configuration.pages[page].title),
-          `${loaderData.sponsors.length} sponsor record${loaderData.sponsors.length === 1 ? "" : "s"}`,
-        ],
+        records,
         confirmLabel: "Publish public site",
         tone: "primary",
       },
@@ -287,6 +396,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         submit(
           {
             intent: "publish-site",
+            commandId: crypto.randomUUID(),
             revision: String(draftBase.revision),
             confirmed: "true",
           },
@@ -310,6 +420,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         submit(
           {
             intent: "delete-sponsor",
+            commandId: crypto.randomUUID(),
             id,
             revision: String(revision),
             confirmed: "true",
@@ -334,6 +445,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         submit(
           {
             intent: "publish-recording",
+            commandId: crypto.randomUUID(),
             id: recording.id,
             revision: String(recording.draftRevision),
             confirmed: "true",
@@ -359,6 +471,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         submit(
           {
             intent: "unpublish-recording",
+            commandId: crypto.randomUUID(),
             id: recording.id,
             revision: String(recording.draftRevision),
             confirmed: "true",
@@ -381,7 +494,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="page-actions">
-          {loaderData.published && loaderData.programme ? (
+          {loaderData.published ? (
             <Link
               className="btn"
               to={`/public/programme/${loaderData.event.slug}`}
@@ -492,7 +605,8 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
             ({ revision: _revision, ...sponsor }) => sponsor,
           )}
           programme={loaderData.programme}
-          eventName={loaderData.event.name}
+          event={loaderData.publicEvent}
+          eventContentRevision={loaderData.publicEventContentRevision}
           publicOrigin={loaderData.publicOrigin}
           published={loaderData.published}
           canPublish={

@@ -10,15 +10,14 @@ import { PublicSiteService } from "./public-site-service.server";
 
 export async function getValidatedPublishedPublicSite(
   env: CloudflareEnvironment,
-  programme: PublishedProgramme,
+  slug: string,
+  programme: PublishedProgramme | null,
   now?: number,
 ) {
   try {
-    const site = await new PublicSiteService(env).getPublished(
-      programme.event.slug,
-      now,
-    );
-    if (site) resolvePublicSitePresentation(site.configuration, programme);
+    const site = await new PublicSiteService(env).getPublished(slug, now);
+    if (site)
+      resolvePublicSitePresentation(site.configuration, site.event, programme);
     return site;
   } catch (error) {
     if (

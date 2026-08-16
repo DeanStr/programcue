@@ -14,31 +14,40 @@ import type {
   PublicSiteDraft,
   PublishedPublicSiteSnapshot,
 } from "~/modules/public-site/public-site";
+import type { PublicSiteEvent } from "~/modules/public-site/public-site-service.server";
 
 function PromotionTools({
   origin,
+  event,
   programme,
   configuration,
+  siteContentRevision,
   siteRevision,
 }: {
   origin: string;
-  programme: PublishedProgramme;
+  event: PublicSiteEvent;
+  programme: PublishedProgramme | null;
   configuration: PublishedPublicSiteSnapshot;
+  siteContentRevision: string;
   siteRevision: number;
 }) {
   const [copyStatus, setCopyStatus] = useState("");
-  const { slug, name } = programme.event;
+  const { slug, name } = event;
   const publicUrl = `${origin}/public/programme/${encodeURIComponent(slug)}`;
-  const embed = programmeIframeSnippet(
-    programmeEmbedUrl(origin, slug, defaultProgrammeEmbedConfiguration()),
-    `${name} programme`,
-    720,
-  );
-  const announcement = `${name} is live. ${configuration.tagline || "Explore the published programme, speakers and schedule."} ${publicUrl}`;
+  const embed = programme
+    ? programmeIframeSnippet(
+        programmeEmbedUrl(origin, slug, defaultProgrammeEmbedConfiguration()),
+        `${name} programme`,
+        720,
+      )
+    : null;
+  const announcement = `${name} is live. ${configuration.tagline || "Explore event details and updates."} ${publicUrl}`;
   const socialCardUrl = new URL(`${publicUrl}/social-card.webp`);
   socialCardUrl.searchParams.set(
     "v",
-    `${programme.contentRevision}-${siteRevision}`,
+    programme
+      ? `${programme.contentRevision}-${siteContentRevision}-${siteRevision}`
+      : `${siteContentRevision}-${siteRevision}`,
   );
 
   async function copy(label: string, value: string) {
@@ -82,18 +91,20 @@ function PromotionTools({
           <ClipboardCopy aria-hidden size={14} /> Copy text
         </button>
       </label>
-      <label className="label mt">
-        Programme embed
-        <textarea className="textarea code" readOnly value={embed} rows={5} />
-        <button
-          type="button"
-          className="btn small mt"
-          onClick={() => void copy("embed", embed)}
-        >
-          <ClipboardCopy aria-hidden size={14} /> Copy embed
-        </button>
-      </label>
-      {programme.speakers.length ? (
+      {embed ? (
+        <label className="label mt">
+          Programme embed
+          <textarea className="textarea code" readOnly value={embed} rows={5} />
+          <button
+            type="button"
+            className="btn small mt"
+            onClick={() => void copy("embed", embed)}
+          >
+            <ClipboardCopy aria-hidden size={14} /> Copy embed
+          </button>
+        </label>
+      ) : null}
+      {programme?.speakers.length ? (
         <details className="public-site-speaker-promotion mt">
           <summary>Speaker promotion links</summary>
           <div>
@@ -146,7 +157,8 @@ export function AdminPublicSitePreview({
   configuration,
   draftSponsors,
   programme,
-  eventName,
+  event,
+  eventContentRevision,
   publicOrigin,
   published,
   canPublish,
@@ -155,7 +167,8 @@ export function AdminPublicSitePreview({
   configuration: PublicSiteDraft;
   draftSponsors: PublishedPublicSiteSnapshot["sponsors"];
   programme: PublishedProgramme | null;
-  eventName: string;
+  event: PublicSiteEvent;
+  eventContentRevision: string;
   publicOrigin: string;
   published: {
     configuration: PublishedPublicSiteSnapshot;
@@ -165,15 +178,11 @@ export function AdminPublicSitePreview({
   onPublish: () => void;
 }) {
   const [mobilePreview, setMobilePreview] = useState(false);
-  const draftPreview = programme
-    ? {
-        configuration: { ...configuration, sponsors: draftSponsors },
-        recordings: [],
-      }
-    : null;
-  const palette = programme
-    ? programmeAccentPalette(programme.event.brandAccent)
-    : null;
+  const draftPreview = {
+    configuration: { ...configuration, sponsors: draftSponsors },
+    recordings: [],
+  };
+  const palette = programmeAccentPalette(event.brandAccent);
 
   return (
     <div className="public-site-preview-stack">
@@ -203,32 +212,23 @@ export function AdminPublicSitePreview({
         className={`public-site-preview-frame${mobilePreview ? " is-mobile" : ""}`}
         data-public-theme={configuration.theme}
         style={
-          palette
-            ? ({
-                "--event-accent": palette.accent,
-                "--event-accent-light-ink": palette.ink,
-                "--event-accent-on-solid": palette.onAccent,
-              } as CSSProperties)
-            : undefined
+          {
+            "--event-accent": palette.accent,
+            "--event-accent-light-ink": palette.ink,
+            "--event-accent-on-solid": palette.onAccent,
+          } as CSSProperties
         }
       >
-        {programme && draftPreview ? (
-          <>
-            <header>
-              <strong>{eventName}</strong>
-              <small>{configuration.tagline}</small>
-            </header>
-            <PublicSiteHome programme={programme} site={draftPreview} preview />
-          </>
-        ) : (
-          <div className="empty-state">
-            <strong>Programme required</strong>
-            <p>
-              Publish a programme to preview referenced speakers, sessions and
-              statistics.
-            </p>
-          </div>
-        )}
+        <header>
+          <strong>{event.name}</strong>
+          <small>{configuration.tagline}</small>
+        </header>
+        <PublicSiteHome
+          event={event}
+          programme={programme}
+          site={draftPreview}
+          preview
+        />
       </section>
       <section className="card pad">
         <div>
@@ -247,11 +247,13 @@ export function AdminPublicSitePreview({
           Publish public site
         </button>
       </section>
-      {published && programme ? (
+      {published ? (
         <PromotionTools
           origin={publicOrigin}
+          event={event}
           programme={programme}
           configuration={published.configuration}
+          siteContentRevision={eventContentRevision}
           siteRevision={published.revision}
         />
       ) : null}

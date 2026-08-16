@@ -54,10 +54,12 @@ beforeEach(async () => {
   configuration.sectionVisibility.venue = false;
   const service = new PublicSiteService(testEnv);
   const saved = await service.saveDraft(viewer, {
+    commandId: crypto.randomUUID(),
     revision: 0,
     configurationJson: JSON.stringify(configuration),
   });
   await service.publish(viewer, {
+    commandId: crypto.randomUUID(),
     revision: saved.revision,
     confirmed: "true",
   });
@@ -105,7 +107,7 @@ describe("generated public social cards", () => {
       new PublicProgrammeService(testEnv).getPublished("future-of-events-2027"),
       new PublicSiteService(testEnv).getPublished("future-of-events-2027"),
     ]);
-    const version = `${programme!.contentRevision}-${site!.revision}`;
+    const version = `${programme!.contentRevision}-${site!.contentRevision}-${site!.revision}`;
     const response = await responseFor(
       testEnv,
       `?v=${encodeURIComponent(version)}`,

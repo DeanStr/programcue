@@ -752,13 +752,20 @@ this AIA-08 production slice.
 
 - **Production slice; local acceptance verified, deployment outstanding:**
   `/admin/site` is an owner/administrator-only, event-scoped editor backed by
-  migration `0035_public_event_site.sql`. It has one compare-and-set draft and
+  migration `0037_public_event_site.sql`. It has one compare-and-set draft and
   one immutable published snapshot, explicit preview and publication, and a
   unified branding/site/programme status view. The migration and Drizzle schema
   add event-scoped site, published-reference, sponsor and recording tables with
   organisation/event foreign-key isolation. Audit and event-change evidence is
   conditional on the exact committed operation. The migration validates and
   applies locally; it has not been applied to production.
+- **Independent event-home lifecycle:** A bounded site can publish before an
+  agenda for CFP promotion. Introduction, venue, FAQ, sponsor and fixed-page
+  content use the canonical event projection; featured speakers, featured
+  sessions, statistics and post-event recordings fail publication validation
+  until a programme exists. The main event route, fixed pages, metadata,
+  revisioned social card and desktop/mobile preview all render this
+  pre-programme state without fabricating a programme snapshot.
 - **Bounded composition:** The homepage has exactly six fixed sections:
   introduction, featured speakers, featured sessions, published-programme
   statistics, venue/map and FAQ. Organisers can hide them and use keyboard-
@@ -781,6 +788,17 @@ this AIA-08 production slice.
   request resource, programme/branding content identity and site publication
   revision. Invalid persisted snapshots or branding return a non-cacheable
   error; they do not disappear or receive a product-colour/placeholder fallback.
+- **Replay and snapshot integrity:** Every public-site, sponsor and recording
+  form submits a stable command UUID. The existing D1 idempotency ledger binds
+  it to the exact validated payload and durable result; exact replays converge
+  without duplicate revisions, entities or audit rows, while changed-payload
+  reuse conflicts. Site publication reads the site draft and ordered sponsors
+  in one SQL snapshot before its revision compare-and-set. The confirmation
+  names additions and removals rather than listing only the replacement's
+  enabled content. Published-session status is part of site publication,
+  recording publication and recording-read eligibility; the baseline trigger
+  blocks direct changes that would silently invalidate a featured record or
+  published recording.
 - **Promotion and post-event tools:** The organizer can copy the public URL,
   suggested announcement, escaped programme iframe and existing speaker share
   links, and can inspect the actual unfurl. Event and speaker social cards are

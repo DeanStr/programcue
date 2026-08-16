@@ -1,3 +1,4 @@
+-- Public event-site drafts, publication snapshots, sponsors and recordings.
 CREATE TABLE event_public_sites (
   event_id TEXT PRIMARY KEY,
   organisation_id TEXT NOT NULL,
@@ -97,6 +98,67 @@ CREATE TABLE event_session_recordings (
 CREATE INDEX idx_event_session_recordings_public
   ON event_session_recordings(event_id, published_at, session_id)
   WHERE published_at IS NOT NULL;
+
+CREATE TRIGGER prevent_referenced_public_session_status_change
+BEFORE UPDATE OF status ON sessions
+WHEN OLD.status = 'published'
+ AND NEW.status <> 'published'
+ AND (
+   EXISTS (
+     SELECT 1 FROM event_public_site_references reference
+      WHERE reference.event_id = OLD.event_id
+        AND reference.kind = 'session'
+        AND reference.record_id = OLD.id
+   )
+   OR EXISTS (
+     SELECT 1 FROM event_public_site_references reference
+     JOIN session_speakers relation
+       ON relation.event_id = reference.event_id
+      AND relation.person_id = reference.record_id
+      AND relation.session_id = OLD.id
+    WHERE reference.event_id = OLD.event_id
+      AND reference.kind = 'speaker'
+      AND NOT EXISTS (
+        SELECT 1
+          FROM session_speakers alternative_relation
+          JOIN sessions alternative_session
+            ON alternative_session.id = alternative_relation.session_id
+           AND alternative_session.event_id = alternative_relation.event_id
+           AND alternative_session.status = 'published'
+           AND alternative_session.visibility = 'public'
+          JOIN schedule_versions version
+            ON version.event_id = alternative_session.event_id
+           AND version.status = 'published'
+          JOIN schedule_entries entry
+            ON entry.event_id = version.event_id
+           AND entry.schedule_version_id = version.id
+           AND entry.session_id = alternative_session.id
+          JOIN schedule_session_contents content
+            ON content.event_id = entry.event_id
+           AND content.schedule_version_id = entry.schedule_version_id
+           AND content.session_id = entry.session_id
+           AND content.visibility = 'public'
+           AND content.content_status = 'approved'
+          JOIN people person
+            ON person.id = alternative_relation.person_id
+           AND person.profile_status = 'published'
+         WHERE alternative_relation.event_id = reference.event_id
+           AND alternative_relation.person_id = reference.record_id
+           AND alternative_relation.session_id <> OLD.id
+           AND alternative_relation.visibility = 'public'
+           AND alternative_relation.participation_status = 'confirmed'
+      )
+   )
+   OR EXISTS (
+     SELECT 1 FROM event_session_recordings recording
+      WHERE recording.event_id = OLD.event_id
+        AND recording.session_id = OLD.id
+        AND recording.published_at IS NOT NULL
+   )
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'Withdraw public-site references and recordings before changing this published session status');
+END;
 
 -- Managed embeds predate the controlled theme selector. The new contract is
 -- direct rather than dual-path: every persisted configuration now carries it.

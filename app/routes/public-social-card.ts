@@ -47,11 +47,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     });
   const slug = params.slug ?? "";
   const programme = await new PublicProgrammeService(env).getPublished(slug);
-  if (!programme)
-    throw new Response("Published public event site not found", {
-      status: 404,
-    });
-  const site = await getValidatedPublishedPublicSite(env, programme);
+  const site = await getValidatedPublishedPublicSite(env, slug, programme);
   if (!site)
     throw new Response("Published public event site not found", {
       status: 404,
@@ -65,20 +61,24 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       throw new Response("Unsupported social-card parameter", { status: 400 });
   }
   const requestedVersion = searchParams.get("v");
-  const currentVersion = `${programme.contentRevision}-${site.revision}`;
+  const currentVersion = programme
+    ? `${programme.contentRevision}-${site.contentRevision}-${site.revision}`
+    : `${site.contentRevision}-${site.revision}`;
   if (requestedVersion !== null && requestedVersion !== currentVersion)
     throw new Response("Social-card revision not found", { status: 404 });
   const speakerId = searchParams.get("speaker");
-  const speaker = speakerId
-    ? programme.speakers.find((candidate) => candidate.id === speakerId)
-    : null;
+  const speaker =
+    speakerId && programme
+      ? programme.speakers.find((candidate) => candidate.id === speakerId)
+      : null;
   if (speakerId && !speaker)
     throw new Response("Published speaker not found", { status: 404 });
-  const session = speaker
-    ? programme.sessions.find((candidate) =>
-        speaker.sessionIds.includes(candidate.id),
-      )
-    : null;
+  const session =
+    speaker && programme
+      ? programme.sessions.find((candidate) =>
+          speaker.sessionIds.includes(candidate.id),
+        )
+      : null;
   if (speaker && !session)
     throw new Response(
       "The published speaker is not linked to a published session.",
@@ -86,19 +86,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     );
   const title = speaker
     ? `${speaker.displayName} is speaking`
-    : programme.event.name;
+    : site.event.name;
   const subtitle = speaker
     ? session!.title
-    : site.configuration.tagline ||
-      programme.event.description ||
-      "Published event programme";
-  const place = [programme.event.venue, programme.event.city]
-    .filter(Boolean)
-    .join(" · ");
+    : site.configuration.tagline || site.event.description || "Public event";
+  const place = [site.event.venue, site.event.city].filter(Boolean).join(" · ");
   const eventContext = [
-    programme.event.startDate === programme.event.endDate
-      ? programme.event.startDate
-      : `${programme.event.startDate} – ${programme.event.endDate}`,
+    site.event.startDate === site.event.endDate
+      ? site.event.startDate
+      : `${site.event.startDate} – ${site.event.endDate}`,
     place,
   ]
     .filter(Boolean)
@@ -107,7 +103,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const subtitleLines = wrap(subtitle, 58);
   let accent: string;
   try {
-    accent = publishedSocialCardAccent(programme.event.brandAccent);
+    accent = publishedSocialCardAccent(site.event.brandAccent);
   } catch (error) {
     if (error instanceof PublishedPublicSiteInvariantError)
       throw publishedPublicSiteInvariantResponse();
@@ -117,10 +113,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     <rect width="1200" height="630" fill="#111c1b"/>
     <circle cx="1080" cy="-20" r="320" fill="${xml(accent)}" opacity="0.28"/>
     <rect x="72" y="68" width="14" height="494" rx="7" fill="${xml(accent)}"/>
-    <text x="122" y="126" fill="#c9d4d2" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="650">${xml(speaker ? programme.event.name : eventContext)}</text>
+    <text x="122" y="126" fill="#c9d4d2" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="650">${xml(speaker ? site.event.name : eventContext)}</text>
     ${titleLines.map((line, index) => `<text x="122" y="${235 + index * 76}" fill="#ffffff" font-family="Inter,Arial,sans-serif" font-size="64" font-weight="800">${xml(line)}</text>`).join("")}
     ${subtitleLines.map((line, index) => `<text x="122" y="${445 + index * 42}" fill="#c9d4d2" font-family="Inter,Arial,sans-serif" font-size="30">${xml(line)}</text>`).join("")}
-    <text x="122" y="570" fill="${xml(accent)}" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="700">PUBLIC EVENT PROGRAMME</text>
+    <text x="122" y="570" fill="${xml(accent)}" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="700">${programme ? "PUBLIC EVENT PROGRAMME" : "PUBLIC EVENT"}</text>
   </svg>`;
   try {
     const rendered = await env.IMAGES.input(

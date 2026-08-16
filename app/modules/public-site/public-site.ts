@@ -55,6 +55,9 @@ const restrictedMarkdown = (maximum: number, lengthMessage: string) =>
   });
 
 const recordIdSchema = z.string().trim().min(1).max(160);
+const commandIdSchema = z.uuid(
+  "Refresh before retrying this public-site action.",
+);
 const uniqueIdsSchema = z
   .array(recordIdSchema)
   .max(12)
@@ -192,6 +195,7 @@ export const publishedPublicSiteSponsorSchema = z
   .strict();
 
 export const sponsorInputSchema = z.object({
+  commandId: commandIdSchema,
   id: z
     .union([z.literal(""), recordIdSchema])
     .transform((value) => value || null),
@@ -212,6 +216,7 @@ const externalRecordingUrlSchema = optionalCredentialFreeHttpsUrlSchema({
 });
 
 export const recordingDraftInputSchema = z.object({
+  commandId: commandIdSchema,
   id: z
     .union([z.literal(""), recordIdSchema])
     .transform((value) => value || null),
@@ -229,12 +234,14 @@ export const recordingDraftInputSchema = z.object({
 });
 
 export const revisionInputSchema = z.object({
+  commandId: commandIdSchema,
   id: recordIdSchema,
   revision: z.coerce.number().int().positive(),
   confirmed: z.literal("true", { error: "Confirm this publication." }),
 });
 
 export const sitePublishInputSchema = z.object({
+  commandId: commandIdSchema,
   revision: z.coerce.number().int().positive(),
   confirmed: z.literal("true", { error: "Confirm the affected public pages." }),
 });
@@ -246,6 +253,7 @@ export const sitePublishInputSchema = z.object({
 export const PUBLIC_SITE_CONFIGURATION_JSON_MAX_LENGTH = 512_000;
 
 export const siteSaveInputSchema = z.object({
+  commandId: commandIdSchema,
   revision: z.coerce.number().int().nonnegative(),
   configurationJson: z
     .string()

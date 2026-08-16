@@ -3,6 +3,14 @@ import { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { recordingDraftInputSchema, revisionInputSchema } from "./public-site";
 import {
+  parsePublicSiteCommandReplay,
+  preparePublicSiteCommand,
+  publicSiteCommandClaimStatements,
+  publicSiteCommandCompletionStatement,
+  publicSiteCommandGuard,
+  resolvePublicSiteCommandRace,
+} from "./public-site-command.server";
+import {
   PublicSiteRevisionConflictError,
   PublicSiteValidationError,
 } from "./public-site-errors";
@@ -44,6 +52,8 @@ type PublishedRecordingRow = Omit<PublishedPublicRecording, "speakerNames"> & {
 };
 
 const speakerNamesSchema = z.array(z.string().trim().min(1).max(200));
+const entityCommandResponseSchema = z.object({ id: z.string().min(1) });
+const emptyCommandResponseSchema = z.object({});
 
 export class PublicRecordingService {
   constructor(private readonly env: CloudflareEnvironment) {}
@@ -79,6 +89,27 @@ export class PublicRecordingService {
 
   async saveDraft(viewer: Viewer, input: unknown) {
     const parsed = recordingDraftInputSchema.parse(input);
+    const prepared = await preparePublicSiteCommand(
+      this.env,
+      viewer,
+      "public_site.recording.save",
+      parsed.commandId,
+      {
+        id: parsed.id,
+        sessionId: parsed.sessionId,
+        revision: parsed.revision,
+        title: parsed.title,
+        recordingUrl: parsed.recordingUrl,
+        captionsUrl: parsed.captionsUrl,
+        transcriptUrl: parsed.transcriptUrl,
+      },
+    );
+    if (prepared.replay)
+      return parsePublicSiteCommandReplay(
+        prepared.replay,
+        entityCommandResponseSchema,
+      );
+    const command = prepared.command;
     const session = await this.env.DB.prepare(
       `SELECT session.id
          FROM sessions session
@@ -93,7 +124,8 @@ export class PublicRecordingService {
         "The selected recording session does not belong to this event.",
       );
     const id = parsed.id ?? crypto.randomUUID();
-    const operationId = crypto.randomUUID();
+    const operationId = command.id;
+    const commandGuard = publicSiteCommandGuard(viewer, command);
     const mutation = parsed.id
       ? this.env.DB.prepare(
           `UPDATE event_session_recordings
@@ -103,7 +135,8 @@ export class PublicRecordingService {
                   last_updated_by_person_id = ?, last_operation_id = ?,
                   updated_at = unixepoch()
             WHERE id = ? AND event_id = ? AND organisation_id = ?
-              AND session_id = ? AND draft_revision = ?`,
+              AND session_id = ? AND draft_revision = ?
+              AND EXISTS (${commandGuard.sql})`,
         ).bind(
           parsed.title,
           parsed.recordingUrl,
@@ -116,6 +149,7 @@ export class PublicRecordingService {
           viewer.organisationId,
           parsed.sessionId,
           parsed.revision,
+          ...commandGuard.bindings,
         )
       : this.env.DB.prepare(
           `INSERT INTO event_session_recordings (
@@ -123,7 +157,8 @@ export class PublicRecordingService {
              draft_recording_url, draft_captions_url, draft_transcript_url,
              draft_revision, last_updated_by_person_id, last_operation_id,
              created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, unixepoch(), unixepoch())`,
+           ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, unixepoch(), unixepoch()
+              WHERE EXISTS (${commandGuard.sql})`,
         ).bind(
           id,
           viewer.organisationId,
@@ -135,6 +170,7 @@ export class PublicRecordingService {
           parsed.transcriptUrl,
           viewer.personId,
           operationId,
+          ...commandGuard.bindings,
         );
     const evidence = publicSiteMutationEvidence(
       this.env,
@@ -152,15 +188,49 @@ export class PublicRecordingService {
         bindings: [id, viewer.eventId, viewer.organisationId, operationId],
       },
     );
-    const results = await this.env.DB.batch([mutation, ...evidence]);
-    if ((results[0]?.meta.changes ?? 0) !== 1)
+    const results = await this.env.DB.batch([
+      ...publicSiteCommandClaimStatements(this.env, viewer, command),
+      mutation,
+      ...evidence,
+      publicSiteCommandCompletionStatement(this.env, viewer, command, { id }),
+    ]);
+    if ((results[2]?.meta.changes ?? 0) !== 1) {
+      const replay = await resolvePublicSiteCommandRace(
+        this.env,
+        viewer,
+        command,
+      );
+      if (replay)
+        return parsePublicSiteCommandReplay(
+          replay,
+          entityCommandResponseSchema,
+        );
       throw new PublicSiteRevisionConflictError();
-    return { id, changeSequence: publicSiteChangeSequence(results[2]) };
+    }
+    if ((results[5]?.meta.changes ?? 0) !== 1)
+      throw new Error(
+        "The recording draft committed without durable command completion.",
+      );
+    return { id, changeSequence: publicSiteChangeSequence(results[4]) };
   }
 
   async publish(viewer: Viewer, input: unknown) {
     const parsed = revisionInputSchema.parse(input);
-    const operationId = crypto.randomUUID();
+    const prepared = await preparePublicSiteCommand(
+      this.env,
+      viewer,
+      "public_site.recording.publish",
+      parsed.commandId,
+      { id: parsed.id, revision: parsed.revision, confirmed: parsed.confirmed },
+    );
+    if (prepared.replay)
+      return parsePublicSiteCommandReplay(
+        prepared.replay,
+        emptyCommandResponseSchema,
+      );
+    const command = prepared.command;
+    const operationId = command.id;
+    const commandGuard = publicSiteCommandGuard(viewer, command);
     const evidence = publicSiteMutationEvidence(
       this.env,
       viewer,
@@ -184,6 +254,7 @@ export class PublicRecordingService {
       },
     );
     const results = await this.env.DB.batch([
+      ...publicSiteCommandClaimStatements(this.env, viewer, command),
       this.env.DB.prepare(
         `UPDATE event_session_recordings
             SET published_title = draft_title,
@@ -211,10 +282,12 @@ export class PublicRecordingService {
                AND content.session_id = entry.session_id
               WHERE entry.event_id = event_session_recordings.event_id
                 AND entry.session_id = event_session_recordings.session_id
+                AND session.status = 'published'
                 AND session.visibility = 'public'
                 AND content.visibility = 'public'
                 AND content.content_status = 'approved'
-            )`,
+            )
+            AND EXISTS (${commandGuard.sql})`,
       ).bind(
         viewer.personId,
         operationId,
@@ -222,6 +295,7 @@ export class PublicRecordingService {
         viewer.eventId,
         viewer.organisationId,
         parsed.revision,
+        ...commandGuard.bindings,
       ),
       this.env.DB.prepare(
         `UPDATE events
@@ -246,17 +320,44 @@ export class PublicRecordingService {
         parsed.revision,
       ),
       ...evidence,
+      publicSiteCommandCompletionStatement(this.env, viewer, command, {}),
     ]);
-    if ((results[0]?.meta.changes ?? 0) !== 1)
+    if ((results[2]?.meta.changes ?? 0) !== 1) {
+      const replay = await resolvePublicSiteCommandRace(
+        this.env,
+        viewer,
+        command,
+      );
+      if (replay)
+        return parsePublicSiteCommandReplay(replay, emptyCommandResponseSchema);
       throw new PublicSiteValidationError(
         "The recording changed or its session is not in the published programme.",
       );
-    return { changeSequence: publicSiteChangeSequence(results[3]) };
+    }
+    if ((results[6]?.meta.changes ?? 0) !== 1)
+      throw new Error(
+        "The recording publication committed without durable command completion.",
+      );
+    return { changeSequence: publicSiteChangeSequence(results[5]) };
   }
 
   async unpublish(viewer: Viewer, input: unknown) {
     const parsed = revisionInputSchema.parse(input);
-    const operationId = crypto.randomUUID();
+    const prepared = await preparePublicSiteCommand(
+      this.env,
+      viewer,
+      "public_site.recording.unpublish",
+      parsed.commandId,
+      { id: parsed.id, revision: parsed.revision, confirmed: parsed.confirmed },
+    );
+    if (prepared.replay)
+      return parsePublicSiteCommandReplay(
+        prepared.replay,
+        emptyCommandResponseSchema,
+      );
+    const command = prepared.command;
+    const operationId = command.id;
+    const commandGuard = publicSiteCommandGuard(viewer, command);
     const evidence = publicSiteMutationEvidence(
       this.env,
       viewer,
@@ -279,6 +380,7 @@ export class PublicRecordingService {
       },
     );
     const results = await this.env.DB.batch([
+      ...publicSiteCommandClaimStatements(this.env, viewer, command),
       this.env.DB.prepare(
         `UPDATE event_session_recordings
             SET published_title = NULL, published_recording_url = NULL,
@@ -287,7 +389,8 @@ export class PublicRecordingService {
                 last_updated_by_person_id = ?, last_operation_id = ?,
                 updated_at = unixepoch()
           WHERE id = ? AND event_id = ? AND organisation_id = ?
-            AND draft_revision = ? AND published_at IS NOT NULL`,
+            AND draft_revision = ? AND published_at IS NOT NULL
+            AND EXISTS (${commandGuard.sql})`,
       ).bind(
         viewer.personId,
         operationId,
@@ -295,6 +398,7 @@ export class PublicRecordingService {
         viewer.eventId,
         viewer.organisationId,
         parsed.revision,
+        ...commandGuard.bindings,
       ),
       this.env.DB.prepare(
         `UPDATE events
@@ -319,10 +423,23 @@ export class PublicRecordingService {
         operationId,
       ),
       ...evidence,
+      publicSiteCommandCompletionStatement(this.env, viewer, command, {}),
     ]);
-    if ((results[0]?.meta.changes ?? 0) !== 1)
+    if ((results[2]?.meta.changes ?? 0) !== 1) {
+      const replay = await resolvePublicSiteCommandRace(
+        this.env,
+        viewer,
+        command,
+      );
+      if (replay)
+        return parsePublicSiteCommandReplay(replay, emptyCommandResponseSchema);
       throw new PublicSiteRevisionConflictError();
-    return { changeSequence: publicSiteChangeSequence(results[3]) };
+    }
+    if ((results[6]?.meta.changes ?? 0) !== 1)
+      throw new Error(
+        "The recording withdrawal committed without durable command completion.",
+      );
+    return { changeSequence: publicSiteChangeSequence(results[5]) };
   }
 
   async getPublishedForEvent(
@@ -364,6 +481,7 @@ export class PublicRecordingService {
         WHERE recording.event_id = ? AND recording.organisation_id = ?
           AND recording.published_at IS NOT NULL
           AND entry.ends_at <= ?
+          AND session.status = 'published'
           AND session.visibility = 'public'
           AND content.visibility = 'public'
           AND content.content_status = 'approved'

@@ -14,6 +14,13 @@ export class PublicSiteRevisionConflictError extends Error {
   }
 }
 
+export class PublicSiteCommandConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PublicSiteCommandConflictError";
+  }
+}
+
 export class PublicSiteValidationError extends Error {
   constructor(message: string) {
     super(message);

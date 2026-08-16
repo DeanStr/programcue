@@ -35,27 +35,27 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const page = parsePage(params.page);
   const { env } = getCloudflareContext(context);
   const programme = await new PublicProgrammeService(env).getPublished(slug);
-  if (!programme)
-    throw new Response("Public event page not found", { status: 404 });
-  const site = await getValidatedPublishedPublicSite(env, programme);
+  const site = await getValidatedPublishedPublicSite(env, slug, programme);
   if (!site?.configuration.pages[page].enabled)
     throw new Response("Public event page not found", { status: 404 });
   const canonicalUrl = new URL(
-    `/public/programme/${encodeURIComponent(programme.event.slug)}/pages/${encodeURIComponent(page)}`,
+    `/public/programme/${encodeURIComponent(site.event.slug)}/pages/${encodeURIComponent(page)}`,
     request.url,
   ).toString();
   const socialCardUrl = new URL(
-    `/public/programme/${encodeURIComponent(programme.event.slug)}/social-card.webp`,
+    `/public/programme/${encodeURIComponent(site.event.slug)}/social-card.webp`,
     request.url,
   );
   socialCardUrl.searchParams.set(
     "v",
-    `${programme.contentRevision}-${site.revision}`,
+    programme
+      ? `${programme.contentRevision}-${site.contentRevision}-${site.revision}`
+      : `${site.contentRevision}-${site.revision}`,
   );
   const cacheHeaders = await publishedProgrammeCacheHeaders(
     request,
-    programme,
-    `public-site-${site.revision}`,
+    programme ?? site,
+    `public-site-${site.contentRevision}-${site.revision}`,
   );
   if (publishedProgrammeNotModified(request, cacheHeaders.etag)) {
     return new Response(null, { status: 304, headers: cacheHeaders });
@@ -81,10 +81,10 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   const page = loaderData.site.configuration.pages[loaderData.page];
   const description =
     restrictedMarkdownPlainText(page.body).slice(0, 220) ||
-    loaderData.programme.event.description ||
+    loaderData.site.event.description ||
     page.title;
   return [
-    { title: `${page.title} · ${loaderData.programme.event.name}` },
+    { title: `${page.title} · ${loaderData.site.event.name}` },
     {
       name: "description",
       content: description,
@@ -93,7 +93,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
     { property: "og:type", content: "website" },
     {
       property: "og:title",
-      content: `${page.title} · ${loaderData.programme.event.name}`,
+      content: `${page.title} · ${loaderData.site.event.name}`,
     },
     { property: "og:description", content: description },
     { property: "og:image", content: loaderData.socialCardUrl },
@@ -105,7 +105,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 };
 
 function PageBody({ loaderData }: Route.ComponentProps) {
-  const { programme, site, page } = loaderData;
+  const { site, page } = loaderData;
   const configuration = site.configuration.pages[page];
   if (page === "faq") {
     return (
@@ -133,15 +133,15 @@ function PageBody({ loaderData }: Route.ComponentProps) {
         <div className="public-site-venue">
           <MapPin aria-hidden />
           <div>
-            {publicVenueLabel(programme.event) !==
-            programme.event.venueAddress?.trim() ? (
-              <strong>{publicVenueLabel(programme.event)}</strong>
+            {publicVenueLabel(site.event) !==
+            site.event.venueAddress?.trim() ? (
+              <strong>{publicVenueLabel(site.event)}</strong>
             ) : null}
-            {programme.event.venueAddress ? (
-              <address>{programme.event.venueAddress}</address>
+            {site.event.venueAddress ? (
+              <address>{site.event.venueAddress}</address>
             ) : null}
-            {programme.event.venueMapUrl ? (
-              <a href={programme.event.venueMapUrl} rel="noreferrer">
+            {site.event.venueMapUrl ? (
+              <a href={site.event.venueMapUrl} rel="noreferrer">
                 Open map <ExternalLink aria-hidden size={13} />
               </a>
             ) : null}
@@ -192,13 +192,13 @@ function PageBody({ loaderData }: Route.ComponentProps) {
   }
   const body =
     configuration.body ||
-    (page === "about" ? (programme.event.description ?? "") : "");
+    (page === "about" ? (site.event.description ?? "") : "");
   return <RestrictedMarkdown>{body}</RestrictedMarkdown>;
 }
 
 export default function PublicSitePage(props: Route.ComponentProps) {
   const { programme, site, page } = props.loaderData;
-  const palette = programmeAccentPalette(programme.event.brandAccent);
+  const palette = programmeAccentPalette(site.event.brandAccent);
   return (
     <div
       className="public-shell event-branded public-site-page-shell"
@@ -212,16 +212,17 @@ export default function PublicSitePage(props: Route.ComponentProps) {
       }
     >
       <PublicEventHeader
+        event={site.event}
         programme={programme}
         site={site.configuration}
         activePage={page}
       />
       <main id="main" className="public-site-page">
-        <p className="pc-page-eyebrow">{programme.event.name}</p>
+        <p className="pc-page-eyebrow">{site.event.name}</p>
         <h1>{site.configuration.pages[page].title}</h1>
         <PageBody {...props} />
       </main>
-      <PublicEventFooter programme={programme} />
+      <PublicEventFooter event={site.event} programme={programme} />
     </div>
   );
 }

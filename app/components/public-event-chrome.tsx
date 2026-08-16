@@ -22,52 +22,66 @@ type EventNavigationLink = {
 };
 
 export function PublicEventHeader({
+  event,
   programme,
   site,
   activeSurface,
   activePage,
   itinerary,
 }: {
-  programme: PublishedProgramme;
+  event: PublishedProgramme["event"];
+  programme: PublishedProgramme | null;
   site: PublishedPublicSiteSnapshot | null;
   activeSurface?: PublicProgrammeSurface;
   activePage?: PublicSitePageType;
   itinerary?: { shared: boolean; savedCount: number };
 }) {
   const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
-  const slug = programme.event.slug;
+  const slug = event.slug;
   const overviewSurface =
     activeSurface === "overview" || activeSurface === "sessions";
   const programmeHref = `/public/programme/${slug}`;
   const links: EventNavigationLink[] = [
-    {
-      key: "sessions",
-      label: "All sessions",
-      href: overviewSurface ? "#programme" : `${programmeHref}#programme`,
-      active: Boolean(overviewSurface && !activePage),
-      routed: false,
-    },
-    {
-      key: "speakers",
-      label: "Speakers",
-      href: overviewSurface
-        ? "#speakers"
-        : publicProgrammeSurfacePath(slug, "speakers"),
-      active: activeSurface === "speakers",
-      routed: false,
-    },
-    ...(["agenda", "schedule", "gallery"] as const).map((surface) => ({
-      key: surface,
-      label:
-        surface === "agenda"
-          ? "Day agenda"
-          : surface === "schedule"
-            ? "Full schedule"
-            : "Speaker Gallery",
-      href: publicProgrammeSurfacePath(slug, surface),
-      active: activeSurface === surface,
-      routed: true,
-    })),
+    ...(programme
+      ? [
+          {
+            key: "sessions",
+            label: "All sessions",
+            href: overviewSurface ? "#programme" : `${programmeHref}#programme`,
+            active: Boolean(overviewSurface && !activePage),
+            routed: false,
+          },
+          {
+            key: "speakers",
+            label: "Speakers",
+            href: overviewSurface
+              ? "#speakers"
+              : publicProgrammeSurfacePath(slug, "speakers"),
+            active: activeSurface === "speakers",
+            routed: false,
+          },
+          ...(["agenda", "schedule", "gallery"] as const).map((surface) => ({
+            key: surface,
+            label:
+              surface === "agenda"
+                ? "Day agenda"
+                : surface === "schedule"
+                  ? "Full schedule"
+                  : "Speaker Gallery",
+            href: publicProgrammeSurfacePath(slug, surface),
+            active: activeSurface === surface,
+            routed: true,
+          })),
+        ]
+      : [
+          {
+            key: "home",
+            label: "Event home",
+            href: programmeHref,
+            active: !activePage,
+            routed: true,
+          },
+        ]),
     ...PUBLIC_SITE_PAGE_TYPES.flatMap((page) => {
       const configuration = site?.pages[page];
       return configuration?.enabled
@@ -114,20 +128,16 @@ export function PublicEventHeader({
   return (
     <header className="public-top">
       <Link
-        aria-label={`${programme.event.name} programme`}
+        aria-label={`${event.name} event home`}
         className="brand"
         to={programmeHref}
       >
-        {programme.event.logoUrl ? (
-          <img
-            className="public-event-logo"
-            src={programme.event.logoUrl}
-            alt=""
-          />
+        {event.logoUrl ? (
+          <img className="public-event-logo" src={event.logoUrl} alt="" />
         ) : (
           <span className="public-brand-mark" aria-hidden="true" />
         )}
-        <span className="public-brand-name">{programme.event.name}</span>
+        <span className="public-brand-name">{event.name}</span>
       </Link>
       <nav className="public-nav" aria-label="Programme">
         {links.map((link) => navigationLink(link))}
@@ -154,32 +164,39 @@ export function PublicEventHeader({
 }
 
 export function PublicEventFooter({
+  event,
   programme,
 }: {
-  programme: PublishedProgramme;
+  event: PublishedProgramme["event"];
+  programme: PublishedProgramme | null;
 }) {
-  const published = new Intl.DateTimeFormat("en", {
-    dateStyle: "long",
-    timeZone: programme.event.timezone,
-  }).format(new Date(programme.version.publishedAt * 1_000));
+  const published = programme
+    ? new Intl.DateTimeFormat("en", {
+        dateStyle: "long",
+        timeZone: event.timezone,
+      }).format(new Date(programme.version.publishedAt * 1_000))
+    : null;
   return (
     <footer className="public-footer">
       <div>
         <p className="public-footer-primary">
-          All times shown in {programme.event.timezone}.
+          Event dates and times use {event.timezone}.
         </p>
         <p className="public-footer-secondary">
-          Programme version {programme.version.versionNumber} · published{" "}
-          {published}
+          {programme
+            ? `Programme version ${programme.version.versionNumber} · published ${published}`
+            : `${event.startDate}${event.startDate === event.endDate ? "" : ` – ${event.endDate}`}`}
         </p>
       </div>
       <div className="public-footer-actions">
-        <a
-          className="btn small"
-          href={`/api/v1/public/events/${encodeURIComponent(programme.event.slug)}/calendar.ics`}
-        >
-          Add to calendar (.ics)
-        </a>
+        {programme ? (
+          <a
+            className="btn small"
+            href={`/api/v1/public/events/${encodeURIComponent(event.slug)}/calendar.ics`}
+          >
+            Add to calendar (.ics)
+          </a>
+        ) : null}
         <p className="public-footer-secondary">Powered by Program Cue</p>
       </div>
     </footer>

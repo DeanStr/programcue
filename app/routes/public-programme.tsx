@@ -106,6 +106,31 @@ function surfaceFromParam(
  * else. The event owns this page; the platform does not appear.
  */
 export const meta: Route.MetaFunction = ({ loaderData }) => {
+  if (loaderData && "eventSiteOnly" in loaderData) {
+    const { event, configuration, contentRevision, revision } = loaderData.site;
+    const description =
+      configuration.tagline || event.description || event.name;
+    const socialCard = new URL(
+      `/public/programme/${encodeURIComponent(event.slug)}/social-card.webp`,
+      loaderData.canonicalUrl,
+    );
+    socialCard.searchParams.set("v", `${contentRevision}-${revision}`);
+    return [
+      { title: event.name },
+      { name: "description", content: description },
+      { tagName: "link", rel: "canonical", href: loaderData.canonicalUrl },
+      { property: "og:type", content: "website" },
+      { property: "og:site_name", content: event.name },
+      { property: "og:title", content: event.name },
+      { property: "og:description", content: description },
+      { property: "og:url", content: loaderData.canonicalUrl },
+      { property: "og:image", content: socialCard.toString() },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:description", content: description },
+      { name: "twitter:image", content: socialCard.toString() },
+      { name: "theme-color", content: event.brandAccent },
+    ];
+  }
   if (!loaderData || !("programme" in loaderData) || !loaderData.programme) {
     return [{ title: "Event programme" }];
   }
@@ -133,7 +158,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   if (generatedShareImage) {
     generatedShareImage.searchParams.set(
       "v",
-      `${loaderData.programme.contentRevision}-${loaderData.site!.revision}`,
+      `${loaderData.programme.contentRevision}-${loaderData.site!.contentRevision}-${loaderData.site!.revision}`,
     );
   }
   const shareImage =
@@ -268,11 +293,41 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   }
   const service = new PublicProgrammeService(env);
   const programme = await service.getPublished(slug);
-  if (!programme)
-    throw new Response("Published event programme not found", { status: 404 });
+  if (!programme) {
+    if (embedded || managedEmbed || params.surface) {
+      throw new Response("Published event programme not found", {
+        status: 404,
+      });
+    }
+    const site = await getValidatedPublishedPublicSite(env, slug, null);
+    if (!site) throw new Response("Published event not found", { status: 404 });
+    const canonicalUrl = new URL(
+      `/public/programme/${encodeURIComponent(site.event.slug)}`,
+      request.url,
+    ).toString();
+    const cacheHeaders = await publishedProgrammeCacheHeaders(
+      request,
+      site,
+      `public-site-${site.revision}`,
+    );
+    if (publishedProgrammeNotModified(request, cacheHeaders.etag)) {
+      return new Response(null, { status: 304, headers: cacheHeaders });
+    }
+    return data(
+      {
+        eventSiteOnly: true as const,
+        site,
+        canonicalUrl,
+        programme: null,
+        speakerShare: null,
+        surface: "overview" as const,
+      },
+      { headers: cacheHeaders },
+    );
+  }
   const site = embedded
     ? null
-    : await getValidatedPublishedPublicSite(env, programme);
+    : await getValidatedPublishedPublicSite(env, slug, programme);
   let surface: PublicProgrammeSurface;
   try {
     surface = managedEmbed
@@ -610,10 +665,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 import { PublicProgrammeWorkspace } from "~/components/public-programme-workspace";
+import { PublicEventSiteWorkspace } from "~/components/public-site-content";
 
 export { descriptionSnippet } from "~/components/public-programme-model";
 
 export default function PublicProgramme({ loaderData }: Route.ComponentProps) {
+  if ("eventSiteOnly" in loaderData)
+    return <PublicEventSiteWorkspace site={loaderData.site} />;
   return <PublicProgrammeWorkspace loaderData={loaderData} />;
 }
 

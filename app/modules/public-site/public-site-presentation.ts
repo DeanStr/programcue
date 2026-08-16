@@ -48,12 +48,10 @@ export function validatePublicSiteCanonicalEvent(
 
 export function resolvePublicSitePresentation(
   configuration: PublicSiteDraft,
-  programme: PublishedProgramme,
+  event: CanonicalPublicEvent,
+  programme: PublishedProgramme | null,
 ) {
-  const venueLabel = validatePublicSiteCanonicalEvent(
-    configuration,
-    programme.event,
-  );
+  const venueLabel = validatePublicSiteCanonicalEvent(configuration, event);
 
   if (
     configuration.sectionVisibility.faq &&
@@ -107,6 +105,22 @@ export function resolvePublicSitePresentation(
     throw new PublishedPublicSiteInvariantError(
       "Post-event mode requires a heading.",
     );
+  }
+
+  if (
+    !programme &&
+    (configuration.sectionVisibility.featured_speakers ||
+      configuration.sectionVisibility.featured_sessions ||
+      configuration.sectionVisibility.statistics ||
+      configuration.postEvent.enabled)
+  ) {
+    throw new PublishedPublicSiteInvariantError(
+      "Featured speakers, featured sessions, statistics and post-event recordings require a published programme.",
+    );
+  }
+
+  if (!programme) {
+    return { featuredSpeakers: [], featuredSessions: [], venueLabel };
   }
 
   const speakerById = new Map(

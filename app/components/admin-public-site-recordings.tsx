@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Form } from "react-router";
 
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
@@ -67,6 +68,15 @@ export function AdminPublicSiteRecordings({
   onPublish: (recording: PublicRecordingWorkspaceItem) => void;
   onUnpublish: (recording: PublicRecordingWorkspaceItem) => void;
 }) {
+  const commandIds = useMemo(() => {
+    const ids = new Map(
+      recordings.map(
+        (recording) => [recording.id, crypto.randomUUID()] as const,
+      ),
+    );
+    ids.set("", crypto.randomUUID());
+    return ids;
+  }, [recordings]);
   return (
     <section className="card pad">
       <div className="card-title">
@@ -85,6 +95,11 @@ export function AdminPublicSiteRecordings({
           key={recording.id}
         >
           <input type="hidden" name="intent" value="save-recording" />
+          <input
+            type="hidden"
+            name="commandId"
+            value={commandIds.get(recording.id)}
+          />
           <input type="hidden" name="id" value={recording.id} />
           <input type="hidden" name="sessionId" value={recording.sessionId} />
           <input
@@ -130,6 +145,7 @@ export function AdminPublicSiteRecordings({
       {programme ? (
         <Form method="post" className="public-site-record-editor">
           <input type="hidden" name="intent" value="save-recording" />
+          <input type="hidden" name="commandId" value={commandIds.get("")} />
           <input type="hidden" name="id" value="" />
           <input type="hidden" name="revision" value="0" />
           <label className="label">

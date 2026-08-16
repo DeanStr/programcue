@@ -67,13 +67,17 @@ describe("public event site rules", () => {
       PUBLIC_SITE_CONFIGURATION_JSON_MAX_LENGTH,
     );
     expect(
-      siteSaveInputSchema.parse({ revision: 0, configurationJson })
-        .configurationJson,
+      siteSaveInputSchema.parse({
+        commandId: crypto.randomUUID(),
+        revision: 0,
+        configurationJson,
+      }).configurationJson,
     ).toEqual(draft);
   });
 
   it("rejects credentialed or non-HTTPS sponsor addresses", () => {
     const input = {
+      commandId: crypto.randomUUID(),
       id: "",
       revision: 0,
       name: "Main partner",
@@ -141,6 +145,7 @@ describe("public event site rules", () => {
     } as unknown as PublishedProgramme;
     const markup = renderToStaticMarkup(
       createElement(PublicSiteHome, {
+        event: programme.event,
         programme,
         site: {
           configuration,
@@ -187,6 +192,7 @@ describe("public event site rules", () => {
     } as unknown as PublishedProgramme;
     const markup = renderToStaticMarkup(
       createElement(PublicSiteHome, {
+        event: programme.event,
         programme,
         site: { configuration, recordings: [] },
         preview: true,
@@ -244,8 +250,30 @@ describe("public event site rules", () => {
       sessions: [],
       speakers: [],
     } as unknown as PublishedProgramme;
-    expect(() => resolvePublicSitePresentation(draft, programme)).toThrow(
-      /missing-session.*current published programme/i,
+    expect(() =>
+      resolvePublicSitePresentation(draft, programme.event, programme),
+    ).toThrow(/missing-session.*current published programme/i);
+  });
+
+  it("requires programme-backed sections to be hidden before pre-programme publication", () => {
+    const draft = defaultPublicSiteDraft();
+    draft.sectionVisibility.introduction = false;
+    draft.sectionVisibility.venue = false;
+    const event = {
+      description: null,
+      venue: null,
+      city: null,
+      venueAddress: null,
+    };
+    expect(() => resolvePublicSitePresentation(draft, event, null)).toThrow(
+      /require a published programme/i,
     );
+
+    draft.sectionVisibility.statistics = false;
+    expect(resolvePublicSitePresentation(draft, event, null)).toEqual({
+      featuredSpeakers: [],
+      featuredSessions: [],
+      venueLabel: undefined,
+    });
   });
 });

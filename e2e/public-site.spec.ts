@@ -114,13 +114,17 @@ test("organisers compose, preview and publish the bounded public event site", as
   const confirmation = page.getByRole("dialog", {
     name: "Publish the public event site?",
   });
-  await expect(confirmation).toContainText("About");
-  await expect(confirmation).toContainText("Sponsors");
-  await expect(confirmation).toContainText("1 sponsor record");
+  await expect(confirmation).toContainText("Pages to publish: About, Sponsors");
+  await expect(confirmation).toContainText(
+    "Sponsors to publish: Example Partner",
+  );
   await confirmation
     .getByRole("button", { name: "Publish public site" })
     .click();
   await expect(page.getByText("Public event site published.")).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "Generated social sharing preview" }),
+  ).toHaveAttribute("src", /social-card\.webp\?v=.+/u);
   await expect(page.getByText("Speaker promotion links")).toBeVisible();
 
   await page.goto("/public/programme/future-of-events-2027");
@@ -175,4 +179,31 @@ test("organisers compose, preview and publish the bounded public event site", as
   );
   expect(socialCard.ok()).toBe(true);
   expect(socialCard.headers()["content-type"]).toBe("image/webp");
+
+  await page.goto("/admin/site");
+  await page
+    .locator(".public-site-page-editor fieldset")
+    .filter({ has: page.locator("legend", { hasText: "About" }) })
+    .getByLabel("Publish this page with the site")
+    .uncheck();
+  await page
+    .locator(".public-site-page-editor fieldset")
+    .filter({ has: page.locator("legend", { hasText: "Sponsors" }) })
+    .getByLabel("Publish this page with the site")
+    .uncheck();
+  await page.getByRole("button", { name: "Save site draft" }).click();
+  const sponsorEditor = page.locator("form.public-site-record-editor").filter({
+    has: page.locator('input[name="name"][value="Example Partner"]'),
+  });
+  await sponsorEditor.getByRole("button", { name: "Remove" }).click();
+  await page
+    .getByRole("dialog", { name: "Remove Example Partner?" })
+    .getByRole("button", { name: "Remove sponsor" })
+    .click();
+  await page.getByRole("button", { name: "Publish public site" }).click();
+  const replacement = page.getByRole("dialog", {
+    name: "Publish the public event site?",
+  });
+  await expect(replacement).toContainText("Pages removed: About, Sponsors");
+  await expect(replacement).toContainText("Sponsors removed: Example Partner");
 });
