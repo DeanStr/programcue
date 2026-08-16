@@ -208,6 +208,20 @@ describe("production evaluation guide", () => {
     expect(
       unlockedGuide.identities.map((identity) => String(identity.key)),
     ).not.toContain("sbek_second_speaker");
+    expect(
+      unlockedGuide.identities.find((identity) => identity.key === "organizer"),
+    ).toMatchObject({
+      whatToTry: expect.stringContaining(
+        "enable reviewer AI in Review & decisions",
+      ),
+    });
+    expect(
+      unlockedGuide.identities.find((identity) => identity.key === "reviewer"),
+    ).toMatchObject({
+      whatToTry: expect.stringContaining(
+        "save an independent rubric response",
+      ),
+    });
 
     const selected = await action({
       request: request(
@@ -820,6 +834,9 @@ describe("production evaluation guide", () => {
     await expect(readReviewer()).resolves.toMatchObject({
       label: "Assigned reviewer",
       destination: "/review/workbench",
+      whatToTry: expect.stringContaining(
+        "save an independent rubric response",
+      ),
       primaryActionLabel: "Open Sam's assigned review",
       progress: { clean: false, title: "Review assigned" },
     });

@@ -249,6 +249,13 @@ review aggregates. Provider work uses a bounded lease; an interrupted or
 provider-completed generation that cannot be reconciled becomes an audited
 failed operation. Another provider call requires the reviewer to acknowledge
 the possible duplicate usage or charge explicitly and is never automatic.
+Immediately before sending evidence to the provider, one guarded D1 claim
+revalidates the exact event repository and opt-in revision, reviewer pool,
+assignment status and revision, active round and scorecard, immutable source
+snapshot and saved initial draft. The claim also requires that no active
+suggestion or unexpired generation exists for the assignment. A failed
+provider call remains visible for duplicate-risk acknowledgement even when a
+later draft save advances the assignment revision.
 
 ## Selective deterministic scheduling
 

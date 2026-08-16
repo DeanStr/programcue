@@ -407,7 +407,9 @@ export const reviews = sqliteTable(
     confidence: integer("confidence"),
     submitterFeedback: text("submitter_feedback"),
     privateNotes: text("private_notes"),
-    aiSuggestionId: text("ai_suggestion_id"),
+    aiSuggestionId: text("ai_suggestion_id").references(
+      () => reviewerAiSuggestions.id,
+    ),
     importedCriterionIdsJson: text("imported_criterion_ids_json")
       .notNull()
       .default("[]"),
@@ -645,7 +647,9 @@ export const reviewRevisions = sqliteTable(
     scorecardId: text("scorecard_id"),
     scorecardVersion: integer("scorecard_version"),
     criteriaSnapshotJson: text("criteria_snapshot_json"),
-    aiSuggestionId: text("ai_suggestion_id"),
+    aiSuggestionId: text("ai_suggestion_id").references(
+      () => reviewerAiSuggestions.id,
+    ),
     importedCriterionIdsJson: text("imported_criterion_ids_json")
       .notNull()
       .default("[]"),

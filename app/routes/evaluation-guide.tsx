@@ -239,7 +239,8 @@ function reviewerPresentation(
         label,
         description: `Sam has ${itemCount(state.assignmentCount, "review assignment")} and no saved review draft.`,
         destination: "/review/workbench",
-        whatToTry: "Open an assigned proposal and begin scoring.",
+        whatToTry:
+          "Open the assigned proposal, save an independent rubric response, then request and inspect AI suggestions.",
         primaryActionLabel: "Open Sam's assigned review",
         progress: {
           clean: false,

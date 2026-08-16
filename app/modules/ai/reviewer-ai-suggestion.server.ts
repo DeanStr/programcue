@@ -413,15 +413,6 @@ export class ReviewerAiSuggestionService {
           AND operation.status = 'failed'
           AND assignment.id = ?
           AND assignment.evaluator_person_id = ?
-          AND assignment.revision = json_extract(
-            operation.payload_json, '$.assignmentRevision'
-          )
-          AND round.scorecard_id = json_extract(
-            operation.payload_json, '$.scorecardId'
-          )
-          AND round.scorecard_version = json_extract(
-            operation.payload_json, '$.scorecardVersion'
-          )
           AND json_extract(operation.result_json, '$.retrySafe') = 0
           AND NOT EXISTS (
             SELECT 1 FROM operation_jobs retry
@@ -713,18 +704,83 @@ export class ReviewerAiSuggestionService {
            cancellable, claim_token, claim_expires_at,
            started_at, created_at, updated_at
          )
-         SELECT ?, ?, ?, ?, 'ai.reviewer_suggestion.generate', ?, ?,
+         SELECT ?, event.organisation_id, assignment.event_id,
+                assignment.evaluator_person_id,
+                'ai.reviewer_suggestion.generate', ?, ?,
                 'running', ?, 1, 0, 0, 1, 0, ?, unixepoch() + ?,
                 unixepoch(), unixepoch(), unixepoch()
-          WHERE NOT EXISTS (
-            SELECT 1 FROM operation_jobs operation
-             WHERE operation.event_id = ? AND operation.idempotency_key = ?
-          )`,
+           FROM evaluator_assignments assignment
+           JOIN evaluation_rounds round
+             ON round.id = assignment.round_id
+            AND round.event_id = assignment.event_id
+           JOIN evaluation_plans plan
+             ON plan.id = round.plan_id AND plan.event_id = round.event_id
+           JOIN evaluation_round_reviewers pool
+             ON pool.event_id = assignment.event_id
+            AND pool.round_id = assignment.round_id
+            AND pool.person_id = assignment.evaluator_person_id
+           JOIN reviews review
+             ON review.assignment_id = assignment.id
+            AND review.event_id = assignment.event_id
+            AND review.status IN ('draft','reopened')
+           JOIN events event
+             ON event.id = assignment.event_id AND event.organisation_id = ?
+            AND event.repository_provider = 'd1'
+           JOIN event_ai_review_settings setting
+             ON setting.event_id = assignment.event_id
+            AND setting.enabled = 1 AND setting.revision = ?
+           LEFT JOIN submissions submission
+             ON submission.id = assignment.submission_id
+            AND submission.event_id = assignment.event_id
+           LEFT JOIN sessions session
+             ON session.id = assignment.session_id
+            AND session.event_id = assignment.event_id
+          WHERE assignment.id = ? AND assignment.event_id = ?
+            AND assignment.evaluator_person_id = ? AND assignment.revision = ?
+            AND assignment.status IN ('assigned','in_progress','reopened')
+            AND assignment.round_id = ?
+            AND plan.status = 'active' AND round.status = 'active'
+            AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
+            AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
+            AND round.scorecard_id = ? AND round.scorecard_version = ?
+            AND COALESCE(submission.submitted_snapshot_json,
+                         assignment.session_snapshot_json) = ?
+            AND EXISTS (SELECT 1 FROM json_each(review.scores_json))
+            AND (
+              (assignment.submission_id IS NOT NULL
+               AND ${reviewableSubmissionSql("submission", "review")})
+              OR
+              (assignment.session_id IS NOT NULL
+               AND session.status NOT IN ('cancelled','archived'))
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM reviewer_ai_suggestions active
+               WHERE active.event_id = assignment.event_id
+                 AND active.assignment_id = assignment.id
+                 AND active.evaluator_person_id = assignment.evaluator_person_id
+                 AND active.status IN ('offered','imported')
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM operation_jobs active_operation
+               WHERE active_operation.event_id = assignment.event_id
+                 AND active_operation.requested_by_person_id =
+                     assignment.evaluator_person_id
+                 AND active_operation.type = 'ai.reviewer_suggestion.generate'
+                 AND active_operation.status = 'running'
+                 AND (
+                   active_operation.claim_expires_at IS NULL
+                   OR active_operation.claim_expires_at > unixepoch()
+                 )
+                 AND json_extract(
+                   active_operation.payload_json, '$.assignmentId'
+                 ) = assignment.id
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM operation_jobs operation
+               WHERE operation.event_id = ? AND operation.idempotency_key = ?
+            )`,
       ).bind(
         operationId,
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
         operationIdempotencyKey,
         operationId,
         JSON.stringify({
@@ -740,6 +796,16 @@ export class ReviewerAiSuggestionService {
         }),
         claimToken,
         GENERATION_LEASE_SECONDS,
+        viewer.organisationId,
+        setting.revision,
+        assignmentId,
+        viewer.eventId,
+        viewer.personId,
+        binding.assignmentRevision,
+        binding.roundId,
+        binding.scorecardId,
+        binding.scorecardVersion,
+        binding.sourceSnapshotJson,
         viewer.eventId,
         operationIdempotencyKey,
       ),
@@ -771,7 +837,7 @@ export class ReviewerAiSuggestionService {
     ]);
     if ((operationResults[0]?.meta.changes ?? 0) !== 1) {
       throw new ReviewerAiSuggestionStateError(
-        "AI suggestions are already being generated for this assignment. Wait for that request to finish.",
+        "AI suggestions could not start because this assignment or event setting changed, an active suggestion exists, or another request is already being generated. Refresh before trying again.",
       );
     }
     if ((operationResults[1]?.meta.changes ?? 0) !== 1) {

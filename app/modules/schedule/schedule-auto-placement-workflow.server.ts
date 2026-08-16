@@ -123,7 +123,7 @@ function assertAutoPlacementBatchFits(
   const statementCount = autoPlacementD1StatementCount(computation);
   if (statementCount > MAX_AUTO_PLACEMENT_D1_STATEMENTS) {
     throw new ScheduleConfigurationError(
-      `Auto-place cannot apply this proposal atomically because it requires ${statementCount} D1 statements; the safe limit is ${MAX_AUTO_PLACEMENT_D1_STATEMENTS}. Place some sessions manually and prepare a fresh preview.`,
+      `Auto-place cannot apply this proposal atomically because it requires ${statementCount} D1 statements; the safe limit is ${MAX_AUTO_PLACEMENT_D1_STATEMENTS}. Prepare a fresh preview and select fewer proposed placements.`,
     );
   }
 }

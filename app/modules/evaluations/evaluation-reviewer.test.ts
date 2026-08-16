@@ -289,6 +289,50 @@ async function addRoundReviewer(
     .run();
 }
 
+async function prepareReviewerAiGenerationFixture(roundId: string) {
+  await resetEvaluationFixture();
+  const testEnv = env as unknown as CloudflareEnvironment;
+  const service = new EvaluationService(testEnv);
+  await service.savePlan(admin, {
+    revision: 0,
+    name: "Reviewer AI provider-boundary plan",
+    status: "active",
+    rounds: [
+      {
+        id: roundId,
+        name: "Initial review",
+        anonymous: true,
+        criteria,
+      },
+    ],
+  });
+  await addRoundReviewer(roundId);
+  await service.assign(admin, {
+    roundId,
+    targetType: "submission",
+    targetIds: ["eval-test-submission"],
+    evaluatorPersonIds: [evaluator.personId],
+  });
+  const workspace = await service.getReviewerWorkspace(evaluator);
+  const assignmentId = workspace.selected!.id;
+  const initialReview = await service.saveReview(evaluator, {
+    assignmentId,
+    revision: 0,
+    scores: { "eval-test-relevance": 3 },
+    recommendation: null,
+    confidence: null,
+    submitterFeedback: "",
+    privateNotes: "",
+    conflictAffirmed: false,
+    intent: "save",
+  });
+  await new ReviewerAiSuggestionService(testEnv).updateSetting(admin, {
+    enabled: true,
+    revision: 0,
+  });
+  return { assignmentId, initialReview, service, testEnv };
+}
+
 describe("evaluation vertical slice", () => {
   beforeEach(async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
@@ -362,6 +406,140 @@ describe("evaluation vertical slice", () => {
         )
           .bind(admin.eventId)
           .run();
+      }
+    });
+
+    it.each(["disablement", "recusal"] as const)(
+      "revalidates reviewer AI %s at the provider-call boundary",
+      async (race) => {
+        const { assignmentId, service, testEnv } =
+          await prepareReviewerAiGenerationFixture(
+            `eval-ai-boundary-${race}-round`,
+          );
+        let providerCalls = 0;
+        const provider: AiModelProvider = {
+          providerName: "Workers AI",
+          model: "must-not-run",
+          async create() {
+            providerCalls += 1;
+            throw new Error("Provider must not run after reviewer access changes.");
+          },
+        };
+        const racingEnv = withBatchRace(testEnv, async () => {
+          if (race === "disablement") {
+            await new ReviewerAiSuggestionService(testEnv).updateSetting(admin, {
+              enabled: false,
+              revision: 1,
+            });
+            return;
+          }
+          await service.declareConflict(evaluator, {
+            assignmentId,
+            reason: "A concurrent conflict declaration requires recusal.",
+          });
+        });
+
+        try {
+          await expect(
+            new ReviewerAiSuggestionService(racingEnv, { provider }).generate(
+              evaluator,
+              { assignmentId },
+            ),
+          ).rejects.toThrow(/could not start/i);
+          expect(providerCalls).toBe(0);
+          expect(
+            await env.DB.prepare(
+              `SELECT COUNT(*) AS count FROM operation_jobs
+                WHERE event_id = ?
+                  AND type = 'ai.reviewer_suggestion.generate'
+                  AND status = 'running'
+                  AND json_extract(payload_json, '$.assignmentId') = ?`,
+            )
+              .bind(evaluator.eventId, assignmentId)
+              .first<{ count: number }>(),
+          ).toEqual({ count: 0 });
+        } finally {
+          await resetEvaluationFixture();
+        }
+      },
+    );
+
+    it("blocks a different-revision request while provider work is live and preserves failed-call acknowledgement", async () => {
+      const { assignmentId, initialReview, service, testEnv } =
+        await prepareReviewerAiGenerationFixture(
+          "eval-ai-different-revision-round",
+        );
+      let releaseProvider!: () => void;
+      let providerStarted!: () => void;
+      const providerRelease = new Promise<void>((resolve) => {
+        releaseProvider = resolve;
+      });
+      const providerStart = new Promise<void>((resolve) => {
+        providerStarted = resolve;
+      });
+      let providerCalls = 0;
+      const provider: AiModelProvider = {
+        providerName: "Workers AI",
+        model: "test-reviewer-boundary-model",
+        async create() {
+          providerCalls += 1;
+          providerStarted();
+          await providerRelease;
+          return {
+            id: "provider-reviewer-boundary-1",
+            model: "test-reviewer-boundary-model",
+            status: "completed",
+            output: [],
+            output_text: JSON.stringify({
+              criteria: criteria.map((criterion) => ({
+                criterionId: criterion.id,
+                suggestedValue: "4",
+                rationale:
+                  "The submitted description contains concrete evidence relevant to this criterion.",
+                evidenceFieldIds: ["description"],
+              })),
+            }),
+          };
+        },
+      };
+      const ai = new ReviewerAiSuggestionService(testEnv, { provider });
+      let released = false;
+
+      try {
+        const firstGeneration = ai.generate(evaluator, { assignmentId });
+        await providerStart;
+        await service.saveReview(evaluator, {
+          assignmentId,
+          revision: initialReview.revision,
+          scores: { "eval-test-relevance": 4 },
+          recommendation: null,
+          confidence: null,
+          submitterFeedback: "",
+          privateNotes: "",
+          conflictAffirmed: false,
+          intent: "save",
+        });
+
+        await expect(ai.generate(evaluator, { assignmentId })).rejects.toThrow(
+          /another request is already being generated/i,
+        );
+        expect(providerCalls).toBe(1);
+
+        released = true;
+        releaseProvider();
+        await expect(firstGeneration).rejects.toThrow(/assignment changed/i);
+
+        const retry = await ai.getRetryForAssignment(evaluator, assignmentId);
+        expect(retry).toMatchObject({
+          providerRequestId: "provider-reviewer-boundary-1",
+        });
+        await expect(ai.generate(evaluator, { assignmentId })).rejects.toThrow(
+          /possible duplicate request or charge/i,
+        );
+        expect(providerCalls).toBe(1);
+      } finally {
+        if (!released) releaseProvider();
+        await resetEvaluationFixture();
       }
     });
 
@@ -535,9 +713,10 @@ describe("evaluation vertical slice", () => {
              FROM operation_jobs
             WHERE event_id = ? AND type = 'ai.reviewer_suggestion.generate'
               AND id <> ?
+              AND json_extract(payload_json, '$.assignmentId') = ?
             ORDER BY created_at DESC, id DESC LIMIT 1`,
-        )
-          .bind(evaluator.eventId, interruptedOperationId)
+          )
+          .bind(evaluator.eventId, interruptedOperationId, assignmentId)
           .first(),
       ).toEqual({
         status: "failed",

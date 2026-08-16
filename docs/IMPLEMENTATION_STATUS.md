@@ -488,10 +488,15 @@ before parsing output, and the bounded rationale has a response budget shared
 by model reasoning and final output. A failed generation remains durable and is
 never retried automatically; an explicit acknowledged retry creates a separately
 idempotent, linked attempt and prevents another concurrent attempt for the same
-target.
+target. The pre-provider operation claim atomically revalidates the event's D1
+repository and opt-in revision, reviewer pool, assignment status and revision,
+round window, scorecard, immutable source snapshot and initial review draft. It
+also rejects an active suggestion or unexpired generation for the assignment.
+Unsafe failed-call acknowledgement remains visible after later draft revisions.
 Focused Worker coverage exercises review advancement,
 archived-cycle decisions, late co-speaker claim/profile/session/task propagation
-and AI persistence/idempotency. The ABS-S2/S3 Chromium workflow exercises cycle
+and AI persistence/idempotency, including disablement, recusal and
+different-revision provider-boundary races. The ABS-S2/S3 Chromium workflow exercises cycle
 creation, round/rubric edit and deletion, reviewer pools/progress/reminder
 draft preparation, result sorting/export, server-side blinding, an explicit
 decision override and confirmed co-speaker invitation. On 14 August 2026, a

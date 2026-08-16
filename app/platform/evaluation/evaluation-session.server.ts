@@ -32,7 +32,7 @@ export const EVALUATION_IDENTITIES = {
     description:
       "The complete operations workspace with a rich, published event.",
     whatToTry:
-      "Inspect submissions and scheduling; when creating a D1 event, explicitly reuse the verified sender.",
+      "Inspect submissions and scheduling; enable reviewer AI in Review & decisions, and explicitly reuse the verified sender when creating a D1 event.",
     group: "showcase",
   },
   chair: {
@@ -49,7 +49,7 @@ export const EVALUATION_IDENTITIES = {
     label: "Reviewer",
     description: "An assigned proposal and the focused scoring workbench.",
     whatToTry:
-      "Score the assigned proposal, save a draft and submit the review.",
+      "Score the assigned proposal, save an independent rubric response, then request and inspect AI suggestions before submitting the review.",
     group: "showcase",
   },
   applicant: {

@@ -233,6 +233,9 @@ describe("schedule auto-placement workflow", () => {
       expect(autoPlacementD1StatementCount(preview)).toBeGreaterThan(
         MAX_AUTO_PLACEMENT_D1_STATEMENTS,
       );
+      await expect(
+        service.confirmAutoPlacement(viewer, preview),
+      ).rejects.toThrow(/select fewer proposed placements/i);
       const selectedSessionId = preview.placements[0]!.sessionId;
 
       const result = await service.confirmAutoPlacement(viewer, {
