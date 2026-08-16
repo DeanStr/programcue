@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { optionalCredentialFreeHttpsUrlSchema } from "./https-url";
+
 import {
   eventFilePolicySchema,
   type EventFilePolicy,
@@ -171,17 +173,13 @@ export const eventSetupInputSchema = z
         "Participant logo URL is too long.",
       ),
     participantWelcomeText: z.string().trim().max(500),
-    participantSupportUrl: z
-      .union([
-        z.literal(""),
-        z.url("Enter a valid participant support URL.").startsWith("https://", {
-          message: "Participant support URLs must use HTTPS.",
-        }),
-      ])
-      .refine(
-        (value) => value.length <= 2_048,
-        "Participant support URL is too long.",
-      ),
+    participantSupportUrl: optionalCredentialFreeHttpsUrlSchema({
+      invalidMessage: "Enter a valid participant support URL.",
+      httpsMessage: "Participant support URLs must use HTTPS.",
+      credentialsMessage:
+        "Participant support URLs cannot contain a username or password.",
+      tooLongMessage: "Participant support URL is too long.",
+    }),
     description: z.string().trim().max(2_000),
     repositoryProvider: z.enum(["d1", "airtable"]),
     retentionMonths: z.coerce

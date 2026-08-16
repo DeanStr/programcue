@@ -58,7 +58,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
 
     for table, expected in {
         "events": {"public_projection_revision", "brand_logo_asset_id", "brand_banner_asset_id", "brand_draft_accent", "brand_draft_logo_asset_id", "brand_draft_banner_asset_id", "brand_draft_welcome_text", "brand_draft_support_url", "brand_draft_revision", "brand_published_revision", "brand_published_at"},
-        "event_brand_assets": {"organisation_id", "event_id", "kind", "object_key", "object_etag", "original_filename", "content_type", "size_bytes", "created_by_person_id", "deleted_at"},
+        "event_brand_assets": {"organisation_id", "event_id", "kind", "object_key", "object_etag", "original_filename", "content_type", "size_bytes", "width_px", "height_px", "normalizer_version", "normalized_at", "created_by_person_id", "deleted_at", "cleanup_attempts", "cleanup_last_attempt_at", "cleanup_last_error"},
         "people": {"linkedin_url", "x_handle", "profile_revision"},
         "event_participant_profiles": {"event_id", "organisation_id", "person_id", "travel_preferences", "last_operation_id"},
         "organisation_ai_settings": {"provider", "model", "revision", "last_updated_by_person_id", "last_operation_id"},
@@ -143,6 +143,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "idx_organisation_contacts_status", "idx_organisation_contact_tags_tag",
         "idx_crm_pipeline_stage", "idx_crm_pipeline_activity_entry",
         "assistant_proposal_executions_claim_idx",
+        "idx_event_brand_assets_cleanup",
     }
     if required_indexes - indexes:
         raise SystemExit(f"Migration missing indexes: {sorted(required_indexes - indexes)}")
@@ -277,6 +278,60 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "VALUES ('missing-calendar-credentials','org-a','event-a','person-a','google','missing','[]','connected')",
         "A connected calendar account without durable credentials was accepted",
     )
+    must_fail(
+        "INSERT INTO event_brand_assets "
+        "(id,organisation_id,event_id,kind,object_key,object_etag,original_filename,content_type,size_bytes,created_by_person_id) "
+        "VALUES ('raw-brand','org-a','event-a','logo','raw-brand','raw-etag','raw.png','image/png',10,'person-a')",
+        "A live event branding asset without normalized image evidence was accepted",
+    )
+    connection.execute(
+        "INSERT INTO event_brand_assets "
+        "(id,organisation_id,event_id,kind,object_key,object_etag,original_filename,content_type,size_bytes,width_px,height_px,normalizer_version,normalized_at,created_by_person_id) "
+        "VALUES ('brand-logo','org-a','event-a','logo','brand-logo','brand-etag','brand.webp','image/webp',10,100,100,'cloudflare-images-webp-v1',unixepoch(),'person-a')"
+    )
+    connection.execute(
+        "INSERT INTO events (id,organisation_id,name,slug,timezone,starts_at,ends_at,file_policy_json) "
+        "VALUES ('brand-event','org-a','Brand event','brand-event','UTC',100,200,'{\"headshotMaximumBytes\":10485760,\"slidesMaximumBytes\":104857600,\"supportingDocumentMaximumBytes\":104857600,\"videoMaximumBytes\":1073741824}')"
+    )
+    connection.execute(
+        "INSERT INTO event_brand_assets "
+        "(id,organisation_id,event_id,kind,object_key,object_etag,original_filename,content_type,size_bytes,width_px,height_px,normalizer_version,normalized_at,created_by_person_id) "
+        "VALUES ('brand-delete-guard','org-a','brand-event','logo','brand-delete-guard','brand-delete-etag','brand.webp','image/webp',10,100,100,'cloudflare-images-webp-v1',unixepoch(),'person-a')"
+    )
+    must_fail(
+        "DELETE FROM events WHERE id='brand-event'",
+        "An event deletion discarded durable brand-object cleanup evidence",
+    )
+    connection.execute(
+        "DELETE FROM event_brand_assets WHERE id='brand-delete-guard'"
+    )
+    connection.execute("DELETE FROM events WHERE id='brand-event'")
+    connection.execute(
+        "UPDATE events SET brand_draft_logo_asset_id='brand-logo' WHERE id='event-a'"
+    )
+    must_fail(
+        "UPDATE events SET brand_draft_banner_asset_id='brand-logo' WHERE id='event-a'",
+        "An event banner pointer accepted a logo asset",
+    )
+    must_fail(
+        "UPDATE event_brand_assets SET deleted_at=unixepoch() WHERE id='brand-logo'",
+        "A referenced event branding asset was retired",
+    )
+    must_fail(
+        "DELETE FROM event_brand_assets WHERE id='brand-logo'",
+        "A referenced event branding asset was deleted",
+    )
+    connection.execute(
+        "UPDATE events SET brand_draft_logo_asset_id=NULL WHERE id='event-a'"
+    )
+    connection.execute(
+        "UPDATE event_brand_assets SET deleted_at=unixepoch() WHERE id='brand-logo'"
+    )
+    must_fail(
+        "UPDATE event_brand_assets SET deleted_at=NULL WHERE id='brand-logo'",
+        "A retired event branding asset was restored after cleanup became eligible",
+    )
+    connection.execute("DELETE FROM event_brand_assets WHERE id='brand-logo'")
     connection.execute(
         "INSERT INTO evaluation_plans (id,event_id,name,status) "
         "VALUES ('migration-evaluation-plan','event-a','Migration evaluation plan','draft')"
@@ -348,6 +403,16 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "schedule_session_contents_approval_provenance_insert",
         "schedule_session_contents_approval_provenance_update",
         "schedule_versions_public_content_approval_guard",
+        "event_brand_assets_ready_insert",
+        "event_brand_assets_ready_update",
+        "event_brand_assets_identity_immutable",
+        "event_brand_assets_no_restore",
+        "event_brand_assets_no_retire_while_referenced",
+        "event_brand_assets_no_delete_while_referenced",
+        "events_no_delete_with_brand_assets",
+        "events_brand_assets_ready_insert",
+        "events_brand_assets_ready_update",
+        "events_retire_unreferenced_brand_assets",
     }
     if required_triggers - triggers:
         raise SystemExit(f"Migration triggers are missing: {sorted(required_triggers - triggers)}")

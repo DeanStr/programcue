@@ -7,6 +7,7 @@ import { parseResourceEmbedOrigins } from "~/modules/resources/resource-embed-po
 const requiredProductionBindings = [
   "DB",
   "FILES",
+  "IMAGES",
   "BACKUPS",
   "OPERATIONS_QUEUE",
   "EVENT_CHANNEL",

@@ -72,6 +72,9 @@ describe("event cloning", () => {
           WHERE id = ? AND organisation_id = ?`,
       ).bind(viewer.eventId, viewer.organisationId),
       env.DB.prepare(
+        "DELETE FROM event_brand_assets WHERE id = 'managed-logo'",
+      ),
+      env.DB.prepare(
         `DELETE FROM task_template_dependencies
           WHERE template_id = 'resource-ack:source-page'
              OR depends_on_template_id = 'resource-ack:source-page'`,
@@ -213,12 +216,23 @@ describe("event cloning", () => {
     const service = new EventCloneService(
       env as unknown as CloudflareEnvironment,
     );
-    await env.DB.prepare(
-      `UPDATE events SET brand_logo_asset_id = 'managed-logo'
-        WHERE id = ? AND organisation_id = ?`,
-    )
-      .bind(viewer.eventId, viewer.organisationId)
-      .run();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO event_brand_assets (
+           id, organisation_id, event_id, kind, object_key, object_etag,
+           original_filename, content_type, size_bytes, width_px, height_px,
+           normalizer_version, normalized_at, created_by_person_id
+         ) VALUES (
+           'managed-logo', ?, ?, 'logo', 'test/managed-logo', '"managed"',
+           'managed.webp', 'image/webp', 1, 1, 1,
+           'cloudflare-images-webp-v1', unixepoch(), ?
+         )`,
+      ).bind(viewer.organisationId, viewer.eventId, viewer.personId),
+      env.DB.prepare(
+        `UPDATE events SET brand_logo_asset_id = 'managed-logo'
+          WHERE id = ? AND organisation_id = ?`,
+      ).bind(viewer.eventId, viewer.organisationId),
+    ]);
     await expect(
       service.clone(viewer, {
         name: "Image clone",

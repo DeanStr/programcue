@@ -178,8 +178,31 @@ describe("complete evaluator demo reset", () => {
                 display_name = 'Stale Speaker Two', profile_status = 'published'
           WHERE id = ?`,
       ).bind(SBEK_FIXTURE_PEOPLE.speaker2.personId),
+      testEnvironment.DB.prepare(
+        `INSERT INTO event_brand_assets (
+           id, organisation_id, event_id, kind, object_key, object_etag,
+           original_filename, content_type, size_bytes, width_px, height_px,
+           normalizer_version, normalized_at, created_by_person_id
+         ) VALUES (
+           'demo-reset-brand', ?, ?, 'logo', ?, '"demo-reset-brand"',
+           'brand.webp', 'image/webp', 5, 1, 1,
+           'cloudflare-images-webp-v1', unixepoch(), 'person-demo-admin'
+         )`,
+      ).bind(
+        DEMO_ORGANISATION_ID,
+        DEMO_EVENT_ID,
+        `${DEMO_R2_PREFIX}branding/logo/demo-reset-brand`,
+      ),
+      testEnvironment.DB.prepare(
+        `UPDATE events SET brand_logo_asset_id = 'demo-reset-brand'
+          WHERE id = ? AND organisation_id = ?`,
+      ).bind(DEMO_EVENT_ID, DEMO_ORGANISATION_ID),
     ]);
     await testEnvironment.FILES.put(`${DEMO_R2_PREFIX}old/slides.pdf`, "old");
+    await testEnvironment.FILES.put(
+      `${DEMO_R2_PREFIX}branding/logo/demo-reset-brand`,
+      "brand",
+    );
     await testEnvironment.FILES.put(
       "private/events/another-event/keep.pdf",
       "keep",
@@ -191,7 +214,7 @@ describe("complete evaluator demo reset", () => {
       DEMO_RESET_CONFIRMATION,
     );
 
-    expect(reset.objectCount).toBe(1);
+    expect(reset.objectCount).toBe(2);
     expect(reset.baseline).toMatchObject({
       submissions: 2,
       assignments: 2,
@@ -209,6 +232,11 @@ describe("complete evaluator demo reset", () => {
     });
     await expect(
       testEnvironment.FILES.head(`${DEMO_R2_PREFIX}old/slides.pdf`),
+    ).resolves.toBeNull();
+    await expect(
+      testEnvironment.DB.prepare(
+        "SELECT id FROM event_brand_assets WHERE id = 'demo-reset-brand'",
+      ).first(),
     ).resolves.toBeNull();
     await expect(
       testEnvironment.FILES.head("private/events/another-event/keep.pdf"),

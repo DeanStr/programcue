@@ -505,37 +505,50 @@ schedule tests verify this AIA-08 production slice.
 
 ## Event branding workstream evidence
 
-- **Production slice:** `/admin/branding` owns a server-backed event branding
+- **Production slice; repository evidence for this hardening is not deployed:** `/admin/branding` owns a server-backed event branding
   draft with compare-and-set revision, representative desktop/mobile previews
   for the application, participant workspace, programme and email, and one
   confirmed publication boundary. Publication atomically advances the event
   and public-projection revisions, records audit/change evidence and projects
   the existing event configuration to Airtable when Airtable is authoritative.
-  Non-no-op mutations require a positive durable event-change sequence;
-  missing change evidence reports an explicit committed warning. Event Setup
+  Success audit/change inserts require the exact committed domain post-state,
+  so a suppressed mutation cannot leave success history. Non-no-op mutations
+  require one audit and a positive durable event-change sequence; missing
+  evidence after a committed mutation reports an explicit warning. Event Setup
   rejects legacy-field attempts to bypass the branding publication boundary.
 - **Managed brand assets:** Event administrators can upload bounded JPEG, PNG
-  or WebP logos and banners. Program Cue checks the declared MIME against the
-  byte signature, stores the bytes under an event-scoped private R2 key and
-  records the exact ETag and byte size. Draft reads require
+  or WebP logos and banners. Program Cue checks declared MIME and signature,
+  requires a complete Cloudflare Images decode, enforces width, height and total
+  pixel limits, removes animation and source metadata by producing a canonical
+  WebP, and verifies the normalized result before storing it under an
+  event-scoped private R2 key. D1 records its dimensions,
+  normalizer version, ETag and normalized byte size. Draft reads require
   event-administrator authority; anonymous asset routes resolve only the logo
   or banner referenced by the active event's published snapshot and revalidate
-  that ETag. Migration `0029_event_branding_publication.sql` follows the
-  deployed `0026`–`0028` sequence. A publication race returns a non-cacheable
-  503 retry response rather than stale bytes or a false not-found result.
+  that ETag. Migration `0032_event_brand_asset_normalization.sql` adds the
+  fail-closed readiness and cleanup invariants after the deployed branding
+  baseline; it is repository evidence and is not yet deployed. A publication
+  race returns a non-cacheable 503 retry response rather than stale bytes or a
+  false not-found result.
 - **Published surfaces:** The published accent, logo, banner, welcome and
   support link reach the public application, participant workspace, programme,
   embeds and communication email. A deployed external logo or programme hero
   remains live only until the first managed Branding publication, which clears
   those retired authoring fields rather than silently preferring two sources.
   Program Cue attribution remains visible.
-- **Scope boundary:** Organisation brand defaults, custom fonts, arbitrary CSS,
-  per-event custom domains and white-label attribution removal remain not
-  implemented. Replaced brand objects remain event-owned history until an
-  explicit retention/deletion workflow is designed. Event cloning is blocked
-  while brand images, a legacy programme hero or unpublished branding changes
-  exist; private R2 asset copying is not implemented and is never silently
-  omitted.
+- **Asset lifecycle:** A live row is ready only after synchronous normalization;
+  there is no scanner fallback or speculative asynchronous validation state.
+  Assets unreferenced by both snapshots are tombstoned, then a scheduled worker
+  removes R2 bytes and D1 rows while persisting cleanup failures for retry.
+  Referenced assets cannot be retired or deleted, and event deletion fails until
+  branding cleanup is drained. Migration `0032` detaches and retires all old
+  raw-byte rows rather than retaining an unsafe compatibility path.
+- **URL validation and scope boundary:** Support URLs require credential-free
+  HTTPS with a hostname. Organisation brand defaults, custom fonts, arbitrary
+  CSS, per-event custom domains and white-label attribution removal remain not
+  implemented. Event cloning is blocked while brand images, a legacy programme
+  hero or unpublished branding changes exist; private R2 asset copying is not
+  implemented and is never silently omitted.
 
 ## Public programme gallery workstream evidence
 

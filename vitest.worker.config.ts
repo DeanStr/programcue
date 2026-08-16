@@ -21,6 +21,7 @@ export default defineProject({
         compatibilityFlags: ["nodejs_compat"],
         d1Databases: ["DB"],
         r2Buckets: ["FILES", "BACKUPS"],
+        images: { binding: "IMAGES" },
         bindings: {
           APP_ENV: "test",
           DEMO_MODE: "true",

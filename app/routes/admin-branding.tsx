@@ -20,12 +20,15 @@ import type { Route } from "./+types/admin-branding";
 import { BrandMark } from "~/components/brand-mark";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
+  EVENT_BRAND_ASSET_DIMENSION_POLICY,
   EVENT_BRAND_ASSET_MAXIMUM_BYTES,
   type EventBrandAssetKind,
 } from "~/modules/events/event-branding";
 import {
+  EventBrandingAuditCommitError,
   EventBrandingAssetError,
   EventBrandingChangeCommitError,
+  EventBrandingCleanupIntegrityError,
   EventBrandingNotFoundError,
   EventBrandingProjectionCommitError,
   EventBrandingRevisionConflictError,
@@ -175,7 +178,10 @@ export async function action({ request, context }: Route.ActionArgs) {
         },
         { status: 207 },
       );
-    if (error instanceof EventBrandingChangeCommitError)
+    if (
+      error instanceof EventBrandingAuditCommitError ||
+      error instanceof EventBrandingChangeCommitError
+    )
       return data<BrandingActionResponse>(
         {
           ok: true,
@@ -185,6 +191,11 @@ export async function action({ request, context }: Route.ActionArgs) {
           message: error.message,
         },
         { status: 207 },
+      );
+    if (error instanceof EventBrandingCleanupIntegrityError)
+      return data<BrandingActionResponse>(
+        { ok: false, intent, message: error.message },
+        { status: 503 },
       );
     if (
       error instanceof EventBrandingAssetError ||
@@ -335,7 +346,13 @@ function AssetUpload({
 }: {
   kind: EventBrandAssetKind;
   revision: number;
-  asset: { filename: string; sizeBytes: number; url: string } | null;
+  asset: {
+    filename: string;
+    sizeBytes: number;
+    width: number;
+    height: number;
+    url: string;
+  } | null;
   disabled: boolean;
 }) {
   const title = kind === "logo" ? "Logo" : "Banner";
@@ -353,11 +370,14 @@ function AssetUpload({
         <strong>{title}</strong>
         <p className="help">
           JPEG, PNG or WebP · up to{" "}
-          {EVENT_BRAND_ASSET_MAXIMUM_BYTES[kind] / 1_048_576} MB
+          {EVENT_BRAND_ASSET_MAXIMUM_BYTES[kind] / 1_048_576} MB · maximum{" "}
+          {EVENT_BRAND_ASSET_DIMENSION_POLICY[kind].maximumWidth} ×{" "}
+          {EVENT_BRAND_ASSET_DIMENSION_POLICY[kind].maximumHeight} px
         </p>
         {asset ? (
           <p className="help">
-            {asset.filename} · {(asset.sizeBytes / 1_048_576).toFixed(1)} MB
+            {asset.filename} · {asset.width} × {asset.height} px ·{" "}
+            {(asset.sizeBytes / 1_048_576).toFixed(1)} MB
           </p>
         ) : null}
         <Form

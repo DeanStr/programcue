@@ -96,15 +96,20 @@ describe("service readiness", () => {
   it("fails production readiness when a required platform binding is missing", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const production = completeProductionEnvironment();
-    const response = await health({
-      ...production,
-      OPERATIONS_QUEUE: undefined,
-    } as unknown as CloudflareEnvironment);
+    for (const overrides of [
+      { OPERATIONS_QUEUE: undefined },
+      { IMAGES: undefined },
+    ]) {
+      const response = await health({
+        ...production,
+        ...overrides,
+      } as unknown as CloudflareEnvironment);
 
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: "RUNTIME_CONFIGURATION_INVALID" },
-    });
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "RUNTIME_CONFIGURATION_INVALID" },
+      });
+    }
   });
 
   it("fails production readiness when the selected email provider is not production-safe", async () => {
@@ -192,6 +197,7 @@ function completeProductionEnvironment() {
     SOURCE_REVISION: "1234567",
     DB: env.DB,
     FILES: {},
+    IMAGES: {},
     BACKUPS: {},
     OPERATIONS_QUEUE: {},
     EVENT_CHANNEL: {},

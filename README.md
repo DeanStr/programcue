@@ -1,6 +1,6 @@
 # Program Cue
 
-Program Cue is a pre-release conference programme operations platform. It is one React Router/TypeScript modular monolith on Cloudflare Workers, with D1 for relational state, R2 for private files, Queues for provider work and an event-scoped Durable Object for realtime invalidation.
+Program Cue is a pre-release conference programme operations platform. It is one React Router/TypeScript modular monolith on Cloudflare Workers, with D1 for relational state, R2 for private files, Cloudflare Images for brand-image normalization, Queues for provider work and an event-scoped Durable Object for realtime invalidation.
 
 The repository contains connected server-backed slices for event setup, submissions, evaluation and decisions, automatic speaker onboarding, resources/files, FullCalendar scheduling and publication, communications/calendars, Airtable and Accelevents integrations, operations, a permissioned AI assistant and a documented 33-path REST/webhook API. Published forms, resources, schedule content and communication templates keep immutable version snapshots; retryable provider work is recorded durably and claimed idempotently. Remaining boundaries are deployment of each new release candidate, unexercised live-provider paths and independent acceptance evidence rather than simulated success; see [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
@@ -32,10 +32,10 @@ are shown as an explicit no-send fixture, and the E2E server creates a private,
 ephemeral auth signing value rather than using a checked-in credential.
 
 The development command applies the baseline migration to Wrangler's local D1
-emulator and starts the application at `http://127.0.0.1:5173`. D1, R2, Queues
-and Durable Objects are local. Backup Workflow bindings and the daily backup
-cron exist only in production because D1 export requires remote Cloudflare
-authority. Direct multipart upload, malware scanning, connected calendars,
+emulator and starts the application at `http://127.0.0.1:5173`. D1, R2, Images,
+Queues and Durable Objects are local. Backup Workflow bindings and the daily
+backup cron exist only in production because D1 export requires remote
+Cloudflare authority. Direct multipart upload, malware scanning, connected calendars,
 external integrations and non-Workers-AI providers remain unavailable locally
 until their optional `.dev.vars` credentials are supplied; they fail fast when
 selected. Local demo cookies and mutation routes exist only in the explicit
@@ -150,8 +150,9 @@ The production resource inventory is:
 - Queue `program-cue-operations` and dead-letter queue
   `program-cue-operations-dlq`.
 - Durable Object classes `EventChannel` and `ProgramCueEventAgent`, Workers AI
-  binding `AI`, and Workflow `program-cue-d1-backup`; Wrangler creates these
-  from the checked-in bindings and migrations.
+  binding `AI`, Images binding `IMAGES`, and Workflow
+  `program-cue-d1-backup`; Wrangler creates these from the checked-in bindings
+  and migrations.
 - File-scanner Worker `program-cue-file-scanner`, Workflow
   `program-cue-file-scans` and a four-slot EU-pinned pool of `standard-2`
   Cloudflare Containers running the pinned ClamAV 1.4 LTS image. Each container

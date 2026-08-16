@@ -245,6 +245,23 @@ describe("production evaluation fixture", () => {
                    'evaluation-extra-event', ?, 'event.created', 'event',
                    'evaluation-extra-event', '{}', unixepoch())`,
       ).bind(SBEK_FIXTURE_PEOPLE.organizer.personId),
+      environment.DB.prepare(
+        `INSERT INTO event_brand_assets (
+           id, organisation_id, event_id, kind, object_key, object_etag,
+           original_filename, content_type, size_bytes, width_px, height_px,
+           normalizer_version, normalized_at, created_by_person_id
+         ) VALUES (
+           'evaluation-extra-brand', 'org-future-events',
+           'evaluation-extra-event', 'logo',
+           'private/events/evaluation-extra-event/branding/logo/evaluation-extra-brand',
+           '"evaluation-extra-brand"', 'brand.webp', 'image/webp', 7, 1, 1,
+           'cloudflare-images-webp-v1', unixepoch(), ?
+         )`,
+      ).bind(SBEK_FIXTURE_PEOPLE.organizer.personId),
+      environment.DB.prepare(
+        `UPDATE events SET brand_logo_asset_id = 'evaluation-extra-brand'
+          WHERE id = 'evaluation-extra-event'`,
+      ),
     ]);
     await environment.FILES.put(
       "private/events/evaluation-extra-event/headshot.png",
@@ -252,6 +269,10 @@ describe("production evaluation fixture", () => {
     );
     await environment.FILES.put(
       "private/events/evaluation-second-extra-event/slides.pdf",
+      "fixture",
+    );
+    await environment.FILES.put(
+      "private/events/evaluation-extra-event/branding/logo/evaluation-extra-brand",
       "fixture",
     );
 
@@ -328,6 +349,16 @@ describe("production evaluation fixture", () => {
     await expect(
       environment.FILES.head(
         "private/events/evaluation-second-extra-event/slides.pdf",
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      environment.DB.prepare(
+        "SELECT id FROM event_brand_assets WHERE id = 'evaluation-extra-brand'",
+      ).first(),
+    ).resolves.toBeNull();
+    await expect(
+      environment.FILES.head(
+        "private/events/evaluation-extra-event/branding/logo/evaluation-extra-brand",
       ),
     ).resolves.toBeNull();
 

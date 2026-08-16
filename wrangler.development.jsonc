@@ -13,6 +13,7 @@
     },
   ],
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "program-cue-files" }],
+  "images": { "binding": "IMAGES" },
   "durable_objects": {
     "bindings": [
       { "name": "EVENT_CHANNEL", "class_name": "EventChannel" },

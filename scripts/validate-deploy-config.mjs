@@ -403,6 +403,16 @@ function validateCommonProfile(profile, config, spec, issues) {
     );
   }
 
+  if (config.images?.binding !== "IMAGES") {
+    issues.push(
+      issue(
+        profile,
+        "configuration",
+        "The Cloudflare Images binding must be named IMAGES.",
+      ),
+    );
+  }
+
   const durableObjects = config.durable_objects?.bindings ?? [];
   const expectedDurableObjects = new Map([
     ["EVENT_CHANNEL", "EventChannel"],

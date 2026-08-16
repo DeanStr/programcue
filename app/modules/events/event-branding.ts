@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { optionalCredentialFreeHttpsUrlSchema } from "./https-url";
+
 export const eventBrandAssetKindSchema = z.enum(["logo", "banner"]);
 export type EventBrandAssetKind = z.infer<typeof eventBrandAssetKindSchema>;
 
@@ -7,15 +9,12 @@ const optionalAssetIdSchema = z
   .union([z.literal(""), z.string().trim().min(1).max(160)])
   .transform((value) => value || null);
 
-const optionalSupportUrlSchema = z
-  .union([
-    z.literal(""),
-    z.url("Enter a valid support URL.").startsWith("https://", {
-      message: "Support URLs must use HTTPS.",
-    }),
-  ])
-  .refine((value) => value.length <= 2_048, "Support URL is too long.")
-  .transform((value) => value || null);
+const optionalSupportUrlSchema = optionalCredentialFreeHttpsUrlSchema({
+  invalidMessage: "Enter a valid support URL.",
+  httpsMessage: "Support URLs must use HTTPS.",
+  credentialsMessage: "Support URLs cannot contain a username or password.",
+  tooLongMessage: "Support URL is too long.",
+}).transform((value) => value || null);
 
 export const eventBrandDraftInputSchema = z.object({
   revision: z.coerce.number().int().positive(),
@@ -44,6 +43,20 @@ export const EVENT_BRAND_ASSET_MAXIMUM_BYTES = {
   logo: 2 * 1_048_576,
   banner: 5 * 1_048_576,
 } as const satisfies Record<EventBrandAssetKind, number>;
+
+export const EVENT_BRAND_ASSET_DIMENSION_POLICY = {
+  logo: { maximumWidth: 2_048, maximumHeight: 2_048, maximumPixels: 4_194_304 },
+  banner: {
+    maximumWidth: 4_096,
+    maximumHeight: 2_160,
+    maximumPixels: 9_000_000,
+  },
+} as const satisfies Record<
+  EventBrandAssetKind,
+  { maximumWidth: number; maximumHeight: number; maximumPixels: number }
+>;
+
+export const EVENT_BRAND_IMAGE_NORMALIZER_VERSION = "cloudflare-images-webp-v1";
 
 export function publicEventBrandAssetPath(
   slug: string,

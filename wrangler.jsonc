@@ -33,6 +33,7 @@
     },
   ],
   "ai": { "binding": "AI" },
+  "images": { "binding": "IMAGES" },
   "workflows": [
     {
       "name": "program-cue-d1-backup",

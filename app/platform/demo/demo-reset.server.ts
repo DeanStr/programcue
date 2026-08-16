@@ -971,6 +971,13 @@ export async function resetDemoEvent(
     env.DB.prepare(
       "DELETE FROM memberships WHERE organisation_id = ? AND event_id IS NULL",
     ).bind(DEMO_ORGANISATION_ID),
+    env.DB.prepare(
+      `UPDATE events
+          SET brand_logo_asset_id = NULL, brand_banner_asset_id = NULL,
+              brand_draft_logo_asset_id = NULL,
+              brand_draft_banner_asset_id = NULL
+        WHERE id = ? AND organisation_id = ?`,
+    ).bind(DEMO_EVENT_ID, DEMO_ORGANISATION_ID),
     ...cleanup,
   ]);
 

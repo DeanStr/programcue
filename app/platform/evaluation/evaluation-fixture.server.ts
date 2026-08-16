@@ -515,6 +515,14 @@ async function retireExtraFixtureEvents(
       event.slug !== `discarded:evaluation:${event.id}`,
   );
   const results = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE events
+          SET brand_logo_asset_id = NULL, brand_banner_asset_id = NULL,
+              brand_draft_logo_asset_id = NULL,
+              brand_draft_banner_asset_id = NULL
+        WHERE id IN (${eventPlaceholders})
+          AND organisation_id = ?`,
+    ).bind(...eventIds, DEMO_ORGANISATION_ID),
     ...DEMO_RESET_EVENT_TABLES.map((table) =>
       env.DB.prepare(
         `DELETE FROM ${table} WHERE event_id IN (${eventPlaceholders})`,

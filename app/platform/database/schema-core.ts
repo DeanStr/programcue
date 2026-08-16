@@ -225,17 +225,27 @@ export const eventBrandAssets = sqliteTable(
     originalFilename: text("original_filename").notNull(),
     contentType: text("content_type").notNull(),
     sizeBytes: integer("size_bytes").notNull(),
+    widthPx: integer("width_px"),
+    heightPx: integer("height_px"),
+    normalizerVersion: text("normalizer_version"),
+    normalizedAt: integer("normalized_at"),
     createdByPersonId: text("created_by_person_id")
       .notNull()
       .references(() => people.id),
     createdAt: integer("created_at").notNull().default(epochNow),
     deletedAt: integer("deleted_at"),
+    cleanupAttempts: integer("cleanup_attempts").notNull().default(0),
+    cleanupLastAttemptAt: integer("cleanup_last_attempt_at"),
+    cleanupLastError: text("cleanup_last_error"),
   },
   (table) => [
     uniqueIndex("event_brand_assets_object_key_unique").on(table.objectKey),
     index("idx_event_brand_assets_event_kind")
       .on(table.eventId, table.kind, table.createdAt)
       .where(sql`${table.deletedAt} IS NULL`),
+    index("idx_event_brand_assets_cleanup")
+      .on(table.cleanupLastAttemptAt, table.deletedAt, table.id)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
     foreignKey({
       columns: [table.eventId, table.organisationId],
       foreignColumns: [events.id, events.organisationId],
