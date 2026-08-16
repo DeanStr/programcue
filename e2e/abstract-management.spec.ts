@@ -258,13 +258,17 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
       .fill("Priya Raman builds data systems at Latticework Systems.");
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect(
-      page.locator(".validation-item.ok[role='status']"),
-    ).toContainText("Your draft has been saved");
+      page.locator(".validation-item.ok[role='status']").filter({
+        hasText: "Your draft has been saved",
+      }),
+    ).toBeVisible();
     await page.getByText("I have reviewed this application").click();
     await page.getByRole("button", { name: "Submit application" }).click();
     await expect(
-      page.locator(".validation-item.ok[role='status']"),
-    ).toContainText("Your application has been submitted");
+      page.locator(".validation-item.ok[role='status']").filter({
+        hasText: "Your application has been submitted",
+      }),
+    ).toBeVisible();
 
     await switchDemoRole(page, "administrator", "/admin/review");
     await waitForInterface(page, "/admin/review");

@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { e2eOrigin } from "./support/e2e-origin";
 import { resetDemoEvent } from "./support/reset-demo-event";
@@ -37,6 +37,20 @@ async function createNextScheduleDraft(page: Page) {
     "The published programme will not change",
   );
   await confirmation.getByRole("button", { name: "Confirm new draft" }).click();
+}
+
+async function selectScheduleSessionByTitle(
+  placement: Locator,
+  title: string,
+) {
+  const sessionSelect = placement.getByLabel("Session");
+  const matchingOption = sessionSelect
+    .locator("option")
+    .filter({ hasText: title });
+  await expect(matchingOption).toHaveCount(1);
+  const sessionId = await matchingOption.getAttribute("value");
+  expect(sessionId).toBeTruthy();
+  await sessionSelect.selectOption(sessionId!);
 }
 
 function waitForScheduleMutation(page: Page) {
@@ -384,9 +398,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       has: page.getByText("Place or move with form", { exact: true }),
     });
     await expect(placement).toHaveAttribute("open", "");
-    await placement.getByLabel("Session").selectOption({
-      label: "AI in Event Operations · scheduled",
-    });
+    await selectScheduleSessionByTitle(placement, "AI in Event Operations");
     await placement.getByLabel("Room").selectOption({ label: "Room 301A" });
     const start = placement.getByLabel(/Start · America\/Toronto/);
     const speakerConflictSlot = (
@@ -426,9 +438,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await page.getByRole("button", { name: "Undo" }).click();
     await expectStatus(page, "Schedule change undone");
 
-    await placement.getByLabel("Session").selectOption({
-      label: SUBMISSION_TITLE,
-    });
+    await selectScheduleSessionByTitle(placement, SUBMISSION_TITLE);
     await placement.getByLabel("Room").selectOption({ label: "Main Stage" });
     const occupiedSlot = (await start.locator("option").allTextContents()).find(
       (label) => /Thu, May 20.*9:00 AM/.test(label),

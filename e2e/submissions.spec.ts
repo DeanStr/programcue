@@ -206,6 +206,9 @@ test.describe.serial("submissions vertical slice", () => {
     await expect(editor).toBeVisible();
     const fields = editor.locator(".fb-canvas-field");
     const initialFieldCount = await fields.count();
+    const initialFieldIds = await fields.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute("data-field-id")),
+    );
     await expect(editor.locator('[data-field-id="materials"]')).toContainText(
       "Shown when Format = Workshop",
     );
@@ -252,8 +255,19 @@ test.describe.serial("submissions vertical slice", () => {
     );
     await expect(fields).toHaveCount(initialFieldCount + 1);
 
-    const created = fields.first();
-    await expect(created).toHaveAttribute("data-field-id", /^field_/);
+    const createdFieldId = await fields.evaluateAll(
+      (elements, existingIds) =>
+        elements
+          .map((element) => element.getAttribute("data-field-id"))
+          .find((fieldId) => fieldId !== null && !existingIds.includes(fieldId)),
+      initialFieldIds,
+    );
+    expect(createdFieldId).toBeTruthy();
+    const created = editor.locator(`[data-field-id="${createdFieldId}"]`);
+    await expect(fields.first()).toHaveAttribute(
+      "data-field-id",
+      createdFieldId!,
+    );
     await page.getByLabel("Label", { exact: true }).fill(visualLabel);
     await expect(created).toContainText(visualLabel);
 
