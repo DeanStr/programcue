@@ -527,7 +527,13 @@ export function DecisionDialog() {
     setSessionTrackId(
       draft ? (draft.sessionTrackId ?? "") : defaultSessionTrackId,
     );
-  }, [defaultSessionTrackId, selected?.id]);
+  }, [
+    defaultSessionTrackId,
+    selected?.decisionDraft?.decision,
+    selected?.decisionDraft?.revisionNumber,
+    selected?.decisionDraft?.sessionTrackId,
+    selected?.id,
+  ]);
   return selected ? (
     <Dialog
       title={`Decision · ${selected.title}`}
