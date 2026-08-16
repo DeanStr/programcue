@@ -1,6 +1,10 @@
-import { CalendarDays, Heart, MapPin, Search } from "lucide-react";
-import { type CSSProperties, useRef, useState } from "react";
+import { CalendarDays, MapPin, Search } from "lucide-react";
+import { type CSSProperties, useState } from "react";
 import { Link } from "react-router";
+import {
+  PublicEventFooter,
+  PublicEventHeader,
+} from "~/components/public-event-chrome";
 import {
   descriptionSnippet,
   eventHeroImagePath,
@@ -25,6 +29,7 @@ import {
   SessionTime,
 } from "~/components/public-programme-parts";
 import { PublicProgrammeSurfaceContent } from "~/components/public-programme-surfaces";
+import { PublicSiteHome } from "~/components/public-site-content";
 import { TurnstileWidget } from "~/components/turnstile-widget";
 import {
   formatProgrammeDuration,
@@ -39,89 +44,6 @@ import {
  * The header, hero and footer wrap every published surface, so they live here
  * and the surface modules only render their own content.
  */
-function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
-  const { programme, loaderData, shared, saved } = model;
-  const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
-  const slug = programme.event.slug;
-  const overviewSurface =
-    loaderData.surface === "overview" || loaderData.surface === "sessions";
-  const programmeHref = `/public/programme/${slug}`;
-  const links = [
-    {
-      key: "programme",
-      label: "Programme",
-      href: programmeHref,
-      active: ["overview", "sessions", "agenda", "schedule"].includes(
-        loaderData.surface,
-      ),
-    },
-    {
-      key: "speakers",
-      label: "Speakers",
-      href: publicProgrammeSurfacePath(slug, "speakers"),
-      active: ["speakers", "gallery"].includes(loaderData.surface),
-    },
-  ];
-  const itineraryHref = overviewSurface
-    ? "#itinerary"
-    : `${programmeHref}#itinerary`;
-
-  const navLink = (link: (typeof links)[number], onActivate?: () => void) => (
-    <Link
-      key={link.key}
-      to={link.href}
-      className={link.active ? "active" : undefined}
-      aria-current={link.active ? "page" : undefined}
-      onClick={onActivate}
-    >
-      {link.label}
-    </Link>
-  );
-
-  return (
-    <header className="public-top">
-      {/* The event owns this page. The platform is credited in the footer, not
-          in the masthead where it used to outrank the customer's own name. */}
-      <Link
-        aria-label={`${programme.event.name} programme`}
-        className="brand"
-        to={programmeHref}
-      >
-        {programme.event.logoUrl ? (
-          <img
-            className="public-event-logo"
-            src={programme.event.logoUrl}
-            alt=""
-          />
-        ) : (
-          <span className="public-brand-mark" aria-hidden="true" />
-        )}
-        <span className="public-brand-name">{programme.event.name}</span>
-      </Link>
-      <nav className="public-nav" aria-label="Programme">
-        {links.map((link) => navLink(link))}
-      </nav>
-      <details className="public-mobile-nav" ref={mobileNavigationRef}>
-        <summary className="btn small">Browse</summary>
-        <nav aria-label="Programme sections">
-          {links.map((link) =>
-            navLink(link, () =>
-              mobileNavigationRef.current?.removeAttribute("open"),
-            ),
-          )}
-        </nav>
-      </details>
-      {/* A lucide heart, not "♡": the keyboard glyph falls back to the system
-          emoji font beside monochrome vector icons. */}
-      <a className="btn public-itinerary-link" href={itineraryHref}>
-        <Heart aria-hidden="true" size={15} />
-        <span>{shared ? "Shared itinerary" : "My itinerary"}</span>
-        <span className="status info">{saved.length}</span>
-      </a>
-    </header>
-  );
-}
-
 function PublicProgrammeViewNavigation({
   model,
 }: {
@@ -178,7 +100,6 @@ function PublicProgrammeViewNavigation({
     </nav>
   );
 }
-
 /**
  * The masthead of a published programme. It used to carry three big numbers —
  * sessions, speakers, days — each of which the page states again within one
@@ -215,6 +136,13 @@ function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
           />
         ) : null}
         <h1>{programme.event.name}</h1>
+        {model.loaderData.site?.configuration.tagline ? (
+          <p className="public-site-tagline">
+            {model.loaderData.site.configuration.tagline}
+          </p>
+        ) : programme.event.description ? (
+          <p className="public-site-tagline">{programme.event.description}</p>
+        ) : null}
         <p className="hero-meta">
           {model.showEmbedField("time") ? (
             <span>
@@ -262,36 +190,6 @@ function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
         </div>
       ) : null}
     </section>
-  );
-}
-
-function PublicProgrammeFooter({ model }: { model: PublicProgrammeModel }) {
-  const { programme } = model;
-  const published = new Intl.DateTimeFormat("en", {
-    dateStyle: "long",
-    timeZone: programme.event.timezone,
-  }).format(new Date(programme.version.publishedAt * 1_000));
-  return (
-    <footer className="public-footer">
-      <div>
-        <p className="public-footer-primary">
-          All times shown in {programme.event.timezone}.
-        </p>
-        <p className="public-footer-secondary">
-          Programme version {programme.version.versionNumber} · published{" "}
-          {published}
-        </p>
-      </div>
-      <div className="public-footer-actions">
-        <a
-          className="btn small"
-          href={`/api/v1/public/events/${encodeURIComponent(programme.event.slug)}/calendar.ics`}
-        >
-          Add to calendar (.ics)
-        </a>
-        <p className="public-footer-secondary">Powered by Program Cue</p>
-      </div>
-    </footer>
   );
 }
 
@@ -1157,21 +1055,34 @@ export function PublicProgrammeWorkspace({
     model;
   const overviewSurface =
     loaderData.surface === "overview" || loaderData.surface === "sessions";
+  const homeSurface = loaderData.surface === "overview";
   const accentPalette = programmeAccentPalette(
     embedOptions.accent ?? programme.event.brandAccent,
   );
   return (
     <div
       className={`public-shell event-branded${embedded ? " embedded" : ""}${embedded && embedOptions.density === "compact" ? " embed-compact" : ""}`}
+      data-public-theme={
+        embedded
+          ? embedOptions.theme
+          : (loaderData.site?.configuration.theme ?? "system")
+      }
       style={
         {
           "--event-accent": accentPalette.accent,
-          "--accent-ink": accentPalette.ink,
-          "--accent-on-solid": accentPalette.onAccent,
+          "--event-accent-light-ink": accentPalette.ink,
+          "--event-accent-on-solid": accentPalette.onAccent,
         } as CSSProperties
       }
     >
-      {!embedded ? <PublicProgrammeHeader model={model} /> : null}
+      {!embedded ? (
+        <PublicEventHeader
+          programme={programme}
+          site={loaderData.site?.configuration ?? null}
+          activeSurface={loaderData.surface}
+          itinerary={{ shared: model.shared, savedCount: model.saved.length }}
+        />
+      ) : null}
       <main
         aria-label={embedded ? "Embedded programme preview" : undefined}
         id="main"
@@ -1193,6 +1104,9 @@ export function PublicProgrammeWorkspace({
           ) : (
             <>
               <div className="public-content" id="programme">
+                {homeSurface && loaderData.site ? (
+                  <PublicSiteHome programme={programme} site={loaderData.site} />
+                ) : null}
                 {fetcher.data && "error" in fetcher.data ? (
                   <div className="validation-item error mb" role="alert">
                     <strong>Itinerary not updated</strong>
@@ -1226,7 +1140,7 @@ export function PublicProgrammeWorkspace({
           )}
         </div>
       </main>
-      {!embedded ? <PublicProgrammeFooter model={model} /> : null}
+      {!embedded ? <PublicEventFooter programme={programme} /> : null}
     </div>
   );
 }

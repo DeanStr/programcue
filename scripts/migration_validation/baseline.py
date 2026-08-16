@@ -23,6 +23,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "tags", "session_tags", "session_archives",
         "schedule_versions", "schedule_session_contents", "session_content_revisions", "schedule_entries", "schedule_conflicts",
         "programme_embeds", "public_itineraries", "public_itinerary_items",
+        "event_public_sites", "event_public_site_references", "event_site_sponsors", "event_session_recordings",
         "task_templates", "task_template_dependencies", "task_instances",
         "task_instance_dependencies", "task_comments", "task_evidence",
         "file_assets", "file_versions", "file_multipart_uploads", "event_brand_assets", "resource_pages", "resource_page_versions",
@@ -98,6 +99,10 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "schedule_versions": {"status", "revision", "notes"},
         "schedule_session_contents": {"schedule_version_id", "event_id", "session_id", "title", "slug", "description", "track_id", "format", "duration_minutes", "required_resources_json", "visibility", "content_status", "content_revision", "last_edited_by_person_id", "approved_by_person_id", "approved_at", "approval_source", "last_operation_id"},
         "session_content_revisions": {"event_id", "schedule_version_id", "session_id", "revision_number", "title", "description", "content_status", "change_kind", "restored_from_revision_id", "created_by_person_id"},
+        "event_public_sites": {"event_id", "organisation_id", "draft_json", "draft_revision", "published_json", "published_revision", "published_at", "last_updated_by_person_id", "last_operation_id"},
+        "event_public_site_references": {"event_id", "organisation_id", "kind", "record_id", "site_revision"},
+        "event_site_sponsors": {"id", "organisation_id", "event_id", "name", "tier", "website_url", "logo_url", "description", "position", "revision", "last_updated_by_person_id", "last_operation_id"},
+        "event_session_recordings": {"id", "organisation_id", "event_id", "session_id", "draft_title", "draft_recording_url", "draft_captions_url", "draft_transcript_url", "draft_revision", "published_title", "published_recording_url", "published_captions_url", "published_transcript_url", "published_revision", "published_at", "last_updated_by_person_id", "last_operation_id"},
         "communications": {"idempotency_key", "content_snapshot_json", "recipient_count", "operation_id", "revision"},
         "calendar_invitations": {"ical_uid", "sequence_number", "method", "provider_event_id", "status"},
         "operation_jobs": {"correlation_id", "progress_total", "progress_completed", "progress_failed", "result_json", "claim_token", "claim_expires_at"},
@@ -146,6 +151,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "idx_crm_pipeline_stage", "idx_crm_pipeline_activity_entry",
         "assistant_proposal_executions_claim_idx",
         "idx_event_brand_assets_cleanup",
+        "idx_event_site_sponsors_order", "idx_event_session_recordings_public",
     }
     if required_indexes - indexes:
         raise SystemExit(f"Migration missing indexes: {sorted(required_indexes - indexes)}")

@@ -33,6 +33,7 @@ import {
   PublishedProgrammeItineraryNotFoundError,
   PublishedProgrammeSessionNotFoundError,
 } from "~/modules/programme/public-programme-service.server";
+import { getValidatedPublishedPublicSite } from "~/modules/public-site/validated-public-site.server";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import {
   publishedProgrammeCacheHeaders,
@@ -117,7 +118,26 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   const title = loaderData.speakerShare
     ? `${loaderData.speakerShare.speakerName} · ${event.name}`
     : `Programme · ${event.name}`;
+  const generatedShareImage = loaderData.site
+    ? new URL(
+        `/public/programme/${encodeURIComponent(event.slug)}/social-card.webp`,
+        loaderData.canonicalUrl,
+      )
+    : null;
+  if (generatedShareImage && loaderData.speakerShare) {
+    generatedShareImage.searchParams.set(
+      "speaker",
+      loaderData.speakerShare.speakerId,
+    );
+  }
+  if (generatedShareImage) {
+    generatedShareImage.searchParams.set(
+      "v",
+      `${loaderData.programme.contentRevision}-${loaderData.site!.revision}`,
+    );
+  }
   const shareImage =
+    generatedShareImage?.toString() ??
     loaderData.speakerShare?.imageUrl ??
     (event.bannerUrl
       ? new URL(event.bannerUrl, loaderData.canonicalUrl).toString()
@@ -250,6 +270,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const programme = await service.getPublished(slug);
   if (!programme)
     throw new Response("Published event programme not found", { status: 404 });
+  const site = embedded
+    ? null
+    : await getValidatedPublishedPublicSite(env, programme);
   let surface: PublicProgrammeSurface;
   try {
     surface = managedEmbed
@@ -425,6 +448,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return data(
     {
       programme,
+      site,
       canonicalUrl: canonicalUrl.toString(),
       speakerShare,
       surface,

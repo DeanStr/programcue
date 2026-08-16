@@ -14,18 +14,21 @@
       had nothing to grab and defaulted to scanning the coloured pills.
 */
 
-.public-shell {
+:is(.public-shell, .public-site-preview-frame) {
   --event-accent: var(--brand-600);
   /* Accent tints are derived, never hand-picked, so any brand colour lands in
      the same tonal relationship to the page. */
   --accent-soft: color-mix(in srgb, var(--event-accent) 8%, white);
   --accent-line: color-mix(in srgb, var(--event-accent) 26%, var(--line));
-  --accent-ink: color-mix(in srgb, var(--event-accent) 78%, black);
-  --accent-on-solid: var(--text-inverse);
+  --accent-ink: var(--event-accent-light-ink);
+  --accent-on-solid: var(--event-accent-on-solid);
+}
+.public-shell {
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
   background: var(--surface-editorial);
+  color: var(--ink);
 }
 /* The public page stops borrowing the admin card heading, which set a section
    title smaller than the row titles inside it. */

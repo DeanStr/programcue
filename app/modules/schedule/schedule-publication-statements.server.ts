@@ -1,5 +1,6 @@
 import type { ScheduleCalendarFanoutMessage } from "~/modules/calendars/calendar-schema";
 import { scheduleCalendarFanoutSnapshotStatements } from "~/modules/calendars/calendar-service.server";
+import { PUBLIC_SITE_SCHEDULE_ATOMIC_GUARD } from "~/modules/public-site/public-site-publication-validation.server";
 import type { ScheduleConflict } from "./schedule-rules";
 import type { schedulePublishSchema } from "./schedule-schema";
 import type {
@@ -152,6 +153,7 @@ export function buildSchedulePublicationStatements(input: {
                   )
                 )
            )
+           ${PUBLIC_SITE_SCHEDULE_ATOMIC_GUARD}
            ${commandGuard}
       `,
     ).bind(
@@ -168,6 +170,13 @@ export function buildSchedulePublicationStatements(input: {
       viewer.eventId,
       parsed.scheduleVersionId,
       viewer.eventId,
+      viewer.eventId,
+      viewer.organisationId,
+      parsed.scheduleVersionId,
+      parsed.scheduleVersionId,
+      viewer.eventId,
+      viewer.organisationId,
+      parsed.scheduleVersionId,
       ...commandGuardBindings,
     ),
     env.DB.prepare(

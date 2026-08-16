@@ -18,6 +18,8 @@ describe("static programme HTML", () => {
         venueMapUrl: null,
         city: null,
         description: null,
+        supportUrl: null,
+        applicationUrl: null,
         brandAccent: "#4f46e5",
         heroImageUrl: null,
         logoUrl: null,

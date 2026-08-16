@@ -246,6 +246,24 @@ function EmbedConfigurationWorkflow({
                 </select>
               </label>
               <label className="label">
+                Theme
+                <select
+                  className="select"
+                  value={configuration.theme}
+                  onChange={(event) =>
+                    update(
+                      "theme",
+                      event.target
+                        .value as ProgrammeEmbedConfiguration["theme"],
+                    )
+                  }
+                >
+                  <option value="system">Follow visitor system</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </label>
+              <label className="label">
                 Initial height
                 <input
                   className="field"

@@ -1636,6 +1636,8 @@ components:
           venueMapUrl,
           city,
           description,
+          supportUrl,
+          applicationUrl,
           brandAccent,
           heroImageUrl,
           logoUrl,
@@ -1659,6 +1661,14 @@ components:
           }
         city: { type: [string, "null"] }
         description: { type: [string, "null"] }
+        supportUrl:
+          {
+            type: [string, "null"],
+            format: uri,
+            pattern: "^https://",
+            maxLength: 2048,
+          }
+        applicationUrl: { type: [string, "null"], format: uri-reference }
         brandAccent: { type: string }
         heroImageUrl:
           {
@@ -1705,6 +1715,8 @@ components:
               venueMapUrl,
               city,
               description,
+              supportUrl,
+              applicationUrl,
               brandAccent,
               heroImageUrl,
               logoUrl,
@@ -1738,6 +1750,14 @@ components:
               }
             city: { type: [string, "null"] }
             description: { type: [string, "null"] }
+            supportUrl:
+              {
+                type: [string, "null"],
+                format: uri,
+                pattern: "^https://",
+                maxLength: 2048,
+              }
+            applicationUrl: { type: [string, "null"], format: uri-reference }
             brandAccent: { type: string }
             heroImageUrl:
               {

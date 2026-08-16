@@ -210,6 +210,8 @@ async function publicContentRevision(
         programme.event.venueMapUrl,
         programme.event.city,
         programme.event.description,
+        programme.event.supportUrl,
+        programme.event.applicationUrl,
         programme.event.brandAccent,
         programme.event.heroImageUrl,
         programme.event.logoUrl,
@@ -447,6 +449,21 @@ export class PublicProgrammeService {
              brand_logo_asset_id AS logoAssetId,
              brand_banner_asset_id AS bannerAssetId,
              participant_logo_url AS legacyLogoUrl,
+             participant_support_url AS supportUrl,
+             (
+               SELECT '/apply/' || form.public_slug
+                 FROM form_definitions form
+                WHERE form.event_id = events.id
+                  AND form.kind = 'submission' AND form.status = 'published'
+                  AND EXISTS (
+                    SELECT 1 FROM form_versions version
+                     WHERE version.form_id = form.id
+                       AND version.event_id = form.event_id
+                       AND version.status = 'published'
+                  )
+                ORDER BY form.updated_at DESC, form.id
+                LIMIT 1
+             ) AS applicationUrl,
              organisation_id AS organisationId,
              repository_provider AS repositoryProvider
         FROM events
@@ -490,6 +507,8 @@ export class PublicProgrammeService {
       bannerUrl: eventRow.bannerAssetId
         ? publicEventBrandAssetPath(eventRow.slug, "banner")
         : null,
+      supportUrl: eventRow.supportUrl,
+      applicationUrl: eventRow.applicationUrl,
     };
     const version = await this.env.DB.prepare(
       `

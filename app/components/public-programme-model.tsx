@@ -14,6 +14,7 @@ import type {
   PublishedProgramme,
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
+import type { PublishedPublicSite } from "~/modules/public-site/public-site-service.server";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 
 export type PublicProgrammeLoaderData = {
@@ -38,6 +39,7 @@ export type PublicProgrammeLoaderData = {
     text: string;
     imageUrl: string | null;
   } | null;
+  site?: PublishedPublicSite | null;
 };
 
 export function formatDay(epoch: number, timezone: string) {

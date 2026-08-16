@@ -12,6 +12,7 @@ import {
   ContactRound,
   Files,
   FolderOpen,
+  Globe2,
   LayoutDashboard,
   ListChecks,
   Mail,
@@ -57,6 +58,7 @@ export const NAV_ITEMS = [
   ["command", LayoutDashboard, "Home"],
   ["event", CalendarCog, "Event settings"],
   ["branding", Palette, "Branding"],
+  ["site", Globe2, "Public site"],
   ["submissions", Files, "Applications"],
   /* Sparkles is the universal "a machine wrote this" glyph and the palette
      already spends it on the assistant. Humans score submissions here. */
@@ -98,7 +100,7 @@ const NAV_CHILDREN: Record<string, ReadonlyArray<string>> = {
   speakers: ["crm", "resources"],
   schedule: ["content", "programme"],
   communications: ["tasks"],
-  event: ["branding"],
+  event: ["branding", "site"],
   operations: ["integrations", "settings"],
 };
 

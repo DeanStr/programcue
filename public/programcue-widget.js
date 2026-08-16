@@ -47,6 +47,7 @@
     "accent",
     "controls",
     "density",
+    "theme",
     "directory",
     "fields",
   ];

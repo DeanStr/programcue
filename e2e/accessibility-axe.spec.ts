@@ -25,6 +25,7 @@ const SURFACES = [
   { role: "administrator", path: "/admin/submissions" },
   { role: "administrator", path: "/admin/submissions/form" },
   { role: "administrator", path: "/admin/schedule" },
+  { role: "administrator", path: "/admin/site" },
   { role: "evaluator", path: "/review/workbench" },
   { role: "submitter", path: "/apply/form" },
   { role: "speaker", path: "/participant/dashboard" },
@@ -221,4 +222,18 @@ test("public programme embeds retain contrast with a light event accent", async 
 }) => {
   await openHydrated(page, "/embed/future-of-events-2027?accent=%23ffffff");
   await expectNoViolations(page, "public programme @ light event accent");
+});
+
+test("public programme embeds retain contrast in the controlled dark theme", async ({
+  page,
+}) => {
+  await openHydrated(
+    page,
+    "/embed/future-of-events-2027?accent=%239d4a31&theme=dark",
+  );
+  await expect(page.locator(".public-shell")).toHaveAttribute(
+    "data-public-theme",
+    "dark",
+  );
+  await expectNoViolations(page, "public programme @ controlled dark theme");
 });

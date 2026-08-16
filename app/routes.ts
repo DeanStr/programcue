@@ -149,6 +149,7 @@ export default [
     route("admin/views", "routes/admin-saved-views.ts"),
     route("admin/event", "routes/event-setup.tsx"),
     route("admin/branding", "routes/admin-branding.tsx"),
+    route("admin/site", "routes/admin-public-site.tsx"),
     route("admin/branding/assets/:assetId", "routes/admin-branding-asset.ts"),
     route("admin/operations", "routes/operation-centre.tsx"),
     route(
@@ -234,6 +235,11 @@ export default [
   route("public/programme/:slug", "routes/public-programme.tsx", {
     id: "public-programme-by-slug",
   }),
+  route("public/programme/:slug/pages/:page", "routes/public-site-page.tsx"),
+  route(
+    "public/programme/:slug/social-card.webp",
+    "routes/public-social-card.ts",
+  ),
   route("public/programme/:slug/:surface", "routes/public-programme.tsx", {
     id: "public-programme-surface",
   }),

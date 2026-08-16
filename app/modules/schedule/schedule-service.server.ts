@@ -9,6 +9,7 @@ import {
   scheduleCalendarFanoutMessageSchema,
 } from "~/modules/calendars/calendar-schema";
 import type { AuditOrigin } from "~/platform/audit/audit-contract";
+import { validatePublishedSiteReferencesForSchedule } from "~/modules/public-site/public-site-publication-validation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   WebhookService,
@@ -1029,6 +1030,16 @@ export class ScheduleService {
       );
     }
 
+    const invalidSiteReference =
+      await validatePublishedSiteReferencesForSchedule(this.env, {
+        eventId: viewer.eventId,
+        organisationId: viewer.organisationId,
+        scheduleVersionId: parsed.scheduleVersionId,
+      });
+    if (invalidSiteReference) {
+      throw new SchedulePublicationBlockedError([], invalidSiteReference);
+    }
+
     const detectedConflicts = detectWorkspaceConflicts(workspace);
     const allConflicts = detectedConflicts.map(({ conflict }) => conflict);
     const blockingConflicts = allConflicts.filter(
@@ -1145,6 +1156,18 @@ export class ScheduleService {
         throw new SchedulePublicationBlockedError(
           [],
           `Every scheduled speaker must confirm their participation before publication. “${newlyUnconfirmedSpeaker.title}” still has an unconfirmed speaker.`,
+        );
+      }
+      const newlyInvalidSiteReference =
+        await validatePublishedSiteReferencesForSchedule(this.env, {
+          eventId: viewer.eventId,
+          organisationId: viewer.organisationId,
+          scheduleVersionId: parsed.scheduleVersionId,
+        });
+      if (newlyInvalidSiteReference) {
+        throw new SchedulePublicationBlockedError(
+          [],
+          newlyInvalidSiteReference,
         );
       }
       throw new ScheduleRevisionConflictError();

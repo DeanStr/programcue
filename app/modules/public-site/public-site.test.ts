@@ -1,0 +1,251 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import { PublicSiteHome } from "~/components/public-site-content";
+import {
+  RestrictedMarkdown,
+  restrictedMarkdownPlainText,
+} from "~/components/restricted-markdown";
+import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
+import {
+  defaultPublicSiteDraft,
+  PUBLIC_SITE_CONFIGURATION_JSON_MAX_LENGTH,
+  parsePublishedPublicSiteSnapshot,
+  publicSiteDraftSchema,
+  siteSaveInputSchema,
+  sponsorInputSchema,
+} from "./public-site";
+import { resolvePublicSitePresentation } from "./public-site-presentation";
+
+describe("public event site rules", () => {
+  it("keeps the homepage to exactly six unique fixed sections", () => {
+    const draft = defaultPublicSiteDraft();
+    expect(publicSiteDraftSchema.parse(draft).sectionOrder).toHaveLength(6);
+    expect(() =>
+      publicSiteDraftSchema.parse({
+        ...draft,
+        sectionOrder: [
+          "introduction",
+          "introduction",
+          "featured_sessions",
+          "statistics",
+          "venue",
+          "faq",
+        ],
+      }),
+    ).toThrow(/exactly once/i);
+  });
+
+  it("accepts a draft with every editorial field at its declared limit", () => {
+    const escapedCharacter = "\u0000";
+    const maximumId = (index: number) =>
+      `${String(index).padStart(3, "0")}${escapedCharacter.repeat(157)}`;
+    const draft = defaultPublicSiteDraft();
+    draft.tagline = escapedCharacter.repeat(180);
+    draft.introductionHeading = escapedCharacter.repeat(100);
+    draft.featuredSpeakerIds = Array.from({ length: 12 }, (_, index) =>
+      maximumId(index),
+    );
+    draft.featuredSessionIds = Array.from({ length: 12 }, (_, index) =>
+      maximumId(index),
+    );
+    draft.faqItems = Array.from({ length: 12 }, (_, index) => ({
+      id: maximumId(index),
+      question: escapedCharacter.repeat(180),
+      answer: escapedCharacter.repeat(2_000),
+    }));
+    for (const page of Object.values(draft.pages)) {
+      page.title = escapedCharacter.repeat(100);
+      page.navigationLabel = escapedCharacter.repeat(40);
+      page.body = escapedCharacter.repeat(8_000);
+    }
+    draft.postEvent.heading = escapedCharacter.repeat(120);
+    draft.postEvent.body = escapedCharacter.repeat(2_000);
+
+    const configurationJson = JSON.stringify(draft);
+    expect(configurationJson.length).toBeLessThanOrEqual(
+      PUBLIC_SITE_CONFIGURATION_JSON_MAX_LENGTH,
+    );
+    expect(
+      siteSaveInputSchema.parse({ revision: 0, configurationJson })
+        .configurationJson,
+    ).toEqual(draft);
+  });
+
+  it("rejects credentialed or non-HTTPS sponsor addresses", () => {
+    const input = {
+      id: "",
+      revision: 0,
+      name: "Main partner",
+      tier: "Gold",
+      websiteUrl: "http://example.test",
+      logoUrl: "https://user:password@example.test/logo.png",
+      description: "",
+      position: 0,
+    };
+    expect(() => sponsorInputSchema.parse(input)).toThrow();
+  });
+
+  it("renders only credential-free HTTPS Markdown links", () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        RestrictedMarkdown,
+        null,
+        "[Safe](https://example.test/help) [Secret](https://user:password@example.test/help) [Local](http://example.test/help)",
+      ),
+    );
+    expect(markup).toContain('href="https://example.test/help"');
+    expect(markup).not.toContain("user:password");
+    expect(markup).not.toContain('href="http://');
+    expect(markup).toContain("Secret");
+  });
+
+  it("derives clean metadata text from restricted Markdown", () => {
+    expect(
+      restrictedMarkdownPlainText(
+        "## Why attend\n\n- Meet **practitioners**\n- Read [the guide](https://example.test/guide)",
+      ),
+    ).toBe("Why attend Meet practitioners Read the guide");
+  });
+
+  it("renders post-event Markdown and published accessibility resources", () => {
+    const configuration = {
+      ...defaultPublicSiteDraft(),
+      sectionVisibility: {
+        introduction: false,
+        featured_speakers: false,
+        featured_sessions: false,
+        statistics: false,
+        venue: false,
+        faq: false,
+      },
+      postEvent: {
+        enabled: true,
+        heading: "Watch on demand",
+        body: "Find **every talk** in the archive.",
+      },
+      sponsors: [],
+    };
+    const programme = {
+      event: {
+        slug: "example-event",
+        startDate: "2027-01-01",
+        endDate: "2027-01-01",
+        description: null,
+        venue: null,
+        city: null,
+        venueAddress: null,
+      },
+      sessions: [],
+      speakers: [],
+    } as unknown as PublishedProgramme;
+    const markup = renderToStaticMarkup(
+      createElement(PublicSiteHome, {
+        programme,
+        site: {
+          configuration,
+          recordings: [
+            {
+              id: "recording-one",
+              sessionId: "session-one",
+              title: "Opening keynote",
+              recordingUrl: "https://video.example.test/watch",
+              captionsUrl: "https://video.example.test/captions.vtt",
+              transcriptUrl: "https://video.example.test/transcript",
+              sessionTitle: "Opening keynote",
+              speakerNames: ["Example Speaker"],
+            },
+          ],
+        },
+      }),
+    );
+    expect(markup).toContain("<strong>every talk</strong>");
+    expect(markup).toContain('href="https://video.example.test/captions.vtt"');
+    expect(markup).toContain('href="https://video.example.test/transcript"');
+  });
+
+  it("keeps every public action inert in the editor preview", () => {
+    const configuration = {
+      ...defaultPublicSiteDraft(),
+      sponsors: [],
+    };
+    const programme = {
+      event: {
+        slug: "example-event",
+        startDate: "2027-01-01",
+        endDate: "2027-01-01",
+        description: "An example event.",
+        venue: "Example Hall",
+        city: "Example City",
+        venueAddress: "1 Example Street",
+        venueMapUrl: "https://maps.example.test/hall",
+        applicationUrl: "https://forms.example.test/apply",
+        supportUrl: "https://help.example.test/event",
+      },
+      sessions: [],
+      speakers: [],
+    } as unknown as PublishedProgramme;
+    const markup = renderToStaticMarkup(
+      createElement(PublicSiteHome, {
+        programme,
+        site: { configuration, recordings: [] },
+        preview: true,
+      }),
+    );
+    expect(markup).toContain("Apply to speak");
+    expect(markup).toContain("Explore the programme");
+    expect(markup).toContain("Event help");
+    expect(markup).toContain("Open map");
+    expect(markup).not.toContain("href=");
+  });
+
+  it("rejects unsafe restricted-Markdown links before publication", () => {
+    const draft = defaultPublicSiteDraft();
+    draft.pages.about.body =
+      "[Secret](https://user:password@example.test/help)";
+    expect(() => publicSiteDraftSchema.parse(draft)).toThrow(
+      /credential-free HTTPS/i,
+    );
+  });
+
+  it("strictly validates sponsor fields in persisted publication snapshots", () => {
+    const snapshot = {
+      ...defaultPublicSiteDraft(),
+      sponsors: [
+        {
+          id: "sponsor-one",
+          name: "Partner",
+          tier: "Gold",
+          websiteUrl: "https://user:password@example.test",
+          logoUrl: null,
+          description: null,
+          position: 0,
+        },
+      ],
+    };
+    expect(() =>
+      parsePublishedPublicSiteSnapshot(JSON.stringify(snapshot)),
+    ).toThrow(/credentials/i);
+  });
+
+  it("fails when a visible featured record no longer resolves", () => {
+    const draft = defaultPublicSiteDraft();
+    draft.sectionVisibility.introduction = false;
+    draft.sectionVisibility.venue = false;
+    draft.sectionVisibility.featured_sessions = true;
+    draft.featuredSessionIds = ["missing-session"];
+    const programme = {
+      event: {
+        description: null,
+        venue: null,
+        city: null,
+        venueAddress: null,
+      },
+      sessions: [],
+      speakers: [],
+    } as unknown as PublishedProgramme;
+    expect(() => resolvePublicSitePresentation(draft, programme)).toThrow(
+      /missing-session.*current published programme/i,
+    );
+  });
+});

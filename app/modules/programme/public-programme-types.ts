@@ -47,6 +47,8 @@ export type PublishedProgramme = {
     heroImageUrl: string | null;
     logoUrl: string | null;
     bannerUrl: string | null;
+    supportUrl: string | null;
+    applicationUrl: string | null;
   };
   version: { id: string; versionNumber: number; publishedAt: number };
   sessions: PublishedSession[];

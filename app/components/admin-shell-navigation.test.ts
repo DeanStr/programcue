@@ -175,6 +175,7 @@ describe("administrator navigation context", () => {
         "programme",
         "tasks",
         "branding",
+        "site",
         "integrations",
         "settings",
       ]),
@@ -243,6 +244,9 @@ describe("administrator navigation context", () => {
     expect(
       primaryNavigationChildren("communications", NAV_ITEMS).map(([id]) => id),
     ).toEqual(["tasks"]);
+    expect(
+      primaryNavigationChildren("event", NAV_ITEMS).map(([id]) => id),
+    ).toEqual(["branding", "site"]);
   });
 
   it("drops a second-level tool the viewer is not authorised for", () => {

@@ -12,6 +12,7 @@ import {
   parseProgrammeEmbedSearchParameters,
   parseProgrammeEmbedSpeakerDirectory,
   parseProgrammeEmbedSurface,
+  parseProgrammeEmbedTheme,
   programmeEmbedFilterOptions,
   programmeEmbedUrl,
   programmeIframeSnippet,
@@ -137,11 +138,41 @@ describe("programme embed configuration", () => {
     expect(() => parseProgrammeEmbedSpeakerDirectory("maybe")).toThrow(
       /show or hide/i,
     );
+    expect(parseProgrammeEmbedTheme("dark")).toBe("dark");
+    expect(parseProgrammeEmbedTheme(null)).toBe("system");
+    expect(() => parseProgrammeEmbedTheme("brand")).toThrow(
+      /light, dark or system/i,
+    );
     expect(() =>
       parseProgrammeEmbedSearchParameters(
         new URLSearchParams("fields=time,unknown"),
       ),
     ).toThrow(/supported public fields/i);
+  });
+
+  it("serializes an explicit controlled theme", () => {
+    const configuration = {
+      ...defaultProgrammeEmbedConfiguration(),
+      theme: "dark" as const,
+    };
+    expect(
+      programmeEmbedUrl(
+        "https://events.example.com",
+        "future-of-events-2027",
+        configuration,
+      ),
+    ).toBe(
+      "https://events.example.com/embed/future-of-events-2027/sessions?theme=dark",
+    );
+    expect(
+      programmeWidgetSnippet({
+        origin: "https://events.example.com",
+        eventSlug: "future-of-events-2027",
+        target: "programme-widget",
+        title: "Programme",
+        configuration,
+      }),
+    ).toContain('data-theme="dark"');
   });
 
   it("parses supported parameters and rejects empty, unknown or duplicate input", () => {

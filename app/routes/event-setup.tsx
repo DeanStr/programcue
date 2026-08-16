@@ -31,6 +31,7 @@ import {
   EventBrandingOwnershipError,
   EventInvitationAddressError,
   EventInvitationDeliveryError,
+  EventPublicSiteConflictError,
   EventRepositoryMigrationRequiredError,
   EventService,
 } from "~/modules/events/event-service.server";
@@ -431,6 +432,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       error instanceof EventPublishedScheduleConflictError ||
       error instanceof EventPublishedProgrammeSlugError ||
       error instanceof EventBrandingOwnershipError ||
+      error instanceof EventPublicSiteConflictError ||
       error instanceof EventRepositoryMigrationRequiredError ||
       error instanceof AirtableMigrationStateError
     ) {

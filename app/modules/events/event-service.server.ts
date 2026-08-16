@@ -4,6 +4,9 @@ import {
 } from "~/modules/airtable/airtable-event-data-repository.server";
 import { AirtableRoomRepository } from "~/modules/airtable/airtable-room-repository.server";
 import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
+import { parsePublishedPublicSiteSnapshot } from "~/modules/public-site/public-site";
+import { PublishedPublicSiteInvariantError } from "~/modules/public-site/public-site-errors";
+import { validatePublicSiteCanonicalEvent } from "~/modules/public-site/public-site-presentation";
 import { createAuth } from "~/platform/auth/auth.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
@@ -66,6 +69,15 @@ export class EventBrandingOwnershipError extends Error {
       "Event Setup cannot change published branding. Refresh this page and use the Branding workspace for event identity changes.",
     );
     this.name = "EventBrandingOwnershipError";
+  }
+}
+
+export class EventPublicSiteConflictError extends Error {
+  constructor(message: string) {
+    super(
+      `${message} Update and publish the public site before removing its canonical event content.`,
+    );
+    this.name = "EventPublicSiteConflictError";
   }
 }
 
@@ -165,6 +177,31 @@ export class EventService {
     const parsed = requested;
     if (current.repositoryProvider !== parsed.repositoryProvider)
       throw new EventRepositoryMigrationRequiredError();
+    const publishedSite = await this.env.DB.prepare(
+      `SELECT published_json AS publishedJson
+         FROM event_public_sites
+        WHERE event_id = ? AND organisation_id = ?
+          AND published_json IS NOT NULL`,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .first<{ publishedJson: string }>();
+    if (publishedSite) {
+      const configuration = parsePublishedPublicSiteSnapshot(
+        publishedSite.publishedJson,
+      );
+      try {
+        validatePublicSiteCanonicalEvent(configuration, {
+          description: parsed.description,
+          venue: parsed.venue,
+          city: parsed.city,
+          venueAddress: parsed.venueAddress,
+        });
+      } catch (error) {
+        if (error instanceof PublishedPublicSiteInvariantError)
+          throw new EventPublicSiteConflictError(error.message);
+        throw error;
+      }
+    }
     await this.repository.validateSetup(
       viewer.organisationId,
       viewer.eventId,

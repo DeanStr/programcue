@@ -748,6 +748,69 @@ this AIA-08 production slice.
   hero or unpublished branding changes exist; private R2 asset copying is not
   implemented and is never silently omitted.
 
+## Public event-site workstream evidence
+
+- **Production slice; local acceptance verified, deployment outstanding:**
+  `/admin/site` is an owner/administrator-only, event-scoped editor backed by
+  migration `0035_public_event_site.sql`. It has one compare-and-set draft and
+  one immutable published snapshot, explicit preview and publication, and a
+  unified branding/site/programme status view. The migration and Drizzle schema
+  add event-scoped site, published-reference, sponsor and recording tables with
+  organisation/event foreign-key isolation. Audit and event-change evidence is
+  conditional on the exact committed operation. The migration validates and
+  applies locally; it has not been applied to production.
+- **Bounded composition:** The homepage has exactly six fixed sections:
+  introduction, featured speakers, featured sessions, published-programme
+  statistics, venue/map and FAQ. Organisers can hide them and use keyboard-
+  accessible Move up/Move down controls. Desktop/mobile previews use the same
+  renderer as the public homepage. About, FAQ, Venue, Code of Conduct and
+  Sponsors are the only optional pages; content uses restricted Markdown with
+  no arbitrary HTML or routes. Invalid or credentialed Markdown links fail
+  draft validation and remain sanitized at render time as defense in depth.
+- **Canonical data and publication integrity:** The visible event description,
+  venue/address/map, published support URL and current CFP action continue to
+  come from Event Setup, Branding and the published form. Site publication
+  snapshots editorial configuration and structured sponsors, not programme
+  records. Featured IDs must resolve against the current published programme at
+  site publication, are materialized only when visible, and are revalidated in
+  both the schedule preflight and atomic schedule compare-and-set. A conflicting
+  schedule stays unpublished rather than silently dropping homepage content.
+  Site publication also atomically rechecks canonical description/venue
+  dependencies; public loaders repeat the checks, and Event Setup blocks removal
+  of content required by the live site. Fixed editorial page ETags combine the
+  request resource, programme/branding content identity and site publication
+  revision. Invalid persisted snapshots or branding return a non-cacheable
+  error; they do not disappear or receive a product-colour/placeholder fallback.
+- **Promotion and post-event tools:** The organizer can copy the public URL,
+  suggested announcement, escaped programme iframe and existing speaker share
+  links, and can inspect the actual unfurl. Event and speaker social cards are
+  rendered as WebP by the required Images binding; the route returns an explicit
+  503 without it and uses programme/site revisioned URLs. External HTTPS
+  recording drafts have a separate confirmed publication boundary, require a
+  currently published session, and appear only after the event and session end.
+  Optional external captions and transcripts are linked beside the recording.
+  Schedule publication preflight and its atomic guard prevent a published
+  recording's session from disappearing silently. Withdrawal removes public
+  access immediately while retaining the editable draft. Disabled post-event
+  mode does not serialize recording data. No upload, hosting, caption generation
+  or rights-management success is claimed.
+- **Themes and verification:** Public pages and managed embeds accept only
+  light, dark or system. The closed public theme token set does not enable a
+  global application dark mode; a dedicated axe case verifies the dark public
+  programme contrast contract. Focused unit/Worker coverage verifies fixed
+  composition, URL constraints, immutable snapshots, stale-write behavior,
+  sponsor snapshots and edits, featured-record and recording schedule blocking,
+  recording resources/timing and a real Images WebP render.
+  `e2e/public-site.spec.ts` passes the complete organizer-to-public Chromium
+  workflow, including conditional fixed-page caching, and `/admin/site` passes
+  the WCAG A/AA axe sweep at phone, tablet and desktop widths. The complete local
+  core gate also passes, including TypeScript, production builds, the Agents
+  Durable Object test, recovery, migration/contracts and synchronized OpenAPI
+  validation.
+- **Scope boundary:** Generic blocks, arbitrary HTML/CSS, nesting, custom
+  domains, custom fonts, white-label removal, sponsor asset upload, media upload
+  and media processing remain not implemented.
+
 ## Public programme gallery workstream evidence
 
 - **Production slice (EMB-01/04/09/12/13/14):** The anonymous public programme now exposes the published D1/Airtable snapshot through the existing service at the sessions overview, `/speakers`, `/agenda`, `/schedule` and `/gallery` surfaces. Its primary navigation is Programme, Speakers and My itinerary; ordinary links retain List/Agenda/Schedule and Directory/Gallery as selected, deep-linkable views within those concepts. Surface selection uses the matched React Router parameter, so framework `.data` revalidation URLs cannot be mistaken for a public surface and return a false 404. Sessions and chronological itinerary cards include complete public metadata; speakers are surname-ordered; gallery search and the keyboard-accessible detail panel use the same published speaker/session graph.
@@ -772,7 +835,7 @@ this AIA-08 production slice.
 | NFR-001–005               | Typed builds, indexed server pagination, local performance harness, automated accessibility/cross-browser coverage, security controls, observability and recovery mechanics exist. Production RUM/scale, live recovery and manual accessibility acceptance remain outstanding.                                                                                                                                                                                                                               |
 | OPT-001–006               | Multi-round evaluation, advanced task/resource flows, AI assistance, D1/Airtable event clone, import/export, saved views and higher-polish operational UI are connected.                                                                                                                                                                                                                                                                                                                                     |
 | WVD-001–003               | Accelevents export/reconciliation, versioned resources/files and responsive public programme/itinerary slices are connected; live provider acceptance remains external.                                                                                                                                                                                                                                                                                                                                      |
-| OUT-001–005               | General-purpose CRM, broad marketing automation, CMS, payments and multilingual expansion remain deliberately excluded. Speaker Network is an explicit, bounded SBEK extra-credit slice constrained to programme-speaker relationships, sourcing and event-specific invitations; it is not claimed as frozen base scope.                                                                                                                                                                                     |
+| OUT-001–005               | General-purpose CRM, broad marketing automation, a generic CMS, payments and multilingual expansion remain deliberately excluded. The fixed-section public event site is a bounded editorial layer over canonical published data, not a generic CMS. Speaker Network is an explicit, bounded SBEK extra-credit slice constrained to programme-speaker relationships, sourcing and event-specific invitations; it is not claimed as frozen base scope.                                                        |
 | CMP-001–013               | Repository evidence exists. Forge, deployed evaluator URL, competition submission, reimbursement, judging and walkthrough evidence are external and unverified.                                                                                                                                                                                                                                                                                                                                              |
 | TEC-001–009               | The Worker/D1/R2/Queue/Workflow/Durable Object architecture, multi-event isolation, 33-path API, generated OpenAPI component schemas, provider boundaries, observability and recovery code are deployed. Retained logs, zero-backlog Queue metrics, a live Workflow backup, isolated restore, three scoped alerts and repeated firing alert exercises are verified. Autonomous post-fix cron completion, Cloudflare's failed Workers-alert-to-Notifications handoff and measured RPO/RTO remain outstanding. |
 | UX-001–010                | Command search/saved views, readiness drill-downs, review workspace, consequence previews, draft recovery, safe undo, contextual/standalone AI, demo walkthroughs, isolated authoring previews and the unified Operation Centre are connected. Cross-surface smart defaults, progressive disclosure, linked validation summaries, organisation-scoped person lookup, near-limit counts, unsaved-change protection and URL-restored programme/schedule filters are connected. Manual assistive-technology acceptance remains external.                                                                                                          |

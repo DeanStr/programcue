@@ -749,6 +749,77 @@ domains and removal of platform attribution remain outside this slice. Support
 links require HTTPS with a hostname and reject embedded usernames or passwords;
 ports remain allowed because no current requirement narrows them.
 
+## Public event-site publication decisions
+
+The event site is a bounded editorial layer over the canonical event and
+published programme, not a generic block editor. Its homepage has exactly six
+known section types and its navigation has five known optional pages. Organisers
+may hide or reorder sections with authoritative Move up/Move down controls, but
+cannot add arbitrary routes, HTML, scripts or layout blocks. Editorial bodies
+use a deliberately restricted Markdown subset. Credentialed, non-HTTPS or
+invalid Markdown links are rejected when the draft is saved; rendering repeats
+the same link restriction as defense in depth rather than silently repairing
+published copy.
+
+The saved site draft and immutable published site snapshot have an independent
+compare-and-set revision. Publication snapshots editorial configuration and the
+ordered sponsor records, but never copies sessions, speakers, event description,
+venue, map or branding data. Visible featured record IDs are materialized as
+published-site references and must resolve to eligible records in the current
+published programme. Site publication and schedule publication both recheck
+that invariant inside their D1 compare-and-set boundary; an incompatible
+schedule remains a draft and the previous public programme remains live. Hidden
+selections are not hard references. The organizer sees branding, site and
+programme publication state together even though their publication boundaries
+remain independent.
+
+The final site-and-sponsor snapshot is schema-validated and written directly by
+the guarded publication statement; publication does not first copy and then
+replace the draft JSON. That statement atomically rechecks the canonical event
+description and venue dependencies as well as visible programme references.
+Public routes repeat those checks before rendering. Event Setup refuses to
+remove description or venue data still required by a published site. Persisted
+snapshot corruption, missing visible references and invalid published branding
+fail with a non-cacheable error rather than dropping content or substituting
+Program Cue presentation defaults.
+
+Sponsors are event-scoped structured draft records and enter the public surface
+only through the site snapshot. Recordings accept external credential-free
+HTTPS URLs only; saving is explicitly neither upload nor publication. A separate
+confirmed recording publication copies its draft fields, requires its session
+in the published programme, and exposes it only after both the event and session
+have ended. Organisers can withdraw the public recording immediately without
+discarding its editable draft. A later schedule cannot make the recording
+silently disappear: preflight and the atomic schedule-publication statement
+require every published recording's session to remain eligible. Optional
+external caption and transcript resources are rendered beside the recording.
+Upload processing, media hosting, rights management, transcription and caption
+generation remain outside this slice. Recording draft/publication persistence
+lives in a focused service inside the same modular monolith; it is not a media
+subsystem or separate runtime.
+
+Generated event and speaker social cards require Cloudflare Images to render a
+server-generated SVG as WebP. Missing or failed rendering returns an explicit
+non-cacheable 503. Card URLs include the complete programme content identity and site
+publication revision, so branding, programme and editorial changes cannot reuse
+the wrong cached unfurl. Promotion tools reuse the existing speaker share URL
+instead of introducing a second speaker-landing concept.
+
+Fixed editorial pages are public-cacheable. Their conditional response identity
+combines the request resource, complete programme/branding content revision and
+site publication revision, so canonical event, programme, branding, sponsor and
+editorial changes invalidate the representation together.
+
+The programme and fixed event pages share one event header, navigation and
+footer contract. The administrator route retains one loader/action and splits
+only its concrete editor, sponsor, recording and preview panels; no generic CMS
+component or block framework is introduced.
+
+Light, dark and system themes are a controlled public-surface choice, including
+managed programme embeds. They switch a closed event-site token set; arbitrary
+CSS, fonts and user-defined theme values remain unsupported. The global
+administrator and participant application still has no dark theme.
+
 ### External resource embeds (supersedes the earlier resource-embed trust row)
 
 External resources are first-class typed document blocks for YouTube, Vimeo or
@@ -831,7 +902,7 @@ rewritten.
 | Elevation contract                                 | Border contains, tint groups, shadow floats. A card on canvas is a 1px border plus `--elev-1`; a panel nested inside a card recedes to `--surface-sunken` with no border and no shadow; a popover is `--elev-3` with no border.                                                                                                                                                                                                                                                                                       |
 | Consequential actions show blast radius            | `window.confirm` is not permitted. `ConfirmDialog` is used instead and is passed the affected records whenever they are already in scope, satisfying the contributor rule that consequential actions show what they will change.                                                                                                                                                                                                                                                                                      |
 | One feedback rule                                  | A result that stays on the page is an inline `StatusNotice` beside the affected workflow. Cross-navigation results use an explicit destination notice carried by the route; no shared action-toast abstraction is required. `{ ok: false, committed: true }` is a warning, not a failure — that work committed.                                                                                                                                                                                                       |
-| Dark theme deferred                                | A dark token set was written and then removed. With 159 colour literals and 32 shadows still outside the token layer, a theme swap would have left hard-coded light surfaces — `workspace-integrations.css` paints a `#f8faff → #fff` gradient — behind lightened text. There is also no current product requirement for it. Revisit once the literal baseline reaches zero.                                                                                                                                          |
+| Global application dark theme deferred             | The administrator and participant application still contains recorded light-only literals and shadows, so a global theme swap would leave mixed surfaces. The bounded anonymous event site is the deliberate exception: light/dark/system switches only its closed public token set and managed embeds, with browser contrast coverage. Revisit a global theme only when the literal baseline reaches zero.                                                                                                           |
 | Reduced motion slows, it does not freeze           | `prefers-reduced-motion` overrides `--dur-*` to 1ms rather than blanket-killing animation, so loading signals stay legible at a calmer speed instead of appearing frozen.                                                                                                                                                                                                                                                                                                                                             |
 | `.grid-N` is a column ceiling, not a column hint   | The track floor is `max(--grid-min, 1/N of the row)`, so extra width widens the existing columns instead of adding more. Previously `.grid-N` meant "as many `--grid-min` columns as fit", rendering `.grid-2` as three columns at 1440px, four at 1920px and six at 2560px — a larger screen bought more cramped columns rather than more comfortable ones. Only narrowing drops columns now.                                                                                                                        |
 | Repeating record editors are tables, not cards     | A collection whose length the user controls (rooms, tracks, session formats) renders one row per record under a shared column header, not one card per record. Stacked cards made those panels 1,200–1,400px tall beside 215px settings cards, and since a grid row is as tall as its tallest child, that height mismatch is what produced Event Setup's 1,096px hole. Equal heights remove the holes at the source.                                                                                                  |

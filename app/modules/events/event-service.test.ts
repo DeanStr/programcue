@@ -1,5 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { defaultPublicSiteDraft } from "~/modules/public-site/public-site";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import {
   acceptEventInvitation,
@@ -21,6 +22,7 @@ import {
 import { eventSetupInputSchema } from "./event-schema";
 import {
   EventBrandingOwnershipError,
+  EventPublicSiteConflictError,
   EventService,
 } from "./event-service.server";
 
@@ -251,6 +253,39 @@ describe("Event Setup D1 service", () => {
       .bind(viewer.eventId)
       .first<{ publicProjectionRevision: number }>();
     expect(projection?.publicProjectionRevision).toBe(result.changeSequence);
+  });
+
+  it("blocks Event Setup from invalidating canonical content used by the published site", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const eventService = new EventService(testEnv);
+    const current = await eventService.getSetup(viewer);
+    const configuration = defaultPublicSiteDraft();
+    configuration.sectionVisibility.venue = false;
+    const snapshot = JSON.stringify({ ...configuration, sponsors: [] });
+    await env.DB.prepare(
+      `INSERT INTO event_public_sites (
+         event_id, organisation_id, draft_json, draft_revision,
+         published_json, published_revision, published_at,
+         last_updated_by_person_id, last_operation_id
+       ) VALUES (?, ?, ?, 1, ?, 1, unixepoch(), ?, ?)`,
+    )
+      .bind(
+        viewer.eventId,
+        viewer.organisationId,
+        JSON.stringify(configuration),
+        snapshot,
+        viewer.personId,
+        crypto.randomUUID(),
+      )
+      .run();
+
+    await expect(
+      eventService.saveSetup(viewer, {
+        ...inputFrom(current),
+        description: "",
+      }),
+    ).rejects.toBeInstanceOf(EventPublicSiteConflictError);
   });
 
   it("persists tracks, format defaults and room resource inventories", async () => {

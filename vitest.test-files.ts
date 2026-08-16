@@ -42,6 +42,7 @@ export const nodeOnlyTestFiles = [
   "app/modules/programme/programme-embed-configuration.test.ts",
   "app/modules/programme/programme-presentation.test.ts",
   "app/modules/programme/public-programme-filter-state.test.ts",
+  "app/modules/public-site/public-site.test.ts",
   "app/modules/submissions/application-notice.test.ts",
   "app/modules/readiness/readiness-rules.test.ts",
   "app/modules/schedule/schedule-rules.test.ts",

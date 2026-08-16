@@ -90,6 +90,18 @@
   /* A cool hairline reads blue against warm paper, so the editorial surface
      carries its own. */
   --border-editorial: #dedbd5;
+  /* The event-site theme is deliberately scoped to anonymous programme
+     surfaces. These tokens do not imply a global application dark mode. */
+  --public-dark-canvas: #101817;
+  --public-dark-line: #35413f;
+  --public-dark-surface: #172220;
+  --public-dark-surface-raised: #1c2927;
+  --public-dark-surface-sunken: #111b1a;
+  --public-dark-ink: #f2f5f4;
+  --public-dark-muted: #a8b5b1;
+  --public-dark-muted-on-surface: #bcc7c4;
+  --public-dark-accent-ink: #d7e4e1;
+  --public-dark-accent-on-solid: #101817;
   /* The one dark gradient ground in the product: the design-system hero and
      the evaluation surfaces. Held as tokens because two files were painting
      the same three values by hand. */
@@ -109,6 +121,11 @@
   --text-tertiary: var(--muted-on-surface); /* 5.43:1 on white */
   --text-inverse: #fff;
   --text-accent: var(--brand-700);
+  /* Public event shells replace these two with the accessible palette derived
+     from the event accent. Defaults keep the CSS contract valid before that
+     route-owned inline palette is present. */
+  --event-accent-light-ink: var(--brand-700);
+  --event-accent-on-solid: var(--text-inverse);
 
   /* --- State -------------------------------------------------------------
      Two weights per state, because a fill and a label have different jobs.

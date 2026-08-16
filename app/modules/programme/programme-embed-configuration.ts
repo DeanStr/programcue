@@ -33,6 +33,7 @@ export type ProgrammeEmbedControl = (typeof PROGRAMME_EMBED_CONTROLS)[number];
 export type ProgrammeEmbedSurface = (typeof PROGRAMME_EMBED_SURFACES)[number];
 export type ProgrammeEmbedField = (typeof PROGRAMME_EMBED_FIELDS)[number];
 export type ProgrammeEmbedDensity = "comfortable" | "compact";
+export type ProgrammeEmbedTheme = "light" | "dark" | "system";
 
 const PROGRAMME_EMBED_QUERY_PARAMETERS = [
   "day",
@@ -43,6 +44,7 @@ const PROGRAMME_EMBED_QUERY_PARAMETERS = [
   "accent",
   "controls",
   "density",
+  "theme",
   "directory",
   "fields",
 ] as const;
@@ -56,6 +58,7 @@ type ProgrammeEmbedSearchConfiguration = {
   accent: string | null;
   controls: ProgrammeEmbedControl[];
   density: ProgrammeEmbedDensity;
+  theme: ProgrammeEmbedTheme;
   showSpeakerDirectory: boolean;
   fields: ProgrammeEmbedField[];
 };
@@ -70,6 +73,7 @@ export type ProgrammeEmbedConfiguration = {
   accent: string;
   controls: ProgrammeEmbedControl[];
   density: ProgrammeEmbedDensity;
+  theme: ProgrammeEmbedTheme;
   showSpeakerDirectory: boolean;
   fields: ProgrammeEmbedField[];
   height: number;
@@ -102,6 +106,7 @@ export function defaultProgrammeEmbedConfiguration(): ProgrammeEmbedConfiguratio
     accent: "",
     controls: [...PROGRAMME_EMBED_CONTROLS],
     density: "comfortable",
+    theme: "system",
     showSpeakerDirectory: true,
     fields: [...PROGRAMME_EMBED_FIELDS],
     height: 720,
@@ -212,6 +217,16 @@ export function parseProgrammeEmbedDensity(
   );
 }
 
+export function parseProgrammeEmbedTheme(
+  raw: string | null,
+): ProgrammeEmbedTheme {
+  if (raw === null || raw === "system") return "system";
+  if (raw === "light" || raw === "dark") return raw;
+  throw new ProgrammeEmbedConfigurationError(
+    "Embed theme must be light, dark or system.",
+  );
+}
+
 export function parseProgrammeEmbedSpeakerDirectory(
   raw: string | null,
 ): boolean {
@@ -265,6 +280,7 @@ export function parseProgrammeEmbedSearchParameters(
     accent: optionalNonEmptyEmbedParameter(searchParams, "accent"),
     controls: parseProgrammeEmbedControls(searchParams.get("controls")),
     density: parseProgrammeEmbedDensity(searchParams.get("density")),
+    theme: parseProgrammeEmbedTheme(searchParams.get("theme")),
     showSpeakerDirectory: parseProgrammeEmbedSpeakerDirectory(
       searchParams.get("directory"),
     ),
@@ -304,6 +320,7 @@ export function assertProgrammeEmbedConfiguration(
     configuration.controls.length ? configuration.controls.join(",") : "none",
   );
   parseProgrammeEmbedDensity(configuration.density);
+  parseProgrammeEmbedTheme(configuration.theme);
   parseProgrammeEmbedFields(
     configuration.fields.length ? configuration.fields.join(",") : "none",
   );
@@ -355,6 +372,7 @@ export function parsePersistedProgrammeEmbedConfiguration(
     "accent",
     "controls",
     "density",
+    "theme",
     "showSpeakerDirectory",
     "fields",
     "height",
@@ -370,6 +388,7 @@ export function parsePersistedProgrammeEmbedConfiguration(
     !Array.isArray(candidate.fields) ||
     candidate.fields.some((field) => typeof field !== "string") ||
     typeof candidate.showSpeakerDirectory !== "boolean" ||
+    typeof candidate.theme !== "string" ||
     typeof candidate.height !== "number"
   ) {
     throw new ProgrammeEmbedConfigurationError(
@@ -398,6 +417,7 @@ export function programmeEmbedSearchConfiguration(
     accent: configuration.accent || null,
     controls: [...configuration.controls],
     density: configuration.density,
+    theme: configuration.theme,
     showSpeakerDirectory: configuration.showSpeakerDirectory,
     fields: [...configuration.fields],
   };
@@ -432,6 +452,9 @@ export function programmeEmbedUrl(
   }
   if (configuration.density !== "comfortable") {
     url.searchParams.set("density", configuration.density);
+  }
+  if (configuration.theme !== "system") {
+    url.searchParams.set("theme", configuration.theme);
   }
   if (
     configuration.surface === "sessions" &&
@@ -538,6 +561,7 @@ export function programmeWidgetSnippet({
       "data-density",
       configuration.density === "comfortable" ? "" : configuration.density,
     ],
+    ["data-theme", configuration.theme === "system" ? "" : configuration.theme],
     [
       "data-directory",
       configuration.surface === "sessions" &&
