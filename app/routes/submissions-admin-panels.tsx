@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, Link, useLocation, useNavigation } from "react-router";
+import { Form, Link, useNavigation, useSearchParams } from "react-router";
 
 import { PersonDuplicateWarning } from "~/components/person-duplicate-warning";
 import { PersonLookup } from "~/components/person-lookup";
@@ -48,6 +48,7 @@ export function SubmissionAdminDetailPanel({
   queueNavigation: SubmissionAdminQueueNavigation | null;
 }) {
   const navigation = useNavigation();
+  const [searchParams] = useSearchParams();
   const labels = new Map(
     submission.schema?.fields.map((field) => [field.id, field.label]) ?? [],
   );
@@ -121,6 +122,23 @@ export function SubmissionAdminDetailPanel({
             </span>
           )}
         </nav>
+      ) : null}
+      {searchParams.get("created") === "1" ? (
+        <div
+          className={`validation-item ${searchParams.get("attention") === "1" ? "warn" : "ok"} card pad mb`}
+          role="status"
+        >
+          <strong>Application record created</strong>
+          <span>
+            The immutable submitted snapshot is ready for review and selection.
+          </span>
+          {searchParams.get("attention") === "1" ? (
+            <span>
+              One or more outbound webhook deliveries require attention in
+              Operations.
+            </span>
+          ) : null}
+        </div>
       ) : null}
       <ActionNotice result={actionResult} />
       <div className="grid grid-2">
@@ -484,25 +502,24 @@ function DuplicatePersonWarning({
   );
 }
 
-export function ManualEntryPanels({
-  routingTeams,
-  routingTracks,
-  sessionFormats,
-  manualApplicationIdempotencyKey,
-  directSessionIdempotencyKey,
-  actionResult,
-}: {
-  routingTeams: Array<{ id: string; name: string }>;
+type AdminCreationFormProps = {
   routingTracks: Array<{ id: string; name: string }>;
   sessionFormats: Awaited<
     ReturnType<SubmissionService["getConfiguredSessionFormats"]>
   >;
-  manualApplicationIdempotencyKey: string;
-  directSessionIdempotencyKey: string;
   actionResult?: SubmissionsAdminActionResult;
-}) {
+} & (
+  | {
+      kind: "application";
+      routingTeams: Array<{ id: string; name: string }>;
+      idempotencyKey: string;
+    }
+  | { kind: "session"; idempotencyKey: string }
+);
+
+export function AdminCreationForm(props: AdminCreationFormProps) {
+  const { kind, routingTracks, sessionFormats, actionResult } = props;
   const navigation = useNavigation();
-  const location = useLocation();
   const [directSpeakers, setDirectSpeakers] = useState<
     SubmissionAdminSpeakerInput[]
   >([{ name: "", email: "", biography: "" }]);
@@ -515,234 +532,222 @@ export function ManualEntryPanels({
   );
   return (
     <div className="stack">
-      <details className="card pad">
-        <summary>
-          <strong>Enter an application manually</strong>{" "}
-          <span className="subtle">
-            preserve an abstract for participants who already accepted their
-            event invitations
-          </span>
-        </summary>
-        <Form method="post" className="stack mt">
-          <input
-            type="hidden"
-            name="_intent"
-            value="create_manual_application"
-          />
-          <input
-            type="hidden"
-            name="idempotencyKey"
-            value={manualApplicationIdempotencyKey}
-          />
-          <input
-            type="hidden"
-            name="speakers"
-            value={JSON.stringify(applicationSpeakers)}
-          />
-          <div className="grid grid-2">
+      {kind === "application" ? (
+        <section className="card pad">
+          <Form method="post" className="stack mt">
+            <input
+              type="hidden"
+              name="_intent"
+              value="create_manual_application"
+            />
+            <input
+              type="hidden"
+              name="idempotencyKey"
+              value={props.idempotencyKey}
+            />
+            <input
+              type="hidden"
+              name="speakers"
+              value={JSON.stringify(applicationSpeakers)}
+            />
+            <div className="grid grid-2">
+              <label className="label">
+                Session title
+                <input className="field" name="title" required />
+              </label>
+              <label className="label">
+                Tracks
+                <select
+                  className="select"
+                  name="trackIds"
+                  required
+                  multiple
+                  size={Math.min(Math.max(routingTracks.length, 2), 6)}
+                >
+                  {routingTracks.map((track) => (
+                    <option key={track.id} value={track.id}>
+                      {track.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="help">
+                  Select every review track that applies.
+                </span>
+              </label>
+              <label className="label">
+                Format
+                <select
+                  className="select"
+                  name="format"
+                  defaultValue={sessionFormats[0]!.key}
+                >
+                  {sessionFormats.map((format) => (
+                    <option key={format.key} value={format.key}>
+                      {format.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="label">
+                Review teams (optional administrator override)
+                <select
+                  className="select"
+                  name="routedTeamIds"
+                  multiple
+                  size={Math.min(Math.max(props.routingTeams.length, 2), 6)}
+                >
+                  {props.routingTeams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="help">
+                  Routing is recorded now; evaluator assignments are created
+                  separately in Review administration.
+                </span>
+              </label>
+            </div>
             <label className="label">
-              Session title
-              <input className="field" name="title" required />
+              Abstract or description
+              <textarea className="textarea" name="description" required />
             </label>
-            <label className="label">
-              Tracks
-              <select
-                className="select"
-                name="trackIds"
-                required
-                multiple
-                size={Math.min(Math.max(routingTracks.length, 2), 6)}
-              >
-                {routingTracks.map((track) => (
-                  <option key={track.id} value={track.id}>
-                    {track.name}
-                  </option>
-                ))}
-              </select>
-              <span className="help">
-                Select every review track that applies.
-              </span>
-            </label>
-            <label className="label">
-              Format
-              <select
-                className="select"
-                name="format"
-                defaultValue={sessionFormats[0]!.key}
-              >
-                {sessionFormats.map((format) => (
-                  <option key={format.key} value={format.key}>
-                    {format.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="label">
-              Review teams (optional administrator override)
-              <select
-                className="select"
-                name="routedTeamIds"
-                multiple
-                size={Math.min(Math.max(routingTeams.length, 2), 6)}
-              >
-                {routingTeams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
-              <span className="help">
-                Routing is recorded now; evaluator assignments are created
-                separately in Review administration.
-              </span>
-            </label>
-          </div>
-          <label className="label">
-            Abstract or description
-            <textarea className="textarea" name="description" required />
-          </label>
-          <div className="grid grid-2">
-            <label className="label">
-              Submitter name
-              <input className="field" name="submitterName" required />
-            </label>
-            <label className="label">
-              Submitter email
-              <input
-                className="field"
-                name="submitterEmail"
-                type="email"
-                required
-              />
-            </label>
-          </div>
-          <SpeakerFields
-            speakers={applicationSpeakers}
-            setSpeakers={setApplicationSpeakers}
-          />
-          <DuplicatePersonWarning
-            result={actionResult}
-            intent="create_manual_application"
-          />
-          <button
-            className="btn primary"
-            type="submit"
-            disabled={navigation.state !== "idle"}
-          >
-            {navigation.formData?.get("_intent") === "create_manual_application"
-              ? "Creating…"
-              : "Create manual application"}
-          </button>
-        </Form>
-      </details>
+            <div className="grid grid-2">
+              <label className="label">
+                Submitter name
+                <input className="field" name="submitterName" required />
+              </label>
+              <label className="label">
+                Submitter email
+                <input
+                  className="field"
+                  name="submitterEmail"
+                  type="email"
+                  required
+                />
+              </label>
+            </div>
+            <SpeakerFields
+              speakers={applicationSpeakers}
+              setSpeakers={setApplicationSpeakers}
+            />
+            <DuplicatePersonWarning
+              result={actionResult}
+              intent="create_manual_application"
+            />
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={navigation.state !== "idle"}
+            >
+              {navigation.formData?.get("_intent") ===
+              "create_manual_application"
+                ? "Creating…"
+                : "Create manual application"}
+            </button>
+          </Form>
+        </section>
+      ) : null}
 
-      <details
-        className="card pad"
-        id="create-direct-session"
-        open={location.hash === "#create-direct-session" || undefined}
-      >
-        <summary>
-          <strong>Create a guaranteed direct session</strong>{" "}
-          <span className="subtle">
-            for sponsors, invited speakers or confirmed programme items
-          </span>
-        </summary>
-        <Form method="post" className="stack mt">
-          <input type="hidden" name="_intent" value="create_direct_session" />
-          <input
-            type="hidden"
-            name="idempotencyKey"
-            value={directSessionIdempotencyKey}
-          />
-          <input
-            type="hidden"
-            name="speakers"
-            value={JSON.stringify(directSpeakers)}
-          />
-          <div className="form-row">
-            <label className="label">
-              Session title
-              <input className="field" name="title" required />
-            </label>
-            <label className="label">
-              Track
-              <select
-                className="select"
-                name="trackId"
-                required
-                defaultValue=""
-              >
-                <option value="" disabled>
-                  Choose a current event track
-                </option>
-                {routingTracks.map((track) => (
-                  <option key={track.id} value={track.id}>
-                    {track.name}
+      {kind === "session" ? (
+        <section className="card pad">
+          <Form method="post" className="stack mt">
+            <input type="hidden" name="_intent" value="create_direct_session" />
+            <input
+              type="hidden"
+              name="idempotencyKey"
+              value={props.idempotencyKey}
+            />
+            <input
+              type="hidden"
+              name="speakers"
+              value={JSON.stringify(directSpeakers)}
+            />
+            <div className="form-row">
+              <label className="label">
+                Session title
+                <input className="field" name="title" required />
+              </label>
+              <label className="label">
+                Track
+                <select
+                  className="select"
+                  name="trackId"
+                  required
+                  defaultValue=""
+                >
+                  <option value="" disabled>
+                    Choose a current event track
                   </option>
-                ))}
-              </select>
-            </label>
+                  {routingTracks.map((track) => (
+                    <option key={track.id} value={track.id}>
+                      {track.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="label">
+                Format
+                <select
+                  className="select"
+                  name="format"
+                  value={directFormat}
+                  onChange={(changeEvent) => {
+                    const next = sessionFormats.find(
+                      (format) => format.key === changeEvent.target.value,
+                    );
+                    if (!next) return;
+                    setDirectFormat(next.key);
+                    setDirectDuration(next.defaultDurationMinutes);
+                  }}
+                >
+                  {sessionFormats.map((format) => (
+                    <option key={format.key} value={format.key}>
+                      {format.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="label">
+                Duration (minutes)
+                <input
+                  className="field"
+                  name="durationMinutes"
+                  type="number"
+                  min={5}
+                  max={480}
+                  value={directDuration}
+                  onChange={(changeEvent) =>
+                    setDirectDuration(Number(changeEvent.target.value))
+                  }
+                  required
+                />
+              </label>
+            </div>
             <label className="label">
-              Format
-              <select
-                className="select"
-                name="format"
-                value={directFormat}
-                onChange={(changeEvent) => {
-                  const next = sessionFormats.find(
-                    (format) => format.key === changeEvent.target.value,
-                  );
-                  if (!next) return;
-                  setDirectFormat(next.key);
-                  setDirectDuration(next.defaultDurationMinutes);
-                }}
-              >
-                {sessionFormats.map((format) => (
-                  <option key={format.key} value={format.key}>
-                    {format.label}
-                  </option>
-                ))}
-              </select>
+              Description
+              <textarea className="textarea" name="description" />
             </label>
-            <label className="label">
-              Duration (minutes)
-              <input
-                className="field"
-                name="durationMinutes"
-                type="number"
-                min={5}
-                max={480}
-                value={directDuration}
-                onChange={(changeEvent) =>
-                  setDirectDuration(Number(changeEvent.target.value))
-                }
-                required
-              />
-            </label>
-          </div>
-          <label className="label">
-            Description
-            <textarea className="textarea" name="description" />
-          </label>
-          <SpeakerFields
-            speakers={directSpeakers}
-            setSpeakers={setDirectSpeakers}
-          />
-          <DuplicatePersonWarning
-            result={actionResult}
-            intent="create_direct_session"
-          />
-          <button
-            className="btn primary"
-            type="submit"
-            disabled={navigation.state !== "idle"}
-          >
-            {navigation.formData?.get("_intent") === "create_direct_session"
-              ? "Creating…"
-              : "Create unscheduled session"}
-          </button>
-        </Form>
-      </details>
+            <SpeakerFields
+              speakers={directSpeakers}
+              setSpeakers={setDirectSpeakers}
+            />
+            <DuplicatePersonWarning
+              result={actionResult}
+              intent="create_direct_session"
+            />
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={navigation.state !== "idle"}
+            >
+              {navigation.formData?.get("_intent") === "create_direct_session"
+                ? "Creating…"
+                : "Create unscheduled session"}
+            </button>
+          </Form>
+        </section>
+      ) : null}
     </div>
   );
 }

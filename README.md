@@ -46,11 +46,11 @@ Useful routes:
 
 - Evaluator guide and complete demo reset: `http://127.0.0.1:5173/demo`
 - Command Centre: `http://127.0.0.1:5173/admin/command`
-- Event Setup: `http://127.0.0.1:5173/admin/event`
+- Event settings: `http://127.0.0.1:5173/admin/event`
 - Branding: `http://127.0.0.1:5173/admin/branding`
 - New blank event: `http://127.0.0.1:5173/admin/events/new`
-- Submissions and forms: `http://127.0.0.1:5173/admin/submissions`
-- Review administration: `http://127.0.0.1:5173/admin/review`
+- Applications and forms: `http://127.0.0.1:5173/admin/submissions`
+- Review & selection: `http://127.0.0.1:5173/admin/review`
 - Schedule: `http://127.0.0.1:5173/admin/schedule`
 - Communications: `http://127.0.0.1:5173/admin/communications`
 - Participant workspace: `http://127.0.0.1:5173/participant/dashboard`

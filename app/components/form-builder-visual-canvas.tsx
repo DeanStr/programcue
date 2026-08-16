@@ -22,16 +22,25 @@ import {
   FORM_FIELD_TYPES,
   formConditionSourceLabel,
   formFieldCreationIssue,
+  formFieldInsertionSectionId,
   formFieldTypeLabel,
+  moveFormFieldToInsertion,
 } from "~/modules/submissions/form-builder-fields";
 import type {
   FormField,
   SaveFormInput,
 } from "~/modules/submissions/submission-schema";
+import { formSectionsForDisplay } from "~/modules/submissions/submission-schema";
 
 type DraggedItem =
   | { kind: "new-field"; fieldType: FormField["type"]; label: string }
   | { kind: "field"; fieldId: string; label: string };
+
+function fieldsInSectionOrder(input: SaveFormInput) {
+  return formSectionsForDisplay(input.schema).flatMap(
+    (section) => section.fields,
+  );
+}
 
 const formCollisionDetection: CollisionDetection = (args) => {
   const canvasTargets = args.droppableContainers.filter(
@@ -243,6 +252,11 @@ function CanvasPage({
     id: "form-canvas-boundary",
     data: { kind: "canvas-boundary" },
   });
+  const sections = formSectionsForDisplay(input.schema);
+  const orderedFields = sections.flatMap((section) => section.fields);
+  const fieldIndexes = new Map(
+    orderedFields.map((field, index) => [field.id, index]),
+  );
 
   return (
     <div ref={canvas.setNodeRef} className="fb-canvas-page">
@@ -253,26 +267,34 @@ function CanvasPage({
         </p>
       </div>
       <ol className="fb-canvas-fields">
-        {input.schema.fields.map((field, index) => (
-          <Fragment key={field.id}>
-            <CanvasInsertionTarget index={index} />
-            <CanvasField
-              field={field}
-              selected={field.id === selectedId}
-              select={() => onSelect(field.id)}
-              openSettings={onOpenSettings}
-              conditionSourceLabel={
-                field.condition
-                  ? formConditionSourceLabel(
-                      input.schema.fields,
-                      field.condition.fieldId,
-                    )
-                  : null
-              }
-            />
+        {sections.map((section) => (
+          <Fragment key={section.id}>
+            <li className="fb-canvas-section">
+              <strong>{section.title}</strong>
+              {section.description ? <p>{section.description}</p> : null}
+            </li>
+            {section.fields.map((field) => (
+              <Fragment key={field.id}>
+                <CanvasInsertionTarget index={fieldIndexes.get(field.id)!} />
+                <CanvasField
+                  field={field}
+                  selected={field.id === selectedId}
+                  select={() => onSelect(field.id)}
+                  openSettings={onOpenSettings}
+                  conditionSourceLabel={
+                    field.condition
+                      ? formConditionSourceLabel(
+                          orderedFields,
+                          field.condition.fieldId,
+                        )
+                      : null
+                  }
+                />
+              </Fragment>
+            ))}
           </Fragment>
         ))}
-        <CanvasInsertionTarget index={input.schema.fields.length} />
+        <CanvasInsertionTarget index={orderedFields.length} />
       </ol>
       {!input.schema.fields.length ? (
         <p className="fb-canvas-empty">Drag a field here to begin.</p>
@@ -304,13 +326,19 @@ export function FormBuilderVisualCanvas({
   const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null);
 
   function insertField(type: FormField["type"], targetIndex: number) {
-    const issue = formFieldCreationIssue(input.schema.fields, type);
+    const orderedFields = fieldsInSectionOrder(input);
+    const issue = formFieldCreationIssue(orderedFields, type);
     if (issue) {
       onOperationBlocked(issue);
       return;
     }
-    const field = createFormField(input.schema.fields, type);
-    const fields = [...input.schema.fields];
+    const sectionId = formFieldInsertionSectionId(
+      orderedFields,
+      targetIndex,
+      input.schema.sections[0]!.id,
+    );
+    const field = createFormField(orderedFields, type, sectionId);
+    const fields = [...orderedFields];
     fields.splice(targetIndex, 0, field);
     change({ ...input, schema: { ...input.schema, fields } });
     onSelect(field.id);
@@ -335,24 +363,21 @@ export function FormBuilderVisualCanvas({
       return;
     }
 
-    const sourceIndex = input.schema.fields.findIndex(
-      (field) => field.id === active.fieldId,
+    const orderedFields = fieldsInSectionOrder(input);
+    const fields = moveFormFieldToInsertion(
+      orderedFields,
+      active.fieldId,
+      targetIndex,
+      input.schema.sections[0]!.id,
     );
-    if (sourceIndex < 0) return;
-    const fields = [...input.schema.fields];
-    const [field] = fields.splice(sourceIndex, 1);
-    if (!field) return;
-    const adjustedTarget =
-      targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
-    if (adjustedTarget === sourceIndex) return;
-    fields.splice(Math.min(adjustedTarget, fields.length), 0, field);
+    if (!fields) return;
     const issue = conditionalFieldOrderIssue(fields);
     if (issue) {
       onOperationBlocked(issue);
       return;
     }
     change({ ...input, schema: { ...input.schema, fields } });
-    onSelect(field.id);
+    onSelect(active.fieldId);
   }
 
   function startDrag(event: DragStartEvent) {

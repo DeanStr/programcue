@@ -199,6 +199,8 @@ export default [
     ),
     route("admin/submissions/form", "routes/form-builder-preview.tsx"),
     route("admin/schedule", "routes/schedule-planner.tsx"),
+    route("admin/sessions/new", "routes/admin-create-session.tsx"),
+    route("admin/submissions/new", "routes/admin-create-application.tsx"),
     route("admin/sessions/bulk", "routes/admin-session-bulk.tsx"),
     route("admin/submissions", "routes/submissions-admin.tsx", {
       id: "submissions-admin",

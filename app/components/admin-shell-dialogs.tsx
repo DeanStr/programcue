@@ -45,8 +45,8 @@ function readableRole(role: string) {
 }
 
 const VIEW_AREA_LABELS: Record<SavedViewArea, string> = {
-  submissions: "Submissions",
-  evaluations: "Review",
+  submissions: "Applications",
+  evaluations: "Review & selection",
   speakers: "Speakers",
   sessions: "Schedule",
   tasks: "Tasks",
@@ -405,7 +405,7 @@ export function AdminAuxiliaryDialogs({
           <div className="pc-menu">
             <Link
               className="pc-menu-item"
-              to="/admin/submissions#create-direct-session"
+              to="/admin/sessions/new?from=global"
               onClick={closeDialog}
               data-dialog-autofocus
             >
@@ -416,6 +416,21 @@ export function AdminAuxiliaryDialogs({
                 <strong>Direct session</strong>
                 <small>
                   Add an invited, sponsored or guaranteed programme session.
+                </small>
+              </span>
+            </Link>
+            <Link
+              className="pc-menu-item"
+              to="/admin/submissions/new"
+              onClick={closeDialog}
+            >
+              <span className="pc-menu-icon">
+                <CopyPlus aria-hidden size={16} />
+              </span>
+              <span className="pc-menu-copy">
+                <strong>Application record</strong>
+                <small>
+                  Enter an application for an accepted event participant.
                 </small>
               </span>
             </Link>

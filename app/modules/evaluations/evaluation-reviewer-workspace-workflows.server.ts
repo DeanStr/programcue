@@ -1,4 +1,7 @@
-import { reviewerVisibleAnswers } from "~/modules/submissions/submission-schema";
+import {
+  formFieldsInDisplayOrder,
+  reviewerVisibleAnswers,
+} from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { EvaluationStateError } from "./evaluation-errors";
 import {
@@ -497,7 +500,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
           category: summaryAnswer(answers.category),
           format: summaryAnswer(answers.format),
           answers,
-          answerFields: snapshot.schema.fields
+          answerFields: formFieldsInDisplayOrder(snapshot.schema)
             .filter((field) => Object.hasOwn(answers, field.id))
             .map((field) => ({
               id: field.id,

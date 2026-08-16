@@ -41,7 +41,7 @@ test.describe
         breadcrumbs.getByRole("link", { name: "Future of Events 2027" }),
       ).toBeVisible();
       await expect(
-        breadcrumbs.getByText("Submissions", { exact: true }),
+        breadcrumbs.getByText("Applications", { exact: true }),
       ).toHaveAttribute("aria-current", "page");
 
       await page
@@ -105,8 +105,7 @@ test.describe
       page,
     }) => {
       const title = `Duplicate-aware direct session ${Date.now()}`;
-      await page.goto("/admin/submissions");
-      await page.getByText("Create a guaranteed direct session").click();
+      await page.goto("/admin/sessions/new?from=global");
       const directSessionForm = page.locator("form").filter({
         has: page.getByRole("button", {
           name: "Create unscheduled session",
@@ -142,10 +141,8 @@ test.describe
         })
         .click();
       await expect(
-        page.getByText(
-          /Direct session created in the unscheduled programme\. Speaker participation must be confirmed before publication; portal invitation acceptance is separate\./,
-        ),
-      ).toBeVisible();
+        page.getByRole("status").filter({ hasText: "Direct session created" }),
+      ).toContainText("Speaker participation must still be confirmed");
     });
 
     test("manual speaker creation warns before linking an existing identity", async ({

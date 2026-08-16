@@ -17,9 +17,17 @@ const PLAN_ID = "demo-evaluation-plan";
 const ROUND_ID = "demo-evaluation-round";
 
 const formSchema = {
+  schemaVersion: 2,
   introduction:
     "These archived proposals provide stable, realistic evaluation examples in demo mode.",
   presentation: DEFAULT_FORM_PRESENTATION,
+  sections: [
+    {
+      id: "proposal",
+      title: "Proposal",
+      description: "",
+    },
+  ],
   fields: [
     {
       id: "title",
@@ -32,6 +40,7 @@ const formSchema = {
       reviewVisibility: "reviewers",
       blindReviewVisibility: "content",
       condition: null,
+      sectionId: "proposal",
     },
     {
       id: "category",
@@ -44,6 +53,7 @@ const formSchema = {
       reviewVisibility: "reviewers",
       blindReviewVisibility: "content",
       condition: null,
+      sectionId: "proposal",
     },
     {
       id: "format",
@@ -56,6 +66,7 @@ const formSchema = {
       reviewVisibility: "reviewers",
       blindReviewVisibility: "content",
       condition: null,
+      sectionId: "proposal",
     },
     {
       id: "session_overview",
@@ -68,6 +79,7 @@ const formSchema = {
       reviewVisibility: "reviewers",
       blindReviewVisibility: "content",
       condition: null,
+      sectionId: "proposal",
     },
     {
       id: "audience_takeaway",
@@ -80,6 +92,7 @@ const formSchema = {
       reviewVisibility: "reviewers",
       blindReviewVisibility: "content",
       condition: null,
+      sectionId: "proposal",
     },
     {
       id: "delivery_approach",
@@ -92,6 +105,7 @@ const formSchema = {
       reviewVisibility: "reviewers",
       blindReviewVisibility: "content",
       condition: null,
+      sectionId: "proposal",
     },
   ],
 } satisfies SubmissionFormSchema;

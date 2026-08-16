@@ -4,7 +4,7 @@ import { ApiParticipantService } from "~/platform/api/api-participant-service.se
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   draftPayloadSchema,
-  formSchemaSchema,
+  storedFormSchemaSchema,
   submittedSnapshotSchema,
 } from "./submission-schema";
 
@@ -50,7 +50,7 @@ const participantApplicationSummarySchema = z
         isPrimary: z.boolean(),
       }),
     ),
-    schema: formSchemaSchema,
+    schema: storedFormSchemaSchema,
     answers: draftPayloadSchema.shape.answers,
     submittedSnapshot: submittedSnapshotSchema.nullable(),
     submittedAt: z.iso.datetime({ offset: true }).nullable(),

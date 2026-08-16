@@ -122,12 +122,39 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       workspace.version.id,
     );
   }
-  const requestedSessionId = searchParams.get("session");
+  const requestedSessionValues = searchParams.getAll("session");
+  if (requestedSessionValues.length > 1) {
+    throw new Response("Invalid schedule session focus", { status: 400 });
+  }
+  const requestedSessionId = requestedSessionValues[0] ?? null;
   const focusedSessionId = workspace.sessions.some(
     (session) => session.id === requestedSessionId,
   )
     ? requestedSessionId
     : null;
+  if (requestedSessionId && !focusedSessionId) {
+    throw new Response("Schedule session not found in this event", {
+      status: 404,
+    });
+  }
+  const createdValues = searchParams.getAll("created");
+  const attentionValues = searchParams.getAll("attention");
+  if (createdValues.length > 1 || attentionValues.length > 1) {
+    throw new Response("Invalid direct-session creation result", {
+      status: 400,
+    });
+  }
+  const created = createdValues[0] ?? null;
+  const attention = attentionValues[0] ?? null;
+  if (
+    (created !== null && created !== "1") ||
+    (attention !== null && attention !== "1") ||
+    ((created === "1" || attention === "1") && !focusedSessionId)
+  ) {
+    throw new Response("Invalid direct-session creation result", {
+      status: 400,
+    });
+  }
   const requestedConflictId = searchParams.get("conflict")?.trim() ?? "";
   if (requestedConflictId.length > 200)
     throw new Response("Invalid schedule conflict focus", { status: 400 });
@@ -143,6 +170,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     activeFilter,
     filteredSessionIds,
     focusedSessionId,
+    createdSessionId: created === "1" ? focusedSessionId : null,
+    createdSessionNeedsAttention: attention === "1",
     focusedConflictId: requestedConflictId || null,
     recoveryScope: { eventId: viewer.eventId, personId: viewer.personId },
     intentId: crypto.randomUUID(),

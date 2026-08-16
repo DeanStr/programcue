@@ -32,11 +32,13 @@ function dateLabel(epoch: number, timezone: string) {
 function DraggableSession({
   session,
   scheduled,
+  focused,
   placementAvailable,
   readOnlyMessage,
 }: {
   session: ScheduleSession;
   scheduled: boolean;
+  focused: boolean;
   placementAvailable: boolean;
   readOnlyMessage: string;
 }) {
@@ -51,7 +53,8 @@ function DraggableSession({
     <button
       ref={setNodeRef}
       type="button"
-      className={`schedule-session-source${isDragging ? " dragging" : ""}`}
+      className={`schedule-session-source${isDragging ? " dragging" : ""}${focused ? " focused" : ""}`}
+      aria-current={focused ? "true" : undefined}
       style={{ transform: CSS.Translate.toString(transform) }}
       disabled={disabled}
       {...listeners}
@@ -383,10 +386,10 @@ export function ScheduleSourcePanel({
               <div className="validation-item warn">
                 <span>
                   Configure resource inventory on at least one room in Event
-                  Setup before assigning session requirements.
+                  settings before assigning session requirements.
                 </span>
                 <Link className="btn small" to="/admin/event">
-                  Open Event Setup
+                  Open Event settings
                 </Link>
               </div>
             )}
@@ -458,6 +461,7 @@ export function ScheduleSourcePanel({
             key={session.id}
             session={session}
             scheduled={scheduledSessionIds.has(session.id)}
+            focused={workspace.focusedSessionId === session.id}
             placementAvailable={placementAvailable}
             readOnlyMessage={readOnlyPlacementMessage}
           />

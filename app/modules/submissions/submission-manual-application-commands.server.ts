@@ -140,8 +140,10 @@ export class SubmissionManualApplicationCommands extends SubmissionAdministratio
       format: configuredFormat.key,
     };
     const manualSchema = {
+      schemaVersion: 2 as const,
       introduction: "Entered manually by an administrator.",
       presentation: DEFAULT_FORM_SCHEMA.presentation,
+      sections: DEFAULT_FORM_SCHEMA.sections,
       fields: DEFAULT_FORM_SCHEMA.fields
         .filter((field) =>
           ["title", "description", "category", "format"].includes(field.id),

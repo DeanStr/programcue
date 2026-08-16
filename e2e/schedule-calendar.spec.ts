@@ -461,18 +461,14 @@ test.describe("mutable schedule authoring", () => {
       `Auto-place second ${unique}`,
     ];
 
-    await waitForInterface(page, "/admin/submissions");
     for (const [index, title] of titles.entries()) {
-      const directSession = page.locator("details").filter({
-        has: page.getByText("Create a guaranteed direct session", {
+      await waitForInterface(page, "/admin/sessions/new?from=schedule");
+      const directSession = page.locator("form").filter({
+        has: page.getByRole("button", {
+          name: "Create unscheduled session",
           exact: true,
         }),
       });
-      if ((await directSession.getAttribute("open")) === null) {
-        await directSession
-          .getByText("Create a guaranteed direct session", { exact: true })
-          .click();
-      }
       await directSession.getByLabel("Session title").fill(title);
       await directSession.getByLabel("Track").selectOption({ index: 1 });
       await directSession
@@ -487,11 +483,12 @@ test.describe("mutable schedule authoring", () => {
       await directSession
         .getByRole("button", { name: "Create unscheduled session" })
         .click();
+      await expect(page).toHaveURL(
+        /\/admin\/schedule\?session=[^&]+&created=1/u,
+      );
       await expect(
-        page.locator(".validation-item.ok[role='status']").filter({
-          hasText: "Direct session created in the unscheduled programme.",
-        }),
-      ).toBeVisible();
+        page.getByRole("status").filter({ hasText: "Direct session created" }),
+      ).toContainText("selected for placement");
     }
 
     await waitForInterface(page, "/admin/schedule");

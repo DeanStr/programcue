@@ -20,6 +20,7 @@ import {
 } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
+import { adminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
@@ -39,6 +40,12 @@ import {
   recordRouteChange,
 } from "~/platform/realtime/route-realtime.server";
 import type { Route } from "./+types/admin-speaker-detail";
+
+export const handle = adminRecordBreadcrumbHandle([
+  "detail",
+  "profile",
+  "name",
+]);
 
 export const meta: Route.MetaFunction = ({ loaderData }) => [
   {

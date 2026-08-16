@@ -31,10 +31,11 @@ import {
   Link,
   useFetcher,
   useLocation,
+  useMatches,
   useNavigate,
   useSubmit,
 } from "react-router";
-
+import type { AdminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
 import type {
   CommandRecord,
   RecentCommandRecord,
@@ -53,50 +54,38 @@ import { Button } from "./ui/button";
 export type AdminNavigationItem = readonly [string, LucideIcon, string];
 
 export const NAV_ITEMS = [
-  ["command", LayoutDashboard, "Command Centre"],
-  ["event", CalendarCog, "Event Setup"],
+  ["command", LayoutDashboard, "Home"],
+  ["event", CalendarCog, "Event settings"],
   ["branding", Palette, "Branding"],
-  ["submissions", Files, "Submissions"],
+  ["submissions", Files, "Applications"],
   /* Sparkles is the universal "a machine wrote this" glyph and the palette
      already spends it on the assistant. Humans score submissions here. */
-  ["review", ClipboardCheck, "Review"],
+  ["review", ClipboardCheck, "Review & selection"],
   ["speakers", UsersRound, "Speakers"],
-  ["crm", ContactRound, "Speaker Network"],
-  ["resources", BookOpen, "Resources"],
-  ["schedule", CalendarDays, "Schedule"],
+  ["crm", ContactRound, "Speaker network"],
+  ["resources", BookOpen, "Speaker resources"],
+  ["schedule", CalendarDays, "Programme"],
   ["communications", Mail, "Communications"],
   ["tasks", ListChecks, "Tasks"],
   /* Files and FileStack are the same stacked-paper outline at 16px, which is
      exactly the size the rail runs at when the icon is the only label. */
-  ["content", FolderOpen, "Content & files"],
-  ["programme", PanelTop, "Programme"],
+  ["content", FolderOpen, "Session content & files"],
+  ["programme", PanelTop, "Publish & embed"],
   ["integrations", Cable, "Integrations"],
-  ["settings", Settings, "Settings"],
+  ["settings", Settings, "API & webhooks"],
   ["operations", Activity, "Operations"],
 ] as const satisfies ReadonlyArray<AdminNavigationItem>;
 
-/* "Core work" held ten of the thirteen items, which chunks nothing. The phases
-   an event actually moves through do: take the work in, get it ready, keep the
-   installation running. */
+/* Keep a stable set of user-facing workspace families. Their children expose
+   the existing routes without making the rail mirror the internal model. */
 const NAV_GROUPS = [
   {
-    label: "Core work",
-    ids: ["command", "event", "branding", "submissions", "review"],
+    label: "Event work",
+    ids: ["command", "submissions", "speakers", "schedule", "communications"],
   },
   {
-    label: "Delivery",
-    ids: [
-      "speakers",
-      "schedule",
-      "programme",
-      "communications",
-      "tasks",
-      "content",
-    ],
-  },
-  {
-    label: "Manage",
-    ids: ["integrations", "operations", "settings"],
+    label: "Administration",
+    ids: ["event", "operations"],
   },
 ] as const;
 
@@ -105,7 +94,12 @@ const NAV_GROUPS = [
    breadcrumb printed directly below it. They are the speaker family's second
    level and appear whenever that family is where you are. */
 const NAV_CHILDREN: Record<string, ReadonlyArray<string>> = {
+  submissions: ["review"],
   speakers: ["crm", "resources"],
+  schedule: ["content", "programme"],
+  communications: ["tasks"],
+  event: ["branding"],
+  operations: ["integrations", "settings"],
 };
 
 function navigationFamily(id: string) {
@@ -115,18 +109,50 @@ function navigationFamily(id: string) {
 export function primaryNavigationGroups(
   items: ReadonlyArray<AdminNavigationItem>,
 ) {
+  const placementCounts = new Map<string, number>();
+  for (const group of NAV_GROUPS) {
+    for (const parentId of group.ids) {
+      for (const id of navigationFamily(parentId)) {
+        placementCounts.set(id, (placementCounts.get(id) ?? 0) + 1);
+      }
+    }
+  }
+  const invalidConfiguration = NAV_ITEMS.filter(
+    ([id]) => placementCounts.get(id) !== 1,
+  ).map(([id]) => id);
+  if (invalidConfiguration.length) {
+    throw new Error(
+      `Administrator navigation items must have exactly one family: ${invalidConfiguration.join(", ")}`,
+    );
+  }
+  const unknownItems = items
+    .filter(([id]) => !placementCounts.has(id))
+    .map(([id]) => id);
+  if (unknownItems.length) {
+    throw new Error(
+      `Administrator navigation items are not assigned to a family: ${unknownItems.join(", ")}`,
+    );
+  }
   const available = new Map(items.map((item) => [item[0], item]));
-  return NAV_GROUPS.map((group) => ({
+  const groups = NAV_GROUPS.map((group) => ({
     label: group.label,
-    items: group.ids.flatMap((id) => {
-      const item = available.get(id);
-      return item ? [item] : [];
+    items: group.ids.flatMap((parentId) => {
+      const parent = available.get(parentId);
+      if (parent) return [parent];
+      return (NAV_CHILDREN[parentId] ?? []).flatMap((childId) => {
+        const child = available.get(childId);
+        return child ? [child] : [];
+      });
     }),
   })).filter((group) => group.items.length > 0);
+  return groups;
 }
 
 export function primaryNavigationSection(pathname: string) {
-  return pathname.split("/").filter(Boolean)[1] ?? "command";
+  const section = pathname.split("/").filter(Boolean)[1] ?? "command";
+  if (section === "sessions") return "schedule";
+  if (section === "events" || section === "files") return "event";
+  return section;
 }
 
 export function primaryNavigationItemActive(id: string, pathname: string) {
@@ -244,16 +270,53 @@ const ADMIN_SECTION_LABELS: Record<string, string> = Object.fromEntries(
   NAV_ITEMS.map(([id, , label]) => [id, label]),
 );
 
-export function adminPageBreadcrumbs(pathname: string) {
+export type AdminRecordBreadcrumb =
+  | { state: "none" }
+  | { state: "unavailable" }
+  | { state: "resolved"; label: string };
+
+export function adminRecordBreadcrumb(
+  matches: ReadonlyArray<{
+    loaderData: unknown;
+    handle?: unknown;
+  }>,
+): AdminRecordBreadcrumb {
+  for (const match of matches) {
+    const handle = match.handle as AdminRecordBreadcrumbHandle | undefined;
+    if (typeof handle?.adminRecordBreadcrumbLabel !== "function") continue;
+    if (match.loaderData === undefined || match.loaderData === null) {
+      return { state: "unavailable" };
+    }
+    const label = handle.adminRecordBreadcrumbLabel(match.loaderData);
+    if (label !== null) {
+      return { state: "resolved", label };
+    }
+  }
+  return { state: "none" };
+}
+
+function requiredRecordBreadcrumb(
+  breadcrumb: AdminRecordBreadcrumb,
+  unavailableLabel: string,
+) {
+  if (breadcrumb.state === "resolved") return breadcrumb.label;
+  if (breadcrumb.state === "unavailable") return unavailableLabel;
+  throw new Error("The record detail route has no breadcrumb handle.");
+}
+
+export function adminPageBreadcrumbs(
+  pathname: string,
+  recordBreadcrumb: AdminRecordBreadcrumb = { state: "none" },
+) {
   const parts = pathname.split("/").filter(Boolean);
   const section = parts[1] ?? "command";
   const sectionLabel =
     section === "events"
-      ? "Event Setup"
+      ? "Event settings"
       : section === "sessions"
-        ? "Sessions"
+        ? "Programme"
         : section === "files"
-          ? "Files"
+          ? "Event settings"
           : (ADMIN_SECTION_LABELS[section] ??
             section
               .replaceAll("-", " ")
@@ -264,7 +327,7 @@ export function adminPageBreadcrumbs(pathname: string) {
       : section === "sessions"
         ? "/admin/schedule"
         : section === "files"
-          ? "/admin/settings"
+          ? "/admin/event"
           : `/admin/${section}`;
 
   if (parts.length <= 2) {
@@ -280,23 +343,41 @@ export function adminPageBreadcrumbs(pathname: string) {
         ? "Clone event"
         : pathname === "/admin/submissions/form"
           ? "Form builder"
-          : pathname === "/admin/tasks/bulk"
-            ? "Bulk task update"
-            : pathname === "/admin/sessions/bulk"
-              ? "Bulk session update"
-              : pathname === "/admin/files/retention"
-                ? "Data retention"
-                : section === "submissions"
-                  ? "Application detail"
-                  : section === "crm" && parts[2] === "pipeline"
-                    ? "Sourcing pipeline"
-                    : section === "crm" && parts[2] === "outreach"
-                      ? "Speaker invitations"
-                      : section === "crm" && parts[2] === "contacts"
-                        ? "Contact"
-                        : section === "speakers"
-                          ? "Speaker detail"
-                          : "Detail";
+          : pathname === "/admin/submissions/new"
+            ? "Create application record"
+            : pathname === "/admin/sessions/new"
+              ? "Create direct session"
+              : pathname === "/admin/tasks/bulk"
+                ? "Bulk task update"
+                : pathname === "/admin/sessions/bulk"
+                  ? "Bulk session update"
+                  : pathname === "/admin/files/retention"
+                    ? "Data retention"
+                    : section === "submissions"
+                      ? requiredRecordBreadcrumb(
+                          recordBreadcrumb,
+                          "Application",
+                        )
+                      : section === "crm" && parts[2] === "pipeline"
+                        ? "Sourcing pipeline"
+                        : section === "crm" && parts[2] === "outreach"
+                          ? "Speaker invitations"
+                          : section === "crm" && parts[2] === "contacts"
+                            ? requiredRecordBreadcrumb(
+                                recordBreadcrumb,
+                                "Contact",
+                              )
+                            : section === "speakers"
+                              ? requiredRecordBreadcrumb(
+                                  recordBreadcrumb,
+                                  "Speaker",
+                                )
+                              : section === "content" && parts[2] === "sessions"
+                                ? requiredRecordBreadcrumb(
+                                    recordBreadcrumb,
+                                    "Session",
+                                  )
+                                : "Detail";
 
   return [
     { label: sectionLabel, href: sectionHref },
@@ -762,6 +843,7 @@ export function AdminShell({
   children: React.ReactNode;
 }) {
   const location = useLocation();
+  const matches = useMatches();
   const navigate = useNavigate();
   const submit = useSubmit();
   const [collapsed, setCollapsed] = useState(false);
@@ -842,7 +924,10 @@ export function AdminShell({
       "The current event is missing from the authorised event options.",
     );
   }
-  const breadcrumbs = adminPageBreadcrumbs(location.pathname);
+  const breadcrumbs = adminPageBreadcrumbs(
+    location.pathname,
+    adminRecordBreadcrumb(matches),
+  );
 
   useHotkeys("mod+k", openCommandDialog, {
     preventDefault: true,

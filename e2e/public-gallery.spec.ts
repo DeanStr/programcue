@@ -15,6 +15,13 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await page.context().clearCookies();
 
   await openAnonymous(page, "/public/programme/future-of-events-2027");
+  await expect(page.locator(".public-nav a")).toHaveText([
+    "Programme",
+    "Speakers",
+  ]);
+  await expect(
+    page.getByRole("navigation", { name: "Programme views" }).getByRole("link"),
+  ).toHaveText(["List", "Agenda", "Schedule"]);
   await expect(page.locator(".programme-row")).toHaveCount(5);
   const showMore = page
     .getByRole("button", {
@@ -35,6 +42,9 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await expect(showMore).toBeVisible();
 
   await openAnonymous(page, "/public/programme/future-of-events-2027/speakers");
+  await expect(
+    page.getByRole("navigation", { name: "Speaker views" }).getByRole("link"),
+  ).toHaveText(["Directory", "Gallery"]);
   await expect(
     page.getByRole("heading", { name: "Speakers", exact: true }),
   ).toBeVisible();

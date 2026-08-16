@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { AuditReader } from "~/platform/audit/audit-reader.server";
 import {
+  ADMIN_SUBMISSION_STATUSES,
   type AdminSubmission,
   type AdminSubmissionFilters,
+  type AdminSubmissionStatus,
+  type AdminSubmissionSummary,
   parseJson,
 } from "./submission-repository-shared";
 import {
@@ -12,9 +15,9 @@ import {
 import {
   ADMIN_MANUAL_ENTRY_FORM_VERSION_ID,
   type FormRouting,
-  formSchemaSchema,
   routingSchema,
   type SubmittedSnapshot,
+  storedFormSchemaSchema,
   submittedSnapshotSchema,
 } from "./submission-schema";
 
@@ -79,6 +82,92 @@ function requireSnapshotTitle(
   return title;
 }
 
+const adminSubmissionFilterSql = `
+  s.event_id = ?
+  AND (? = '' OR s.status = ?)
+  AND (? = '' OR (s.status = 'draft' AND s.category = ?) OR EXISTS (
+    SELECT 1 FROM submission_track_selections selected_filter
+     WHERE selected_filter.submission_id = s.id
+       AND selected_filter.event_id = s.event_id
+       AND selected_filter.track_name_snapshot = ?
+  ))
+  AND (
+    ? = '%%'
+    OR s.title LIKE ? ESCAPE '!'
+    OR p.display_name LIKE ? ESCAPE '!'
+    OR COALESCE(p.email, s.submitter_email) LIKE ? ESCAPE '!'
+  )
+  AND (
+    ? = ''
+    OR (
+      ? = 'manual_override'
+      AND s.status <> 'draft'
+      AND s.form_version_id IS NULL
+      AND json_extract(s.submitted_snapshot_json, '$.formVersionId') = ?
+      AND EXISTS (
+        SELECT 1 FROM submission_routing_teams manual_route
+         WHERE manual_route.submission_id = s.id
+           AND manual_route.event_id = s.event_id
+      )
+    )
+    OR (
+      ? = 'missing_automatic'
+      AND s.status <> 'draft'
+      AND s.form_version_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM submission_track_selections selected_route
+         WHERE selected_route.submission_id = s.id
+           AND selected_route.event_id = s.event_id
+           AND NOT EXISTS (
+             SELECT 1
+               FROM json_each(fv.routing_json, '$.categories') automatic_route
+              WHERE automatic_route.key = selected_route.track_name_snapshot
+                AND typeof(automatic_route.value) = 'text'
+                AND trim(automatic_route.value) <> ''
+           )
+      )
+    )
+  )`;
+
+function adminSubmissionFilterBindings(
+  eventId: string,
+  filters: AdminSubmissionFilters,
+) {
+  const query = `%${(filters.query ?? "")
+    .replaceAll("!", "!!")
+    .replaceAll("%", "!%")
+    .replaceAll("_", "!_")}%`;
+  return [
+    eventId,
+    filters.status ?? "",
+    filters.status ?? "",
+    filters.category ?? "",
+    filters.category ?? "",
+    filters.category ?? "",
+    query,
+    query,
+    query,
+    query,
+    filters.routing ?? "",
+    filters.routing ?? "",
+    ADMIN_MANUAL_ENTRY_FORM_VERSION_ID,
+    filters.routing ?? "",
+  ];
+}
+
+function adminSubmissionOrder(filters: AdminSubmissionFilters) {
+  switch (filters.sort ?? "submittedAt-desc") {
+    case "submittedAt-desc":
+      return "COALESCE(s.submitted_at, s.updated_at) DESC, s.id DESC";
+    case "submittedAt-asc":
+      return "COALESCE(s.submitted_at, s.updated_at) ASC, s.id ASC";
+    case "title-asc":
+      return "s.title COLLATE NOCASE ASC, s.title ASC, s.id ASC";
+    case "title-desc":
+      return "s.title COLLATE NOCASE DESC, s.title DESC, s.id DESC";
+  }
+}
+
 export class SubmissionAdminRepository {
   constructor(private readonly env: CloudflareEnvironment) {}
 
@@ -113,6 +202,82 @@ export class SubmissionAdminRepository {
     return rows.results.map((row) => row.category);
   }
 
+  async getAdminSubmissionSummary(
+    organisationId: string,
+    eventId: string,
+  ): Promise<AdminSubmissionSummary> {
+    const [statusResult, routedTeamResult] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `SELECT submission.status, COUNT(*) AS count
+           FROM submissions submission
+           JOIN events event
+             ON event.id = submission.event_id AND event.organisation_id = ?
+          WHERE submission.event_id = ?
+          GROUP BY submission.status`,
+      ).bind(organisationId, eventId),
+      this.env.DB.prepare(
+        `SELECT COUNT(DISTINCT route.team_id) AS count
+           FROM submission_routing_teams route
+           JOIN submissions submission
+             ON submission.id = route.submission_id
+            AND submission.event_id = route.event_id
+           JOIN events event
+             ON event.id = submission.event_id AND event.organisation_id = ?
+          WHERE route.event_id = ?`,
+      ).bind(organisationId, eventId),
+    ]);
+    const byStatus = Object.fromEntries(
+      ADMIN_SUBMISSION_STATUSES.map((status) => [status, 0]),
+    ) as Record<AdminSubmissionStatus, number>;
+    let eventTotal = 0;
+    for (const row of statusResult.results as unknown as Array<{
+      status: AdminSubmissionStatus;
+      count: number;
+    }>) {
+      if (!ADMIN_SUBMISSION_STATUSES.includes(row.status)) {
+        throw new Error(`Unknown persisted submission status: ${row.status}`);
+      }
+      const count = Number(row.count);
+      byStatus[row.status] = count;
+      eventTotal += count;
+    }
+    const routedTeamRow = routedTeamResult.results[0] as
+      | { count: number }
+      | undefined;
+    if (!routedTeamRow) {
+      throw new Error("The routed-team aggregate count was not returned.");
+    }
+    const routedTeamCount = Number(routedTeamRow.count);
+    if (!Number.isSafeInteger(routedTeamCount) || routedTeamCount < 0) {
+      throw new Error("The routed-team aggregate count is invalid.");
+    }
+    return {
+      eventTotal,
+      byStatus,
+      routedTeamCount,
+    };
+  }
+
+  async countAdminSubmissions(
+    organisationId: string,
+    eventId: string,
+    filters: AdminSubmissionFilters,
+  ) {
+    const row = await this.env.DB.prepare(
+      `SELECT COUNT(*) AS count
+         FROM submissions s
+         JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
+         LEFT JOIN people p ON p.id = s.submitter_person_id
+         LEFT JOIN form_versions fv
+           ON fv.id = s.form_version_id AND fv.event_id = s.event_id
+        WHERE ${adminSubmissionFilterSql}`,
+    )
+      .bind(organisationId, ...adminSubmissionFilterBindings(eventId, filters))
+      .first<{ count: number }>();
+    if (!row) throw new Error("The submission result count was not returned.");
+    return Number(row.count);
+  }
+
   async listAdminSubmissions(
     organisationId: string,
     eventId: string,
@@ -120,15 +285,14 @@ export class SubmissionAdminRepository {
     pagination: { limit: number; offset: number } = { limit: 200, offset: 0 },
   ): Promise<AdminSubmission[]> {
     if (
-      !Number.isInteger(pagination.limit) ||
+      !Number.isSafeInteger(pagination.limit) ||
       pagination.limit < 1 ||
       pagination.limit > 200 ||
-      !Number.isInteger(pagination.offset) ||
+      !Number.isSafeInteger(pagination.offset) ||
       pagination.offset < 0
     ) {
       throw new Error("Submission pagination is outside its supported range.");
     }
-    const query = `%${filters.query ?? ""}%`;
     const rows = await this.env.DB.prepare(
       `
       SELECT s.id, s.public_reference AS publicReference, s.title,
@@ -181,73 +345,14 @@ export class SubmissionAdminRepository {
         LEFT JOIN people p ON p.id = s.submitter_person_id
         LEFT JOIN form_versions fv
           ON fv.id = s.form_version_id AND fv.event_id = s.event_id
-       WHERE s.event_id = ?
-         AND (? = '' OR s.status = ?)
-         AND (? = '' OR (s.status = 'draft' AND s.category = ?) OR EXISTS (
-           SELECT 1 FROM submission_track_selections selected_filter
-            WHERE selected_filter.submission_id = s.id
-              AND selected_filter.event_id = s.event_id
-              AND selected_filter.track_name_snapshot = ?
-         ))
-         AND (? = '%%' OR s.title LIKE ? OR p.display_name LIKE ? OR COALESCE(p.email, s.submitter_email) LIKE ?)
-         AND (
-           ? = ''
-           OR (
-             ? = 'manual_override'
-             AND s.status <> 'draft'
-             AND s.form_version_id IS NULL
-             AND json_extract(s.submitted_snapshot_json, '$.formVersionId') = ?
-             AND EXISTS (
-               SELECT 1 FROM submission_routing_teams manual_route
-                WHERE manual_route.submission_id = s.id
-                  AND manual_route.event_id = s.event_id
-             )
-           )
-           OR (
-             ? = 'missing_automatic'
-             AND s.status <> 'draft'
-             AND s.form_version_id IS NOT NULL
-             AND EXISTS (
-               SELECT 1 FROM submission_track_selections selected_route
-                WHERE selected_route.submission_id = s.id
-                  AND selected_route.event_id = s.event_id
-                  AND NOT EXISTS (
-                    SELECT 1
-                      FROM json_each(
-                        CASE
-                          WHEN s.form_version_id IS NULL
-                            THEN json_extract(s.submitted_snapshot_json, '$.routing')
-                          ELSE fv.routing_json
-                        END,
-                        '$.categories'
-                      ) automatic_route
-                     WHERE automatic_route.key = selected_route.track_name_snapshot
-                       AND typeof(automatic_route.value) = 'text'
-                       AND trim(automatic_route.value) <> ''
-                  )
-             )
-           )
-         )
-       ORDER BY COALESCE(s.submitted_at, s.updated_at) DESC, s.id DESC
+       WHERE ${adminSubmissionFilterSql}
+       ORDER BY ${adminSubmissionOrder(filters)}
        LIMIT ? OFFSET ?
     `,
     )
       .bind(
         organisationId,
-        eventId,
-        filters.status ?? "",
-        filters.status ?? "",
-        filters.category ?? "",
-        filters.category ?? "",
-        filters.category ?? "",
-        query,
-        query,
-        query,
-        query,
-        filters.routing ?? "",
-        filters.routing ?? "",
-        ADMIN_MANUAL_ENTRY_FORM_VERSION_ID,
-        filters.routing ?? "",
+        ...adminSubmissionFilterBindings(eventId, filters),
         pagination.limit,
         pagination.offset,
       )
@@ -520,7 +625,7 @@ export class SubmissionAdminRepository {
     const schema = snapshot
       ? snapshot.schema
       : row.schemaJson
-        ? parseJson(row.schemaJson, formSchemaSchema)
+        ? parseJson(row.schemaJson, storedFormSchemaSchema)
         : null;
     const {
       answersJson: _answersJson,

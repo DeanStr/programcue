@@ -176,6 +176,7 @@
   text-overflow: ellipsis;
 }
 /* A jump from the validation rail has to land somewhere the eye can find. */
+.schedule-session-source.focused,
 .schedule-room-board .session-card.revealed,
 .schedule-room-board .session-card.focused {
   outline: 3px solid var(--brand-600);

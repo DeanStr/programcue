@@ -48,69 +48,35 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
   const programmeHref = `/public/programme/${slug}`;
   const links = [
     {
-      key: "sessions",
-      label: "All sessions",
-      href: overviewSurface ? "#programme" : programmeHref,
-      active: overviewSurface,
-      routed: false,
+      key: "programme",
+      label: "Programme",
+      href: programmeHref,
+      active: ["overview", "sessions", "agenda", "schedule"].includes(
+        loaderData.surface,
+      ),
     },
     {
       key: "speakers",
       label: "Speakers",
-      href: overviewSurface
-        ? "#speakers"
-        : publicProgrammeSurfacePath(slug, "speakers"),
-      active: loaderData.surface === "speakers",
-      routed: false,
-    },
-    {
-      key: "agenda",
-      label: "Day agenda",
-      href: publicProgrammeSurfacePath(slug, "agenda"),
-      active: loaderData.surface === "agenda",
-      routed: true,
-    },
-    {
-      key: "schedule",
-      label: "Full schedule",
-      href: publicProgrammeSurfacePath(slug, "schedule"),
-      active: loaderData.surface === "schedule",
-      routed: true,
-    },
-    {
-      key: "gallery",
-      label: "Speaker Gallery",
-      href: publicProgrammeSurfacePath(slug, "gallery"),
-      active: loaderData.surface === "gallery",
-      routed: true,
+      href: publicProgrammeSurfacePath(slug, "speakers"),
+      active: ["speakers", "gallery"].includes(loaderData.surface),
     },
   ];
   const itineraryHref = overviewSurface
     ? "#itinerary"
     : `${programmeHref}#itinerary`;
 
-  const navLink = (link: (typeof links)[number], onActivate?: () => void) =>
-    link.routed ? (
-      <Link
-        key={link.key}
-        to={link.href}
-        className={link.active ? "active" : undefined}
-        aria-current={link.active ? "page" : undefined}
-        onClick={onActivate}
-      >
-        {link.label}
-      </Link>
-    ) : (
-      <a
-        key={link.key}
-        href={link.href}
-        className={link.active ? "active" : undefined}
-        aria-current={link.active ? "page" : undefined}
-        onClick={onActivate}
-      >
-        {link.label}
-      </a>
-    );
+  const navLink = (link: (typeof links)[number], onActivate?: () => void) => (
+    <Link
+      key={link.key}
+      to={link.href}
+      className={link.active ? "active" : undefined}
+      aria-current={link.active ? "page" : undefined}
+      onClick={onActivate}
+    >
+      {link.label}
+    </Link>
+  );
 
   return (
     <header className="public-top">
@@ -153,6 +119,63 @@ function PublicProgrammeHeader({ model }: { model: PublicProgrammeModel }) {
         <span className="status info">{saved.length}</span>
       </a>
     </header>
+  );
+}
+
+function PublicProgrammeViewNavigation({
+  model,
+}: {
+  model: PublicProgrammeModel;
+}) {
+  const { surface, programme } = model;
+  const speakerViews = ["speakers", "gallery"].includes(surface);
+  const views = speakerViews
+    ? [
+        {
+          label: "Directory",
+          href: publicProgrammeSurfacePath(programme.event.slug, "speakers"),
+          active: surface === "speakers",
+        },
+        {
+          label: "Gallery",
+          href: publicProgrammeSurfacePath(programme.event.slug, "gallery"),
+          active: surface === "gallery",
+        },
+      ]
+    : [
+        {
+          label: "List",
+          href: publicProgrammeSurfacePath(programme.event.slug, "sessions"),
+          active: surface === "overview" || surface === "sessions",
+        },
+        {
+          label: "Agenda",
+          href: publicProgrammeSurfacePath(programme.event.slug, "agenda"),
+          active: surface === "agenda",
+        },
+        {
+          label: "Schedule",
+          href: publicProgrammeSurfacePath(programme.event.slug, "schedule"),
+          active: surface === "schedule",
+        },
+      ];
+  return (
+    <nav
+      className="public-view-navigation"
+      aria-label={speakerViews ? "Speaker views" : "Programme views"}
+    >
+      <span>{speakerViews ? "Speakers" : "Programme"}</span>
+      {views.map((view) => (
+        <Link
+          key={view.label}
+          className={view.active ? "active" : undefined}
+          aria-current={view.active ? "page" : undefined}
+          to={view.href}
+        >
+          {view.label}
+        </Link>
+      ))}
+    </nav>
   );
 }
 
@@ -1155,6 +1178,7 @@ export function PublicProgrammeWorkspace({
         className="public-page-main"
       >
         <PublicProgrammeHero model={model} />
+        {!embedded ? <PublicProgrammeViewNavigation model={model} /> : null}
         <div
           className={`public-main${!overviewSurface ? " public-surface-main" : ""}`}
         >

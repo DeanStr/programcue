@@ -33,7 +33,7 @@ import {
 } from "~/platform/operations/webhook-service.server";
 import type { Route } from "./+types/api-settings";
 
-export const meta = () => [{ title: "API & Settings · Program Cue" }];
+export const meta = () => [{ title: "API & webhooks · Program Cue" }];
 
 async function administrator(
   request: Request,
@@ -244,7 +244,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">Developer access</span>
-          <h1>API &amp; settings</h1>
+          <h1>API &amp; webhooks</h1>
           <p>
             Create event-scoped credentials with the minimum permissions an
             integration needs.

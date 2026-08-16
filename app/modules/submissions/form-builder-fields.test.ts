@@ -5,7 +5,9 @@ import {
   createFormField,
   formConditionSourceLabel,
   formFieldCreationIssue,
+  formFieldInsertionSectionId,
   formFieldTypeLabel,
+  moveFormFieldToInsertion,
 } from "./form-builder-fields";
 import {
   DEFAULT_FORM_SCHEMA,
@@ -37,8 +39,8 @@ describe("form builder field rules", () => {
   });
 
   it("generates meaningful stable IDs once and resolves collisions", () => {
-    const first = createFormField([], "short_text");
-    const second = createFormField([first], "short_text");
+    const first = createFormField([], "short_text", "proposal");
+    const second = createFormField([first], "short_text", "proposal");
     expect(first).toMatchObject({ id: "short_text", label: "Short text" });
     expect(second).toMatchObject({ id: "short_text_2", label: "Short text" });
     for (const type of [
@@ -49,7 +51,9 @@ describe("form builder field rules", () => {
       "url",
       "video",
     ] as const) {
-      expect(createFormField([], type).id).toMatch(/^[a-z][a-z0-9_]*$/u);
+      expect(createFormField([], type, "proposal").id).toMatch(
+        /^[a-z][a-z0-9_]*$/u,
+      );
     }
   });
 
@@ -77,5 +81,32 @@ describe("form builder field rules", () => {
     expect(conditionalFieldOrderIssue(fields)).toBe(
       "Cannot reorder fields: “Materials and room setup” must remain after “Format” because its condition depends on that field.",
     );
+  });
+
+  it("assigns an insertion boundary to the section after it", () => {
+    const fields = [
+      { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "a1", sectionId: "a" },
+      { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "a2", sectionId: "a" },
+      { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "b1", sectionId: "b" },
+    ];
+
+    expect(formFieldInsertionSectionId(fields, 2, "a")).toBe("b");
+    expect(formFieldInsertionSectionId(fields, fields.length, "a")).toBe("b");
+    expect(formFieldInsertionSectionId([], 0, "empty")).toBe("empty");
+  });
+
+  it("moves a boundary field into the next section even when its index is unchanged", () => {
+    const fields = [
+      { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "a1", sectionId: "a" },
+      { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "a2", sectionId: "a" },
+      { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "b1", sectionId: "b" },
+    ];
+
+    expect(moveFormFieldToInsertion(fields, "a2", 2, "a")).toEqual([
+      fields[0],
+      { ...fields[1], sectionId: "b" },
+      fields[2],
+    ]);
+    expect(moveFormFieldToInsertion(fields, "a1", 1, "a")).toBeNull();
   });
 });

@@ -226,6 +226,97 @@ describe("Submissions D1 vertical slice", () => {
       }
     });
 
+    it("requires an explicit save before a legacy draft can be published as schema v2", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoData(testEnv);
+      const service = new SubmissionService(testEnv);
+      const defaults = await service.getDefaultFormInput(viewer);
+      const formId = await service.saveForm(viewer, {
+        ...defaults,
+        name: `Legacy draft ${crypto.randomUUID()}`,
+        publicSlug: `legacy-draft-${crypto.randomUUID()}`,
+      });
+      const initial = await service.getAdminWorkspace(viewer, formId);
+      const legacySchema = {
+        introduction: initial!.draftVersion.schema.introduction,
+        presentation: initial!.draftVersion.schema.presentation,
+        fields: initial!.draftVersion.schema.fields.map(
+          ({ sectionId: _sectionId, ...field }) => field,
+        ),
+      };
+      await testEnv.DB.prepare(
+        "UPDATE form_versions SET schema_json = ? WHERE id = ? AND event_id = ?",
+      )
+        .bind(
+          JSON.stringify(legacySchema),
+          initial!.draftVersion.id,
+          viewer.eventId,
+        )
+        .run();
+
+      const legacyWorkspace = await service.getAdminWorkspace(viewer, formId);
+      expect(legacyWorkspace!.draftVersion.schemaFormatVersion).toBe(1);
+      expect(legacyWorkspace!.draftVersion.schema).toMatchObject({
+        schemaVersion: 2,
+        sections: [{ id: "proposal", title: "Application" }],
+      });
+      await expect(
+        service.publishForm(
+          viewer,
+          formId,
+          legacyWorkspace!.revision,
+          legacyWorkspace!.draftVersion.revision,
+        ),
+      ).rejects.toThrow(/save this draft once to upgrade its sections/i);
+
+      await service.saveForm(
+        viewer,
+        SubmissionService.workspaceToInput(legacyWorkspace!),
+      );
+      const upgraded = await service.getAdminWorkspace(viewer, formId);
+      expect(upgraded!.draftVersion.schemaFormatVersion).toBe(2);
+    });
+
+    it("keeps immutable published schema v1 bytes unchanged while v2 drafts are edited", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const workspace = await service.getAdminWorkspace(viewer, id);
+      const published = workspace!.publishedVersion!;
+      if (!("schemaVersion" in published.schema)) {
+        throw new Error("The newly published form did not use schema v2.");
+      }
+      const legacySchema = {
+        introduction: published.schema.introduction,
+        presentation: published.schema.presentation,
+        fields: published.schema.fields.map(
+          ({ sectionId: _sectionId, ...field }) => field,
+        ),
+      };
+      const storedLegacy = JSON.stringify(legacySchema);
+      await testEnv.DB.prepare(
+        "UPDATE form_versions SET schema_json = ? WHERE id = ? AND event_id = ?",
+      )
+        .bind(storedLegacy, published.id, viewer.eventId)
+        .run();
+
+      await expect(service.getPublicForm(slug)).resolves.toMatchObject({
+        version: { schemaFormatVersion: 1 },
+      });
+      const current = await service.getAdminWorkspace(viewer, id);
+      expect(current!.publishedVersion!.schemaFormatVersion).toBe(1);
+      await service.saveForm(
+        viewer,
+        SubmissionService.workspaceToInput(current!),
+      );
+
+      await expect(
+        testEnv.DB.prepare(
+          "SELECT schema_json AS schemaJson FROM form_versions WHERE id = ? AND event_id = ?",
+        )
+          .bind(published.id, viewer.eventId)
+          .first(),
+      ).resolves.toEqual({ schemaJson: storedLegacy });
+    });
+
     it("requires a form draft to be resaved after an event track changes", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoData(testEnv);
@@ -1195,6 +1286,7 @@ describe("Submissions D1 vertical slice", () => {
             help: "",
             options: ["Operations", "Design"],
             condition: null,
+            sectionId: DEFAULT_FORM_SCHEMA.sections[0]!.id,
           },
         ],
       };

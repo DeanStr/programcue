@@ -209,7 +209,7 @@ test("failed Airtable creation stays inaccessible until D1 is explicitly selecte
   await page.getByRole("button", { name: "Open recovered event" }).click();
   await expect(page).toHaveURL(/\/admin\/event$/);
   await expect(
-    page.getByRole("heading", { name: "Event Setup" }),
+    page.getByRole("heading", { name: "Event settings" }),
   ).toBeVisible();
 });
 

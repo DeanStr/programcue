@@ -18,6 +18,10 @@ import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import type { Route } from "./+types/admin-section";
 
+export const meta: Route.MetaFunction = () => [
+  { title: "Publish & embed · Program Cue" },
+];
+
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (params.section !== "programme") {
     throw new Response("Admin section not found", { status: 404 });
@@ -32,11 +36,41 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     new ProgrammeAdminService(env).getOverview(viewer),
     new ProgrammeEmbedService(env).list(viewer),
   ]);
+  const searchParams = new URL(request.url).searchParams;
+  const createdSessionValues = searchParams.getAll("createdSession");
+  const attentionValues = searchParams.getAll("attention");
+  if (createdSessionValues.length > 1 || attentionValues.length > 1) {
+    throw new Response("Invalid direct-session creation result", {
+      status: 400,
+    });
+  }
+  const createdSessionId = createdSessionValues[0] ?? null;
+  const attention = attentionValues[0] ?? null;
+  if (attention !== null && attention !== "1") {
+    throw new Response("Invalid direct-session creation result", {
+      status: 400,
+    });
+  }
+  if (
+    createdSessionId &&
+    !overview.sessions.some((session) => session.id === createdSessionId)
+  ) {
+    throw new Response("Created session not found in this event", {
+      status: 404,
+    });
+  }
+  if (attention === "1" && !createdSessionId) {
+    throw new Response("Invalid direct-session creation result", {
+      status: 400,
+    });
+  }
   return {
     section: "programme" as const,
     ...overview,
     publicOrigin: new URL(request.url).origin,
     managedEmbeds,
+    createdSessionId,
+    createdSessionNeedsAttention: attention === "1",
   };
 }
 
@@ -129,14 +163,14 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <span className="pc-page-eyebrow">Publication overview</span>
-          <h1>Programme</h1>
+          <h1>Publish &amp; embed</h1>
           <p>
             Inspect the programme that is available to attendees and continue
             editing in the schedule planner.
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn" to="/admin/submissions#create-direct-session">
+          <Link className="btn" to="/admin/sessions/new?from=programme">
             Create direct session
           </Link>
           <Link
@@ -168,6 +202,23 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
           </Link>
         </div>
       </div>
+      {loaderData.createdSessionId ? (
+        <div
+          className={`validation-item ${loaderData.createdSessionNeedsAttention ? "warn" : "ok"} card pad mb`}
+          role="status"
+        >
+          <strong>Direct session created</strong>
+          <span>
+            The session is in the unscheduled programme.
+            <Link
+              to={`/admin/schedule?session=${encodeURIComponent(loaderData.createdSessionId)}&created=1${loaderData.createdSessionNeedsAttention ? "&attention=1" : ""}`}
+            >
+              Open the new session in Schedule Planner
+            </Link>
+            .
+          </span>
+        </div>
+      ) : null}
       <div className="grid grid-4 mb">
         <section className="card metric">
           <div className="label">Sessions</div>

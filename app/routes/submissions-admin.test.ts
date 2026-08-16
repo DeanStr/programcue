@@ -6,7 +6,11 @@ import { SubmissionService } from "~/modules/submissions/submission-service.serv
 import { currentEventCookie } from "~/platform/auth/current-event.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { action } from "./submissions-admin";
+import {
+  action,
+  directSessionCreationOrigin,
+  directSessionSuccessDestination,
+} from "./admin-create-session";
 
 function context() {
   const value = new RouterContextProvider();
@@ -22,7 +26,7 @@ function adminRequest(body: URLSearchParams) {
     "evt-foe-2025",
     env as unknown as CloudflareEnvironment,
   ).split(";", 1)[0];
-  return new Request("http://localhost/admin/submissions", {
+  return new Request("http://localhost/admin/sessions/new?from=schedule", {
     method: "POST",
     headers: {
       cookie: `program_cue_demo_identity=administrator; ${eventCookie}`,
@@ -43,6 +47,37 @@ beforeEach(async () => {
 });
 
 describe("manual person creation warnings", () => {
+  it("accepts only bounded creation origins and uses them only for success routing", () => {
+    expect(
+      directSessionCreationOrigin(
+        new URL("https://example.test/admin/sessions/new?from=programme"),
+      ),
+    ).toBe("programme");
+    expect(() =>
+      directSessionCreationOrigin(
+        new URL("https://example.test/admin/sessions/new?from=/admin/event"),
+      ),
+    ).toThrow(Response);
+    expect(() =>
+      directSessionCreationOrigin(
+        new URL("https://example.test/admin/sessions/new"),
+      ),
+    ).toThrow(Response);
+    expect(() =>
+      directSessionCreationOrigin(
+        new URL(
+          "https://example.test/admin/sessions/new?from=schedule&from=programme",
+        ),
+      ),
+    ).toThrow(Response);
+    expect(
+      directSessionSuccessDestination("programme", "session 1", true),
+    ).toBe("/admin/programme?createdSession=session+1&attention=1");
+    expect(directSessionSuccessDestination("global", "session 1", false)).toBe(
+      "/admin/schedule?session=session+1&created=1",
+    );
+  });
+
   it("reports an unmet speaker-invitation prerequisite instead of a server error", async () => {
     const title = `Missing invitation prerequisite ${crypto.randomUUID()}`;
     vi.spyOn(
@@ -180,10 +215,14 @@ describe("manual person creation warnings", () => {
       params: {},
       context: context(),
     } as never);
-    if (confirmed instanceof Response)
-      throw new Error("Confirmed direct session returned a raw response.");
-    expect(confirmed.init?.status ?? 200).toBe(200);
-    expect(confirmed.data).toMatchObject({ ok: true });
+    expect(confirmed).toBeInstanceOf(Response);
+    if (!(confirmed instanceof Response)) {
+      throw new Error("Confirmed direct session did not redirect.");
+    }
+    expect(confirmed.status).toBe(303);
+    expect(confirmed.headers.get("location")).toMatch(
+      /^\/admin\/schedule\?session=.+&created=1$/u,
+    );
     const afterConfirmation = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM sessions WHERE event_id = ? AND title = ?",
     )

@@ -328,6 +328,22 @@
   padding: 0;
   list-style: none;
 }
+.fb-canvas-section {
+  padding: var(--space-4) var(--space-2) var(--space-1);
+}
+.fb-canvas-section:first-child {
+  padding-top: var(--space-2);
+}
+.fb-canvas-section strong,
+.fb-canvas-section p {
+  display: block;
+  margin: 0;
+}
+.fb-canvas-section p {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
 .fb-canvas-insertion-target {
   position: relative;
   min-height: var(--space-3);
@@ -690,6 +706,15 @@
   padding: var(--space-4);
   display: grid;
   gap: var(--space-3);
+}
+.application-form-section {
+  padding-block: var(--space-2);
+}
+.application-form-section > header > :is(h2, h4, p) {
+  margin-block: 0;
+}
+.application-form-section > header > p {
+  margin-top: var(--space-1);
 }
 /* design-primitives.css sets .btn{display:inline-flex} and loads after this
    sheet, so the class alone cannot hide it. */

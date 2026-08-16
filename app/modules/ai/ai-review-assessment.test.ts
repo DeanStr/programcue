@@ -310,6 +310,51 @@ describe("persisted AI first-pass review assessments", () => {
     });
   });
 
+  it("sends proposal evidence to the provider in authored section order", async () => {
+    const row = await env.DB.prepare(
+      `SELECT submitted_snapshot_json AS snapshotJson
+         FROM submissions WHERE id = ? AND event_id = ?`,
+    )
+      .bind(SUBMISSION_ID, admin.eventId)
+      .first<{ snapshotJson: string }>();
+    if (!row) throw new Error("The evaluation demo snapshot was not created.");
+    const snapshot = JSON.parse(row.snapshotJson) as {
+      schema: {
+        sections: Array<{ id: string; title: string; description: string }>;
+        fields: Array<{ id: string; sectionId: string }>;
+      };
+    };
+    snapshot.schema.sections = [
+      { id: "outcomes", title: "Outcomes", description: "" },
+      { id: "proposal", title: "Proposal", description: "" },
+    ];
+    snapshot.schema.fields = snapshot.schema.fields.map((field) => ({
+      ...field,
+      sectionId: field.id === "audience_takeaway" ? "outcomes" : "proposal",
+    }));
+    await env.DB.prepare(
+      `UPDATE submissions SET submitted_snapshot_json = ?
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(JSON.stringify(snapshot), SUBMISSION_ID, admin.eventId)
+      .run();
+
+    const create = vi
+      .fn<(request: OpenAiResponsesRequest) => Promise<OpenAiResponse>>()
+      .mockResolvedValue(structuredResponse(validAssessment()));
+    const service = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+      { provider: workersAiProvider(create) },
+    );
+
+    await service.generate(admin, generationInput());
+
+    const providerInput = create.mock.calls[0]![0].input;
+    expect(providerInput.indexOf('"label":"Audience takeaway"')).toBeLessThan(
+      providerInput.indexOf('"label":"Session overview"'),
+    );
+  });
+
   it("rejects invalid provider output without storing a fallback score", async () => {
     const create = vi
       .fn<(request: OpenAiResponsesRequest) => Promise<OpenAiResponse>>()

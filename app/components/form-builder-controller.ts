@@ -17,8 +17,10 @@ import {
 } from "react-hook-form";
 import { useNavigation, useSubmit } from "react-router";
 
+import { conditionalFieldOrderIssue } from "~/modules/submissions/form-builder-fields";
 import {
   type FormField,
+  formFieldsInDisplayOrder,
   type SaveFormInput,
   saveFormSchema,
 } from "~/modules/submissions/submission-schema";
@@ -105,8 +107,11 @@ export function useFormBuilderController(
     control,
     defaultValue: loaderData.input,
   }) as SaveFormInput;
+  const initialDisplayFields = formFieldsInDisplayOrder(
+    loaderData.input.schema,
+  );
   const [selectedId, setSelectedId] = useState(
-    loaderData.input.schema.fields[0]?.id ?? "",
+    initialDisplayFields[0]?.id ?? "",
   );
   const [publishOpen, setPublishOpen] = useState(false);
   const [clientValidationMessage, setClientValidationMessage] = useState<
@@ -123,7 +128,7 @@ export function useFormBuilderController(
     (recoverable: typeof recoveryPayload) => {
       const restored = { ...recoverable, accessPassword: "" } as SaveFormInput;
       reset(restored, { keepDefaultValues: true });
-      setSelectedId(restored.schema.fields[0]?.id ?? "");
+      setSelectedId(formFieldsInDisplayOrder(restored.schema)[0]?.id ?? "");
     },
     [reset],
   );
@@ -147,7 +152,9 @@ export function useFormBuilderController(
 
   useEffect(() => {
     reset(loaderData.input);
-    setSelectedId(loaderData.input.schema.fields[0]?.id ?? "");
+    setSelectedId(
+      formFieldsInDisplayOrder(loaderData.input.schema)[0]?.id ?? "",
+    );
     setClientValidationMessage(null);
     setClientValidationLocation(null);
   }, [loaderData.input, reset]);
@@ -240,14 +247,24 @@ export function useFormBuilderController(
 
   function patchField(patch: Partial<FormField>) {
     if (!selected) return;
+    const schema = {
+      ...input.schema,
+      fields: input.schema.fields.map((field) =>
+        field.id === selected.id ? { ...field, ...patch } : field,
+      ),
+    };
+    if (patch.sectionId !== undefined) {
+      const issue = conditionalFieldOrderIssue(
+        formFieldsInDisplayOrder(schema),
+      );
+      if (issue) {
+        reportClientValidation(issue, "structure");
+        return;
+      }
+    }
     change({
       ...input,
-      schema: {
-        ...input.schema,
-        fields: input.schema.fields.map((field) =>
-          field.id === selected.id ? { ...field, ...patch } : field,
-        ),
-      },
+      schema,
     });
   }
 

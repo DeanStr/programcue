@@ -175,7 +175,7 @@ test.describe
         currentTracks.getByRole("listitem").filter({ hasText: "Leadership" }),
       ).toBeVisible();
       await expect(
-        currentTracks.getByRole("link", { name: "Event Setup" }),
+        currentTracks.getByRole("link", { name: "Event settings" }),
       ).toHaveAttribute("href", "/admin/event");
       await routing
         .getByRole("combobox", { name: "Event Operations" })

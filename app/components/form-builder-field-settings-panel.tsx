@@ -5,6 +5,7 @@ import type {
   FormField,
   SaveFormInput,
 } from "~/modules/submissions/submission-schema";
+import { formFieldsInDisplayOrder } from "~/modules/submissions/submission-schema";
 
 export function FieldSettingsPanel({
   input,
@@ -30,7 +31,8 @@ export function FieldSettingsPanel({
   hidden?: boolean;
 }) {
   const [allowIdChange, setAllowIdChange] = useState(false);
-  const selectedIndex = selected ? input.schema.fields.indexOf(selected) : -1;
+  const displayFields = formFieldsInDisplayOrder(input.schema);
+  const selectedIndex = selected ? displayFields.indexOf(selected) : -1;
   // biome-ignore lint/correctness/useExhaustiveDependencies: Changing the selected field deliberately revokes the transient permission to edit its stable ID.
   useEffect(() => setAllowIdChange(false), [selectedIndex]);
   const idReferenced = selected
@@ -73,6 +75,23 @@ export function FieldSettingsPanel({
                 value={selected.label}
                 onChange={(event) => patchField({ label: event.target.value })}
               />
+            </label>
+            <label className="label mt">
+              Section
+              <select
+                className="select"
+                aria-label="Field section"
+                value={selected.sectionId}
+                onChange={(event) =>
+                  patchField({ sectionId: event.target.value })
+                }
+              >
+                {input.schema.sections.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.title}
+                  </option>
+                ))}
+              </select>
             </label>
             <details className="pc-disclosure mt">
               <summary>
@@ -191,13 +210,13 @@ export function FieldSettingsPanel({
             ) : selected.id === "category" || selected.id === "format" ? (
               <fieldset className="stack mt">
                 <legend className="label">
-                  Current Event Setup{" "}
+                  Current Event settings{" "}
                   {selected.id === "category" ? "tracks" : "formats"}
                 </legend>
                 <p className="help">
-                  These protected choices follow Event Setup and are captured in
-                  each published form version. Change them in{" "}
-                  <Link to="/admin/event">Event Setup</Link>.
+                  These protected choices follow Event settings and are captured
+                  in each published form version. Change them in{" "}
+                  <Link to="/admin/event">Event settings</Link>.
                 </p>
                 <ul className="help">
                   {selected.options.map((option) => (
@@ -206,7 +225,7 @@ export function FieldSettingsPanel({
                 </ul>
                 {!selected.options.length ? (
                   <p className="help">
-                    Configure at least one choice in Event Setup.
+                    Configure at least one choice in Event settings.
                   </p>
                 ) : null}
               </fieldset>
@@ -282,13 +301,8 @@ export function FieldSettingsPanel({
                 }
               >
                 <option value="">Always visible</option>
-                {input.schema.fields
-                  .slice(
-                    0,
-                    input.schema.fields.findIndex(
-                      (field) => field.id === selected.id,
-                    ),
-                  )
+                {displayFields
+                  .slice(0, selectedIndex)
                   .filter(
                     (field) =>
                       field.type === "select" || field.type === "multi_select",
@@ -316,7 +330,7 @@ export function FieldSettingsPanel({
                   }
                 >
                   <option value="">Choose…</option>
-                  {input.schema.fields
+                  {displayFields
                     .find((field) => field.id === selected.condition?.fieldId)
                     ?.options.map((option) => (
                       <option key={option}>{option}</option>
@@ -337,8 +351,11 @@ export function FieldSettingsPanel({
                           ? { ...field, condition: null }
                           : field,
                       );
-                    change({ ...input, schema: { ...input.schema, fields } });
-                    setSelectedId(fields[0]?.id ?? "");
+                    const schema = { ...input.schema, fields };
+                    change({ ...input, schema });
+                    setSelectedId(
+                      formFieldsInDisplayOrder(schema)[0]?.id ?? "",
+                    );
                   }}
                 >
                   Remove field

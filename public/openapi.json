@@ -7252,6 +7252,10 @@
           "schema": {
             "type": "object",
             "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "const": 2
+              },
               "introduction": {
                 "default": "",
                 "type": "string",
@@ -7310,6 +7314,35 @@
                     "default": false,
                     "type": "boolean"
                   }
+                }
+              },
+              "sections": {
+                "minItems": 1,
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{1,39}$"
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "description": {
+                      "default": "",
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "fields": {
@@ -7400,6 +7433,10 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "sectionId": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{1,39}$"
                     }
                   },
                   "required": [
@@ -7407,13 +7444,16 @@
                     "label",
                     "type",
                     "required",
-                    "reviewVisibility"
+                    "reviewVisibility",
+                    "sectionId"
                   ],
                   "additionalProperties": false
                 }
               }
             },
             "required": [
+              "schemaVersion",
+              "sections",
               "fields"
             ],
             "additionalProperties": false

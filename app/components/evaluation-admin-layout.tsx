@@ -14,7 +14,7 @@ export function EvaluationHeader() {
   return (
     <div className="page-head">
       <div>
-        <h1>Evaluation</h1>
+        <h1>Review &amp; selection</h1>
         <p>
           Configure review, assign evaluators and release programme decisions.
         </p>

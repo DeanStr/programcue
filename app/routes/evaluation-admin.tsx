@@ -11,7 +11,7 @@ export {
   decisionActionOutcome,
 } from "./evaluation-admin-outcomes";
 
-export const meta = () => [{ title: "Evaluation · Program Cue" }];
+export const meta = () => [{ title: "Review & selection · Program Cue" }];
 
 export default function EvaluationAdmin({ loaderData }: Route.ComponentProps) {
   const model = useEvaluationAdminState(loaderData);

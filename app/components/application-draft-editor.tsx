@@ -23,9 +23,10 @@ import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import type { ApplicantDraft } from "~/modules/submissions/submission-repository.server";
 import {
-  DEFAULT_FORM_PRESENTATION,
-  type FormField,
+  formSectionsForDisplay,
   MAX_SUBMISSION_SPEAKERS,
+  type StoredFormField,
+  type StoredSubmissionFormSchema,
   visibleFields,
 } from "~/modules/submissions/submission-schema";
 import {
@@ -42,7 +43,7 @@ function FieldControl({
   describedBy,
   required = field.required,
 }: {
-  field: FormField;
+  field: StoredFormField;
   value: string | string[] | undefined;
   onChange(value: string | string[]): void;
   disabled: boolean;
@@ -128,7 +129,7 @@ type DraftAnswers = ApplicantDraft["answers"];
 type DraftUploads = Record<string, { assetId: string; versionId: string }>;
 
 type ApplicationAnswersProps = {
-  fields: FormField[];
+  sections: ReturnType<typeof formSectionsForDisplay>;
   errors?: Record<string, string[]>;
   answers: DraftAnswers;
   setAnswers: Dispatch<SetStateAction<DraftAnswers>>;
@@ -145,7 +146,7 @@ type ApplicationAnswersProps = {
 };
 
 function ApplicationAnswers({
-  fields,
+  sections,
   errors,
   answers,
   setAnswers,
@@ -162,159 +163,179 @@ function ApplicationAnswers({
 }: ApplicationAnswersProps) {
   return (
     <>
-      {fields.map((field) => {
-        const error = errors?.[field.id]?.[0];
-        const helpId = field.help ? `answer-${field.id}-help` : undefined;
-        const errorId = error ? `answer-${field.id}-error` : undefined;
-        const describedBy =
-          [helpId, errorId].filter(Boolean).join(" ") || undefined;
-        const update = (value: string | string[]) => {
-          setAnswers((current) => ({ ...current, [field.id]: value }));
-          setDirty(true);
-        };
-        if (field.type === "video")
-          return (
-            <fieldset
-              className="application-choice-field"
-              key={field.id}
-              aria-invalid={Boolean(error) || undefined}
-              aria-describedby={describedBy}
-            >
-              <legend className="label">
+      {sections.map((section) => (
+        <section
+          className="application-form-section stack"
+          aria-labelledby={
+            section.title ? `application-section-${section.id}` : undefined
+          }
+          key={section.id}
+        >
+          {section.title ? (
+            <header>
+              <h2 id={`application-section-${section.id}`}>{section.title}</h2>
+              {section.description ? (
+                <p className="subtle">{section.description}</p>
+              ) : null}
+            </header>
+          ) : null}
+          {section.fields.map((field) => {
+            const error = errors?.[field.id]?.[0];
+            const helpId = field.help ? `answer-${field.id}-help` : undefined;
+            const errorId = error ? `answer-${field.id}-error` : undefined;
+            const describedBy =
+              [helpId, errorId].filter(Boolean).join(" ") || undefined;
+            const update = (value: string | string[]) => {
+              setAnswers((current) => ({ ...current, [field.id]: value }));
+              setDirty(true);
+            };
+            if (field.type === "video")
+              return (
+                <fieldset
+                  className="application-choice-field"
+                  key={field.id}
+                  aria-invalid={Boolean(error) || undefined}
+                  aria-describedby={describedBy}
+                >
+                  <legend className="label">
+                    {field.label}
+                    {field.required ? (
+                      <span className="pc-required" aria-hidden="true">
+                        Required
+                      </span>
+                    ) : null}
+                  </legend>
+                  {field.help ? (
+                    <span className="help" id={helpId}>
+                      {field.help}
+                    </span>
+                  ) : null}
+                  <label className="label" htmlFor={`answer-${field.id}`}>
+                    HTTPS video link
+                    <FieldControl
+                      field={field}
+                      value={answers[field.id]}
+                      disabled={
+                        readOnly || (revisionMode && Boolean(uploads[field.id]))
+                      }
+                      required={field.required && !uploads[field.id]}
+                      invalid={Boolean(error)}
+                      describedBy={describedBy}
+                      onChange={update}
+                    />
+                  </label>
+                  {!readOnly && !revisionMode ? (
+                    <ApplicantVideoUpload
+                      publicSlug={publicSlug}
+                      submissionId={draft.id}
+                      fieldId={field.id}
+                      current={
+                        currentUpload?.fieldId === field.id
+                          ? currentUpload
+                          : null
+                      }
+                      siteKey={uploadTurnstileSiteKey}
+                      disabled={readOnly}
+                      maximumBytes={maximumVideoBytes}
+                      onReferenceChange={(reference) => {
+                        setUploads((current) => ({
+                          ...current,
+                          [field.id]: reference,
+                        }));
+                        setDirty(true);
+                      }}
+                    />
+                  ) : uploads[field.id] ? (
+                    <div className="validation-item ok mt">
+                      <strong>Private video attached</strong>
+                      <span>
+                        The immutable submission references its scanned file
+                        version.
+                      </span>
+                    </div>
+                  ) : null}
+                  {error ? (
+                    <span className="field-error" id={errorId}>
+                      {error}
+                    </span>
+                  ) : null}
+                </fieldset>
+              );
+            if (field.type === "multi_select")
+              return (
+                <fieldset
+                  className="application-choice-field"
+                  key={field.id}
+                  aria-invalid={Boolean(error) || undefined}
+                  aria-describedby={describedBy}
+                >
+                  <legend className="label">
+                    {field.label}
+                    {field.required ? (
+                      <span className="pc-required">Required</span>
+                    ) : null}
+                  </legend>
+                  {field.help ? (
+                    <span className="help" id={helpId}>
+                      {field.help}
+                    </span>
+                  ) : null}
+                  <FieldControl
+                    field={field}
+                    value={answers[field.id]}
+                    disabled={readOnly}
+                    invalid={Boolean(error)}
+                    describedBy={describedBy}
+                    onChange={update}
+                  />
+                  {error ? (
+                    <span className="field-error" id={errorId}>
+                      {error}
+                    </span>
+                  ) : null}
+                </fieldset>
+              );
+            return (
+              <label
+                className="label"
+                key={field.id}
+                htmlFor={`answer-${field.id}`}
+              >
                 {field.label}
                 {field.required ? (
                   <span className="pc-required" aria-hidden="true">
                     Required
                   </span>
                 ) : null}
-              </legend>
-              {field.help ? (
-                <span className="help" id={helpId}>
-                  {field.help}
-                </span>
-              ) : null}
-              <label className="label" htmlFor={`answer-${field.id}`}>
-                HTTPS video link
+                {field.help ? (
+                  <span className="help" id={helpId}>
+                    {field.help}
+                  </span>
+                ) : null}
                 <FieldControl
                   field={field}
                   value={answers[field.id]}
-                  disabled={
-                    readOnly || (revisionMode && Boolean(uploads[field.id]))
-                  }
-                  required={field.required && !uploads[field.id]}
+                  disabled={readOnly}
                   invalid={Boolean(error)}
                   describedBy={describedBy}
                   onChange={update}
                 />
-              </label>
-              {!readOnly && !revisionMode ? (
-                <ApplicantVideoUpload
-                  publicSlug={publicSlug}
-                  submissionId={draft.id}
-                  fieldId={field.id}
-                  current={
-                    currentUpload?.fieldId === field.id ? currentUpload : null
-                  }
-                  siteKey={uploadTurnstileSiteKey}
-                  disabled={readOnly}
-                  maximumBytes={maximumVideoBytes}
-                  onReferenceChange={(reference) => {
-                    setUploads((current) => ({
-                      ...current,
-                      [field.id]: reference,
-                    }));
-                    setDirty(true);
-                  }}
-                />
-              ) : uploads[field.id] ? (
-                <div className="validation-item ok mt">
-                  <strong>Private video attached</strong>
-                  <span>
-                    The immutable submission references its scanned file
-                    version.
-                  </span>
-                </div>
-              ) : null}
-              {error ? (
-                <span className="field-error" id={errorId}>
-                  {error}
-                </span>
-              ) : null}
-            </fieldset>
-          );
-        if (field.type === "multi_select")
-          return (
-            <fieldset
-              className="application-choice-field"
-              key={field.id}
-              aria-invalid={Boolean(error) || undefined}
-              aria-describedby={describedBy}
-            >
-              <legend className="label">
-                {field.label}
-                {field.required ? (
-                  <span className="pc-required">Required</span>
+                {field.type === "long_text" ? (
+                  <CharacterCount
+                    value={String(answers[field.id] ?? "")}
+                    maximum={5_000}
+                  />
                 ) : null}
-              </legend>
-              {field.help ? (
-                <span className="help" id={helpId}>
-                  {field.help}
-                </span>
-              ) : null}
-              <FieldControl
-                field={field}
-                value={answers[field.id]}
-                disabled={readOnly}
-                invalid={Boolean(error)}
-                describedBy={describedBy}
-                onChange={update}
-              />
-              {error ? (
-                <span className="field-error" id={errorId}>
-                  {error}
-                </span>
-              ) : null}
-            </fieldset>
-          );
-        return (
-          <label
-            className="label"
-            key={field.id}
-            htmlFor={`answer-${field.id}`}
-          >
-            {field.label}
-            {field.required ? (
-              <span className="pc-required" aria-hidden="true">
-                Required
-              </span>
-            ) : null}
-            {field.help ? (
-              <span className="help" id={helpId}>
-                {field.help}
-              </span>
-            ) : null}
-            <FieldControl
-              field={field}
-              value={answers[field.id]}
-              disabled={readOnly}
-              invalid={Boolean(error)}
-              describedBy={describedBy}
-              onChange={update}
-            />
-            {field.type === "long_text" ? (
-              <CharacterCount
-                value={String(answers[field.id] ?? "")}
-                maximum={5_000}
-              />
-            ) : null}
-            {error ? (
-              <span className="field-error" id={errorId}>
-                {error}
-              </span>
-            ) : null}
-          </label>
-        );
-      })}
+                {error ? (
+                  <span className="field-error" id={errorId}>
+                    {error}
+                  </span>
+                ) : null}
+              </label>
+            );
+          })}
+        </section>
+      ))}
     </>
   );
 }
@@ -796,7 +817,7 @@ export function DraftEditor({
   timezone,
 }: {
   draft: ApplicantDraft;
-  schema: Array<FormField>;
+  schema: StoredSubmissionFormSchema;
   applicant: { name: string; email: string; verified: boolean };
   publicSlug: string;
   currentUpload: ApplicantVideoUploadRecord | null;
@@ -935,14 +956,8 @@ export function DraftEditor({
     if (!serverSaved && !readOnly) return;
     void clearDraftRecoveryScope(recoveryScope);
   }, [readOnly, recoveryScope, serverSaved]);
-  const fields = visibleFields(
-    {
-      introduction: "",
-      presentation: DEFAULT_FORM_PRESENTATION,
-      fields: schema,
-    },
-    answers,
-  );
+  const fields = visibleFields(schema, answers);
+  const sections = formSectionsForDisplay(schema, fields);
   const incompleteRequiredFields = fields.filter((field) => {
     if (!field.required) return false;
     if (field.type === "video" && uploads[field.id]) return false;
@@ -1039,7 +1054,7 @@ export function DraftEditor({
         </div>
       ) : null}
       <ApplicationAnswers
-        fields={fields}
+        sections={sections}
         errors={errors}
         answers={answers}
         setAnswers={setAnswers}

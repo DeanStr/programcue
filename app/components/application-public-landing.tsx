@@ -2,7 +2,10 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 
 import { eventBoundaryCalendarDate } from "~/modules/schedule/schedule-time";
-import type { SubmissionFormSchema } from "~/modules/submissions/submission-schema";
+import {
+  formFieldsInDisplayOrder,
+  type StoredSubmissionFormSchema,
+} from "~/modules/submissions/submission-schema";
 
 type LandingForm = {
   name: string;
@@ -20,7 +23,7 @@ type LandingForm = {
   maxSpeakers: number | null;
   accessMode: "email_verified" | "account_required" | "password_protected";
   allowAnonymousDrafts: boolean;
-  version: { schema: SubmissionFormSchema; versionNumber: number };
+  version: { schema: StoredSubmissionFormSchema; versionNumber: number };
 };
 
 type FeaturedSpeaker = {
@@ -90,7 +93,7 @@ export function PublicApplicationLanding({
 }) {
   const presentation = form.version.schema.presentation;
   const location = [form.eventVenue, form.eventCity].filter(Boolean).join(", ");
-  const applicationFields = form.version.schema.fields;
+  const applicationFields = formFieldsInDisplayOrder(form.version.schema);
   const hasConditionalFields = applicationFields.some(
     (field) => field.condition !== null,
   );

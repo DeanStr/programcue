@@ -1,28 +1,23 @@
 import { data, Form, Link, useActionData } from "react-router";
-import { ZodError } from "zod";
 import { SubmissionDataGrid } from "~/components/submission-data-grid";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
+import { adminRecordBreadcrumbLabelAtPath } from "~/modules/administration/admin-route-breadcrumb";
 import { EvaluationStateError } from "~/modules/evaluations/evaluation-errors";
-import { PersonDuplicateService } from "~/modules/people/person-duplicate-service.server";
+import {
+  type AdminSubmissionView,
+  adminSubmissionSearchParams,
+  parseAdminSubmissionView,
+} from "~/modules/submissions/submission-admin-view";
 import {
   SubmissionRevisionConflictError,
   SubmissionStateError,
 } from "~/modules/submissions/submission-repository.server";
-import type {
-  AdminSubmissionFilters,
-  AdminSubmissionRoutingFilter,
-} from "~/modules/submissions/submission-repository-shared";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import {
-  WebhookService,
-  webhookActorForAudit,
-} from "~/platform/operations/webhook-service.server";
 import type { Route } from "./+types/submissions-admin";
 import {
   ActionNotice,
-  ManualEntryPanels,
   SubmissionAdminDetailPanel,
 } from "./submissions-admin-panels";
 import type {
@@ -30,49 +25,44 @@ import type {
   SubmissionsAdminActionResult,
 } from "./submissions-admin-types";
 
-export const meta: Route.MetaFunction = () => [
-  { title: "Submissions · Program Cue" },
+export const handle = {
+  adminRecordBreadcrumbLabel(data: unknown) {
+    if (!data || typeof data !== "object" || !("mode" in data)) {
+      throw new Error("The applications route did not provide its mode.");
+    }
+    if ((data as { mode: unknown }).mode === "list") return null;
+    if ((data as { mode: unknown }).mode !== "detail") {
+      throw new Error("The applications route provided an invalid mode.");
+    }
+    return adminRecordBreadcrumbLabelAtPath(data, ["submission", "title"]);
+  },
+};
+
+export const meta: Route.MetaFunction = ({ loaderData }) => [
+  {
+    title:
+      loaderData?.mode === "detail"
+        ? `${loaderData.submission.title} · Application · Program Cue`
+        : "Applications · Program Cue",
+  },
 ];
 
-const routingFilters = new Set<AdminSubmissionRoutingFilter>([
-  "missing_automatic",
-  "manual_override",
-]);
-
-function submissionFilters(url: URL): AdminSubmissionFilters {
-  const routing = url.searchParams.get("routing") ?? "";
-  if (routing && !routingFilters.has(routing as AdminSubmissionRoutingFilter)) {
-    throw new Response("Invalid submission routing filter", { status: 400 });
-  }
-  return {
-    status: url.searchParams.get("status") ?? "",
-    category: url.searchParams.get("category") ?? "",
-    query: url.searchParams.get("query") ?? "",
-    routing: routing as AdminSubmissionRoutingFilter | "",
-  };
-}
-
-function queueSearchParams(filters: AdminSubmissionFilters, page: number) {
-  const search = listSearchParams(filters, page);
+function queueSearchParams(view: AdminSubmissionView, page: number) {
+  const search = listSearchParams(view, page);
   search.set("queue", "1");
   return search;
 }
 
-function listSearchParams(filters: AdminSubmissionFilters, page: number) {
-  const search = new URLSearchParams({ page: String(page) });
-  for (const key of ["status", "category", "query", "routing"] as const) {
-    const value = filters[key];
-    if (value) search.set(key, value);
-  }
-  return search;
+function listSearchParams(view: AdminSubmissionView, page: number) {
+  return adminSubmissionSearchParams(view, page);
 }
 
 function detailHref(
   submissionId: string,
-  filters: AdminSubmissionFilters,
+  view: AdminSubmissionView,
   page: number,
 ) {
-  return `/admin/submissions/${encodeURIComponent(submissionId)}?${queueSearchParams(filters, page)}`;
+  return `/admin/submissions/${encodeURIComponent(submissionId)}?${queueSearchParams(view, page)}`;
 }
 
 async function getViewer(
@@ -94,9 +84,25 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   const service = new SubmissionService(env);
   if (params.submissionId) {
     const url = new URL(request.url);
-    const fromQueue = url.searchParams.get("queue") === "1";
-    const filters = submissionFilters(url);
-    const page = Number(url.searchParams.get("page") ?? "1");
+    const queueValues = url.searchParams.getAll("queue");
+    const createdValues = url.searchParams.getAll("created");
+    const attentionValues = url.searchParams.getAll("attention");
+    if (
+      queueValues.length > 1 ||
+      createdValues.length > 1 ||
+      attentionValues.length > 1 ||
+      (queueValues[0] !== undefined && queueValues[0] !== "1") ||
+      (createdValues[0] !== undefined && createdValues[0] !== "1") ||
+      (attentionValues[0] !== undefined && attentionValues[0] !== "1") ||
+      (attentionValues[0] === "1" && createdValues[0] !== "1")
+    ) {
+      throw new Response("Invalid application detail context", {
+        status: 400,
+      });
+    }
+    const fromQueue = queueValues[0] === "1";
+    const view = parseAdminSubmissionView(url);
+    const { filters, page } = view;
     const [submission, queueContext] = await Promise.all([
       service.getAdminSubmission(viewer, params.submissionId),
       fromQueue
@@ -116,13 +122,13 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
         throw new Error("Submission queue context was not resolved.");
       }
       queueNavigation = {
-        backHref: `/admin/submissions?${listSearchParams(filters, page)}`,
+        backHref: `/admin/submissions?${listSearchParams(view, page)}`,
         previous: queueContext.previous
           ? {
               title: queueContext.previous.title,
               href: detailHref(
                 queueContext.previous.id,
-                filters,
+                view,
                 queueContext.previous.page,
               ),
             }
@@ -132,7 +138,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
               title: queueContext.next.title,
               href: detailHref(
                 queueContext.next.id,
-                filters,
+                view,
                 queueContext.next.page,
               ),
             }
@@ -142,78 +148,19 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     return { mode: "detail" as const, submission, queueNavigation };
   }
   const url = new URL(request.url);
-  const filters = submissionFilters(url);
-  const requestedPage = Number(url.searchParams.get("page") ?? "1");
-  const [submissionPage, routingTeams, routingTracks, sessionFormats] =
-    await Promise.all([
-      service.listAdminSubmissionPage(viewer, filters, requestedPage),
-      service.listRoutingTeams(viewer),
-      service.listRoutingTracks(viewer),
-      service.getConfiguredSessionFormats(viewer),
-    ]);
+  const view = parseAdminSubmissionView(url);
+  const { filters, page: requestedPage } = view;
+  const submissionPage = await service.listAdminSubmissionPage(
+    viewer,
+    filters,
+    requestedPage,
+  );
   return {
     mode: "list" as const,
     ...submissionPage,
-    routingTeams,
-    routingTracks,
-    sessionFormats,
     filters,
-    manualApplicationIdempotencyKey: crypto.randomUUID(),
-    directSessionIdempotencyKey: crypto.randomUUID(),
+    view,
   };
-}
-
-class InvalidAdminPayloadError extends Error {}
-
-function speakersFrom(formData: FormData) {
-  const rawSpeakers = formData.get("speakers");
-  if (typeof rawSpeakers !== "string" || rawSpeakers.trim() === "") {
-    throw new InvalidAdminPayloadError(
-      "The speaker details are missing. Refresh and try again.",
-    );
-  }
-  try {
-    const parsed: unknown = JSON.parse(rawSpeakers);
-    if (!Array.isArray(parsed)) throw new Error("Speakers must be a list.");
-    return parsed;
-  } catch {
-    throw new InvalidAdminPayloadError(
-      "The speaker details are invalid. Refresh and try again.",
-    );
-  }
-}
-
-async function queueAdminWebhook(
-  env: CloudflareEnvironment,
-  viewer: Awaited<ReturnType<typeof getViewer>>["viewer"],
-  input: {
-    eventType:
-      | "submission.created"
-      | "submission.submitted"
-      | "session.created";
-    entityType: "submission" | "session";
-    entityId: string;
-    idempotencyKey: string;
-    data: Record<string, unknown>;
-  },
-) {
-  try {
-    const deliveries = await new WebhookService(env).queueEvent(
-      webhookActorForAudit(viewer, "admin_ui"),
-      {
-        ...input,
-        correlationId: crypto.randomUUID(),
-      },
-    );
-    return deliveries.some((delivery) => delivery.status === "queue_failed")
-      ? "One or more outbound webhook deliveries require a retry."
-      : null;
-  } catch (error) {
-    console.error("Failed to record submission administration webhook", {
-      errorName: error instanceof Error ? error.name : "UnknownError",
-    });
-    return "The outbound webhook event could not be recorded.";
-  }
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -222,132 +169,6 @@ export async function action({ request, context }: Route.ActionArgs) {
   const intent = String(formData.get("_intent") ?? "");
   const service = new SubmissionService(env);
   try {
-    if (intent === "create_direct_session") {
-      const speakers = speakersFrom(formData);
-      const duplicateCheck = await new PersonDuplicateService(
-        env,
-      ).findLikelyDuplicates(viewer, speakers);
-      if (
-        duplicateCheck.matches.length &&
-        formData.get("confirmDuplicatePeople") !== "yes"
-      ) {
-        return data<SubmissionsAdminActionResult>(
-          {
-            ok: false,
-            message:
-              "Review the likely existing people before creating this direct session.",
-            duplicateCheck: {
-              intent: "create_direct_session",
-              matches: duplicateCheck.matches,
-              truncated: duplicateCheck.truncated,
-            },
-          },
-          { status: 409 },
-        );
-      }
-      const created = await service.createDirectSession(viewer, {
-        idempotencyKey: formData.get("idempotencyKey"),
-        title: formData.get("title"),
-        description: formData.get("description"),
-        trackId: formData.get("trackId"),
-        format: formData.get("format"),
-        durationMinutes: formData.get("durationMinutes"),
-        speakers,
-      });
-      const warning = [created.invitationWarning, created.webhookWarning]
-        .filter(Boolean)
-        .join(" ");
-      return data<SubmissionsAdminActionResult>(
-        {
-          ok: !warning,
-          partial: Boolean(warning),
-          message: warning
-            ? `Direct session created in the unscheduled programme. Speaker participation must be confirmed before publication; portal invitation acceptance is separate. ${warning}`
-            : "Direct session created in the unscheduled programme. Speaker participation must be confirmed before publication; portal invitation acceptance is separate.",
-        },
-        { status: warning ? 207 : 200 },
-      );
-    }
-    if (intent === "create_manual_application") {
-      const routedTeamIds = formData
-        .getAll("routedTeamIds")
-        .map(String)
-        .filter(Boolean);
-      const speakers = speakersFrom(formData);
-      const duplicateCheck = await new PersonDuplicateService(
-        env,
-      ).findLikelyDuplicates(viewer, [
-        {
-          name: formData.get("submitterName"),
-          email: formData.get("submitterEmail"),
-        },
-        ...speakers,
-      ]);
-      if (
-        duplicateCheck.matches.length &&
-        formData.get("confirmDuplicatePeople") !== "yes"
-      ) {
-        return data<SubmissionsAdminActionResult>(
-          {
-            ok: false,
-            message:
-              "Review the likely existing people before creating this manual application.",
-            duplicateCheck: {
-              intent: "create_manual_application",
-              matches: duplicateCheck.matches,
-              truncated: duplicateCheck.truncated,
-            },
-          },
-          { status: 409 },
-        );
-      }
-      const submissionId = await service.createManualApplication(viewer, {
-        idempotencyKey: formData.get("idempotencyKey"),
-        title: formData.get("title"),
-        description: formData.get("description"),
-        trackIds: formData.getAll("trackIds").map(String),
-        format: formData.get("format"),
-        submitterName: formData.get("submitterName"),
-        submitterEmail: formData.get("submitterEmail"),
-        routedTeamIds,
-        speakers,
-      });
-      const warnings = await Promise.all([
-        queueAdminWebhook(env, viewer, {
-          eventType: "submission.created",
-          entityType: "submission",
-          entityId: submissionId,
-          idempotencyKey: `submission.created:${submissionId}`,
-          data: {
-            source: "administrator_manual_entry",
-            status: "submitted",
-            routedTeamIds,
-          },
-        }),
-        queueAdminWebhook(env, viewer, {
-          eventType: "submission.submitted",
-          entityType: "submission",
-          entityId: submissionId,
-          idempotencyKey: `submission.submitted:${submissionId}`,
-          data: {
-            source: "administrator_manual_entry",
-            status: "submitted",
-            routedTeamIds,
-          },
-        }),
-      ]);
-      const warning = warnings.filter(Boolean).join(" ");
-      return data<SubmissionsAdminActionResult>(
-        {
-          ok: !warning,
-          partial: Boolean(warning),
-          message: warning
-            ? `Manual application created with an immutable source snapshot. ${warning}`
-            : "Manual application created with an immutable source snapshot.",
-        },
-        { status: warning ? 207 : 200 },
-      );
-    }
     if (intent === "resend_co_speaker") {
       const result = await service.resendCoSpeakerInvitation(
         viewer,
@@ -371,22 +192,6 @@ export async function action({ request, context }: Route.ActionArgs) {
       { status: 400 },
     );
   } catch (error) {
-    if (error instanceof ZodError) {
-      return data<SubmissionsAdminActionResult>(
-        {
-          ok: false,
-          message:
-            error.issues[0]?.message ?? "Review the submitted record details.",
-        },
-        { status: 422 },
-      );
-    }
-    if (error instanceof InvalidAdminPayloadError) {
-      return data<SubmissionsAdminActionResult>(
-        { ok: false, message: error.message },
-        { status: 400 },
-      );
-    }
     if (
       error instanceof SubmissionStateError ||
       error instanceof SubmissionRevisionConflictError ||
@@ -414,19 +219,15 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
         queueNavigation={loaderData.queueNavigation}
       />
     );
-  const { submissions, routingTeams, filters, page, hasNext } = loaderData;
-  const submitted = submissions.filter(
-    (submission) => submission.status === "submitted",
-  ).length;
-  const drafts = submissions.filter(
-    (submission) => submission.status === "draft",
-  ).length;
+  const { filters, view, summary, results } = loaderData;
+  const { submissions, page, totalPages, matchingTotal, firstItem, lastItem } =
+    results;
   const categories = loaderData.categories;
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>Submissions</h1>
+          <h1>Applications</h1>
           <p>
             Track applications from private draft through programme decision.
           </p>
@@ -435,35 +236,35 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
           <Link className="btn" to="/admin/submissions/form">
             Form Builder
           </Link>
+          <Link className="btn primary" to="/admin/submissions/new">
+            Create application record
+          </Link>
         </div>
       </div>
       <ActionNotice result={actionData} />
       <div className="grid grid-4 mb">
         <section className="card metric">
-          <div className="label">Visible records</div>
-          <div className="value">{submissions.length}</div>
+          <div className="label">All applications</div>
+          <div className="value">{summary.eventTotal}</div>
         </section>
         <section className="card metric">
           <div className="label">Submitted</div>
-          <div className="value">{submitted}</div>
+          <div className="value">{summary.byStatus.submitted}</div>
         </section>
         <section className="card metric">
           <div className="label">Private drafts</div>
-          <div className="value">{drafts}</div>
+          <div className="value">{summary.byStatus.draft}</div>
         </section>
         <section className="card metric">
-          <div className="label">Reviewer teams</div>
-          <div className="value">
-            {
-              new Set(
-                submissions.flatMap((submission) => submission.routedTeamIds),
-              ).size
-            }
-          </div>
+          <div className="label">Routed teams</div>
+          <div className="value">{summary.routedTeamCount}</div>
         </section>
       </div>
       <section className="card pad mb">
         <Form method="get" className="form-row" role="search">
+          <input type="hidden" name="sort" value={filters.sort} />
+          <input type="hidden" name="columns" value={view.columns.join(",")} />
+          <input type="hidden" name="density" value={view.density} />
           <label className="label">
             Search
             <input
@@ -538,45 +339,38 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
       <section className="card pad mb">
         <div className="card-title">
           <h2>Application queue</h2>
-          <span className="help right">This event only · newest first</span>
+          <span className="help right">
+            {matchingTotal === 0
+              ? `No matching applications · ${summary.eventTotal} applications in this event`
+              : `Showing ${firstItem}–${lastItem} of ${matchingTotal} matching applications · ${summary.eventTotal} applications in this event`}
+          </span>
         </div>
         <SubmissionDataGrid
-          key={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}`}
+          key={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}:${filters.sort}:${view.columns.join(",")}:${view.density}`}
           submissions={submissions}
-          detailSearchParams={queueSearchParams(filters, page).toString()}
+          columns={view.columns}
+          density={view.density}
+          sort={filters.sort ?? "submittedAt-desc"}
+          detailSearchParams={queueSearchParams(view, page).toString()}
         />
-        {page > 1 || hasNext ? (
+        {totalPages > 1 ? (
           <nav className="page-actions mt" aria-label="Submission pages">
             {page > 1 ? (
-              <Link
-                className="btn"
-                to={`?${listSearchParams(filters, page - 1)}`}
-              >
-                ← Newer
+              <Link className="btn" to={`?${listSearchParams(view, page - 1)}`}>
+                ← Previous
               </Link>
             ) : null}
-            <span className="pill">Page {page}</span>
-            {hasNext ? (
-              <Link
-                className="btn"
-                to={`?${listSearchParams(filters, page + 1)}`}
-              >
-                Older →
+            <span className="pill">
+              Page {page} of {totalPages}
+            </span>
+            {page < totalPages ? (
+              <Link className="btn" to={`?${listSearchParams(view, page + 1)}`}>
+                Next →
               </Link>
             ) : null}
           </nav>
         ) : null}
       </section>
-      <ManualEntryPanels
-        routingTeams={routingTeams}
-        routingTracks={loaderData.routingTracks}
-        sessionFormats={loaderData.sessionFormats}
-        manualApplicationIdempotencyKey={
-          loaderData.manualApplicationIdempotencyKey
-        }
-        directSessionIdempotencyKey={loaderData.directSessionIdempotencyKey}
-        actionResult={actionData}
-      />
     </>
   );
 }

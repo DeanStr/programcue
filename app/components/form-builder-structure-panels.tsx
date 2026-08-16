@@ -6,7 +6,11 @@ import {
   formConditionSourceLabel,
   formFieldTypeLabel,
 } from "~/modules/submissions/form-builder-fields";
-import type { SaveFormInput } from "~/modules/submissions/submission-schema";
+import {
+  formSectionsForDisplay,
+  MAX_FORM_SECTIONS,
+  type SaveFormInput,
+} from "~/modules/submissions/submission-schema";
 
 /**
  * The form's keyboard-reorderable outline: what questions exist, and in what
@@ -29,13 +33,21 @@ export function FormStructurePanel({
   operationMessage: string | null;
   onOperationBlocked: (message: string) => void;
 }) {
-  const fields = input.schema.fields;
+  const fields = formSectionsForDisplay(input.schema).flatMap(
+    (section) => section.fields,
+  );
 
   /* Reordering has to act on the row it is drawn on, not on whatever happens
      to be selected, or the two panes disagree about what "this field" means. */
   function moveFieldAt(index: number, direction: -1 | 1) {
     const target = index + direction;
     if (target < 0 || target >= fields.length) return;
+    if (fields[index]!.sectionId !== fields[target]!.sectionId) {
+      onOperationBlocked(
+        "Use the field's Section setting to move it between sections.",
+      );
+      return;
+    }
     const next = [...fields];
     [next[index], next[target]] = [next[target]!, next[index]!];
     const issue = conditionalFieldOrderIssue(next);
@@ -44,6 +56,73 @@ export function FormStructurePanel({
       return;
     }
     change({ ...input, schema: { ...input.schema, fields: next } });
+  }
+
+  function addSection() {
+    if (input.schema.sections.length >= MAX_FORM_SECTIONS) {
+      onOperationBlocked(
+        `A form can contain at most ${MAX_FORM_SECTIONS} sections.`,
+      );
+      return;
+    }
+    const existing = new Set(
+      input.schema.sections.map((section) => section.id),
+    );
+    let suffix = input.schema.sections.length + 1;
+    let id = `section_${suffix}`;
+    while (existing.has(id)) {
+      suffix += 1;
+      id = `section_${suffix}`;
+    }
+    change({
+      ...input,
+      schema: {
+        ...input.schema,
+        sections: [
+          ...input.schema.sections,
+          { id, title: `Section ${suffix}`, description: "" },
+        ],
+      },
+    });
+  }
+
+  function moveSection(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= input.schema.sections.length) return;
+    const sections = [...input.schema.sections];
+    [sections[index], sections[target]] = [sections[target]!, sections[index]!];
+    const orderedFields = sections.flatMap((section) =>
+      fields.filter((field) => field.sectionId === section.id),
+    );
+    const issue = conditionalFieldOrderIssue(orderedFields);
+    if (issue) {
+      onOperationBlocked(issue);
+      return;
+    }
+    change({ ...input, schema: { ...input.schema, sections } });
+  }
+
+  function removeSection(index: number) {
+    if (input.schema.sections.length === 1) return;
+    const removed = input.schema.sections[index]!;
+    const assignedFields = fields.filter(
+      (field) => field.sectionId === removed.id,
+    );
+    if (assignedFields.length) {
+      onOperationBlocked(
+        `Move ${assignedFields.length} assigned ${assignedFields.length === 1 ? "field" : "fields"} to another section before removing “${removed.title}”.`,
+      );
+      return;
+    }
+    change({
+      ...input,
+      schema: {
+        ...input.schema,
+        sections: input.schema.sections.filter(
+          (section) => section.id !== removed.id,
+        ),
+      },
+    });
   }
 
   return (
@@ -68,9 +147,85 @@ export function FormStructurePanel({
           />
           <CharacterCount value={input.schema.introduction} maximum={2_000} />
         </label>
+        <fieldset className="stack mb">
+          <legend className="label">Sections</legend>
+          {input.schema.sections.map((section, index) => (
+            <div className="card pad" key={section.id}>
+              <label className="label">
+                Section title
+                <input
+                  className="field"
+                  value={section.title}
+                  maxLength={120}
+                  required
+                  onChange={(event) => {
+                    const sections = input.schema.sections.map((candidate) =>
+                      candidate.id === section.id
+                        ? { ...candidate, title: event.target.value }
+                        : candidate,
+                    );
+                    change({
+                      ...input,
+                      schema: { ...input.schema, sections },
+                    });
+                  }}
+                />
+              </label>
+              <label className="label mt">
+                Description (optional)
+                <textarea
+                  className="textarea"
+                  rows={2}
+                  value={section.description}
+                  maxLength={500}
+                  onChange={(event) => {
+                    const sections = input.schema.sections.map((candidate) =>
+                      candidate.id === section.id
+                        ? { ...candidate, description: event.target.value }
+                        : candidate,
+                    );
+                    change({
+                      ...input,
+                      schema: { ...input.schema, sections },
+                    });
+                  }}
+                />
+              </label>
+              <div className="page-actions mt">
+                <button
+                  className="btn small"
+                  type="button"
+                  disabled={index === 0}
+                  onClick={() => moveSection(index, -1)}
+                >
+                  <ChevronUp size={13} aria-hidden="true" /> Move up
+                </button>
+                <button
+                  className="btn small"
+                  type="button"
+                  disabled={index === input.schema.sections.length - 1}
+                  onClick={() => moveSection(index, 1)}
+                >
+                  <ChevronDown size={13} aria-hidden="true" /> Move down
+                </button>
+                <button
+                  className="btn small danger"
+                  type="button"
+                  disabled={input.schema.sections.length === 1}
+                  onClick={() => removeSection(index)}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+          <button className="btn small" type="button" onClick={addSection}>
+            + Add section
+          </button>
+        </fieldset>
         {operationMessage ? (
           <div className="validation-item error mb" role="alert">
-            <strong>Reorder blocked</strong>
+            <strong>Change blocked</strong>
             <span>{operationMessage}</span>
           </div>
         ) : null}
@@ -95,7 +250,12 @@ export function FormStructurePanel({
                     {field.required ? "\u00a0*" : ""}
                   </span>
                   <span className="fb-field-kind">
-                    {formFieldTypeLabel(field.type)}
+                    {formFieldTypeLabel(field.type)} ·{" "}
+                    {
+                      input.schema.sections.find(
+                        (section) => section.id === field.sectionId,
+                      )!.title
+                    }
                   </span>
                   {field.condition ? (
                     <span className="fb-field-condition">

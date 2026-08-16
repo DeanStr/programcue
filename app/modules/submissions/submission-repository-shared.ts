@@ -5,10 +5,12 @@ import {
 import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
 import {
   type FormRouting,
-  formSchemaSchema,
   routingSchema,
   type SaveFormInput,
+  type StoredSubmissionFormSchema,
   type SubmissionFormSchema,
+  storedFormSchemaSchema,
+  storedFormSchemaVersion,
   type UploadReference,
 } from "./submission-schema";
 
@@ -49,7 +51,8 @@ export type FormVersion = {
   versionNumber: number;
   status: "draft" | "published" | "retired";
   publishedAt: number | null;
-  schema: SubmissionFormSchema;
+  schema: StoredSubmissionFormSchema;
+  schemaFormatVersion: 1 | 2;
   routing: FormRouting;
   settings: {
     name?: string;
@@ -64,7 +67,9 @@ export type FormVersion = {
 };
 
 export type FormWorkspace = FormSummary & {
-  draftVersion: FormVersion;
+  draftVersion: Omit<FormVersion, "schema"> & {
+    schema: SubmissionFormSchema;
+  };
   publishedVersion: FormVersion | null;
   versions: Array<
     Pick<FormVersion, "id" | "versionNumber" | "status" | "publishedAt">
@@ -154,11 +159,42 @@ export type AdminSubmissionRoutingFilter =
   | "missing_automatic"
   | "manual_override";
 
+export const ADMIN_SUBMISSION_STATUSES = [
+  "draft",
+  "submitted",
+  "assigned",
+  "in_review",
+  "decision_ready",
+  "accepted",
+  "waitlisted",
+  "rejected",
+  "withdrawn",
+] as const;
+
+export type AdminSubmissionStatus = (typeof ADMIN_SUBMISSION_STATUSES)[number];
+
+export const ADMIN_SUBMISSION_SORTS = [
+  "submittedAt-desc",
+  "submittedAt-asc",
+  "title-asc",
+  "title-desc",
+] as const;
+
+export type AdminSubmissionSort = (typeof ADMIN_SUBMISSION_SORTS)[number];
+export const ADMIN_SUBMISSION_PAGE_SIZE = 50;
+
 export type AdminSubmissionFilters = {
-  status?: string;
+  status?: AdminSubmissionStatus | "";
   category?: string;
   query?: string;
   routing?: AdminSubmissionRoutingFilter | "";
+  sort?: AdminSubmissionSort;
+};
+
+export type AdminSubmissionSummary = {
+  eventTotal: number;
+  byStatus: Record<AdminSubmissionStatus, number>;
+  routedTeamCount: number;
 };
 
 export function parseJson<T>(
@@ -281,13 +317,15 @@ export function mapForm(row: FormRow): FormSummary {
 }
 
 export function mapVersion(row: VersionRow): FormVersion {
+  const schema = parseJson(row.schemaJson, storedFormSchemaSchema);
   return {
     id: row.id,
     revision: row.revision,
     versionNumber: row.versionNumber,
     status: row.status,
     publishedAt: row.publishedAt,
-    schema: parseJson(row.schemaJson, formSchemaSchema),
+    schema,
+    schemaFormatVersion: storedFormSchemaVersion(schema),
     routing: parseJson(row.routingJson, routingSchema),
     settings: JSON.parse(row.settingsSnapshotJson) as FormVersion["settings"],
   };

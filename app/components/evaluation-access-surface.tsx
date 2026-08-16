@@ -144,7 +144,7 @@ const OPERATIONS_DESTINATIONS: readonly Destination[] = [
   {
     to: "/admin/submissions",
     icon: FileText,
-    label: "Submissions",
+    label: "Applications",
     detail: "Proposal intake and triage.",
   },
   {
@@ -168,7 +168,7 @@ const OPERATIONS_DESTINATIONS: readonly Destination[] = [
   {
     to: "/admin/content",
     icon: FolderOpen,
-    label: "Content & files",
+    label: "Session content & files",
     detail: "Resources, uploads and retention.",
   },
   {

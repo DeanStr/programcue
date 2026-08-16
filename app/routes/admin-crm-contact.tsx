@@ -25,6 +25,7 @@ import {
   statusPresentation,
 } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
+import { adminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
 import { crmStages } from "~/modules/crm/crm-schema";
 import { CrmService, CrmStateError } from "~/modules/crm/crm-service.server";
 import { ensureDemoCrmData } from "~/modules/crm/demo.server";
@@ -32,9 +33,11 @@ import { requireOrganisationAdministrator } from "~/platform/auth/organisation.s
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import type { Route } from "./+types/admin-crm-contact";
 
+export const handle = adminRecordBreadcrumbHandle(["contact", "name"]);
+
 export const meta = ({ loaderData }: Route.MetaArgs) => [
   {
-    title: `${loaderData?.contact.name ?? "Speaker contact"} · Speaker Network`,
+    title: `${loaderData?.contact.name ?? "Speaker contact"} · Speaker network · Program Cue`,
   },
 ];
 

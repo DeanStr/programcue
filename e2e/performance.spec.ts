@@ -264,7 +264,7 @@ test.describe("explicit local performance evidence", () => {
     for (let index = 0; index < 5; index += 1) {
       const target =
         index % 2 === 0
-          ? { href: "/admin/event", heading: "Event Setup" }
+          ? { href: "/admin/event", heading: "Event settings" }
           : { href: "/admin/command", heading: "Command Centre" };
       const duration = await page.evaluate(async ({ href, heading }) => {
         const link = document.querySelector<HTMLAnchorElement>(

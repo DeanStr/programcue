@@ -77,13 +77,64 @@ export function conditionalFieldOrderIssue(fields: FormField[]) {
   return null;
 }
 
+export function formFieldInsertionSectionId(
+  fields: FormField[],
+  targetIndex: number,
+  emptyFormSectionId: string,
+) {
+  if (
+    !Number.isSafeInteger(targetIndex) ||
+    targetIndex < 0 ||
+    targetIndex > fields.length
+  ) {
+    throw new Error("The form field insertion position is invalid.");
+  }
+  return (
+    fields[targetIndex]?.sectionId ??
+    fields[targetIndex - 1]?.sectionId ??
+    emptyFormSectionId
+  );
+}
+
+export function moveFormFieldToInsertion(
+  fields: FormField[],
+  fieldId: string,
+  targetIndex: number,
+  emptyFormSectionId: string,
+) {
+  const targetSectionId = formFieldInsertionSectionId(
+    fields,
+    targetIndex,
+    emptyFormSectionId,
+  );
+  const sourceIndex = fields.findIndex((field) => field.id === fieldId);
+  if (sourceIndex < 0) {
+    throw new Error(`Cannot move missing form field “${fieldId}”.`);
+  }
+  const nextFields = [...fields];
+  const [field] = nextFields.splice(sourceIndex, 1);
+  if (!field) throw new Error(`Cannot move missing form field “${fieldId}”.`);
+  const insertionIndex =
+    targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
+  if (insertionIndex === sourceIndex && field.sectionId === targetSectionId) {
+    return null;
+  }
+  nextFields.splice(insertionIndex, 0, {
+    ...field,
+    sectionId: targetSectionId,
+  });
+  return nextFields;
+}
+
 export function createFormField(
   fields: FormField[],
   type: FormField["type"],
+  sectionId: string,
 ): FormField {
   const label = formFieldTypeLabel(type);
 
   return {
+    sectionId,
     id: fieldIdFromLabel(fields, label),
     label,
     type,

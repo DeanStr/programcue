@@ -12,6 +12,7 @@ import {
   type VersionRow,
 } from "./submission-repository-shared";
 import type { SaveFormInput } from "./submission-schema";
+import { upgradeStoredFormSchema } from "./submission-schema";
 
 export class SubmissionFormRepository {
   constructor(private readonly env: CloudflareEnvironment) {}
@@ -71,9 +72,15 @@ export class SubmissionFormRepository {
       .bind(form.id)
       .all<VersionRow>();
     const versions = versionsResult.results.map(mapVersion);
-    const draftVersion = versions.find((version) => version.status === "draft");
-    if (!draftVersion)
+    const storedDraftVersion = versions.find(
+      (version) => version.status === "draft",
+    );
+    if (!storedDraftVersion)
       throw new Error("The form has no editable draft version");
+    const draftVersion = {
+      ...storedDraftVersion,
+      schema: upgradeStoredFormSchema(storedDraftVersion.schema),
+    };
     const summary = mapForm(form);
     return {
       ...summary,
@@ -463,6 +470,11 @@ export class SubmissionFormRepository {
     const auditId = operation?.auditId ?? crypto.randomUUID();
     const publicationId = operation?.operationId ?? crypto.randomUUID();
     const version = workspace.draftVersion;
+    if (version.schemaFormatVersion !== 2) {
+      throw new SubmissionStateError(
+        "Save this draft once to upgrade its sections before publishing.",
+      );
+    }
     const routedTrackBindings = Object.entries(
       version.routing.trackIds,
     ).flatMap(([trackName, trackId]) => {

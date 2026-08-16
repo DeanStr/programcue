@@ -43,7 +43,7 @@ describe("Event Setup repository controls", () => {
     expect(button(markup, "Revalidate")).toContain("disabled");
     expect(button(markup, "Preview handover to")).toContain("disabled");
     expect(markup).toContain(
-      "Save or discard your Event Setup edits before changing where event data is held.",
+      "Save or discard your Event settings edits before changing where event data is held.",
     );
     expect(markup).toContain('href="/admin/files/retention"');
   });

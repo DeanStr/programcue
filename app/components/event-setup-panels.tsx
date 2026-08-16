@@ -739,7 +739,7 @@ export function EventRepositoryPanel({
       ) : null}
       {hasUnsavedChanges ? (
         <p className="validation-item warn mt" id={unsavedHelpId} role="status">
-          Save or discard your Event Setup edits before changing where event
+          Save or discard your Event settings edits before changing where event
           data is held.
         </p>
       ) : null}

@@ -185,7 +185,7 @@ export default function IntegrationsAdmin({
           <p>
             Preview the exact record changes, then export them to Accelevents. A
             preview never writes anything to Accelevents. Which system owns your
-            event data is set in Event Setup.
+            event data is set in Event settings.
           </p>
         </div>
         <div className="page-actions">

@@ -13,11 +13,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { submissionReferenceClipboard } from "~/components/operational-ui-rules";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
-import type { AdminSubmission } from "~/modules/submissions/submission-repository-shared";
+import {
+  ADMIN_SUBMISSION_OPTIONAL_COLUMNS,
+  type AdminSubmissionDensity,
+  type AdminSubmissionOptionalColumn,
+} from "~/modules/submissions/submission-admin-view";
+import type {
+  AdminSubmission,
+  AdminSubmissionSort,
+} from "~/modules/submissions/submission-repository-shared";
 
 const gridFeatures = tableFeatures({
   columnVisibilityFeature,
@@ -170,14 +178,18 @@ type ClipboardFeedback = { ok: boolean; message: string };
 
 export function SubmissionDataGrid({
   submissions,
+  columns: visibleOptionalColumns,
+  density,
+  sort,
   detailSearchParams = "",
 }: {
   submissions: AdminSubmission[];
+  columns: AdminSubmissionOptionalColumn[];
+  density: AdminSubmissionDensity;
+  sort: AdminSubmissionSort;
   detailSearchParams?: string;
 }) {
-  const [density, setDensity] = useState<"comfortable" | "compact">(
-    "comfortable",
-  );
+  const [searchParams, setSearchParams] = useSearchParams();
   const [clipboardFeedback, setClipboardFeedback] =
     useState<ClipboardFeedback | null>(null);
   const columns = useMemo(
@@ -189,7 +201,39 @@ export function SubmissionDataGrid({
     columns,
     data: submissions,
     getRowId: (submission) => submission.id,
+    initialState: {
+      columnVisibility: Object.fromEntries(
+        ADMIN_SUBMISSION_OPTIONAL_COLUMNS.map((column) => [
+          column,
+          visibleOptionalColumns.includes(column),
+        ]),
+      ),
+    },
   });
+
+  function setViewParameter(name: string, value: string, defaultValue: string) {
+    const next = new URLSearchParams(searchParams);
+    if (value === defaultValue) next.delete(name);
+    else next.set(name, value);
+    setSearchParams(next);
+  }
+
+  function setColumnVisible(
+    column: AdminSubmissionOptionalColumn,
+    visible: boolean,
+  ) {
+    const nextColumns = visible
+      ? ADMIN_SUBMISSION_OPTIONAL_COLUMNS.filter(
+          (candidate) =>
+            candidate === column || visibleOptionalColumns.includes(candidate),
+        )
+      : visibleOptionalColumns.filter((candidate) => candidate !== column);
+    setViewParameter(
+      "columns",
+      nextColumns.join(","),
+      ADMIN_SUBMISSION_OPTIONAL_COLUMNS.join(","),
+    );
+  }
 
   const selectedRows = table
     .getSelectedRowModel()
@@ -251,12 +295,27 @@ export function SubmissionDataGrid({
           )}
         </div>
         <label className="label pc-data-grid-density">
+          Sort
+          <select
+            className="select"
+            value={sort}
+            onChange={(event) =>
+              setViewParameter("sort", event.target.value, "submittedAt-desc")
+            }
+          >
+            <option value="submittedAt-desc">Newest activity</option>
+            <option value="submittedAt-asc">Oldest activity</option>
+            <option value="title-asc">Application title A–Z</option>
+            <option value="title-desc">Application title Z–A</option>
+          </select>
+        </label>
+        <label className="label pc-data-grid-density">
           <Rows3 aria-hidden size={14} /> Density
           <select
             className="select"
             value={density}
             onChange={(event) =>
-              setDensity(event.target.value as "comfortable" | "compact")
+              setViewParameter("density", event.target.value, "comfortable")
             }
           >
             <option value="comfortable">Comfortable</option>
@@ -278,7 +337,10 @@ export function SubmissionDataGrid({
                     type="checkbox"
                     checked={column.getIsVisible()}
                     onChange={(event) =>
-                      column.getToggleVisibilityHandler()(event)
+                      setColumnVisible(
+                        column.id as AdminSubmissionOptionalColumn,
+                        event.target.checked,
+                      )
                     }
                   />
                   <span>{columnLabel(column.id)}</span>

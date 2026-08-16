@@ -100,7 +100,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 }
 
-export const meta = () => [{ title: "Content & files · Program Cue" }];
+export const meta = () => [{ title: "Session content & files · Program Cue" }];
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -237,7 +237,7 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">Review · approve · deliver</span>
-          <h1>Content &amp; files</h1>
+          <h1>Session content &amp; files</h1>
           <p>
             Review session copy, restore attributed revisions and collect
             released speaker deliverables without duplicating private storage.

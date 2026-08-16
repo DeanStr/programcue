@@ -42,7 +42,7 @@ test("an Event Setup commit invalidates another authenticated browser page over 
   try {
     await observer.goto("/admin/event");
     await expect(
-      observer.getByRole("heading", { name: "Event Setup" }),
+      observer.getByRole("heading", { name: "Event settings" }),
     ).toBeVisible();
 
     const socketSeen = observer.waitForEvent("websocket");
@@ -130,7 +130,7 @@ test("an Event Setup commit invalidates another authenticated browser page over 
 
     await editor.goto("/admin/event");
     await expect(
-      editor.getByRole("heading", { name: "Event Setup" }),
+      editor.getByRole("heading", { name: "Event settings" }),
     ).toBeVisible();
     const venue = editor.getByLabel("Venue", { exact: true });
     originalVenue = await venue.inputValue();

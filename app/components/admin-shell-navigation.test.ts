@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { adminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
 import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
 import {
   adminCommandRecordSelection,
   adminCommandRecordsForKey,
   adminCommandSearchKey,
   adminPageBreadcrumbs,
+  adminRecordBreadcrumb,
   canOpenAdminAssistant,
   NAV_ITEMS,
   primaryNavigationChildren,
@@ -16,26 +18,80 @@ import {
 describe("administrator navigation context", () => {
   it("keeps an event section and current workflow in detail breadcrumbs", () => {
     expect(adminPageBreadcrumbs("/admin/submissions/form")).toEqual([
-      { label: "Submissions", href: "/admin/submissions" },
+      { label: "Applications", href: "/admin/submissions" },
       { label: "Form builder", href: null },
     ]);
     expect(adminPageBreadcrumbs("/admin/events/clone")).toEqual([
-      { label: "Event Setup", href: "/admin/event" },
+      { label: "Event settings", href: "/admin/event" },
       { label: "Clone event", href: null },
     ]);
     expect(adminPageBreadcrumbs("/admin/events/new")).toEqual([
-      { label: "Event Setup", href: "/admin/event" },
+      { label: "Event settings", href: "/admin/event" },
       { label: "New event", href: null },
     ]);
-    expect(adminPageBreadcrumbs("/admin/speakers/person-demo-speaker")).toEqual(
-      [
-        { label: "Speakers", href: "/admin/speakers" },
-        { label: "Speaker detail", href: null },
-      ],
-    );
+    expect(
+      adminPageBreadcrumbs("/admin/speakers/person-demo-speaker", {
+        state: "resolved",
+        label: "Priya Raman",
+      }),
+    ).toEqual([
+      { label: "Speakers", href: "/admin/speakers" },
+      { label: "Priya Raman", href: null },
+    ]);
     expect(adminPageBreadcrumbs("/admin/crm/pipeline")).toEqual([
-      { label: "Speaker Network", href: "/admin/crm" },
+      { label: "Speaker network", href: "/admin/crm" },
       { label: "Sourcing pipeline", href: null },
+    ]);
+  });
+
+  it("projects record labels from existing detail loader data", () => {
+    expect(
+      adminRecordBreadcrumb([
+        {
+          handle: adminRecordBreadcrumbHandle(["submission", "title"]),
+          loaderData: {
+            submission: { title: "Designing trustworthy systems" },
+          },
+        },
+      ]),
+    ).toEqual({
+      state: "resolved",
+      label: "Designing trustworthy systems",
+    });
+    expect(() =>
+      adminRecordBreadcrumb([
+        {
+          handle: adminRecordBreadcrumbHandle(["detail", "profile", "name"]),
+          loaderData: { detail: {} },
+        },
+      ]),
+    ).toThrow(/breadcrumb label/i);
+    expect(
+      adminRecordBreadcrumb([
+        {
+          handle: adminRecordBreadcrumbHandle(["submission", "title"]),
+          loaderData: undefined,
+        },
+      ]),
+    ).toEqual({ state: "unavailable" });
+    expect(
+      adminRecordBreadcrumb([
+        {
+          handle: adminRecordBreadcrumbHandle(["current", "title"]),
+          loaderData: null,
+        },
+      ]),
+    ).toEqual({ state: "unavailable" });
+    expect(() =>
+      adminPageBreadcrumbs("/admin/speakers/person-demo-speaker"),
+    ).toThrow(/breadcrumb handle/i);
+    expect(
+      adminPageBreadcrumbs("/admin/speakers/person-demo-speaker", {
+        state: "unavailable",
+      }),
+    ).toEqual([
+      { label: "Speakers", href: "/admin/speakers" },
+      { label: "Speaker", href: null },
     ]);
   });
 
@@ -94,36 +150,47 @@ describe("administrator navigation context", () => {
     expect(canOpenAdminAssistant("committee_chair")).toBe(false);
   });
 
-  it("chunks the top level by workflow phase and keeps second-level tools out of it", () => {
+  it("keeps seven stable workspace families and their tools at the second level", () => {
     const groups = primaryNavigationGroups(NAV_ITEMS);
     expect(groups.map((group) => group.label)).toEqual([
-      "Core work",
-      "Delivery",
-      "Manage",
+      "Event work",
+      "Administration",
     ]);
     expect(groups[0]?.items.map(([id]) => id)).toEqual([
       "command",
-      "event",
-      "branding",
       "submissions",
-      "review",
-    ]);
-    expect(groups[1]?.items.map(([id]) => id)).toEqual([
       "speakers",
       "schedule",
-      "programme",
       "communications",
-      "tasks",
-      "content",
     ]);
-    expect(groups[2]?.items.map(([id]) => id)).toEqual([
-      "integrations",
-      "operations",
-      "settings",
-    ]);
+    expect(groups[1]?.items.map(([id]) => id)).toEqual(["event", "operations"]);
     expect(
       groups.flatMap((group) => group.items).map(([id]) => id),
-    ).not.toEqual(expect.arrayContaining(["resources", "crm"]));
+    ).not.toEqual(
+      expect.arrayContaining([
+        "review",
+        "resources",
+        "crm",
+        "content",
+        "programme",
+        "tasks",
+        "branding",
+        "integrations",
+        "settings",
+      ]),
+    );
+  });
+
+  it("promotes an authorised child explicitly and rejects unmapped items", () => {
+    const review = NAV_ITEMS.find(([id]) => id === "review")!;
+    expect(primaryNavigationGroups([review])).toEqual([
+      { label: "Event work", items: [review] },
+    ]);
+    expect(() =>
+      primaryNavigationGroups([
+        ["unmapped", NAV_ITEMS[0][1], "Unmapped destination"],
+      ]),
+    ).toThrow(/not assigned to a family/i);
   });
 
   it("marks the section actually open, never a sibling standing in for it", () => {
@@ -146,6 +213,9 @@ describe("administrator navigation context", () => {
     expect(primaryNavigationItemActive("programme", "/admin/schedule")).toBe(
       false,
     );
+    expect(primaryNavigationItemActive("schedule", "/admin/sessions/new")).toBe(
+      true,
+    );
   });
 
   it("opens the speaker family's second level anywhere inside that family", () => {
@@ -164,7 +234,15 @@ describe("administrator navigation context", () => {
     expect(
       primaryNavigationChildren("speakers", NAV_ITEMS).map(([id]) => id),
     ).toEqual(["crm", "resources"]);
-    expect(primaryNavigationChildren("schedule", NAV_ITEMS)).toEqual([]);
+    expect(
+      primaryNavigationChildren("submissions", NAV_ITEMS).map(([id]) => id),
+    ).toEqual(["review"]);
+    expect(
+      primaryNavigationChildren("schedule", NAV_ITEMS).map(([id]) => id),
+    ).toEqual(["content", "programme"]);
+    expect(
+      primaryNavigationChildren("communications", NAV_ITEMS).map(([id]) => id),
+    ).toEqual(["tasks"]);
   });
 
   it("drops a second-level tool the viewer is not authorised for", () => {

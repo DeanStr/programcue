@@ -60,6 +60,7 @@ it("reconciles protected draft tracks and formats with current event choices", a
     reviewVisibility: "reviewers",
     blindReviewVisibility: "content",
     condition: { fieldId: "category", equals: "AI & Innovation" },
+    sectionId: input.schema.sections[0]!.id,
   });
 
   const reconciled = SubmissionService.synchronizeFormEventChoices(

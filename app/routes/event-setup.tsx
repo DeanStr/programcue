@@ -44,7 +44,7 @@ import {
 import type { Route } from "./+types/event-setup";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Event Setup · Program Cue" },
+  { title: "Event settings · Program Cue" },
 ];
 
 export type ActionResponse = {

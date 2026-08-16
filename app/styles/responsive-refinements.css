@@ -438,6 +438,15 @@
     font-size: var(--text-2xs);
     white-space: nowrap;
   }
+  .public-view-navigation {
+    width: calc(100% - 24px);
+    margin-block: var(--space-3);
+    overflow-x: auto;
+  }
+  .public-view-navigation > span,
+  .public-view-navigation a {
+    flex: none;
+  }
   .public-shell #programme,
   .public-shell #speakers,
   .public-shell #itinerary {

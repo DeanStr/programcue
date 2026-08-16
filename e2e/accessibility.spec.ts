@@ -68,7 +68,7 @@ test("skip navigation and command palette preserve keyboard focus", async ({
   await expect(priorControl).toBeFocused();
 });
 
-test("administrator navigation groups core work without hiding programme tools", async ({
+test("administrator navigation groups stable workspace families without hiding programme tools", async ({
   page,
 }) => {
   await waitForInterface(page, "/admin/programme");
@@ -76,22 +76,28 @@ test("administrator navigation groups core work without hiding programme tools",
     name: "Primary navigation",
   });
   await expect(
-    navigation.getByText("Core work", { exact: true }),
+    navigation.getByText("Event work", { exact: true }),
   ).toBeVisible();
-  await expect(navigation.getByText("Manage", { exact: true })).toBeVisible();
+  await expect(
+    navigation.getByText("Administration", { exact: true }),
+  ).toBeVisible();
   await navigation.getByRole("button", { name: "Collapse navigation" }).click();
-  await expect(navigation.getByText("Core work", { exact: true })).toBeHidden();
-  await expect(navigation.getByText("Manage", { exact: true })).toBeHidden();
+  await expect(
+    navigation.getByText("Event work", { exact: true }),
+  ).toBeHidden();
+  await expect(
+    navigation.getByText("Administration", { exact: true }),
+  ).toBeHidden();
   await navigation.getByRole("button", { name: "Expand navigation" }).click();
   await expect(
-    navigation.getByRole("link", { name: "Content & files" }),
+    navigation.getByRole("link", { name: "Session content & files" }),
   ).toBeVisible();
   await expect(
-    navigation.getByRole("link", { name: "Speaker Network" }),
+    navigation.getByRole("link", { name: "Speaker network" }),
   ).toHaveCount(0);
-  await expect(navigation.getByRole("link", { name: "Resources" })).toHaveCount(
-    0,
-  );
+  await expect(
+    navigation.getByRole("link", { name: "Speaker resources" }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "Content review" }),
   ).toHaveAttribute("href", "/admin/content#content-review-title");
@@ -103,7 +109,7 @@ test("administrator navigation groups core work without hiding programme tools",
   await expect(
     page
       .getByRole("complementary", { name: "Primary navigation" })
-      .getByRole("link", { name: "Content & files" }),
+      .getByRole("link", { name: "Session content & files" }),
   ).toHaveAttribute("aria-current", "page");
 
   await waitForInterface(page, "/admin/speakers");
@@ -122,10 +128,10 @@ test("administrator navigation groups core work without hiding programme tools",
     name: "Primary navigation",
   });
   await expect(
-    speakerRail.getByRole("link", { name: "Speaker Network" }),
+    speakerRail.getByRole("link", { name: "Speaker network" }),
   ).toHaveAttribute("href", "/admin/crm");
   await expect(
-    speakerRail.getByRole("link", { name: "Resources" }),
+    speakerRail.getByRole("link", { name: "Speaker resources" }),
   ).toHaveAttribute("href", "/admin/resources");
 
   await waitForInterface(page, "/admin/crm");
@@ -136,7 +142,7 @@ test("administrator navigation groups core work without hiding programme tools",
   // marks the family instead of claiming to be the page and contradicting the
   // breadcrumb underneath it.
   await expect(
-    crmRail.getByRole("link", { name: "Speaker Network" }),
+    crmRail.getByRole("link", { name: "Speaker network" }),
   ).toHaveAttribute("aria-current", "page");
   await expect(crmRail.getByRole("link", { name: "Speakers" })).toHaveAttribute(
     "data-family-current",
@@ -146,7 +152,7 @@ test("administrator navigation groups core work without hiding programme tools",
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open navigation" }).click();
   const mobileNavigation = page.getByRole("dialog", { name: "Navigation" });
-  const mobileCoreHeading = mobileNavigation.getByText("Core work", {
+  const mobileCoreHeading = mobileNavigation.getByText("Event work", {
     exact: true,
   });
   await expect(mobileCoreHeading).toBeVisible();
@@ -328,7 +334,7 @@ test("fixed mobile admin chrome does not cover the page title", async ({
   await waitForInterface(page, "/admin/submissions");
   const topbar = await page.locator(".topbar").boundingBox();
   const heading = await page
-    .getByRole("heading", { name: "Submissions", level: 1 })
+    .getByRole("heading", { name: "Applications", level: 1 })
     .boundingBox();
   expect(topbar).not.toBeNull();
   expect(heading).not.toBeNull();

@@ -2,7 +2,10 @@ import {
   blindReviewerVisibleAnswers,
   requireSubmittedSnapshot,
 } from "~/modules/evaluations/evaluation-service-foundation.server";
-import { reviewerVisibleAnswers } from "~/modules/submissions/submission-schema";
+import {
+  formFieldsInDisplayOrder,
+  reviewerVisibleAnswers,
+} from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { resolveAiProvider } from "./ai-provider.server";
 import {
@@ -157,7 +160,7 @@ export class AiReviewAssessmentGenerationService extends AiReviewAssessmentGener
     const answers = target.blindedReviewing
       ? blindReviewerVisibleAnswers(snapshot)
       : reviewerVisibleAnswers(snapshot.schema, snapshot.answers);
-    const answerFields = snapshot.schema.fields
+    const answerFields = formFieldsInDisplayOrder(snapshot.schema)
       .filter((field) => Object.hasOwn(answers, field.id))
       .map((field) => ({
         id: field.id,

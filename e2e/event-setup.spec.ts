@@ -23,7 +23,7 @@ test.afterAll(async ({ request }) => {
 test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
   await page.goto("/admin/event");
   await expect(
-    page.getByRole("heading", { name: "Event Setup" }),
+    page.getByRole("heading", { name: "Event settings" }),
   ).toBeVisible();
 
   const venue = page.getByLabel("Venue", { exact: true });
@@ -153,7 +153,7 @@ test("uncommitted record drafts block save and remain protected during navigatio
     page.getByText(/Add or clear the unfinished room/),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "Submissions", exact: true }).click();
+  await page.getByRole("link", { name: "Applications", exact: true }).click();
   const warning = page.getByRole("dialog", { name: "Leave without saving?" });
   await expect(warning).toBeVisible();
   await warning.getByRole("button", { name: "Stay on this page" }).click();
@@ -185,7 +185,7 @@ test("repository workflows remain blocked until exact Event Setup edits are save
   await expect(configure).toBeDisabled();
   await expect(
     page.getByText(
-      "Save or discard your Event Setup edits before changing where event data is held.",
+      "Save or discard your Event settings edits before changing where event data is held.",
     ),
   ).toBeVisible();
 
@@ -197,7 +197,7 @@ test("repository workflows remain blocked until exact Event Setup edits are save
   await expect(configure).toBeEnabled();
   await expect(
     page.getByText(
-      "Save or discard your Event Setup edits before changing where event data is held.",
+      "Save or discard your Event settings edits before changing where event data is held.",
     ),
   ).toBeHidden();
 
@@ -209,7 +209,7 @@ test("repository workflows remain blocked until exact Event Setup edits are save
   await expect(city).toHaveValue(originalCity);
   await expect(configure).toBeEnabled();
 
-  await page.getByRole("link", { name: "Submissions", exact: true }).click();
+  await page.getByRole("link", { name: "Applications", exact: true }).click();
   await expect(
     page.getByRole("dialog", { name: "Leave without saving?" }),
   ).toBeHidden();

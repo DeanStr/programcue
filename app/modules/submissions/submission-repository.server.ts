@@ -136,6 +136,18 @@ export class D1SubmissionRepository {
     return this.administration.listAdminSubmissions(...args);
   }
 
+  countAdminSubmissions(
+    ...args: Parameters<SubmissionAdminRepository["countAdminSubmissions"]>
+  ) {
+    return this.administration.countAdminSubmissions(...args);
+  }
+
+  getAdminSubmissionSummary(
+    ...args: Parameters<SubmissionAdminRepository["getAdminSubmissionSummary"]>
+  ) {
+    return this.administration.getAdminSubmissionSummary(...args);
+  }
+
   listAdminSubmissionCategories(
     ...args: Parameters<
       SubmissionAdminRepository["listAdminSubmissionCategories"]

@@ -182,7 +182,15 @@ export function AdminCommandDialog({
       label: "Direct session",
       description: "Enter a proposal on behalf of an invited speaker",
       meta: "Configure",
-      run: () => selectCommand("/admin/submissions#create-direct-session"),
+      run: () => selectCommand("/admin/sessions/new?from=global"),
+    },
+    {
+      value: "create manual application record proposal",
+      icon: Files,
+      label: "Application record",
+      description: "Enter an application for an accepted participant",
+      meta: "Create",
+      run: () => selectCommand("/admin/submissions/new"),
     },
     {
       value: "create readiness task checklist",

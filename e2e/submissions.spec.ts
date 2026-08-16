@@ -587,6 +587,12 @@ test.describe
       await expect(page.getByRole("link", { name: title })).toBeVisible();
       await page.getByRole("link", { name: title }).click();
       await expect(page.getByRole("heading", { name: title })).toBeVisible();
+      await expect(
+        page
+          .getByRole("navigation", { name: "Breadcrumb" })
+          .getByText(title, { exact: true }),
+      ).toHaveAttribute("aria-current", "page");
+      await expect(page).toHaveTitle(`${title} · Application · Program Cue`);
       await expect(page.locator("body")).toContainText(revisionSentence);
       await expect(
         page.getByRole("heading", { name: "Status history" }),
@@ -649,15 +655,13 @@ test.describe
       await page
         .getByRole("link", { name: "Create direct session", exact: true })
         .click();
-      await expect(page).toHaveURL(
-        /\/admin\/submissions#create-direct-session$/u,
-      );
-      const directSession = page.locator("details").filter({
-        has: page.getByText("Create a guaranteed direct session", {
+      await expect(page).toHaveURL(/\/admin\/sessions\/new\?from=schedule$/u);
+      const directSession = page.locator("form").filter({
+        has: page.getByRole("button", {
+          name: "Create unscheduled session",
           exact: true,
         }),
       });
-      await expect(directSession).toHaveAttribute("open", "");
       await directSession
         .getByLabel("Session title")
         .fill(`Sponsor briefing ${unique}`);
@@ -681,11 +685,46 @@ test.describe
       await directSession
         .getByRole("button", { name: "Create unscheduled session" })
         .click();
+      await expect(page).toHaveURL(
+        /\/admin\/schedule\?session=[^&]+&created=1/u,
+      );
       await expect(
-        page.locator(".validation-item.ok[role='status']").filter({
-          hasText: "Direct session created in the unscheduled programme.",
-        }),
-      ).toBeVisible();
+        page.getByRole("status").filter({ hasText: "Direct session created" }),
+      ).toContainText("selected for placement");
+    });
+
+    test("application queue URL state survives reload and invalid pages fail explicitly", async ({
+      page,
+    }) => {
+      await page.goto("/admin/submissions");
+      await expect(page.getByText(/matching applications/)).toBeVisible();
+
+      await page.getByLabel("Sort").selectOption("title-asc");
+      await expect(page).toHaveURL(/sort=title-asc/u);
+      await page.getByLabel("Density").selectOption("compact");
+      await expect(page).toHaveURL(/density=compact/u);
+      const columns = page.locator(".pc-data-grid-columns");
+      await columns.locator("summary").click();
+      await columns.getByLabel("Speakers").click();
+      await expect(page).toHaveURL(/columns=submitter%2Croute%2Cstatus/u);
+
+      await page.reload();
+      await expect(page.getByLabel("Sort")).toHaveValue("title-asc");
+      await expect(page.getByLabel("Density")).toHaveValue("compact");
+      await page.locator(".pc-data-grid-columns summary").click();
+      await expect(
+        page.locator(".pc-data-grid-columns").getByLabel("Speakers"),
+      ).not.toBeChecked();
+
+      const malformed = await page.request.get(
+        "/admin/submissions?density=unknown",
+      );
+      expect(malformed.status()).toBe(400);
+      const stalePage = await page.request.get("/admin/submissions?page=999");
+      expect(stalePage.status()).toBe(404);
+      expect(await stalePage.text()).toContain(
+        "This application result page no longer exists",
+      );
     });
 
     test("authored conditional fields survive publication and toggle on the public form", async ({
@@ -693,16 +732,27 @@ test.describe
     }) => {
       const unique = Date.now();
       await page.goto("/admin/submissions/form");
+      await page.getByRole("button", { name: "Add section" }).click();
+      await page
+        .getByLabel("Section title")
+        .last()
+        .fill("Audience and outcomes");
 
       const editor = page.getByLabel("Visual call-for-speakers form editor");
       await editor.getByRole("button", { name: "Add Long text" }).click();
       await setStableFieldId(page, `key_takeaway_${unique}`);
       await page.getByLabel("Label", { exact: true }).fill("Key takeaway");
+      await page
+        .getByLabel("Field section")
+        .selectOption({ label: "Audience and outcomes" });
       await page.getByLabel("Required when visible").check();
 
       await editor.getByRole("button", { name: "Add Dropdown" }).click();
       await setStableFieldId(page, `audience_level_${unique}`);
       await page.getByLabel("Label", { exact: true }).fill("Audience level");
+      await page
+        .getByLabel("Field section")
+        .selectOption({ label: "Audience and outcomes" });
       await page
         .getByLabel("Options, one per line")
         .fill("Beginner\nIntermediate\nAdvanced");
@@ -713,9 +763,21 @@ test.describe
         .getByLabel("Label", { exact: true })
         .fill("Workshop prerequisites");
       await page
+        .getByLabel("Field section")
+        .selectOption({ label: "Audience and outcomes" });
+      await page
         .getByLabel("Show this field when")
         .selectOption(`audience_level_${unique}`);
       await page.getByLabel("Equals").selectOption("Advanced");
+
+      const audienceSection = page
+        .getByRole("group", { name: "Sections" })
+        .locator(".card")
+        .nth(1);
+      await audienceSection.getByRole("button", { name: "Remove" }).click();
+      await expect(page.getByRole("alert")).toContainText(
+        "Move 3 assigned fields to another section",
+      );
 
       await page.getByRole("button", { name: "Save draft" }).click();
       await expect(
@@ -757,6 +819,9 @@ test.describe
         .click();
       await page.getByRole("button", { name: "Start application" }).click();
 
+      await expect(
+        page.getByRole("heading", { name: "Audience and outcomes" }),
+      ).toBeVisible();
       await expect(page.getByLabel("Key takeaway")).toBeVisible();
       const audienceLevel = page.getByLabel("Audience level");
       await expect(audienceLevel).toBeVisible();

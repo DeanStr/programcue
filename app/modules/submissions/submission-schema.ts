@@ -9,7 +9,7 @@ export const fieldTypeSchema = z.enum([
   "video",
 ]);
 
-export const formFieldSchema = z
+const legacyFormFieldSchema = z
   .object({
     id: z
       .string()
@@ -34,6 +34,7 @@ export const formFieldSchema = z
       .nullable()
       .default(null),
   })
+  .strict()
   .superRefine((field, context) => {
     if (
       (field.type === "select" || field.type === "multi_select") &&
@@ -57,7 +58,15 @@ export const formFieldSchema = z
     }
   });
 
+export const formFieldSchema = legacyFormFieldSchema.safeExtend({
+  sectionId: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{1,39}$/, "Use a stable lowercase section ID"),
+});
+
 export type FormField = z.infer<typeof formFieldSchema>;
+export type LegacyFormField = z.infer<typeof legacyFormFieldSchema>;
+export type StoredFormField = LegacyFormField | FormField;
 
 const optionalHttpsUrl = z
   .string()
@@ -115,6 +124,7 @@ export const formPresentationSchema = z
 export type FormPresentation = z.infer<typeof formPresentationSchema>;
 
 export const MAX_FORM_FIELDS = 50;
+export const MAX_FORM_SECTIONS = 20;
 
 export const DEFAULT_FORM_PRESENTATION: FormPresentation = {
   heroImagePath: "",
@@ -127,81 +137,173 @@ export const DEFAULT_FORM_PRESENTATION: FormPresentation = {
   showFeaturedSpeakers: false,
 };
 
-export const formSchemaSchema = z
-  .object({
-    introduction: z.string().trim().max(2_000).default(""),
-    presentation: formPresentationSchema.default(DEFAULT_FORM_PRESENTATION),
-    fields: z.array(formFieldSchema).min(1).max(MAX_FORM_FIELDS),
-  })
-  .superRefine((schema, context) => {
-    const ids = new Set<string>();
-    schema.fields.forEach((field, index) => {
-      if (ids.has(field.id)) {
-        context.addIssue({
-          code: "custom",
-          path: ["fields", index, "id"],
-          message: "Field IDs must be unique",
-        });
-      }
-      ids.add(field.id);
-    });
-
-    schema.fields.forEach((field, index) => {
-      if (!field.condition) return;
-      const dependencyIndex = schema.fields.findIndex(
-        (candidate) => candidate.id === field.condition?.fieldId,
-      );
-      if (dependencyIndex < 0 || dependencyIndex >= index) {
-        context.addIssue({
-          code: "custom",
-          path: ["fields", index, "condition"],
-          message: "Conditional fields must depend on an earlier field",
-        });
-      } else {
-        const dependency = schema.fields[dependencyIndex];
-        if (
-          dependency &&
-          dependency.type !== "select" &&
-          dependency.type !== "multi_select"
-        ) {
-          context.addIssue({
-            code: "custom",
-            path: ["fields", index, "condition"],
-            message: "Conditional fields must depend on a choice field",
-          });
-        } else if (
-          dependency &&
-          !dependency.options.includes(field.condition.equals)
-        ) {
-          context.addIssue({
-            code: "custom",
-            path: ["fields", index, "condition"],
-            message: "Conditional values must match an available choice",
-          });
-        }
-      }
-    });
-
-    for (const requiredId of ["title", "category", "format"] as const) {
-      if (!ids.has(requiredId)) {
-        context.addIssue({
-          code: "custom",
-          path: ["fields"],
-          message: `The ${requiredId} field is required`,
-        });
-      }
-    }
-
-    if (schema.fields.filter((field) => field.type === "video").length > 1) {
+function validateFormFields(
+  schema: { fields: StoredFormField[] },
+  context: z.RefinementCtx,
+  orderedFields: StoredFormField[] = schema.fields,
+) {
+  const ids = new Set<string>();
+  schema.fields.forEach((field, index) => {
+    if (ids.has(field.id)) {
       context.addIssue({
         code: "custom",
-        path: ["fields"],
-        message: "A form can contain at most one native video upload field",
+        path: ["fields", index, "id"],
+        message: "Field IDs must be unique",
       });
+    }
+    ids.add(field.id);
+  });
+
+  orderedFields.forEach((field, index) => {
+    if (!field.condition) return;
+    const schemaIndex = schema.fields.findIndex(
+      (candidate) => candidate.id === field.id,
+    );
+    const dependencyIndex = orderedFields.findIndex(
+      (candidate) => candidate.id === field.condition?.fieldId,
+    );
+    if (dependencyIndex < 0 || dependencyIndex >= index) {
+      context.addIssue({
+        code: "custom",
+        path: ["fields", schemaIndex, "condition"],
+        message: "Conditional fields must depend on an earlier field",
+      });
+    } else {
+      const dependency = orderedFields[dependencyIndex];
+      if (
+        dependency &&
+        dependency.type !== "select" &&
+        dependency.type !== "multi_select"
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["fields", schemaIndex, "condition"],
+          message: "Conditional fields must depend on a choice field",
+        });
+      } else if (
+        dependency &&
+        !dependency.options.includes(field.condition.equals)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["fields", schemaIndex, "condition"],
+          message: "Conditional values must match an available choice",
+        });
+      }
     }
   });
 
+  for (const requiredId of ["title", "category", "format"] as const) {
+    if (!ids.has(requiredId)) {
+      context.addIssue({
+        code: "custom",
+        path: ["fields"],
+        message: `The ${requiredId} field is required`,
+      });
+    }
+  }
+
+  if (schema.fields.filter((field) => field.type === "video").length > 1) {
+    context.addIssue({
+      code: "custom",
+      path: ["fields"],
+      message: "A form can contain at most one native video upload field",
+    });
+  }
+}
+
+const legacyFormSchemaSchema = z
+  .object({
+    introduction: z.string().trim().max(2_000).default(""),
+    presentation: formPresentationSchema.default(DEFAULT_FORM_PRESENTATION),
+    fields: z.array(legacyFormFieldSchema).min(1).max(MAX_FORM_FIELDS),
+  })
+  .strict()
+  .superRefine(validateFormFields);
+
+export const formSectionSchema = z
+  .object({
+    id: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{1,39}$/, "Use a stable lowercase section ID"),
+    title: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(500).default(""),
+  })
+  .strict();
+
+export type FormSection = z.infer<typeof formSectionSchema>;
+
+export const formSchemaSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    introduction: z.string().trim().max(2_000).default(""),
+    presentation: formPresentationSchema.default(DEFAULT_FORM_PRESENTATION),
+    sections: z.array(formSectionSchema).min(1).max(MAX_FORM_SECTIONS),
+    fields: z.array(formFieldSchema).min(1).max(MAX_FORM_FIELDS),
+  })
+  .strict()
+  .superRefine((schema, context) => {
+    const sectionIds = new Set<string>();
+    schema.sections.forEach((section, index) => {
+      if (sectionIds.has(section.id)) {
+        context.addIssue({
+          code: "custom",
+          path: ["sections", index, "id"],
+          message: "Section IDs must be unique",
+        });
+      }
+      sectionIds.add(section.id);
+    });
+    schema.fields.forEach((field, index) => {
+      if (!sectionIds.has(field.sectionId)) {
+        context.addIssue({
+          code: "custom",
+          path: ["fields", index, "sectionId"],
+          message: "Every field must reference an existing section",
+        });
+      }
+    });
+    const orderedFields = schema.sections.flatMap((section) =>
+      schema.fields.filter((field) => field.sectionId === section.id),
+    );
+    validateFormFields(schema, context, orderedFields);
+  });
+
 export type SubmissionFormSchema = z.infer<typeof formSchemaSchema>;
+export type LegacySubmissionFormSchema = z.infer<typeof legacyFormSchemaSchema>;
+export type StoredSubmissionFormSchema =
+  | LegacySubmissionFormSchema
+  | SubmissionFormSchema;
+
+export const storedFormSchemaSchema = z.union([
+  formSchemaSchema,
+  legacyFormSchemaSchema,
+]);
+
+export function storedFormSchemaVersion(schema: StoredSubmissionFormSchema) {
+  return "schemaVersion" in schema ? 2 : 1;
+}
+
+export function upgradeStoredFormSchema(
+  schema: StoredSubmissionFormSchema,
+): SubmissionFormSchema {
+  if ("schemaVersion" in schema) return schema;
+  const section = {
+    id: "proposal",
+    title: "Application",
+    description: "",
+  };
+  return formSchemaSchema.parse({
+    schemaVersion: 2,
+    introduction: schema.introduction,
+    presentation: schema.presentation,
+    sections: [section],
+    fields: schema.fields.map((field) => ({
+      ...field,
+      sectionId: section.id,
+    })),
+  });
+}
 
 export const routingSchema = z.object({
   categories: z
@@ -436,7 +538,7 @@ export const ADMIN_MANUAL_ENTRY_FORM_VERSION_ID = "manual-administrator-entry";
 export const submittedSnapshotSchema = z.object({
   formVersionId: z.string().min(1).max(100),
   versionNumber: z.number().int().positive(),
-  schema: formSchemaSchema,
+  schema: storedFormSchemaSchema,
   answers: draftPayloadSchema.shape.answers,
   speakers: draftPayloadSchema.shape.speakers,
   uploads: draftPayloadSchema.shape.uploads,
@@ -447,7 +549,7 @@ export type SubmittedSnapshot = z.infer<typeof submittedSnapshotSchema>;
 export type FieldErrors = Record<string, string[]>;
 
 export function validateAnswerShapes(
-  schema: SubmissionFormSchema,
+  schema: StoredSubmissionFormSchema,
   answers: Record<string, string | string[]>,
   uploads: Record<string, UploadReference> = {},
 ) {
@@ -479,11 +581,12 @@ export function validateAnswerShapes(
 }
 
 export function visibleFields(
-  schema: SubmissionFormSchema,
+  schema: StoredSubmissionFormSchema,
   answers: Record<string, string | string[]>,
 ) {
   const visibleIds = new Set<string>();
-  return schema.fields.filter((field) => {
+  const orderedFields = formFieldsInDisplayOrder(schema);
+  return orderedFields.filter((field) => {
     if (!field.condition) {
       visibleIds.add(field.id);
       return true;
@@ -498,8 +601,86 @@ export function visibleFields(
   });
 }
 
-export function visibleAnswers(
+type FormSectionForDisplay<Field extends StoredFormField> = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  fields: Field[];
+};
+
+export function formFieldsInDisplayOrder(
   schema: SubmissionFormSchema,
+): FormField[];
+export function formFieldsInDisplayOrder(
+  schema: LegacySubmissionFormSchema,
+): LegacyFormField[];
+export function formFieldsInDisplayOrder(
+  schema: StoredSubmissionFormSchema,
+): StoredFormField[];
+export function formFieldsInDisplayOrder(
+  schema: StoredSubmissionFormSchema,
+): StoredFormField[] {
+  if (!("schemaVersion" in schema)) return schema.fields;
+  const sectionIds = new Set(schema.sections.map((section) => section.id));
+  for (const field of schema.fields) {
+    if (!("sectionId" in field) || !sectionIds.has(field.sectionId)) {
+      throw new Error(
+        `Form field ${field.id} must reference an existing schema v2 section`,
+      );
+    }
+  }
+  return schema.sections.flatMap((section) =>
+    schema.fields.filter((field) => field.sectionId === section.id),
+  );
+}
+
+export function formSectionsForDisplay(
+  schema: SubmissionFormSchema,
+  fields?: FormField[],
+): Array<FormSectionForDisplay<FormField>>;
+export function formSectionsForDisplay(
+  schema: LegacySubmissionFormSchema,
+  fields?: LegacyFormField[],
+): Array<FormSectionForDisplay<LegacyFormField>>;
+export function formSectionsForDisplay(
+  schema: StoredSubmissionFormSchema,
+  fields?: StoredFormField[],
+): Array<FormSectionForDisplay<StoredFormField>>;
+export function formSectionsForDisplay(
+  schema: StoredSubmissionFormSchema,
+  fields: StoredFormField[] = schema.fields,
+): Array<FormSectionForDisplay<StoredFormField>> {
+  if (!("schemaVersion" in schema)) {
+    return [
+      {
+        id: "legacy_application",
+        title: null,
+        description: null,
+        fields,
+      },
+    ];
+  }
+  const sectionIds = new Set(schema.sections.map((section) => section.id));
+  const versionTwoFields = fields.map((field) => {
+    if (!("sectionId" in field) || !sectionIds.has(field.sectionId)) {
+      throw new Error(
+        `Form field ${field.id} must reference an existing schema v2 section`,
+      );
+    }
+    return field;
+  });
+  return schema.sections
+    .map((section) => ({
+      ...section,
+      fields: versionTwoFields.filter(
+        (field) => field.sectionId === section.id,
+      ),
+    }))
+    .filter((section) => section.fields.length > 0);
+}
+
+export function visibleAnswers(
+  schema: StoredSubmissionFormSchema,
   answers: Record<string, string | string[]>,
 ) {
   return Object.fromEntries(
@@ -510,15 +691,11 @@ export function visibleAnswers(
 }
 
 export function reviewerVisibleAnswers(
-  schema: SubmissionFormSchema,
+  schema: StoredSubmissionFormSchema,
   answers: Record<string, string | string[]>,
 ) {
-  const visible = new Set(
-    visibleFields(schema, answers).map((field) => field.id),
-  );
   return Object.fromEntries(
-    schema.fields
-      .filter((field) => visible.has(field.id))
+    visibleFields(schema, answers)
       .filter((field) => field.reviewVisibility === "reviewers")
       .filter((field) => Object.hasOwn(answers, field.id))
       .map((field) => [field.id, answers[field.id]]),
@@ -526,7 +703,7 @@ export function reviewerVisibleAnswers(
 }
 
 export function validateFinalAnswers(
-  schema: SubmissionFormSchema,
+  schema: StoredSubmissionFormSchema,
   answers: Record<string, string | string[]>,
   speakers: Array<{ name: string; email: string }>,
   minSpeakers: number,
@@ -581,11 +758,20 @@ export function validateFinalAnswers(
 }
 
 export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
+  schemaVersion: 2,
   introduction:
     "Share a practical session that gives attendees something useful to take away.",
   presentation: DEFAULT_FORM_PRESENTATION,
+  sections: [
+    {
+      id: "proposal",
+      title: "Session proposal",
+      description: "Tell us what you want to share with attendees.",
+    },
+  ],
   fields: [
     {
+      sectionId: "proposal",
       id: "title",
       label: "Session title",
       type: "short_text",
@@ -598,6 +784,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       condition: null,
     },
     {
+      sectionId: "proposal",
       id: "description",
       label: "Session description",
       type: "long_text",
@@ -611,6 +798,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       condition: null,
     },
     {
+      sectionId: "proposal",
       id: "category",
       label: "Tracks",
       type: "multi_select",
@@ -623,6 +811,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       condition: null,
     },
     {
+      sectionId: "proposal",
       id: "format",
       label: "Format",
       type: "select",
@@ -635,6 +824,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       condition: null,
     },
     {
+      sectionId: "proposal",
       id: "materials",
       label: "Materials and room setup",
       type: "long_text",
@@ -647,6 +837,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       condition: { fieldId: "format", equals: "Workshop" },
     },
     {
+      sectionId: "proposal",
       id: "video",
       label: "Optional pitch video",
       type: "video",

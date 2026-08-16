@@ -841,7 +841,7 @@ export function EventSetupForm({
 
         <div className="page-head">
           <div>
-            <h1>Event Setup</h1>
+            <h1>Event settings</h1>
             <p>
               Configure event identity, programme structure, access and delivery
               defaults.
@@ -898,7 +898,7 @@ export function EventSetupForm({
         ) : null}
 
         <AdminPageSectionNavigation
-          label="Event Setup sections"
+          label="Event settings sections"
           links={[
             { id: "event-setup-identity", label: "Identity" },
             { id: "event-setup-structure", label: "Programme structure" },

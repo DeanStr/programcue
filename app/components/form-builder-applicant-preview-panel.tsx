@@ -2,9 +2,10 @@ import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 import { BrandMark } from "~/components/brand-mark";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 import {
-  type FormField,
+  formSectionsForDisplay,
   heroImagePathSchema,
   type SaveFormInput,
+  type StoredFormField,
   validateAnswerShapes,
   validateFinalAnswers,
   visibleFields,
@@ -31,7 +32,7 @@ function FieldPreview({
   value,
   onChange,
 }: {
-  field: FormField;
+  field: StoredFormField;
   value: string | string[] | undefined;
   onChange(value: string | string[]): void;
 }) {
@@ -127,6 +128,7 @@ export function ApplicantPreviewPanel({
     setValidated(false);
   }, [input.id, input.schema, input.minSpeakers]);
   const previewFields = visibleFields(input.schema, answers);
+  const previewSections = formSectionsForDisplay(input.schema, previewFields);
 
   function updateAnswer(fieldId: string, value: string | string[]) {
     setAnswers((current) => ({ ...current, [fieldId]: value }));
@@ -234,51 +236,73 @@ export function ApplicantPreviewPanel({
               </div>
               <div className="fb-preview-body">
                 <p className="tiny subtle">{input.schema.introduction}</p>
-                {previewFields.map((field) =>
-                  field.type === "multi_select" ? (
-                    <fieldset
-                      className="application-choice-field"
-                      key={field.id}
-                    >
-                      <legend className="label">
-                        {field.label}
-                        {field.required ? " *" : ""}
-                      </legend>
-                      {field.help ? (
-                        <span className="help">{field.help}</span>
-                      ) : null}
-                      <FieldPreview
-                        field={field}
-                        value={answers[field.id]}
-                        onChange={(value) => updateAnswer(field.id, value)}
-                      />
-                      {errors[field.id]?.[0] ? (
-                        <span className="field-error">
-                          {errors[field.id][0]}
-                        </span>
-                      ) : null}
-                    </fieldset>
-                  ) : (
-                    // biome-ignore lint/a11y/noLabelWithoutControl: FieldPreview renders the wrapped input, select, or textarea.
-                    <label className="label" key={field.id}>
-                      {field.label}
-                      {field.required ? " *" : ""}
-                      {field.help ? (
-                        <span className="help">{field.help}</span>
-                      ) : null}
-                      <FieldPreview
-                        field={field}
-                        value={answers[field.id]}
-                        onChange={(value) => updateAnswer(field.id, value)}
-                      />
-                      {errors[field.id]?.[0] ? (
-                        <span className="field-error">
-                          {errors[field.id][0]}
-                        </span>
-                      ) : null}
-                    </label>
-                  ),
-                )}
+                {previewSections.map((section) => (
+                  <section
+                    className="application-form-section stack"
+                    aria-labelledby={
+                      section.title
+                        ? `preview-section-${section.id}`
+                        : undefined
+                    }
+                    key={section.id}
+                  >
+                    {section.title ? (
+                      <header>
+                        <h4 id={`preview-section-${section.id}`}>
+                          {section.title}
+                        </h4>
+                        {section.description ? (
+                          <p className="subtle">{section.description}</p>
+                        ) : null}
+                      </header>
+                    ) : null}
+                    {section.fields.map((field) =>
+                      field.type === "multi_select" ? (
+                        <fieldset
+                          className="application-choice-field"
+                          key={field.id}
+                        >
+                          <legend className="label">
+                            {field.label}
+                            {field.required ? " *" : ""}
+                          </legend>
+                          {field.help ? (
+                            <span className="help">{field.help}</span>
+                          ) : null}
+                          <FieldPreview
+                            field={field}
+                            value={answers[field.id]}
+                            onChange={(value) => updateAnswer(field.id, value)}
+                          />
+                          {errors[field.id]?.[0] ? (
+                            <span className="field-error">
+                              {errors[field.id][0]}
+                            </span>
+                          ) : null}
+                        </fieldset>
+                      ) : (
+                        // biome-ignore lint/a11y/noLabelWithoutControl: FieldPreview renders the wrapped input, select, or textarea.
+                        <label className="label" key={field.id}>
+                          {field.label}
+                          {field.required ? " *" : ""}
+                          {field.help ? (
+                            <span className="help">{field.help}</span>
+                          ) : null}
+                          <FieldPreview
+                            field={field}
+                            value={answers[field.id]}
+                            onChange={(value) => updateAnswer(field.id, value)}
+                          />
+                          {errors[field.id]?.[0] ? (
+                            <span className="field-error">
+                              {errors[field.id][0]}
+                            </span>
+                          ) : null}
+                        </label>
+                      ),
+                    )}
+                  </section>
+                ))}
                 <label className="label">
                   Test speaker count
                   <input

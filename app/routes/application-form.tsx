@@ -784,7 +784,7 @@ function AuthenticatedApplicationWorkspace({
                   ? { ...selected, revision: actionData.revision }
                   : selected
               }
-              schema={selectedForm.version.schema.fields}
+              schema={selectedForm.version.schema}
               applicant={applicant}
               publicSlug={form.publicSlug}
               currentUpload={loaderData.selectedUpload}

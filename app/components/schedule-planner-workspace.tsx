@@ -103,7 +103,7 @@ export function SchedulePlannerWorkspace({
               Open public programme
             </Link>
           ) : null}
-          <Link className="btn" to="/admin/submissions#create-direct-session">
+          <Link className="btn" to="/admin/sessions/new?from=schedule">
             Create direct session
           </Link>
           <button
@@ -175,6 +175,25 @@ export function SchedulePlannerWorkspace({
           )}
         </div>
       </div>
+      {workspace.createdSessionId ? (
+        <div
+          className={`validation-item schedule-notice ${workspace.createdSessionNeedsAttention ? "warn" : "ok"} mb`}
+          role="status"
+        >
+          <strong>Direct session created</strong>
+          <span>
+            The new session is selected for placement and marked in the session
+            source. Speaker participation must still be confirmed before
+            publication.
+          </span>
+          {workspace.createdSessionNeedsAttention ? (
+            <span>
+              One or more invitation or webhook operations need attention.
+              Review Speakers and Operations before publication.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {autoError ? (
         <div className="validation-item schedule-notice error mb" role="alert">
           <strong>Auto-place blocked</strong>

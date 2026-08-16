@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { SubmissionAdminRepository } from "./submission-admin-repository.server";
 import { SubmissionService } from "./submission-service.server";
 
 const viewer: Viewer = {
@@ -17,11 +18,32 @@ const viewer: Viewer = {
 };
 
 describe("submission administration list", () => {
+  it("fails when the required routed-team aggregate is absent", async () => {
+    const statement = {
+      bind() {
+        return statement;
+      },
+    };
+    const repository = new SubmissionAdminRepository({
+      DB: {
+        prepare: () => statement,
+        batch: async () => [{ results: [] }, { results: [] }],
+      },
+    } as unknown as CloudflareEnvironment);
+
+    await expect(
+      repository.getAdminSubmissionSummary(
+        viewer.organisationId,
+        viewer.eventId,
+      ),
+    ).rejects.toThrow(/routed-team aggregate count was not returned/i);
+  });
+
   it("keeps pagination filtered on the server while returning every event category", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
     const token = crypto.randomUUID().slice(0, 8);
-    const titlePrefix = `Grid ${token}`;
+    const titlePrefix = `Grid % ${token}`;
     const categoryPrefix = `Grid ${token} category`;
     const otherEventId = `other-grid-event-${token}`;
     const formId = `grid-form-${token}`;
@@ -71,6 +93,20 @@ describe("submission administration list", () => {
       ...inserts,
       testEnv.DB.prepare(
         `INSERT INTO submissions (
+           id, event_id, form_version_id, public_reference, title, category,
+           status, answers_json, revision, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, 'draft', '{}', 1, 1699999999,
+                   1699999999)`,
+      ).bind(
+        `grid-wildcard-decoy-${token}`,
+        viewer.eventId,
+        formVersionId,
+        `GRID-WILDCARD-DECOY-${token}`,
+        `Grid X ${token} wildcard decoy`,
+        `Wildcard decoy ${token}`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO submissions (
            id, event_id, public_reference, title, category, status,
            answers_json, revision, created_at, updated_at
          ) VALUES (?, ?, ?, 'Other event application', ?, 'draft', '{}', 1,
@@ -89,10 +125,21 @@ describe("submission administration list", () => {
       { query: titlePrefix },
       1,
     );
-    expect(firstPage.submissions).toHaveLength(50);
-    expect(firstPage.hasNext).toBe(true);
+    expect(firstPage.results.submissions).toHaveLength(50);
+    expect(firstPage.results).toMatchObject({
+      matchingTotal: 55,
+      page: 1,
+      pageSize: 50,
+      firstItem: 1,
+      lastItem: 50,
+      totalPages: 2,
+    });
+    expect(firstPage.summary.eventTotal).toBeGreaterThanOrEqual(55);
+    expect(firstPage.summary.byStatus.draft).toBeGreaterThanOrEqual(55);
     expect(
-      firstPage.submissions.every((row) => row.routingState === "draft"),
+      firstPage.results.submissions.every(
+        (row) => row.routingState === "draft",
+      ),
     ).toBe(true);
 
     const secondPage = await service.listAdminSubmissionPage(
@@ -100,8 +147,42 @@ describe("submission administration list", () => {
       { query: titlePrefix },
       2,
     );
-    expect(secondPage.submissions).toHaveLength(5);
-    expect(secondPage.hasNext).toBe(false);
+    expect(secondPage.results.submissions).toHaveLength(5);
+    expect(secondPage.results).toMatchObject({
+      matchingTotal: 55,
+      page: 2,
+      firstItem: 51,
+      lastItem: 55,
+      totalPages: 2,
+    });
+    await expect(
+      service.listAdminSubmissionPage(viewer, { query: titlePrefix }, 3),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.listAdminSubmissionPage(
+        viewer,
+        { query: `no-match-${crypto.randomUUID()}` },
+        1,
+      ),
+    ).resolves.toMatchObject({
+      results: {
+        submissions: [],
+        matchingTotal: 0,
+        page: 1,
+        firstItem: null,
+        lastItem: null,
+        totalPages: 1,
+      },
+    });
+
+    const titleSorted = await service.listAdminSubmissionPage(
+      viewer,
+      { query: titlePrefix, sort: "title-asc" },
+      1,
+    );
+    expect(titleSorted.results.submissions[0]?.title).toBe(
+      `${titlePrefix} application 00`,
+    );
 
     const ownCategories = firstPage.categories.filter((category) =>
       category.startsWith(categoryPrefix),
@@ -116,15 +197,15 @@ describe("submission administration list", () => {
 
     const lastCategory = `${categoryPrefix} 00`;
     expect(
-      firstPage.submissions.map((submission) => submission.category),
+      firstPage.results.submissions.map((submission) => submission.category),
     ).not.toContain(lastCategory);
     const filtered = await service.listAdminSubmissionPage(
       viewer,
       { category: lastCategory },
       1,
     );
-    expect(filtered.submissions).toHaveLength(1);
-    expect(filtered.submissions[0]?.category).toBe(lastCategory);
+    expect(filtered.results.submissions).toHaveLength(1);
+    expect(filtered.results.submissions[0]?.category).toBe(lastCategory);
     expect(
       filtered.categories.filter((category) =>
         category.startsWith(categoryPrefix),

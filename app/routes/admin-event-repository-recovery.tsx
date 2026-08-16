@@ -167,7 +167,7 @@ export default function AdminEventRepositoryRecovery({
           </p>
         </div>
         <Link className="btn" to="/admin/event">
-          Back to Event Setup
+          Back to Event settings
         </Link>
       </div>
 

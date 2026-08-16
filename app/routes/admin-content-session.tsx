@@ -3,6 +3,7 @@ import { data, Form, Link, useActionData } from "react-router";
 import { ZodError } from "zod";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
+import { adminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
 import {
   ContentManagementService,
   ContentManagementStateError,
@@ -11,6 +12,8 @@ import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 import type { Route } from "./+types/admin-content-session";
+
+export const handle = adminRecordBreadcrumbHandle(["current", "title"]);
 
 async function administrator(
   request: Request,
@@ -108,7 +111,13 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   }
 }
 
-export const meta = () => [{ title: "Content history · Program Cue" }];
+export const meta: Route.MetaFunction = ({ loaderData }) => [
+  {
+    title: loaderData
+      ? `${loaderData.current.title} · Session content · Program Cue`
+      : "Session content · Program Cue",
+  },
+];
 
 export default function AdminContentSession({
   loaderData,
